@@ -1,4 +1,5 @@
 .venv
+data/
 airflow.db
 standalone_admin_password.txt
 modules/services/airflow/logs/
