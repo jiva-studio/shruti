@@ -27,6 +27,30 @@
           "cwd": "/workspaces/lectorium/modules/services/airflow"
         }
       },
+      {
+        "label": "🚀 Minio :: Run",
+        "detail": "Run Minio service",
+        "command": "minio",
+        "type": "shell",
+        "args": [
+          "server",
+          "/workspaces/lectorium/data/s3",
+          "--console-address",
+          "':9001'"
+        ],
+        "presentation": {
+          "reveal": "always"
+        },
+        "icon": {
+          "id": "flame"
+        },
+        "problemMatcher": [],
+        "group": "none",
+        "isBackground": true,
+        "options": {
+          "cwd": "/workspaces/lectorium/modules/services/airflow"
+        }
+      },
     ]
   },
   "launch": {
