@@ -1,0 +1,7 @@
+.venv
+airflow.db
+standalone_admin_password.txt
+modules/services/airflow/logs/
+modules/services/airflow/airflow-webserver.pid
+__pycache__
+.DS_Store
