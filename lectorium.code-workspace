@@ -1,0 +1,97 @@
+{
+  "folders": [
+    {
+      "name": "⚙️ Services :: Airflow",
+      "path": "./modules/services/airflow"
+    },
+  ],
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "🚀 Airflow :: Run",
+        "detail": "Run Airflow service",
+        "command": "source ./.venv/bin/activate.fish && AIRFLOW_HOME=/workspaces/lectorium/modules/services/airflow airflow standalone",
+        "type": "shell",
+        "args": [],
+        "presentation": {
+          "reveal": "always"
+        },
+        "icon": {
+          "id": "flame"
+        },
+        "problemMatcher": [],
+        "group": "none",
+        "isBackground": true,
+        "options": {
+          "cwd": "/workspaces/lectorium/modules/services/airflow"
+        }
+      },
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [],
+    "compounds": []
+  },
+  "settings": {
+    /* -------------------------------------------------------------------------- */
+    /*                                   editor                                   */
+    /* -------------------------------------------------------------------------- */
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit"
+    },
+    /* -------------------------------------------------------------------------- */
+    /*                                   linter                                   */
+    /* -------------------------------------------------------------------------- */
+    "eslint.validate": [
+      "javascript",
+      "typescript",
+      "vue"
+    ],
+    /* -------------------------------------------------------------------------- */
+    /*                                    tests                                   */
+    /* -------------------------------------------------------------------------- */
+    "jest.enable": false,
+    "jest.jestCommandLine": "npx jest",
+    "jest.runMode": "on-demand",
+    "jestrunner.jestCommand": "npx jest",
+    /* -------------------------------------------------------------------------- */
+    /*                                 file types                                 */
+    /* -------------------------------------------------------------------------- */
+    "[feature]": {
+      "editor.formatOnType": true,
+      "editor.formatOnSave": true,
+    },
+    "typescript.preferences.autoImportFileExcludePatterns": [
+      "**/dist/**",
+    ],
+    /* -------------------------------------------------------------------------- */
+    /*                                   github                                   */
+    /* -------------------------------------------------------------------------- */
+    "githubIssues.issueBranchTitle": "${user}/issue-${issueNumber}-${sanitizedIssueTitle}",
+    /* -------------------------------------------------------------------------- */
+    /*                                   search                                   */
+    /* -------------------------------------------------------------------------- */
+    "search.exclude": {
+      "**/dist/**": true
+    },
+    "files.exclude": {
+      "**/.git": true,
+      "**/.DS_Store": true,
+      "**/Thumbs.db": true,
+      "**/dist": true,
+      "**/node_modules": true
+    },
+    "files.watcherExclude": {
+      "**/.git/objects/**": true,
+      "**/.git/subtree-cache/**": true,
+      "**/.hg/store/**": true,
+      "**/dist/**": true,
+      "**/node_modules/**": true
+    },
+  },
+}

@@ -1,0 +1,11 @@
+deepgram-sdk
+anthropic
+jellyfish
+vastai
+nltk
+mutagen
+cuid2
+pydub
+fasttext-langdetect
+boto3
+jellyfish

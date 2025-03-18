@@ -1,0 +1,38 @@
+{
+    "name": "Lectorium (NEW)",
+    "image": "mcr.microsoft.com/devcontainers/base:noble",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        "ghcr.io/devcontainers/features/node:1": {},
+        "ghcr.io/devcontainers/features/python:1": {},
+        "ghcr.io/meaningful-ooo/devcontainer-features/fish:2": {},
+        "ghcr.io/itsmechlark/features/postgresql:1.5.0": {},
+        "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
+            "packages": "nginx"
+        }
+    },
+    "postCreateCommand": "./.devcontainer/bootstrap.sh",
+    "forwardPorts": [
+        80,
+        8001,
+        5432
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "yzhang.markdown-all-in-one",
+                "TakumiI.markdowntable",
+                "firsttris.vscode-jest-runner",
+                "Orta.vscode-jest",
+                "bierner.markdown-mermaid",
+                "github.vscode-pull-request-github",
+                "stackbreak.comment-divider",
+                "cweijan.vscode-postgresql-client2",
+                "humao.rest-client",
+                "cweijan.vscode-redis-client",
+                "ms-playwright.playwright",
+                "Gruntfuggly.todo-tree"
+            ]
+        }
+    }
+}
