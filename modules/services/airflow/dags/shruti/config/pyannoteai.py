@@ -12,7 +12,7 @@ PYANNOTEAI_ACCESS_KEY = "pyannoteai::access-key"
 # ---------------------------------------------------------------------------- #
 
 Variable.setdefault(
-    PYANNOTEAI_ACCESS_KEY,
-    "",
-    "Pyannote.ai access key"
+  PYANNOTEAI_ACCESS_KEY,
+  "",
+  "Pyannote.ai access key"
 )

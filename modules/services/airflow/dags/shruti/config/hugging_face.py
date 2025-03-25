@@ -12,7 +12,7 @@ HUGGING_FACE_ACCESS_KEY = "huggingface::access-key"
 # ---------------------------------------------------------------------------- #
 
 Variable.setdefault(
-    HUGGING_FACE_ACCESS_KEY,
-    "",
-    "Hugging Face access key"
+  HUGGING_FACE_ACCESS_KEY,
+  "",
+  "Hugging Face access key"
 )

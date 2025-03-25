@@ -12,7 +12,7 @@ BEAM_CLOUD_ACCESS_KEY = "beam-cloud::access-key"
 # ---------------------------------------------------------------------------- #
 
 Variable.setdefault(
-    BEAM_CLOUD_ACCESS_KEY,
-    "",
-    "Beam.cloud access key"
+  BEAM_CLOUD_ACCESS_KEY,
+  "",
+  "Beam.cloud access key"
 )

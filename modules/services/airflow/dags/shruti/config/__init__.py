@@ -7,4 +7,4 @@ from shruti.config.transcripts_proofread import *
 from shruti.config.pyannoteai import *
 from shruti.config.hugging_face import *
 from shruti.config.beam_cloud import *
-
+from shruti.config.claude import *

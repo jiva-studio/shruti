@@ -1,0 +1,1 @@
+from shruti.text.tasks.text_detect_language import *
