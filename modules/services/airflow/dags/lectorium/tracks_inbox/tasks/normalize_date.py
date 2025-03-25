@@ -5,34 +5,23 @@ from airflow.decorators import task
 
 @task(task_display_name="Normalize Date")
 def normalize_date(
-    date: str,
+  date: str,
 ) -> tuple[int, int, int]:
+  date_normalized = None
 
-    # ---------------------------------------------------------------------------- #
-    #                                     Steps                                    #
-    # ---------------------------------------------------------------------------- #
+  if not date:
+    print("No date provided")
+    return None
 
-    date_normalized = None
+  try:
+    date_normalized = datetime.strptime(date.strip(), "%Y%m%d").date()
+    date_normalized = (
+      date_normalized.year,
+      date_normalized.month,
+      date_normalized.day,
+    )
+  except ValueError:
+    print("Date is incorrect format: ", date)
+    pass
 
-    if not date:
-        print("No date provided")
-        return None
-
-    # ---------------------------- Normalize the date ---------------------------- #
-
-    try:
-        date_normalized = datetime.strptime(date.strip(), "%Y%m%d").date()
-        date_normalized = (
-            date_normalized.year,
-            date_normalized.month,
-            date_normalized.day,
-        )
-    except ValueError:
-        print("Date is incorrect format: ", date)
-        pass
-
-    # ---------------------------------------------------------------------------- #
-    #                                    Output                                    #
-    # ---------------------------------------------------------------------------- #
-
-    return date_normalized
+  return date_normalized

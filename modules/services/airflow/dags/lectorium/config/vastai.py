@@ -13,14 +13,14 @@ VASTAI_PRIVATE_SSH_KEY = "vastai::private-ssh-key"
 # ---------------------------------------------------------------------------- #
 
 Variable.setdefault(
-    VASTAI_ACCESS_KEY,
-    "",
-    "Vast.ai access key"
+  VASTAI_ACCESS_KEY,
+  "",
+  "Vast.ai access key"
 )
 
 
 Variable.setdefault(
-    VASTAI_PRIVATE_SSH_KEY,
-    "",
-    "Vast.ai private SSH key"
+  VASTAI_PRIVATE_SSH_KEY,
+  "",
+  "Vast.ai private SSH key"
 )

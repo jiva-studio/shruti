@@ -1,0 +1,29 @@
+name: lectorium
+
+services:
+
+  dev:
+    image: mcr.microsoft.com/devcontainers/base:noble
+    command: sleep 365d
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../:/workspaces/lectorium
+      
+  # -------------------------------------------------------------------------- #
+  #                                  Services                                  #
+  # -------------------------------------------------------------------------- #
+
+  postgres:
+    environment:
+      POSTGRES_USER: lectorium
+      POSTGRES_PASSWORD: lectorium
+      POSTGRES_DB: lectorium
+
+  airflow-init:
+    environment:
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: lectorium
+      _AIRFLOW_WWW_USER_PASSWORD: lectorium

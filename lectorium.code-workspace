@@ -1,9 +1,37 @@
 {
   "folders": [
     {
-      "name": "⚙️ Services :: Airflow",
+      "name": "💾 Lectorium :: Data",
+      "path": "./data"
+    },
+    {
+      "name": "💨 Services :: Airflow",
       "path": "./modules/services/airflow"
     },
+    {
+      "name": "📦 Services :: Minio",
+      "path": "./modules/services/minio"
+    },
+    {
+      "name": "🚪 Services :: Gateway",
+      "path": "./modules/services/gateway"
+    },
+    {
+      "name": "🚪 Services :: Database",
+      "path": "./modules/services/database"
+    },
+    {
+      "name": "👋 Apps :: Landing",
+      "path": "./modules/apps/landing"
+    },
+    {
+      "name": "📜 Misc :: Scripts",
+      "path": "./scripts"
+    },
+    {
+      "name": "📖 Docs",
+      "path": "./docs"
+    }
   ],
   "tasks": {
     "version": "2.0.0",
@@ -11,7 +39,7 @@
       {
         "label": "🚀 Airflow :: Run",
         "detail": "Run Airflow service",
-        "command": "source ./.venv/bin/activate.fish && AIRFLOW_HOME=/workspaces/lectorium/modules/services/airflow airflow standalone",
+        "command": "source ./.airflow/bin/activate.fish && airflow standalone",
         "type": "shell",
         "args": [],
         "presentation": {
@@ -24,7 +52,11 @@
         "group": "none",
         "isBackground": true,
         "options": {
-          "cwd": "/workspaces/lectorium/modules/services/airflow"
+          "cwd": "/workspaces/lectorium/modules/services/airflow",
+          "env": {
+            "AIRFLOW_HOME": "/workspaces/lectorium/data/airflow",
+            "AIRFLOW__CORE__MP_START_METHOD": "spawn"
+          }
         }
       },
       {
@@ -34,9 +66,9 @@
         "type": "shell",
         "args": [
           "server",
-          "/workspaces/lectorium/data/s3",
-          "--console-address",
-          "':9001'"
+          "/workspaces/lectorium/data/minio/storage",
+          "--console-address", "':9001'",
+          "--certs-dir", "/workspaces/lectorium/data/minio/certs"
         ],
         "presentation": {
           "reveal": "always"
@@ -48,9 +80,60 @@
         "group": "none",
         "isBackground": true,
         "options": {
-          "cwd": "/workspaces/lectorium/modules/services/airflow"
+          "cwd": "/workspaces/lectorium/modules/services/airflow",
+          "env": {
+            "MINIO_ROOT_USER": "lectorium",
+            "MINIO_ROOT_PASSWORD": "lectorium",
+          }
         }
       },
+      {
+        "label": "🚀 Gateway :: Run",
+        "detail": "Run Gateway service",
+        "command": "nginx",
+        "type": "shell",
+        "args": [
+          "-c", "/workspaces/lectorium/modules/services/gateway/nginx.conf",
+          "-g", "'daemon off;'"
+        ],
+        "presentation": {
+          "reveal": "always"
+        },
+        "icon": {
+          "id": "flame"
+        },
+        "problemMatcher": [],
+        "group": "none",
+        "isBackground": true,
+        "options": {
+          "cwd": "/workspaces/lectorium/modules/services/gateway",
+        }
+      },
+      {
+        "label": "🚀 Postgres :: Run",
+        "detail": "Run the database",
+        "command": "sudo service postgresql start",
+        "type": "shell",
+        "args": [],
+        "problemMatcher": [],
+        "presentation": {
+          "reveal": "always"
+        },
+        "icon": {
+          "id": "flame"
+        },
+        "group": "none",
+        "isBackground": true,
+      },
+      {
+        "label": "🚀 Run All",
+        "dependsOn": [
+          "🚀 Postgres :: Run",
+          "🚀 Airflow :: Run",
+          "🚀 Gateway :: Run",
+        ],
+        "dependsOrder": "parallel"
+      }
     ]
   },
   "launch": {
@@ -101,7 +184,8 @@
     /*                                   search                                   */
     /* -------------------------------------------------------------------------- */
     "search.exclude": {
-      "**/dist/**": true
+      "**/dist/**": true,
+      "**/.airflow/**": true,
     },
     "files.exclude": {
       "**/.git": true,

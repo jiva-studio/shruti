@@ -1,0 +1,1 @@
+from lectorium.text.tasks.text_detect_language import *

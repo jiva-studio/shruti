@@ -7,4 +7,4 @@ from lectorium.config.transcripts_proofread import *
 from lectorium.config.pyannoteai import *
 from lectorium.config.hugging_face import *
 from lectorium.config.beam_cloud import *
-
+from lectorium.config.claude import *
