@@ -1,0 +1,8 @@
+{
+  "name": "lectorium",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ]
+}
