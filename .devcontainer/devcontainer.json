@@ -16,7 +16,6 @@
     "airflow-triggerer",
     "airflow-init"
   ],
-  
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:1": {},
@@ -59,7 +58,8 @@
         "cweijan.vscode-postgresql-client2",
         "humao.rest-client",
         "ms-playwright.playwright",
-        "Gruntfuggly.todo-tree"
+        "Gruntfuggly.todo-tree",
+        "Vue.volar"
       ]
     }
   }

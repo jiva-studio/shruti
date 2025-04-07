@@ -1,0 +1,8 @@
+{
+  "name": "shruti",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "libs/*"
+  ]
+}

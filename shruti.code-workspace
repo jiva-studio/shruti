@@ -5,24 +5,28 @@
       "path": "./data"
     },
     {
-      "name": "💨 Services :: Airflow",
-      "path": "./modules/services/airflow"
+      "name": "👑 Apps :: Admin",
+      "path": "./modules/apps/admin"
     },
     {
-      "name": "📦 Services :: Minio",
-      "path": "./modules/services/minio"
+      "name": "👋 Apps :: Landing",
+      "path": "./modules/apps/landing"
+    },
+    {
+      "name": "📀 Libraries :: DAL",
+      "path": "./modules/libs/dal"
+    },
+    {
+      "name": "💨 Services :: Airflow",
+      "path": "./modules/services/airflow"
     },
     {
       "name": "🚪 Services :: Gateway",
       "path": "./modules/services/gateway"
     },
     {
-      "name": "🚪 Services :: Database",
+      "name": "💾 Services :: Database",
       "path": "./modules/services/database"
-    },
-    {
-      "name": "👋 Apps :: Landing",
-      "path": "./modules/apps/landing"
     },
     {
       "name": "📜 Misc :: Scripts",
@@ -167,6 +171,11 @@
     "jest.runMode": "on-demand",
     "jestrunner.jestCommand": "npx jest",
     /* -------------------------------------------------------------------------- */
+    /*                                    Volar                                   */
+    /* -------------------------------------------------------------------------- */
+    "volar.takeOverMode.enabled": true,
+    "vue.language-server.runtime": "node",
+    /* -------------------------------------------------------------------------- */
     /*                                 file types                                 */
     /* -------------------------------------------------------------------------- */
     "[feature]": {
@@ -192,14 +201,16 @@
       "**/.DS_Store": true,
       "**/Thumbs.db": true,
       "**/dist": true,
-      "**/node_modules": true
+      "**/node_modules": true,
+      "**/.vite": true,
     },
     "files.watcherExclude": {
       "**/.git/objects/**": true,
       "**/.git/subtree-cache/**": true,
       "**/.hg/store/**": true,
       "**/dist/**": true,
-      "**/node_modules/**": true
+      "**/node_modules/**": true,
+      "**/.vite": true,
     },
   },
 }
