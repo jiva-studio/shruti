@@ -46,10 +46,7 @@ x-airflow-common:
 
 services:
 
-  database:
-    build:
-      context: ../modules/services/database/
-      dockerfile: Dockerfile
+  couchdb:
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5984/_up"]
       interval: 30s
@@ -148,7 +145,7 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
-      database:
+      couchdb:
         condition: service_healthy
     networks:
       - lectorium

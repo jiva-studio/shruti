@@ -10,6 +10,9 @@ services:
     ports:
       - "80:80"
 
+  couchdb:
+    image: ghcr.io/akdasa-studios/lectorium-couchdb:staging
+
   airflow-webserver:
     image: ghcr.io/akdasa-studios/lectorium-airflow:staging
 
