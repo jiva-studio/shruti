@@ -10,6 +10,9 @@ services:
     ports:
       - "80:80"
 
+  couchdb:
+    image: ghcr.io/akdasa-studios/shruti-couchdb:staging
+
   airflow-webserver:
     image: ghcr.io/akdasa-studios/shruti-airflow:staging
 

@@ -29,8 +29,8 @@
       "path": "./modules/services/gateway"
     },
     {
-      "name": "💾 Services :: Database",
-      "path": "./modules/services/database"
+      "name": "💾 Services :: CouchDB",
+      "path": "./modules/services/couchdb"
     },
     {
       "name": "📜 Misc :: Scripts",
