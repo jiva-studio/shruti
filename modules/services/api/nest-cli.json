@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "entryFile": "services/api/src/main.js",
+  "watchOptions": {
+    "paths": [
+      "src",
+      "../../libs/entities",
+      "../../libs/protocol",
+      "../../libs/domain"
+    ],
+    "ignored": ["node_modules", "dist", "logs"]
+  },
+  "compilerOptions": {
+    "deleteOutDir": true
+  }
+}

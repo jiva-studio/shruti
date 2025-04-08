@@ -1,13 +1,20 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": ["env.d.ts", "src/**/*", "src/**/*.vue", "../../libs/dal/**/*"],
+  "include": [
+    "env.d.ts",
+    "src/**/*",
+    "src/**/*.vue",
+    "../../libs/dal/**/*",
+    "../../libs/protocol/**/*"
+  ],
   "exclude": ["src/**/__tests__/*"],
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
     "paths": {
       "@shruti/admin/*": ["./src/*"],
-      "@shruti/dal/*": ["../../libs/dal/*"]
+      "@shruti/dal/*": ["../../libs/dal/*"],
+      "@shruti/protocol": ["../../libs/protocol"]
     }
   }
 }

@@ -4,5 +4,5 @@ import { useDatabase } from './useDatabase'
 
 export const useInboxTracksService = createSharedComposable(() => {
   const database = useDatabase()
-  return new InboxTracksService(database.local.inboxTracks)
+  return new InboxTracksService(database.local.inbox)
 })
