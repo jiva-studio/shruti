@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "libs/*"
+    "libs/*",
+    "services/*"
   ]
 }

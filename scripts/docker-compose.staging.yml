@@ -13,6 +13,9 @@ services:
   couchdb:
     image: ghcr.io/akdasa-studios/shruti-couchdb:staging
 
+  couchdb-init:
+    image: ghcr.io/akdasa-studios/shruti-couchdb-init:staging
+
   airflow-webserver:
     image: ghcr.io/akdasa-studios/shruti-airflow:staging
 
