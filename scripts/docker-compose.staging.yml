@@ -9,3 +9,18 @@ services:
     image: ghcr.io/akdasa-studios/shruti-admin:staging
     ports:
       - "80:80"
+
+  airflow-webserver:
+    image: ghcr.io/akdasa-studios/shruti-airflow:staging
+
+  airflow-scheduler:
+    image: ghcr.io/akdasa-studios/shruti-airflow:staging
+
+  airflow-worker:
+    image: ghcr.io/akdasa-studios/shruti-airflow:staging
+
+  airflow-triggerer:
+    image: ghcr.io/akdasa-studios/shruti-airflow:staging
+
+  airflow-init:
+    image: ghcr.io/akdasa-studios/shruti-airflow:staging
