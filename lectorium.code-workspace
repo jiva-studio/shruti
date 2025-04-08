@@ -21,6 +21,14 @@
       "path": "./modules/libs/dal"
     },
     {
+      "name": "📀 Libraries :: Protocol",
+      "path": "./modules/libs/protocol"
+    },
+    {
+      "name": "🛜 Services :: API",
+      "path": "./modules/services/api"
+    },
+    {
       "name": "💨 Services :: Airflow",
       "path": "./modules/services/airflow"
     },
@@ -44,57 +52,6 @@
   "tasks": {
     "version": "2.0.0",
     "tasks": [
-      {
-        "label": "🚀 Airflow :: Run",
-        "detail": "Run Airflow service",
-        "command": "source ./.airflow/bin/activate.fish && airflow standalone",
-        "type": "shell",
-        "args": [],
-        "presentation": {
-          "reveal": "always"
-        },
-        "icon": {
-          "id": "flame"
-        },
-        "problemMatcher": [],
-        "group": "none",
-        "isBackground": true,
-        "options": {
-          "cwd": "/workspaces/lectorium/modules/services/airflow",
-          "env": {
-            "AIRFLOW_HOME": "/workspaces/lectorium/data/airflow",
-            "AIRFLOW__CORE__MP_START_METHOD": "spawn"
-          }
-        }
-      },
-      {
-        "label": "🚀 Minio :: Run",
-        "detail": "Run Minio service",
-        "command": "minio",
-        "type": "shell",
-        "args": [
-          "server",
-          "/workspaces/lectorium/data/minio/storage",
-          "--console-address", "':9001'",
-          "--certs-dir", "/workspaces/lectorium/data/minio/certs"
-        ],
-        "presentation": {
-          "reveal": "always"
-        },
-        "icon": {
-          "id": "flame"
-        },
-        "problemMatcher": [],
-        "group": "none",
-        "isBackground": true,
-        "options": {
-          "cwd": "/workspaces/lectorium/modules/services/airflow",
-          "env": {
-            "MINIO_ROOT_USER": "lectorium",
-            "MINIO_ROOT_PASSWORD": "lectorium",
-          }
-        }
-      },
       {
         "label": "🚀 Gateway :: Run",
         "detail": "Run Gateway service",
@@ -146,7 +103,28 @@
   },
   "launch": {
     "version": "0.2.0",
-    "configurations": [],
+    "configurations": [
+      {
+        "name": "⚙️ Services :: Api",
+        "request": "launch",
+        "runtimeArgs": [
+          "run-script",
+          "start:debug"
+        ],
+        "runtimeExecutable": "npm",
+        "skipFiles": [
+          "<node_internals>/**"
+        ],
+        "type": "node",
+        "console": "integratedTerminal",
+        "cwd": "/workspaces/lectorium/modules/services/api",
+        "presentation": {
+          "hidden": false,
+          "group": "Services",
+          "order": 1
+        },
+      },
+    ],
     "compounds": []
   },
   "settings": {

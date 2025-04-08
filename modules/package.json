@@ -4,6 +4,7 @@
   "workspaces": [
     "apps/*",
     "libs/*",
-    "services/*"
+    "services/*",
+    "services/api"
   ]
 }

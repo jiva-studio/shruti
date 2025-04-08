@@ -9,7 +9,8 @@
   "runServices": [
     "redis",
     "postgres",
-    "database",
+    "couchdb",
+    "couchdb-init",
     "airflow-webserver",
     "airflow-scheduler",
     "airflow-worker",
@@ -21,12 +22,13 @@
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/devcontainers/features/python:1": {},
     "ghcr.io/meaningful-ooo/devcontainer-features/fish:2": {},
+    "ghcr.io/skriptfabrik/devcontainer-features/mailpit:1.0.0": {},
     "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
       "packages": "nginx"
     }
   },
   "postCreateCommand": "./.devcontainer/bootstrap.sh",
-  "forwardPorts": [80, 443],
+  "forwardPorts": [80, 443, 8025, 8001],
   "portsAttributes": {
     "80": {
       "label": "Nginx",
@@ -40,8 +42,13 @@
       "elevateIfNeeded": true,
       "protocol": "https"
     },
-    "9001": {
-      "label": "Minio",
+    "8001": {
+      "label": "API",
+      "onAutoForward": "silent",
+      "elevateIfNeeded": true
+    },
+    "8025": {
+      "label": "Mailpit",
       "onAutoForward": "silent"
     }
   },

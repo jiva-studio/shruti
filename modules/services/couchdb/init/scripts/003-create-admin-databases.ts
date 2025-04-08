@@ -17,6 +17,18 @@ export abstract class CreateAdminDatabase extends Migration {
   async migrate(): Promise<void> {
     await this.server.db.create(this.dbName)
 
+    // Make database publicly readable:
+    // - airflow needs to be able to read the inbox database
+    await this.server.request({
+      db: this.dbName,
+      method: 'PUT',
+      doc: '_security',
+      body: {
+        admins:  { names: [], roles: [ "_admin" ] },
+        members: { names: [], roles: [ ] },
+      }
+    })
+
     // Make database only writable by users with the contentManager
     // role or the _admin role
     await this.server.request({

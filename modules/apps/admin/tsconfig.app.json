@@ -1,13 +1,20 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
-  "include": ["env.d.ts", "src/**/*", "src/**/*.vue", "../../libs/dal/**/*"],
+  "include": [
+    "env.d.ts",
+    "src/**/*",
+    "src/**/*.vue",
+    "../../libs/dal/**/*",
+    "../../libs/protocol/**/*"
+  ],
   "exclude": ["src/**/__tests__/*"],
   "compilerOptions": {
     "composite": true,
     "baseUrl": ".",
     "paths": {
       "@lectorium/admin/*": ["./src/*"],
-      "@lectorium/dal/*": ["../../libs/dal/*"]
+      "@lectorium/dal/*": ["../../libs/dal/*"],
+      "@lectorium/protocol": ["../../libs/protocol"]
     }
   }
 }

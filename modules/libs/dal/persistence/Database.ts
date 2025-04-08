@@ -6,6 +6,7 @@ PouchDB.plugin(PouchDBFind)
 export interface DatabaseConfig {
   name: string,
   adapter?: string,
+  authToken?: () => string
 }
 
 export interface DatabaseReplicationChangeEvent {
@@ -37,6 +38,20 @@ export class Database {
       adapter: this._config.adapter,
       // @ts-ignore
       location: 'default',
+      fetch: (url: string | Request, opts: RequestInit | undefined) => {
+        // Add Authorization header to the request options
+        const token = this._config.authToken ? this._config.authToken() : null
+        if (opts && token) {
+          const headers = new Headers(opts.headers);
+          headers.set('Authorization', `Bearer ${token}`);
+          opts.headers = headers;
+        }
+        
+        // You could also use Basic Auth like this:
+        // opts.headers.set('Authorization', 'Basic ' + btoa('username:password'));
+        
+        return PouchDB.fetch(url, opts);
+      }
     })
   }
 

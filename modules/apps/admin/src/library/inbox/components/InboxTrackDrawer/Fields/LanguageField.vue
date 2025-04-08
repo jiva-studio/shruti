@@ -33,8 +33,8 @@ defineProps<{
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
-
-const languages = ref([
+type Language = { name: string; code: string }
+const languages = ref<Language[]>([
   { name: 'English', code: 'en' },
   { name: 'Russian', code: 'ru' },
   { name: 'Serbian', code: 'sr' },
@@ -44,6 +44,6 @@ const value = defineModel<string[]>('value', { default: () => [] })
 
 const mvalue = computed({
   get: () => value.value.map((v) => languages.value.find((l) => l.code === v)),
-  set: (val: string[]) => (value.value = val.map((x) => x.code)),
+  set: (val: Language[]) => (value.value = val.map((x) => x.code)),
 })
 </script>

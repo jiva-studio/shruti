@@ -12,6 +12,9 @@ export default defineConfig({
       '@lectorium/dal': fileURLToPath(
         new URL('../../libs/dal', import.meta.url),
       ),
+      '@lectorium/protocol': fileURLToPath(
+        new URL('../../libs/protocol', import.meta.url),
+      ),
     },
   },
   base: process.env.BASE_URL || '/',
