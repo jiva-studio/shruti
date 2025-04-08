@@ -59,7 +59,8 @@
         "humao.rest-client",
         "ms-playwright.playwright",
         "Gruntfuggly.todo-tree",
-        "Vue.volar"
+        "Vue.volar",
+        "redhat.vscode-yaml"
       ]
     }
   }

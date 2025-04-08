@@ -5,6 +5,10 @@
       "path": "./data"
     },
     {
+      "name": "💾 Lectorium :: GitHub",
+      "path": "./.github"
+    },
+    {
       "name": "👑 Apps :: Admin",
       "path": "./modules/apps/admin"
     },
