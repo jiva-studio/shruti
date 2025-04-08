@@ -21,7 +21,30 @@ services:
       POSTGRES_PASSWORD: lectorium
       POSTGRES_DB: lectorium
 
+  airflow-webserver:
+    build:
+      context: ../modules/
+      dockerfile: ./services/airflow/Dockerfile
+
+  airflow-scheduler:
+    build:
+      context: ../modules/
+      dockerfile: ./services/airflow/Dockerfile
+
+  airflow-worker:
+    build:
+      context: ../modules/
+      dockerfile: ./services/airflow/Dockerfile
+
+  airflow-triggerer:
+    build:
+      context: ../modules/
+      dockerfile: ./services/airflow/Dockerfile
+
   airflow-init:
+    build:
+      context: ../modules/
+      dockerfile: ./services/airflow/Dockerfile
     environment:
       _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'

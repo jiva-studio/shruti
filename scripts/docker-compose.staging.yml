@@ -9,3 +9,18 @@ services:
     image: ghcr.io/akdasa-studios/lectorium-admin:staging
     ports:
       - "80:80"
+
+  airflow-webserver:
+    image: ghcr.io/akdasa-studios/lectorium-airflow:staging
+
+  airflow-scheduler:
+    image: ghcr.io/akdasa-studios/lectorium-airflow:staging
+
+  airflow-worker:
+    image: ghcr.io/akdasa-studios/lectorium-airflow:staging
+
+  airflow-triggerer:
+    image: ghcr.io/akdasa-studios/lectorium-airflow:staging
+
+  airflow-init:
+    image: ghcr.io/akdasa-studios/lectorium-airflow:staging

@@ -4,8 +4,9 @@ FROM apache/airflow:2.10.2
 #                                     Meta                                     #
 # ---------------------------------------------------------------------------- #
 
-LABEL org.opencontainers.image.description="Airflow"
+LABEL org.opencontainers.image.description="Lectorium Airflow"
 LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/lectorium"
+LABEL org.opencontainers.image.authors="AKd Studios"
 
 # ---------------------------------------------------------------------------- #
 #                             Install Dependencies                             #
@@ -19,6 +20,13 @@ RUN apt-get update \
   && apt-get autoremove -yqq --purge \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
+
 USER airflow
-COPY requirements.txt .
+COPY ./services/airflow/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# ---------------------------------------------------------------------------- #
+#                                  Copy Source                                 #
+# ---------------------------------------------------------------------------- #
+
+COPY . .
