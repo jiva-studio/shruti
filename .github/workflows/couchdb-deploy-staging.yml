@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "modules/apps/couchdb/**"
+      - "modules/services/couchdb/**"
       - ".github/workflows/couchdb-build.yml"
       - ".github/workflows/couchdb-deploy-staging.yml"
 
@@ -31,7 +31,7 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          file: modules/apps/couchdb/Dockerfile
+          file: modules/services/couchdb/Dockerfile
           tags: |
             ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb:staging
 
