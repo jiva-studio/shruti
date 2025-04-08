@@ -17,8 +17,13 @@ services:
 
   couchdb:
     build:
-      context: ../modules/services/couchdb/
-      dockerfile: Dockerfile
+      context: ../modules/
+      dockerfile: ./services/couchdb/service/Dockerfile
+
+  couchdb-init:
+    build:
+      context: ../modules/
+      dockerfile: ./services/couchdb/init/Dockerfile
 
   postgres:
     environment:

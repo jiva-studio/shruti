@@ -13,6 +13,9 @@ services:
   couchdb:
     image: ghcr.io/akdasa-studios/lectorium-couchdb:staging
 
+  couchdb-init:
+    image: ghcr.io/akdasa-studios/lectorium-couchdb-init:staging
+
   airflow-webserver:
     image: ghcr.io/akdasa-studios/lectorium-airflow:staging
 

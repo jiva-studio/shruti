@@ -1,11 +1,11 @@
-name: CouchDB
+name: CouchDB Init
 
 on:
   push:
     paths:
-      - "modules/services/couchdb/service/**"
-      - ".github/workflows/couchdb-build.yml"
-      - ".github/workflows/couchdb-deploy-staging.yml"
+      - "modules/services/couchdb/init/**"
+      - ".github/workflows/couchdb-init-build.yml"
+      - ".github/workflows/couchdb-init-deploy-staging.yml"
   
 env:
   REGISTRY: ghcr.io
@@ -21,8 +21,8 @@ jobs:
         with:
           submodules: true
       
-      - name: 👷‍♂️ Build CouchDB
+      - name: 👷‍♂️ Build CouchDB Init
         uses: ./.github/actions/build-container
         with:
           password: ${{ secrets.GITHUB_TOKEN }}
-          file: modules/services/couchdb/service/Dockerfile
+          file: modules/services/couchdb/init/Dockerfile

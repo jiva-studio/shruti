@@ -1,13 +1,13 @@
-name: CouchDB
+name: CouchDB Init
 
 on:
   push:
     branches:
       - main
     paths:
-      - "modules/services/couchdb/**"
-      - ".github/workflows/couchdb-build.yml"
-      - ".github/workflows/couchdb-deploy-staging.yml"
+      - "modules/services/couchdb-init/**"
+      - ".github/workflows/couchdb-init-build.yml"
+      - ".github/workflows/couchdb-init-deploy-staging.yml"
 
 env:
   REGISTRY: ghcr.io
@@ -31,10 +31,10 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          file: modules/services/couchdb/service/Dockerfile
+          file: modules/services/couchdb/init/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb:staging
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:staging
 
       - name: ⬆️ Push staging Image
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:staging
