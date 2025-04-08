@@ -61,6 +61,17 @@ services:
     ports:
       - "5984:5984"
 
+  couchdb-init:
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    environment:
+      - CONNECTION_STRING=http://shruti:shruti@couchdb:5984
+    networks:
+      - shruti
+    volumes:
+      - ../data/keys/jwt/:/etc/shruti/keys
+
   redis:
     image: redis:7.2-bookworm
     expose:
