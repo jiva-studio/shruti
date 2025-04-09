@@ -40,6 +40,7 @@ export interface JwtToken {
 }
 
 export interface AccessToken extends JwtToken {
+  roles: string[];
 }
 
 export interface RefreshToken extends JwtToken {

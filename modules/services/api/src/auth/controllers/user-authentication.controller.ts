@@ -72,17 +72,27 @@ export class UserAuthenticationController {
     // validate OTP, if invalid send 401 Unauthorized response
     const otp = await this.otpService.validate(request.login, request.otp);
     if (!otp) {
-      throw new UnauthorizedException(['otp is invalid']);
+      throw new UnauthorizedException(
+        new dtoShared.ErrorResponse({
+          message: ['Invalid OTP'],
+          statusCode: 401,
+          error: 'Unauthorized',
+        }),
+      );
     }
 
     // get or create user by login and start new session
-    const user = await this.usersService.findByEmail(request.login);
+    const user = await this.usersService.findByName(request.login);
     if (!user) {
-      throw new UnauthorizedException(['user not found']);
+      throw new UnauthorizedException(
+        new dtoShared.ErrorResponse({
+          message: ['Unauthorized'],
+          statusCode: 401,
+          error: 'Unauthorized',
+        }),
+      );
     }
-    const tokens = await this.authService.generateTokens(user.name, {
-      '_couchdb.roles': user.roles,
-    });
+    const tokens = await this.authService.generateTokens(user.name, user.roles);
 
     return new dto.OtpSignInResponse({
       accessToken: tokens.accessToken,

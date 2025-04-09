@@ -77,15 +77,16 @@ export class TokensController {
     await this.revokedTokensService.revoke(refreshToken);
 
     // get user
-    const user = await this.usersService.findByEmail(refreshToken.sub);
+    const user = await this.usersService.findByName(refreshToken.sub);
     if (!user) {
       throw new UnauthorizedException();
     }
 
     // generate new tokens
-    const tokens = await this.authService.generateTokens(refreshToken.sub, {
-      '_couchdb.roles': user.roles,
-    });
+    const tokens = await this.authService.generateTokens(
+      refreshToken.sub,
+      user.roles,
+    );
     return new dto.RefreshTokensResponse({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,

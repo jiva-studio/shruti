@@ -1,4 +1,4 @@
-name: Airflow
+name: Api
 
 on:
   push:

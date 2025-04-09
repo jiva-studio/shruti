@@ -4,7 +4,6 @@ import { CouchDbService } from '@lectorium/api/shared/services';
 export type LoginField = 'email' | 'phone';
 export type User = {
   name: string;
-  email: string;
   roles: string[];
 };
 
@@ -19,12 +18,12 @@ export class AuthUsersService {
 
   /**
    * Finds a user by their email.
-   * @param email Email of the user to find.
+   * @param name User name.
    * @returns User object if found, null otherwise.
    */
-  async findByEmail(email: string): Promise<User | null> {
+  async findByName(name: string): Promise<User | null> {
     const documents = await this.couchDbService.find<User>('_users', {
-      selector: { email },
+      selector: { name },
       limit: 1,
     });
     if (documents.length === 1) {

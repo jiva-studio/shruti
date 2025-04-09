@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   HttpCode,
   HttpException,
   HttpStatus,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -12,14 +14,20 @@ import {
   ApiOperation,
   ApiTags,
   ApiBadRequestResponse,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import * as dto from '@lectorium/api/bucket/dto';
 import * as dtoShared from '@lectorium/api/shared/dto';
 import { S3Service } from '@lectorium/api/bucket/services/s3.service';
 import { Routes } from '@lectorium/protocol';
+import { Authentication } from '@lectorium/api/auth/decorators';
+import { UserAuthentication } from '@lectorium/api/auth/utils';
+import { AuthenticatedUserGuard } from '@lectorium/api/auth/guards';
 
 @Controller()
 @ApiTags('🪣 Bucket')
+@ApiBearerAuth()
+@UseGuards(AuthenticatedUserGuard)
 export class SignUrlController {
   constructor(private readonly s3Service: S3Service) {}
 
@@ -47,7 +55,18 @@ export class SignUrlController {
   })
   async generateSignedUrl(
     @Body() request: dto.SignUrlRequest,
+    @Authentication() auth: UserAuthentication,
   ): Promise<dto.SignUrlResponse | dtoShared.ErrorResponse> {
+    if (!auth.roles.includes('contentManager')) {
+      throw new ForbiddenException(
+        new dtoShared.ErrorResponse({
+          error: 'Forbidden',
+          statusCode: HttpStatus.FORBIDDEN,
+          message: ['User does not have permission to perform this action.'],
+        }),
+      );
+    }
+
     try {
       // Validate the request
       // TODO: extract validation logic to a validators
