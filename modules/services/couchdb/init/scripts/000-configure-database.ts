@@ -30,6 +30,10 @@ export class ConfigureDatabase extends Migration {
         key: 'jwt_keys/rsa:_default',
         value: jwtPublicKey.replace(/\n/g, '\\n')
       },
+      {
+        key: 'jwt_auth/roles_claim_path',
+        value: 'roles'
+      },
       { key: 'couchdb/single_node', value: 'true' },
     ]
 

@@ -1,15 +1,15 @@
 import { Migration } from './Migration'
 
 export abstract class CreateUserMigration extends Migration {
-  abstract get username(): string
+  abstract get email(): string
   abstract get password(): string
   abstract get roles(): string[]
 
-  get name(): string { return `Create ${this.username} user` }
+  get name(): string { return `Create ${this.email} user` }
 
   async shouldMigrate(): Promise<boolean> {
     try {
-      const doc = await this.server.use("_users").get(`org.couchdb.user:${this.username}`)
+      await this.server.use("_users").get(`org.couchdb.user:${this.email}`)
       return false
     } catch (error) {
       return true
@@ -18,8 +18,8 @@ export abstract class CreateUserMigration extends Migration {
 
   async migrate(): Promise<void> {
     await this.server.use<any>("_users").insert({
-      _id: `org.couchdb.user:${this.username}`,
-      name: this.username,
+      _id: `org.couchdb.user:${this.email}`,
+      name: this.email,
       password: this.password,
       roles: this.roles,
       type: "user"
@@ -32,7 +32,7 @@ export abstract class CreateUserMigration extends Migration {
 }
 
 export class CreateContentManagerUser extends CreateUserMigration {
-  username = "contentManager";
+  email = "content@manager.com";
   password = "contentManager";
   roles = ["contentManager"];
 }

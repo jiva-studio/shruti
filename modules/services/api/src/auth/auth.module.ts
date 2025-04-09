@@ -14,6 +14,7 @@ import { AuthUsersService } from './services/auth-users.service';
 import { OtpService } from './services/otp.service';
 import { RevokedTokensService } from './services/revokedTokens.service';
 import { IsDestinationCorrectConstraint } from './validations/destination.validation';
+import { AuthenticatedUserGuard } from './guards';
 
 @Module({
   imports: [
@@ -53,6 +54,8 @@ import { IsDestinationCorrectConstraint } from './validations/destination.valida
     RedisService,
     CouchDbService,
     IsDestinationCorrectConstraint,
+    AuthenticatedUserGuard,
   ],
+  exports: [AuthenticatedUserGuard],
 })
 export class AuthModule {}

@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import {
-  AuthUsersService,
-  RevokedTokensService,
-} from '@shruti/api/auth/services';
+import { RevokedTokensService } from '@shruti/api/auth/services';
 import { ShrutiRequest } from '@shruti/api/auth/utils';
 import { JwtConfig } from '@shruti/api/configs';
 import { AccessToken } from '@shruti/protocol';
@@ -22,7 +19,6 @@ export class AuthenticatedUserGuard implements CanActivate {
     private readonly jwtConfig: ConfigType<typeof JwtConfig>,
     private readonly jwtService: JwtService,
     private readonly revokedTokensService: RevokedTokensService,
-    private readonly usersService: AuthUsersService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

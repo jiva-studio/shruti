@@ -18,6 +18,14 @@ export class UserAuthentication {
   get accessToken() {
     return this._accessToken;
   }
+
+  /**
+   * Get user roles
+   * @returns User roles
+   */
+  get roles() {
+    return this._accessToken.roles as string[];
+  }
 }
 
 export class AuthenticatedUserPermissions {
