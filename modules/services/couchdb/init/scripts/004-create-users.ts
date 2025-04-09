@@ -32,7 +32,7 @@ export abstract class CreateUserMigration extends Migration {
 }
 
 export class CreateContentManagerUser extends CreateUserMigration {
-  email = "content@manager.com";
-  password = "contentManager";
-  roles = ["contentManager"];
+  email    = process.env.LECTORIUM_CONTENT_MANAGER_EMAIL    ?? "content@manager.com";
+  password = process.env.LECTORIUM_CONTENT_MANAGER_PASSWORD ?? "contentManager";
+  roles    = ["contentManager"];
 }

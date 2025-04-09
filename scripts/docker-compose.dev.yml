@@ -35,6 +35,9 @@ services:
     build:
       context: ../modules/
       dockerfile: ./services/couchdb/init/Dockerfile
+    environment:
+      LECTORIUM_CONTENT_MANAGER_EMAIL: contentManager@lectorium.dev
+      LECTORIUM_CONTENT_MANAGER_PASSWORD: contentManager
 
   postgres:
     environment:
