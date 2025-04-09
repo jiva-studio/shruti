@@ -176,7 +176,15 @@
     /* -------------------------------------------------------------------------- */
     "search.exclude": {
       "**/dist/**": true,
+      "data/**": true,
+      "**/node_modules/**": true,
+      "**/.vite/**": true,
+      "**/.git/**": true,
+      "**/__pycache__/**": true,
       "**/.airflow/**": true,
+      "**/.pytest_cache/**": true,
+      "**/.pytest/**": true,
+      "**/logs/**": true,
     },
     "files.exclude": {
       "**/.git": true,
