@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as dto from '@shruti/api/auth/dto';
+import * as dtoShared from '@shruti/api/shared/dto';
 import { OtpService } from '@shruti/api/auth/services';
 import { MailerConfig } from '@shruti/api/configs';
 import { OtpType, Routes } from '@shruti/protocol';
@@ -51,7 +52,7 @@ export class OtpController {
     description: 'OTP has been sent to the user.',
   })
   @ApiTooManyRequestsResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'An OTP has already been generated and is still valid.',
   })
   async generateOtpCode(

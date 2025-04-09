@@ -12,4 +12,7 @@ export const Routes = (baseUrl: string = '') => ({
   otp: {
     root: () => `${baseUrl}/auth/otp`,
   },
-})
+  bucket: {
+    signUrl: () => `${baseUrl}/bucket/sign-url`,
+  },
+});
