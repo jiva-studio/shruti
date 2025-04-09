@@ -16,6 +16,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import * as dto from '@lectorium/api/auth/dto';
+import * as dtoShared from '@lectorium/api/shared/dto';
 import { AuthenticatedUserGuard } from '@lectorium/api/auth/guards';
 import {
   AuthService,
@@ -56,11 +57,11 @@ export class UserAuthenticationController {
     description: 'User has been authenticated.',
   })
   @ApiUnauthorizedResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'OTP is invalid.',
   })
   @ApiTooManyRequestsResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'Too many requests',
   })
   async signinWithOtp(
@@ -108,11 +109,11 @@ export class UserAuthenticationController {
     description: 'User has been logged out.',
   })
   @ApiBadRequestResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'Invalid request.',
   })
   @ApiUnauthorizedResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'Unauthorized request.',
   })
   async logoutUser(

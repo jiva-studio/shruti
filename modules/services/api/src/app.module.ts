@@ -7,13 +7,16 @@ import {
   MailerConfig,
   OtpConfig,
   RedisConfig,
+  S3Config,
 } from './configs';
 import { ConfigModule } from '@nestjs/config';
+import { BucketModule } from './bucket/bucket.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: ['/workspaces/lectorium/data/.env.development'],
       load: [
         CouchDbConfig,
         OtpConfig,
@@ -21,9 +24,11 @@ import { ConfigModule } from '@nestjs/config';
         JwtConfig,
         AuthConfig,
         MailerConfig,
+        S3Config,
       ],
     }),
     AuthModule,
+    BucketModule,
   ],
   controllers: [],
   providers: [],

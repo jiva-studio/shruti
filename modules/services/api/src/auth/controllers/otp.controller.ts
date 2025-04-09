@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { MailerService } from '@nestjs-modules/mailer';
 import * as dto from '@lectorium/api/auth/dto';
+import * as dtoShared from '@lectorium/api/shared/dto';
 import { OtpService } from '@lectorium/api/auth/services';
 import { MailerConfig } from '@lectorium/api/configs';
 import { OtpType, Routes } from '@lectorium/protocol';
@@ -51,7 +52,7 @@ export class OtpController {
     description: 'OTP has been sent to the user.',
   })
   @ApiTooManyRequestsResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'An OTP has already been generated and is still valid.',
   })
   async generateOtpCode(

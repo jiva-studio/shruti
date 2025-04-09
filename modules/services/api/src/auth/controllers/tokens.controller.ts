@@ -13,6 +13,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import * as dto from '@lectorium/api/auth/dto';
+import * as dtoShared from '@lectorium/api/shared/dto';
 import {
   AuthService,
   AuthUsersService,
@@ -47,11 +48,11 @@ export class TokensController {
     description: 'Tokens have been refreshed.',
   })
   @ApiBadRequestResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'Unable to refresh tokens.',
   })
   @ApiUnauthorizedResponse({
-    type: dto.ErrorResponse,
+    type: dtoShared.ErrorResponse,
     description: 'Refresh token is invalid.',
   })
   async refreshTokens(

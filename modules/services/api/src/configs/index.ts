@@ -4,3 +4,4 @@ export { default as JwtConfig } from './jwt.config';
 export { default as MailerConfig } from './mailer.config';
 export { default as OtpConfig } from './otp.config';
 export { default as RedisConfig } from './redis.config';
+export { default as S3Config } from './s3.config';
