@@ -35,6 +35,9 @@ services:
     build:
       context: ../modules/
       dockerfile: ./services/couchdb/init/Dockerfile
+    environment:
+      SHRUTI_CONTENT_MANAGER_EMAIL: contentManager@shruti.dev
+      SHRUTI_CONTENT_MANAGER_PASSWORD: contentManager
 
   postgres:
     environment:
