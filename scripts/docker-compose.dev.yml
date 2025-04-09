@@ -21,6 +21,11 @@ services:
   #                                  Services                                  #
   # -------------------------------------------------------------------------- #
 
+  api:
+    build:
+      context: ../modules/
+      dockerfile: ./services/api/Dockerfile
+
   couchdb:
     build:
       context: ../modules/

@@ -5,10 +5,11 @@ name: lectorium
 # -------------------------------------------------------------------------- #
 
 services:
+  api:
+    image: ghcr.io/akdasa-studios/lectorium-api:staging
+
   admin:
     image: ghcr.io/akdasa-studios/lectorium-admin:staging
-    ports:
-      - "80:80"
 
   couchdb:
     image: ghcr.io/akdasa-studios/lectorium-couchdb:staging

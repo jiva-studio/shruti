@@ -46,6 +46,12 @@ x-airflow-common:
 
 services:
 
+  api:
+    ports:
+      - "8081:8081"
+    networks:
+      - lectorium
+
   couchdb:
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5984/_up"]
