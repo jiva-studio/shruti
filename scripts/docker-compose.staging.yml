@@ -5,10 +5,11 @@ name: shruti
 # -------------------------------------------------------------------------- #
 
 services:
+  api:
+    image: ghcr.io/jiva-studio/shruti-api:staging
+
   admin:
     image: ghcr.io/jiva-studio/shruti-admin:staging
-    ports:
-      - "80:80"
 
   couchdb:
     image: ghcr.io/jiva-studio/shruti-couchdb:staging
