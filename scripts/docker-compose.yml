@@ -59,6 +59,9 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    volumes:
+      - ../data/couchdb/data:/opt/couchdb/data
+      - ../data/couchdb/config:/opt/couchdb/etc/local.d
     networks:
       - lectorium
     environment:
