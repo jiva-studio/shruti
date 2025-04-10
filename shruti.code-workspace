@@ -13,6 +13,10 @@
       "path": "./modules/apps/admin"
     },
     {
+      "name": "📱 Apps :: Mobile",
+      "path": "./modules/apps/mobile"
+    },
+    {
       "name": "👋 Apps :: Landing",
       "path": "./modules/apps/landing"
     },
