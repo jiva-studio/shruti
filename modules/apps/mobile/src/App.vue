@@ -7,5 +7,16 @@
 
 <script setup lang="ts">
 import { IonApp, IonRouterOutlet } from '@ionic/vue';
-import { FloatingPlayer } from '@/app';
+import { FloatingPlayer, useSyncService } from '@/app';
+import { onMounted } from 'vue';
+
+/* -------------------------------------------------------------------------- */
+/*                                Dependencies                                */
+/* -------------------------------------------------------------------------- */
+
+const syncService = useSyncService()
+
+onMounted(() => {
+  syncService.sync()
+})
 </script>
