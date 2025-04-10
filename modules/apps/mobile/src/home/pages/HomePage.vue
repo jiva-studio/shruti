@@ -16,27 +16,14 @@
         />
       </ion-list>
 
-      <SectionHeader title="You Might Like" />
-      <ion-list lines="none">
-        <PlaylistItem 
-          v-for="item in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]"
-          :key="item"
-          trackId="1"
-          title="Krishna is Supreme Personality of Godhead"
-          author="ACBPS"
-          location="India"
-          :references="['BG 1.1', 'BG 1.2']"
-          status="none"
-          date="2023-10-01"
-        />
-      </ion-list>
+      <TrackSuggestionsSection />
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import { IonPage, IonContent, IonList } from '@ionic/vue';
-import { PlaylistItem, SectionHeader } from '@/home';
+import { PlaylistItem, SectionHeader, TrackSuggestionsSection } from '@/home';
 
 
 const upNext = [

@@ -1,10 +1,10 @@
 <template>
   <IonItem @click="onItemClicked">
     <IonIcon
-      v-if="playingStatusIcon.icon"
+      v-if="PlayListItemStatusIcon.icon"
       aria-hidden="true"
-      :icon="playingStatusIcon.icon"
-      :color="playingStatusIcon.color"
+      :icon="PlayListItemStatusIcon.icon"
+      :color="PlayListItemStatusIcon.color"
       slot="end"
     />
     <IonLabel class="ion-text-nowrap">
@@ -29,29 +29,29 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { IonItem, IonLabel, IonIcon } from '@ionic/vue'
-import { headset, cloudDownloadOutline } from 'ionicons/icons'
+import { cloudDownloadOutline } from 'ionicons/icons'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
-export type PlayingStatus =
+export type PlaylistItemStatus =
   | "none"
   | "loading"
   | "playing"
 
-export interface TrackViewModel {
+export type PlaylistItemData = {
   trackId: string
   playlistItemId?: string
   title: string
   author: string
   location?: string
   references: string[]
-  status: PlayingStatus,
+  status: PlaylistItemStatus,
   date: string
 }
 
 const props = defineProps<
-  TrackViewModel
+  PlaylistItemData
 >()
 
 const emit = defineEmits<{
@@ -62,7 +62,7 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 type StatusIconMap = {
-  [key in PlayingStatus]: { icon?: string, color?: string }
+  [key in PlaylistItemStatus]: { icon?: string, color?: string }
 }
 
 const statusIconMaps: StatusIconMap = {
@@ -70,7 +70,7 @@ const statusIconMaps: StatusIconMap = {
   "loading":  { icon: cloudDownloadOutline, color: 'light' },
   "playing":  { icon: undefined,            color: undefined },
 }
-const playingStatusIcon = computed(
+const PlayListItemStatusIcon = computed(
   () => statusIconMaps[props.status]
 )
 
