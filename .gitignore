@@ -43,3 +43,7 @@ __pycache__
 **/node_modules/**
 **/dist/**
 .env.development
+.idea/
+*.xcworkspacedata
+IDEWorkspaceChecks.plist
+.env.sentry-build-plugin
