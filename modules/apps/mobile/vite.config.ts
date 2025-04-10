@@ -1,4 +1,5 @@
 /// <reference types="vitest" />
+import { fileURLToPath } from 'node:url'
 
 import legacy from '@vitejs/plugin-legacy'
 import vue from '@vitejs/plugin-vue'
@@ -13,6 +14,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@lectorium/dal': fileURLToPath(
+        new URL('../../libs/dal', import.meta.url),
+      ),
       '@': path.resolve(__dirname, './src'),
     },
   },
