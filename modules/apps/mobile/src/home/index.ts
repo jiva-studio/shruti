@@ -4,3 +4,6 @@ export { default as PlaylistItem, type PlaylistItemData } from './components/Pla
 
 // containers:
 export { default as TrackSuggestionsSection } from './containers/TrackSuggestionsSection.vue';
+
+// mappers:
+export { mapTrackToPlaylistItem } from './mappers/tracks';

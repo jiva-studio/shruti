@@ -1,4 +1,6 @@
 export type Location = {
   _id: string
-  name: Record<string, string>
+  type: "location"
+  version: number
+  fullName: Record<string, string>
 }
