@@ -3,13 +3,13 @@ import { Database } from '../persistence'
 import { DatabaseService } from './DatabaseService'
 
 /**
- * Schema of the Source documents in the Library collection.
+ * Schema of the Location documents in the Dictionary collection.
  */
 type LocationsDBSchema = {
   _id: string
-  name: {
-    [language: string]: string
-  }
+  type: "location",
+  version: number,
+  fullName: Record<string, string>
 }
 
 const locationSerializer   = (item: Location): LocationsDBSchema => item

@@ -10,7 +10,7 @@
       :location="item.location"
       :references="item.references"
       :date="item.date"
-      status="none"
+      :status="item.status"
     />
   </IonList>
 </template>
@@ -19,9 +19,8 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue';
-import { PlaylistItem, SectionHeader, type PlaylistItemData } from '@/home';
+import { mapTrackToPlaylistItem, PlaylistItem, SectionHeader, type PlaylistItemData } from '@/home';
 import { useDAL } from '@/app';
-import { Track } from '@lectorium/dal/models';
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -39,22 +38,17 @@ const { state } = useAsyncState(
   { immediate: true, resetOnExecute: false }
 )
 
-
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
 
 async function getSuggestions() : Promise<PlaylistItemData[]> {
-  const mapToPlaylistItemData = (track: Track): PlaylistItemData => ({
-    trackId: track._id,
-    title: track.title["en"],
-    author: track.author,
-    location: track.location,
-    references: track.references.map(x => x.join(" ")),
-    date: track.date.join("-"),
-    status: "none",
-  })
-
-  return (await dal.tracks.getAll()).map(mapToPlaylistItemData)
+  try {
+    const suggestedTracks = await dal.tracks.getAll()
+    return await Promise.all(suggestedTracks.map(mapTrackToPlaylistItem))
+  } catch (error) {
+    console.error("Error fetching track suggestions:", error)
+    return []
+  }
 }
 </script>

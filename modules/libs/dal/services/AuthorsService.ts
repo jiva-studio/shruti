@@ -4,6 +4,7 @@ import { DatabaseService } from './DatabaseService'
 
 export type AuthorDbScheme = {
   _id: string
+  type: "author"
   version: number
   fullName: Record<string, string>
 }

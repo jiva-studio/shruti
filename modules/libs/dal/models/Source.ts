@@ -3,6 +3,7 @@
  */
 export type Source = {
   _id: string
+  type: "source"
   version: number
   fullName: Record<string, string>
   shortName: Record<string, string>

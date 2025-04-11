@@ -7,6 +7,7 @@ import { DatabaseService } from './DatabaseService'
  */
 type SourcesDBSchema = {
   _id: string
+  type: "source"
   version: number
   shortName: Record<string, string>
   fullName: Record<string, string>
