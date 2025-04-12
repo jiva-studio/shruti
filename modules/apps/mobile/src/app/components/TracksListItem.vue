@@ -2,10 +2,10 @@
   <IonItem @click="onItemClicked">
     <IonIcon
       v-if="PlayListItemStatusIcon.icon"
+      slot="end"
       aria-hidden="true"
       :icon="PlayListItemStatusIcon.icon"
       :color="PlayListItemStatusIcon.color"
-      slot="end"
     />
     <IonLabel class="ion-text-nowrap">
       <h3>
@@ -34,24 +34,24 @@ import { cloudDownloadOutline } from 'ionicons/icons'
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
-export type PlaylistItemStatus =
-  | "none"
-  | "loading"
-  | "playing"
+export type TracksListItemStatus =
+  | 'none'
+  | 'loading'
+  | 'playing'
 
-export type PlaylistItemData = {
+export type TracksListItemData = {
   trackId: string
   playlistItemId?: string
   title: string
   author: string
   location?: string
   references: string[]
-  status: PlaylistItemStatus,
+  status: TracksListItemStatus,
   date: string
 }
 
 const props = defineProps<
-  PlaylistItemData
+  TracksListItemData
 >()
 
 const emit = defineEmits<{
@@ -62,13 +62,13 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 type StatusIconMap = {
-  [key in PlaylistItemStatus]: { icon?: string, color?: string }
+  [key in TracksListItemStatus]: { icon?: string, color?: string }
 }
 
 const statusIconMaps: StatusIconMap = {
-  "none":     { icon: undefined,            color: undefined },
-  "loading":  { icon: cloudDownloadOutline, color: 'light' },
-  "playing":  { icon: undefined,            color: undefined },
+  'none':     { icon: undefined,            color: undefined },
+  'loading':  { icon: cloudDownloadOutline, color: 'light' },
+  'playing':  { icon: undefined,            color: undefined },
 }
 const PlayListItemStatusIcon = computed(
   () => statusIconMaps[props.status]
