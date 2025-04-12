@@ -1,9 +1,9 @@
 <template>
-  <ion-page>
-    <ion-content :fullscreen="true">
+  <IonPage>
+    <IonContent :fullscreen="true">
       <SectionHeader title="Up Next" />
-      <ion-list lines="none">
-        <PlaylistItem 
+      <IonList lines="none">
+        <TracksListItem 
           v-for="item in upNext"
           :key="item.trackId"
           :track-id="item.trackId"
@@ -14,17 +14,17 @@
           :status="item.status"
           :date="item.date"
         />
-      </ion-list>
+      </IonList>
 
       <TrackSuggestionsSection />
-    </ion-content>
-  </ion-page>
+    </IonContent>
+  </IonPage>
 </template>
 
 <script setup lang="ts">
-import { IonPage, IonContent, IonList } from '@ionic/vue';
-import { PlaylistItem, SectionHeader, TrackSuggestionsSection } from '@/home';
-
+import { IonPage, IonContent, IonList } from '@ionic/vue'
+import { SectionHeader, TrackSuggestionsSection } from '@/home'
+import { TracksListItem } from '@/app'
 
 const upNext = [
   {
