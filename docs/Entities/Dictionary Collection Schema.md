@@ -57,6 +57,7 @@ This document describes the schema for a dictionary collection in a database.
   "_id": "language::{id}",
   "type": "language",
   "version": 1,
+  "code": "en",
   "fullName": "English",
   "icon": "🇺🇸"
 }

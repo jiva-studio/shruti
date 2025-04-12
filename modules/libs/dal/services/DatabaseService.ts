@@ -109,11 +109,11 @@ export class DatabaseService<
     request?: GetAllRequest
   ): Promise<TItem[]> {
     const response = await this._database.db.find({
-      selector: { 
+      selector: {
         ...this._scope,
-        limit: request?.limit , 
-        skip: request?.skip 
       }, 
+      limit: request?.limit ?? 25,
+      skip: request?.skip,
     })
     return response.docs.map(row => this._deserializer(row as unknown as TDbScheme))
   }
@@ -121,6 +121,7 @@ export class DatabaseService<
   async getMany(
     request: GetManyRequest
   ): Promise<TItem[]> {
+    console.log("getMany", request)
     const response = await this._database.db.find({
       selector: {
         ...this._scope,

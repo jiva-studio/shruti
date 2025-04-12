@@ -1,19 +1,20 @@
-import { Track } from "@lectorium/dal/models"
-import { PlaylistItemData } from "@/home"
-import { useDAL } from "@/app"
+import { Track } from '@lectorium/dal/models'
+import { TracksListItemData } from '@/app'
+import { useDAL } from '@/app'
 
+// TODO: move to @/app
 
 export async function mapTrackToPlaylistItem(
   track: Track
-): Promise<PlaylistItemData> {
+): Promise<TracksListItemData> {
   return {
     trackId: track._id,
     title: mapTrackTitle(track.title),
     author: await mapAuthorFullNameById(track.author), 
     location: await mapLocationFullNameById(track.location),
-    references: track.references.map(x => x.join(" ")),
+    references: track.references.map(x => x.join(' ')),
     date: mapTrackDate(track.date),
-    status: "none", // TODO: set status based on playlist item
+    status: 'none', // TODO: set status based on playlist item
   }
 }
 
@@ -23,7 +24,7 @@ export async function mapTrackToPlaylistItem(
 
 function mapTrackTitle(
   titles: Record<string, string>,
-  language: string = "en"
+  language: string = 'en'
 ): string {
   return titles[language] 
     || titles[Object.keys(titles)[0]] 
@@ -59,7 +60,7 @@ function mapTrackDate(
       day: 'numeric'
     })
   }
-  return ""
+  return ''
 }
 
 /* -------------------------------------------------------------------------- */
@@ -69,8 +70,8 @@ function mapTrackDate(
 async function mapAuthorFullNameById(authorId: string) {
   try {
     const dal = useDAL()
-    const author = await dal.authors.getOne("author::" + authorId)
-    return author.fullName["en"] || "Unknown"
+    const author = await dal.authors.getOne('author::' + authorId)
+    return author.fullName['en'] || 'Unknown'
   } catch (error) {
     return authorId
   }
@@ -83,8 +84,8 @@ async function mapAuthorFullNameById(authorId: string) {
 async function mapLocationFullNameById(locationId: string) {
   try {
     const dal = useDAL()
-    const location = await dal.locations.getOne("location::" + locationId)
-    return location.fullName["en"] || locationId
+    const location = await dal.locations.getOne('location::' + locationId)
+    return location.fullName['en'] || locationId
   } catch (error) {
     return locationId
   }

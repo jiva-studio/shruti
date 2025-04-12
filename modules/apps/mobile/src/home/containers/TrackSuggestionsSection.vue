@@ -1,10 +1,10 @@
 <template>
   <SectionHeader title="You Might Like" />
   <IonList lines="none">
-    <PlaylistItem 
+    <TracksListItem 
       v-for="item in state"
       :key="item.trackId"
-      :trackId="item.trackId"
+      :track-id="item.trackId"
       :title="item.title"
       :author="item.author"
       :location="item.location"
@@ -18,9 +18,10 @@
 
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
-import { IonList } from '@ionic/vue';
-import { mapTrackToPlaylistItem, PlaylistItem, SectionHeader, type PlaylistItemData } from '@/home';
-import { useDAL } from '@/app';
+import { IonList } from '@ionic/vue'
+import { mapTrackToPlaylistItem, SectionHeader } from '@/home'
+import { TracksListItem, type TracksListItemData } from '@/app'
+import { useDAL } from '@/app'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -42,12 +43,13 @@ const { state } = useAsyncState(
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
 
-async function getSuggestions() : Promise<PlaylistItemData[]> {
+async function getSuggestions() : Promise<TracksListItemData[]> {
   try {
     const suggestedTracks = await dal.tracks.getAll()
     return await Promise.all(suggestedTracks.map(mapTrackToPlaylistItem))
   } catch (error) {
-    console.error("Error fetching track suggestions:", error)
+    // TODO: better error handling
+    console.error('Error fetching track suggestions:', error)
     return []
   }
 }

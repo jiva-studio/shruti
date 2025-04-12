@@ -17,13 +17,15 @@
     "@capacitor/status-bar": "7.0.1",
     "@ionic/vue": "^8.0.0",
     "@ionic/vue-router": "^8.0.0",
+    "@vue/language-server": "^2.2.8",
     "@vueuse/core": "^13.1.0",
-    "ionicons": "^7.0.0",
-    "vue": "^3.3.0",
-    "vue-router": "^4.2.0",
     "events": "^3.3.0",
+    "ionicons": "^7.0.0",
     "pouchdb": "^9.0.0",
-    "pouchdb-find": "^9.0.0"
+    "pouchdb-find": "^9.0.0",
+    "prettier": "^3.5.3",
+    "vue": "^3.3.0",
+    "vue-router": "^4.2.0"
   },
   "devDependencies": {
     "@capacitor/cli": "7.2.0",
