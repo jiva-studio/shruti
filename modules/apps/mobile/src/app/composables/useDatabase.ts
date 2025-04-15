@@ -1,11 +1,11 @@
-import { Capacitor } from "@capacitor/core"
-import { useConfig } from "@/app"
-import { Database } from "@lectorium/dal/persistence"
+import { useConfig } from '@/app'
+import { Database } from '@lectorium/dal/persistence'
 
 export function useDatabase() {
   const config = useConfig()
   const databaseUrl = config.databaseUrl.value
-  const localAdapter = Capacitor.isNativePlatform() ? 'cordova-sqlite' : undefined
+  // TODO: use sqlite adapter for android / ios
+  const localAdapter = undefined // Capacitor.isNativePlatform() ? 'cordova-sqlite' : undefined
 
   return {
     local: {
