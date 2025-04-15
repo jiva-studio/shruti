@@ -7,6 +7,11 @@ export { default as DateRangeSelectorDialog, type DateRange } from './components
 export { default as TracksListItem, type TracksListItemData } from './components/TracksListItem.vue'
 export { default as TracksListItemSkeleton } from './components/TracksListItemSkeleton.vue'
 
+// icons:
+export { default as IconHome } from './icons/IconHome.vue'
+export { default as IconSettings } from './icons/IconSettings.vue'
+export { default as IconSearch } from './icons/IconSearch.vue'
+
 // composables:
 export * from './composables/useConfig'
 export * from './composables/useDatabase'
