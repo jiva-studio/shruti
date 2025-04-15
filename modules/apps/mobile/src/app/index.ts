@@ -6,6 +6,7 @@ export { default as ListItemSelectorDialog, type Item as ListItemSelectorItem } 
 export { default as DateRangeSelectorDialog, type DateRange } from './components/SelectorDialog/DateRangeSelectorDialog.vue'
 export { default as TracksListItem, type TracksListItemData } from './components/TracksListItem.vue'
 export { default as TracksListItemSkeleton } from './components/TracksListItemSkeleton.vue'
+export { default as Page } from './components/Page.vue'
 
 // icons:
 export { default as IconHome } from './icons/IconHome.vue'
@@ -20,3 +21,8 @@ export * from './composables/useDAL'
 
 // services:
 export * from './services/SyncService'
+
+// features:
+export * from './features/navigation-bar.feature'
+export * from './features/status-bar.feature'
+export * from './features/safe-area.feature'

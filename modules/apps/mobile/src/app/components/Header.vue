@@ -1,7 +1,6 @@
 <template>
   <IonHeader
     :class="{
-      'Header': true,
       'ion-no-border': isAndroid
     }"
   >

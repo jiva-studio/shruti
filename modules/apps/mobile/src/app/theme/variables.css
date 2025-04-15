@@ -8,7 +8,4 @@ http://ionicframework.com/docs/theming/ */
 	--ion-color-primary-contrast-rgb: 255,255,255;
 	--ion-color-primary-shade: #6720b6;
 	--ion-color-primary-tint: #833ad4;
-
-  --ion-toolbar-background: var(--ion-color-primary);
-  --ion-toolbar-color: #fff; /* Text/icon color */
 }

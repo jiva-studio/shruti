@@ -1,18 +1,17 @@
 <template>
-  <IonPage>
-    <IonContent :fullscreen="true">
-      <IonSearchbar placeholder="Custom Placeholder" />
-      <TracksFilterBar v-model="filters" />
-      <TracksSearchResults
-        :filters="filters"
-      />
-    </IonContent>
-  </IonPage>
+  <Page>
+    <Searchbar placeholder="Search" />
+    <TracksFilterBar v-model="filters" />
+
+    <TracksSearchResults
+      :filters="filters"
+    />
+  </Page>
 </template>
 
 <script setup lang="ts">
-import { IonPage, IonContent, IonSearchbar } from '@ionic/vue'
-import { TracksFilterBar, TracksFilterValue, TracksSearchResults } from '@/library'
+import { Searchbar, TracksFilterBar, TracksFilterValue, TracksSearchResults } from '@/library'
+import { Page } from '@/app/'
 import { ref } from 'vue'
 
 const filters = ref<TracksFilterValue>({
