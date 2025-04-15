@@ -1,30 +1,29 @@
 <template>
-  <IonPage>
-    <IonContent :fullscreen="true">
-      <SectionHeader title="Up Next" />
-      <IonList lines="none">
-        <TracksListItem 
-          v-for="item in upNext"
-          :key="item.trackId"
-          :track-id="item.trackId"
-          :title="item.title"
-          :author="item.author"
-          :location="item.location"
-          :references="item.references"
-          :status="item.status"
-          :date="item.date"
-        />
-      </IonList>
+  <Page>
+    <SectionHeader title="Up Next" />
+    <IonList lines="none">
+      <TracksListItem 
+        v-for="item in upNext"
+        :key="item.trackId"
+        :track-id="item.trackId"
+        :title="item.title"
+        :author="item.author"
+        :location="item.location"
+        :references="item.references"
+        :status="item.status"
+        :date="item.date"
+      />
+    </IonList>
 
-      <TrackSuggestionsSection />
-    </IonContent>
-  </IonPage>
+    <TrackSuggestionsSection />
+  </Page>
 </template>
 
 <script setup lang="ts">
-import { IonPage, IonContent, IonList } from '@ionic/vue'
+import { IonList } from '@ionic/vue'
 import { SectionHeader, TrackSuggestionsSection } from '@/home'
-import { TracksListItem } from '@/app'
+import { Page, TracksListItem } from '@/app'
+import { TracksListItemStatus } from '@/app/components/TracksListItem.vue'
 
 const upNext = [
   {
@@ -33,7 +32,7 @@ const upNext = [
     author: 'ACBPS',
     location: 'India',
     references: ['BG 1.1', 'BG 1.2'],
-    status: 'playing',
+    status: 'playing' as TracksListItemStatus,
     date: '2023-10-01'
   },
   {
@@ -42,7 +41,7 @@ const upNext = [
     author: 'ACBPS',
     location: 'USA',
     references: ['SSR 2.1', 'SSR 2.2'],
-    status: 'loading',
+    status: 'loading' as TracksListItemStatus,
     date: '2023-09-15'
   },
   {
@@ -51,7 +50,7 @@ const upNext = [
     author: 'ACBPS',
     location: 'India',
     references: ['BG 2.1', 'BG 2.2'],
-    status: 'loading',
+    status: 'loading' as TracksListItemStatus,
     date: '2023-08-20'
   },
   {
@@ -60,7 +59,7 @@ const upNext = [
     author: 'ACBPS',
     location: 'India',
     references: ['TLC 1.1', 'TLC 1.2'],
-    status: 'none',
+    status: 'none' as TracksListItemStatus,
     date: '2023-07-10'
   },
 ]

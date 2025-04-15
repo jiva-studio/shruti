@@ -41,8 +41,9 @@ ion-tab-bar {
   --border: 0;
   --background: linear-gradient(
     to bottom,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0) 0%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1) 100%
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0)   0%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), .8) 35%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1)  100%
   );
   padding-top: 50px;
 }

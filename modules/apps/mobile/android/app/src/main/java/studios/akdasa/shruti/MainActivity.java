@@ -1,4 +1,4 @@
-package io.ionic.starter;
+package studios.akdasa.shruti;
 
 import android.os.Bundle;
 import android.webkit.WebView;
