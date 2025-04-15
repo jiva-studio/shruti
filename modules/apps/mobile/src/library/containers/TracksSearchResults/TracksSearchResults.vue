@@ -95,7 +95,6 @@ async function loadTracks(
   offset: number = 0,
   filters: Filters,
 ) {
-  if (offset === 0) { tracks.value = [] }
 
   try {
     isLoading.value = true
@@ -110,6 +109,7 @@ async function loadTracks(
       limit: pageSize,
     })
     const items = await Promise.all(searchResult.map(mapTrackToPlaylistItem))
+    if (offset === 0) { tracks.value = [] }
     tracks.value.push(...items)
     infiniteScrollEnabled.value = items.length === pageSize 
   } catch (error) {
