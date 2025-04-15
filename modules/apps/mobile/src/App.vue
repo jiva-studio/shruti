@@ -1,14 +1,16 @@
 <template>
-  <ion-app>
-    <ion-router-outlet />
-    <FloatingPlayer />
-  </ion-app>
+  <IonApp>
+    <IonRouterOutlet />
+    <Player />
+    <NavigationBarHolder />
+  </IonApp>
 </template>
 
 <script setup lang="ts">
-import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { FloatingPlayer, useSyncService } from '@/app'
 import { onMounted } from 'vue'
+import { IonApp, IonRouterOutlet } from '@ionic/vue'
+import { NavigationBarHolder, useSyncService } from '@/app'
+import { Player } from '@/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -16,7 +18,11 @@ import { onMounted } from 'vue'
 
 const syncService = useSyncService()
 
-onMounted(() => {
+/* -------------------------------------------------------------------------- */
+/*                                    Hooks                                   */
+/* -------------------------------------------------------------------------- */
+
+onMounted(async () => {
   syncService.sync()
 })
 </script>
