@@ -1,0 +1,68 @@
+name: Mobile
+
+on:
+  push:
+    paths:
+      - "modules/apps/mobile/**"
+      - ".github/workflows/mobile-build.yml"
+  
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: jiva-studio
+
+jobs:
+  build:
+    name: 👷‍♂️ Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: 💾 Install Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 🤖 Install Android SDK
+        uses: android-actions/setup-android@v2
+
+      - name: 📝 Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: 🧰 Install SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+
+      - name: 🧰 Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'modules/package-lock.json'
+
+      - name: 📦 Install Node Dependencies
+        working-directory: modules
+        run: npm ci
+
+      - name: 👷 Build Plugins
+        working-directory: modules/libs/downloader
+        run: npm i && npm run build
+
+      - name: 👷 Build Ionic App
+        working-directory: modules/apps/mobile
+        run: npm i && npm run build+sync
+
+      - name: 👷 Build Android App
+        working-directory: modules/apps/mobile/android
+        run: ./gradlew assembleDebug
+        # run: npx cap build android
+
+      - name: 📤 Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 1
+      
