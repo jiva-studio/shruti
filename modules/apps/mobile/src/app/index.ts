@@ -20,6 +20,7 @@ export * from './composables/useConfig'
 export * from './composables/useDatabase'
 export * from './composables/useSyncService'
 export * from './composables/useDAL'
+export * from './composables/useDownloader'
 
 // services:
 export * from './services/SyncService'

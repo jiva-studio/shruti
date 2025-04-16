@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
+    "build+sync": "npm run build && npx cap sync",
     "preview": "vite preview",
     "lint": "eslint ."
   },
@@ -25,6 +26,7 @@
     "capacitor-plugin-safe-area": "^4.0.0",
     "events": "^3.3.0",
     "ionicons": "^7.0.0",
+    "lectorium-downloader": "^0.0.1",
     "pouchdb": "^9.0.0",
     "pouchdb-find": "^9.0.0",
     "prettier": "^3.5.3",
