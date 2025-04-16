@@ -3,18 +3,17 @@
     :is-open="open"
     @did-dismiss="open = false"
   >
-    <IonContent :fullscreen="true">
+    <IonContent
+      :fullscreen="true"
+      class="ion-padding"
+    >
       <slot />
-      <p class="ion-padding prompter">
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec tincidunt eleifend placerat. Etiam ac risus orci. Suspendisse sed maximus eros. Nullam quis leo a nunc fringilla viverra quis eget ex. Donec varius finibus ante sed semper. Praesent ut lectus vel elit maximus efficitur quis sed sem. Vivamus consectetur turpis in orci lacinia, consequat interdum risus ultricies. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Integer volutpat lectus et sem aliquam, non ultricies risus aliquet. Etiam neque orci, consectetur sed semper ut, malesuada vitae odio. In hendrerit fringilla pellentesque. Vivamus sagittis venenatis placerat. Vestibulum tincidunt elementum ipsum, non aliquam diam laoreet malesuada. Praesent ut massa justo. Nunc dapibus risus ut augue iaculis, sit amet rutrum est faucibus.
-
-        Praesent non venenatis tellus, sit amet mattis libero. In id eros ultricies, suscipit purus quis, viverra velit. Mauris suscipit tellus ac odio efficitur, nec maximus ex dignissim. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Integer pulvinar nisl velit, quis mollis tellus consequat ut. Nulla scelerisque ipsum ut est consectetur, lobortis fringilla nulla rhoncus. Ut pharetra dui dolor, id eleifend tortor tincidunt vitae. Sed venenatis euismod sapien, eget gravida lacus dictum a. Ut nec dictum ex. Sed rutrum laoreet tortor, sit amet tempor elit cursus ut. Nullam id mollis sem. Etiam in lacus sagittis, rutrum augue at, pellentesque dolor. Morbi quis gravida sapien.
-
-        Praesent non purus odio. Quisque faucibus sodales dictum. Vivamus rutrum enim vitae purus mollis, et hendrerit dui laoreet. Proin varius leo eget dui ullamcorper dictum. Quisque lobortis bibendum vulputate. Etiam sed vehicula mi. Phasellus ultrices risus sed mauris finibus, quis auctor dui faucibus. Suspendisse non lacus lectus. Vivamus libero libero, congue in placerat at, consectetur sit amet risus. Morbi sollicitudin a elit id commodo. Morbi scelerisque, nisi finibus facilisis sodales, ipsum risus commodo magna, sit amet pulvinar quam nisi nec nibh. Phasellus in nunc ac turpis mollis blandit ut in elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-
-        Vestibulum eleifend et dolor sed condimentum. Praesent a purus a dui dapibus imperdiet. Suspendisse id tincidunt odio, sed tincidunt augue. Maecenas felis sem, varius non fringilla elementum, molestie vel turpis. Sed lectus tortor, lacinia eu blandit sit amet, facilisis et purus. Cras eu lorem rutrum, auctor velit sed, molestie sapien. Curabitur tincidunt suscipit libero sit amet interdum. Morbi lorem nulla, tempus quis metus et, vulputate interdum felis. Quisque et aliquet tellus. Nunc porta ipsum nec tortor ornare, eu consequat orci accumsan. Quisque eu venenatis orci. Donec metus sapien, scelerisque eu tempor quis, ultricies quis arcu. Ut gravida augue eu quam porta semper. Nunc commodo metus ac odio faucibus, finibus pharetra tellus elementum.
-
-        Nulla facilisi. Nullam at pulvinar enim, et aliquam diam. Nullam sagittis dapibus libero quis viverra. Suspendisse et porttitor nulla. Sed sed nibh vitae nulla aliquam interdum non at massa. Praesent tincidunt varius tristique. Aenean pretium quam et libero facilisis venenatis. Donec vel accumsan tellus. Nunc eleifend erat non enim pretium, sed hendrerit magna commodo. Aliquam quis arcu vitae metus aliquam molestie at sollicitudin sem. Suspendisse vel porta leo. Pellentesque at laoreet purus. Duis vulputate enim sed mauris fermentum, sit amet ultrices diam pharetra. Aliquam tristique mauris ipsum, vel dapibus est vehicula quis.
+      <p
+        v-for="t in text"
+        :key="t.timestamp"
+        class="prompter"
+      >
+        {{ t.text }}
       </p>
     </IonContent>
   </IonModal>
@@ -24,6 +23,44 @@
 import { IonModal, IonContent} from '@ionic/vue'
 
 const open = defineModel<boolean>('open')
+
+const text = [
+  {
+    timestamp: 0,
+    text: 'Ladies and gentlemen, devotees and seekers, please accept my humble obeisances. All glories to Śrīla Prabhupāda. All glories to Śrī Kṛṣṇa, the Supreme Personality of Godhead.'
+  },
+  {
+    timestamp: 0,
+    text: 'So, who is Kṛṣṇa? Kṛṣṇa is not an ordinary person. He is Bhagavān, the Supreme Personality of Godhead. In the Bhagavad-gītā, Kṛṣṇa says, \'mattaḥ parataraṁ nānyat kiñcid asti dhanañjaya\' – there is no truth superior to Me. He is the cause of all causes, sarva-kāraṇa-kāraṇam.'
+  },
+  {
+    timestamp: 0,
+    text: 'When we speak of God, we must understand what that means. Not a vague idea. No. God is a person, and His name is Kṛṣṇa. He has a form, He has qualities, and He performs activities—divine pastimes, or līlās—and all of them are transcendental.'
+  },
+  {
+    timestamp: 0,
+    text: 'In the material world, we are trying to enjoy, but we are frustrated. Why? Because we are not the enjoyer—we are the enjoyed. The real enjoyer is Kṛṣṇa. We are His eternal servants. That is our natural position: jīvera \'svarūpa\' haya — kṛṣṇera \'nitya-dāsa\'.'
+  },
+  {
+    timestamp: 0,
+    text: 'Kṛṣṇa comes to this world not to become God—He is always God. He comes to attract us back to Him. Therefore, He speaks the Bhagavad-gītā. He says, \'sarva-dharmān parityajya mām ekaṁ śaraṇaṁ vraja\' – Just surrender unto Me.'
+  }, 
+  {
+    timestamp: 0,
+    text: 'And when we chant the holy name – Hare Kṛṣṇa, Hare Kṛṣṇa, Kṛṣṇa Kṛṣṇa, Hare Hare / Hare Rāma, Hare Rāma, Rāma Rāma, Hare Hare – we are calling out to Kṛṣṇa and His internal energy, Śrīmatī Rādhārāṇī. This chanting is the yuga-dharma, the process of self-realization for this age of Kali.'
+  } ,{
+    timestamp: 0,
+    text: 'So please, do not take Kṛṣṇa as some mythology or symbol. He is a historical person, appeared 5,000 years ago in Mathurā, performed wonderful pastimes in Vṛndāvana, and gave His transcendental teachings in Kurukṣetra.'
+  },
+  {
+    timestamp: 0,
+    text: 'Take to Kṛṣṇa consciousness seriously. Read Bhagavad-gītā As It Is, chant the holy name, and associate with devotees. Then your life will become successful. This human life is meant for understanding Kṛṣṇa. Otherwise, we are simply wasting time.'
+  },
+  {
+    timestamp: 0,
+    text: 'Thank you very much. Hare Kṛṣṇa.'
+  }
+]
 </script>
 
 
