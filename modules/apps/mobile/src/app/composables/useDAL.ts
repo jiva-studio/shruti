@@ -1,7 +1,7 @@
 import { createGlobalState } from '@vueuse/core'
 import { useDatabase } from '@/app'
 import { TracksService } from '@lectorium/dal/services/TracksService'
-import { AuthorsService, LanguagesService, LocationsService, SourcesService } from '@lectorium/dal/index'
+import { AuthorsService, LanguagesService, LocationsService, MediaItemsService, SourcesService } from '@lectorium/dal/index'
 
 // TODO: rename to something better
 export const useDAL = createGlobalState(() => {
@@ -13,5 +13,6 @@ export const useDAL = createGlobalState(() => {
     locations: new LocationsService(database.local.dictionary),
     sources: new SourcesService(database.local.dictionary),
     languages: new LanguagesService(database.local.dictionary),
+    mediaItems: new MediaItemsService(database.local.userData),
   }
 })

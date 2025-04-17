@@ -96,7 +96,7 @@ async function onTrackClick(trackId: string) {
     return
   }
   await mediaService.get({ 
-    url: `https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_stereo.avi`,
+    url: 'https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_stereo.avi',
     destination: 'tracks/' + trackId + '/audio/original.avi',
     title: track.title,
   })

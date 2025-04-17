@@ -33,7 +33,10 @@ import '@ionic/vue/css/display.css'
 
 /* Theme variables */
 import './app/theme/variables.css'
-import { initNavigationBarFeature, initSafeAreaFeature, initStatusBarFeature } from './app'
+import { 
+  initNavigationBarFeature, initSafeAreaFeature, initStatusBarFeature,
+  initUpdateMediaItemStatusesOnAppStateChange 
+} from './app'
 
 const app = createApp(App)
   .use(IonicVue)
@@ -44,6 +47,6 @@ router.isReady().then(async () => {
   await initNavigationBarFeature()
   await initStatusBarFeature()
   await initSafeAreaFeature()
+  await initUpdateMediaItemStatusesOnAppStateChange()
   app.mount('#app')
 })
-
