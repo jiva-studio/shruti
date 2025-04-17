@@ -20,10 +20,12 @@ export * from './composables/useConfig'
 export * from './composables/useDatabase'
 export * from './composables/useSyncService'
 export * from './composables/useDAL'
-export * from './composables/useDownloader'
+export * from './composables/useMediaService'
 
 // services:
 export * from './services/SyncService'
+export * from './services/DownloaderService'
+export * from './services/MediaService'
 
 // features:
 export * from './features/navigation-bar.feature'
