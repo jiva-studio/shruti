@@ -75,7 +75,10 @@
         "problemMatcher": [
           {
             "owner": "typescript",
-            "fileLocation": ["relative", "${workspaceFolder}"],
+            "fileLocation": [
+              "relative",
+              "${workspaceFolder}"
+            ],
             "pattern": {
               "regexp": "^\\s*([a-zA-Z0-9_\\-\\.]+)\\((\\d+)\\)\\s*:\\s*(.*)$",
               "file": 1,
@@ -87,7 +90,7 @@
         "group": "build",
         "isBackground": false,
         "options": {
-          "cwd": "/workspaces/lectorium/modules/libs/downloader",
+          "cwd": "/workspaces/lectorium/modules/libs/downloader"
         }
       },
       {
@@ -105,7 +108,10 @@
         "problemMatcher": [
           {
             "owner": "typescript",
-            "fileLocation": ["relative", "${workspaceFolder}"],
+            "fileLocation": [
+              "relative",
+              "${workspaceFolder}"
+            ],
             "pattern": {
               "regexp": "^\\s*([a-zA-Z0-9_\\-\\.]+)\\((\\d+)\\)\\s*:\\s*(.*)$",
               "file": 1,
@@ -117,7 +123,7 @@
         "group": "build",
         "isBackground": false,
         "options": {
-          "cwd": "/workspaces/lectorium/modules/apps/mobile",
+          "cwd": "/workspaces/lectorium/modules/apps/mobile"
         }
       },
       {
@@ -126,8 +132,10 @@
         "command": "nginx",
         "type": "shell",
         "args": [
-          "-c", "/workspaces/lectorium/modules/services/gateway/nginx.conf",
-          "-g", "'daemon off;'"
+          "-c",
+          "/workspaces/lectorium/modules/services/gateway/nginx.conf",
+          "-g",
+          "'daemon off;'"
         ],
         "presentation": {
           "reveal": "always"
@@ -136,7 +144,7 @@
         "group": "none",
         "isBackground": true,
         "options": {
-          "cwd": "/workspaces/lectorium/modules/services/gateway",
+          "cwd": "/workspaces/lectorium/modules/services/gateway"
         }
       },
       {
@@ -150,14 +158,14 @@
           "reveal": "always"
         },
         "group": "none",
-        "isBackground": true,
+        "isBackground": true
       },
       {
         "label": "🚀 Run All",
         "dependsOn": [
           "🚀 Postgres :: Run",
           "🚀 Airflow :: Run",
-          "🚀 Gateway :: Run",
+          "🚀 Gateway :: Run"
         ],
         "dependsOrder": "parallel"
       }

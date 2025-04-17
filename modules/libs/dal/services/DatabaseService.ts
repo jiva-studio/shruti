@@ -9,6 +9,8 @@ export type ItemChangedEvent<TItem> = {
 
 export type ItemChangedEventHandler<TItem> = (event: ItemChangedEvent<TItem>) => Promise<void>
 
+export type FindOneRequest<TItem> = Partial<TItem>
+
 export type GetAllRequest = {
   limit?: number
   skip?: number
@@ -101,6 +103,25 @@ export class DatabaseService<
   }
 
   /**
+   * Finds a single item in the database based on the provided request.
+   * @param request The request object containing the search criteria.
+   * @returns A Promise that resolves to the found item, or undefined if not found.
+   */
+  async findOne(
+    request: FindOneRequest<TDbScheme>
+  ): Promise<TItem | undefined> {
+    const response = await this._database.db.find({
+      selector: { ...request, ...this._scope },
+      limit: 1
+    })
+    if (!response.docs || response.docs.length === 0) {
+      return undefined
+    }
+    return this._deserializer(response.docs[0] as unknown as TDbScheme)
+  }
+
+
+  /**
    * Retrieves all items from the database.
    * @param request - Optional request parameters.
    * @returns A promise that resolves to an array of items.
@@ -113,7 +134,7 @@ export class DatabaseService<
         ...this._scope,
       }, 
       limit: request?.limit ?? 25,
-      skip: request?.skip,
+      skip: request?.skip ?? 0,
     })
     return response.docs.map(row => this._deserializer(row as unknown as TDbScheme))
   }
@@ -121,15 +142,15 @@ export class DatabaseService<
   async getMany(
     request: GetManyRequest
   ): Promise<TItem[]> {
-    console.log("getMany", request)
-    const response = await this._database.db.find({
+    const r = {
       selector: {
         ...this._scope,
         ...request.selector
       },
-      limit: request.limit,
-      skip: request.skip
-    })
+      limit: request?.limit ?? 25,
+      skip: request?.skip ?? 0
+    }
+    const response = await this._database.db.find(r)
 
     return response.docs
       .map(doc => this._deserializer(doc as unknown as TDbScheme))

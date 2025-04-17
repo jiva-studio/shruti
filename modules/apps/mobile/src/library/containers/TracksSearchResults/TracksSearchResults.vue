@@ -10,6 +10,7 @@
       :references="item.references"
       :status="item.status"
       :date="item.date"
+      @click="onTrackClick(item.trackId)"
     />
   </IonList>
 
@@ -22,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { useDAL, TracksListItem, TracksListItemData } from '@/app'
+import { useDAL, TracksListItem, TracksListItemData, useMediaService } from '@/app'
 import { mapTrackToPlaylistItem } from '@/home'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent } from '@ionic/vue'
 import { watchDebounced } from '@vueuse/core'
@@ -33,11 +34,13 @@ import { ref, toRefs, onMounted } from 'vue'
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
+const mediaService = useMediaService()
 
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
+
 type Filters = {
   authors: string[]
   sources: string[]
@@ -86,6 +89,18 @@ async function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
   e.target.complete()
 }
 
+async function onTrackClick(trackId: string) {
+  const track = tracks.value.find(x => x.trackId === trackId)
+  if (!track) {
+    console.error('Track not found:', trackId)
+    return
+  }
+  await mediaService.get({ 
+    url: `https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_stereo.avi`,
+    destination: 'tracks/' + trackId + '/audio/original.avi',
+    title: track.title,
+  })
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
