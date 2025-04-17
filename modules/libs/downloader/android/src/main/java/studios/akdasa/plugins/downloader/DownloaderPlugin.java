@@ -121,7 +121,6 @@ public class DownloaderPlugin extends Plugin {
         @Override
         public void onDownloadCompleted(long taskId, String status) {
             if (onDownloadCompleteCallback == null) { return; }
-            Log.i(TAG, "Download status changed");
             JSObject result = new JSObject();
             result.put("taskId", Long.toString(taskId));
             result.put("status", status);

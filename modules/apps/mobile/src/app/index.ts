@@ -21,6 +21,7 @@ export * from './composables/useDatabase'
 export * from './composables/useSyncService'
 export * from './composables/useDAL'
 export * from './composables/useMediaService'
+export * from './composables/useDownloaderService'
 
 // services:
 export * from './services/SyncService'
@@ -31,3 +32,7 @@ export * from './services/MediaService'
 export * from './features/navigation-bar.feature'
 export * from './features/status-bar.feature'
 export * from './features/safe-area.feature'
+export * from './features/update-media-item-status.feature'
+
+// helpers:
+export * from './helpers/id-generator.helper'
