@@ -8,11 +8,11 @@ import { DatabaseService } from './DatabaseService'
 type MediaItemDBSchema = {
   _id: string
   type: "mediaItem"
-  taskId: string
   title: string
   remoteUrl: string
   localPath: string
-  status: 'pending' | 'downloading' | 'available' | 'failed' | 'paused',
+  taskId: string
+  taskStatus: 'pending' | 'running' | 'successful' | 'failed' | 'paused'
 }
 
 const mediaItemSerializer = (item: MediaItem): MediaItemDBSchema => item
@@ -44,11 +44,11 @@ export class MediaItemsService
    * @returns List of media items in the specified states
    */
   async getInState(
-    states: MediaItem['status'][]
+    states: MediaItem['taskStatus'][]
   ): Promise<MediaItem[]> {
     return await this.getMany({
       selector: {
-        status: { $in: states }
+        taskStatus: { $in: states }
       }
     })
   }

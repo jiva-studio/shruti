@@ -8,11 +8,13 @@ import android.content.IntentFilter;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.core.content.ContextCompat;
 
 
 public class Downloader implements AutoCloseable {
+    private static final String TAG = "DownloaderPlugin";
     private final DownloadManager downloadManager;
     private final DownloadCompleteReceiver downloadCompleteReceiver;
     private final Context context;
@@ -90,15 +92,14 @@ public class Downloader implements AutoCloseable {
                     case DownloadManager.STATUS_SUCCESSFUL -> "successful";
                     case DownloadManager.STATUS_PENDING -> "pending";
                     case DownloadManager.STATUS_PAUSED -> "paused";
-                    case DownloadManager.STATUS_FAILED -> "failed";
                     case DownloadManager.STATUS_RUNNING -> "running";
-                    default -> "unknown";
+                    default -> "failed";
                 };
             }
             cursor.close();
         }
 
-        return "not-found";
+        return "failed";
     }
 
     /**
