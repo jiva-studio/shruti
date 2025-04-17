@@ -16,7 +16,15 @@ export type GetStatusResponse = {
   status: "successful" | "pending" | "paused" | "failed" | "running";
 }
 
+export type DownloadCompleteEvent = {
+  taskId: string
+  status: "successful" | "failed"
+}
+
 export interface DownloaderPlugin {
   enqueue(request: DownloadRequest): Promise<DownloadResponse>;
   getStatus(request: GetStatusRequest): Promise<GetStatusResponse>;
+  onDownloadComplete(
+    callback: (event: DownloadCompleteEvent) => void
+  ): Promise<{ callbackId: string }>
 }

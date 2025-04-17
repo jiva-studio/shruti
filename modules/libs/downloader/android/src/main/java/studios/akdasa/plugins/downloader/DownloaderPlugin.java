@@ -17,12 +17,32 @@ import java.io.File;
 public class DownloaderPlugin extends Plugin {
     private static final String TAG = "DownloaderPlugin";
     private Downloader implementation;
+    private PluginCall onDownloadCompleteCallback;
+
+    /* -------------------------------------------------------------------------- */
+    /*                                  Lifecycle                                 */
+    /* -------------------------------------------------------------------------- */
 
     public void load() {
+        Log.i(TAG, "Starting...");
+        Context context = getContext();
         this.implementation = new Downloader(
-                (DownloadManager)getContext().getSystemService(Context.DOWNLOAD_SERVICE)
+                context,
+                (DownloadManager)context.getSystemService(Context.DOWNLOAD_SERVICE),
+                new MyDownloadListener()
         );
     }
+
+    @Override
+    protected void handleOnDestroy() {
+        Log.i(TAG, "Destroying...");
+        implementation.close();
+        super.handleOnDestroy();
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                                   Methods                                  */
+    /* -------------------------------------------------------------------------- */
 
     @PluginMethod
     public void enqueue(PluginCall call) {
@@ -55,7 +75,6 @@ public class DownloaderPlugin extends Plugin {
             // Return task ID
 
             long taskId = implementation.enqueue(Uri.parse(url), localUrl, title);
-            Log.d(TAG, "downloadFile: Method called");
             JSObject ret = new JSObject();
             ret.put("taskId", Long.toString(taskId));
             call.resolve(ret);
@@ -80,6 +99,33 @@ public class DownloaderPlugin extends Plugin {
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Unable to get status", e);
+        }
+    }
+
+    @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
+    public void onDownloadComplete(PluginCall call) {
+        // TODO: Currently, onDownloadComplete stores only one callback which will be overwritten
+        //       if multiple callbacks are registered; consider using a collection to support
+        //       multiple simultaneous download complete callbacks.
+        call.setKeepAlive(true);
+        getBridge().saveCall(call);
+        onDownloadCompleteCallback = call;
+    }
+
+
+    /* -------------------------------------------------------------------------- */
+    /*                                   Private                                  */
+    /* -------------------------------------------------------------------------- */
+
+    private class MyDownloadListener implements Downloader.DownloadListener {
+        @Override
+        public void onDownloadCompleted(long taskId, String status) {
+            if (onDownloadCompleteCallback == null) { return; }
+            Log.i(TAG, "Download status changed");
+            JSObject result = new JSObject();
+            result.put("taskId", Long.toString(taskId));
+            result.put("status", status);
+            onDownloadCompleteCallback.resolve(result);
         }
     }
 }
