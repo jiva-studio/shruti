@@ -23,8 +23,9 @@
 </template>
 
 <script setup lang="ts">
-import { useDAL, TracksListItem, TracksListItemData, useMediaService } from '@/app'
+import { useDAL, TracksListItem, TracksListItemData, useSafeOperation } from '@/app'
 import { mapTrackToPlaylistItem } from '@/home'
+import { useLibraryScenarios } from '@/library/composables/useLibraryScenarios'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent } from '@ionic/vue'
 import { watchDebounced } from '@vueuse/core'
 import { ref, toRefs, onMounted } from 'vue'
@@ -34,8 +35,8 @@ import { ref, toRefs, onMounted } from 'vue'
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
-const mediaService = useMediaService()
-
+const libraryScenarios = useLibraryScenarios()
+const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -90,22 +91,16 @@ async function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
 }
 
 async function onTrackClick(trackId: string) {
-  const track = tracks.value.find(x => x.trackId === trackId)
-  if (!track) {
-    console.error('Track not found:', trackId)
-    return
-  }
-  await mediaService.get({ 
-    url: 'https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_stereo.avi',
-    destination: 'tracks/' + trackId + '/audio/original.avi',
-    title: track.title,
-  })
+  safeOperation.execute(
+    async () => await libraryScenarios.userAddsTrackToPlaylistScenario.execute(trackId)
+  )
 }
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
 
+// TODO: extract to Library Scenarios: UserSearchesForTracksScenario
 async function loadTracks(
   offset: number = 0,
   filters: Filters,

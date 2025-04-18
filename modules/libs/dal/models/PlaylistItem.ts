@@ -1,17 +1,11 @@
-export enum PlaylistItemStatus {
-  New,
-  Playing,
-  Played,
-}
-
-export type Aviability = "available" | "unavailable" | "downloaded" | "unknown"
+// export type ResourceStatus = {
+//   type: 'audio:original' | 
+// }
 
 export type PlaylistItem = {
+  _id: string
+  type: "playlistItem"
   trackId: string
-  collectionId?: string
   order: number
   played: number
-
-  mediaStatus: Aviability
-  transcriptStatus: Aviability
 }

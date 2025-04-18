@@ -17,6 +17,10 @@ export type MediaItem = {
    */
   localPath: string
   
+  /**
+   * The media item ID associated with this media item.
+   */
+  trackId: string
 
   /**
    * The downloader task ID associated with this media item.
