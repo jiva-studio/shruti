@@ -14,6 +14,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@shruti/protocol': fileURLToPath(
+        new URL('../../libs/protocol', import.meta.url),
+      ),
       '@shruti/dal': fileURLToPath(
         new URL('../../libs/dal', import.meta.url),
       ),

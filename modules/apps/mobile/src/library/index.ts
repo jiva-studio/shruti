@@ -9,3 +9,9 @@ export { default as Searchbar } from './components/Searchbar.vue'
 // containers:
 export { default as TracksFilterBar, type TracksFilterValue } from './containers/TracksFilterBar/TracksFilterBar.vue'
 export { default as TracksSearchResults } from './containers/TracksSearchResults/TracksSearchResults.vue'
+
+// composables:
+export * from './composables/useLibraryScenarios'
+
+// scenarios:
+export * from './scenarios/UserAddsTrackToPlaylistScenario'

@@ -1,5 +1,7 @@
 <template>
-  <h3 class="sectionHeader">{{ title }}</h3>
+  <h3 class="sectionHeader">
+    {{ title }}
+  </h3>
 </template>
 
 <script setup lang="ts">
