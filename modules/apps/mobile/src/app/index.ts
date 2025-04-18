@@ -3,7 +3,7 @@ export { default as Header } from './components/Header.vue'
 export { default as ListItemsSelectorDialog, type Item as SelectorDialogItem } from './components/SelectorDialog/ListItemsSelectorDialog.vue'
 export { default as ListItemSelectorDialog, type Item as ListItemSelectorItem } from './components/SelectorDialog/ListItemSelectorDialog.vue'
 export { default as DateRangeSelectorDialog, type DateRange } from './components/SelectorDialog/DateRangeSelectorDialog.vue'
-export { default as TracksListItem, type TracksListItemData } from './components/TracksListItem.vue'
+export { default as TracksListItem, type TracksListItemData, type TracksListItemStatus } from './components/TracksListItem.vue'
 export { default as TracksListItemSkeleton } from './components/TracksListItemSkeleton.vue'
 export { default as Page } from './components/Page.vue'
 
@@ -22,11 +22,14 @@ export * from './composables/useSyncService'
 export * from './composables/useDAL'
 export * from './composables/useMediaService'
 export * from './composables/useDownloaderService'
+export * from './composables/useBucketService'
+export * from './composables/useSafeOperation'
 
 // services:
 export * from './services/SyncService'
 export * from './services/DownloaderService'
 export * from './services/MediaService'
+export * from './services/BucketService'
 
 // features:
 export * from './features/navigation-bar.feature'

@@ -1,5 +1,8 @@
 <template>
-  <IonItem @click="onItemClicked">
+  <IonItem
+    :disabled="!enabled"
+    @click="onItemClicked"
+  >
     <IonIcon
       v-if="PlayListItemStatusIcon.icon"
       slot="end"
@@ -29,7 +32,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { IonItem, IonLabel, IonIcon } from '@ionic/vue'
-import { cloudDownloadOutline } from 'ionicons/icons'
+import { closeCircleOutline, syncOutline } from 'ionicons/icons'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -37,11 +40,10 @@ import { cloudDownloadOutline } from 'ionicons/icons'
 export type TracksListItemStatus =
   | 'none'
   | 'loading'
-  | 'playing'
+  | 'failed'
 
 export type TracksListItemData = {
   trackId: string
-  playlistItemId?: string
   title: string
   author: string
   location?: string
@@ -50,9 +52,14 @@ export type TracksListItemData = {
   date: string
 }
 
-const props = defineProps<
-  TracksListItemData
->()
+const props = withDefaults(defineProps<
+  TracksListItemData & {
+    enabled?: boolean
+  }
+>(), {
+  enabled: true, 
+  location: undefined 
+})
 
 const emit = defineEmits<{
   click: []
@@ -66,9 +73,9 @@ type StatusIconMap = {
 }
 
 const statusIconMaps: StatusIconMap = {
-  'none':     { icon: undefined,            color: undefined },
-  'loading':  { icon: cloudDownloadOutline, color: 'light' },
-  'playing':  { icon: undefined,            color: undefined },
+  'none':     { icon: undefined,          color: undefined },
+  'loading':  { icon: syncOutline,        color: 'medium' },
+  'failed':   { icon: closeCircleOutline, color: 'danger' },
 }
 const PlayListItemStatusIcon = computed(
   () => statusIconMaps[props.status]

@@ -5,3 +5,5 @@ export * from "./services/SourcesService"
 export * from "./services/InboxTracksService"
 export * from './services/LanguagesService'
 export * from './services/MediaItemsService'
+export * from './services/PlaylistItemService'
+export * from './services/TracksService'

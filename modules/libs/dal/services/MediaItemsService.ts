@@ -11,6 +11,7 @@ type MediaItemDBSchema = {
   title: string
   remoteUrl: string
   localPath: string
+  trackId: string,
   taskId: string
   taskStatus: 'pending' | 'running' | 'successful' | 'failed' | 'paused'
 }

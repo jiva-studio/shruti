@@ -19,7 +19,7 @@ import {
 import * as dto from '@lectorium/api/bucket/dto';
 import * as dtoShared from '@lectorium/api/shared/dto';
 import { S3Service } from '@lectorium/api/bucket/services/s3.service';
-import { Routes } from '@lectorium/protocol';
+import { Routes, S3Operation } from '@lectorium/protocol';
 import { Authentication } from '@lectorium/api/auth/decorators';
 import { UserAuthentication } from '@lectorium/api/auth/utils';
 import { AuthenticatedUserGuard } from '@lectorium/api/auth/guards';
@@ -57,12 +57,30 @@ export class SignUrlController {
     @Body() request: dto.SignUrlRequest,
     @Authentication() auth: UserAuthentication,
   ): Promise<dto.SignUrlResponse | dtoShared.ErrorResponse> {
-    if (!auth.roles.includes('contentManager')) {
+    if (
+      !auth.roles.includes('contentManager') &&
+      !auth.roles.includes('readonly')
+    ) {
       throw new ForbiddenException(
         new dtoShared.ErrorResponse({
           error: 'Forbidden',
           statusCode: HttpStatus.FORBIDDEN,
           message: ['User does not have permission to perform this action.'],
+        }),
+      );
+    }
+
+    if (
+      auth.roles.includes('readonly') &&
+      request.operation !== S3Operation.GetObject
+    ) {
+      throw new ForbiddenException(
+        new dtoShared.ErrorResponse({
+          error: 'Forbidden',
+          statusCode: HttpStatus.FORBIDDEN,
+          message: [
+            'User with readonly role can only perform getObject operation.',
+          ],
         }),
       );
     }

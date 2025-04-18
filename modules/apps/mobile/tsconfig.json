@@ -15,6 +15,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@lectorium/dal/*": ["../../libs/dal/*"],
+      "@lectorium/protocol/*": ["../../libs/protocol/*"],
     }
   },
   "include": [
@@ -22,7 +23,8 @@
     "src/**/*.d.ts",
     "src/**/*.tsx",
     "src/**/*.vue",
-    "../../libs/dal/**/*"
+    "../../libs/dal/**/*",
+    "../../libs/protocol/**/*"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

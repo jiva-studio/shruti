@@ -14,6 +14,9 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@lectorium/protocol': fileURLToPath(
+        new URL('../../libs/protocol', import.meta.url),
+      ),
       '@lectorium/dal': fileURLToPath(
         new URL('../../libs/dal', import.meta.url),
       ),

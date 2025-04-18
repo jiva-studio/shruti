@@ -2,6 +2,7 @@ import { MediaItemsService } from '@lectorium/dal/index'
 import { DownloaderService, DownloaderTaskStatuses, generateId } from '@/app'
 
 export type GetMediaRequest = {
+  trackId: string,
   url: string
   destination: string
   title: string
@@ -45,19 +46,20 @@ export class MediaService {
     }
       
     // start download
+    console.log('Starting download for:', JSON.stringify(request))
     const downloaderResponse =
       await this.downloader.enqueue(request)
-    console.log('Download started:', downloaderResponse.taskId)
 
     // add to media items
     await this.mediaItems.addOne({
       _id: generateId(22),
-      taskId: downloaderResponse.taskId,
       type: 'mediaItem',
+      taskStatus: 'pending',
+      trackId: request.trackId,
+      taskId: downloaderResponse.taskId,
       title: request.title,
       remoteUrl: request.url,
       localPath: request.destination,
-      taskStatus: 'pending',
     })
   }
 
