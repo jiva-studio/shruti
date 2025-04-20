@@ -39,6 +39,7 @@ def claude_run_prompt(
     ],
     extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
   )
+  print(prompt + "\n\n" + chunk)
   return message.parse().content[0].text
 
 

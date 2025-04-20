@@ -123,7 +123,7 @@ def transcript_proofread():
       return "normal.claude_run_batch_prompt"
 
   @task(
-    task_display_name="👍 Proofreading Completed",
+    task_display_name="👍 Proofreading Complete",
     trigger_rule="none_failed_min_one_success")
   def proofreading_completed(
     fast: list[str] | None,

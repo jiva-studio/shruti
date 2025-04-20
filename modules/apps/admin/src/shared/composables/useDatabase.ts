@@ -30,7 +30,7 @@ export const useDatabase = createSharedComposable(() => {
         name: serverBaseUrl + '/dictionary',
         authToken: () => authTokens.value.accessToken,
       }),
-      inboxTracks: new Database({
+      inbox: new Database({
         name: serverBaseUrl + '/inbox',
         authToken: () => authTokens.value.accessToken,
       }),
