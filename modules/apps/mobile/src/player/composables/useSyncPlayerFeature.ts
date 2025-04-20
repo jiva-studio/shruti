@@ -1,5 +1,5 @@
 import { useDAL } from '@/app'
-import { usePlayer, usePlayerControls } from '@/player'
+import { usePlayer, usePlayerControls, usePlayerTranscript } from '@/player'
 
 
 export function useSyncPlayerFeature() {
@@ -9,6 +9,7 @@ export function useSyncPlayerFeature() {
 
   const player = usePlayer()
   const playerControls = usePlayerControls()
+  const playerTranscript = usePlayerTranscript()
   const dal = useDAL()
 
   /* -------------------------------------------------------------------------- */
@@ -31,10 +32,12 @@ export function useSyncPlayerFeature() {
       const author = await dal.authors.getOne('author::' + track.author)
       playerControls.author.value = author.fullName['en'] // TODO: add support for other languages
       playerControls.title.value = track.title['en']      // TODO: add support for other languages
+      playerTranscript.trackId.value = progress.trackId
     }
 
     // Update the rest of the player controls
     playerControls.isPlaying.value = progress.playing
+    playerControls.position.value = progress.position
     lastTrackId = progress.trackId
   })
 }

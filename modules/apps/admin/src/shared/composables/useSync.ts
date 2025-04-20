@@ -9,7 +9,7 @@ export function useSync() {
         return !doc._id.startsWith('_design/')
       },
     })
-    await database.local.inbox.sync(database.remote.inboxTracks, {
+    await database.local.inbox.sync(database.remote.inbox, {
       filter: (doc) => {
         return !doc._id.startsWith('_design/')
       },

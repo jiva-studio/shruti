@@ -105,6 +105,24 @@ def bucket_sign_url(
     Params={"Bucket": bucket_name, "Key": object_key},
     ExpiresIn=expiration,
   )
+
+@task(task_display_name="🗂️ Bucket: Copy File")
+def bucket_copy_file(
+  source_key: str,
+  destination_key: str,
+):
+  source_key = source_key.replace('//', '/')
+  destination_key = destination_key.replace('//', '/')
+  bucket_name = Variable.get(VAR_APP_BUCKET_NAME)
+  bucket_client = __get_bucket_client()
+
+  print(f"Copying file from {source_key} to {destination_key}")
+
+  bucket_client.copy_object(
+    Bucket=bucket_name,
+    CopySource={'Bucket': bucket_name, 'Key': source_key},
+    Key=destination_key
+  )
   
 @task(task_display_name="📋 Bucket: List Files")
 def bucket_list_files(
