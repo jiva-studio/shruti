@@ -1,31 +1,42 @@
 <template>
   <PlayerControls
     :playing="isPlaying"
+    :title="title"
+    :author="author"
     :class="{
       'player': true,
       'closed': !isPlayerTranscriptOpen,
-      'opened': isPlayerTranscriptOpen
+      'opened': isPlayerTranscriptOpen,
+      'hidden': !isVisible
     }"
-    @play="isPlaying = !isPlaying"
+    @play="togglePause"
     @click="isPlayerTranscriptOpen = !isPlayerTranscriptOpen"
   />
   <PlayerTranscript v-model:open="isPlayerTranscriptOpen" />
 </template>
 
 <script setup lang="ts">
-import { PlayerControls, PlayerTranscript, usePlayerControls, usePlayerTranscript } from '@/player'
+import { computed } from 'vue'
+import { 
+  PlayerControls, PlayerTranscript, usePlayerControls,
+  usePlayerTranscript, usePlayerControlsPlayerScenario
+} from '@/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const { isPlaying } = usePlayerControls()
+const { isPlaying, title, author } = usePlayerControls()
 const { isOpen: isPlayerTranscriptOpen } = usePlayerTranscript()
+const { togglePause } = usePlayerControlsPlayerScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
+const isVisible = computed(() => {
+  return title.value !== '' || author.value !== ''
+})
 </script>
 
 <style scoped>
@@ -52,5 +63,11 @@ const { isOpen: isPlayerTranscriptOpen } = usePlayerTranscript()
   right: 0px;
   border-top-left-radius: 5px;
   border-top-right-radius: 5px;
+}
+
+.hidden {
+  opacity: 0;
+  bottom: 0;
+  pointer-events: none;
 }
 </style>

@@ -9,5 +9,8 @@ export { default as UpNextTracksSection } from './containers/UpNextTracksSection
 // composables:
 export { useHomeScenarios } from './composables/useHomeScenarios'
 
+// scenarios:
+export * from './composables/useUserSelectsTrackToPlayScenario'
+
 // mappers:
 export { mapTrackToPlaylistItem } from './mappers/tracks'
