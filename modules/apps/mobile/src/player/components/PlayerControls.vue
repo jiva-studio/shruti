@@ -2,10 +2,10 @@
   <div class="floatingPlayer">
     <div class="info">
       <IonLabel class="author">
-        A.C. Bhaktivedanta Swami Prabhupada
+        {{ author }}
       </IonLabel>
       <IonLabel class="title">
-        Krishna is the Supreme Personality of Godhead
+        {{ title }}
       </IonLabel>
     </div>
 
@@ -34,6 +34,8 @@ import { computed, toRefs } from 'vue'
 
 const props = defineProps<{
   playing: boolean
+  author: string
+  title: string
 }>()
 
 const emit = defineEmits<{

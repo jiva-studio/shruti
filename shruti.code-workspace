@@ -33,6 +33,10 @@
       "path": "./modules/libs/downloader"
     },
     {
+      "name": "📀 Libraries :: Audio Player",
+      "path": "./modules/libs/audioPlayer"
+    },
+    {
       "name": "🛜 Services :: API",
       "path": "./modules/services/api"
     },
@@ -91,6 +95,39 @@
         "isBackground": false,
         "options": {
           "cwd": "/workspaces/shruti/modules/libs/downloader"
+        }
+      },
+      {
+        "label": "👷 Audio Player Plugin :: Build",
+        "detail": "Build the audio player plugin",
+        "command": "npm",
+        "type": "shell",
+        "args": [
+          "run",
+          "build"
+        ],
+        "presentation": {
+          "reveal": "always"
+        },
+        "problemMatcher": [
+          {
+            "owner": "typescript",
+            "fileLocation": [
+              "relative",
+              "${workspaceFolder}"
+            ],
+            "pattern": {
+              "regexp": "^\\s*([a-zA-Z0-9_\\-\\.]+)\\((\\d+)\\)\\s*:\\s*(.*)$",
+              "file": 1,
+              "line": 2,
+              "message": 3
+            }
+          }
+        ],
+        "group": "build",
+        "isBackground": false,
+        "options": {
+          "cwd": "/workspaces/shruti/modules/libs/audioPlayer"
         }
       },
       {
