@@ -174,7 +174,7 @@ export class DatabaseService<
         ...this._serializer(item)
       })
     } catch (error) {
-      console.error('Error adding item to database', error)
+      console.error('Error adding item to database', JSON.stringify(error))
     }
     await this.notifyChange({ item, event: 'added' })
   }

@@ -22,6 +22,9 @@
         :date="item.date"
         :status="item.status"
         :enabled="item.status === 'none'"
+        @click="() => {
+          userSelectsTrackToPlay.execute(item.trackId)
+        }"
       />
     </template>
 
@@ -36,7 +39,7 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { SectionHeader, PlaylistIsEmpty, useHomeScenarios } from '@/home'
+import { SectionHeader, PlaylistIsEmpty, useHomeScenarios, useUserSelectsTrackToPlayScenario } from '@/home'
 import { TracksListItem, TracksListItemSkeleton } from '@/app'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -47,6 +50,7 @@ import { useRouter } from 'vue-router'
 
 const homeScenarios = useHomeScenarios()
 const router = useRouter()
+const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -58,6 +62,7 @@ const { state: tracks, execute: refresh, isLoading } = useAsyncState(
 )
 
 const isFirstLoad = computed(() => tracks.value.length === 0 && isLoading.value)
+
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */

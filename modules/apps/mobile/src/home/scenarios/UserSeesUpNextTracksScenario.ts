@@ -51,7 +51,7 @@ export class UserSeesUpNextTracksScenario extends TracksListScenario{
         const trackMediaItems = mediaItems.filter(item => item.trackId === trackId)
         const isLoading = trackMediaItems.some(item => LoadingStatuses.includes(item.taskStatus))
         const isFailed = trackMediaItems.some(item => FailedStatuses.includes(item.taskStatus))
-        acc[trackId] = trackMediaItems.length === 0 || isFailed ? 'failed' : isLoading ? 'loading' : 'none'
+        acc[trackId] = trackMediaItems.length === 0 || isLoading ? 'loading' : isFailed ? 'failed' : 'none'
         return acc
       }, {})
 

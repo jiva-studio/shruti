@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - "modules/apps/mobile/**"
+      - "modules/libs/downloader/**"
+      - "modules/libs/audioPlayer/**"
+      - "modules/package.json"
+      - "modules/package-lock.json"
       - ".github/workflows/mobile-build.yml"
   
 env:
@@ -46,8 +50,12 @@ jobs:
         working-directory: modules
         run: npm ci
 
-      - name: 👷 Build Plugins
+      - name: 👷 Build Downloader Plugin
         working-directory: modules/libs/downloader
+        run: npm i && npm run build
+
+      - name: 👷 Build Audio Player Plugin
+        working-directory: modules/libs/audioPlayer
         run: npm i && npm run build
 
       - name: 👷 Build Ionic App
