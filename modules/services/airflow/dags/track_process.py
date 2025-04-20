@@ -59,8 +59,8 @@ def track_process():
   conf_languages_in_audio_file     = "{{ params.languages_in_audio_file }}"
   conf_languages_to_translate_into = "{{ params.languages_to_translate_into }}"
   conf_speakers_count              = "{{ params.speakers_count | int }}"
-  conf_audio_type                  = "normalized"
-
+  conf_audio_type                  = "original"
+  
   @task(
     task_display_name="🗣️ Audio: Speaker Diarization")
   def run_audio_speaker_diarization(
@@ -91,6 +91,7 @@ def track_process():
     trigger_rule="none_failed")
   def run_transcript_extract(
     track_id: str,
+    audio_type: str,
     languages_in_audio_file: list[str],
     languages_to_translate_into: list[str],
     **kwargs,
@@ -103,6 +104,7 @@ def track_process():
       track_id=track_id,
       conf={
         "track_id": track_id,
+        "audio_type": audio_type,
         "languages_in_audio_file": languages_in_audio_file,
         "languages_to_translate_into": languages_to_translate_into
       },
@@ -144,6 +146,7 @@ def track_process():
   ) >> (
     transcript_extract_dag_run_id := run_transcript_extract(
       track_id=conf_track_id,
+      audio_type=conf_audio_type,
       languages_in_audio_file=conf_languages_in_audio_file,
       languages_to_translate_into=conf_languages_to_translate_into,
     )

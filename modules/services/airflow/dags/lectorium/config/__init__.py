@@ -8,3 +8,5 @@ from lectorium.config.pyannoteai import *
 from lectorium.config.hugging_face import *
 from lectorium.config.beam_cloud import *
 from lectorium.config.claude import *
+from lectorium.config.track_inbox_extract_metadata import *
+from lectorium.config.track_inbox import *

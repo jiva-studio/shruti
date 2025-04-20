@@ -29,6 +29,13 @@ from lectorium.shared import (
       type="string",
       title="Track ID",
     ),
+    "audio_type": Param(
+      default="original",
+      description="Type of audio to process",
+      title="Audio Type",
+      type="string",
+      enum=["original", "normalized"],
+    ),
     "languages_in_audio_file": Param(
       default=["en"],
       description="Languages present in the audio file. First language will be used for translating transcripts into other languages",
@@ -67,6 +74,7 @@ def transcript_extract():
   conf_track_id                    = "{{ params.track_id | string }}"
   conf_languages_in_audio_file     = "{{ params.languages_in_audio_file }}"
   conf_languages_to_translate_into = "{{ params.languages_to_translate_into }}"
+  conf_audio_type                  = "{{ params.audio_type | string }}"
   conf_diarization_report_path     = "library/tracks/{{ params.track_id }}/artifacts/diarization/diarization.json"
 
   # ---------------------------------------------------------------------------- #
@@ -76,6 +84,7 @@ def transcript_extract():
   @task(task_display_name="📜 Transcript: Transcribe Audio ⤵️")
   def run_transcript_transcribe_audio_dag(
     track_id: str,
+    audio_type: str,
     languages_in_audio_file: list[str],
     diarization_report: dict | None,
     **kwargs
@@ -87,7 +96,7 @@ def transcript_extract():
     if not diarization_report_exists and only_one_speaker:
       run_dags_params = [{
         "track_id": track_id,
-        "audio_type": "normalized",
+        "audio_type": audio_type,
         "language": languages_in_audio_file[0]
       }]
     elif diarization_report_exists and not only_one_speaker:
@@ -268,6 +277,7 @@ def transcript_extract():
     dag_run_transcribe_ids :=
       run_transcript_transcribe_audio_dag(
         track_id=conf_track_id,
+        audio_type=conf_audio_type,
         languages_in_audio_file=conf_languages_in_audio_file,
         diarization_report=diarization_report)
   ) >> (

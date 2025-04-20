@@ -35,7 +35,7 @@ from lectorium.shared import set_dag_run_note
       title="#️⃣ Track ID",
     ),
     "audio_type": Param(
-      default="normalized",
+      default="original",
       description="Type of audio to process",
       title="🎙️ Audio Type",
       type="string",

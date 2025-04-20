@@ -1,6 +1,8 @@
+from typing import TypedDict
 from uuid import uuid4
 from io import BytesIO
 from json import dumps as json_dumps, loads as json_loads
+from mutagen.mp3 import MP3
 
 from airflow.models import Variable
 from airflow.decorators import task
@@ -8,6 +10,13 @@ from airflow.decorators import task
 from boto3 import client
 
 from lectorium.config import VAR_APP_BUCKET_ACCESS_KEY, VAR_APP_BUCKET_NAME
+
+
+class BucketObjectInfo(TypedDict):
+  key: str
+  size: int
+  last_modified: int
+
 
 def __get_bucket_client():
   bucket_credentials = Variable.get(VAR_APP_BUCKET_ACCESS_KEY, deserialize_json=True)
@@ -100,7 +109,7 @@ def bucket_sign_url(
 @task(task_display_name="📋 Bucket: List Files")
 def bucket_list_files(
   prefix=''
-) -> list[str]:
+) -> list[BucketObjectInfo]:
   s3_client   = __get_bucket_client()
   bucket_name = Variable.get(VAR_APP_BUCKET_NAME)
   file_list   = []
@@ -110,6 +119,49 @@ def bucket_list_files(
     if 'Contents' in page:
       for obj in page['Contents']:
         if not obj['Key'].endswith('/'):
-          file_list.append(obj['Key'].removeprefix(prefix))
+          file_list.append(
+            BucketObjectInfo(
+              key=obj['Key'],
+              size=obj['Size'],
+              last_modified=obj['LastModified'].timestamp() if 'LastModified' in obj else 0
+            )
+          )
     
     return file_list
+
+
+@task(
+  task_display_name="⏰ AWS: Get Audio Duration",
+  multiple_outputs=False)
+def get_audio_duration(
+  object_key: str,
+) -> int:
+  s3_client   = __get_bucket_client()
+  bucket_name = Variable.get(VAR_APP_BUCKET_NAME)
+  response    = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+  file_data   = BytesIO(response['Body'].read())
+  audio       = MP3(file_data)
+  return audio.info.length
+
+
+@task(task_display_name="🔄 Bucket: Move File")
+def bucket_move_file(
+  source_key: str,
+  destination_key: str,
+):
+  # source_key = source_key.replace('//', '/')
+  # destination_key = destination_key.replace('//', '/')
+  bucket_name = Variable.get(VAR_APP_BUCKET_NAME)
+  bucket_client = __get_bucket_client()
+
+  print(f"Moving file from {source_key} to {destination_key}")
+
+  # Copy the file to the new location
+  bucket_client.copy_object(
+    Bucket=bucket_name,
+    CopySource={'Bucket': bucket_name, 'Key': source_key},
+    Key=destination_key
+  )
+
+  # Delete the original file
+  bucket_client.delete_object(Bucket=bucket_name, Key=source_key)

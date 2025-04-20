@@ -5,7 +5,7 @@ from airflow.models import Variable
 #                                     Names                                    #
 # ---------------------------------------------------------------------------- #
 
-PROOFREAD_PROMPT_PREFIX = "lectorium::proofread-prompt::"
+PROOFREAD_PROMPT_PREFIX = "lectorium::prompts::proofread::"
 
 # ---------------------------------------------------------------------------- #
 #                                    Default                                   #
@@ -13,11 +13,10 @@ PROOFREAD_PROMPT_PREFIX = "lectorium::proofread-prompt::"
 
 Variable.setdefault(
   PROOFREAD_PROMPT_PREFIX + "en",
-  """You work as an editor of transcripts of lectures on Vedic culture. You need to correct grammar, punctuation, and other errors.
-  Proofread the transcription of the audio lecture, which may contain errors:
-  1. Fix any grammar, spelling, or punctuation errors.
-  2. Each sentence starts with a number in a curly bracket. Example: {42} {22}. Keep the number in curly brackets unchanged, and do not change the value of the number.
-  Return text.""",
+  """
+  You work as an editor of transcripts of lectures on Vedic culture. You need to correct grammar, punctuation.
+  Do not change markers like {0} or rewrite sentences. Return text.
+  """,
   "Transript proofread prompt in English",
 )
 

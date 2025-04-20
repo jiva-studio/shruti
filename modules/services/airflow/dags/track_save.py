@@ -1,3 +1,4 @@
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import TypedDict
 
@@ -8,7 +9,9 @@ from lectorium.couchdb import couchdb_save_document
 from lectorium.config.database import (
   LECTORIUM_DATABASE_COLLECTIONS, LECTORIUM_DATABASE_CONNECTION_STRING,
   LectoriumDatabaseCollections)
-from lectorium.bucket import bucket_download_json_data, bucket_list_files
+from lectorium.bucket import (
+  bucket_download_json_data, bucket_list_files, get_audio_duration,
+  BucketObjectInfo)
 
 
 @dag(
@@ -45,6 +48,12 @@ def track_save():
     path: str
     kind: str
 
+  class audio_file_info(TypedDict):
+    path: str
+    type: str
+    size: int
+    duration: int
+
   # ---------------------------------------------------------------------------- #
   #                                    Config                                    #
   # ---------------------------------------------------------------------------- #
@@ -65,27 +74,62 @@ def track_save():
   @task(
     task_display_name="☑️ Get Save Transcript Tasks")
   def get_transcripts_to_save(
-    file_paths: list[str],
-  ) -> list[transcript_info]: 
-    is_transcript = lambda path: path.startswith("/artifacts/transcripts")
-    get_language  = lambda path: path.split("/")[3]
-    get_kind      = lambda path: path.split("/")[4].split(".")[0]
-    
-    # filter out only translated and proofread transcripts
-    transcript_file_paths = [
-      file_path for file_path in file_paths 
-      if is_transcript(file_path) and 
-         get_kind(file_path) in ["translated", "proofread"]
-    ]
+    track_id: str,
+    bucket_objects: list[BucketObjectInfo],
+  ) -> list[transcript_info]:
+    result: list[transcript_info] = []
+    transcript_prefix = f"library/tracks/{track_id}/artifacts/transcripts"
 
-    # return transcript info
-    return [
-      transcript_info(
-        language=get_language(path),
-        kind=get_kind(path),
-        path=path
-      ) for path in transcript_file_paths 
-    ]
+    for bucket_object in bucket_objects:
+      if not bucket_object["key"].startswith(transcript_prefix):
+        continue
+
+      path     = bucket_object["key"].removeprefix(transcript_prefix)
+      language = path.split("/")[1]
+      kind     = Path(path).stem 
+      print(path)
+
+      if kind not in ["translated", "proofread"]:
+        continue
+
+      result.append(
+        transcript_info(
+          language=language,
+          kind=kind,
+          path=bucket_object["key"]
+        ) 
+      )
+    return result
+
+  @task(
+    task_display_name="☑️ Get Audio Files")
+  def get_audio_files(
+    track_id: str,
+    bucket_objects: list[BucketObjectInfo],
+  ) -> list[transcript_info]: 
+    result: list[transcript_info] = []
+    audio_prefix = f"library/tracks/{track_id}/audio"
+
+    for bucket_object in bucket_objects:
+      if not bucket_object["key"].startswith(audio_prefix):
+        continue
+
+      path  = bucket_object["key"].removeprefix(audio_prefix)
+      type  = Path(path).stem 
+
+      if type not in ["original", "normalized"]:
+        continue
+
+      result.append(
+        audio_file_info(
+          type=type,
+          path=bucket_object["key"],
+          size=bucket_object["size"],
+          duration=int(get_audio_duration.function(bucket_object['key'])),
+        ) 
+      )
+    return result
+
 
   @task(
     task_display_name="💾 Save Transcript")
@@ -93,30 +137,57 @@ def track_save():
     track_id: str,
     transcript_info: transcript_info,
    ):
-    document = bucket_download_json_data.function(
-      object_key=f"library/tracks/{track_id}{transcript_info['path']}") 
+    raw_document = bucket_download_json_data.function(
+      object_key=transcript_info['path']) 
    
+    transcript_document = {
+      "@type": "transcript",
+      "version": 1,
+      "blocks": raw_document["blocks"],
+    }
+
     couchdb_save_document.function(
       conf_database_connection_string,
       conf_database_collections["transcripts"],
-      document,
-      f"{track_id}::{transcript_info['language']}"
+      transcript_document,
+      f"{track_id}::transcript::{transcript_info['language']}"
     )
 
   @task(
     task_display_name="📂 Save Track")
   def save_track_in_database(
     track_id: str,
-    transcripts_info: transcript_info,
+    transcripts_info: list[transcript_info],
+    audio_files_info: list[audio_file_info],
   ):
-    document = {
-      "_id": track_id,
-      "languages": [{
-        "language": transcript_info["language"],
-        "source": "transcript",
-      } for transcript_info in transcripts_info]
+    track_document = {
+      "_id": track_id + "::track",
+      "@type": "track",
+      "version": 1,
+      "duration": 0,
+      "audio": {
+        afi["type"]: {
+          "path": f"library/tracks/{track_id}{afi['path']}",
+          "file_size": afi["size"],
+          "duration": afi["duration"],
+        } for afi in audio_files_info
+      },
+      "languages": [
+        {
+          "language": transcript_info["language"],
+          "source": "transcript",
+          "type": "generated",
+        } for transcript_info in transcripts_info
+      ] + [
+        # TODO get info about original language from track inbox
+      ]
     }
-    return document
+
+    couchdb_save_document.function(
+      conf_database_connection_string,
+      conf_database_collections["transcripts"],
+      track_document,
+    )
 
   # ---------------------------------------------------------------------------- #
   #                                       Flow                                   #
@@ -124,19 +195,20 @@ def track_save():
 
   (
     files_in_bucket := bucket_list_files(conf_track_folder)
-  ) >> (
-    transcripts_info := get_transcripts_to_save(files_in_bucket)
   ) >> [
-    (
-      save_transcript_in_database
-        .partial(track_id=conf_track_id)
-        .expand(transcript_info=transcripts_info)
-    ), (
-      save_track_in_database(
-        track_id=conf_track_id, 
-        transcripts_info=transcripts_info)
-    )
-  ]
-
+    ( transcripts_info := get_transcripts_to_save(conf_track_id, files_in_bucket) ),
+    ( audio_files_info := get_audio_files(conf_track_id, files_in_bucket) )
+  ] 
+  
+  (
+    save_transcript_in_database
+      .partial(track_id=conf_track_id)
+      .expand(transcript_info=transcripts_info)
+  ), (
+    save_track_in_database(
+      track_id=conf_track_id, 
+      transcripts_info=transcripts_info,
+      audio_files_info=audio_files_info)
+  )
 
 track_save()
