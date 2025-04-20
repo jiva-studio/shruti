@@ -1,6 +1,4 @@
 from datetime import datetime, timedelta
-from cuid2 import cuid_wrapper
-from typing import Callable
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
@@ -57,8 +55,7 @@ def inbox_start_processing():
     document: TrackInbox,
     **kwargs,
   ) -> TrackInbox:
-    cuid_generator: Callable[[], str] = cuid_wrapper()
-    track_id = cuid_generator()
+    track_id = document["track_id"]
     bucket_move_file.function(
       source_key=document["path"],
       destination_key=f"library/tracks/{track_id}/audio/original.mp3",
@@ -69,8 +66,8 @@ def inbox_start_processing():
       track_id=track_id,
       conf={
         "track_id": track_id,
-        "languages_in_audio_file": ["en"],
-        "languages_to_translate_into": [],
+        "languages_in_audio_file": document["languagesExtract"],
+        "languages_to_translate_into": document["languagesTranslateInto"],
         "speakers_count": 1,
       }, 
       task_instance=kwargs["ti"],

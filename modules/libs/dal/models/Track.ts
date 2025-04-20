@@ -19,4 +19,7 @@ export type Track = {
     source: "track" | "transcript";
     type: "original" | "generated" | "edited";
   }[];
+  transcripts: Record<string, {
+    path: string;
+  }>;
 }

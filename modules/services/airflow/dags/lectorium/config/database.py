@@ -33,12 +33,12 @@ Variable.setdefault(
 Variable.setdefault(
   LECTORIUM_DATABASE_COLLECTIONS,
   LectoriumDatabaseCollections(
-    tracks="library-tracks-v0001",
-    dictionary="library-dictionary-v0001",
-    transcripts="library-transcripts-v0001",
-    index="library-index-v0001",
-    tracks_inbox="tracks-inbox",
-    tracks_sources="tracks-sources"
+    tracks="tracks",
+    dictionary="dictionary",
+    transcripts="transcripts",
+    index="index",
+    tracks_inbox="inbox",
+    tracks_sources="sources"
   ),
   "Database collection names",
   deserialize_json=True

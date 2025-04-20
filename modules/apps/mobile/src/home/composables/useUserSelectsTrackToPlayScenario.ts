@@ -1,5 +1,5 @@
 import { useDAL } from '@/app'
-import { usePlayer, usePlayerControls } from '@/player'
+import { usePlayer, usePlayerTranscript } from '@/player'
 
 
 export function useUserSelectsTrackToPlayScenario() {
@@ -9,7 +9,7 @@ export function useUserSelectsTrackToPlayScenario() {
   /* -------------------------------------------------------------------------- */
 
   const player = usePlayer()
-  const playerControls = usePlayerControls()
+  const playerTranscript = usePlayerTranscript()
   const dal = useDAL()
 
   /* -------------------------------------------------------------------------- */
@@ -22,17 +22,18 @@ export function useUserSelectsTrackToPlayScenario() {
 
     await player.open({
       trackId: trackId,
-      url: track.audio.original.path, // TODO: use audio type [original, normalized, etc]
-      title: track.title.en,          // TODO: use localized title
-      author: author.fullName['en'],  // TODO: use localized author
+      url: track.audio.original.path,           // TODO: use audio type [original, normalized, etc]
+      title: track.title?.en ?? 'Unknown',      // TODO: use localized title
+      author: author.fullName?.en ?? 'Unknown', // TODO: use localized author
     })
     await player.play()
+    playerTranscript.trackId.value = trackId
 
     // TODO: looks like it didn't help
     //       it still update playr controls slowly
-    playerControls.isPlaying.value = !playerControls.isPlaying.value
-    playerControls.title.value = track.title.en // TODO: use localized title
-    playerControls.author.value = author.fullName['en'] // TODO: use localized author
+    // playerControls.isPlaying.value = !playerControls.isPlaying.value
+    // playerControls.title.value = track.title.en // TODO: use localized title
+    // playerControls.author.value = author.fullName['en'] // TODO: use localized author
   }
 
   /* -------------------------------------------------------------------------- */

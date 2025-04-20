@@ -6,19 +6,23 @@ class TrackLanguage(TypedDict):
   source: str # track | transcript
   type: str # original | generated
 
+class TrackTranscript(TypedDict):
+  path: str
+
+class TrackAudio(TypedDict):
+  path: str
+  file_size: int
+  duration: int
 
 class Track(TypedDict):
   _id: str
-  urs: str
-  audioNormalizedUrl: str | None
-  title: dict[str, str]
+  type: str
+  version: int
   location: str | None
   date: list[int] | None
   author: str
-  file_size: int
-  duration: int
+  title: dict[str, str]
   references: list[list[str|int]]
+  audio: dict[str, TrackAudio]
+  transcripts: dict[str, TrackTranscript]
   languages: list[TrackLanguage]
-
-
-

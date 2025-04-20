@@ -1,10 +1,13 @@
 import hashlib
 from datetime import datetime, timedelta
+from typing import Callable
 
 from airflow.decorators import dag, task
 from airflow.models import Variable
 from airflow.models import Param
 from airflow.exceptions import AirflowSkipException
+
+from cuid2 import cuid_wrapper
 
 from lectorium.couchdb import couchdb_get_document
 from lectorium.tracks_inbox import TrackInbox
@@ -155,6 +158,8 @@ def inbox_scan_for_new_tracks():
     """
     Saves information about files in the inbox in the database.
     """
+    track_id_generator: Callable[[], str] = cuid_wrapper()
+    
     if not bucket_objects:
       raise AirflowSkipException("Nothing to process")
     
@@ -167,6 +172,7 @@ def inbox_scan_for_new_tracks():
         conf_database_collections["tracks_inbox"],
         TrackInbox(
           _id=get_track_inbox_id(inbox["key"]),
+          track_id=track_id_generator(),
           path=inbox["key"],
           status="new",
         ),

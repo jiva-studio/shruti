@@ -30,7 +30,7 @@ from lectorium.config import (
 def inbox_extract_metadata():
   """
   Extracts and saves metadata for inbox tracs in _new_ status. Updates status
-  of inbox track to _need-approval_.
+  of inbox track to verification.
 
   #### Services:
   - `CouchDB`: Database to save the tracks.
@@ -111,7 +111,7 @@ def inbox_extract_metadata():
     Enriches the inbox document with the extracted metadata.
     """
     document, normalized_author, normalized_location, normalized_title, normalized_date, normalized_reference = document_and_normalized_values
-    document["status"]     = "need-approval"
+    document["status"]     = "verification"
     document["date"]       = normalized_date
     document["references"] = normalized_reference
     document["title"]      = normalized_title
@@ -217,7 +217,7 @@ def inbox_extract_metadata():
       best_match_id    = None
       
       names = {
-        item['_id']: list(item["name"].values())
+        item['_id']: list(item["fullName"].values())
         for item in entities
       }
       

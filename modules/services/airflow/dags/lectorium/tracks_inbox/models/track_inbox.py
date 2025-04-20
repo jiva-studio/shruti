@@ -11,6 +11,9 @@ class TrackInbox(TypedDict):
     # Unique identifier
     _id: str
 
+    # Track ID
+    track_id: str
+
     # Path to the source file
     path: str
 
@@ -36,13 +39,13 @@ class TrackInbox(TypedDict):
     duration: int
 
     # Extract transcript from audio for languages
-    extract_languages: list[str]
+    languagesExtract: list[str]
 
     # List of languages to translate transcript into
-    translate_into: list[str]
+    languagesTranslateInto: list[str]
 
     # Status of the track
-    status: str # new, need-approval, ready-to-process, processing, done, error
+    status: str # new, verification, pending, processing, done, error
 
     # Tasks status
     tasks: dict[str, str] | None

@@ -5,13 +5,15 @@ from typing import TypedDict
 from airflow.decorators import dag, task
 from airflow.models import Param, Variable
 
-from lectorium.couchdb import couchdb_save_document
+from lectorium.tracks_inbox import TrackInbox
+from lectorium.tracks.models.track import Track
+from lectorium.couchdb import couchdb_save_document, couchdb_find_documents
 from lectorium.config.database import (
   LECTORIUM_DATABASE_COLLECTIONS, LECTORIUM_DATABASE_CONNECTION_STRING,
   LectoriumDatabaseCollections)
 from lectorium.bucket import (
-  bucket_download_json_data, bucket_list_files, get_audio_duration,
-  BucketObjectInfo)
+  bucket_list_files, get_audio_duration,
+  bucket_copy_file, BucketObjectInfo)
 
 
 @dag(
@@ -133,44 +135,45 @@ def track_save():
 
   @task(
     task_display_name="💾 Save Transcript")
-  def save_transcript_in_database(
+  def save_transcript(
     track_id: str,
     transcript_info: transcript_info,
    ):
-    raw_document = bucket_download_json_data.function(
-      object_key=transcript_info['path']) 
-   
-    transcript_document = {
-      "@type": "transcript",
-      "version": 1,
-      "blocks": raw_document["blocks"],
-    }
-
-    couchdb_save_document.function(
-      conf_database_connection_string,
-      conf_database_collections["transcripts"],
-      transcript_document,
-      f"{track_id}::transcript::{transcript_info['language']}"
+    bucket_copy_file.function(
+      source_key=transcript_info['path'],
+      destination_key=f"library/tracks/{track_id}/transcripts/{transcript_info['language']}.json"
     )
 
   @task(
     task_display_name="📂 Save Track")
   def save_track_in_database(
     track_id: str,
+    track_inbox: list[TrackInbox],
     transcripts_info: list[transcript_info],
     audio_files_info: list[audio_file_info],
   ):
-    track_document = {
+    track_document: Track = {
       "_id": track_id + "::track",
-      "@type": "track",
+      "type": "track",
       "version": 1,
-      "duration": 0,
+      "location": track_inbox[0]["location"]["normalized"],
+      "date": track_inbox[0]["date"]["normalized"],
+      "author": track_inbox[0]["author"]["normalized"],
+      "title": {
+        "en": track_inbox[0]["title"]["normalized"],
+      },
+      "references": track_inbox[0]["references"]["normalized"],
       "audio": {
         afi["type"]: {
-          "path": f"library/tracks/{track_id}{afi['path']}",
+          "path": afi['path'],
           "file_size": afi["size"],
           "duration": afi["duration"],
         } for afi in audio_files_info
+      },
+      "transcripts": {
+        transcript["language"] : {
+          "path": f"library/tracks/{track_id}/transcripts/{transcript['language']}.json",
+        } for transcript in transcripts_info
       },
       "languages": [
         {
@@ -179,19 +182,33 @@ def track_save():
           "type": "generated",
         } for transcript_info in transcripts_info
       ] + [
-        # TODO get info about original language from track inbox
+        {
+          "language": lang,
+          "source": "track",
+          "type": "original",
+        } for lang in track_inbox[0]["languagesExtract"]
       ]
     }
 
     couchdb_save_document.function(
       conf_database_connection_string,
-      conf_database_collections["transcripts"],
+      conf_database_collections["tracks"],
       track_document,
     )
 
   # ---------------------------------------------------------------------------- #
   #                                       Flow                                   #
   # ---------------------------------------------------------------------------- #
+
+  (
+    track_inbox := couchdb_find_documents.override(
+      task_display_name="📥 Get Track Inbox"
+    )(
+      connection_string=conf_database_connection_string,
+      collection=conf_database_collections["tracks_inbox"],
+      filter={"track_id": conf_track_id},
+    )
+  )
 
   (
     files_in_bucket := bucket_list_files(conf_track_folder)
@@ -201,12 +218,15 @@ def track_save():
   ] 
   
   (
-    save_transcript_in_database
+    save_transcript
       .partial(track_id=conf_track_id)
       .expand(transcript_info=transcripts_info)
-  ), (
+  )
+  
+  (
     save_track_in_database(
       track_id=conf_track_id, 
+      track_inbox=track_inbox,
       transcripts_info=transcripts_info,
       audio_files_info=audio_files_info)
   )

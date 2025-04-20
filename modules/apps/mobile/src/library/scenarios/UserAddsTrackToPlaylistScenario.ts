@@ -44,12 +44,28 @@ export class UserAddsTrackToPlaylistScenario {
     // TODO: add support for multiple media items
     // TODO: get track title in the current language
     await this.media.get({
-      // url: track.audio.original.path,
       trackId: trackId,
       url: signedUrl.signedUrl, 
       destination: track.audio.original.path,
-      title: track.title.en,
+      title: track.title?.en ?? 'Unknown', // TODO: use localized title
     })
+
+    // Download all related transcripts
+
+    for (const transcript of Object.values(track.transcripts)) {
+      const signedUrl = await this.bucketService.getSignedUrl({
+        key: transcript.path,
+        bucketName: this.bucketName,
+        expiresIn: 60 * 60 * 24,
+        operation: S3Operation.GetObject,
+      })
+      await this.media.get({
+        trackId: trackId,
+        url: signedUrl.signedUrl, 
+        destination: transcript.path,
+        title: track.title?.en ?? 'Unknown', // TODO: use localized title
+      })
+    }
   }
 
 }
