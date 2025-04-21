@@ -11,7 +11,7 @@
     >
       <IonRadioGroup
         v-model="value"
-        :allow-empty-selection="true"
+        :allow-empty-selection="allowEmpty"
       >
         <IonItem
           v-for="item in items"
@@ -42,11 +42,18 @@ export type Item = {
   title: string
 }
 
-defineProps<{
-  title: string,
-  open: boolean,
-  items: Item[],
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string,
+    open: boolean,
+    items: Item[],
+    allowEmpty?: boolean
+    value?: ItemId
+  }>(), {
+    allowEmpty: false,
+    value: undefined
+  }
+)
 
 const emit = defineEmits<{
   close: [],
@@ -57,7 +64,7 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const value = ref<ItemId>(undefined)
+const value = ref<ItemId>(props.value)
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */

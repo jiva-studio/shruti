@@ -11,7 +11,7 @@
           <IonButton
             @click="onSelect"
           >
-            Apply
+            {{ $t('app.apply') }}
           </IonButton>
         </IonButtons>
       </IonToolbar>

@@ -33,14 +33,42 @@ import '@ionic/vue/css/display.css'
 
 /* Theme variables */
 import './app/theme/variables.css'
+
+
+import { createI18n } from 'vue-i18n'
 import { 
   initNavigationBarFeature, initSafeAreaFeature, initStatusBarFeature,
   initUpdateMediaItemStatusesOnAppStateChange 
 } from './app'
 
+import { locale as localeApp } from './app/locale'
+import { locale as localeHome } from './home/locale'
+import { locale as localeLibrary } from './library/locale'
+import { locale as localeSettings } from './settings/locale'
+
+const i18n = createI18n({
+  locale: 'en',
+  fallbackLocale: 'en',
+  messages: {
+    en: {
+      app: localeApp.en,
+      home: localeHome.en,
+      library: localeLibrary.en,
+      settings: localeSettings.en,
+    },
+    ru: {
+      app: localeApp.ru,
+      home: localeHome.ru,
+      library: localeLibrary.ru,
+      settings: localeSettings.ru,
+    }
+  }
+})
+
 const app = createApp(App)
   .use(IonicVue)
   .use(router)
+  .use(i18n)
 
 
 router.isReady().then(async () => {

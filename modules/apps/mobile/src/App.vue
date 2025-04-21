@@ -10,7 +10,7 @@
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
 import { NavigationBarHolder, useSyncService } from '@/app'
-import { Player, useSyncPlayerFeature } from '@/player'
+import { Player, useSyncAudioPlayerPluginState, useSetPlayerControlsInfo } from '@/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -24,6 +24,10 @@ const syncService = useSyncService()
 
 onMounted(async () => {
   syncService.sync()
-  useSyncPlayerFeature()
+
+  // Player //
+
+  useSyncAudioPlayerPluginState()
+  useSetPlayerControlsInfo()
 })
 </script>

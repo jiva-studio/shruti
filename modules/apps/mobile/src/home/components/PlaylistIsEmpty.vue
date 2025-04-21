@@ -1,6 +1,6 @@
 <template>
   <IonItem>
-    No tracks have been added to your playlist yet. Tap here to add some tracks.
+    {{ $t('home.playlistIsEmpty') }}
     <IonIcon
       slot="end"
       aria-hidden="true"

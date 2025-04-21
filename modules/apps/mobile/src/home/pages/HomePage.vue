@@ -1,26 +1,28 @@
 <template>
   <Page>
     <UpNextTracksSection ref="upNextTracksRef" />
-    <TrackSuggestionsSection />
+    <TrackSuggestionsSection ref="trackSuggestionsRef" />
   </Page>
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import { TrackSuggestionsSection, UpNextTracksSection } from '@/home'
-import { Page, useDAL } from '@/app'
-import { ref } from 'vue'
+import { Page, useDAL, useConfig } from '@/app'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
+const config = useConfig()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const upNextTracksRef = ref<typeof UpNextTracksSection>() 
+const trackSuggestionsRef = ref<typeof TrackSuggestionsSection>() 
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
@@ -34,5 +36,9 @@ dal.mediaItems.subscribe(async () => {
 })
 dal.playlistItems.subscribe(async () => {
   upNextTracksRef.value?.refresh()
+})
+watch(config.appLanguage, async () => {
+  upNextTracksRef.value?.refresh()
+  trackSuggestionsRef.value?.refresh()
 })
 </script>
