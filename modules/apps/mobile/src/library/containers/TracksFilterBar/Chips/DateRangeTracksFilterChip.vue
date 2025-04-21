@@ -1,7 +1,7 @@
 <template>
   <TracksFilterChipWithDateRange 
     v-model="modelValue"
-    title="📆 Dates"
+    :title="$t('library.filters.dates')"
   />
 </template>
 

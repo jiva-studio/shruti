@@ -6,22 +6,22 @@
     @close="onClose"
   >
     <IonItem>
-      <IonLabel>{{ $t('filter-date-start') }}</IonLabel>
+      <IonLabel>{{ $t('app.from') }}</IonLabel>
       <IonButton
         id="start-date-button"
         fill="clear"
       >
-        {{ value.from ? formatDate(value.from) : $t('select') }}
+        {{ value.from ? formatDate(value.from) : $t('app.select') }}
       </IonButton>
     </IonItem>
 
     <IonItem>
-      <IonLabel>{{ $t('filter-date-end') }}</IonLabel>
+      <IonLabel>{{ $t('app.to') }}</IonLabel>
       <IonButton
         id="end-date-button"
         fill="clear"
       >
-        {{ value.to ? formatDate(value.to) : $t('select') }}
+        {{ value.to ? formatDate(value.to) : $t('app.select') }}
       </IonButton>
     </IonItem>
 
@@ -113,9 +113,5 @@ function formatDate(date: string) {
     month: 'long',
     day: 'numeric',
   })
-}
-
-function $t(key: string) {
-  return key
 }
 </script>

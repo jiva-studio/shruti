@@ -1,5 +1,5 @@
 <template>
-  <SectionHeader title="You Might Like" />
+  <SectionHeader :title="$t('home.youMightLike')" />
   <IonList lines="none">
     <TracksListItem 
       v-for="item in state"
@@ -20,7 +20,7 @@
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
 import { mapTrackToPlaylistItem, SectionHeader } from '@/home'
-import { TracksListItem, type TracksListItemData } from '@/app'
+import { TracksListItem, type TracksListItemData, useConfig } from '@/app'
 import { useDAL } from '@/app'
 
 /* -------------------------------------------------------------------------- */
@@ -28,16 +28,22 @@ import { useDAL } from '@/app'
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
+const config = useConfig()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { state } = useAsyncState(
-  getSuggestions(),
-  [],
-  { immediate: true, resetOnExecute: false }
+const { state, execute: refresh } = useAsyncState(
+  async () => await getSuggestions(),
+  [], { immediate: true, resetOnExecute: false }
 )
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+defineExpose({ refresh })
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
@@ -46,7 +52,9 @@ const { state } = useAsyncState(
 async function getSuggestions() : Promise<TracksListItemData[]> {
   try {
     const suggestedTracks = await dal.tracks.getAll()
-    return await Promise.all(suggestedTracks.map(mapTrackToPlaylistItem))
+    return await Promise.all(
+      suggestedTracks.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
+    )
   } catch (error) {
     // TODO: better error handling
     console.error('Error fetching track suggestions:', error)

@@ -3,16 +3,20 @@ import { TracksListItemData } from '@/app'
 import { useDAL } from '@/app'
 
 // TODO: move to @/app
+// TODO: DAL access should be cached
 
 export async function mapTrackToPlaylistItem(
-  track: Track
+  track: Track,
+  language: string = 'en'
 ): Promise<TracksListItemData> {
   return {
     trackId: track._id,
-    title: mapTrackTitle(track.title),
-    author: await mapAuthorFullNameById(track.author), 
-    location: await mapLocationFullNameById(track.location),
-    references: track.references.map(x => x.join(' ')),
+    title: mapTrackTitle(track.title, language),
+    author: await mapAuthorFullNameById(track.author, language), 
+    location: await mapLocationFullNameById(track.location, language),
+    references: track.references.length >= 1 
+      ? [await mapReference(track.references[0], language)]
+      : [],
     date: mapTrackDate(track.date),
     status: 'none', // TODO: set status based on playlist item
   }
@@ -67,11 +71,14 @@ function mapTrackDate(
 /*                                   Author                                   */
 /* -------------------------------------------------------------------------- */
 
-async function mapAuthorFullNameById(authorId: string) {
+async function mapAuthorFullNameById(
+  authorId: string, 
+  language: string = 'en'
+) {
   try {
     const dal = useDAL()
     const author = await dal.authors.getOne('author::' + authorId)
-    return author.fullName['en'] || 'Unknown'
+    return author.fullName[language] || author.fullName['en'] || authorId
   } catch (error) {
     return authorId
   }
@@ -81,12 +88,34 @@ async function mapAuthorFullNameById(authorId: string) {
 /*                                  Location                                  */
 /* -------------------------------------------------------------------------- */
 
-async function mapLocationFullNameById(locationId: string) {
+async function mapLocationFullNameById(
+  locationId: string,
+  language: string = 'en'
+) {
   try {
     const dal = useDAL()
     const location = await dal.locations.getOne('location::' + locationId)
-    return location.fullName['en'] || locationId
+    return location.fullName[language] || location.fullName['en'] || locationId
   } catch (error) {
     return locationId
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  Reference                                 */
+/* -------------------------------------------------------------------------- */
+
+async function mapReference(
+  reference: (string|number)[],
+  language: string = 'en'
+): Promise<string> {
+  try {
+    const dal = useDAL()
+    const sourceId = 'source::' + reference[0]
+    const source = await dal.sources.getOne(sourceId)
+    const sourceName = source.shortName[language] || source.shortName['en'] || sourceId
+    return sourceName + ' ' + reference.slice(1).join('.')
+  } catch {
+    return reference.join('.')
   }
 }
