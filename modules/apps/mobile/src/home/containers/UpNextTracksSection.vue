@@ -1,5 +1,5 @@
 <template>
-  <SectionHeader title="Up Next" />
+  <SectionHeader :title="$t('home.upNext')" />
   <IonList
     lines="none"
   >
@@ -39,8 +39,8 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { SectionHeader, PlaylistIsEmpty, useHomeScenarios, useUserSelectsTrackToPlayScenario } from '@/home'
-import { TracksListItem, TracksListItemSkeleton } from '@/app'
+import { SectionHeader, PlaylistIsEmpty, useHomeScenarios, useUserSelectsTrackToPlay } from '@/home'
+import { TracksListItem, TracksListItemSkeleton, useConfig } from '@/app'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -49,15 +49,16 @@ import { useRouter } from 'vue-router'
 /* -------------------------------------------------------------------------- */
 
 const homeScenarios = useHomeScenarios()
+const config = useConfig()
 const router = useRouter()
-const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
+const userSelectsTrackToPlay = useUserSelectsTrackToPlay()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const { state: tracks, execute: refresh, isLoading } = useAsyncState(
-  async () => await homeScenarios.userSeesUpNextTracksScenario.execute(), 
+  async () => await homeScenarios.userSeesUpNextTracksScenario.execute(config.appLanguage.value), 
   [], { immediate: true, resetOnExecute: false }
 )
 
@@ -69,6 +70,9 @@ const isFirstLoad = computed(() => tracks.value.length === 0 && isLoading.value)
 
 defineExpose({ refresh })
 
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
 
 function goToLibrary() {
   router.replace({ name: 'library' })

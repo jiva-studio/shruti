@@ -8,7 +8,7 @@
           href="/app/home"
         >
           <IconHome />
-          <IonLabel>Home</IonLabel>
+          <IonLabel>{{ $t('app.home') }}</IonLabel>
         </IonTabButton>
 
         <IonTabButton
@@ -16,7 +16,7 @@
           href="/app/library"
         >
           <IconSearch />
-          <IonLabel>Library</IonLabel>
+          <IonLabel>{{ $t('app.search') }}</IonLabel>
         </IonTabButton>
 
         <IonTabButton
@@ -24,7 +24,7 @@
           href="/app/settings"
         >
           <IconSettings />
-          <IonLabel>Settings</IonLabel>
+          <IonLabel>{{ $t('app.settings') }}</IonLabel>
         </IonTabButton>
       </IonTabBar>
     </IonTabs>

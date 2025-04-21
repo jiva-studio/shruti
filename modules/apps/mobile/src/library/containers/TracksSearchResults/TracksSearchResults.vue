@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { useDAL, TracksListItem, TracksListItemData, useSafeOperation } from '@/app'
+import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
 import { mapTrackToPlaylistItem } from '@/home'
 import { useLibraryScenarios } from '@/library/composables/useLibraryScenarios'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent } from '@ionic/vue'
@@ -35,6 +35,7 @@ import { ref, toRefs, onMounted } from 'vue'
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
+const config = useConfig()
 const libraryScenarios = useLibraryScenarios()
 const safeOperation = useSafeOperation()
 
@@ -56,6 +57,12 @@ const props = defineProps<{
 }>()
 
 const { filters } = toRefs(props)
+
+defineExpose({
+  refresh: async () => {
+    await loadTracks(0, filters.value)
+  },
+})
 
 
 /* -------------------------------------------------------------------------- */
@@ -105,7 +112,6 @@ async function loadTracks(
   offset: number = 0,
   filters: Filters,
 ) {
-
   try {
     isLoading.value = true
     const searchResult = await dal.tracks.find({
@@ -118,7 +124,9 @@ async function loadTracks(
       skip: offset,
       limit: pageSize,
     })
-    const items = await Promise.all(searchResult.map(mapTrackToPlaylistItem))
+    const items = await Promise.all(
+      searchResult.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
+    )
     if (offset === 0) { tracks.value = [] }
     tracks.value.push(...items)
     infiniteScrollEnabled.value = items.length === pageSize 

@@ -2,7 +2,7 @@
   <TracksFilterChipWithListItem
     v-model="selectedDuration"
     :items="durations"
-    title="⏰ Durations"
+    :title="$t('library.filters.duration')"
   />
 </template>
 
@@ -10,6 +10,14 @@
 <script lang="ts" setup>
 import { TracksFilterChipWithListItem } from '@/library'
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+/* -------------------------------------------------------------------------- */
+/*                                Dependencies                                */
+/* -------------------------------------------------------------------------- */
+
+const i18n = useI18n()
+
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -31,10 +39,10 @@ const modelValue = defineModel<Duration>({
 const selectedDuration = ref<string|undefined>(undefined)
 
 const durations = [
-  { id: 'short',      title: $t('filter-duration-short'),      min: 0  * 60, max: 15 * 60 },
-  { id: 'medium',     title: $t('filter-duration-medium'),     min: 15 * 60, max: 30 * 60 },
-  { id: 'long',       title: $t('filter-duration-long'),       min: 30 * 60, max: 60 * 60 },
-  { id: 'extra-long', title: $t('filter-duration-extra-long'), min: 60 * 60, max: 60 * 60 * 24 },
+  { id: 'short',      title: i18n.t('library.filters.durationShort'),     min: 0  * 60, max: 15 * 60 },
+  { id: 'medium',     title: i18n.t('library.filters.durationMedium'),    min: 15 * 60, max: 30 * 60 },
+  { id: 'long',       title: i18n.t('library.filters.durationLong'),      min: 30 * 60, max: 60 * 60 },
+  { id: 'extra-long', title: i18n.t('library.filters.durationExtraLong'), min: 60 * 60, max: 60 * 60 * 24 },
 ]
 
 /* -------------------------------------------------------------------------- */
@@ -52,8 +60,4 @@ watch(selectedDuration, (selected) => {
     modelValue.value = { min: 0, max: Number.MAX_SAFE_INTEGER }
   }
 }, { deep: true, immediate: true })
-
-function $t(key: string) {
-  return key
-}
 </script>
