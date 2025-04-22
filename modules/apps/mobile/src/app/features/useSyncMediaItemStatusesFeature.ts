@@ -1,7 +1,7 @@
 import { App } from '@capacitor/app'
 import { useDAL, useDownloaderService } from '..'
 
-export async function initUpdateMediaItemStatusesOnAppStateChange() {
+export async function useSyncMediaItemStatusesFeature() {
 
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */

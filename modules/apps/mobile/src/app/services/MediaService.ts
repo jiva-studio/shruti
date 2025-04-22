@@ -1,5 +1,5 @@
 import { MediaItemsService } from '@lectorium/dal/index'
-import { DownloaderService, DownloaderTaskStatuses, generateId } from '@/app'
+import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@/app'
 
 export type GetMediaRequest = {
   trackId: string,
@@ -52,7 +52,7 @@ export class MediaService {
 
     // add to media items
     await this.mediaItems.addOne({
-      _id: generateId(22),
+      _id: useIdGenerator().generateId(22),
       type: 'mediaItem',
       taskStatus: 'pending',
       trackId: request.trackId,

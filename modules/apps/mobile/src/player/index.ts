@@ -26,9 +26,9 @@ export * from './composables/usePlayerControls'
 export * from './composables/usePlayer'
 
 // scenarios:
-export * from './composables/usePlayerControlsPlayerScenario'
+export * from './scenarios/usePlayerControlsPlayerScenario'
 
 // features:
-export * from './features/useSyncAudioPlayerPluginState'
-export * from './features/useSetPlayerControlsInfo'
+export * from './features/useSyncAudioPlayerPluginStateFeature'
+export * from './features/useSyncPlayerControlsInfoFeature'
 

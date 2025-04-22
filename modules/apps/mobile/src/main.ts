@@ -34,12 +34,17 @@ import '@ionic/vue/css/display.css'
 /* Theme variables */
 import './app/theme/variables.css'
 
-
 import { createI18n } from 'vue-i18n'
 import { 
-  initNavigationBarFeature, initSafeAreaFeature, initStatusBarFeature,
-  initUpdateMediaItemStatusesOnAppStateChange 
+  useNavigationBarFeature,
+  useSafeAreaFeature,
+  useStatusBarFeature,
+  useSyncMediaItemStatusesFeature 
 } from './app'
+import { 
+  useSyncAudioPlayerPluginStateFeature, 
+  useSetPlayerControlsInfoFeature 
+} from '@/player'
 
 import { locale as localeApp } from './app/locale'
 import { locale as localeHome } from './home/locale'
@@ -72,9 +77,15 @@ const app = createApp(App)
 
 
 router.isReady().then(async () => {
-  await initNavigationBarFeature()
-  await initStatusBarFeature()
-  await initSafeAreaFeature()
-  await initUpdateMediaItemStatusesOnAppStateChange()
+  // App //
+  await useNavigationBarFeature()
+  await useStatusBarFeature()
+  await useSafeAreaFeature()
+  await useSyncMediaItemStatusesFeature()
+
+  // Player //
+
+  useSyncAudioPlayerPluginStateFeature()
+  useSetPlayerControlsInfoFeature()
   app.mount('#app')
 })

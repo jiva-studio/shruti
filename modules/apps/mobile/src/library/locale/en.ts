@@ -9,6 +9,6 @@ export const en = {
     durationShort: 'Uo to 15 minutes',
     durationMedium: '15-30 minutes',
     durationLong: '30-60 minutes',
-    durationAll: '60+ minutes',
+    durationExtraLong: '60+ minutes',
   }
 }

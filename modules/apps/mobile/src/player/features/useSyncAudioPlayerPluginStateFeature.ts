@@ -3,7 +3,7 @@ import { usePlayer, usePlayerControls } from '@/player'
 /**
  * Syncs the player controls with the Audio Player plugin state.
  */
-export function useSyncAudioPlayerPluginState() {
+export function useSyncAudioPlayerPluginStateFeature() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */

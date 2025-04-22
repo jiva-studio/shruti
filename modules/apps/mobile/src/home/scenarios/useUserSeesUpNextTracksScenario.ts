@@ -1,44 +1,35 @@
-import { MediaItemsService, PlaylistItemsService, TracksService } from '@lectorium/dal/index'
 import { mapTrackToPlaylistItem } from '../mappers/tracks'
 import { Track } from '@lectorium/dal/models'
+import { useDAL } from '@/app'
 
 type TrackStatus = 'none' | 'loading' | 'failed'
 const LoadingStatuses = ['pending', 'running', 'paused']
 const FailedStatuses = ['failed']
 
+export function useUserSeesUpNextTracksScenario() {
+  
+  /* -------------------------------------------------------------------------- */
+  /*                                Dependencies                                */
+  /* -------------------------------------------------------------------------- */
 
-export class TracksListScenario {
-  protected async map(
-    track: Track,
-    language: string = 'en',
-    enricher: (track: Track) => object
-  ) {
-    const mappedItem = await mapTrackToPlaylistItem(track, language)
-    return { ...mappedItem, ...enricher(track) }
-  }
-}
+  const dal = useDAL()
 
-export class UserSeesUpNextTracksScenario extends TracksListScenario{
-  constructor(
-    private readonly playlistItems: PlaylistItemsService,
-    private readonly mediaItems: MediaItemsService,
-    private readonly tracks: TracksService,
-  ) { 
-    super()
-  }
+  /* -------------------------------------------------------------------------- */
+  /*                                   Helpers                                  */
+  /* -------------------------------------------------------------------------- */
 
-  async execute(
+  async function execute(
     language: string = 'en'
   ) {
     // Get next 10 tracks from the playlist
-    const playlistItems = await this.playlistItems.getAll({ limit: 10 })
+    const playlistItems = await dal.playlistItems.getAll({ limit: 10 })
     const upNextTrackIds = playlistItems.map(item => item.trackId)
-    const upNextTracks = await this.tracks.getMany({
+    const upNextTracks = await dal.tracks.getMany({
       selector: { _id : { $in: upNextTrackIds } },
     })
 
     // Get related media items
-    const mediaItems = await this.mediaItems.getMany({
+    const mediaItems = await dal.mediaItems.getMany({
       selector: { trackId : { $in: upNextTrackIds } },
       limit: 100
     })
@@ -59,7 +50,24 @@ export class UserSeesUpNextTracksScenario extends TracksListScenario{
 
     // Enrich tracks with their statuses
     const trackStatusEnricher = (track: Track) => ({ status: trackStatuses[track._id] })
-    const trackMappers = upNextTracks.map((x) => this.map(x, language, trackStatusEnricher))
+    const trackMappers = upNextTracks.map((x) => map(x, language, trackStatusEnricher))
     return await Promise.all(trackMappers)
+  }
+
+  async function map(
+    track: Track,
+    language: string = 'en',
+    enricher: (track: Track) => object
+  ) {
+    const mappedItem = await mapTrackToPlaylistItem(track, language)
+    return { ...mappedItem, ...enricher(track) }
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                                  Interface                                 */
+  /* -------------------------------------------------------------------------- */
+
+  return {
+    execute
   }
 }
