@@ -10,5 +10,8 @@ export const en = {
     durationMedium: '15-30 minutes',
     durationLong: '30-60 minutes',
     durationExtraLong: '60+ minutes',
+  },
+  notifications: {
+    newTrackAddedToPlaylist: 'Track added to playlist',
   }
 }
