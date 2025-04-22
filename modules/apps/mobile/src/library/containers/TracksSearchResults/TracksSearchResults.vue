@@ -60,6 +60,7 @@ const { filters } = toRefs(props)
 
 defineExpose({
   refresh: async () => {
+    trackIdsInPlaylist.value = await loadTrackIdsInPlaylist()
     await loadTracks(0, filters.value)
   },
 })
@@ -73,6 +74,7 @@ const pageSize = 25
 const tracks = ref<TracksListItemData[]>([])
 const isLoading = ref<boolean>(false)
 const infiniteScrollEnabled = ref<boolean>(true)
+const trackIdsInPlaylist = ref<string[]>([])
 
 
 /* -------------------------------------------------------------------------- */
@@ -84,9 +86,19 @@ watchDebounced(filters, async (v) => {
 }, { debounce: 500, maxWait: 1000, deep: true })
 
 onMounted(async () => {
+  trackIdsInPlaylist.value = await loadTrackIdsInPlaylist()
   await loadTracks(0, filters.value)
 })
 
+dal.playlistItems.subscribe(async (e) => {
+  if (e.event !== 'added') { return }
+  const track = tracks.value.find(x => x.trackId === e.item.trackId)
+  if (track) {
+    track.status = 'added'
+  } else {
+    console.warn('Track not found in the list:', e.item.trackId, tracks.value)
+  }
+})
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -125,7 +137,12 @@ async function loadTracks(
       limit: pageSize,
     })
     const items = await Promise.all(
-      searchResult.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
+      searchResult.map(
+        x => mapTrackToPlaylistItem(
+          x, 
+          config.appLanguage.value,
+          trackIdsInPlaylist.value.includes(x._id) ? 'added' : 'none',
+        ))
     )
     if (offset === 0) { tracks.value = [] }
     tracks.value.push(...items)
@@ -137,5 +154,10 @@ async function loadTracks(
   } finally {
     isLoading.value = false
   }
+}
+
+async function loadTrackIdsInPlaylist(): Promise<string[]> {
+  const playlist = await dal.playlistItems.getAll()
+  return playlist.map(x => x.trackId) ?? []
 }
 </script>
