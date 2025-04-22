@@ -6,7 +6,7 @@ import { usePlayerControls } from '@/player'
  * Sets the player controls info (title and author) based on the trackId.
  * It also updates the info when the app language changes.
  */
-export function useSetPlayerControlsInfo() {
+export function useSetPlayerControlsInfoFeature() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */

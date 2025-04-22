@@ -1,3 +1,7 @@
+/* -------------------------------------------------------------------------- */
+/*                                UI Components                               */
+/* -------------------------------------------------------------------------- */
+
 // components:
 export { default as Header } from './components/Header.vue'
 export { default as ListItemsSelectorDialog, type Item as SelectorDialogItem } from './components/SelectorDialog/ListItemsSelectorDialog.vue'
@@ -15,6 +19,10 @@ export { default as IconHome } from './icons/IconHome.vue'
 export { default as IconSettings } from './icons/IconSettings.vue'
 export { default as IconSearch } from './icons/IconSearch.vue'
 
+/* -------------------------------------------------------------------------- */
+/*                               Business Logic                               */
+/* -------------------------------------------------------------------------- */
+
 // composables:
 export * from './composables/useConfig'
 export * from './composables/useDatabase'
@@ -24,18 +32,16 @@ export * from './composables/useMediaService'
 export * from './composables/useDownloaderService'
 export * from './composables/useBucketService'
 export * from './composables/useSafeOperation'
+export * from './composables/useIdGenerator'
+
+// features:
+export * from './features/useNavigationBarFeature'
+export * from './features/useStatusBarFeature'
+export * from './features/useSafeAreaFeature'
+export * from './features/useSyncMediaItemStatusesFeature'
 
 // services:
 export * from './services/SyncService'
 export * from './services/DownloaderService'
 export * from './services/MediaService'
 export * from './services/BucketService'
-
-// features:
-export * from './features/navigation-bar.feature'
-export * from './features/status-bar.feature'
-export * from './features/safe-area.feature'
-export * from './features/update-media-item-status.feature'
-
-// helpers:
-export * from './helpers/id-generator.helper'

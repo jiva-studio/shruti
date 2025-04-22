@@ -1,3 +1,7 @@
+/* -------------------------------------------------------------------------- */
+/*                                UI Components                               */
+/* -------------------------------------------------------------------------- */
+
 // components:
 export { default as TracksFilterChipsList } from './components/TracksFilterChipsList.vue'
 export { default as TracksFilterChip } from './components/TracksFilterChip.vue'
@@ -10,8 +14,9 @@ export { default as Searchbar } from './components/Searchbar.vue'
 export { default as TracksFilterBar, type TracksFilterValue } from './containers/TracksFilterBar/TracksFilterBar.vue'
 export { default as TracksSearchResults } from './containers/TracksSearchResults/TracksSearchResults.vue'
 
-// composables:
-export * from './composables/useLibraryScenarios'
+/* -------------------------------------------------------------------------- */
+/*                               Business Logic                               */
+/* -------------------------------------------------------------------------- */
 
 // scenarios:
-export * from './scenarios/UserAddsTrackToPlaylistScenario'
+export * from './scenarios/useUserAddsTrackToPlaylistScenario'

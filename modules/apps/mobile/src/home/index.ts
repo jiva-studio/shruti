@@ -14,11 +14,9 @@ export { default as UpNextTracksSection } from './containers/UpNextTracksSection
 /*                               Business Logic                               */
 /* -------------------------------------------------------------------------- */
 
-// composables:
-export { useHomeScenarios } from './composables/useHomeScenarios'
-
 // scenarios:
-export * from './scenarios/useUserSelectsTrackToPlay'
+export * from './scenarios/useUserSeesUpNextTracksScenario'
+export * from './scenarios/useUserSelectsTrackToPlayScenario'
 
 // mappers:
 export { mapTrackToPlaylistItem } from './mappers/tracks'
