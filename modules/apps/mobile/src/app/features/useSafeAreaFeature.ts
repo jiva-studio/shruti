@@ -2,7 +2,7 @@
 import { SafeArea, SafeAreaInsets } from 'capacitor-plugin-safe-area'
 // import { Device } from '@capacitor/device'
 
-export async function initSafeAreaFeature() {
+export async function useSafeAreaFeature() {
   /* -------------------------------------------------------------------------- */
   /*                                    State                                   */
   /* -------------------------------------------------------------------------- */

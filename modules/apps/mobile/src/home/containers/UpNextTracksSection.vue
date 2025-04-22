@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { SectionHeader, PlaylistIsEmpty, useHomeScenarios, useUserSelectsTrackToPlay } from '@/home'
+import { SectionHeader, PlaylistIsEmpty, useUserSelectsTrackToPlayScenario, useUserSeesUpNextTracksScenario } from '@/home'
 import { TracksListItem, TracksListItemSkeleton, useConfig } from '@/app'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -48,17 +48,17 @@ import { useRouter } from 'vue-router'
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const homeScenarios = useHomeScenarios()
 const config = useConfig()
 const router = useRouter()
-const userSelectsTrackToPlay = useUserSelectsTrackToPlay()
+const userSeesUpNextTracks = useUserSeesUpNextTracksScenario()
+const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const { state: tracks, execute: refresh, isLoading } = useAsyncState(
-  async () => await homeScenarios.userSeesUpNextTracksScenario.execute(config.appLanguage.value), 
+  async () => await userSeesUpNextTracks.execute(config.appLanguage.value), 
   [], { immediate: true, resetOnExecute: false }
 )
 

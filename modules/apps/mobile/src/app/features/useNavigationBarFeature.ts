@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { NavigationBar } from '@squareetlabs/capacitor-navigation-bar'
 import { usePlayerTranscript } from '@/player'
 
-export async function initNavigationBarFeature() {
+export async function useNavigationBarFeature() {
 
   /* -------------------------------------------------------------------------- */
   /*                                    State                                   */

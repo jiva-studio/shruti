@@ -23,12 +23,12 @@
 </template>
 
 <script setup lang="ts">
-import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
-import { mapTrackToPlaylistItem } from '@/home'
-import { useLibraryScenarios } from '@/library/composables/useLibraryScenarios'
+import { ref, toRefs, onMounted } from 'vue'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent } from '@ionic/vue'
 import { watchDebounced } from '@vueuse/core'
-import { ref, toRefs, onMounted } from 'vue'
+import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
+import { mapTrackToPlaylistItem } from '@/home'
+import { useUserAddsTrackToPlaylistScenario } from '@/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -36,7 +36,7 @@ import { ref, toRefs, onMounted } from 'vue'
 
 const dal = useDAL()
 const config = useConfig()
-const libraryScenarios = useLibraryScenarios()
+const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
 const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
@@ -99,7 +99,7 @@ async function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
 
 async function onTrackClick(trackId: string) {
   safeOperation.execute(
-    async () => await libraryScenarios.userAddsTrackToPlaylistScenario.execute(trackId)
+    async () => await userAddsTrackToPlaylist.execute(trackId)
   )
 }
 

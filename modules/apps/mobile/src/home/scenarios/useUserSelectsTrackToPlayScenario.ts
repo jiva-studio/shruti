@@ -2,7 +2,7 @@ import { useConfig, useDAL } from '@/app'
 import { usePlayer, usePlayerControls, usePlayerTranscript } from '@/player'
 
 
-export function useUserSelectsTrackToPlay() {
+export function useUserSelectsTrackToPlayScenario() {
 
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
