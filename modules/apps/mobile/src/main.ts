@@ -78,6 +78,7 @@ const app = createApp(App)
 
 router.isReady().then(async () => {
   // App //
+
   await useNavigationBarFeature()
   await useStatusBarFeature()
   await useSafeAreaFeature()
