@@ -9,7 +9,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationBarHolder, useSyncService } from '@/app'
+import { NavigationBarHolder, useSyncService, useSafeOperation } from '@/app'
 import { Player } from '@/player'
 
 /* -------------------------------------------------------------------------- */
@@ -17,12 +17,15 @@ import { Player } from '@/player'
 /* -------------------------------------------------------------------------- */
 
 const syncService = useSyncService()
+const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
 
 onMounted(async () => {
-  syncService.sync()
+  safeOperation.execute(async () => {
+    await syncService.sync()
+  })
 })
 </script>

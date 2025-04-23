@@ -5,7 +5,7 @@ export function useSafeOperation() {
     try {
       await operation()
     } catch (error) {
-      console.error('Error executing safe operation:', error)
+      console.error('Error executing safe operation: ', JSON.stringify(error))
       const toast = await toastController.create({
         message: 'An error occurred while performing the operation.',
         duration: 3500,
