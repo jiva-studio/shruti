@@ -10,7 +10,7 @@ on:
       - "modules/libs/audioPlayer/**"
       - "modules/package.json"
       - "modules/package-lock.json"
-      - ".github/workflows/mobile-build.yml"
+      - ".github/workflows/mobile-build-deploy-staging.yml"
   
 env:
   REGISTRY: ghcr.io
