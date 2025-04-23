@@ -19,7 +19,7 @@ env:
 jobs:
   build:
     environment: staging
-    name: 👷‍♂️ Build
+    name: 🚀 Deploy to Staging
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
