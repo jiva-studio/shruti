@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "lie": "^3.3.0",
+    "pouchdb": "^9.0.0",
+    "pouchdb-adapter-http": "^9.0.0",
+    "pouchdb-adapter-leveldb": "^9.0.0",
+    "pouchdb-adapter-node-websql": "^7.0.0",
+    "pouchdb-core": "^9.0.0",
+    "pouchdb-replication": "^9.0.0",
+    "pouchdb-replication-stream": "^1.2.9",
+    "progress": "^2.0.3",
+    "yargs": "^17.7.2"
+  }
+}

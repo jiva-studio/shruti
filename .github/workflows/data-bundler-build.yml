@@ -1,0 +1,28 @@
+name: Data Bundler
+
+on:
+  push:
+    paths:
+      - "modules/tools/dataBundler/**"
+      - ".github/workflows/data-bundler-build.yml"
+      - ".github/workflows/data-bundler-deploy-staging.yml"
+  
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: akdasa-studios
+
+jobs:
+  build:
+    name: 👷‍♂️ Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      
+      - name: 👷‍♂️ Build Container
+        uses: ./.github/actions/build-container
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
+          file: modules/tools/dataBundler/Dockerfile
