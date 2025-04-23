@@ -13,7 +13,7 @@ LABEL org.opencontainers.image.authors="AKd Studios"
 # ---------------------------------------------------------------------------- #
 
 WORKDIR /tools
-COPY package*.json ./
+COPY tools/dataBundler/package*.json ./
 RUN npm install --python=python3
 
 # ---------------------------------------------------------------------------- #
