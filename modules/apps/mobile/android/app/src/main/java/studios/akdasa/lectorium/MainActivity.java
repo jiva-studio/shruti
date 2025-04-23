@@ -9,6 +9,16 @@ public class MainActivity extends BridgeActivity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+
+    // Copy the database from assets to the databases folder
+    DatabaseHelper databaseHelper = new DatabaseHelper(this);
+    try {
+      databaseHelper.copyDatabaseFromAssets("tracks.db");
+      databaseHelper.copyDatabaseFromAssets("dictionary.db");
+      databaseHelper.copyDatabaseFromAssets("index.db");
+    } catch (RuntimeException e) {
+      e.printStackTrace();
+    }
   }
 
   @Override

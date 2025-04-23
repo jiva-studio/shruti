@@ -43,7 +43,7 @@ export async function normalizeLocation(
   }
   try {
     const location = await locations.getOne('location::' + value)
-    return location.name['en']
+    return location.fullName['en']
   } catch (error) {
     return value ?? 'Empty'
   }

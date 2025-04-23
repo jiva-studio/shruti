@@ -47,3 +47,10 @@ __pycache__
 *.xcworkspacedata
 IDEWorkspaceChecks.plist
 .env.sentry-build-plugin
+
+
+# ---------------------------------------------------------------------------- #
+#                                      App                                     #
+# ---------------------------------------------------------------------------- #
+
+modules/apps/mobile/android/app/src/main/assets/*

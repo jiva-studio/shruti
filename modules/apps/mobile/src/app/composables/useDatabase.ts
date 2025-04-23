@@ -1,25 +1,29 @@
+import { Capacitor } from '@capacitor/core'
 import { useConfig } from '@/app'
 import { Database } from '@lectorium/dal/persistence'
 
 export function useDatabase() {
   const config = useConfig()
   const databaseUrl = config.databaseUrl.value
-  // TODO: use sqlite adapter for android / ios
-  const localAdapter = undefined // Capacitor.isNativePlatform() ? 'cordova-sqlite' : undefined
+  const adapter = Capacitor.isNativePlatform() ? 'cordova-sqlite' : undefined
 
   return {
     local: {
-      userData:    new Database({ name: 'data.db', adapter: localAdapter }),
-      tracks:      new Database({ name: 'tracks.db', adapter: localAdapter }),
-      transcripts: new Database({ name: 'transcripts.db', adapter: localAdapter }),
-      dictionary:  new Database({ name: 'dictionary.db', adapter: localAdapter }),
-      index:       new Database({ name: 'index.db', adapter: localAdapter })
+      userData: new Database({ name: 'userData.db', adapter }),
+      tracks: new Database({ name: 'tracks.db', adapter }),
+      dictionary: new Database({ name: 'dictionary.db', adapter }),
+      index: new Database({ name: 'index.db', adapter }),
     },
     remote: {
-      tracks:      new Database({ name: databaseUrl + '/tracks' }),
-      transcripts: new Database({ name: databaseUrl + '/transcripts' }),
-      dictionary:  new Database({ name: databaseUrl + '/dictionary' }),
-      index:       new Database({ name: databaseUrl + '/index' })
-    }
+      tracks: new Database({
+        name: databaseUrl + '/tracks',
+      }),
+      dictionary: new Database({
+        name: databaseUrl + '/dictionary',
+      }),
+      index: new Database({
+        name: databaseUrl + '/index',
+      }),
+    },
   }
 }

@@ -8,6 +8,10 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // to make pouchdb working
+      if (window.global === undefined) { window.global = window; }
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
