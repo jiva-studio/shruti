@@ -12,6 +12,7 @@ services:
       - lectorium
     volumes:
       - ../:/workspaces/lectorium
+      - /tmp/lectorium:/tmp/lectorium
     depends_on:
       - couchdb
       - postgres
