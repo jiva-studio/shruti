@@ -2,6 +2,8 @@ name: Mobile
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "modules/apps/mobile/**"
       - "modules/libs/downloader/**"
@@ -16,6 +18,7 @@ env:
 
 jobs:
   build:
+    environment: staging
     name: 👷‍♂️ Build
     runs-on: ubuntu-latest
     steps:
@@ -69,6 +72,19 @@ jobs:
       - name: 👷 Build Audio Player Plugin
         working-directory: modules/libs/audioPlayer
         run: npm i && npm run build
+
+      # ---------------------------------------------------------------------------- #
+      #                              Download Artifacts                              #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 📥 Download Database Artifacts
+        env:
+          BUCKET_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          BUCKET_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          BUCKET_ENDPOINT_URL: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          BUCKET_REGION_NAME: ${{ secrets.BUCKET_REGION_NAME }}
+          BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+        run: python3 scripts/download-app-database-artifacts.py
 
       # ---------------------------------------------------------------------------- #
       #                                   Build App                                  #

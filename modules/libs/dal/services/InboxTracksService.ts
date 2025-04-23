@@ -37,7 +37,6 @@ export class InboxTracksService
       selector: {
         status: {
           $in: [
-            "new",
             "verification",
             "processing",
             "error",

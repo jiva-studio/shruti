@@ -48,6 +48,13 @@ import {
   useSetPlayerControlsInfoFeature 
 } from '@/player'
 
+/** 
+ * Configure PouchDB to use SQLite adapter for Cordova
+ */
+import PouchDB from 'pouchdb'
+import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
+PouchDB.plugin(PouchDBAdapterSqlLite)
+
 import { locale as localeApp } from './app/locale'
 import { locale as localeHome } from './home/locale'
 import { locale as localeLibrary } from './library/locale'
