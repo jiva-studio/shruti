@@ -12,6 +12,7 @@ services:
       - shruti
     volumes:
       - ../:/workspaces/shruti
+      - /tmp/shruti:/tmp/shruti
     depends_on:
       - couchdb
       - postgres
