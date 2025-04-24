@@ -5,7 +5,7 @@ Initial schema with support for multilingual titles, basic metadata, references,
 
 ```json
 {
-  "_id": "{trackId}::track",
+  "_id": "{trackId}",
   "@type": "track",
   "version": 1,
   "location": "mayapur",

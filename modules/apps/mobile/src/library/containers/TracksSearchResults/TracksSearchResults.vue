@@ -44,6 +44,7 @@ const safeOperation = useSafeOperation()
 /* -------------------------------------------------------------------------- */
 
 type Filters = {
+  query: string
   authors: string[]
   sources: string[]
   locations: string[]
@@ -126,7 +127,13 @@ async function loadTracks(
 ) {
   try {
     isLoading.value = true
+
+    const searchQueryTrackIds = filters.query
+      ? await dal.index.search(filters.query)
+      : { ids: undefined }
+
     const searchResult = await dal.tracks.find({
+      ids: searchQueryTrackIds.ids, 
       authors: filters.authors,
       sources: filters.sources,
       locations: filters.locations,
