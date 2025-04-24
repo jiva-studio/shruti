@@ -11,9 +11,9 @@
       :color="statusIcon.color"
     />
     <IonLabel class="ion-text-nowrap">
-      <h3>
-        <b>{{ references[0] }}</b>
-        {{ title }} 
+      <h3 class="title-block">
+        <span class="title">{{ title }}</span> 
+        <span class="reference">{{ references[0] }}</span>
       </h3>
       <p>
         {{ author }}
@@ -90,3 +90,26 @@ function onItemClicked() {
   emit('click')
 }
 </script>
+
+<style scoped>
+.title-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+}
+
+.title {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.reference {
+  background-color: var(--ion-color-dark);
+  font-weight: bold;
+  color: var(--ion-color-light);
+  border-radius: 5px;
+  padding: 0px 5px;
+  font-size: 0.8em;
+}
+</style>
