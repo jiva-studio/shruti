@@ -1,6 +1,9 @@
 <template>
   <Page>
-    <Searchbar :placeholder="$t('app.search')" />
+    <Searchbar
+      v-model="query"
+      :placeholder="$t('app.search')"
+    />
     <TracksFilterBar v-model="filters" />
     <TracksSearchResults
       ref="tracksSearchResultsRef"
@@ -30,7 +33,10 @@ const tracksSearchResultsRef = ref<typeof TracksSearchResults>()
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
+const query = ref('')
+
 const filters = ref<TracksFilterValue>({
+  query: '',
   ids: [],
   authors: [],
   sources: [],
@@ -44,6 +50,10 @@ const filters = ref<TracksFilterValue>({
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
+
+watch(query, (newQuery) => {
+  filters.value.query = newQuery
+})
 
 watch(config.appLanguage, () => {
   tracksSearchResultsRef.value?.refresh()

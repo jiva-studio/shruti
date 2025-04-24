@@ -33,6 +33,7 @@ const trackSerializer = (item: Track): TracksDBSchema => item
 const trackDeserializer = (document: TracksDBSchema): Track => document
 
 export type FindTracksRequest = {
+  ids: string[] | undefined
   authors: string[]
   sources: string[]
   locations: string[]
@@ -53,6 +54,10 @@ export class TracksService extends DatabaseService<Track, TracksDBSchema> {
 
   async find(request: FindTracksRequest): Promise<Track[]> {
     const selector: any = {}
+
+    if (request.ids) {
+      selector._id = { $in: request.ids }
+    }
 
     if (request.authors.length > 0) { 
       selector.author = { $in: request.authors } 
