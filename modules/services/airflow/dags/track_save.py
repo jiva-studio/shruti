@@ -7,7 +7,8 @@ from airflow.models import Param, Variable
 
 from lectorium.tracks_inbox import TrackInbox
 from lectorium.tracks.models.track import Track
-from lectorium.couchdb import couchdb_save_document, couchdb_find_documents
+from lectorium.couchdb import couchdb_save_document, couchdb_find_document
+from lectorium.bucket import bucket_download_json_data
 from lectorium.config.database import (
   LECTORIUM_DATABASE_COLLECTIONS, LECTORIUM_DATABASE_CONNECTION_STRING,
   LectoriumDatabaseCollections)
@@ -60,8 +61,9 @@ def track_save():
   #                                    Config                                    #
   # ---------------------------------------------------------------------------- #
 
-  conf_track_id     = "{{ params.track_id | string }}"
-  conf_track_folder = "{{ 'library/tracks/' ~ params.track_id }}"
+  conf_track_id      = "{{ params.track_id | string }}"
+  conf_track_folder  = "{{ 'library/tracks/' ~ params.track_id }}"
+  conf_titles        = "{{ 'library/tracks/' ~ params.track_id ~ '/artifacts/metadata/titles.json' }}"
   
   conf_database_connection_string = \
     Variable.get(LECTORIUM_DATABASE_CONNECTION_STRING)
@@ -148,21 +150,24 @@ def track_save():
     task_display_name="📂 Save Track")
   def save_track_in_database(
     track_id: str,
-    track_inbox: list[TrackInbox],
+    track_inbox: TrackInbox,
     transcripts_info: list[transcript_info],
     audio_files_info: list[audio_file_info],
+    titles: dict[str, str],
   ):
+    original_language = track_inbox["languagesExtract"][0]
+
     track_document: Track = {
       "_id": track_id + "::track",
       "type": "track",
       "version": 1,
-      "location": track_inbox[0]["location"]["normalized"],
-      "date": track_inbox[0]["date"]["normalized"],
-      "author": track_inbox[0]["author"]["normalized"],
+      "location": track_inbox["location"]["normalized"],
+      "date": track_inbox["date"]["normalized"],
+      "author": track_inbox["author"]["normalized"],
       "title": {
-        "en": track_inbox[0]["title"]["normalized"],
-      },
-      "references": track_inbox[0]["references"]["normalized"],
+        original_language: track_inbox["title"]["normalized"],
+      } | (titles if titles else {}),
+      "references": track_inbox["references"]["normalized"],
       "audio": {
         afi["type"]: {
           "path": afi['path'],
@@ -186,7 +191,7 @@ def track_save():
           "language": lang,
           "source": "track",
           "type": "original",
-        } for lang in track_inbox[0]["languagesExtract"]
+        } for lang in track_inbox["languagesExtract"]
       ]
     }
 
@@ -201,7 +206,7 @@ def track_save():
   # ---------------------------------------------------------------------------- #
 
   (
-    track_inbox := couchdb_find_documents.override(
+    track_inbox := couchdb_find_document.override(
       task_display_name="📥 Get Track Inbox"
     )(
       connection_string=conf_database_connection_string,
@@ -218,6 +223,15 @@ def track_save():
   ] 
   
   (
+    titles := bucket_download_json_data.override(
+      task_display_name="📥 Get Titles",
+    )(
+      object_key=conf_titles,
+      raise_if_not_found=False,
+    )
+  )
+
+  (
     save_transcript
       .partial(track_id=conf_track_id)
       .expand(transcript_info=transcripts_info)
@@ -228,7 +242,8 @@ def track_save():
       track_id=conf_track_id, 
       track_inbox=track_inbox,
       transcripts_info=transcripts_info,
-      audio_files_info=audio_files_info)
+      audio_files_info=audio_files_info,
+      titles=titles)
   )
 
 track_save()

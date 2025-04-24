@@ -38,6 +38,7 @@ export class InboxTracksService
         status: {
           $in: [
             "verification",
+            "pending",
             "processing",
             "error",
           ]

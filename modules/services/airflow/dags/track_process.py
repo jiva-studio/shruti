@@ -7,7 +7,6 @@ from airflow.exceptions import AirflowSkipException
 from lectorium.shared import run_dag, wait_dag_run
 
 import lectorium as lectorium
-import lectorium.tracks_inbox
 
 
 @dag(
@@ -62,6 +61,29 @@ def track_process():
   conf_audio_type                  = "original"
   
   @task(
+    task_display_name="🗂️ Track: Translate Metadata")
+  def run_track_translate_metadata(
+    track_id: str,
+    languages_to_translate_into: list[str],
+    **kwargs,
+  ) -> str:
+    """
+    Translate metadata for the given track in the given language.
+    """
+    if not languages_to_translate_into:
+      raise AirflowSkipException("No translation requested.")
+    
+    return run_dag.function(
+      dag_id="track_translate_metadata",
+      track_id=track_id,
+      conf={
+        "track_id": track_id,
+        "languages_translate_into": languages_to_translate_into
+      },
+      task_instance=kwargs["ti"],
+    )
+
+  @task(
     task_display_name="🗣️ Audio: Speaker Diarization")
   def run_audio_speaker_diarization(
     track_id: str,
@@ -73,7 +95,7 @@ def track_process():
     Run speaker diarization on the audio file to identify speakers if required
     """
     if (speakers_count <= 1):
-      raise AirflowSkipException("Diaraization is not required for single speaker audio files")
+      raise AirflowSkipException("Diarization is not required for single speaker audio files")
   
     return run_dag.function(
       dag_id="audio_speaker_diarization",
@@ -112,7 +134,8 @@ def track_process():
     )
 
   @task(
-    task_display_name="💾 Track: Save")
+    task_display_name="💾 Track: Save",
+    trigger_rule="none_failed")
   def run_track_save(
     track_id: str,
     **kwargs,
@@ -132,6 +155,17 @@ def track_process():
   # ---------------------------------------------------------------------------- #
   #                                       Flow                                   #
   # ---------------------------------------------------------------------------- #
+
+  (
+    track_translate_metadata_run_id := run_track_translate_metadata(
+      track_id=conf_track_id,
+      languages_to_translate_into=conf_languages_to_translate_into,
+    )
+  ) >> (
+    track_translate_metadata_run := wait_dag_run(
+      dag_id="track_translate_metadata",
+      dag_run_id=track_translate_metadata_run_id)
+  )
 
   (
     audio_diarization_dag_run_id := run_audio_speaker_diarization(
@@ -163,6 +197,9 @@ def track_process():
       dag_id="track_save",
       dag_run_id=track_save_dag_run_id)
   )
+
+
+  track_translate_metadata_run >> track_save_dag_run_id
 
   
 track_process()
