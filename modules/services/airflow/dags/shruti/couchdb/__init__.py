@@ -1,4 +1,5 @@
 from shruti.couchdb.tasks.couchdb_find_documents import couchdb_find_documents
+from shruti.couchdb.tasks.couchdb_find_document import couchdb_find_document
 from shruti.couchdb.tasks.couchdb_get_document import couchdb_get_document
 from shruti.couchdb.tasks.couchdb_save_document import couchdb_save_document
 from shruti.couchdb.tasks.couchdb_patch_document import couchdb_patch_document
