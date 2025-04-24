@@ -95,11 +95,11 @@ def inbox_extract_metadata():
     """
     tokens = response.split("|")
     return file_meta_info(
-      author=tokens[0],
-      title=tokens[1], 
-      date=tokens[2], 
-      location=tokens[3], 
-      reference=tokens[4])
+      author    = tokens[0] if len(tokens) > 0 else "",
+      title     = tokens[1] if len(tokens) > 1 else "", 
+      date      = tokens[2] if len(tokens) > 2 else "", 
+      location  = tokens[3] if len(tokens) > 3 else "", 
+      reference = tokens[4] if len(tokens) > 4 else "")
 
 
   @task(
