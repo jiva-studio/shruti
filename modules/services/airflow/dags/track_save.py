@@ -158,7 +158,7 @@ def track_save():
     original_language = track_inbox["languagesExtract"][0]
 
     track_document: Track = {
-      "_id": track_id + "::track",
+      "_id": track_id,
       "type": "track",
       "version": 1,
       "location": track_inbox["location"]["normalized"],

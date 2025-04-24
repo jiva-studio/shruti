@@ -152,6 +152,24 @@ def track_process():
       task_instance=kwargs["ti"],
     )
 
+  @task(
+    task_display_name="🗄️ Index: Update")
+  def run_index_generate(
+    track_id: str,
+    **kwargs,
+  ) -> str:
+    """
+    Update the index for the given track
+    """
+    return run_dag.function(
+      dag_id="index_generate",
+      track_id=track_id,
+      conf={
+        "track_id": track_id,
+      },
+      task_instance=kwargs["ti"],
+    )
+
   # ---------------------------------------------------------------------------- #
   #                                       Flow                                   #
   # ---------------------------------------------------------------------------- #
@@ -196,8 +214,15 @@ def track_process():
     wait_dag_run(
       dag_id="track_save",
       dag_run_id=track_save_dag_run_id)
+  ) >> (
+    track_index_generate_dag_run_id := run_index_generate(
+      track_id=conf_track_id,
+    )
+  ) >> (
+    wait_dag_run(
+      dag_id="index_generate",
+      dag_run_id=track_index_generate_dag_run_id)
   )
-
 
   track_translate_metadata_run >> track_save_dag_run_id
 
