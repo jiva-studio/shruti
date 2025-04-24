@@ -6,7 +6,7 @@ from airflow.models import Variable
 from shruti.shared import run_dag
 from shruti.bucket import bucket_move_file
 from shruti.tracks_inbox import TrackInbox
-from shruti.couchdb import couchdb_find_documents
+from shruti.couchdb import couchdb_save_document, couchdb_find_documents
 from shruti.config.database import (
   SHRUTI_DATABASE_COLLECTIONS, SHRUTI_DATABASE_CONNECTION_STRING,
   ShrutiDatabaseCollections)
@@ -50,7 +50,8 @@ def inbox_start_processing():
     )
   
   @task(
-    task_display_name="📥 Move File to Library")
+    task_display_name="📥 Move File to Library",
+    map_index_template="{{ document['track_id'] }}")
   def move_file_to_library(
     document: TrackInbox,
     **kwargs,
@@ -72,6 +73,18 @@ def inbox_start_processing():
       }, 
       task_instance=kwargs["ti"],
     )
+
+  @task(
+    task_display_name="📥 Mark Document as Processing")
+  def mark_document_as_processing(
+    document: TrackInbox,
+  ) -> TrackInbox:
+    document["status"] = "processing"
+    couchdb_save_document.function(
+      connection_string=conf_database_connection_string,
+      collection=conf_database_collections["tracks_inbox"],
+      document=document,
+    )
   
   # ---------------------------------------------------------------------------- #
   #                                     Flow                                     #
@@ -82,6 +95,9 @@ def inbox_start_processing():
     ready_to_process_documents := get_ready_to_process_documents()
   ) >> (
     move_file_to_library.expand(document=ready_to_process_documents)
+  ) >> (
+    mark_document_as_processing
+      .expand(document=ready_to_process_documents)
   )
 
 inbox_start_processing()
