@@ -156,10 +156,14 @@ export class DatabaseService<
       .map(doc => this._deserializer(doc as unknown as TDbScheme))
   }
 
+  /**
+   * Retrieves the count of items in the database.
+   * @returns A promise that resolves to the count of items in the database.
+   */
   async getCount(): Promise<number> {
-    return (await this._database.db.allDocs()).total_rows
+    const info = await this._database.db.info()
+    return info.doc_count
   }
-
 
   /**
    * Adds an item to the database with the specified Id.
@@ -209,5 +213,4 @@ export class DatabaseService<
     await this._database.db.remove(document)
     await this.notifyChange({ item, event: 'removed' })
   }
-
 }

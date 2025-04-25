@@ -2,7 +2,7 @@
   <Page>
     <Searchbar
       v-model="query"
-      :placeholder="$t('app.search')"
+      :placeholder="$t('library.search', { count: tracksCount })"
     />
     <TracksFilterBar v-model="filters" />
     <TracksSearchResults
@@ -17,7 +17,7 @@ import {
   Searchbar, TracksFilterBar, TracksFilterValue, TracksSearchResults,
   useNotifyUserIfNewTrackAddedFeature
 } from '@/library'
-import { Page, useConfig } from '@/app/'
+import { Page, useConfig, useDAL } from '@/app/'
 import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -27,6 +27,7 @@ import { useI18n } from 'vue-i18n'
 
 const i18n = useI18n()
 const config = useConfig()
+const dal = useDAL()
 const tracksSearchResultsRef = ref<typeof TracksSearchResults>()
 
 /* -------------------------------------------------------------------------- */
@@ -46,6 +47,7 @@ const filters = ref<TracksFilterValue>({
   dates: { from: '', to: '' },
 })
 
+const tracksCount = ref<number>(0)
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
@@ -59,7 +61,8 @@ watch(config.appLanguage, () => {
   tracksSearchResultsRef.value?.refresh()
 })
 
-onMounted(() => {
+onMounted(async () => {
   useNotifyUserIfNewTrackAddedFeature(i18n.t)
+  tracksCount.value = await dal.tracks.getCount()
 })
 </script>
