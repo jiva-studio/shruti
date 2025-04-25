@@ -17,6 +17,7 @@ export { default as UpNextTracksSection } from './containers/UpNextTracksSection
 // scenarios:
 export * from './scenarios/useUserSeesUpNextTracksScenario'
 export * from './scenarios/useUserSelectsTrackToPlayScenario'
+export * from './scenarios/useUserRemovesPlaylistItemScenario'
 
 // mappers:
 export { mapTrackToPlaylistItem } from './mappers/tracks'
