@@ -40,6 +40,8 @@ export * from './features/useStatusBarFeature'
 export * from './features/useSafeAreaFeature'
 export * from './features/useSyncMediaItemStatusesFeature'
 export * from './features/useConfigPersistenceFeature'
+export * from './features/useCleanupMediaItemsFeature'
+export * from './features/useCleanupFilesFeature'
 
 // services:
 export * from './services/SyncService'

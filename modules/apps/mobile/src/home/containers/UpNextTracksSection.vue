@@ -11,21 +11,35 @@
     </template>
 
     <template v-else-if="!isFirstLoad && tracks.length > 0">
-      <TracksListItem
+      <IonItemSliding
         v-for="item in tracks"
         :key="item.trackId"
-        :track-id="item.trackId"
-        :title="item.title"
-        :author="item.author"
-        :location="item.location"
-        :references="item.references"
-        :date="item.date"
-        :status="item.status"
-        :enabled="item.status === 'none'"
-        @click="() => {
-          userSelectsTrackToPlay.execute(item.trackId)
-        }"
-      />
+      >
+        <TracksListItem
+          :track-id="item.trackId"
+          :title="item.title"
+          :author="item.author"
+          :location="item.location"
+          :references="item.references"
+          :date="item.date"
+          :status="item.status"
+          :enabled="item.status === 'none'"
+          @click="() => {
+            userSelectsTrackToPlay.execute(item.trackId)
+          }"
+        />
+        <IonItemOptions>
+          <IonItemOption
+            color="danger"
+            @click="() => onRemovePlaylistItem(item.trackId)"
+          >
+            <IonIcon
+              slot="icon-only"
+              :icon="trashOutline"
+            />
+          </IonItemOption>
+        </IonItemOptions>
+      </IonItemSliding>
     </template>
 
     <PlaylistIsEmpty
@@ -38,11 +52,15 @@
 
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
-import { IonList } from '@ionic/vue'
-import { SectionHeader, PlaylistIsEmpty, useUserSelectsTrackToPlayScenario, useUserSeesUpNextTracksScenario } from '@/home'
+import { IonList, IonItemSliding, IonItemOptions, IonItemOption, IonIcon } from '@ionic/vue'
+import { 
+  SectionHeader, PlaylistIsEmpty, useUserSelectsTrackToPlayScenario, 
+  useUserSeesUpNextTracksScenario, useUserRemovesPlaylistItemScenario
+} from '@/home'
 import { TracksListItem, TracksListItemSkeleton, useConfig } from '@/app'
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { trashOutline } from 'ionicons/icons'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -52,6 +70,7 @@ const config = useConfig()
 const router = useRouter()
 const userSeesUpNextTracks = useUserSeesUpNextTracksScenario()
 const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
+const userRemovesPlaylistItem = useUserRemovesPlaylistItemScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -72,6 +91,14 @@ defineExpose({ refresh })
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+async function onRemovePlaylistItem(playlistItemId: string) {
+  await userRemovesPlaylistItem.execute(playlistItemId)
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                  Helpers                                   */
 /* -------------------------------------------------------------------------- */
 
 function goToLibrary() {
