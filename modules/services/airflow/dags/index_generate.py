@@ -49,19 +49,13 @@ def index_generate():
   #                                    Config                                    #
   # ---------------------------------------------------------------------------- #
 
-  conf_track_id      = "{{ params.track_id }}"
+  conf_track_id = "{{ params.track_id }}"
 
   conf_database_connection_string = \
     Variable.get(LECTORIUM_DATABASE_CONNECTION_STRING)
 
   conf_database_collections: LectoriumDatabaseCollections = \
     Variable.get(LECTORIUM_DATABASE_COLLECTIONS, deserialize_json=True)
-  
-  languages = {
-    "en": "english",
-    "ru": "russian",
-    "sr": "russian",
-  }
 
   # ---------------------------------------------------------------------------- #
   #                                     Tasks                                    #
@@ -73,10 +67,16 @@ def index_generate():
     document: Track,
   ) -> list[str]:
     result = set()
-    for lang, title in document["title"].items():
+    for title in document["title"].values():
       clean_title = (
         title.translate(str.maketrans("", "", string.punctuation))
         .lower())
+      
+      for reference in document["references"]:
+        clean_title += " " + " ".join(reference)
+
+      if document["date"]:
+        clean_title += " " + str(document["date"][0])
 
       for word in clean_title.split():
         result.add(word)
