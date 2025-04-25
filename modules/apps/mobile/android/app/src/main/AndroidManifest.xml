@@ -37,20 +37,28 @@
         </provider>
 
         <service
-            android:name=".audioplayer.AudioPlayerService"
+            android:name="studios.akdasa.lectorium.audioplayer.AudioPlayerService"
             android:foregroundServiceType="mediaPlayback"
             android:enabled="true"
             android:exported="true"
         />
 
         <service
-            android:name=".audioplayer.MediaBrowserService"
-            android:exported="true"
-            >
+            android:name="studios.akdasa.lectorium.audioplayer.MediaBrowserService"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+
+
+        <receiver
+            android:name="androidx.media.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 
 
