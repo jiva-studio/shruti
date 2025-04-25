@@ -1,5 +1,5 @@
 export const en = {
-  search: 'Search | Search in {count} track | Search in {count} tracks',
+  search: 'Search | Search through {count} track | Search through {count} tracks',
   filters: {
     authors: '👨‍🏫 Authors',
     sources: '📚 Sources',

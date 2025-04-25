@@ -26,5 +26,6 @@ export function useSyncAudioPlayerPluginStateFeature() {
     // Update the rest of the player controls
     playerControls.isPlaying.value = progress.playing
     playerControls.position.value = progress.position
+    playerControls.duration.value = progress.duration
   })
 }
