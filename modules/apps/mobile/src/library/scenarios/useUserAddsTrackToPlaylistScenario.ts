@@ -38,6 +38,7 @@ export function useUserAddsTrackToPlaylistScenario() {
       type: 'playlistItem',
       order: 0,
       played: 0,
+      completedAt: undefined
     })
 
     const signedUrl = await bucketService.getSignedUrl({

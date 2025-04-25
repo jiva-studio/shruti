@@ -1,28 +1,24 @@
-import { Filesystem, Directory } from '@capacitor/filesystem'
+import { usePlayerControls } from '@/player'
+import { watch } from 'vue'
 import { useDAL } from '@/app'
 
-export function useCleanupFilesFeature() {
-
+export function useMarkCompletedPlaylistItem() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
+  const player = usePlayerControls()
   const dal = useDAL()
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  dal.mediaItems.subscribe(async x => {
-    if (x.event !== 'removed') { return }
-
-    try {
-      await Filesystem.deleteFile({
-        path: x.item.localPath,
-        directory: Directory.External,
-      })
-    } catch (e) {
-      console.error('Unable to delete file', JSON.stringify(e))
+  watch(player.position, async (pos) => {
+    if (pos >= player.duration.value) {
+      const playListItem = await dal.playlistItems.getOne(player.trackId.value) 
+      playListItem.completedAt = Date.now()
+      await dal.playlistItems.updateOne(playListItem._id, playListItem)
     }
   })
 }
