@@ -28,7 +28,7 @@ import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCus
 import { watchDebounced } from '@vueuse/core'
 import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
 import { mapTrackToPlaylistItem } from '@/home'
-import { useUserAddsTrackToPlaylistScenario } from '@/library'
+import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -37,6 +37,7 @@ import { useUserAddsTrackToPlaylistScenario } from '@/library'
 const dal = useDAL()
 const config = useConfig()
 const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
+const userSearchesForTracks = useUserSearchesForTracksScenario()
 const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
@@ -71,9 +72,7 @@ defineExpose({
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const pageSize = 25
 const tracks = ref<TracksListItemData[]>([])
-const isLoading = ref<boolean>(false)
 const infiniteScrollEnabled = ref<boolean>(true)
 const trackIdsInPlaylist = ref<string[]>([])
 
@@ -120,29 +119,15 @@ async function onTrackClick(trackId: string) {
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
 
-// TODO: extract to Library Scenarios: UserSearchesForTracksScenario
 async function loadTracks(
   offset: number = 0,
   filters: Filters,
+  pageSize: number = 25,
 ) {
   try {
-    isLoading.value = true
+    const searchResult = await userSearchesForTracks
+      .execute(offset, filters, pageSize)
 
-    const searchQueryTrackIds = filters.query
-      ? await dal.index.search(filters.query)
-      : { ids: undefined }
-
-    const searchResult = await dal.tracks.find({
-      ids: searchQueryTrackIds.ids, 
-      authors: filters.authors,
-      sources: filters.sources,
-      locations: filters.locations,
-      languages: filters.languages,
-      duration: filters.duration,
-      dates: filters.dates,
-      skip: offset,
-      limit: pageSize,
-    })
     const items = await Promise.all(
       searchResult.map(
         x => mapTrackToPlaylistItem(
@@ -151,15 +136,16 @@ async function loadTracks(
           trackIdsInPlaylist.value.includes(x._id) ? 'added' : 'none',
         ))
     )
-    if (offset === 0) { tracks.value = [] }
-    tracks.value.push(...items)
+    if (offset === 0) { 
+      tracks.value = items 
+    } else {
+      tracks.value.push(...items)
+    }
     infiniteScrollEnabled.value = items.length === pageSize 
   } catch (error) {
     // TODO: better error handling
     console.error('Error fetching track suggestions:', error)
     return []
-  } finally {
-    isLoading.value = false
   }
 }
 

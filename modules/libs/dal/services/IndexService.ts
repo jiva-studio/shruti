@@ -13,11 +13,6 @@ export type SearchResult = {
   ids: Array<string>
 }
 
-// const localizedSources: Record<string, string> = {
-//   "шб": "sb",
-//   "бг": "bg",
-// }
-
 export class IndexService {
   private readonly sqids = new Sqids({
     minLength: 10,
@@ -34,11 +29,8 @@ export class IndexService {
    */
   async search(
     query: string,
-    // language: string,
   ): Promise<SearchResult> {
     const documentIds: string[][] = []
-    // const stemmer = new Snowball("english");
-    // const 
 
     // Get stems of words provided
     const terms: string[] = query

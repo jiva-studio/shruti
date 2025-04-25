@@ -20,6 +20,7 @@ export { default as TracksSearchResults } from './containers/TracksSearchResults
 
 // scenarios:
 export * from './scenarios/useUserAddsTrackToPlaylistScenario'
+export * from './scenarios/useUserSearchesForTracksScenario'
 
 // features:
 export * from './features/useNotifyUserIfNewTrackAddedFeature'
