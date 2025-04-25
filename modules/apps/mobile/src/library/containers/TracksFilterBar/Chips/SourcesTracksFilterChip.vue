@@ -41,6 +41,12 @@ const { state, execute: refresh } = useAsyncState(
 
 watch(config.appLanguage, async () => await refresh())
 
+watch(modelValue, (value) => {
+  state.value.forEach((item) => {
+    item.checked = value.includes(item.id)
+  })
+})
+
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
