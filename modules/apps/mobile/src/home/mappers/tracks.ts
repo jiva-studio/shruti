@@ -15,7 +15,7 @@ export async function mapTrackToPlaylistItem(
     title: mapTrackTitle(track.title, language),
     author: await mapAuthorFullNameById(track.author, language), 
     location: await mapLocationFullNameById(track.location, language),
-    references: track.references.length >= 1 
+    references: track.references?.length >= 1 
       ? [await mapReference(track.references[0], language)]
       : [],
     date: mapTrackDate(track.date),
@@ -117,6 +117,6 @@ async function mapReference(
     const sourceName = source.shortName[language] || source.shortName['en'] || sourceId
     return sourceName + ' ' + reference.slice(1).join('.')
   } catch {
-    return reference.join('.')
+    return reference[0].toString().toUpperCase() + ' ' + reference.slice(1).join('.')
   }
 }

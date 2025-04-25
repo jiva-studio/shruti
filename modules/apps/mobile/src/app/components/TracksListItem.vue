@@ -15,7 +15,10 @@
 
     <IonLabel class="ion-text-nowrap">
       <h3 class="title-block">
-        <span class="reference">{{ references[0] }}</span>
+        <span
+          v-if="references[0]"
+          class="reference"
+        >{{ references[0] }}</span>
         <span class="title">{{ title }}</span>
       </h3>
       <p class="details">
