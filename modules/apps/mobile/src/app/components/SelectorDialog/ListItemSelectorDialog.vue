@@ -28,7 +28,7 @@
 
 
 <script setup lang="ts" generic="T extends Item">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { IonList, IonRadioGroup, IonRadio, IonItem } from '@ionic/vue'
 import SelectorDialog from './SelectorDialog.vue'
 
@@ -65,6 +65,12 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const value = ref<ItemId>(props.value)
+
+/* -------------------------------------------------------------------------- */
+/*                                    Hooks                                   */
+/* -------------------------------------------------------------------------- */
+
+watch(() => props.value, (newValue) => { value.value = newValue })
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */

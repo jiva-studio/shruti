@@ -5,12 +5,17 @@
     @click="emit('click')"
   >
     <slot />
+    <IonIcon
+      :icon="icon"
+      @click.stop="applied ? emit('remove') : emit('click')"
+    />
   </IonChip>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IonChip } from '@ionic/vue'
+import { IonChip, IonIcon } from '@ionic/vue'
+import { close, chevronDownOutline } from 'ionicons/icons'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -29,6 +34,7 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
+const icon  = computed(() => applied ? close : chevronDownOutline)
 const color = computed(() => applied ? 'primary' : 'medium')
 </script>
 

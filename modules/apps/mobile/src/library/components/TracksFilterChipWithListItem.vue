@@ -2,6 +2,7 @@
   <TracksFilterChip 
     :applied="isApplied"
     @click="setDialogOpen(true)"
+    @remove="modelValue = undefined"
   >
     {{ title }}
   </TracksFilterChip> 
@@ -9,6 +10,7 @@
     :title="title"
     :items="items"
     :open="isDialogOpen"
+    :value="modelValue"
     @close="setDialogOpen(false)"
     @select="modelValue = $event"
   />
