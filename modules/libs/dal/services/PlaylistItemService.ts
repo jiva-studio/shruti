@@ -11,6 +11,7 @@ type PlaylistItemDBSchema = {
   trackId: string
   order: number
   played: number
+  completedAt: number | undefined
 }
 
 const playlistItemSerializer   = (item: PlaylistItem): PlaylistItemDBSchema => item

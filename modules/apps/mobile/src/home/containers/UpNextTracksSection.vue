@@ -23,7 +23,7 @@
           :references="item.references"
           :date="item.date"
           :status="item.status"
-          :enabled="item.status === 'none'"
+          :enabled="item.status === 'none' || item.status === 'completed'"
           @click="() => {
             userSelectsTrackToPlay.execute(item.trackId)
           }"
