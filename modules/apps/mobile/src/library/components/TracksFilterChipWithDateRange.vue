@@ -2,6 +2,7 @@
   <TracksFilterChip 
     :applied="isApplied"
     @click="setDialogOpen(true)"
+    @remove="modelValue = { from: '', to: '' }"
   >
     {{ title }}
   </TracksFilterChip> 

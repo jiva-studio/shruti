@@ -8,6 +8,7 @@
 
 
 <script lang="ts" setup>
+import { watch } from 'vue'
 import { useDAL } from '@/app'
 import { useAsyncState } from '@vueuse/core'
 import { TracksFilterChipWithListItems } from '@/library'
@@ -30,6 +31,15 @@ const modelValue = defineModel<string[]>({ required: true, default: [] })
 
 const { state } = useAsyncState(loadItems, [], { immediate: true, shallow: false })
 
+/* -------------------------------------------------------------------------- */
+/*                                    Hooks                                   */
+/* -------------------------------------------------------------------------- */
+
+watch(modelValue, (value) => {
+  state.value.forEach((item) => {
+    item.checked = value.includes(item.id)
+  })
+})
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */

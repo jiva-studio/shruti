@@ -45,7 +45,7 @@
 
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { IonButton, IonDatetime, IonPopover, IonItem, IonLabel } from '@ionic/vue'
 import SelectorDialog from './SelectorDialog.vue'
 
@@ -70,6 +70,12 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const value = ref<DateRange>({ from: props.value.from, to: props.value.to })
+
+/* -------------------------------------------------------------------------- */
+/*                                    Hooks                                   */
+/* -------------------------------------------------------------------------- */
+
+watch(() => props.value, (newValue) => { value.value = newValue })
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
