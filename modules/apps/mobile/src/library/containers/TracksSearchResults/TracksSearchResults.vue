@@ -91,10 +91,9 @@ onMounted(async () => {
 })
 
 dal.playlistItems.subscribe(async (e) => {
-  if (e.event !== 'added') { return }
   const track = tracks.value.find(x => x.trackId === e.item.trackId)
   if (track) {
-    track.status = 'added'
+    track.status = e.event == 'added' ? 'added' : 'none'
   } else {
     console.warn('Track not found in the list:', e.item.trackId, tracks.value)
   }
