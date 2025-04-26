@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { mapTrackToPlaylistItem, SectionHeader } from '@/home'
+import { mapTrackToPlaylistItem, SectionHeader, useUserSeesSuggestionsScenario } from '@/home'
 import { TracksListItem, type TracksListItemData, useConfig } from '@/app'
 import { useDAL } from '@/app'
 
@@ -29,6 +29,7 @@ import { useDAL } from '@/app'
 
 const dal = useDAL()
 const config = useConfig()
+const userSeesSuggestions = useUserSeesSuggestionsScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -51,7 +52,7 @@ defineExpose({ refresh })
 
 async function getSuggestions() : Promise<TracksListItemData[]> {
   try {
-    const suggestedTracks = await dal.tracks.getAll()
+    const suggestedTracks = await userSeesSuggestions.execute()
     return await Promise.all(
       suggestedTracks.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
     )
