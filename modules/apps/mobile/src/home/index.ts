@@ -19,6 +19,7 @@ export * from './scenarios/useUserSeesUpNextTracksScenario'
 export * from './scenarios/useUserSelectsTrackToPlayScenario'
 export * from './scenarios/useUserRemovesPlaylistItemScenario'
 export * from './scenarios/useUserSeesSuggestionsScenario'
+export * from './scenarios/useUserRedownloadsFailedMediaItemsScenario'
 
 // mappers:
 export { mapTrackToPlaylistItem } from './mappers/tracks'
