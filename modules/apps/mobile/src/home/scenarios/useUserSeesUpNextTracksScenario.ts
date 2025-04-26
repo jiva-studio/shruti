@@ -22,7 +22,14 @@ export function useUserSeesUpNextTracksScenario() {
     language: string = 'en'
   ) {
     // Get next 10 tracks from the playlist
-    const playlistItems = await dal.playlistItems.getAll({ limit: 10 })
+    const playlistItems = await dal.playlistItems.getMany({
+      limit: 10,
+      sort: ['addedAt'],
+      selector: { 
+        type: 'playlistItem', 
+        addedAt: { $gte: null } 
+      },
+    })
     const upNextTrackIds = playlistItems.map(item => item.trackId)
     const upNextTracks = await dal.tracks.getMany({
       selector: { _id : { $in: upNextTrackIds } },
@@ -59,7 +66,10 @@ export function useUserSeesUpNextTracksScenario() {
 
     // Enrich tracks with their statuses
     const trackStatusEnricher = (track: Track) => ({ status: trackStatuses[track._id] })
-    const trackMappers = upNextTracks.map((x) => map(x, language, trackStatusEnricher))
+    const trackMappers = upNextTrackIds
+      .map(x => upNextTracks.find(t => t._id === x)!)  
+      .filter(x => x !== undefined)
+      .map(x => map(x, language, trackStatusEnricher))
     return await Promise.all(trackMappers)
   }
 

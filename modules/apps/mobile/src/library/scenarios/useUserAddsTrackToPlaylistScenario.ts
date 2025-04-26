@@ -36,8 +36,8 @@ export function useUserAddsTrackToPlaylistScenario() {
       _id: trackId,
       trackId: trackId,
       type: 'playlistItem',
-      order: 0,
       played: 0,
+      addedAt: Date.now(),
       completedAt: undefined
     })
 
