@@ -44,6 +44,7 @@ function mapTrackDate(
   input: [number, number?, number?],
   locale: string = 'ru-RU'
 ): string {
+  if (!input) { return '' }
   if (input.length === 1) {
     return input[0].toString()
   } else if (input.length === 2) {
