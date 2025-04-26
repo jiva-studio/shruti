@@ -1,11 +1,8 @@
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { useDAL, useBucketService, useConfig, useMediaService } from '@/app'
 import { S3Operation } from '@lectorium/protocol/index'
 
-/**
- * Scenario for adding a track to a playlist.
- */
-export function useUserAddsTrackToPlaylistScenario() {
+
+export function useUserRedownloadsFailedMediaItemsScenario() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
@@ -20,30 +17,13 @@ export function useUserAddsTrackToPlaylistScenario() {
   /* -------------------------------------------------------------------------- */
 
   async function execute(
-    trackId: string,
+    trackId: string
   ) {
-    await Haptics.impact({ style: ImpactStyle.Light })
-
-    // Add track to playlist, or exit if it already exists
-    const existingPlayListItem = await dal.playlistItems.findOne({ _id: trackId })
-    if (existingPlayListItem) { return }
-
-    // Get track information
     const track = await dal.tracks.getOne(trackId)
     const trackTitle = track.title[config.appLanguage.value] 
       || track.title['en']
       || 'Unknown'
-
-    // Add track to playlist
-    await dal.playlistItems.addOne({
-      _id: trackId,
-      trackId: trackId,
-      type: 'playlistItem',
-      played: 0,
-      addedAt: Date.now(),
-      completedAt: undefined
-    })
-
+  
     const signedUrl = await bucketService.getSignedUrl({
       key: track.audio.original.path,
       bucketName: config.bucketName.value,
@@ -82,7 +62,5 @@ export function useUserAddsTrackToPlaylistScenario() {
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return {
-    execute
-  }
+  return { execute }
 }

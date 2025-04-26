@@ -1,6 +1,6 @@
 import { mapTrackToPlaylistItem } from '../mappers/tracks'
 import { Track } from '@lectorium/dal/models'
-import { useDAL } from '@/app'
+import { TracksListItemData, useDAL } from '@/app'
 
 type TrackStatus = 'none' | 'loading' | 'failed' | 'completed'
 const LoadingStatuses = ['pending', 'running', 'paused']
@@ -43,18 +43,21 @@ export function useUserSeesUpNextTracksScenario() {
 
     // Create dictionary { trackId: status } of track statuses based
     // on media items statuses
+    // - completed: track has been played completely 
     // - loading: media items are pending, running or paused
     // - failed: media items are failed
     // - none: media items are successful
     const trackStatuses = upNextTrackIds
       .reduce((acc: Record<string, TrackStatus>, trackId) => {
         const trackMediaItems = mediaItems.filter(item => item.trackId === trackId)
-        const playListItem = playlistItems.find(item => item.trackId === trackId)
-        const isLoading = trackMediaItems.some(item => LoadingStatuses.includes(item.taskStatus))
-        const isFailed = trackMediaItems.some(item => FailedStatuses.includes(item.taskStatus))
+        const playListItem = playlistItems.find(item => item.trackId === trackId)!
+        const isLoading = trackMediaItems.some(item => LoadingStatuses.includes(item.taskStatus)) 
+                          || (trackMediaItems.length === 0 && Date.now() < playListItem.addedAt + 3000)
+        const isFailed = trackMediaItems.some(item => FailedStatuses.includes(item.taskStatus)) 
+                          || (trackMediaItems.length === 0 && Date.now() > playListItem.addedAt + 3000)
         if (playListItem?.completedAt) {
           acc[trackId] = 'completed'
-        } else if (trackMediaItems.length === 0 || isLoading) {
+        } else if (isLoading) {
           acc[trackId] = 'loading'
         } else if (isFailed) {
           acc[trackId] = 'failed'
@@ -77,7 +80,7 @@ export function useUserSeesUpNextTracksScenario() {
     track: Track,
     language: string = 'en',
     enricher: (track: Track) => object
-  ) {
+  ): Promise<TracksListItemData> {
     const mappedItem = await mapTrackToPlaylistItem(track, language)
     return { ...mappedItem, ...enricher(track) }
   }
