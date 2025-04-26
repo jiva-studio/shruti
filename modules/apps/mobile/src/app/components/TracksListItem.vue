@@ -18,7 +18,9 @@
         <span
           v-if="references[0]"
           class="reference"
-        >{{ references[0] }}</span>
+        >
+          {{ references[0] }}
+        </span>
         <span class="title">{{ title }}</span>
       </h3>
       <p class="details">

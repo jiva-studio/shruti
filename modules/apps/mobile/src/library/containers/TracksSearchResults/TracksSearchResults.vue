@@ -14,8 +14,18 @@
     />
   </IonList>
 
+  <IonItem
+    v-if="!infiniteScrollEnabled"
+    lines="none"
+    class="specify-criteria"
+  >
+    <IonNote>
+      {{ $t('library.specifySearchCriteria') }}
+    </IonNote>
+  </IonItem>
+
   <IonInfiniteScroll
-    :disabled="!infiniteScrollEnabled"
+    v-if="infiniteScrollEnabled"
     @ion-infinite="onInfiniteSctoll"
   >
     <IonInfiniteScrollContent />
@@ -23,9 +33,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRefs, onMounted } from 'vue'
-import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent } from '@ionic/vue'
-import { watchDebounced } from '@vueuse/core'
+import { ref, toRefs, onMounted, watch } from 'vue'
+import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent, IonItem, IonNote } from '@ionic/vue'
 import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
 import { mapTrackToPlaylistItem } from '@/home'
 import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@/library'
@@ -81,9 +90,9 @@ const trackIdsInPlaylist = ref<string[]>([])
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
 
-watchDebounced(filters, async (v) => {
+watch(filters, async (v) => {
   await loadTracks(0, v)
-}, { debounce: 500, maxWait: 1000, deep: true })
+}, { deep: true })
 
 onMounted(async () => {
   trackIdsInPlaylist.value = await loadTrackIdsInPlaylist()
@@ -103,9 +112,9 @@ dal.playlistItems.subscribe(async (e) => {
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
-async function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
-  await loadTracks(tracks.value.length, filters.value)
-  e.target.complete()
+function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
+  loadTracks(tracks.value.length, filters.value)
+    .then(() => e.target.complete())
 }
 
 async function onTrackClick(trackId: string) {
@@ -140,11 +149,10 @@ async function loadTracks(
     } else {
       tracks.value.push(...items)
     }
-    infiniteScrollEnabled.value = items.length === pageSize 
+    infiniteScrollEnabled.value = items.length === pageSize && tracks.value.length <= 50
   } catch (error) {
     // TODO: better error handling
     console.error('Error fetching track suggestions:', error)
-    return []
   }
 }
 
@@ -153,3 +161,11 @@ async function loadTrackIdsInPlaylist(): Promise<string[]> {
   return playlist.map(x => x.trackId) ?? []
 }
 </script>
+
+
+<style scoped>
+.specify-criteria {
+  text-align: center;
+  padding: 2rem;
+}
+</style>
