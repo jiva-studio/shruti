@@ -14,23 +14,32 @@ export type FindOneRequest<TItem> = Partial<TItem>
 export type GetAllRequest = {
   limit?: number
   skip?: number
+  sort?: string[]
 }
 
 export type GetManyRequest = {
   selector?: any
   limit?: number
   skip?: number
+  sort?: string[]
+  fields?: string[]
 }
 
-export class DatabaseService<
+export type IndicesConfig = {
+  name: string
+  fields: string[],
+}
+
+export abstract class DatabaseService<
   TItem extends Identifiable,
   TDbScheme extends Identifiable,
 > {
-  private _database: Database
+  protected _database: Database
   private _changeEventHandlers: ItemChangedEventHandler<TItem>[] = []
   private _deserializer: (document: TDbScheme) => TItem
   private _serializer: (item: TItem) => TDbScheme
   private _scope: object = {}
+  private _indices: IndicesConfig[]
 
   /**
    * Constructs a new instance of the DatabaseService class.
@@ -44,11 +53,26 @@ export class DatabaseService<
     serializer: (item: TItem) => TDbScheme,
     deserializer: (document: TDbScheme) => TItem,
     scope: object = {},
+    indices: IndicesConfig[] = []
   ) {
     this._database = database
     this._serializer = serializer
     this._deserializer = deserializer
     this._scope = scope
+    this._indices = indices
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                               Initialization                               */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * Initializes the database service by creating indices in the database.
+   */
+  async init() {
+    for (const index of this._indices) {
+      await this._database.db.createIndex({ index })
+    }
   }
 
   /* -------------------------------------------------------------------------- */
@@ -132,10 +156,14 @@ export class DatabaseService<
     const response = await this._database.db.find({
       selector: {
         ...this._scope,
-      }, 
+      },
       limit: request?.limit ?? 25,
       skip: request?.skip ?? 0,
+      sort: request?.sort ?? undefined
     })
+    if (response.warning) {
+      console.warn(response.warning, request)
+    }
     return response.docs.map(row => this._deserializer(row as unknown as TDbScheme))
   }
 
@@ -147,10 +175,15 @@ export class DatabaseService<
         ...this._scope,
         ...request.selector
       },
-      limit: request?.limit ?? 25,
-      skip: request?.skip ?? 0
+      limit: request.limit ?? 25,
+      skip: request.skip ?? 0,
+      sort: request.sort ?? undefined,
+      fields: request.fields
     }
     const response = await this._database.db.find(r)
+    if (response.warning) {
+      console.warn(response.warning, request)
+    }
 
     return response.docs
       .map(doc => this._deserializer(doc as unknown as TDbScheme))

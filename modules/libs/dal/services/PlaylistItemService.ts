@@ -9,8 +9,8 @@ type PlaylistItemDBSchema = {
   _id: string
   type: "playlistItem"
   trackId: string
-  order: number
   played: number
+  addedAt: number
   completedAt: number | undefined
 }
 
@@ -23,6 +23,16 @@ export class PlaylistItemsService extends DatabaseService<
   PlaylistItemDBSchema
 > {
   constructor(database: Database) {
-    super(database, playlistItemSerializer, playlistItemDeserializer, { type: "playlistItem" })
+    super(
+      database,
+      playlistItemSerializer,
+      playlistItemDeserializer, { type: "playlistItem" },
+      [
+        {
+          name: "addedAt",
+          fields: ['addedAt']
+        }
+      ]
+    )
   }
 }

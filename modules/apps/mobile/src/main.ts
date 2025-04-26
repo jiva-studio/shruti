@@ -45,7 +45,8 @@ import {
   useCleanupMediaItemsFeature,
   useCleanupFilesFeature,
   useMarkCompletedPlaylistItem,
-  useRemoveCompletedPlaylistItemsFeature
+  useRemoveCompletedPlaylistItemsFeature,
+  useDAL
 } from './app'
 import { 
   useSyncAudioPlayerPluginStateFeature, 
@@ -117,6 +118,10 @@ router.isReady().then(async () => {
 
   console.groupEnd()
   console.timeEnd('App Initialization')
+
+  // TODO: refactor to initialization steps
+  const dal = useDAL()
+  await dal.playlistItems.init()
 
   app.mount('#app')
 })
