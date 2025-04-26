@@ -90,7 +90,7 @@ def index_generate():
     word: str,
     track_id: str,
   ):
-    sqids = Sqids(min_length=10)
+    sqids = Sqids(min_length=9, alphabet='abcdefghijklmnopqrstuvwxyz')
     numerical_track_id = sqids.decode(track_id)[0]
 
     document = couchdb_get_document.function(

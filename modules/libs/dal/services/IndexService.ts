@@ -15,7 +15,8 @@ export type SearchResult = {
 
 export class IndexService {
   private readonly sqids = new Sqids({
-    minLength: 10,
+    minLength: 9,
+    alphabet: 'abcdefghijklmnopqrstuvwxyz'
   })
 
   constructor(

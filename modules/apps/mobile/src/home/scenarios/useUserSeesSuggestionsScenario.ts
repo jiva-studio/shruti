@@ -8,7 +8,10 @@ export function useUserSeesSuggestionsScenario() {
   /* -------------------------------------------------------------------------- */
 
   const dal = useDAL()
-  const sqids = new Sqids({ minLength: 10 })
+  const sqids = new Sqids({ 
+    minLength: 9,
+    alphabet: 'abcdefghijklmnopqrstuvwxyz'
+  })
 
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */

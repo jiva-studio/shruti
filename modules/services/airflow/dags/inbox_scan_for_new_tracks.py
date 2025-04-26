@@ -174,7 +174,7 @@ def inbox_scan_for_new_tracks():
       # save the document in the database if it doesn't exist
       # with the status set to "new" to indicate that it needs
       # to be processed further
-      sqids = Sqids(min_length=10)
+      sqids = Sqids(min_length=9, alphabet='abcdefghijklmnopqrstuvwxyz')
       couchdb_save_document.function(
         conf_database_connection_string,
         conf_database_collections["tracks_inbox"],
