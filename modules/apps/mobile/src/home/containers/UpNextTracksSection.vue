@@ -23,10 +23,7 @@
           :references="item.references"
           :date="item.date"
           :status="item.status"
-          :enabled="item.status === 'none' || item.status === 'completed'"
-          @click="() => {
-            userSelectsTrackToPlay.execute(item.trackId)
-          }"
+          @click="() => onPlaylistItemClicked(item.status, item.trackId)"
         />
         <IonItemOptions>
           <IonItemOption
@@ -55,10 +52,11 @@ import { useAsyncState } from '@vueuse/core'
 import { IonList, IonItemSliding, IonItemOptions, IonItemOption, IonIcon } from '@ionic/vue'
 import { 
   SectionHeader, PlaylistIsEmpty, useUserSelectsTrackToPlayScenario, 
-  useUserSeesUpNextTracksScenario, useUserRemovesPlaylistItemScenario
+  useUserSeesUpNextTracksScenario, useUserRemovesPlaylistItemScenario,
+  useUserRedownloadsFailedMediaItemsScenario
 } from '@/home'
 import { TracksListItem, TracksListItemSkeleton, useConfig } from '@/app'
-import { computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { trashOutline } from 'ionicons/icons'
 
@@ -71,17 +69,18 @@ const router = useRouter()
 const userSeesUpNextTracks = useUserSeesUpNextTracksScenario()
 const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
 const userRemovesPlaylistItem = useUserRemovesPlaylistItemScenario()
+const userRedownloadsFailedMediaItems = useUserRedownloadsFailedMediaItemsScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { state: tracks, execute: refresh, isLoading } = useAsyncState(
+const { state: tracks, execute: refresh } = useAsyncState(
   async () => await userSeesUpNextTracks.execute(config.appLanguage.value), 
-  [], { immediate: true, resetOnExecute: false }
+  [], { immediate: true, resetOnExecute: false, onSuccess: () => isFirstLoad.value = false }
 )
 
-const isFirstLoad = computed(() => tracks.value.length === 0 && isLoading.value)
+const isFirstLoad = ref(true)
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -95,6 +94,14 @@ defineExpose({ refresh })
 
 async function onRemovePlaylistItem(playlistItemId: string) {
   await userRemovesPlaylistItem.execute(playlistItemId)
+}
+
+function onPlaylistItemClicked(status: string, trackId: string) {
+  if (['completed', 'none'].includes(status)) {
+    userSelectsTrackToPlay.execute(trackId)
+  } else if (['failed'].includes(status)) {
+    userRedownloadsFailedMediaItems.execute(trackId)
+  }
 }
 
 /* -------------------------------------------------------------------------- */

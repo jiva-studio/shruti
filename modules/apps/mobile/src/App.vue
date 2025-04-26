@@ -24,8 +24,8 @@ const safeOperation = useSafeOperation()
 /* -------------------------------------------------------------------------- */
 
 onMounted(async () => {
-  safeOperation.execute(async () => {
-    await syncService.sync()
+  safeOperation.execute({
+    operation: async () => { await syncService.sync() }
   })
 })
 </script>

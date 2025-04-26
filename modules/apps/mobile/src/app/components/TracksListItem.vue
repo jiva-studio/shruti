@@ -1,7 +1,7 @@
 <template>
   <IonItem
     :disabled="!enabled"
-    :class="{ 'completed': status === 'completed' }"
+    :class="{ 'dimmed': ['completed', 'failed', 'loading'].includes(status) }"
     @click="onItemClicked"
   >
     <IonIcon
@@ -126,10 +126,10 @@ function onItemClicked() {
   opacity: .4;
 }
 
-.completed .title,
-.completed .reference,
-.completed .icon,
-.completed .details {
+.dimmed .title,
+.dimmed .reference,
+.dimmed .icon,
+.dimmed .details {
   opacity: .4;
 }
 </style>

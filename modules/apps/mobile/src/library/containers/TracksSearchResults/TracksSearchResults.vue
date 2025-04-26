@@ -109,9 +109,9 @@ async function onInfiniteSctoll(e: InfiniteScrollCustomEvent) {
 }
 
 async function onTrackClick(trackId: string) {
-  safeOperation.execute(
-    async () => await userAddsTrackToPlaylist.execute(trackId)
-  )
+  safeOperation.execute({
+    operation: async () => await userAddsTrackToPlaylist.execute(trackId),
+  })
 }
 
 /* -------------------------------------------------------------------------- */

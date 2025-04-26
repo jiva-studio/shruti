@@ -34,6 +34,8 @@ export class MediaService {
   async get(
     request: GetMediaRequest
   ): Promise<void> {
+    if (!request.trackId) { throw new Error('No trackId provided') }
+
     // check if media item already exists
     const mediaItem = await this.mediaItems.findOne({ 
       localPath: request.destination 
