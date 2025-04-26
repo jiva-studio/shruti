@@ -5,7 +5,7 @@
     @select="onSelect"
     @close="onClose"
   >
-    <IonSearchbar
+    <Searchbar
       v-if="items.length > 10"
       v-model="query"
       placeholder="Search"
@@ -34,7 +34,7 @@
 <script setup lang="ts" generic="T extends Item">
 import { computed, ref } from 'vue'
 import { IonList, IonCheckbox, IonItem } from '@ionic/vue'
-import { IonSearchbar } from '@ionic/vue'
+import { Searchbar } from '@/library'
 import SelectorDialog from './SelectorDialog.vue'
 
 /* -------------------------------------------------------------------------- */

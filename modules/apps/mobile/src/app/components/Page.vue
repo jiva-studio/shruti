@@ -4,7 +4,7 @@
     
     <IonContent :fullscreen="true">
       <slot />
-      <div class="placeholder" />
+      <!-- <div class="placeholder" /> -->
     </IonContent>
   </IonPage>
 </template>
