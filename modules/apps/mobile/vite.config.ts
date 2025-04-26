@@ -8,6 +8,30 @@ import { defineConfig } from 'vite'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      treeshake: true,
+      output: {
+        manualChunks(id) {
+          // if (id.includes('@ionic/core/components/')) {
+          //   const match = id.match(/@ionic\/core\/components\/([^/]+)/)
+          //   if (match) {
+          //     return `vendor-ionic-core-${match[1]}`
+          //   }
+          //   return 'vendor-ionic-core'
+          // }
+          
+          // vendor
+          if (id.includes('@ionic/core')) { return 'vendor-ionic-core' }
+          if (id.includes('@ionic/vue')) { return 'vendor-ionic-vue' }
+          if (id.includes('pouchdb')) { return 'vendor-pouchdb' }
+
+          // app
+          if (id.includes('/modules/libs/dal/')) { return 'lectorium-dal' }
+        }
+      },
+    },
+  },
   plugins: [
     vue(),
     legacy()
