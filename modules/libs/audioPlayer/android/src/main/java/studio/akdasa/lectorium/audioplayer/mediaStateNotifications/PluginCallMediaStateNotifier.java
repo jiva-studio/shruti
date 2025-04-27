@@ -1,4 +1,4 @@
-package studios.akdasa.lectorium.audioplayer.mediaStateNotifications;
+package studio.jiva.shruti.audioplayer.mediaStateNotifications;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;

@@ -1,4 +1,4 @@
-package studios.akdasa.lectorium.audioplayer;
+package studio.jiva.shruti.audioplayer;
 
 import android.os.Bundle;
 import android.support.v4.media.MediaBrowserCompat;

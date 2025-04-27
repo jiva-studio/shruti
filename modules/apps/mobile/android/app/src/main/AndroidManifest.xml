@@ -13,7 +13,7 @@
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
-            android:name="studios.akdasa.lectorium.MainActivity"
+            android:name="studio.jiva.shruti.MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
@@ -37,14 +37,14 @@
         </provider>
 
         <service
-            android:name="studios.akdasa.lectorium.audioplayer.AudioPlayerService"
+            android:name="studio.jiva.shruti.audioplayer.AudioPlayerService"
             android:foregroundServiceType="mediaPlayback"
             android:enabled="true"
             android:exported="true"
         />
 
         <service
-            android:name="studios.akdasa.lectorium.audioplayer.MediaBrowserService"
+            android:name="studio.jiva.shruti.audioplayer.MediaBrowserService"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />

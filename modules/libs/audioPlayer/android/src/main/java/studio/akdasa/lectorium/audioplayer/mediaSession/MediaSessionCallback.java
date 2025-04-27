@@ -1,9 +1,9 @@
-package studios.akdasa.lectorium.audioplayer.mediaSession;
+package studio.jiva.shruti.audioplayer.mediaSession;
 
 import android.content.Intent;
 import android.support.v4.media.session.MediaSessionCompat;
 
-import studios.akdasa.lectorium.audioplayer.AudioPlayerService;
+import studio.jiva.shruti.audioplayer.AudioPlayerService;
 
 public final class MediaSessionCallback extends MediaSessionCompat.Callback {
     private final AudioPlayerService service;

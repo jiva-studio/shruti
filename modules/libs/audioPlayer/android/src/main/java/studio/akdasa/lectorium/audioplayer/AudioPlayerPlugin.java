@@ -1,4 +1,4 @@
-package studios.akdasa.lectorium.audioplayer;
+package studio.jiva.shruti.audioplayer;
 
 import android.content.Context;
 import android.content.Intent;

@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: 'studios.akdasa.lectorium',
+  appId: 'studio.jiva.shruti',
   appName: 'lectorium',
   webDir: 'dist',
   // TODO: don't use this in production

@@ -1,4 +1,4 @@
-package studios.akdasa.lectorium;
+package studio.jiva.shruti;
 
 import android.content.Context;
 import android.util.Log;

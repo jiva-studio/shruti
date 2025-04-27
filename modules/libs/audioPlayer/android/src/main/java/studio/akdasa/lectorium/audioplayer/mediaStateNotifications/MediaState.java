@@ -1,4 +1,4 @@
-package studios.akdasa.lectorium.audioplayer.mediaStateNotifications;
+package studio.jiva.shruti.audioplayer.mediaStateNotifications;
 
 public class MediaState {
     private String trackId;

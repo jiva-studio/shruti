@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Lectorium</string>
     <string name="title_activity_main">Lectorium</string>
-    <string name="package_name">studios.akdasa.lectorium</string>
-    <string name="custom_url_scheme">studios.akdasa.lectorium</string>
+    <string name="package_name">studio.jiva.shruti</string>
+    <string name="custom_url_scheme">studio.jiva.shruti</string>
 </resources>
