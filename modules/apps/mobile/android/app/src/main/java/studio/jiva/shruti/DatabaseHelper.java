@@ -1,4 +1,4 @@
-package studios.akdasa.shruti;
+package studio.jiva.shruti;
 
 import android.content.Context;
 import android.util.Log;

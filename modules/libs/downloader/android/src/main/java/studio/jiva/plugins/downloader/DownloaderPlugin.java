@@ -1,4 +1,4 @@
-package studios.akdasa.plugins.downloader;
+package studio.jiva.plugins.downloader;
 
 import android.app.DownloadManager;
 import android.content.Context;
