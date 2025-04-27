@@ -36,7 +36,7 @@ jobs:
       - name: Get Release Version
         id: release_version
         run: |
-          echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
+          echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1) | sed 's/^v//')" >> $GITHUB_OUTPUT
 
       # ---------------------------------------------------------------------------- #
       #                                 Dependencies                                 #
@@ -97,11 +97,15 @@ jobs:
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
         run: python3 scripts/download-app-database-artifacts.py
 
+      - name: 🔑 Get Android keys
+        working-directory: data/keys/apk
+        run: echo "${{ secrets.ANDROID_KEYSTORE_FILE }}" | base64 -d > mobile.jks
+
       # ---------------------------------------------------------------------------- #
       #                                  Update Env                                  #
       # ---------------------------------------------------------------------------- #
 
-      - name: 📥 Update Env
+      - name: 🌎 Update Env
         env:
           RELEASE: ${{ steps.release_version.outputs.tag }}
           DIST: ${{ github.sha }}
@@ -110,6 +114,14 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
         run: python3 scripts/update-envs.py
+
+
+      - name: 🧮 Update Version
+        env:
+          VERSION: ${{ steps.release_version.outputs.tag }}
+          BUILD_ID: ${{ github.run_number }}
+        working-directory: modules/apps/mobile/android
+        run: npx trapeze run configuration.yml -y --android
 
       # ---------------------------------------------------------------------------- #
       #                                   Build App                                  #
@@ -121,19 +133,17 @@ jobs:
 
       - name: 👷 Build Android App
         working-directory: modules/apps/mobile/android
-        run: ./gradlew assembleDebug
-        # run: npx cap build android
+        run: |
+              npx cap build android \
+              --keystorepath ../../../../data/keys/apk/mobile.jks \
+              --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
+              --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
+              --androidreleasetype AAB
 
       # ---------------------------------------------------------------------------- #
       #                                   Artifacts                                  #
       # ---------------------------------------------------------------------------- #
-
-      - name: 📤 Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: app
-          path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 1
 
       - name: 📤 Upload S3
         uses: jakejarvis/s3-sync-action@v0.5.1
@@ -145,5 +155,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
           AWS_S3_ENDPOINT: ${{ secrets.BUCKET_ENDPOINT_URL }}
           AWS_REGION: ${{ secrets.BUCKET_REGION_NAME }}
-          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/apk/debug
+          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/bundle/release
           DEST_DIR: artifacts/mobile-app/${{ steps.release_version.outputs.tag }}
