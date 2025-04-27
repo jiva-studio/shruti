@@ -23,9 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ---------------------------------------------------------------------------- #
+      #                                     Misc                                     #
+      # ---------------------------------------------------------------------------- #
+
+      - name: Get Release Version
+        id: release_version
+        run: |
+          echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
 
       # ---------------------------------------------------------------------------- #
       #                                 Dependencies                                 #
@@ -87,6 +98,20 @@ jobs:
         run: python3 scripts/download-app-database-artifacts.py
 
       # ---------------------------------------------------------------------------- #
+      #                                  Update Env                                  #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 📥 Update Env
+        env:
+          RELEASE: ${{ steps.release_version.outputs.tag }}
+          DIST: ${{ github.sha }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          API_URL: ${{ secrets.API_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+        run: python3 scripts/update-envs.py
+
+      # ---------------------------------------------------------------------------- #
       #                                   Build App                                  #
       # ---------------------------------------------------------------------------- #
 
@@ -109,4 +134,16 @@ jobs:
           name: app
           path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 1
-      
+
+      - name: 📤 Upload S3
+        uses: jakejarvis/s3-sync-action@v0.5.1
+        with:
+          args: --acl public-read --follow-symlinks --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          AWS_REGION: ${{ secrets.BUCKET_REGION_NAME }}
+          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/apk/debug
+          DEST_DIR: artifacts/mobile-app/${{ steps.release_version.outputs.tag }}
