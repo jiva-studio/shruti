@@ -44,6 +44,7 @@ export * from './features/useCleanupMediaItemsFeature'
 export * from './features/useCleanupFilesFeature'
 export * from './features/useMarkCompletedPlaylistItem'
 export * from './features/useRemoveCompletedPlaylistItemsFeature'
+export * from './features/useSentryFeature'
 
 // services:
 export * from './services/SyncService'
