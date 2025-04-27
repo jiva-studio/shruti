@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "studios.akdasa.shruti"
+    namespace "studio.jiva.shruti"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "studios.akdasa.shruti"
+        applicationId "studio.jiva.shruti"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -1,4 +1,4 @@
-package studios.akdasa.shruti.audioplayer;
+package studio.jiva.shruti.audioplayer;
 
 import android.os.Binder;
 

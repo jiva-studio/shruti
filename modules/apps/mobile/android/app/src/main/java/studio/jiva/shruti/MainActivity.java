@@ -1,4 +1,4 @@
-package studios.akdasa.shruti;
+package studio.jiva.shruti;
 
 import android.os.Bundle;
 import android.webkit.WebView;
