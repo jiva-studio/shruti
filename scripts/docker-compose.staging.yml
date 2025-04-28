@@ -7,6 +7,9 @@ name: lectorium
 services:
   api:
     image: ghcr.io/akdasa-studios/lectorium-api:staging
+    volumes:
+      - ../data/keys/jwt/:/etc/lectorium/keys/
+ 
 
   admin:
     image: ghcr.io/akdasa-studios/lectorium-admin:staging
@@ -34,4 +37,9 @@ services:
 
   gateway:
     image: ghcr.io/akdasa-studios/lectorium-gateway:staging
+    volumes:
+      - ../data/gateway/certs:/workspaces/lectorium/data/gateway/certs
+    environment:
+      - CONFIG_TYPE=release
+
     

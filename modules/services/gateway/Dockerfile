@@ -12,10 +12,10 @@ LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/lectori
 # ---------------------------------------------------------------------------- #
 
 WORKDIR /lectorium/gateway
-COPY . .
+COPY ./services/gateway .
 
 # ---------------------------------------------------------------------------- #
 #                                      Run                                     #
 # ---------------------------------------------------------------------------- #
 
-CMD ["nginx", "-c", "/lectorium/gateway/servers/lectorium.dev.conf", "-g", "daemon off;"]
+ENTRYPOINT [ "/lectorium/gateway/run.sh" ]

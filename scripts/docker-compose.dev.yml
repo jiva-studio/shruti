@@ -26,6 +26,21 @@ services:
     build:
       context: ../modules/
       dockerfile: ./services/api/Dockerfile
+    volumes:
+      - ../data/keys/jwt/:/etc/lectorium/keys/
+
+
+  admin:
+    build:
+      context: ../modules/
+      dockerfile: ./apps/admin/Dockerfile
+
+  gateway:
+    build:
+      context: ../modules/
+      dockerfile: ./services/gateway/Dockerfile
+    volumes:
+      - ../data/gateway/certs:/workspaces/lectorium/data/gateway/certs
 
   couchdb:
     build:

@@ -47,14 +47,28 @@ x-airflow-common:
 services:
 
   api:
+    depends_on:
+      - redis
     expose:
       - "8081:8081"
+    networks:
+      - lectorium
+
+  admin:
+    expose:
+      - "80:80"
     networks:
       - lectorium
 
   gateway:
     ports:
       - "80:80"
+      - "443:443"
+    depends_on:
+      - airflow-webserver
+      - api
+      - admin
+      - couchdb
     networks:
       - lectorium
 

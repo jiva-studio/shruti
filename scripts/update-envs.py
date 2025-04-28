@@ -4,7 +4,7 @@ import os
 release             = os.getenv('RELEASE', 'lectorium@dev')
 dist                = os.getenv('DIST', 'dev')
 sentry_dsn          = os.getenv('SENTRY_DSN', '')
-api_url             = os.getenv('API_URL', 'http://localhost:8001/')
+api_url             = os.getenv('API_URL', 'http://localhost:8101/')
 database_url        = os.getenv('DATABASE_URL', 'http://localhost:5984/')
 bucket_name         = os.getenv('BUCKET_NAME', 'lectorium-dev')
 readonly_auth_token = os.getenv('READONLY_AUTH_TOKEN', '')
