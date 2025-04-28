@@ -7,6 +7,9 @@ name: shruti
 services:
   api:
     image: ghcr.io/jiva-studio/shruti-api:staging
+    volumes:
+      - ../data/keys/jwt/:/etc/shruti/keys/
+ 
 
   admin:
     image: ghcr.io/jiva-studio/shruti-admin:staging
@@ -34,4 +37,9 @@ services:
 
   gateway:
     image: ghcr.io/jiva-studio/shruti-gateway:staging
+    volumes:
+      - ../data/gateway/certs:/workspaces/shruti/data/gateway/certs
+    environment:
+      - CONFIG_TYPE=release
+
     
