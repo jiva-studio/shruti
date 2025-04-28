@@ -113,8 +113,8 @@ jobs:
           API_URL: ${{ secrets.API_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+          READONLY_AUTH_TOKEN: ${{ secrets.READONLY_AUTH_TOKEN }}
         run: python3 scripts/update-envs.py
-
 
       - name: 🧮 Update Version
         env:
