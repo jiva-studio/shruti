@@ -10,7 +10,8 @@ COPY services/api/package*.json services/api/
 RUN npm i \
     && cd ./services/api \
     && npm i
-COPY . .
+COPY services/api services/api
+COPY libs/protocol libs/protocol
 
 # ---------------------------------------------------------------------------- #
 #                                     Build                                    #
@@ -30,8 +31,10 @@ LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/shruti"
 LABEL org.opencontainers.image.authors="AKd Studios"
 
 WORKDIR /akd-stidios/shruti/
+COPY services/api/package*.json .
 COPY --from=build /akd-stidios/shruti/services/api/dist .
+RUN npm i
 
 EXPOSE 8101
 
-CMD ["node", "./dist/services/api/src/main"]
+CMD ["node", "./services/api/src/main"]

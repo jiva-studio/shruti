@@ -12,10 +12,10 @@ LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/shruti"
 # ---------------------------------------------------------------------------- #
 
 WORKDIR /shruti/gateway
-COPY . .
+COPY ./services/gateway .
 
 # ---------------------------------------------------------------------------- #
 #                                      Run                                     #
 # ---------------------------------------------------------------------------- #
 
-CMD ["nginx", "-c", "/shruti/gateway/servers/shruti.dev.conf", "-g", "daemon off;"]
+ENTRYPOINT [ "/shruti/gateway/run.sh" ]
