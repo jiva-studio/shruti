@@ -1,9 +1,16 @@
 import { createGlobalState } from '@vueuse/core'
 
 export const useConfig = createGlobalState(() => {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+  const origin = window.location.origin
+  const apiUrl = origin.replace(/^https?:\/\/[^.]+\./, 'https://api.')
+  const couchDbUrl = origin.replace(/^https?:\/\/[^.]+\./, 'https://couchdb.')
+
+  if (origin.includes('localhost')) {
+    throw new Error('Should not be working on localhost')
+  }
 
   return {
     apiUrl,
+    couchDbUrl,
   }
 })

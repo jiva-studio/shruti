@@ -2,8 +2,8 @@ export const ENVIRONMENT = {
   release: 'shruti@dev',
   dist: 'dev',
   sentryDsn: '',
-  apiUrl: 'http://localhost:8001/',
-  databaseUrl: 'http://localhost:5984/',
+  apiUrl: 'https://api.shruti.dev/',
+  databaseUrl: 'https://couchdb.shruti.dev/',
   bucketName: 'shruti-dev',
   readonlyAuthToken: 
     'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZWFkb25seSIsImlhdCI6MTc0NDk4' +

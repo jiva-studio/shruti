@@ -17,7 +17,7 @@ async function bootstrap() {
     .addBearerAuth()
     .addTag('🎟️ Authentication :: One-Time Password')
     .addTag('🔐 Authentication', 'Endpoints for authentication')
-    .addServer('http://localhost:8001', 'Development server')
+    .addServer('http://localhost:8101', 'Development server')
     .addServer('https://api.shruti.com', 'Production server')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
@@ -43,6 +43,6 @@ async function bootstrap() {
   });
 
   // TODO Change environment variable to SHRUTI_API_PORT
-  await app.listen(process.env.SHRUTI_API_PORT ?? 8001);
+  await app.listen(process.env.SHRUTI_API_PORT ?? 8101);
 }
 bootstrap();

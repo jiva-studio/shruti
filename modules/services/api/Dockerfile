@@ -32,6 +32,6 @@ LABEL org.opencontainers.image.authors="AKd Studios"
 WORKDIR /akd-stidios/shruti/
 COPY --from=build /akd-stidios/shruti/services/api/dist .
 
-EXPOSE 8001
+EXPOSE 8101
 
 CMD ["node", "./dist/services/api/src/main"]
