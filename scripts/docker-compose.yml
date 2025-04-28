@@ -83,6 +83,7 @@ services:
 
   redis:
     image: redis:7.2-bookworm
+    command: redis-server --save 60 1 --loglevel warning
     expose:
       - 6379
     healthcheck:
@@ -92,6 +93,8 @@ services:
       retries: 50
       start_period: 30s
     restart: always
+    volumes:
+      - ../data/redis/data:/data
     networks:
       - lectorium
 
