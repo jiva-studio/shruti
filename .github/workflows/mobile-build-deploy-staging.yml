@@ -131,7 +131,7 @@ jobs:
         working-directory: modules/apps/mobile
         run: npm i && npm run build+sync
 
-      - name: 👷 Build Android App
+      - name: 👷 Build Android ABB
         working-directory: modules/apps/mobile/android
         run: |
               npx cap build android \
@@ -140,6 +140,16 @@ jobs:
               --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
               --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
               --androidreleasetype AAB
+    
+      - name: 👷 Build Android APK
+        working-directory: modules/apps/mobile/android
+        run: |
+              npx cap build android \
+              --keystorepath ../../../../data/keys/apk/mobile.jks \
+              --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
+              --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
+              --androidreleasetype APK
 
       # ---------------------------------------------------------------------------- #
       #                                   Artifacts                                  #
@@ -155,5 +165,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
           AWS_S3_ENDPOINT: ${{ secrets.BUCKET_ENDPOINT_URL }}
           AWS_REGION: ${{ secrets.BUCKET_REGION_NAME }}
-          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/bundle/release
+          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/
           DEST_DIR: artifacts/mobile-app/${{ steps.release_version.outputs.tag }}
