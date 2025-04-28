@@ -2,8 +2,8 @@ export const ENVIRONMENT = {
   release: 'lectorium@dev',
   dist: 'dev',
   sentryDsn: '',
-  apiUrl: 'http://localhost:8001/',
-  databaseUrl: 'http://localhost:5984/',
+  apiUrl: 'https://api.lectorium.dev/',
+  databaseUrl: 'https://couchdb.lectorium.dev/',
   bucketName: 'lectorium-dev',
   readonlyAuthToken: 
     'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZWFkb25seSIsImlhdCI6MTc0NDk4' +

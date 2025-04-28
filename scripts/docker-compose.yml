@@ -47,8 +47,14 @@ x-airflow-common:
 services:
 
   api:
-    ports:
+    expose:
       - "8081:8081"
+    networks:
+      - lectorium
+
+  gateway:
+    ports:
+      - "80:80"
     networks:
       - lectorium
 
@@ -67,7 +73,7 @@ services:
     environment:
       - COUCHDB_USER=lectorium
       - COUCHDB_PASSWORD=lectorium
-    ports:
+    expose:
       - "5984:5984"
 
   couchdb-init:
@@ -114,7 +120,7 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
-    ports:
+    expose:
       - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]

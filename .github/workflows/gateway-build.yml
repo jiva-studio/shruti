@@ -1,0 +1,39 @@
+name: Gateway
+
+on:
+  push:
+    paths:
+      - "modules/services/gateway/**"
+      - ".github/workflows/gateway-build.yml"
+      - ".github/workflows/gateway-deploy-staging.yml"
+  
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: akdasa-studios
+
+jobs:
+  build:
+    name: 👷‍♂️ Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      
+      - name: 👷‍♂️ Build Container
+        uses: ./.github/actions/build-container
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
+          file: modules/services/gateway/Dockerfile
+        
+      # - name: Check Vulnerabilities
+      #   uses: aquasecurity/trivy-action@v0.3.0
+      #   with:
+      #     image-ref: ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-gateway:staging
+      #     format: 'json'
+      #     output: 'trivy-report.json'
+      #     ignore-unfixed: true
+      #     severity: 'HIGH,CRITICAL'
+      #     exit-code: 1
+      #     ignore-policy: '.github/actions/trivy-policy.json'

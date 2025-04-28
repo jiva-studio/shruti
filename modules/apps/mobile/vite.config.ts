@@ -32,6 +32,11 @@ export default defineConfig({
       },
     },
   },
+  server: {
+    host: '0.0.0.0',
+    port: 8102,
+    allowedHosts: ['mobile.lectorium.dev'],
+  },
   plugins: [
     vue(),
     legacy()

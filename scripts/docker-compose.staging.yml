@@ -11,12 +11,6 @@ services:
   admin:
     image: ghcr.io/akdasa-studios/lectorium-admin:staging
 
-  couchdb:
-    image: ghcr.io/akdasa-studios/lectorium-couchdb:staging
-
-  couchdb-init:
-    image: ghcr.io/akdasa-studios/lectorium-couchdb-init:staging
-
   airflow-webserver:
     image: ghcr.io/akdasa-studios/lectorium-airflow:staging
 
@@ -31,3 +25,13 @@ services:
 
   airflow-init:
     image: ghcr.io/akdasa-studios/lectorium-airflow:staging
+
+  couchdb:
+    image: ghcr.io/akdasa-studios/lectorium-couchdb:staging
+
+  couchdb-init:
+    image: ghcr.io/akdasa-studios/lectorium-couchdb-init:staging
+
+  gateway:
+    image: ghcr.io/akdasa-studios/lectorium-gateway:staging
+    

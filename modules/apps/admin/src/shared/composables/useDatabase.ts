@@ -1,14 +1,11 @@
 import { createSharedComposable } from '@vueuse/core'
 import { Database } from '@lectorium/dal/persistence/Database'
 import { useAuthTokens } from '@lectorium/admin/auth'
+import { useConfig } from './useConfig'
 
 export const useDatabase = createSharedComposable(() => {
-  // TODO: add config
-  // const schema = window.location.protocol;
-  // const hostname = window.location.hostname;
-  // const serverBaseUrl = `${schema}//${hostname}/database`
+  const config = useConfig()
   const authTokens = useAuthTokens()
-  const serverBaseUrl = 'http://localhost:5984/'
 
   return {
     local: {
@@ -19,19 +16,19 @@ export const useDatabase = createSharedComposable(() => {
     },
     remote: {
       tracks: new Database({
-        name: serverBaseUrl + '/tracks',
+        name: config.couchDbUrl + '/tracks',
         authToken: () => authTokens.value.accessToken,
       }),
       transcripts: new Database({
-        name: serverBaseUrl + '/transcripts',
+        name: config.couchDbUrl + '/transcripts',
         authToken: () => authTokens.value.accessToken,
       }),
       dictionary: new Database({
-        name: serverBaseUrl + '/dictionary',
+        name: config.couchDbUrl + '/dictionary',
         authToken: () => authTokens.value.accessToken,
       }),
       inbox: new Database({
-        name: serverBaseUrl + '/inbox',
+        name: config.couchDbUrl + '/inbox',
         authToken: () => authTokens.value.accessToken,
       }),
     },

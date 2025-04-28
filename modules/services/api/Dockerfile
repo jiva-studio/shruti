@@ -32,6 +32,6 @@ LABEL org.opencontainers.image.authors="AKd Studios"
 WORKDIR /akd-stidios/lectorium/
 COPY --from=build /akd-stidios/lectorium/services/api/dist .
 
-EXPOSE 8001
+EXPOSE 8101
 
 CMD ["node", "./dist/services/api/src/main"]
