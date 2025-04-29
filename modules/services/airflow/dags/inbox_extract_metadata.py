@@ -154,7 +154,7 @@ def inbox_extract_metadata():
     """
     Normalizes the reference from "BG 1.2.3" to "['bg', 1, 2, 3]".
     """
-    reference_prefix = "reference::"
+    reference_prefix = "source::"
 
     try:
       references       = [d for d in dictionary if d["_id"].startswith(reference_prefix)]
