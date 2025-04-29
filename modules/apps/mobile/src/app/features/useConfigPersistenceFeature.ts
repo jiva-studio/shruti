@@ -18,7 +18,7 @@ export async function useConfigPersistenceFeature() {
   await storage.create()
 
   // Bind config to storage
-  await bind(config.appLanguage, 'app.language', 'en')
+  await bind(config.appLanguage, 'app.language', 'ru')
 
   /* -------------------------------------------------------------------------- */
   /*                                   Helpers                                  */
