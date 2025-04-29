@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "modules/services/couchdb-init/**"
+      - "modules/services/couchdb/init/**"
       - ".github/workflows/couchdb-init-build.yml"
       - ".github/workflows/couchdb-init-deploy-staging.yml"
 
