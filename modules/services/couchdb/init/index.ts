@@ -31,6 +31,9 @@ const migrations = [
   new CreateContentManagerUser(server),
 ]
 
+/**
+ * Entry point
+ */
 async function migrate() {
   try {
     for (const migration of migrations) {
