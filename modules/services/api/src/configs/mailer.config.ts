@@ -6,7 +6,7 @@ export default registerAs('mailer', () => ({
   username: process.env.SHRUTI_MAILER_USERNAME ?? 'mailer',
   password: process.env.SHRUTI_MAILER_PASSWORD ?? 'password',
   from: {
-    name: process.env.SHRUTI_MAILER_FROM_NAME ?? 'shruti',
+    name: process.env.SHRUTI_MAILER_FROM ?? 'shruti',
     address: process.env.SHRUTI_MAILER_FROM_ADDRESS ?? 'test@shruti.dev',
   },
 }));
