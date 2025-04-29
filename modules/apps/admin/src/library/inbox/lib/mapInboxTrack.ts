@@ -10,7 +10,11 @@ export function mapEditInboxTrackToInboxTrack(
   inboxTrack.location.normalized = editInboxTrack.location
   inboxTrack.date.normalized = editInboxTrack.date
   inboxTrack.references.normalized = editInboxTrack.references.map((x) =>
-    x.split(/\s|\./),
+    x
+      .split(/\s|\./)
+      .map((item, index) =>
+        index > 0 && !isNaN(parseInt(item)) ? parseInt(item) : item,
+      ),
   )
   inboxTrack.languagesExtract = editInboxTrack.languagesExtract
   inboxTrack.languagesTranslateInto = editInboxTrack.languagesTranslateInto
