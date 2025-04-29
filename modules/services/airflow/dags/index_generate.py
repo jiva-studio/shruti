@@ -73,7 +73,7 @@ def index_generate():
         .lower())
       
       for reference in document["references"]:
-        clean_title += " " + " ".join(reference)
+        clean_title += " " + " ".join([str(r) for r in reference])
 
       if document["date"]:
         clean_title += " " + str(document["date"][0])
