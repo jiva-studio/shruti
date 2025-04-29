@@ -24,7 +24,7 @@ export abstract class CreateAdminDatabase extends Migration {
       method: 'PUT',
       doc: '_security',
       body: {
-        admins:  { names: [], roles: [ "_admin" ] },
+        admins:  { names: [], roles: [ "_admin", "contentManager" ] },
         members: { names: [], roles: [ ] },
       }
     })
