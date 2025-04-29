@@ -67,7 +67,7 @@ import { locale as localeLibrary } from './library/locale'
 import { locale as localeSettings } from './settings/locale'
 
 const i18n = createI18n({
-  locale: 'en',
+  locale: 'ru',
   fallbackLocale: 'en',
   messages: {
     en: {
