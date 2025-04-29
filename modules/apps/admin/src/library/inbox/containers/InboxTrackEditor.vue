@@ -140,7 +140,7 @@ async function getAuthors() {
 }
 
 async function getLocations() {
-  const locations = await locationsService.getAll()
+  const locations = await locationsService.getAll({ limit: 100 })
   return locations.map((x) => ({
     label: x.fullName['en'],
     value: x._id.replace('location::', ''),
