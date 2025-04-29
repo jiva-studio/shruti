@@ -4,7 +4,7 @@ import { ENVIRONMENT } from '@/app/env'
 
 
 export const useConfig = createGlobalState(() => {
-  const appLanguage  = ref('en')
+  const appLanguage  = ref('ru')
   const authToken    = ref(ENVIRONMENT.readonlyAuthToken)
   const apiUrl       = ref(ENVIRONMENT.apiUrl)
   const databaseUrl  = ref(ENVIRONMENT.databaseUrl)
