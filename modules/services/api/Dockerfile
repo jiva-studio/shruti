@@ -35,6 +35,9 @@ COPY services/api/package*.json .
 COPY --from=build /akd-stidios/lectorium/services/api/dist .
 RUN npm i
 
+# Copy assets
+COPY services/api/src/auth/templates src/auth/templates
+
 EXPOSE 8101
 
 CMD ["node", "./services/api/src/main"]

@@ -6,7 +6,7 @@ export default registerAs('mailer', () => ({
   username: process.env.LECTORIUM_MAILER_USERNAME ?? 'mailer',
   password: process.env.LECTORIUM_MAILER_PASSWORD ?? 'password',
   from: {
-    name: process.env.LECTORIUM_MAILER_FROM_NAME ?? 'lectorium',
+    name: process.env.LECTORIUM_MAILER_FROM ?? 'lectorium',
     address: process.env.LECTORIUM_MAILER_FROM_ADDRESS ?? 'test@lectorium.dev',
   },
 }));
