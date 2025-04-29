@@ -9,20 +9,27 @@ export class BucketService {
   async getSignedUrl(
     request: S3SignedUrlRequest
   ): Promise<S3SignedUrlResponse> {
-    const response = await fetch(Routes(this.baseUrl).bucket.signUrl(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.token}`,
-      },
-      body: JSON.stringify(request),
-    })
-    console.log(
-      `Signing URL at ${Routes(this.baseUrl).bucket.signUrl()} ` +
-      `with payload ${JSON.stringify(request)}`)
-    if (response.status !== 200) {
-      throw new Error(`Failed to get signed URL: ${response.statusText}`)
+    try {
+      const response = await fetch(Routes(this.baseUrl).bucket.signUrl(), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(request),
+      })
+      console.log(
+        `Signing URL at ${Routes(this.baseUrl).bucket.signUrl()} ` +
+        `with payload ${JSON.stringify(request)}`)
+      if (response.status !== 200) {
+        throw new Error(`Failed to get signed URL: ${response.statusText}`)
+      }
+      const responseData = await response.json() as S3SignedUrlResponse
+      console.log(`Signed url: ${JSON.stringify(response)}`)
+      return responseData
+    } catch (e) {
+      console.error('Unhandled exception while to signing URL', JSON.stringify(e))
+      throw e
     }
-    return await response.json() as S3SignedUrlResponse
   }
 }
