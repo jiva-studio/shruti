@@ -15,7 +15,7 @@
   </IonList>
 
   <IonItem
-    v-if="!infiniteScrollEnabled"
+    v-if="!infiniteScrollEnabled && tracks.length >= maxRecords"
     lines="none"
     class="specify-criteria"
   >
@@ -81,6 +81,7 @@ defineExpose({
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
+const maxRecords = 75
 const tracks = ref<TracksListItemData[]>([])
 const infiniteScrollEnabled = ref<boolean>(true)
 const trackIdsInPlaylist = ref<string[]>([])
@@ -149,7 +150,7 @@ async function loadTracks(
     } else {
       tracks.value.push(...items)
     }
-    infiniteScrollEnabled.value = items.length === pageSize && tracks.value.length <= 50
+    infiniteScrollEnabled.value = items.length === pageSize && tracks.value.length < maxRecords
   } catch (error) {
     // TODO: better error handling
     console.error('Error fetching track suggestions:', error)
