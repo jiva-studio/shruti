@@ -22,13 +22,14 @@ export class BucketService {
         `Signing URL at ${Routes(this.baseUrl).bucket.signUrl()} ` +
         `with payload ${JSON.stringify(request)}`)
       if (response.status !== 200) {
+        console.error('Filed to sign url', response.status, this.token)
         throw new Error(`Failed to get signed URL: ${response.statusText}`)
       }
       const responseData = await response.json() as S3SignedUrlResponse
       console.log(`Signed url: ${JSON.stringify(response)}`)
       return responseData
     } catch (e) {
-      console.error('Unhandled exception while to signing URL', JSON.stringify(e))
+      console.error('Unhandled exception while signing URL', JSON.stringify(e))
       throw e
     }
   }
