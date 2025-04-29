@@ -28,7 +28,7 @@ import { AuthenticatedUserGuard } from './guards';
           pool: true,
           host: config.host,
           port: config.port,
-          secure: false,
+          secure: true,
           auth: {
             user: config.username,
             pass: config.password,

@@ -17,8 +17,7 @@ async function bootstrap() {
     .addBearerAuth()
     .addTag('🎟️ Authentication :: One-Time Password')
     .addTag('🔐 Authentication', 'Endpoints for authentication')
-    .addServer('http://localhost:8101', 'Development server')
-    .addServer('https://api.lectorium.com', 'Production server')
+    .addServer('https://api.lectorium.dev', 'Development server')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('swagger', app, documentFactory);
