@@ -141,15 +141,9 @@ jobs:
               --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
               --androidreleasetype AAB
     
-      - name: 👷 Build Android APK
+      - name: 👷 Build Android APK (Debug)
         working-directory: modules/apps/mobile/android
-        run: |
-              npx cap build android \
-              --keystorepath ../../../../data/keys/apk/mobile.jks \
-              --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
-              --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
-              --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
-              --androidreleasetype APK
+        run: ./gradlew assembleDebug
 
       # ---------------------------------------------------------------------------- #
       #                                   Artifacts                                  #
