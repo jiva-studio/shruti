@@ -11,6 +11,7 @@
       :references="item.references"
       :date="item.date"
       :status="item.status"
+      @click="onTrackClick(item.trackId)"
     />
   </IonList>
 </template>
@@ -22,6 +23,8 @@ import { IonList } from '@ionic/vue'
 import { SectionHeader, useUserSeesSuggestionsScenario } from '@lectorium/mobile/home'
 import { TracksListItem, type TracksListItemData, useConfig } from '@lectorium/mobile/app'
 import { mapTrackToPlaylistItem } from '@lectorium/mobile/home/mappers/tracks'
+import { useUserAddsTrackToPlaylistScenario } from '@lectorium/mobile/library'
+import { useSafeOperation } from '@lectorium/mobile/app'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -29,6 +32,8 @@ import { mapTrackToPlaylistItem } from '@lectorium/mobile/home/mappers/tracks'
 
 const config = useConfig()
 const userSeesSuggestions = useUserSeesSuggestionsScenario()
+const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
+const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -44,6 +49,16 @@ const { state, execute: refresh } = useAsyncState(
 /* -------------------------------------------------------------------------- */
 
 defineExpose({ refresh })
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+async function onTrackClick(trackId: string) {
+  safeOperation.execute({
+    operation: async () => await userAddsTrackToPlaylist.execute(trackId),
+  })
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
