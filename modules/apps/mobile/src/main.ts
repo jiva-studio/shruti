@@ -46,8 +46,8 @@ import {
   useCleanupFilesFeature,
   useMarkCompletedPlaylistItem,
   useRemoveCompletedPlaylistItemsFeature,
-  useDAL,
-  useSentryFeature
+  useSentryFeature,
+  useDatabase
 } from './app'
 import { 
   useSyncAudioPlayerPluginStateFeature, 
@@ -120,8 +120,9 @@ router.isReady().then(async () => {
 
   // Steps //
 
-  const dal = useDAL()
-  await dal.playlistItems.init()
+  const database = useDatabase()
+  await database.init()
+  
 
   const elapsed = new Date().getTime() - start
   console.log(`Initialization time: ${elapsed}ms`)
