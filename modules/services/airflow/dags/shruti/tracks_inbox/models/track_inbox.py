@@ -24,7 +24,7 @@ class TrackInbox(TypedDict):
     author: NormalizedValue[str]
 
     # List of references
-    references: NormalizedValue[str]
+    references: NormalizedValue[list[str|int]]
 
     # Location
     location: NormalizedValue[str]
