@@ -14,6 +14,7 @@ import shruti as shruti
   start_date=datetime(2021, 1, 1),
   catchup=False,
   tags=["shruti", "tracks"],
+  max_active_runs=3,
   dag_display_name="▶️ Track: Process",
   dagrun_timeout=timedelta(minutes=60*48),
   default_args={
