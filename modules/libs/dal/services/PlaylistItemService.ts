@@ -27,12 +27,6 @@ export class PlaylistItemsService extends DatabaseService<
       database,
       playlistItemSerializer,
       playlistItemDeserializer, { type: "playlistItem" },
-      [
-        {
-          name: "addedAt",
-          fields: ['addedAt']
-        }
-      ]
     )
   }
 }

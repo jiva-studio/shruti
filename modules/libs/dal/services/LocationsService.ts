@@ -21,6 +21,11 @@ export class LocationsService extends DatabaseService<
   LocationsDBSchema
 > {
   constructor(database: Database) {
-    super(database, locationSerializer, locationDeserializer, { type: "location" })
+    super(
+      database,
+      locationSerializer,
+      locationDeserializer,
+      { type: "location" },
+    )
   }
 }

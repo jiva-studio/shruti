@@ -3,24 +3,37 @@ import PouchDBFind from 'pouchdb-find'
 
 PouchDB.plugin(PouchDBFind)
 
+/* -------------------------------------------------------------------------- */
+/*                                Configuration                               */
+/* -------------------------------------------------------------------------- */
+
+export type IndexConfig = {
+  name: string
+  fields: string[],
+}
+
 export interface DatabaseConfig {
   name: string,
   adapter?: string,
+  indices?: IndexConfig[],
   authToken?: () => string
 }
 
-export interface DatabaseReplicationChangeEvent {
-  documentsPending: number,
-  docs: any[]
-}
+/* -------------------------------------------------------------------------- */
+/*                                 Replication                                */
+/* -------------------------------------------------------------------------- */
 
 export interface DatabaseReplicationOptions {
   filter?: string | ((doc: any, params: any) => any) | undefined;
   doc_ids?: string[],
   query_params?: Record<string, any>
   style?: string
-  onChange?: (event: DatabaseReplicationChangeEvent) => void
 }
+
+
+/* -------------------------------------------------------------------------- */
+/*                                  Database                                  */
+/* -------------------------------------------------------------------------- */
 
 export class Database {
   private _db: PouchDB.Database
@@ -46,14 +59,28 @@ export class Database {
           headers.set('Authorization', `Bearer ${token}`);
           opts.headers = headers;
         }
-        
-        // You could also use Basic Auth like this:
-        // opts.headers.set('Authorization', 'Basic ' + btoa('username:password'));
-        
         return PouchDB.fetch(url, opts);
       }
     })
   }
+
+  /* -------------------------------------------------------------------------- */
+  /*                               Initialization                               */
+  /* -------------------------------------------------------------------------- */
+
+  /**
+   * Initializes the database.
+   */
+  async init() {
+    for (const index of this._config.indices || []) {
+      await this._db.createIndex({ index })
+    }
+  }
+
+
+  /* -------------------------------------------------------------------------- */
+  /*                                 Replication                                */
+  /* -------------------------------------------------------------------------- */
 
   /**
    * Replicate the local database from a remote database
@@ -64,13 +91,6 @@ export class Database {
   ) {
     await this._db.replicate
       .from(source.db, options)
-      .on('change', info => {
-        options?.onChange && options.onChange({
-          // @ts-ignore
-          documentsPending: info.pending || 0,
-          docs: info.docs
-        })
-      })
   }
 
   async sync(
