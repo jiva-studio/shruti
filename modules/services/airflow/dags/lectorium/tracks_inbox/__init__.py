@@ -1,3 +1,1 @@
 from lectorium.tracks_inbox.models.track_inbox import TrackInbox, NormalizedValue
-from lectorium.tracks_inbox.tasks.normalize_location import normalize_location
-from lectorium.tracks_inbox.tasks.normalize_reference import normalize_reference

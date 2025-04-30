@@ -150,9 +150,9 @@ def inbox_extract_metadata():
   def normalize_reference(
     value: str,
     dictionary: list[dict]
-  ) -> NormalizedValue:
+  ) -> NormalizedValue[list[str|int]]:
     """
-    Normalizes the reference from "BG 1.2.3" to "['bg', 1, 2, 3]".
+    Normalizes the reference from "BG 1.2.3" to "[ ['bg', 1, 2, 3] ]".
     """
     reference_prefix = "source::"
 
@@ -182,9 +182,8 @@ def inbox_extract_metadata():
 
       return NormalizedValue(
         extracted=value,
-        normalized=[
-          best_match_id.removeprefix(reference_prefix)] + 
-          extracted_source_loc if best_match_id else None)
+        normalized=
+          [[best_match_id.removeprefix(reference_prefix)] + extracted_source_loc] if best_match_id else None)
     except Exception as e:
       print(f"Error {value}: ", e)
       return NormalizedValue(
