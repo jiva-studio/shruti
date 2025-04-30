@@ -142,7 +142,7 @@ export abstract class DatabaseService<
     }
     const response = await this._database.db.find(r)
     if (response.warning) {
-      console.warn(response.warning, r)
+      console.warn(response.warning, JSON.stringify(r))
     }
     return response.docs.map(row => this._deserializer(row as unknown as TDbScheme))
   }
@@ -162,7 +162,7 @@ export abstract class DatabaseService<
     }
     const response = await this._database.db.find(r)
     if (response.warning) {
-      console.warn(response.warning, r)
+      console.warn(response.warning, JSON.stringify(r))
     }
 
     return response.docs
