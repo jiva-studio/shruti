@@ -1,5 +1,5 @@
 import { MediaItemsService } from '@shruti/dal/index'
-import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@/app'
+import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@shruti/mobile/app'
 
 export type GetMediaRequest = {
   trackId: string,

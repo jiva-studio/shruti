@@ -1,6 +1,6 @@
-import { usePlayerControls } from '@/player'
+import { usePlayerControls } from '@shruti/mobile/player'
 import { watch } from 'vue'
-import { useDAL } from '@/app'
+import { useDAL } from '@shruti/mobile/app'
 
 export function useMarkCompletedPlaylistItem() {
   /* -------------------------------------------------------------------------- */

@@ -9,8 +9,8 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationBarHolder, useSyncService, useSafeOperation } from '@/app'
-import { Player } from '@/player'
+import { NavigationBarHolder, useSyncService, useSafeOperation } from '@shruti/mobile/app'
+import { Player } from '@shruti/mobile/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

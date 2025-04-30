@@ -10,6 +10,6 @@
 
 <script setup lang="ts">
 import { IonList, IonContent } from '@ionic/vue'
-import { Page } from '@/app/'
+import { Page } from '@shruti/mobile/app'
 import AppLanguageSettingsItem from '../containers/AppLanguageSettingsItem.vue'
 </script>

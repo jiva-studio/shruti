@@ -7,8 +7,8 @@
 
 
 <script lang="ts" setup>
-import { DateRange } from '@/app'
-import { TracksFilterChipWithDateRange } from '@/library'
+import { DateRange } from '@shruti/mobile/app'
+import { TracksFilterChipWithDateRange } from '@shruti/mobile/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

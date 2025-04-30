@@ -19,15 +19,14 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { mapTrackToPlaylistItem, SectionHeader, useUserSeesSuggestionsScenario } from '@/home'
-import { TracksListItem, type TracksListItemData, useConfig } from '@/app'
-import { useDAL } from '@/app'
+import { SectionHeader, useUserSeesSuggestionsScenario } from '@shruti/mobile/home'
+import { TracksListItem, type TracksListItemData, useConfig } from '@shruti/mobile/app'
+import { mapTrackToPlaylistItem } from '@shruti/mobile/home/mappers/tracks'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const dal = useDAL()
 const config = useConfig()
 const userSeesSuggestions = useUserSeesSuggestionsScenario()
 

@@ -19,6 +19,9 @@ export { default as IconHome } from './icons/IconHome.vue'
 export { default as IconSettings } from './icons/IconSettings.vue'
 export { default as IconSearch } from './icons/IconSearch.vue'
 
+// pages
+export { default as AppMainPage } from './pages/AppMainPage.vue'
+
 /* -------------------------------------------------------------------------- */
 /*                               Business Logic                               */
 /* -------------------------------------------------------------------------- */

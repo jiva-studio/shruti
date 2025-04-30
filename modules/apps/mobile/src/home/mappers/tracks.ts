@@ -1,8 +1,8 @@
 import { Track } from '@shruti/dal/models'
-import { TracksListItemData, TracksListItemStatus } from '@/app'
-import { useDAL } from '@/app'
+import { TracksListItemData, TracksListItemStatus } from '@shruti/mobile/app'
+import { useDAL } from '@shruti/mobile/app'
 
-// TODO: move to @/app
+// TODO: move to @shruti/mobile
 // TODO: DAL access should be cached
 
 export async function mapTrackToPlaylistItem(

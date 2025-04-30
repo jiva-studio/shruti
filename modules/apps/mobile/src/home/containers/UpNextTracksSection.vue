@@ -54,8 +54,8 @@ import {
   SectionHeader, PlaylistIsEmpty, useUserSelectsTrackToPlayScenario, 
   useUserSeesUpNextTracksScenario, useUserRemovesPlaylistItemScenario,
   useUserRedownloadsFailedMediaItemsScenario
-} from '@/home'
-import { TracksListItem, TracksListItemSkeleton, useConfig } from '@/app'
+} from '@shruti/mobile/home'
+import { TracksListItem, TracksListItemSkeleton, useConfig } from '@shruti/mobile/app'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { trashOutline } from 'ionicons/icons'

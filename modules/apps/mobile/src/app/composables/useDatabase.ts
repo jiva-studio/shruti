@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core'
-import { useConfig } from '@/app'
+import { useConfig } from '@shruti/mobile/app'
 import { Database } from '@shruti/dal/persistence'
 
 export function useDatabase() {

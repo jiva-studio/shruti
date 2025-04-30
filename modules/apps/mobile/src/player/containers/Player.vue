@@ -37,8 +37,8 @@ import {
   PlayerControls, TranscriptSection, TranscriptLanguage, TranscriptText,
   TranscriptDialog, TranscriptBlock, LanguageSelector, usePlayerControls,
   usePlayerTranscript, usePlayerControlsPlayerScenario, usePlayer
-} from '@/player'
-import { useDAL } from '@/app'
+} from '@shruti/mobile/player'
+import { useDAL } from '@shruti/mobile/app'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import type { Transcript, Track } from '@shruti/dal/models'
 
