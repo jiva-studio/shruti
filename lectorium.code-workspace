@@ -174,7 +174,7 @@
         "type": "shell",
         "args": [
           "-c",
-          "/workspaces/lectorium/modules/services/gateway/nginx.conf",
+          "/workspaces/lectorium/modules/services/gateway/nginx.dev.conf",
           "-g",
           "'daemon off;'"
         ],
