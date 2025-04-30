@@ -1,4 +1,4 @@
-import { useDAL, useBucketService, useConfig, useMediaService } from '@/app'
+import { useDAL, useBucketService, useConfig, useMediaService } from '@lectorium/mobile/app'
 import { S3Operation } from '@lectorium/protocol/index'
 
 

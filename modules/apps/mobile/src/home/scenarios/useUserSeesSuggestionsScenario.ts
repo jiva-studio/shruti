@@ -1,4 +1,4 @@
-import { useDAL } from '@/app'
+import { useDAL } from '@lectorium/mobile/app'
 import { Track } from '@lectorium/dal/models'
 import Sqids from 'sqids'
 

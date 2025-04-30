@@ -7,8 +7,8 @@
 
 
 <script lang="ts" setup>
-import { DateRange } from '@/app'
-import { TracksFilterChipWithDateRange } from '@/library'
+import { DateRange } from '@lectorium/mobile/app'
+import { TracksFilterChipWithDateRange } from '@lectorium/mobile/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

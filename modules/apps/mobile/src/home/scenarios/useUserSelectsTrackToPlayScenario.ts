@@ -1,5 +1,5 @@
-import { useConfig, useDAL } from '@/app'
-import { usePlayer, usePlayerControls, usePlayerTranscript } from '@/player'
+import { useConfig, useDAL } from '@lectorium/mobile/app'
+import { usePlayer, usePlayerControls, usePlayerTranscript } from '@lectorium/mobile/player'
 
 
 export function useUserSelectsTrackToPlayScenario() {

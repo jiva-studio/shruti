@@ -1,8 +1,8 @@
 import { Track } from '@lectorium/dal/models'
-import { TracksListItemData, TracksListItemStatus } from '@/app'
-import { useDAL } from '@/app'
+import { TracksListItemData, TracksListItemStatus } from '@lectorium/mobile/app'
+import { useDAL } from '@lectorium/mobile/app'
 
-// TODO: move to @/app
+// TODO: move to @lectorium/mobile
 // TODO: DAL access should be cached
 
 export async function mapTrackToPlaylistItem(

@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/capacitor'
 import * as SentryVue from '@sentry/vue'
-import { ENVIRONMENT } from '@/app/env'
+import { ENVIRONMENT } from '@lectorium/mobile/app/env'
 
 export function useSentryFeature(app: any) {
   if (!ENVIRONMENT.sentryDsn) { return }

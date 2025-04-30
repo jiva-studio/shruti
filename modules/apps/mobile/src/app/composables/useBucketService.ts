@@ -1,5 +1,5 @@
 import { createGlobalState } from '@vueuse/core'
-import { BucketService, useConfig } from '@/app'
+import { BucketService, useConfig } from '@lectorium/mobile/app'
 
 export const useBucketService = createGlobalState(() => {
   const config = useConfig()

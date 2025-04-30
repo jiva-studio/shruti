@@ -1,4 +1,4 @@
-import { useDAL } from '@/app'
+import { useDAL } from '@lectorium/mobile/app'
 import { Source } from '@lectorium/dal/models'
 import { ref } from 'vue'
 

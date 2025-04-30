@@ -1,4 +1,4 @@
-import { usePlayer, usePlayerControls } from '@/player'
+import { usePlayer, usePlayerControls } from '@lectorium/mobile/player'
 
 /**
  * Syncs the player controls with the Audio Player plugin state.

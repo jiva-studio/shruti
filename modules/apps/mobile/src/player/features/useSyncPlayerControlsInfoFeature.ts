@@ -1,6 +1,6 @@
 import { watch } from 'vue'
-import { useConfig, useDAL } from '@/app'
-import { usePlayerControls } from '@/player'
+import { useConfig, useDAL } from '@lectorium/mobile/app'
+import { usePlayerControls } from '@lectorium/mobile/player'
 
 /**
  * Sets the player controls info (title and author) based on the trackId.

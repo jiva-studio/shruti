@@ -1,6 +1,6 @@
 import { mapTrackToPlaylistItem } from '../mappers/tracks'
 import { Track } from '@lectorium/dal/models'
-import { TracksListItemData, useDAL } from '@/app'
+import { TracksListItemData, useDAL } from '@lectorium/mobile/app'
 
 type TrackStatus = 'none' | 'loading' | 'failed' | 'completed'
 const LoadingStatuses = ['pending', 'running', 'paused']

@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core'
-import { useConfig } from '@/app'
+import { useConfig } from '@lectorium/mobile/app'
 import { Database } from '@lectorium/dal/persistence'
 
 export function useDatabase() {

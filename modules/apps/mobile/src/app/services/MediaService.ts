@@ -1,5 +1,5 @@
 import { MediaItemsService } from '@lectorium/dal/index'
-import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@/app'
+import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@lectorium/mobile/app'
 
 export type GetMediaRequest = {
   trackId: string,

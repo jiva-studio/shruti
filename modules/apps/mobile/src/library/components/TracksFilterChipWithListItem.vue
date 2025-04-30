@@ -19,8 +19,8 @@
 
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
-import { ListItemSelectorDialog, type ListItemSelectorItem } from '@/app'
-import { TracksFilterChip } from '@/library'
+import { ListItemSelectorDialog, type ListItemSelectorItem } from '@lectorium/mobile/app'
+import { TracksFilterChip } from '@lectorium/mobile/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

@@ -26,7 +26,7 @@
 
 <script setup lang="ts">
 import { IonModal, IonContent, IonToolbar, IonButtons, IonButton, IonTitle } from '@ionic/vue'
-import { Header } from '@/app/'
+import { Header } from '@lectorium/mobile/app'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

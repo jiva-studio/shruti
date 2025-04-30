@@ -1,5 +1,5 @@
 import { createGlobalState } from '@vueuse/core'
-import { useDatabase } from '@/app'
+import { useDatabase } from '@lectorium/mobile/app'
 import { 
   AuthorsService, LanguagesService, LocationsService, MediaItemsService,
   PlaylistItemsService, SourcesService, IndexService, TracksService

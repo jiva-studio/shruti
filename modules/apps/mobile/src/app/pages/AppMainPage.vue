@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
-import { IconHome, IconSearch, IconSettings } from '@/app'
+import { IconHome, IconSearch, IconSettings } from '@lectorium/mobile/app'
 </script>
 
 <style scoped>

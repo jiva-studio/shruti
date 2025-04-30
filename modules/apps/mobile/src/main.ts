@@ -52,7 +52,7 @@ import {
 import { 
   useSyncAudioPlayerPluginStateFeature, 
   useSetPlayerControlsInfoFeature,
-} from '@/player'
+} from '@lectorium/mobile/player'
 
 /** 
  * Configure PouchDB to use SQLite adapter for Cordova

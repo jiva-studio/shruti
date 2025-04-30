@@ -1,6 +1,6 @@
 import { watch } from 'vue'
 import { NavigationBar } from '@squareetlabs/capacitor-navigation-bar'
-import { usePlayerTranscript } from '@/player'
+import { usePlayerTranscript } from '@lectorium/mobile/player'
 
 export async function useNavigationBarFeature() {
 

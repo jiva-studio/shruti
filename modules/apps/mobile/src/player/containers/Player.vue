@@ -37,8 +37,8 @@ import {
   PlayerControls, TranscriptSection, TranscriptLanguage, TranscriptText,
   TranscriptDialog, TranscriptBlock, LanguageSelector, usePlayerControls,
   usePlayerTranscript, usePlayerControlsPlayerScenario, usePlayer
-} from '@/player'
-import { useDAL } from '@/app'
+} from '@lectorium/mobile/player'
+import { useDAL } from '@lectorium/mobile/app'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import type { Transcript, Track } from '@lectorium/dal/models'
 

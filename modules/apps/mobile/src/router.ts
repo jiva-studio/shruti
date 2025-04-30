@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router'
 import { RouteRecordRaw } from 'vue-router'
-import AppMainPage from '@/app/pages/AppMainPage.vue'
+import { AppMainPage } from '@lectorium/mobile/app'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -18,17 +18,17 @@ const routes: Array<RouteRecordRaw> = [
       {
         path: 'home',
         name: 'home',
-        component: () => import('@/home/pages/HomePage.vue')
+        component: () => import('@lectorium/mobile/home/pages/HomePage.vue')
       },
       {
         path: 'library',
         name: 'library',
-        component: () => import('@/library/pages/LibraryPage.vue')
+        component: () => import('@lectorium/mobile/library/pages/LibraryPage.vue')
       },
       {
         path: 'settings',
         name: 'settings',
-        component: () => import('@/settings/pages/SettingsPage.vue')
+        component: () => import('@lectorium/mobile/settings/pages/SettingsPage.vue')
       }
     ]
   }

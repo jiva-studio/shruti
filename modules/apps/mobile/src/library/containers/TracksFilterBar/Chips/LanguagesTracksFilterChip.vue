@@ -9,9 +9,9 @@
 
 <script lang="ts" setup>
 import { watch } from 'vue'
-import { useDAL } from '@/app'
+import { useDAL } from '@lectorium/mobile/app'
 import { useAsyncState } from '@vueuse/core'
-import { TracksFilterChipWithListItems } from '@/library'
+import { TracksFilterChipWithListItems } from '@lectorium/mobile/library'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

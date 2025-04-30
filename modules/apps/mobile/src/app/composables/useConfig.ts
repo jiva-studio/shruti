@@ -1,6 +1,6 @@
 import { createGlobalState } from '@vueuse/core'
 import { ref } from 'vue'
-import { ENVIRONMENT } from '@/app/env'
+import { ENVIRONMENT } from '@lectorium/mobile/app/env'
 
 
 export const useConfig = createGlobalState(() => {

@@ -1,6 +1,6 @@
 import { watch, Ref, toRaw } from 'vue'
 import { Storage } from '@ionic/storage'
-import { useConfig } from '@/app'
+import { useConfig } from '@lectorium/mobile/app'
 
 export async function useConfigPersistenceFeature() {
 

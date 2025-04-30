@@ -1,4 +1,4 @@
-import { useConfig } from '@/app'
+import { useConfig } from '@lectorium/mobile/app'
 import { useI18n } from 'vue-i18n'
 
 export function useUserChangesAppLangSetting() {

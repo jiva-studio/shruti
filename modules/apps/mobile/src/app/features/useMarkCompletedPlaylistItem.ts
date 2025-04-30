@@ -1,6 +1,6 @@
-import { usePlayerControls } from '@/player'
+import { usePlayerControls } from '@lectorium/mobile/player'
 import { watch } from 'vue'
-import { useDAL } from '@/app'
+import { useDAL } from '@lectorium/mobile/app'
 
 export function useMarkCompletedPlaylistItem() {
   /* -------------------------------------------------------------------------- */

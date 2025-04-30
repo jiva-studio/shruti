@@ -9,8 +9,8 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationBarHolder, useSyncService, useSafeOperation } from '@/app'
-import { Player } from '@/player'
+import { NavigationBarHolder, useSyncService, useSafeOperation } from '@lectorium/mobile/app'
+import { Player } from '@lectorium/mobile/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

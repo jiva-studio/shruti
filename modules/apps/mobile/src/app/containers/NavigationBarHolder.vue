@@ -6,7 +6,7 @@
 </template>
 
 <script setup lang="ts">
-import { usePlayerTranscript } from '@/player'
+import { usePlayerTranscript } from '@lectorium/mobile/player'
 const { isOpen: isPlayerTranscriptOpen } = usePlayerTranscript()
 </script>
 
