@@ -15,8 +15,8 @@
 <script setup lang="ts">
 import {
   Searchbar, TracksFilterBar, TracksFilterValue, TracksSearchResults,
-} from '@/library'
-import { Page, useConfig, useDAL } from '@/app/'
+} from '@shruti/mobile/library'
+import { Page, useConfig, useDAL } from '@shruti/mobile/app'
 import { ref, watch, onMounted } from 'vue'
 
 /* -------------------------------------------------------------------------- */

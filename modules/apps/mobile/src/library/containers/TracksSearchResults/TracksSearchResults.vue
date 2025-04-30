@@ -35,9 +35,9 @@
 <script setup lang="ts">
 import { ref, toRefs, onMounted, watch } from 'vue'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent, IonItem, IonNote } from '@ionic/vue'
-import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@/app'
-import { mapTrackToPlaylistItem } from '@/home'
-import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@/library'
+import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@shruti/mobile/app'
+import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@shruti/mobile/library'
+import { mapTrackToPlaylistItem } from '@shruti/mobile/home/mappers/tracks'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

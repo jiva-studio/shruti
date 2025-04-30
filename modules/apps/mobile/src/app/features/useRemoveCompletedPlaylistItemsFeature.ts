@@ -1,4 +1,4 @@
-import { useDAL } from '@/app'
+import { useDAL } from '@shruti/mobile/app'
 
 export function useRemoveCompletedPlaylistItemsFeature() {
   /* -------------------------------------------------------------------------- */

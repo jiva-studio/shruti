@@ -1,4 +1,4 @@
-import { useDAL } from '@/app'
+import { useDAL } from '@shruti/mobile/app'
 import { Source } from '@shruti/dal/models'
 import { ref } from 'vue'
 

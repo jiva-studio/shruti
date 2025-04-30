@@ -1,4 +1,4 @@
-import { useDAL, useBucketService, useConfig, useMediaService } from '@/app'
+import { useDAL, useBucketService, useConfig, useMediaService } from '@shruti/mobile/app'
 import { S3Operation } from '@shruti/protocol/index'
 
 

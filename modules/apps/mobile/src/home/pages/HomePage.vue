@@ -8,8 +8,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useTimeoutPoll } from '@vueuse/core'
-import { TrackSuggestionsSection, UpNextTracksSection } from '@/home'
-import { Page, useDAL, useConfig, TracksListItemData } from '@/app'
+import { TrackSuggestionsSection, UpNextTracksSection } from '@shruti/mobile/home'
+import { Page, useDAL, useConfig, TracksListItemData } from '@shruti/mobile/app'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

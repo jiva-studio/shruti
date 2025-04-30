@@ -26,9 +26,9 @@
 import { ref } from 'vue'
 import { IonItem, IonLabel } from '@ionic/vue'
 import { useAsyncState } from '@vueuse/core'
-import { ListItemSelectorDialog, useConfig } from '@/app'
-import { useDAL } from '@/app'
-import { useUserChangesAppLangSetting } from '@/settings'
+import { ListItemSelectorDialog, useConfig } from '@shruti/mobile/app'
+import { useDAL } from '@shruti/mobile/app'
+import { useUserChangesAppLangSetting } from '@shruti/mobile/settings'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

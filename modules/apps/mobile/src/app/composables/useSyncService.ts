@@ -1,5 +1,5 @@
 import { createGlobalState } from '@vueuse/core'
-import { useDatabase, SyncService } from '@/app'
+import { useDatabase, SyncService } from '@shruti/mobile/app'
 
 export const useSyncService = createGlobalState(() => {
   const database = useDatabase()

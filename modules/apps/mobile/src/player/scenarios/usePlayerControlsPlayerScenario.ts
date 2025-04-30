@@ -1,4 +1,4 @@
-import { usePlayer, usePlayerControls } from '@/player'
+import { usePlayer, usePlayerControls } from '@shruti/mobile/player'
 
 export function usePlayerControlsPlayerScenario() {
   /* -------------------------------------------------------------------------- */

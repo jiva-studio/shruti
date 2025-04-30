@@ -1,5 +1,5 @@
 import { Filesystem, Directory } from '@capacitor/filesystem'
-import { useDAL } from '@/app'
+import { useDAL } from '@shruti/mobile/app'
 
 export function useCleanupFilesFeature() {
 

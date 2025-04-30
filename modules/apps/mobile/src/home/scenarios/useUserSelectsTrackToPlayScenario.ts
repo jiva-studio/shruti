@@ -1,5 +1,5 @@
-import { useConfig, useDAL } from '@/app'
-import { usePlayer, usePlayerControls, usePlayerTranscript } from '@/player'
+import { useConfig, useDAL } from '@shruti/mobile/app'
+import { usePlayer, usePlayerControls, usePlayerTranscript } from '@shruti/mobile/player'
 
 
 export function useUserSelectsTrackToPlayScenario() {

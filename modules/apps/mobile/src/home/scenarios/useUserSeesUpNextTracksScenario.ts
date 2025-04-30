@@ -1,6 +1,6 @@
 import { mapTrackToPlaylistItem } from '../mappers/tracks'
 import { Track } from '@shruti/dal/models'
-import { TracksListItemData, useDAL } from '@/app'
+import { TracksListItemData, useDAL } from '@shruti/mobile/app'
 
 type TrackStatus = 'none' | 'loading' | 'failed' | 'completed'
 const LoadingStatuses = ['pending', 'running', 'paused']
