@@ -28,7 +28,7 @@
     }
   },
   "postCreateCommand": "./.devcontainer/bootstrap.sh",
-  "forwardPorts": [80, 443, 8025, 8001],
+  "forwardPorts": [80, 443, 8100, 8101, 8102],
   "portsAttributes": {
     "80": {
       "label": "Nginx",
@@ -42,8 +42,13 @@
       "elevateIfNeeded": true,
       "protocol": "https"
     },
-    "8001": {
+    "8101": {
       "label": "API",
+      "onAutoForward": "silent",
+      "elevateIfNeeded": true
+    },
+    "8102": {
+      "label": "Mobile",
       "onAutoForward": "silent",
       "elevateIfNeeded": true
     },
