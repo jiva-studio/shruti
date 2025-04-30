@@ -26,7 +26,7 @@ export class BucketService {
         throw new Error(`Failed to get signed URL: ${response.statusText}`)
       }
       const responseData = await response.json() as S3SignedUrlResponse
-      console.log(`Signed url: ${JSON.stringify(response)}`)
+      console.log(`Signed url: ${JSON.stringify(responseData)}`)
       return responseData
     } catch (e) {
       console.error('Unhandled exception while signing URL', JSON.stringify(e))
