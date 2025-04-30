@@ -36,7 +36,12 @@ export class MediaItemsService
   constructor(
     database: Database
   ) {
-    super(database, mediaItemSerializer, mediaItemDeserializer, { type: "mediaItem" })
+    super(
+      database, 
+      mediaItemSerializer, 
+      mediaItemDeserializer, 
+      { type: "mediaItem" }
+    )
   }
 
   /**

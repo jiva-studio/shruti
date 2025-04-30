@@ -49,7 +49,12 @@ export type FindTracksRequest = {
  */
 export class TracksService extends DatabaseService<Track, TracksDBSchema> {
   constructor(database: Database) {
-    super(database, trackSerializer, trackDeserializer, { type: "track" })
+    super(
+      database, 
+      trackSerializer, 
+      trackDeserializer, 
+      { type: "track" },
+    )
   }
 
   async find(request: FindTracksRequest): Promise<Track[]> {

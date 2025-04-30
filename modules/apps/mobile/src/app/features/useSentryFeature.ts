@@ -1,6 +1,5 @@
 import * as Sentry from '@sentry/capacitor'
 import * as SentryVue from '@sentry/vue'
-import * as SentryBrowser from '@sentry/browser'
 import { ENVIRONMENT } from '@/app/env'
 
 export function useSentryFeature(app: any) {
@@ -18,7 +17,6 @@ export function useSentryFeature(app: any) {
       // Set your dist version, such as "1"
       dist: ENVIRONMENT.dist,
       integrations: [
-        SentryBrowser.captureConsoleIntegration(),
         SentryVue.replayIntegration({
           maskAllText: false,
           maskAllInputs: false,

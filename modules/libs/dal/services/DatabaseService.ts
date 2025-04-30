@@ -25,11 +25,6 @@ export type GetManyRequest = {
   fields?: string[]
 }
 
-export type IndicesConfig = {
-  name: string
-  fields: string[],
-}
-
 export abstract class DatabaseService<
   TItem extends Identifiable,
   TDbScheme extends Identifiable,
@@ -39,7 +34,6 @@ export abstract class DatabaseService<
   private _deserializer: (document: TDbScheme) => TItem
   private _serializer: (item: TItem) => TDbScheme
   private _scope: object = {}
-  private _indices: IndicesConfig[]
 
   /**
    * Constructs a new instance of the DatabaseService class.
@@ -53,26 +47,11 @@ export abstract class DatabaseService<
     serializer: (item: TItem) => TDbScheme,
     deserializer: (document: TDbScheme) => TItem,
     scope: object = {},
-    indices: IndicesConfig[] = []
   ) {
     this._database = database
     this._serializer = serializer
     this._deserializer = deserializer
     this._scope = scope
-    this._indices = indices
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                               Initialization                               */
-  /* -------------------------------------------------------------------------- */
-
-  /**
-   * Initializes the database service by creating indices in the database.
-   */
-  async init() {
-    for (const index of this._indices) {
-      await this._database.db.createIndex({ index })
-    }
   }
 
   /* -------------------------------------------------------------------------- */
@@ -153,16 +132,17 @@ export abstract class DatabaseService<
   async getAll(
     request?: GetAllRequest
   ): Promise<TItem[]> {
-    const response = await this._database.db.find({
+    const r = {
       selector: {
         ...this._scope,
       },
       limit: request?.limit ?? 25,
       skip: request?.skip ?? 0,
       sort: request?.sort ?? undefined
-    })
+    }
+    const response = await this._database.db.find(r)
     if (response.warning) {
-      console.warn(response.warning, request)
+      console.warn(response.warning, r)
     }
     return response.docs.map(row => this._deserializer(row as unknown as TDbScheme))
   }
@@ -182,7 +162,7 @@ export abstract class DatabaseService<
     }
     const response = await this._database.db.find(r)
     if (response.warning) {
-      console.warn(response.warning, request)
+      console.warn(response.warning, r)
     }
 
     return response.docs
