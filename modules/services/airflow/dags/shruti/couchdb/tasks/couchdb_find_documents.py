@@ -10,6 +10,12 @@ def couchdb_find_documents(
   filter: dict,
 ) -> None:
   url = f"{connection_string}/{collection}/_find"
-  response = post(url, json={"selector": filter})
+  response = post(
+    url, 
+    json={
+      "selector": filter,
+      "limit": 150, # TODO: add paginated loading
+    }
+  )
   docs = response.json().get("docs", [])
   return docs
