@@ -174,7 +174,7 @@
         "type": "shell",
         "args": [
           "-c",
-          "/workspaces/shruti/modules/services/gateway/nginx.conf",
+          "/workspaces/shruti/modules/services/gateway/nginx.dev.conf",
           "-g",
           "'daemon off;'"
         ],
