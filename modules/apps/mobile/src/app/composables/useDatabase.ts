@@ -34,9 +34,9 @@ export function useDatabase() {
       dictionary: new Database({
         name: 'dictionary.db',
         adapter: adapter,
-        indices: [
-          { name: 'type', fields: ['type'] }
-        ]
+        // indices: [
+        //   { name: 'type', fields: ['type'] }
+        // ]
       }),
       index: new Database({
         name: 'index.db',

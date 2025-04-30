@@ -18,6 +18,7 @@ export class AuthorsService extends DatabaseService<Author, AuthorDbScheme> {
       database,
       authorSerializer,
       authorDeserializer, 
-      { type: "author" })
+      { type: "author" }
+    )
   }
 }
