@@ -1,27 +1,30 @@
 <template>
-  <p
-    v-for="(section, idx) in sections"
-    :key="idx"
-    :class="{
-      'prompter': true,
-      'paragraph': section.blocks[0].start <= time && section.blocks[section.blocks.length-1].end >= time
-    }"
-  >
-    <Timestamp
-      :start="section.blocks[0].start"
-    />
-    <component
-      :is="'span'"
-      v-for="(block, index) in section.blocks"
-      :key="index"
+  <div>
+    <p
+      v-for="(section, idx) in sections"
+      :key="idx"
       :class="{
-        'highlight': block.start <= time && block.end >= time
+        'prompter': true,
+        'paragraph': section.blocks[0]?.start <= time && section.blocks[section.blocks.length-1].end >= time
       }"
-      @click="emit('rewind', block.start)"
     >
-      {{ block.text + " " }}
-    </component>
-  </p>
+      <Timestamp
+        v-if="section.blocks[0]?.start"
+        :start="section.blocks[0]?.start"
+      />
+      <component
+        :is="'span'"
+        v-for="(block, index) in section.blocks"
+        :key="index"
+        :class="{
+          'highlight': block.start <= time && block.end >= time,
+        }"
+        @click="emit('rewind', block.start)"
+      >
+        {{ block.text + " " }}
+      </component>
+    </p>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -36,6 +39,7 @@ export type TranscriptBlock = {
   text: string
   start: number
   end: number
+  speaker: string
 }
 
 defineProps<{
