@@ -2,6 +2,7 @@
   <IonApp>
     <IonRouterOutlet />
     <Player />
+    <Transcript />
     <NavigationBarHolder />
   </IonApp>
 </template>
@@ -10,7 +11,7 @@
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
 import { NavigationBarHolder, useSyncService, useSafeOperation } from '@shruti/mobile/app'
-import { Player } from '@shruti/mobile/player'
+import { Player, Transcript } from '@shruti/mobile/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

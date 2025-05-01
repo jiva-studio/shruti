@@ -10,6 +10,7 @@ export { default as LanguageSelector, type TranscriptLanguage } from './componen
 
 // containers:
 export { default as Player } from './containers/Player.vue'
+export { default as Transcript } from './containers/Transcript.vue'
 
 // icons:
 export { default as IconCaretDown } from './icons/IconCaretDown.vue'
