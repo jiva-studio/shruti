@@ -69,7 +69,7 @@ def inbox_start_processing():
         "track_id": track_id,
         "languages_in_audio_file": document["languagesExtract"],
         "languages_to_translate_into": document["languagesTranslateInto"],
-        "speakers_count": 1,
+        "speakers_count": len(document["languagesExtract"]),
       }, 
       task_instance=kwargs["ti"],
     )
