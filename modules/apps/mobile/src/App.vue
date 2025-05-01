@@ -2,6 +2,7 @@
   <IonApp>
     <IonRouterOutlet />
     <Player />
+    <Transcript />
     <NavigationBarHolder />
   </IonApp>
 </template>
@@ -10,7 +11,7 @@
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
 import { NavigationBarHolder, useSyncService, useSafeOperation } from '@lectorium/mobile/app'
-import { Player } from '@lectorium/mobile/player'
+import { Player, Transcript } from '@lectorium/mobile/player'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

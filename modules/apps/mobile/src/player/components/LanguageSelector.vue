@@ -4,30 +4,51 @@
       v-for="lang in languages"
       :key="lang.code"
       :class="{
-        'language-inactive': lang.code !== activeLanguage,
-        'language-active': lang.code === activeLanguage
+        'language': true,
+        'language-inactive': !active.includes(lang.code),
+        'language-active': active.includes(lang.code)
       }"
-      @click="emit('changeLanguage', lang.code)"
+      @click="onLanguageClicked(lang.code)"
     >
-      {{ lang.icon ?? "🏁" }} 
+      {{ lang.icon ?? "🏁" }} {{ lang.name }}
     </span>  
   </div>
 </template>
 
 <script setup lang="ts">
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
 export type TranscriptLanguage = {
   code: string
+  name: string
   icon: string
 }
 
-defineProps<{
+const props = defineProps<{
   languages: TranscriptLanguage[]
-  activeLanguage: string
+  allowMultiple: boolean
 }>()
 
-const emit = defineEmits<{
-  changeLanguage: [lang: string]
-}>()
+const active = defineModel<string[]>('active', { default: [] })
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+function onLanguageClicked(language: string) {
+  if (props.allowMultiple) {
+    if (active.value.includes(language)) {
+      if (active.value.length <= 1) { return }
+      active.value = active.value.filter(x => x !== language)
+    } else {
+      active.value = [...active.value, language]
+    }
+  } else {
+    active.value = [language]
+  }
+}
 </script>
 
 
@@ -39,14 +60,23 @@ const emit = defineEmits<{
   align-items: center;
   margin-bottom: 16px;
   gap: 1rem;
-  font-size: 1.5rem;
+  font-size: .75rem;
+}
+
+.language {
+  transition: all 1s;
+  background-color: #A0E060;
+  border-radius: 5px;
+  padding: 5px;
 }
 
 .language-inactive {
   opacity: 0.5;
+  /* scale: .75; */
 }
 
 .language-active {
   opacity: 1;
+  scale: 1.05;
 }
 </style>
