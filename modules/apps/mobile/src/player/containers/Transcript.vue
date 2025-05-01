@@ -187,8 +187,10 @@ async function loadTranscriptBlocks(
       blocksAdded = 0
     }
     blocksAdded++
-    lastSection.push({ ...block, ...{ start: lastBlockEnd } })
-    lastBlockEnd = block.end
+    if (block.type !== 'paragraph') {
+      lastSection.push({ ...block, ...{ start: lastBlockEnd } })
+      lastBlockEnd = block.end
+    }
   }
   if (lastSection.length > 0) {
     sections.push({ blocks: lastSection })
