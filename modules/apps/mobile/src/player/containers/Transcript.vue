@@ -184,13 +184,11 @@ async function loadTranscriptBlocks(
     if (block.type === 'paragraph' || blocksAdded > 5) {
       sections.push({ blocks: lastSection })
       lastSection = []
-      // lastSpeaker = block.speaker
       blocksAdded = 0
-    } else {
-      blocksAdded++
-      lastSection.push({ ...block, ...{ start: lastBlockEnd } })
-      lastBlockEnd = block.end
     }
+    blocksAdded++
+    lastSection.push({ ...block, ...{ start: lastBlockEnd } })
+    lastBlockEnd = block.end
   }
   if (lastSection.length > 0) {
     sections.push({ blocks: lastSection })
