@@ -16,13 +16,19 @@ def audio_create_from_segments(
   total_length = 0
   segments_flat = [item for sublist in segments for item in sublist]
   for start, end in segments_flat:
+
+    # NOTE: skip first 10 minutes of audio, because there may be a kirtan
+    # TODO: automatically find end of kirtan
+    if start <= 600:
+      continue
+    
     print(f"Getting audio form {start} to {end}")
     result_audio += audio[start*1000:end*1000]
     total_length += end - start
     if total_length >= max_duration:
       break
 
-  tmp_path = "/tmp/" + str(uuid4())
+  tmp_path = "/tmp/lectorium/" + str(uuid4())
   with open(tmp_path, "wb") as f:
     result_audio.export(f, format="mp3")
   return tmp_path
