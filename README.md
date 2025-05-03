@@ -36,6 +36,7 @@ Instantly translate any lecture into your preferred language. Learning has no bo
 Got questions? Lectorium lets you ask and get answers straight from the lecture content — like having a professor in your pocket.
 
 
+
 # Get involved
 
 If you'd like to help develop the project, here's a list of links to get you started:
