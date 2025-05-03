@@ -57,10 +57,10 @@ export async function normalizeReference(
     return '<Error>'
   }
   try {
-    const book = reference[0].toString()
+    const book = reference[0].toString().toLowerCase()
     const numbers = reference.slice(1)
-    const source = await sourcesService.getOne('source::' + book.toLowerCase())
-    return `${source.shortName['en']} ${numbers.join('.')}`
+    await sourcesService.getOne('source::' + book)
+    return `${book} ${numbers.join('.')}`
   } catch {
     return reference.join(' ')
   }
