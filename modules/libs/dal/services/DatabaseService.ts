@@ -213,6 +213,18 @@ export abstract class DatabaseService<
     await this.notifyChange({ item: updatedItem, event: 'updated' })
   }
 
+  async patchOne(
+    id: string,
+    item: Partial<TItem>
+  ): Promise<void> {
+    const document = await this._database.db.get<TDbScheme>(id)
+    const updatedItem = { ...this._deserializer(document), ...item }
+    const updatedDocument = this._serializer(updatedItem)
+    await this._database.db.put(updatedDocument)
+    await this.notifyChange({ item: updatedItem, event: 'updated' })
+  }
+
+
   /**
    * Removes a document from the database.
    * @param id The ID of the document to be removed.

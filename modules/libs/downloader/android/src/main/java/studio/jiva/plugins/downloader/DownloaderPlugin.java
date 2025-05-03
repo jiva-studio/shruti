@@ -73,7 +73,6 @@ public class DownloaderPlugin extends Plugin {
             Uri localUrl = Uri.fromFile(new File(directory, destination));
 
             // Return task ID
-
             long taskId = implementation.enqueue(Uri.parse(url), localUrl, title);
             JSObject ret = new JSObject();
             ret.put("taskId", Long.toString(taskId));
@@ -93,9 +92,10 @@ public class DownloaderPlugin extends Plugin {
         }
 
         try {
-            String status = implementation.getStatus(Long.parseLong(taskId));
+            DownloaderTaskStatus status = implementation.getStatus(Long.parseLong(taskId));
             JSObject ret = new JSObject();
-            ret.put("status", status);
+            ret.put("status", status.status());
+            ret.put("progress", status.progress());
             call.resolve(ret);
         } catch (Exception e) {
             call.reject("Unable to get status", e);
@@ -119,11 +119,11 @@ public class DownloaderPlugin extends Plugin {
 
     private class MyDownloadListener implements Downloader.DownloadListener {
         @Override
-        public void onDownloadCompleted(long taskId, String status) {
+        public void onDownloadCompleted(long taskId, DownloaderTaskStatus status) {
             if (onDownloadCompleteCallback == null) { return; }
             JSObject result = new JSObject();
             result.put("taskId", Long.toString(taskId));
-            result.put("status", status);
+            result.put("status", status.status());
             onDownloadCompleteCallback.resolve(result);
         }
     }
