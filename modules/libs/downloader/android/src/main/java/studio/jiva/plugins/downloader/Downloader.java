@@ -12,7 +12,6 @@ import android.util.Log;
 
 import androidx.core.content.ContextCompat;
 
-
 public class Downloader implements AutoCloseable {
     private static final String TAG = "DownloaderPlugin";
     private final DownloadManager downloadManager;
@@ -48,7 +47,7 @@ public class Downloader implements AutoCloseable {
     /* -------------------------------------------------------------------------- */
 
     public interface DownloadListener {
-        void onDownloadCompleted(long taskId, String status);
+        void onDownloadCompleted(long taskId, DownloaderTaskStatus status);
     }
 
 
@@ -77,29 +76,36 @@ public class Downloader implements AutoCloseable {
     /**
      * Get the status of a download.
      * @param taskId The ID of the download to check.
-     * @return The status of the download as a string.
+     * @return The status of the download.
      */
-    public String getStatus(long taskId) {
+    public DownloaderTaskStatus getStatus(long taskId) {
         Cursor cursor = downloadManager.query(
                 new DownloadManager.Query().setFilterById(taskId)
         );
         if (cursor != null) {
             if (cursor.moveToFirst()) {
                 int columnIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS);
+                int bytesDownloadedIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
+                int bytesTotalIndex = cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES);
+
                 int status = cursor.getInt(columnIndex);
+                long bytesDownloaded = cursor.getLong(bytesDownloadedIndex);
+                long bytesTotal = cursor.getLong(bytesTotalIndex);
+
+                int progress = (bytesTotal > 0) ? (int) ((float)bytesDownloaded / (float)bytesTotal * 100) : 0;
                 cursor.close();
                 return switch (status) {
-                    case DownloadManager.STATUS_SUCCESSFUL -> "successful";
-                    case DownloadManager.STATUS_PENDING -> "pending";
-                    case DownloadManager.STATUS_PAUSED -> "paused";
-                    case DownloadManager.STATUS_RUNNING -> "running";
-                    default -> "failed";
+                    case DownloadManager.STATUS_SUCCESSFUL -> new DownloaderTaskStatus("successful", progress);
+                    case DownloadManager.STATUS_PENDING -> new DownloaderTaskStatus("pending", progress);
+                    case DownloadManager.STATUS_PAUSED -> new DownloaderTaskStatus("paused", progress);
+                    case DownloadManager.STATUS_RUNNING -> new DownloaderTaskStatus("running", progress);
+                    default -> new DownloaderTaskStatus("failed", progress);
                 };
             }
             cursor.close();
         }
 
-        return "failed";
+        return new DownloaderTaskStatus("failed", 0);
     }
 
     /**
@@ -122,7 +128,7 @@ public class Downloader implements AutoCloseable {
             if (DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
                 long taskId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
                 if (taskId == -1) { return; }
-                String status = getStatus(taskId);
+                DownloaderTaskStatus status = getStatus(taskId);
                 downloadListener.onDownloadCompleted(taskId, status);
             }
         }
