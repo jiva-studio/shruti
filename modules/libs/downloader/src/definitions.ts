@@ -14,6 +14,7 @@ export type GetStatusRequest = {
 
 export type GetStatusResponse = {
   status: "successful" | "pending" | "paused" | "failed" | "running";
+  progress: number;
 }
 
 export type DownloadCompleteEvent = {

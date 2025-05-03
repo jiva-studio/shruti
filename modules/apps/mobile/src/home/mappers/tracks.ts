@@ -1,5 +1,5 @@
 import { Track } from '@lectorium/dal/models'
-import { TracksListItemData, TracksListItemStatus } from '@lectorium/mobile/app'
+import { TracksListItemData,  } from '@lectorium/mobile/app'
 import { useDAL } from '@lectorium/mobile/app'
 
 // TODO: move to @lectorium/mobile
@@ -8,7 +8,6 @@ import { useDAL } from '@lectorium/mobile/app'
 export async function mapTrackToPlaylistItem(
   track: Track,
   language: string = 'en',
-  status: TracksListItemStatus = 'none'
 ): Promise<TracksListItemData> {
   return {
     trackId: track._id,
@@ -16,10 +15,10 @@ export async function mapTrackToPlaylistItem(
     author: await mapAuthorFullNameById(track.author, language), 
     location: await mapLocationFullNameById(track.location, language),
     references: track.references?.length >= 1 
-      ? [await mapReference(track.references[0], language)]
+      ? await Promise.all(track.references.map(ref => mapReference(ref, language)))
       : [],
     date: mapTrackDate(track.date),
-    status: status, 
+    icon: 'none'
   }
 }
 

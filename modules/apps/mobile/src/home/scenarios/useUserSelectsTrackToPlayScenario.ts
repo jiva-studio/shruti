@@ -1,3 +1,4 @@
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { useConfig, useDAL } from '@lectorium/mobile/app'
 import { usePlayer, usePlayerControls, usePlayerTranscript } from '@lectorium/mobile/player'
 
@@ -19,6 +20,9 @@ export function useUserSelectsTrackToPlayScenario() {
   /* -------------------------------------------------------------------------- */
 
   async function execute(trackId: string) {
+    // Notify user
+    await Haptics.impact({ style: ImpactStyle.Light })
+    
     const track = await dal.tracks.getOne(trackId)
     const author = await dal.authors.getOne('author::' + track.author)
 

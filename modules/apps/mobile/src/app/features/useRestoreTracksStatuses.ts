@@ -1,22 +1,24 @@
-import { usePlayer, usePlayerControls } from '@lectorium/mobile/player'
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
+import { useTrackStateStore } from '@lectorium/mobile/app/stores'
+import { useDAL } from '@lectorium/mobile/app'
 
-export function usePlayerControlsPlayerScenario() {
+export function useRestoreTracksStatuses() {
+
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
-  const player = usePlayer()
-  const playerControls = usePlayerControls()
+  const dal = useDAL()
+  const trackStateStore = useTrackStateStore()
 
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function togglePause() {
-    await player.togglePause()
-    await Haptics.impact({ style: ImpactStyle.Light })
-    playerControls.isPlaying.value = !playerControls.isPlaying.value
+  async function init() {
+    const items = await dal.playlistItems.getAll()
+    for (const item of items) {
+      trackStateStore.setStatus(item.trackId, { inPlaylist: true })
+    }
   }
 
   /* -------------------------------------------------------------------------- */
@@ -24,6 +26,6 @@ export function usePlayerControlsPlayerScenario() {
   /* -------------------------------------------------------------------------- */
 
   return {
-    togglePause
+    init
   }
 }

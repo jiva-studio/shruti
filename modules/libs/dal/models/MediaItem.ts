@@ -29,12 +29,6 @@ export type MediaItem = {
 
   /**
    * The status of the media item.
-   * 
-   * - `pending`: The media item is queued for download.
-   * - `running`: The media item is currently being downloaded.
-   * - `successful`: The media item has been successfully downloaded.
-   * - `failed`: The media item failed to download.
-   * - `paused`: The media item download is paused.
    */
-  taskStatus: 'pending' | 'running' | 'successful' | 'failed' | 'paused'
+  taskStatus: 'running' | 'successful' | 'failed'
 }

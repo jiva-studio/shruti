@@ -10,7 +10,7 @@
       'hidden': !isVisible
     }"
     @play="togglePause"
-    @click="isPlayerTranscriptOpen = !isPlayerTranscriptOpen"
+    @click="toggleTranscriptOpen"
   />
 </template>
 
@@ -27,7 +27,7 @@ import {
 /* -------------------------------------------------------------------------- */
 
 const { isPlaying, title, author } = usePlayerControls()
-const { isOpen: isPlayerTranscriptOpen } = usePlayerTranscript()
+const { isOpen: isPlayerTranscriptOpen, toggleTranscriptOpen } = usePlayerTranscript()
 const { togglePause } = usePlayerControlsPlayerScenario()
 
 /* -------------------------------------------------------------------------- */

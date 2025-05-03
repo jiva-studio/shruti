@@ -22,8 +22,10 @@
           :location="item.location"
           :references="item.references"
           :date="item.date"
-          :status="item.status"
-          @click="() => onPlaylistItemClicked(item.status, item.trackId)"
+          :icon="trackStateStore.isCompleted(item.trackId) ? 'completed' : trackStateStore.downloadFailed(item.trackId) ? 'failed' : 'none'"
+          :progress="trackStateStore.downloadProgress(item.trackId)"
+          :dimmed="trackStateStore.isDownloading(item.trackId) || trackStateStore.downloadFailed(item.trackId)"
+          @click="() => onPlaylistItemClicked(item.trackId, trackStateStore.getStatus(item.trackId).downloadFailed === true)"
         />
         <IonItemOptions>
           <IonItemOption
@@ -59,6 +61,7 @@ import { TracksListItem, TracksListItemSkeleton, useConfig } from '@lectorium/mo
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { trashOutline } from 'ionicons/icons'
+import { useTrackStateStore } from '@lectorium/mobile/app/stores'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -66,6 +69,7 @@ import { trashOutline } from 'ionicons/icons'
 
 const config = useConfig()
 const router = useRouter()
+const trackStateStore = useTrackStateStore()
 const userSeesUpNextTracks = useUserSeesUpNextTracksScenario()
 const userSelectsTrackToPlay = useUserSelectsTrackToPlayScenario()
 const userRemovesPlaylistItem = useUserRemovesPlaylistItemScenario()
@@ -77,7 +81,11 @@ const userRedownloadsFailedMediaItems = useUserRedownloadsFailedMediaItemsScenar
 
 const { state: tracks, execute: refresh } = useAsyncState(
   async () => await userSeesUpNextTracks.execute(config.appLanguage.value), 
-  [], { immediate: true, resetOnExecute: false, onSuccess: () => isFirstLoad.value = false }
+  [], { 
+    immediate: true, 
+    resetOnExecute: false, 
+    onSuccess: () => isFirstLoad.value = false,
+  }
 )
 
 const isFirstLoad = ref(true)
@@ -96,10 +104,10 @@ async function onRemovePlaylistItem(playlistItemId: string) {
   await userRemovesPlaylistItem.execute(playlistItemId)
 }
 
-function onPlaylistItemClicked(status: string, trackId: string) {
-  if (['completed', 'none'].includes(status)) {
+function onPlaylistItemClicked(trackId: string, redownload: boolean) {
+  if (!redownload) {
     userSelectsTrackToPlay.execute(trackId)
-  } else if (['failed'].includes(status)) {
+  } else {
     userRedownloadsFailedMediaItems.execute(trackId)
   }
 }

@@ -1,6 +1,6 @@
 import { 
-  Downloader, DownloadRequest, DownloadResponse, GetStatusRequest, 
-  GetStatusResponse 
+  Downloader, DownloadRequest, DownloadResponse, GetStatusRequest,
+  DownloadCompleteEvent, GetStatusResponse 
 } from 'lectorium-downloader'
 
 export type DownloaderTaskStatuses = GetStatusResponse['status']
@@ -15,7 +15,7 @@ export class DownloaderService {
   }
 
   async onDownloadComplete(
-    callback: (event: { taskId: string; status: DownloaderTaskStatuses }) => void
+    callback: (event: DownloadCompleteEvent) => void
   ): Promise<{ callbackId: string }> {
     return await Downloader.onDownloadComplete(callback)
   }

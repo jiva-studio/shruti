@@ -12,20 +12,14 @@ npx cap sync
 
 <docgen-index>
 
-- [@lectorium/audio-player](#lectoriumaudio-player)
-  - [Install](#install)
-  - [API](#api)
-    - [open(...)](#open)
-    - [play()](#play)
-    - [togglePause()](#togglepause)
-    - [seek(...)](#seek)
-    - [stop()](#stop)
-    - [onProgressChanged(...)](#onprogresschanged)
-    - [Interfaces](#interfaces)
-      - [AudioPlayerListenerResult](#audioplayerlistenerresult)
-    - [Type Aliases](#type-aliases)
-      - [OpenParams](#openparams)
-      - [Status](#status)
+* [`open(...)`](#open)
+* [`play()`](#play)
+* [`togglePause()`](#togglepause)
+* [`seek(...)`](#seek)
+* [`stop()`](#stop)
+* [`onProgressChanged(...)`](#onprogresschanged)
+* [Interfaces](#interfaces)
+* [Type Aliases](#type-aliases)
 
 </docgen-index>
 

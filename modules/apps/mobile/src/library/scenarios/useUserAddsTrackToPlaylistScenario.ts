@@ -1,5 +1,6 @@
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { useDAL, useBucketService, useConfig, useMediaService } from '@lectorium/mobile/app'
+import { useTrackStateStore } from '@lectorium/mobile/app/stores'
 import { S3Operation } from '@lectorium/protocol/index'
 
 /**
@@ -14,6 +15,7 @@ export function useUserAddsTrackToPlaylistScenario() {
   const config = useConfig()
   const mediaService = useMediaService()
   const bucketService = useBucketService()
+  const trackStateStore = useTrackStateStore()
 
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */
@@ -22,60 +24,78 @@ export function useUserAddsTrackToPlaylistScenario() {
   async function execute(
     trackId: string,
   ) {
-    await Haptics.impact({ style: ImpactStyle.Light })
+    try {
+      // Add track to playlist, or exit if it already exists
+      const existingPlayListItem = await dal.playlistItems.findOne({ _id: trackId })
+      if (existingPlayListItem) { return }
 
-    // Add track to playlist, or exit if it already exists
-    const existingPlayListItem = await dal.playlistItems.findOne({ _id: trackId })
-    if (existingPlayListItem) { return }
+      // Notify user
+      await Haptics.impact({ style: ImpactStyle.Light })
 
-    // Get track information
-    const track = await dal.tracks.getOne(trackId)
-    const trackTitle = track.title[config.appLanguage.value] 
-      || track.title['en']
-      || 'Unknown'
+      // Get track information
+      const track = await dal.tracks.getOne(trackId)
+      const trackTitle = track.title[config.appLanguage.value] 
+        || track.title['en']
+        || 'Unknown'
 
-    // Add track to playlist
-    await dal.playlistItems.addOne({
-      _id: trackId,
-      trackId: trackId,
-      type: 'playlistItem',
-      played: 0,
-      addedAt: Date.now(),
-      completedAt: undefined
-    })
-
-    const signedUrl = await bucketService.getSignedUrl({
-      key: track.audio.original.path,
-      bucketName: config.bucketName.value,
-      expiresIn: 60 * 60 * 24,
-      operation: S3Operation.GetObject,
-    })
-
-    // Enqueue related media to download
-    // TODO: add support for multiple media items
-    await mediaService.get({
-      trackId: trackId,
-      url: signedUrl.signedUrl, 
-      destination: track.audio.original.path,
-      title: trackTitle,
-    })
-
-    // Download all related transcripts
-    // TODO: download only transcript in language of the user selected in settings
-    for (const transcript of Object.values(track.transcripts)) {
-      const signedUrl = await bucketService.getSignedUrl({
-        key: transcript.path,
-        bucketName: config.bucketName.value,
-        expiresIn: 60 * 60 * 24,
-        operation: S3Operation.GetObject,
-      })
-      await mediaService.get({
+      // Add track to playlist
+      await dal.playlistItems.addOne({
+        _id: trackId,
         trackId: trackId,
-        url: signedUrl.signedUrl, 
-        destination: transcript.path,
-        title: trackTitle, 
+        type: 'playlistItem',
+        played: 0,
+        addedAt: Date.now(),
+        completedAt: undefined
       })
+      trackStateStore.setStatus(trackId, { 
+        inPlaylist: true, 
+        downloadProgress: 0,
+      })
+
+      const transcripts = Object.values(track.transcripts)
+
+      // Sign all urls and prepare download tasks for MediaService
+      const downloadTasks = await Promise.all(
+        [
+          { 
+            path: track.audio.original.path,
+            title: trackTitle,
+          },
+          ...transcripts.map(transcript => ({
+            path: transcript.path,
+            title: trackTitle, // TODO: add "transcript:" prefix + "(language)" postfix
+          }))
+        ].map(async (file) => {
+          const response = await bucketService.getSignedUrl({
+            key: file.path,
+            bucketName: config.bucketName.value,
+            expiresIn: 60 * 60 * 24,
+            operation: S3Operation.GetObject,
+          })
+          return {
+            url: response.signedUrl,
+            destination: file.path,
+            title: file.title, 
+          }
+        })
+      )
+
+      // Download all files using MediaService and prepared tasks
+      // from above
+      await Promise.all(
+        downloadTasks.map(async (task) => {
+          await mediaService.get({ trackId: trackId, ...task })
+        })
+      )
+    } catch {
+      // Something wrong happened
+      trackStateStore.setStatus(trackId, { 
+        inPlaylist: true, 
+        downloadFailed: true,
+        downloadProgress: undefined
+      }) 
     }
+    
   }
 
   /* -------------------------------------------------------------------------- */
@@ -83,6 +103,6 @@ export function useUserAddsTrackToPlaylistScenario() {
   /* -------------------------------------------------------------------------- */
 
   return {
-    execute
+    execute,
   }
 }

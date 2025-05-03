@@ -1,15 +1,16 @@
 <template>
-  <IonList>
+  <IonList lines="none">
     <TracksListItem
       v-for="item in tracks"
       :key="item.trackId"
       :track-id="item.trackId"
+      :date="item.date"
       :title="item.title"
       :author="item.author"
       :location="item.location"
       :references="item.references"
-      :status="item.status"
-      :date="item.date"
+      :icon="trackStateStore.isInPlaylist(item.trackId) ? 'added' : 'none'"
+      :progress="trackStateStore.downloadProgress(item.trackId)"
       @click="onTrackClick(item.trackId)"
     />
   </IonList>
@@ -35,19 +36,20 @@
 <script setup lang="ts">
 import { ref, toRefs, onMounted, watch } from 'vue'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent, IonItem, IonNote } from '@ionic/vue'
-import { useDAL, TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@lectorium/mobile/app'
+import { TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@lectorium/mobile/app'
 import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@lectorium/mobile/library'
 import { mapTrackToPlaylistItem } from '@lectorium/mobile/home/mappers/tracks'
+import { useTrackStateStore } from '@lectorium/mobile/app/stores'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const dal = useDAL()
 const config = useConfig()
+const safeOperation = useSafeOperation()
+const trackStateStore = useTrackStateStore()
 const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
 const userSearchesForTracks = useUserSearchesForTracksScenario()
-const safeOperation = useSafeOperation()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -67,11 +69,9 @@ const props = defineProps<{
   filters: Filters
 }>()
 
-const { filters } = toRefs(props)
 
 defineExpose({
   refresh: async () => {
-    trackIdsInPlaylist.value = await loadTrackIdsInPlaylist()
     await loadTracks(0, filters.value)
   },
 })
@@ -84,8 +84,7 @@ defineExpose({
 const maxRecords = 75
 const tracks = ref<TracksListItemData[]>([])
 const infiniteScrollEnabled = ref<boolean>(true)
-const trackIdsInPlaylist = ref<string[]>([])
-
+const { filters } = toRefs(props)
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
@@ -96,18 +95,9 @@ watch(filters, async (v) => {
 }, { deep: true })
 
 onMounted(async () => {
-  trackIdsInPlaylist.value = await loadTrackIdsInPlaylist()
   await loadTracks(0, filters.value)
 })
 
-dal.playlistItems.subscribe(async (e) => {
-  const track = tracks.value.find(x => x.trackId === e.item.trackId)
-  if (track) {
-    track.status = e.event == 'added' ? 'added' : 'none'
-  } else {
-    console.warn('Track not found in the list:', e.item.trackId, tracks.value)
-  }
-})
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -139,11 +129,8 @@ async function loadTracks(
 
     const items = await Promise.all(
       searchResult.map(
-        x => mapTrackToPlaylistItem(
-          x, 
-          config.appLanguage.value,
-          trackIdsInPlaylist.value.includes(x._id) ? 'added' : 'none',
-        ))
+        x => mapTrackToPlaylistItem(x, config.appLanguage.value)
+      )
     )
     if (offset === 0) { 
       tracks.value = items 
@@ -155,11 +142,6 @@ async function loadTracks(
     // TODO: better error handling
     console.error('Error fetching track suggestions:', error)
   }
-}
-
-async function loadTrackIdsInPlaylist(): Promise<string[]> {
-  const playlist = await dal.playlistItems.getAll()
-  return playlist.map(x => x.trackId) ?? []
 }
 </script>
 

@@ -1,5 +1,5 @@
 import { MediaItemsService } from '@lectorium/dal/index'
-import { DownloaderService, DownloaderTaskStatuses, useIdGenerator } from '@lectorium/mobile/app'
+import { DownloaderService, useIdGenerator } from '@lectorium/mobile/app'
 
 export type GetMediaRequest = {
   trackId: string,
@@ -21,11 +21,7 @@ export class MediaService {
   constructor(
     private readonly mediaItems: MediaItemsService,
     private readonly downloader: DownloaderService
-  ) {
-    downloader.onDownloadComplete(
-      async ({ taskId, status }) => await this.onMediaItemDownloadComplete(taskId, status) 
-    )
-  }
+  ) { }
 
   /**
    * Gets media item.
@@ -48,42 +44,19 @@ export class MediaService {
     }
       
     // start download
-    console.log('Starting download for:', JSON.stringify(request))
-    const downloaderResponse =
-      await this.downloader.enqueue(request)
+    console.log('Download starting: ', JSON.stringify(request))
+    const downloaderResponse = await this.downloader.enqueue(request)
 
     // add to media items
     await this.mediaItems.addOne({
       _id: useIdGenerator().generateId(22),
       type: 'mediaItem',
-      taskStatus: 'pending',
-      trackId: request.trackId,
-      taskId: downloaderResponse.taskId,
       title: request.title,
       remoteUrl: request.url,
       localPath: request.destination,
+      trackId: request.trackId,
+      taskId: downloaderResponse.taskId,
+      taskStatus: 'running',
     })
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                                   Private                                  */
-  /* -------------------------------------------------------------------------- */
-
-  private async onMediaItemDownloadComplete(
-    taskId: string,
-    status: DownloaderTaskStatuses
-  ) {
-    // get media item by taskId
-    const mediaItem = await this.mediaItems.findOne({ taskId })
-    console.log(
-      `Download ${taskId} completed with status: `+
-      `${mediaItem?.taskStatus ?? 'unknown'} -> ${status}`)
-
-    // update media item status if necessary
-    if (mediaItem && mediaItem.taskStatus !== status) {
-      mediaItem.taskStatus = status
-      await this.mediaItems.updateOne(mediaItem._id, mediaItem)
-      console.log('Media item status updated:', mediaItem._id, mediaItem.taskStatus)
-    } 
   }
 }

@@ -10,7 +10,7 @@
       :location="item.location"
       :references="item.references"
       :date="item.date"
-      :status="item.status"
+      :icon="item.icon"
       @click="onTrackClick(item.trackId)"
     />
   </IonList>

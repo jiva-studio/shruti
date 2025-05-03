@@ -13,7 +13,7 @@ type MediaItemDBSchema = {
   localPath: string
   trackId: string,
   taskId: string
-  taskStatus: 'pending' | 'running' | 'successful' | 'failed' | 'paused'
+  taskStatus: 'running' | 'successful' | 'failed'
 }
 
 const mediaItemSerializer = (item: MediaItem): MediaItemDBSchema => item
