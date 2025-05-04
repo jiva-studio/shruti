@@ -1,64 +1,43 @@
 <template>
-  <Page>
-    <Searchbar
-      v-model="query"
-      :placeholder="$t('library.search', { count: tracksCount })"
-    />
-    <TracksFilterBar v-model="filters" />
-    <TracksSearchResults
-      ref="tracksSearchResultsRef"
-      :filters="filters"
+  <Page :loading="loading">
+    <RandomTrackSuggestions 
+      :max-authors="2"
+      @loading="onLoadingStateChanged"
     />
   </Page>
 </template>
 
 <script setup lang="ts">
-import {
-  Searchbar, TracksFilterBar, TracksFilterValue, TracksSearchResults,
-} from '@lectorium/mobile/library'
-import { Page, useConfig, useDAL } from '@lectorium/mobile/app'
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
+import { Page, useConfig } from '@lectorium/mobile/app'
+import RandomTrackSuggestions from '@lectorium/mobile/library/containers/RandomTrackSuggestions.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const config = useConfig()
-const dal = useDAL()
-const tracksSearchResultsRef = ref<typeof TracksSearchResults>()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const query = ref('')
+const trackSuggestionsRef = ref<typeof RandomTrackSuggestions>()
+const loading = ref(true)
 
-const filters = ref<TracksFilterValue>({
-  query: '',
-  ids: [],
-  authors: [],
-  sources: [],
-  locations: [],
-  languages: [],
-  duration: { min: 0, max: Number.MAX_SAFE_INTEGER },
-  dates: { from: '', to: '' },
-})
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
 
-const tracksCount = ref<number>(0)
+function onLoadingStateChanged(value: boolean) {
+  loading.value = value
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
 
-watch(query, (newQuery) => {
-  filters.value.query = newQuery
-})
-
 watch(config.appLanguage, () => {
-  tracksSearchResultsRef.value?.refresh()
-})
-
-onMounted(async () => {
-  tracksCount.value = await dal.tracks.getCount()
+  trackSuggestionsRef.value?.refresh()
 })
 </script>

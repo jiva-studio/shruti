@@ -2,23 +2,22 @@
   <TracksFilterChipWithListItems 
     v-model="modelValue"
     :items="state"
-    :title="$t('library.filters.locations')"
+    :title="$t('search.filters.languages')"
   />
 </template>
 
 
 <script lang="ts" setup>
 import { watch } from 'vue'
-import { useDAL, useConfig } from '@lectorium/mobile/app'
+import { useDAL } from '@lectorium/mobile/app'
 import { useAsyncState } from '@vueuse/core'
-import { TracksFilterChipWithListItems } from '@lectorium/mobile/library'
+import { TracksFilterChipWithListItems } from '@lectorium/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const dal = useDAL()
-const config = useConfig()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -30,16 +29,11 @@ const modelValue = defineModel<string[]>({ required: true, default: [] })
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { state, execute: refresh } = useAsyncState(
-  async () => await loadItems(), 
-  [], { immediate: true, shallow: false }
-)
+const { state } = useAsyncState(loadItems, [], { immediate: true, shallow: false })
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
-
-watch(config.appLanguage, async () => await refresh())
 
 watch(modelValue, (value) => {
   state.value.forEach((item) => {
@@ -52,13 +46,11 @@ watch(modelValue, (value) => {
 /* -------------------------------------------------------------------------- */
 
 async function loadItems() {
-  const allItems = await dal.locations.getAll()
+  const allItems = await dal.languages.getAll()
   return allItems
     .map((item) => ({
-      id: item._id.replace('location::', ''),
-      title: item.fullName[config.appLanguage.value] 
-             || item.fullName['en'] 
-             || item._id,
+      id: item._id.replace('language::', ''),
+      title: item.fullName + ' ' + item.icon,
       checked: false,
     }))
     .sort((a, b) => a.title.localeCompare(b.title))

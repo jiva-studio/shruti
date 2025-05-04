@@ -19,7 +19,7 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
 import { DateRange, DateRangeSelectorDialog } from '@lectorium/mobile/app'
-import { TracksFilterChip } from '@lectorium/mobile/library'
+import { TracksFilterChip } from '@lectorium/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

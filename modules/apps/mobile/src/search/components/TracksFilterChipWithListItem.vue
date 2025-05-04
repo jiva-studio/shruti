@@ -20,7 +20,7 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
 import { ListItemSelectorDialog, type ListItemSelectorItem } from '@lectorium/mobile/app'
-import { TracksFilterChip } from '@lectorium/mobile/library'
+import { TracksFilterChip } from '@lectorium/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

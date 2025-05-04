@@ -11,7 +11,7 @@
 
 
 <script lang="ts" setup>
-import { TracksFilterChipsList } from '@lectorium/mobile/library'
+import { TracksFilterChipsList } from '@lectorium/mobile/search'
 import AuthorsTracksFilterChip from './Chips/AuthorsTracksFilterChip.vue'
 import SourcesTracksFilterChip from './Chips/SourcesTracksFilterChip.vue'
 import LocationsTracksFilterChip from './Chips/LocationsTracksFilterChip.vue'

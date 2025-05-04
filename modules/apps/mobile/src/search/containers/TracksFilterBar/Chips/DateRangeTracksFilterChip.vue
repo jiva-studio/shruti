@@ -1,14 +1,14 @@
 <template>
   <TracksFilterChipWithDateRange 
     v-model="modelValue"
-    :title="$t('library.filters.dates')"
+    :title="$t('search.filters.dates')"
   />
 </template>
 
 
 <script lang="ts" setup>
 import { DateRange } from '@lectorium/mobile/app'
-import { TracksFilterChipWithDateRange } from '@lectorium/mobile/library'
+import { TracksFilterChipWithDateRange } from '@lectorium/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

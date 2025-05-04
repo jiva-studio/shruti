@@ -2,7 +2,7 @@
   <TracksFilterChipWithListItems 
     v-model="modelValue"
     :items="state"
-    :title="$t('library.filters.sources')"
+    :title="$t('search.filters.authors')"
   />
 </template>
 
@@ -11,7 +11,7 @@
 import { watch } from 'vue'
 import { useDAL, useConfig } from '@lectorium/mobile/app'
 import { useAsyncState } from '@vueuse/core'
-import { TracksFilterChipWithListItems } from '@lectorium/mobile/library'
+import { TracksFilterChipWithListItems } from '@lectorium/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -32,7 +32,7 @@ const modelValue = defineModel<string[]>({ required: true, default: [] })
 
 const { state, execute: refresh } = useAsyncState(
   async () => await loadItems(), 
-  [], { immediate: true, shallow: false }
+  [], { immediate: true }
 )
 
 /* -------------------------------------------------------------------------- */
@@ -52,10 +52,10 @@ watch(modelValue, (value) => {
 /* -------------------------------------------------------------------------- */
 
 async function loadItems() {
-  const allItems = await dal.sources.getAll()
+  const allItems = await dal.authors.getAll()
   return allItems
     .map((item) => ({
-      id: item._id.replace('source::', ''),
+      id: item._id.replace('author::', ''),
       title: item.fullName[config.appLanguage.value] 
              || item.fullName['en'] 
              || item._id,

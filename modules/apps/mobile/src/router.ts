@@ -26,6 +26,11 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@lectorium/mobile/library/pages/LibraryPage.vue')
       },
       {
+        path: 'search',
+        name: 'search',
+        component: () => import('@lectorium/mobile/search/pages/SearchPage.vue')
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('@lectorium/mobile/settings/pages/SettingsPage.vue')
