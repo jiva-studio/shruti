@@ -169,6 +169,26 @@ export abstract class DatabaseService<
       .map(doc => this._deserializer(doc as unknown as TDbScheme))
   }
 
+  async getIds(
+    request: GetManyRequest
+  ): Promise<string[]> {
+    const r = {
+      selector: {
+        ...this._scope,
+        ...request.selector
+      },
+      limit: request.limit ?? 25,
+      skip: request.skip ?? 0,
+      sort: request.sort ?? undefined,
+      fields: ['_id']
+    }
+    const response = await this._database.db.find(r)
+    if (response.warning) {
+      console.warn(response.warning, JSON.stringify(r))
+    }
+    return response.docs.map(doc => doc._id)
+  }
+
   /**
    * Retrieves the count of items in the database.
    * @returns A promise that resolves to the count of items in the database.

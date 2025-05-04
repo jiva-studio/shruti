@@ -21,7 +21,7 @@
     class="specify-criteria"
   >
     <IonNote>
-      {{ $t('library.specifySearchCriteria') }}
+      {{ $t('search.specifySearchCriteria') }}
     </IonNote>
   </IonItem>
 
@@ -37,7 +37,7 @@
 import { ref, toRefs, onMounted, watch } from 'vue'
 import { IonList, IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent, IonItem, IonNote } from '@ionic/vue'
 import { TracksListItem, TracksListItemData, useSafeOperation, useConfig } from '@shruti/mobile/app'
-import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@shruti/mobile/library'
+import { useUserAddsTrackToPlaylistScenario, useUserSearchesForTracksScenario } from '@shruti/mobile/search'
 import { mapTrackToPlaylistItem } from '@shruti/mobile/home/mappers/tracks'
 import { useTrackStateStore } from '@shruti/mobile/app/stores'
 

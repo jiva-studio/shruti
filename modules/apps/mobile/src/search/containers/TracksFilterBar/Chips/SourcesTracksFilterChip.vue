@@ -2,7 +2,7 @@
   <TracksFilterChipWithListItems 
     v-model="modelValue"
     :items="state"
-    :title="$t('library.filters.sources')"
+    :title="$t('search.filters.sources')"
   />
 </template>
 
@@ -11,7 +11,7 @@
 import { watch } from 'vue'
 import { useDAL, useConfig } from '@shruti/mobile/app'
 import { useAsyncState } from '@vueuse/core'
-import { TracksFilterChipWithListItems } from '@shruti/mobile/library'
+import { TracksFilterChipWithListItems } from '@shruti/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

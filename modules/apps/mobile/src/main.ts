@@ -65,6 +65,7 @@ PouchDB.plugin(PouchDBAdapterSqlLite)
 
 import { locale as localeApp } from './app/locale'
 import { locale as localeHome } from './home/locale'
+import { locale as localeSearch } from './search/locale'
 import { locale as localeLibrary } from './library/locale'
 import { locale as localeSettings } from './settings/locale'
 
@@ -75,12 +76,14 @@ const i18n = createI18n({
     en: {
       app: localeApp.en,
       home: localeHome.en,
+      search: localeSearch.en,
       library: localeLibrary.en,
       settings: localeSettings.en,
     },
     ru: {
       app: localeApp.ru,
       home: localeHome.ru,
+      search: localeSearch.ru,
       library: localeLibrary.ru,
       settings: localeSettings.ru,
     }
