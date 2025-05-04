@@ -1,16 +1,16 @@
 <template>
-  <SectionHeader :title="$t('home.youMightLike')" />
+  <SectionHeader :title="title" />
   <IonList lines="none">
     <TracksListItem 
       v-for="item in state"
       :key="item.trackId"
       :track-id="item.trackId"
       :title="item.title"
-      :author="item.author"
       :location="item.location"
       :references="item.references"
       :date="item.date"
-      :icon="item.icon"
+      :icon="trackStateStore.isInPlaylist(item.trackId) ? 'added' : 'none'"
+      :progress="trackStateStore.downloadProgress(item.trackId)"
       @click="onTrackClick(item.trackId)"
     />
   </IonList>
@@ -20,20 +20,39 @@
 <script setup lang="ts">
 import { useAsyncState } from '@vueuse/core'
 import { IonList } from '@ionic/vue'
-import { SectionHeader, useUserSeesSuggestionsScenario } from '@shruti/mobile/home'
+import { SectionHeader } from '@shruti/mobile/home'
 import { TracksListItem, type TracksListItemData, useConfig } from '@shruti/mobile/app'
 import { mapTrackToPlaylistItem } from '@shruti/mobile/home/mappers/tracks'
-import { useUserAddsTrackToPlaylistScenario } from '@shruti/mobile/library'
+import { useUserAddsTrackToPlaylistScenario } from '@shruti/mobile/search'
 import { useSafeOperation } from '@shruti/mobile/app'
+import { useRandomTracks } from '@shruti/mobile/library/composables/useRandomTracks'
+import { useTrackStateStore } from '@shruti/mobile/app/stores/useTrackStateStore'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const config = useConfig()
-const userSeesSuggestions = useUserSeesSuggestionsScenario()
-const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
+const randomTracks = useRandomTracks()
 const safeOperation = useSafeOperation()
+const trackStateStore = useTrackStateStore()
+const userAddsTrackToPlaylist = useUserAddsTrackToPlaylistScenario()
+
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+const props = defineProps<{
+  title: string
+  selector: object
+  max: number
+}>()
+
+const emit = defineEmits<{
+  (e: 'loading', value: boolean): void
+}>()
+
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -41,12 +60,12 @@ const safeOperation = useSafeOperation()
 
 const { state, execute: refresh } = useAsyncState(
   async () => await getSuggestions(),
-  [], { immediate: true, resetOnExecute: false }
+  [], { 
+    immediate: true, 
+    resetOnExecute: false,
+    onSuccess: () => emit('loading', false),
+  }
 )
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
 
 defineExpose({ refresh })
 
@@ -65,15 +84,11 @@ async function onTrackClick(trackId: string) {
 /* -------------------------------------------------------------------------- */
 
 async function getSuggestions() : Promise<TracksListItemData[]> {
-  try {
-    const suggestedTracks = await userSeesSuggestions.execute()
-    return await Promise.all(
-      suggestedTracks.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
-    )
-  } catch (error) {
-    // TODO: better error handling
-    console.error('Error fetching track suggestions:', error)
-    return []
-  }
+  const suggestedTracks = await randomTracks.get({ 
+    max: props.max, selector: props.selector 
+  })
+  return await Promise.all(
+    suggestedTracks.map(x => mapTrackToPlaylistItem(x, config.appLanguage.value))
+  )
 }
 </script>

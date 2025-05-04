@@ -2,13 +2,12 @@
   <TracksFilterChip 
     :applied="isApplied"
     @click="setDialogOpen(true)"
-    @remove="modelValue = undefined"
+    @remove="modelValue = { from: '', to: '' }"
   >
     {{ title }}
   </TracksFilterChip> 
-  <ListItemSelectorDialog
+  <DateRangeSelectorDialog
     :title="title"
-    :items="items"
     :open="isDialogOpen"
     :value="modelValue"
     @close="setDialogOpen(false)"
@@ -19,8 +18,8 @@
 
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
-import { ListItemSelectorDialog, type ListItemSelectorItem } from '@shruti/mobile/app'
-import { TracksFilterChip } from '@shruti/mobile/library'
+import { DateRange, DateRangeSelectorDialog } from '@shruti/mobile/app'
+import { TracksFilterChip } from '@shruti/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -28,18 +27,16 @@ import { TracksFilterChip } from '@shruti/mobile/library'
 
 defineProps<{
   title: string
-  items: ListItemSelectorItem[]
 }>()
 
-const modelValue = defineModel<string|undefined>({ required: true, default: undefined })
+const modelValue = defineModel<DateRange>({ required: true, default: { from: '', to: ''} })
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const isDialogOpen = ref(false)
-const isApplied = computed(() => modelValue.value !== undefined)
-
+const isApplied = computed(() => modelValue.value.from !== '' || modelValue.value.to !== '')
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */

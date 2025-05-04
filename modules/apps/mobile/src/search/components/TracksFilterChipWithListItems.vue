@@ -19,7 +19,7 @@
 <script lang="ts" setup>
 import { computed, ref, toRefs } from 'vue'
 import { ListItemsSelectorDialog, type SelectorDialogItem } from '@shruti/mobile/app'
-import { TracksFilterChip } from '@shruti/mobile/library'
+import { TracksFilterChip } from '@shruti/mobile/search'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

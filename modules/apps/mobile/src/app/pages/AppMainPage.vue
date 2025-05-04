@@ -15,12 +15,20 @@
           tab="tab2"
           href="/app/library"
         >
+          <IconLibrary />
+          <IonLabel>{{ $t('app.library') }}</IonLabel>
+        </IonTabButton>
+
+        <IonTabButton
+          tab="tab3"
+          href="/app/search"
+        >
           <IconSearch />
           <IonLabel>{{ $t('app.search') }}</IonLabel>
         </IonTabButton>
 
         <IonTabButton
-          tab="tab3"
+          tab="tab4"
           href="/app/settings"
         >
           <IconSettings />
@@ -34,6 +42,7 @@
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
 import { IconHome, IconSearch, IconSettings } from '@shruti/mobile/app'
+import IconLibrary from '@shruti/mobile/app/icons/IconLibrary.vue'
 </script>
 
 <style scoped>

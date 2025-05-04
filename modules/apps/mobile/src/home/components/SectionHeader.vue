@@ -1,7 +1,7 @@
 <template>
-  <h3 class="sectionHeader">
+  <h4 class="sectionHeader">
     {{ title }}
-  </h3>
+  </h4>
 </template>
 
 <script setup lang="ts">
@@ -14,5 +14,9 @@ defineProps<{
 .sectionHeader {
   margin-left: var(--ion-padding, 16px);
   margin-right: var(--ion-padding, 16px);
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

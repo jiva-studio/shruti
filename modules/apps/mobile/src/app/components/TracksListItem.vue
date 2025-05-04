@@ -58,12 +58,20 @@
         <span class="title">{{ title }}</span>
       </h3>
       <p class="details">
-        {{ author }}
+        <template v-if="author">
+          {{ author }} 
+          <template v-if="location">
+            •
+          </template>
+        </template>
         <template v-if="location">
-          • {{ location }}
+          {{ location }}
+          <template v-if="date">
+            •
+          </template>
         </template>
         <template v-if="date">
-          • {{ date }}
+          {{ date }}
         </template>
       </p>
     </IonLabel>
@@ -90,7 +98,7 @@ export type TrackListItemIcon =
 export type TracksListItemData = {
   trackId: string
   title: string
-  author: string
+  author?: string
   location?: string
   references: string[]
   date: string
@@ -104,6 +112,7 @@ const props = withDefaults(defineProps<
     enabled?: boolean
   }
 >(), {
+  author: '',
   dimmed: false,
   enabled: true, 
   location: undefined,
