@@ -68,14 +68,10 @@ public final class AudioPlayerPlugin extends Plugin {
             return;
         }
 
-        // Convert url to local path
-        File directory = getContext().getExternalFilesDir(".");
-        Uri localUrl = Uri.fromFile(new File(directory, url));
-
         // Start playing
         audioPlayerServiceConnection
           .getService()
-          .open(trackId, localUrl.toString(), title, author);
+          .open(trackId, url, title, author);
         call.resolve();
     }
 

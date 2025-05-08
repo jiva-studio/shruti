@@ -15,7 +15,7 @@
   <IonSearchbar
     v-else
     v-model="searchQuery"
-    placeholder="search"
+    :placeholder="placeholder"
     @input="(e) => searchQuery = e.target.value"
   />
 </template>

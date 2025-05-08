@@ -31,10 +31,14 @@ jobs:
       # ---------------------------------------------------------------------------- #
       #                                  Prepare Env                                 #
       # ---------------------------------------------------------------------------- #
+
+      - name: Set version with offset
+        run: echo "BUILD_NUMBER=$((${{ github.run_number }} + 200))" >> $GITHUB_ENV
       
       - name: 🚀 Run Prepare Mobile Action
         uses: ./.github/actions/mobile-prepare-env
         with:
+          buildId: ${{ env.BUILD_NUMBER }}
           bucketAccessKeyId: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
           bucketSecretAccessKey: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
           bucketEndpointUrl: ${{ secrets.BUCKET_ENDPOINT_URL }}

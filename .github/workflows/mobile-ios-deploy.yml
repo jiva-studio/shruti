@@ -32,9 +32,13 @@ jobs:
       #                                  Prepare Env                                 #
       # ---------------------------------------------------------------------------- #
       
+      - name: Set version with offset
+        run: echo "BUILD_NUMBER=$((${{ github.run_number }} + 200))" >> $GITHUB_ENV
+      
       - name: 🚀 Run Prepare Mobile Action
         uses: ./.github/actions/mobile-prepare-env
         with:
+          buildId: ${{ env.BUILD_NUMBER }}
           gemRequired: true
           bucketAccessKeyId: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
           bucketSecretAccessKey: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
@@ -66,7 +70,7 @@ jobs:
       - name: 👷 Build iOS App
         working-directory: modules/apps/mobile/ios/App
         env:
-          BUILD_ID: ${{ github.run_number }}
+          BUILD_ID: ${{ env.BUILD_NUMBER }}
           BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
           BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
           BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
