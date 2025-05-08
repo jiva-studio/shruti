@@ -105,6 +105,7 @@ platform :ios do
     
     pilot(
       distribute_external: true,
+      notify_external_testers: true,
       expire_previous_builds: false,
       groups: ["External"],
       changelog: commit[:message],

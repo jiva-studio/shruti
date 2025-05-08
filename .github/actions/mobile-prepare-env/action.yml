@@ -1,6 +1,9 @@
 name: '👷‍♂️ Prepare Mobile'
 description: 'Prepares the environment for mobile builds'
 inputs:
+  buildId:
+    description: 'Build ID for the current run'
+    required: true
   bucketAccessKeyId:
     description: 'Access key ID for the bucket'
     required: true
@@ -147,7 +150,7 @@ runs:
       shell: bash
       env:
         VERSION: ${{ steps.release_version.outputs.tag }}
-        BUILD_ID: ${{ github.run_number }}
+        BUILD_ID: ${{ inputs.buildId }}
       working-directory: modules/apps/mobile/android
       run: npx trapeze run configuration.yml -y --android
 

@@ -1,89 +1,36 @@
 <template>
   <IonItem
     :disabled="!enabled"
-    :class="{ 'dimmed': dimmed }"
+    :class="{ 'dimmed': dimmed, 'track': true }"
     @click="onItemClicked"
   >
-    <!-- Icon and radial progress -->
-    <Transition
-      name="fade"
-      mode="out-in"
-    >
-      <div
-        v-if="iconDisplayMode === 'icon'"
-        slot="end"
-        key="icon"
-      >
-        <IonIcon
-          aria-hidden="true"
-          :icon="statusIcon.icon"
-          :color="statusIcon.color"
-          class="icon"
-        />
-      </div>
-      <div
-        v-else-if="iconDisplayMode === 'progress'"
-        slot="end"
-        key="progress"
-      >
-        <RadialProgress
-          :stroke-width="4"
-          :inner-stroke-width="4"
-          :diameter="24"
-          :completed-steps="progress"
-          :total-steps="100"
-          :animate-speed="750"
-          start-color="var(--ion-color-primary)"
-          stop-color="var(--ion-color-primary)"
-          inner-stroke-color="var(--ion-color-light)"
-        />
-      </div>
-    </Transition>
-  
-    <!-- Track information -->
+    <TrackState
+      :state="icon"
+      :progress="progress"
+    />
     <IonLabel class="ion-text-nowrap">
-      <h3 class="title-block">
-        <span
-          v-if="references[0]"
-          class="reference"
-        >
-          {{ references[0] }}
-        </span>
-        <span
-          v-if="references?.length > 1"
-          class="reference extra"
-        >
-          +{{ references.length-1 }}
-        </span>
-        <span class="title">{{ title }}</span>
-      </h3>
-      <p class="details">
-        <template v-if="author">
-          {{ author }} 
-          <template v-if="location">
-            •
-          </template>
-        </template>
-        <template v-if="location">
-          {{ location }}
-          <template v-if="date">
-            •
-          </template>
-        </template>
-        <template v-if="date">
-          {{ date }}
-        </template>
-      </p>
+      <TrackInfo
+        class="info"
+        :title="title"
+        :references="references"
+      /> 
+      <TrackDetails 
+        class="details"  
+        :author="author"
+        :location="location"
+        :date="date"
+      />
     </IonLabel>
   </IonItem>
 </template>
 
 
 <script setup lang="ts">
-import { computed, toRefs, ref, watch } from 'vue'
-import { IonItem, IonLabel, IonIcon } from '@ionic/vue'
-import { closeCircle, checkmarkCircle, checkmarkDoneCircle } from 'ionicons/icons'
-import RadialProgress from 'vue3-radial-progress'
+import { toRefs } from 'vue'
+import { IonItem, IonLabel } from '@ionic/vue'
+import TrackState from './TrackState.vue'
+import TrackDetails from './TrackDetails.vue'
+import TrackInfo from './TrackInfo.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -127,38 +74,9 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-type StatusIconMap = {
-  [key in TrackListItemIcon]: { icon?: string, color?: string }
-}
-
-const statusIconMaps: StatusIconMap = {
-  'none':      { icon: undefined,           color: undefined },
-  'failed':    { icon: closeCircle,         color: 'danger'  },
-  'added':     { icon: checkmarkCircle,     color: 'primary' },
-  'completed': { icon: checkmarkDoneCircle, color: 'medium' },
-}
-const statusIcon = computed(
-  () => statusIconMaps[props.icon]
-)
 
 const { progress } = toRefs(props) 
-const iconDisplayMode = ref<string>('none')
 
-/* -------------------------------------------------------------------------- */
-/*                                    Hooks                                   */
-/* -------------------------------------------------------------------------- */
-
-watch((): [TrackListItemIcon, number|undefined] => [props.icon, props.progress], ([i, p]) => {
-  if (p !== undefined && p < 100) { 
-    iconDisplayMode.value = 'progress'
-  } else { 
-    if (iconDisplayMode.value === 'progress') {
-      setTimeout(() => { iconDisplayMode.value = i !== 'none' ? 'icon' : 'none' },  1000)
-    } else {
-      iconDisplayMode.value = i !== 'none' ? 'icon' : 'none'
-    }
-  }
-}, { immediate: true })
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -170,45 +88,14 @@ function onItemClicked() {
 </script>
 
 <style scoped>
-.title-block {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.track,
+.info,
+.details {
+  opacity: 1;
+  transition: all 1s ease;
 }
 
-.title {
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
-.reference {
-  background-color: var(--ion-color-medium);
-  font-weight: bold;
-  color: var(--ion-color-light);
-  border-radius: 5px;
-  padding: 0px 5px;
-  font-size: 0.8em;
-  font-stretch: condensed;
-}
-
-.reference.extra {
-  font-stretch: condensed;
-  opacity: .5;
-}
-
-.dimmed .reference.extra {
-  font-stretch: condensed;
-  opacity: .2;
-}
-
-.icon {
-  width: 24px;
-  height: 24px;
-}
-
-.dimmed .title,
-.dimmed .reference,
-.dimmed .icon,
+.dimmed .info,
 .dimmed .details {
   opacity: .4;
 }
