@@ -1,0 +1,4 @@
+git_url("git@github.com:akdasa-studios/lectorium-secrets.git")
+storage_mode("git")
+type("appstore") # The default type, can be: appstore, adhoc, enterprise or development
+team_id(ENV['APPLE_STORE_TEAM_ID'])

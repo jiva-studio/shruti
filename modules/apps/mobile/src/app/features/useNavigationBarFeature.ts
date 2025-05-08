@@ -1,8 +1,11 @@
 import { watch } from 'vue'
 import { NavigationBar } from '@squareetlabs/capacitor-navigation-bar'
 import { usePlayerTranscript } from '@lectorium/mobile/player'
+import { Capacitor } from '@capacitor/core'
 
 export async function useNavigationBarFeature() {
+  if (Capacitor.getPlatform() !== 'android') { return }
+  
 
   /* -------------------------------------------------------------------------- */
   /*                                    State                                   */

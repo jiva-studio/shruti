@@ -9,6 +9,10 @@
       "path": "./.github"
     },
     {
+      "name": "🐞 Lectorium :: Patches",
+      "path": "./modules/patches"
+    },
+    {
       "name": "👑 Apps :: Admin",
       "path": "./modules/apps/admin"
     },
@@ -27,10 +31,6 @@
     {
       "name": "📀 Libraries :: Protocol",
       "path": "./modules/libs/protocol"
-    },
-    {
-      "name": "📀 Libraries :: Downloader",
-      "path": "./modules/libs/downloader"
     },
     {
       "name": "📀 Libraries :: Audio Player",
@@ -68,39 +68,6 @@
   "tasks": {
     "version": "2.0.0",
     "tasks": [
-      {
-        "label": "👷 Downloader Plugin :: Build",
-        "detail": "Build the downloader plugin",
-        "command": "npm",
-        "type": "shell",
-        "args": [
-          "run",
-          "build"
-        ],
-        "presentation": {
-          "reveal": "always"
-        },
-        "problemMatcher": [
-          {
-            "owner": "typescript",
-            "fileLocation": [
-              "relative",
-              "${workspaceFolder}"
-            ],
-            "pattern": {
-              "regexp": "^\\s*([a-zA-Z0-9_\\-\\.]+)\\((\\d+)\\)\\s*:\\s*(.*)$",
-              "file": 1,
-              "line": 2,
-              "message": 3
-            }
-          }
-        ],
-        "group": "build",
-        "isBackground": false,
-        "options": {
-          "cwd": "/workspaces/lectorium/modules/libs/downloader"
-        }
-      },
       {
         "label": "👷 Audio Player Plugin :: Build",
         "detail": "Build the audio player plugin",

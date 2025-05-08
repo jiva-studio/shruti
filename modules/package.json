@@ -1,6 +1,9 @@
 {
   "name": "lectorium",
   "private": true,
+  "scripts": {
+    "postinstall": "patch-package"
+  },
   "workspaces": [
     "apps/*",
     "apps/mobile",

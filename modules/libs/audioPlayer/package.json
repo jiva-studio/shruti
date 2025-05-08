@@ -16,6 +16,9 @@
     "LectoriumAudioPlayer.podspec"
   ],
   "author": "",
+  "repository": {
+    "url": "https://github.com/akdasa-studios/lectorium"
+  },
   "keywords": [
     "capacitor",
     "plugin",

@@ -1,11 +1,12 @@
 import { createGlobalState } from '@vueuse/core'
-import { DownloaderService, MediaService, useDAL } from '@lectorium/mobile/app'
+import { MediaService, useDAL, useDownloaderService } from '@lectorium/mobile/app'
 
 export const useMediaService = createGlobalState(() => {
   const dal = useDAL()
+  const downloaderService = useDownloaderService()
 
   return new MediaService(
     dal.mediaItems,
-    new DownloaderService(),
+    downloaderService,
   )
 })

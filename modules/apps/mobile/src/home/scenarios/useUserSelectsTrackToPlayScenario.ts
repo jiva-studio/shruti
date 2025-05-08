@@ -1,6 +1,7 @@
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { useConfig, useDAL } from '@lectorium/mobile/app'
 import { usePlayer, usePlayerControls, usePlayerTranscript } from '@lectorium/mobile/player'
+import { Filesystem, Directory } from '@capacitor/filesystem'
 
 
 export function useUserSelectsTrackToPlayScenario() {
@@ -28,9 +29,14 @@ export function useUserSelectsTrackToPlayScenario() {
 
     // open track with Audio Player plugin and
     // pass required information for media session widget
+    const r = await Filesystem.getUri({
+      path: track.audio.original.path, // TODO: use audio type [original, normalized, etc]
+      directory: Directory.External,
+    })
+
     await player.open({
       trackId: trackId,
-      url: track.audio.original.path, // TODO: use audio type [original, normalized, etc]
+      url: r.uri, 
       title: track.title[config.appLanguage.value]
         || track.title['en'],
       author: author.fullName[config.appLanguage.value] 

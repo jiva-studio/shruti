@@ -1,0 +1,79 @@
+name: Mobile / iOS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/apps/mobile/**"
+      - "modules/libs/audioPlayer/**"
+      - "modules/package.json"
+      - "modules/package-lock.json"
+      - ".github/workflows/mobile-ios-deploy.yml"
+  
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: akdasa-studios
+
+jobs:
+  build:
+    environment: staging
+    name: Deploy
+    runs-on: macos-15
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          fetch-tags: true
+      
+      # ---------------------------------------------------------------------------- #
+      #                                  Prepare Env                                 #
+      # ---------------------------------------------------------------------------- #
+      
+      - name: 🚀 Run Prepare Mobile Action
+        uses: ./.github/actions/mobile-prepare-env
+        with:
+          gemRequired: true
+          bucketAccessKeyId: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          bucketSecretAccessKey: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          bucketEndpointUrl: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          bucketRegionName: ${{ secrets.BUCKET_REGION_NAME }}
+          bucketName: ${{ secrets.BUCKET_NAME }}
+          sentryDsn: ${{ secrets.SENTRY_DSN }}
+          apiUrl: ${{ secrets.API_URL }}
+          databaseUrl: ${{ secrets.DATABASE_URL }}
+          readonlyAuthToken: ${{ secrets.READONLY_AUTH_TOKEN }}
+          appleCertificates: ${{ secrets.APPLE_CERTIFICATES }}
+
+      # ---------------------------------------------------------------------------- #
+      #                                 Build Plugins                                #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 👷 Build Audio Player Plugin
+        working-directory: modules/libs/audioPlayer
+        run: npm i && npm run build
+
+      # ---------------------------------------------------------------------------- #
+      #                                   Build App                                  #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 👷 Build Ionic App
+        working-directory: modules/apps/mobile
+        run: npm i && npm run build+sync
+
+      - name: 👷 Build iOS App
+        working-directory: modules/apps/mobile/ios/App
+        env:
+          BUILD_ID: ${{ github.run_number }}
+          BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
+          BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
+          BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
+          BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+          APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+        run: |
+          bundle exec fastlane staging    

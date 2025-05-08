@@ -41,15 +41,14 @@ import {
   useConfigPersistenceFeature,
   useNavigationBarFeature,
   useSafeAreaFeature,
-  useStatusBarFeature,
   useCleanupMediaItemsFeature,
   useCleanupFilesFeature,
   useMarkCompletedPlaylistItem,
   useRemoveCompletedPlaylistItemsFeature,
   useSentryFeature,
   useDatabase,
-  useDownloaderFeature,
-  useRestoreTracksStatuses,
+  useShowTrackDownloadingStatusFeature,
+  useShowTrackInPlaylistStatusFeature,
 } from './app'
 import { 
   useSyncAudioPlayerPluginStateFeature, 
@@ -110,9 +109,6 @@ router.isReady().then(async () => {
   console.log('useNavigationBarFeature...')
   await useNavigationBarFeature()
 
-  console.log('useStatusBarFeature...')
-  await useStatusBarFeature()
-
   console.log('useSafeAreaFeature...')
   await useSafeAreaFeature()
 
@@ -128,10 +124,9 @@ router.isReady().then(async () => {
   console.log('useRemoveCompletedPlaylistItemsFeature...')
   useRemoveCompletedPlaylistItemsFeature()
 
-  console.log('useDownloaderFeature...')
-  await useDownloaderFeature().init()
-
-  await useRestoreTracksStatuses().init()
+  console.log('useShowTrackDownloadingStatusFeature...')
+  await useShowTrackDownloadingStatusFeature().init()
+  await useShowTrackInPlaylistStatusFeature().init()
 
   // Player //
 

@@ -19,7 +19,6 @@ dependencies {
     implementation project(':sentry-capacitor')
     implementation project(':squareetlabs-capacitor-navigation-bar')
     implementation project(':capacitor-plugin-safe-area')
-    implementation project(':lectorium-downloader')
 
 }
 

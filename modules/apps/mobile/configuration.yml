@@ -3,6 +3,8 @@ vars:
     default: "0.0.1"
   BUILD_ID:
     default: 1
+  DEVELOPMENT_TEAM:
+    default: "YourTeamID"
 
 platforms:
   # ios:
@@ -10,3 +12,8 @@ platforms:
   android:
     versionName: $VERSION
     versionCode: $BUILD_ID
+  ios:
+    targets:
+      App:
+        buildSettings:
+          DEVELOPMENT_TEAM: $DEVELOPMENT_TEAM

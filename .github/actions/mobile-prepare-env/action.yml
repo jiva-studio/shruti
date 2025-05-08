@@ -1,0 +1,171 @@
+name: '👷‍♂️ Prepare Mobile'
+description: 'Prepares the environment for mobile builds'
+inputs:
+  bucketAccessKeyId:
+    description: 'Access key ID for the bucket'
+    required: true
+  bucketSecretAccessKey:
+    description: 'Secret access key for the bucket'
+    required: true
+  bucketEndpointUrl:
+    description: 'Endpoint URL for the bucket'
+    required: true
+  bucketRegionName:
+    description: 'Region name for the bucket'
+    required: true
+  bucketName:
+    description: 'Name of the bucket'
+    required: true
+  sentryDsn:
+    description: 'Sentry DSN for error tracking'
+    required: true
+  apiUrl:
+    description: 'API URL for the application'
+    required: true
+  databaseUrl:
+    description: 'Database URL for the application'
+    required: true
+  readonlyAuthToken:
+    description: 'Readonly authentication token'
+    required: true
+  appleCertificates:
+    description: 'Apple certificates for iOS builds'
+    required: false
+  googleCertificates:
+    description: 'Google certificates for Android builds'
+    required: false
+  javaRequired:
+    description: 'Java required for the build'
+    required: false
+  gemRequired:
+    description: 'Gem required for the build'
+    required: false
+
+runs:
+  using: 'composite'
+  steps:
+  
+    # ---------------------------------------------------------------------------- #
+    #                                     Misc                                     #
+    # ---------------------------------------------------------------------------- #
+
+    - name: Get Release Version
+      id: release_version
+      shell: bash
+      run: |
+        echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1) | sed 's/^v//')" >> $GITHUB_OUTPUT
+
+    # ---------------------------------------------------------------------------- #
+    #                                 Dependencies                                 #
+    # ---------------------------------------------------------------------------- #
+
+    # ----------------------------------- Java ----------------------------------- #
+
+    - name: 💾 Install Java
+      if: inputs.javaRequired == 'true'
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: 🤖 Install Android SDK
+      if: inputs.javaRequired == 'true'
+      uses: android-actions/setup-android@v2
+
+    - name: 📝 Accept Android SDK licenses
+      if: inputs.javaRequired == 'true'
+      shell: bash
+      run: yes "" | sdkmanager --licenses || true
+
+    # ---------------------------------- Node.js --------------------------------- #
+
+    - name: 🧰 Install Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: 'modules/package-lock.json'
+
+    - name: 📦 Install Node Dependencies
+      working-directory: modules
+      shell: bash
+      run: npm ci
+
+    # ------------------------------------ Gem ----------------------------------- #
+
+    - name: 📦 Install Gem Dependencies
+      if: inputs.gemRequired == 'true'
+      working-directory: modules/apps/mobile/ios/App
+      shell: bash
+      run: |
+        sudo gem install bundler
+        bundle install
+
+    # ----------------------------------- Tools ---------------------------------- #
+
+    - name: 📦 Install Script Dependencies
+      working-directory: scripts
+      shell: bash
+      run: |
+        python3 -m venv venv
+        source venv/bin/activate
+        pip3 install -r requirements.txt
+
+    # ---------------------------------------------------------------------------- #
+    #                              Download Artifacts                              #
+    # ---------------------------------------------------------------------------- #
+
+    - name: 📥 Download Database Artifacts
+      shell: bash
+      env:
+        BUCKET_ACCESS_KEY_ID: ${{ inputs.bucketAccessKeyId }}
+        BUCKET_SECRET_ACCESS_KEY: ${{ inputs.bucketSecretAccessKey }}
+        BUCKET_ENDPOINT_URL: ${{ inputs.bucketEndpointUrl }}
+        BUCKET_REGION_NAME: ${{ inputs.bucketRegionName }}
+        BUCKET_NAME: ${{ inputs.bucketName }}
+      run: |
+        source scripts/venv/bin/activate
+        python3 scripts/download-app-database-artifacts.py
+
+    # ---------------------------------------------------------------------------- #
+    #                                  Update Env                                  #
+    # ---------------------------------------------------------------------------- #
+
+    - name: 🌎 Update Env
+      shell: bash
+      env:
+        RELEASE: ${{ steps.release_version.outputs.tag }}
+        DIST: ${{ github.sha }}
+        SENTRY_DSN: ${{ inputs.sentryDsn }}
+        API_URL: ${{ inputs.apiUrl }}
+        DATABASE_URL: ${{ inputs.databaseUrl }}
+        BUCKET_NAME: ${{ inputs.bucketName }}
+        READONLY_AUTH_TOKEN: ${{ inputs.readonlyAuthToken }}
+      run: python3 scripts/update-envs.py
+
+    - name: 🧮 Update Version
+      shell: bash
+      env:
+        VERSION: ${{ steps.release_version.outputs.tag }}
+        BUILD_ID: ${{ github.run_number }}
+      working-directory: modules/apps/mobile/android
+      run: npx trapeze run configuration.yml -y --android
+
+    # ---------------------------------------------------------------------------- #
+    #                                 Certificates                                 #
+    # ---------------------------------------------------------------------------- #
+
+    - name: 📜 Install iOS Certificates
+      if: inputs.appleCertificates != ''
+      shell: bash
+      working-directory: modules/apps/mobile/ios/App/fastlane
+      env:
+        APPLE_CERTIFICATES: ${{ inputs.appleCertificates }}
+      run: |
+        echo ${{ inputs.appleCertificates }} | base64 -d > output.zip && unzip output.zip
+
+    - name: 📜 Install Android Certificates
+      if: inputs.googleCertificates != ''
+      shell: bash
+      working-directory: data/keys/apk
+      run: echo "${{ inputs.googleCertificates }}" | base64 -d > mobile.jks

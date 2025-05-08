@@ -1,5 +1,7 @@
-import { Downloader } from 'lectorium-downloader'
+import { DownloaderService } from '../services/DownloaderService'
+
+ const DOWNLOADER_SERVICE = new DownloaderService()
  
  export function useDownloaderService() {
-  return Downloader
+  return DOWNLOADER_SERVICE
  }
