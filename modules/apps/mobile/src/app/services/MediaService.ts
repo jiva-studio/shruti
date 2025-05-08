@@ -36,27 +36,35 @@ export class MediaService {
     const mediaItem = await this.mediaItems.findOne({ 
       localPath: request.destination 
     })
-    if (mediaItem && mediaItem.taskStatus === 'failed') {
+    if (mediaItem && mediaItem.state === 'failed') {
       // Media item failed, remove it and start download again
       await this.mediaItems.removeOne(mediaItem._id)
     } else if (mediaItem) {
       return // Media item already exists, do nothing
     }
-      
-    // start download
-    console.log('Download starting: ', JSON.stringify(request))
-    const downloaderResponse = await this.downloader.enqueue(request)
-
+     
     // add to media items
+    const newMediaItemId = useIdGenerator().generateId(22)
     await this.mediaItems.addOne({
-      _id: useIdGenerator().generateId(22),
+      _id: newMediaItemId, 
       type: 'mediaItem',
       title: request.title,
       remoteUrl: request.url,
       localPath: request.destination,
       trackId: request.trackId,
-      taskId: downloaderResponse.taskId,
-      taskStatus: 'running',
+      state: 'pending'
+    })
+
+    // start download
+    console.log('Download starting: ', JSON.stringify(request))
+    await this.downloader.enqueue({
+      url: request.url,
+      destination: request.destination,
+      title: request.title,
+      meta: {
+        trackId: request.trackId,
+        mediaItemId: newMediaItemId,
+      }
     })
   }
 }

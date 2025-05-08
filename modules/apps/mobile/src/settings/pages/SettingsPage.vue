@@ -1,15 +1,13 @@
 <template>
   <Page>
-    <IonContent>
-      <IonList>
-        <AppLanguageSettingsItem />
-      </IonList>
-    </IonContent>
+    <IonList>
+      <AppLanguageSettingsItem />
+    </IonList>
   </Page>
 </template>
 
 <script setup lang="ts">
-import { IonList, IonContent } from '@ionic/vue'
+import { IonList } from '@ionic/vue'
 import { Page } from '@shruti/mobile/app'
 import AppLanguageSettingsItem from '../containers/AppLanguageSettingsItem.vue'
 </script>

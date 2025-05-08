@@ -1,0 +1,129 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :staging do
+    commit = last_git_commit
+    tag = last_git_tag.gsub(/^v/, '')
+
+    # Set App Store Connect API Key to be able to upload
+    # the build to App Store and submit it to TestFlight
+    app_store_connect_api_key(
+      key_id: ENV['APPLE_STORE_CONNECT_API_KEY_ID'],
+      issuer_id: ENV['APPLE_STORE_CONNECT_API_KEY_ISSUER'],
+      key_content: ENV['APPLE_STORE_CONNECT_API_KEY'],
+      duration: 1200,
+      in_house: false
+    )
+
+    create_keychain(
+      name: "temp_keychain", 
+      password: "temp_123456", 
+      default_keychain: true, 
+      unlock: true, 
+      timeout: 3600, 
+      lock_when_sleeps: false
+    )
+    
+    # ---------------------------------------------------------------------------- #
+    #                               Configure Project                              #
+    # ---------------------------------------------------------------------------- #
+    
+    update_project_team(
+      path: "App.xcodeproj",
+      teamid: ENV["APPLE_STORE_TEAM_ID"],
+    )
+
+    increment_build_number(
+      build_number: ENV["BUILD_ID"],
+      xcodeproj: "App.xcodeproj"
+    )
+    increment_version_number(
+      version_number: tag,
+      xcodeproj: "App.xcodeproj"
+    )
+
+    # ---------------------------------------------------------------------------- #
+    #                    Certificates and Provisioning Profiles                    #
+    # ---------------------------------------------------------------------------- #
+
+    import_certificate(
+      certificate_path: "fastlane/AKd Studios.p12",
+      keychain_name: "temp_keychain",
+      keychain_password: "temp_123456",
+      certificate_password: ENV["CERTIFICATE_PASSWORD"] || "_H0m3w0r1d_"
+    )
+    import_certificate(
+      certificate_path: "fastlane/development.cer",
+      keychain_name: "temp_keychain",
+      keychain_password: "temp_123456",
+    )
+    import_certificate(
+      certificate_path: "fastlane/distribution.cer",
+      keychain_name: "temp_keychain",
+      keychain_password: "temp_123456",
+    )
+    install_provisioning_profile(
+      path: "fastlane/Shruti_Development.mobileprovision"
+    )
+    install_provisioning_profile(
+      path: "fastlane/Shruti_Distribution.mobileprovision"
+    )
+
+    # ---------------------------------------------------------------------------- #
+    #                                     Build                                    #
+    # ---------------------------------------------------------------------------- #
+    
+    build_app(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      export_method: "app-store",
+      export_options: {
+        signingStyle: "manual",
+        teamID: ENV["APPLE_STORE_TEAM_ID"],
+        provisioningProfiles: {
+          "studio.jiva.shruti" => "Shruti Distribution"
+        },
+      }
+    )
+
+    # ---------------------------------------------------------------------------- #
+    #                                    Deploy                                    #
+    # ---------------------------------------------------------------------------- #
+    
+    pilot(
+      distribute_external: true,
+      expire_previous_builds: false,
+      groups: ["External"],
+      changelog: commit[:message],
+      beta_app_description: \
+        'Shruti is your pocket companion for Vedic wisdom. ' + \
+        'Explore a rich library of spiritual lectures by A. C. Bhaktivedanta Swami ' + \
+        'Prabhupada and other spiritual masters — all Vedic knowledge ' + \
+        'right in your pocket.',
+      beta_app_feedback_email: ENV["BETA_FEEDBACK_EMAIL"],
+      first_name: ENV["BETA_CONTACT_FIRST_NAME"],
+      last_name: ENV["BETA_CONTACT_LAST_NAME"],
+      demo_account_required: false,
+      beta_app_review_info: {
+        contact_email: ENV["BETA_FEEDBACK_EMAIL"],
+        contact_first_name: ENV["BETA_CONTACT_FIRST_NAME"],
+        contact_last_name: ENV["BETA_CONTACT_LAST_NAME"],
+        contact_phone: ENV["BETA_CONTACT_PHONE_NUMBER"],
+        notes: "<3 thank you for reviewing"
+      },
+    )
+  end
+end

@@ -1,0 +1,2 @@
+app_identifier("studio.jiva.shruti")
+team_id(ENV['APPLE_STORE_TEAM_ID'])

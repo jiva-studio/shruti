@@ -1,4 +1,3 @@
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { createGlobalState } from '@vueuse/core'
 import { ref } from 'vue'
 
@@ -11,7 +10,6 @@ export const usePlayerTranscript = createGlobalState(() => {
   /* -------------------------------------------------------------------------- */
     
   async function toggleTranscriptOpen() {
-    await Haptics.impact({ style: ImpactStyle.Light })
     isOpen.value = !isOpen.value
   }
 

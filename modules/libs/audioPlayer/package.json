@@ -16,6 +16,9 @@
     "ShrutiAudioPlayer.podspec"
   ],
   "author": "",
+  "repository": {
+    "url": "https://github.com/jiva-studio/shruti"
+  },
   "keywords": [
     "capacitor",
     "plugin",

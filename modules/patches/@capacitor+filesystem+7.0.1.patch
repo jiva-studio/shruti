@@ -1,0 +1,15 @@
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
+index 51c7ba2..ccd7f79 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
+@@ -309,7 +309,9 @@ import Capacitor
+                     let timeElapsed = currentTimestamp - lastEmitTimestamp
+ 
+                     if totalBytesExpectedToWrite > 0 {
+-                        if timeElapsed >= 0.1 {
++                        let isTimeToEmit = timeElapsed >= 0.1
++                        let isLastChunk = totalBytesWritten == totalBytesExpectedToWrite
++                        if isTimeToEmit || isLastChunk {
+                             emitter(totalBytesWritten, totalBytesExpectedToWrite)
+                             lastEmitTimestamp = currentTimestamp
+                         }
