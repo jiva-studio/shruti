@@ -8,7 +8,7 @@ on:
       - "modules/apps/admin/**"
       - "modules/libs/dal/**"
       - ".github/workflows/admin-build.yml"
-      - ".github/workflows/admin-deploy-staging.yml"
+      - ".github/workflows/admin-deploy.yml"
 
 env:
   REGISTRY: ghcr.io
@@ -18,7 +18,7 @@ jobs:
   deploy:
     environment:
       name: staging
-    name: 🚀 Deploy to Staging
+    name: Deploy
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
