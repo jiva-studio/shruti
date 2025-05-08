@@ -23,12 +23,7 @@ export type MediaItem = {
   trackId: string
 
   /**
-   * The downloader task ID associated with this media item.
-   */
-  taskId: string
-
-  /**
    * The status of the media item.
    */
-  taskStatus: 'running' | 'successful' | 'failed'
+  state: 'pending' | 'ready' | 'failed'
 }

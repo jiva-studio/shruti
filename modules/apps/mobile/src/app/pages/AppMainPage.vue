@@ -11,13 +11,13 @@
           <IonLabel>{{ $t('app.home') }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton
+        <!-- <IonTabButton
           tab="tab2"
           href="/app/library"
         >
           <IconLibrary />
           <IonLabel>{{ $t('app.library') }}</IonLabel>
-        </IonTabButton>
+        </IonTabButton> -->
 
         <IonTabButton
           tab="tab3"
@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
 import { IconHome, IconSearch, IconSettings } from '@shruti/mobile/app'
-import IconLibrary from '@shruti/mobile/app/icons/IconLibrary.vue'
+// import IconLibrary from '@shruti/mobile/app/icons/IconLibrary.vue'
 </script>
 
 <style scoped>

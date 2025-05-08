@@ -1,6 +1,6 @@
 <template>
   <IonPage>
-    <!-- <div class="header" /> -->
+    <div class="header" />
     
     <IonContent :fullscreen="true">
       <IonSpinner
@@ -48,7 +48,12 @@ ion-content {
   right: 0px;
   top: 0px;
   height: var(--ion-safe-area-top);
-  background: rgb(var(--ion-background-color-rgb, 255, 255, 255));
+  background: linear-gradient(
+    to bottom,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255),  1) 0%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), .8) 35%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255),  0) 100%
+  );
   z-index: 1;
 }
 

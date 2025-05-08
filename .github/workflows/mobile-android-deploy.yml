@@ -1,0 +1,96 @@
+name: Mobile / Android
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/apps/mobile/**"
+      - "modules/libs/audioPlayer/**"
+      - "modules/package.json"
+      - "modules/package-lock.json"
+      - ".github/workflows/mobile-android-deploy.yml"
+  
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: akdasa-studios
+
+jobs:
+  build:
+    environment: staging
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+          fetch-tags: true
+
+      # ---------------------------------------------------------------------------- #
+      #                                  Prepare Env                                 #
+      # ---------------------------------------------------------------------------- #
+      
+      - name: 🚀 Run Prepare Mobile Action
+        uses: ./.github/actions/mobile-prepare-env
+        with:
+          bucketAccessKeyId: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          bucketSecretAccessKey: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          bucketEndpointUrl: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          bucketRegionName: ${{ secrets.BUCKET_REGION_NAME }}
+          bucketName: ${{ secrets.BUCKET_NAME }}
+          sentryDsn: ${{ secrets.SENTRY_DSN }}
+          apiUrl: ${{ secrets.API_URL }}
+          databaseUrl: ${{ secrets.DATABASE_URL }}
+          javaRequired: true
+          gemRequired: false
+          readonlyAuthToken: ${{ secrets.READONLY_AUTH_TOKEN }}
+          googleCertificates: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+
+      # ---------------------------------------------------------------------------- #
+      #                                 Build Plugins                                #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 👷 Build Audio Player Plugin
+        working-directory: modules/libs/audioPlayer
+        run: npm i && npm run build
+
+      # ---------------------------------------------------------------------------- #
+      #                                   Build App                                  #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 👷 Build Ionic App
+        working-directory: modules/apps/mobile
+        run: npm i && npm run build+sync
+
+      - name: 👷 Build Android ABB
+        working-directory: modules/apps/mobile/android
+        run: |
+              npx cap build android \
+              --keystorepath ../../../../data/keys/apk/mobile.jks \
+              --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
+              --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
+              --androidreleasetype AAB
+    
+      - name: 👷 Build Android APK (Debug)
+        working-directory: modules/apps/mobile/android
+        run: ./gradlew assembleDebug
+
+      # ---------------------------------------------------------------------------- #
+      #                                   Artifacts                                  #
+      # ---------------------------------------------------------------------------- #
+
+      - name: 📤 Upload S3
+        uses: jakejarvis/s3-sync-action@v0.5.1
+        with:
+          args: --acl public-read --follow-symlinks --delete
+        env:
+          AWS_S3_BUCKET: ${{ secrets.BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          AWS_S3_ENDPOINT: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          AWS_REGION: ${{ secrets.BUCKET_REGION_NAME }}
+          SOURCE_DIR: modules/apps/mobile/android/app/build/outputs/
+          DEST_DIR: artifacts/mobile-app/${{ steps.release_version.outputs.tag }}

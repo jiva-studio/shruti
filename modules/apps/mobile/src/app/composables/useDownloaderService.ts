@@ -1,5 +1,7 @@
-import { Downloader } from 'shruti-downloader'
+import { DownloaderService } from '../services/DownloaderService'
+
+ const DOWNLOADER_SERVICE = new DownloaderService()
  
  export function useDownloaderService() {
-  return Downloader
+  return DOWNLOADER_SERVICE
  }

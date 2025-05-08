@@ -39,6 +39,7 @@ export function useUserAddsTrackToPlaylistScenario() {
         || 'Unknown'
 
       // Add track to playlist
+      trackStateStore.setStatus(trackId, { downloadProgress: 0 })
       await dal.playlistItems.addOne({
         _id: trackId,
         trackId: trackId,
@@ -46,10 +47,6 @@ export function useUserAddsTrackToPlaylistScenario() {
         played: 0,
         addedAt: Date.now(),
         completedAt: undefined
-      })
-      trackStateStore.setStatus(trackId, { 
-        inPlaylist: true, 
-        downloadProgress: 0,
       })
 
       const transcripts = Object.values(track.transcripts)
@@ -90,12 +87,10 @@ export function useUserAddsTrackToPlaylistScenario() {
     } catch {
       // Something wrong happened
       trackStateStore.setStatus(trackId, { 
-        inPlaylist: true, 
         downloadFailed: true,
         downloadProgress: undefined
       }) 
     }
-    
   }
 
   /* -------------------------------------------------------------------------- */
