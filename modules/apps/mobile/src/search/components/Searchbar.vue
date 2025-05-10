@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="isAndroid"
+    v-if="!isIOS"
     class="search"
   >
     <IonInput
@@ -42,7 +42,7 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const isAndroid = isPlatform('android')
+const isIOS = isPlatform('ios')
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
