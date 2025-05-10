@@ -48,6 +48,8 @@
         v-model:references="track.references"
         :errors="annotations.references"
       />
+
+      <TagsField v-model:tags="track.tags" :items="tags" />
     </div>
 
     <template #footer>
@@ -83,6 +85,7 @@ import LocationField from './Fields/LocationField.vue'
 import ReferencesField from './Fields/ReferencesField.vue'
 import DateField from './Fields/DateField.vue'
 import LanguageField from './Fields/LanguageField.vue'
+import TagsField from './Fields/TagsField.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -104,6 +107,7 @@ export type EditInboxTrack = {
   location: string
   languagesExtract: string[]
   languagesTranslateInto: string[]
+  tags?: string[]
 }
 
 export type EditInboxTrackAnnotation = {
@@ -114,6 +118,7 @@ export type EditInboxTrackAnnotation = {
 const props = defineProps<{
   authors: { label: string; value: string }[]
   locations: { label: string; value: string }[]
+  tags: { label: string; value: string }[]
   annotations: Record<string, EditInboxTrackAnnotation[]>
 }>()
 

@@ -49,3 +49,6 @@ class TrackInbox(TypedDict):
 
     # Tasks status
     tasks: dict[str, str] | None
+
+    # Tags
+    tags: list[str] | None

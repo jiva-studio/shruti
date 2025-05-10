@@ -11,6 +11,7 @@ export type InboxTrackDbScheme = {
   title: NormalizedValue<string>;
   author: NormalizedValue<DocumentId>;
   location: NormalizedValue<DocumentId>;
+  tags: string[] | undefined;
   languagesExtract: string[];
   languagesTranslateInto: string[];
 };

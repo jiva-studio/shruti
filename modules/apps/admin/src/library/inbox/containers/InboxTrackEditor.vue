@@ -5,6 +5,7 @@
     :annotations="annotations"
     :authors="authors"
     :locations="locations"
+    :tags="tags"
     @save="onSave"
     @start-processing="onStartProcessing"
   />
@@ -17,6 +18,7 @@ import {
   useAuthorsService,
   useInboxTracksService,
   useLocationsService,
+  useTagsService,
 } from '@lectorium/admin/shared'
 import {
   type EditInboxTrack,
@@ -39,6 +41,7 @@ import {
 const authorsService = useAuthorsService()
 const locationsService = useLocationsService()
 const inboxTracksService = useInboxTracksService()
+const tagsService = useTagsService()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -59,6 +62,9 @@ const { state: authors } = useAsyncState(getAuthors, [], {
   resetOnExecute: false,
 })
 const { state: locations } = useAsyncState(getLocations, [], {
+  resetOnExecute: false,
+})
+const { state: tags } = useAsyncState(getTags, [], {
   resetOnExecute: false,
 })
 
@@ -121,6 +127,7 @@ async function onTrackLoad(trackId: string | undefined) {
     title: inboxTrack.title.normalized ?? '',
     author: inboxTrack.author.normalized ?? '',
     location: inboxTrack.location.normalized ?? '',
+    tags: inboxTrack.tags ?? [],
     languagesExtract: inboxTrack.languagesExtract ?? [],
     languagesTranslateInto: inboxTrack.languagesTranslateInto ?? [],
   }
@@ -144,6 +151,14 @@ async function getLocations() {
   return locations.map((x) => ({
     label: x.fullName['en'],
     value: x._id.replace('location::', ''),
+  }))
+}
+
+async function getTags() {
+  const locations = await tagsService.getAll({ limit: 100 })
+  return locations.map((x) => ({
+    label: x.fullName['en'],
+    value: x._id.replace('tag::', ''),
   }))
 }
 

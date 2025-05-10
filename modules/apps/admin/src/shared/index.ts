@@ -12,6 +12,7 @@ export * from './composables/useAuthorsService'
 export * from './composables/useLocationsService'
 export * from './composables/useInboxTracksService'
 export * from './composables/useSourcesService'
+export * from './composables/useTagsService'
 export * from './composables/useSync'
 export * from './composables/useConfig'
 
