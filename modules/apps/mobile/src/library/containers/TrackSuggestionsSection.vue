@@ -8,6 +8,7 @@
       :title="item.title"
       :location="item.location"
       :references="item.references"
+      :tags="item.tags"
       :date="item.date"
       :icon="trackStateStore.isInPlaylist(item.trackId) ? 'added' : 'none'"
       :progress="trackStateStore.downloadProgress(item.trackId)"

@@ -2,7 +2,8 @@ import { createGlobalState } from '@vueuse/core'
 import { useDatabase } from '@lectorium/mobile/app'
 import { 
   AuthorsService, LanguagesService, LocationsService, MediaItemsService,
-  PlaylistItemsService, SourcesService, IndexService, TracksService
+  PlaylistItemsService, SourcesService, IndexService, TracksService,
+  TagsService
 
 } from '@lectorium/dal/index'
 
@@ -18,6 +19,7 @@ export const useDAL = createGlobalState(() => {
     locations: new LocationsService(database.local.dictionary),
     sources: new SourcesService(database.local.dictionary),
     languages: new LanguagesService(database.local.dictionary),
+    tags: new TagsService(database.local.dictionary),
 
     // Index
     index: new IndexService(database.local.index),

@@ -13,6 +13,7 @@
         class="info"
         :title="title"
         :references="references"
+        :tags="tags"
       /> 
       <TrackDetails 
         class="details"  
@@ -48,6 +49,7 @@ export type TracksListItemData = {
   author?: string
   location?: string
   references: string[]
+  tags: string[]
   date: string
   icon: TrackListItemIcon
   dimmed?: boolean

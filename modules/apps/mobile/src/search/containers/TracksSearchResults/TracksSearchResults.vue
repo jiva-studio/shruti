@@ -9,6 +9,7 @@
       :author="item.author"
       :location="item.location"
       :references="item.references"
+      :tags="item.tags"
       :icon="trackStateStore.isInPlaylist(item.trackId) ? 'added' : 'none'"
       :progress="trackStateStore.downloadProgress(item.trackId)"
       @click="onTrackClick(item.trackId)"

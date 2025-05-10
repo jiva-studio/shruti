@@ -14,6 +14,9 @@ export async function mapTrackToPlaylistItem(
     title: mapTrackTitle(track.title, language),
     author: await mapAuthorFullNameById(track.author, language), 
     location: await mapLocationFullNameById(track.location, language),
+    tags: (track.tags || []).length >= 1
+      ? await Promise.all((track.tags || []).map(tag => mapTagFullNameById(tag, language)))
+      : [],
     references: track.references?.length >= 1 
       ? await Promise.all(track.references.map(ref => mapReference(ref, language)))
       : [],
@@ -99,6 +102,23 @@ async function mapLocationFullNameById(
     return location.fullName[language] || location.fullName['en'] || locationId
   } catch (error) {
     return locationId
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                    Tags                                    */
+/* -------------------------------------------------------------------------- */
+
+async function mapTagFullNameById(
+  tagId: string,
+  language: string = 'en'
+) {
+  try {
+    const dal = useDAL()
+    const tag = await dal.tags.getOne('tag::' + tagId)
+    return tag.fullName[language] || tag.fullName['en'] || tagId
+  } catch (error) {
+    return tagId
   }
 }
 
