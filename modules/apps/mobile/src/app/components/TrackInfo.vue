@@ -12,6 +12,12 @@
     >
       +{{ references.length-1 }}
     </span>
+    <span
+      v-if="tags[0] && references?.length === 0"
+      class="reference"
+    >
+      {{ tags[0] }}
+    </span>
     <span class="title">{{ title }}</span>
   </h3>
 </template>
@@ -21,6 +27,7 @@
 defineProps<{
   title: string
   references: string[]
+  tags: string[]
 }>()
 </script>
 
