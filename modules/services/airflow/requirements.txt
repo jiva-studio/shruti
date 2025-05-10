@@ -1,7 +1,6 @@
 deepgram-sdk
 anthropic
 jellyfish
-vastai
 nltk
 mutagen
 cuid2
