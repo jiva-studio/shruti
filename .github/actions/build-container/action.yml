@@ -37,5 +37,5 @@ runs:
       with:
         context: ./modules
         file: ${{ inputs.file }}
-        tags: ${{ inputs.tags}}
+        tags: ${{ inputs.tags }}
         load: true
