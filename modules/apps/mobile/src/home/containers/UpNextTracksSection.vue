@@ -21,6 +21,7 @@
           :author="item.author"
           :location="item.location"
           :references="item.references"
+          :tags="item.tags"
           :date="item.date"
           :icon="trackStateStore.isCompleted(item.trackId) ? 'completed' : trackStateStore.downloadFailed(item.trackId) ? 'failed' : 'none'"
           :progress="trackStateStore.downloadProgress(item.trackId)"
