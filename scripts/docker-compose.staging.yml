@@ -10,6 +10,10 @@ services:
     volumes:
       - ../data/keys/jwt/:/etc/lectorium/keys/
  
+  landing:
+    image: ghcr.io/akdasa-studios/lectorium-landing:staging
+    volumes:
+      - ../data/landing/res:/usr/share/nginx/html/res
 
   admin:
     image: ghcr.io/akdasa-studios/lectorium-admin:staging

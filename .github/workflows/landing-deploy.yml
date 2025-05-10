@@ -1,0 +1,41 @@
+name: Landing
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "modules/apps/landing/**"
+      - "modules/libs/dal/**"
+      - ".github/workflows/landing-build.yml"
+      - ".github/workflows/landing-deploy.yml"
+
+env:
+  REGISTRY: ghcr.io
+  ORGANIZATION: akdasa-studios
+
+jobs:
+  deploy:
+    environment:
+      name: staging
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      
+      - name: 👷‍♂️ Build Container
+        uses: ./.github/actions/build-container
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          file: modules/apps/landing/Dockerfile
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-landing:staging
+
+      - name: ⬆️ Push staging Image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-landing:staging

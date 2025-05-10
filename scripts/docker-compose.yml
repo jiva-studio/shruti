@@ -60,6 +60,12 @@ services:
     networks:
       - lectorium
 
+  landing:
+    expose:
+      - "80:80"
+    networks:
+      - lectorium
+  
   gateway:
     ports:
       - "80:80"
@@ -69,6 +75,7 @@ services:
       - api
       - admin
       - couchdb
+      - landing
     networks:
       - lectorium
 
