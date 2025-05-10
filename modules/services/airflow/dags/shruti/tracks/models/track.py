@@ -26,3 +26,4 @@ class Track(TypedDict):
   audio: dict[str, TrackAudio]
   transcripts: dict[str, TrackTranscript]
   languages: list[TrackLanguage]
+  tags: list[str] | None

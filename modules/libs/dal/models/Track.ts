@@ -22,4 +22,5 @@ export type Track = {
   transcripts: Record<string, {
     path: string;
   }>;
+  tags?: string[];
 }

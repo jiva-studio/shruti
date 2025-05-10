@@ -168,6 +168,7 @@ def track_save():
         original_language: track_inbox["title"]["normalized"],
       } | (titles if titles else {}),
       "references": track_inbox["references"]["normalized"],
+      "tags": track_inbox["tags"],
       "audio": {
         afi["type"]: {
           "path": afi['path'],

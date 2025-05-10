@@ -19,5 +19,6 @@ export function mapEditInboxTrackToInboxTrack(
   inboxTrack.languagesExtract = editInboxTrack.languagesExtract
   inboxTrack.languagesTranslateInto = editInboxTrack.languagesTranslateInto
   inboxTrack.status = editInboxTrack.status
+  inboxTrack.tags = editInboxTrack.tags
   return inboxTrack
 }

@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - "modules/apps/landing/**"
-      - "modules/libs/dal/**"
       - ".github/workflows/landing-build.yml"
       - ".github/workflows/landing-deploy-staging.yml"
   

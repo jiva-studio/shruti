@@ -20,6 +20,7 @@ export type InboxTrack = {
   title: NormalizedValue<string>;
   author: NormalizedValue<DocumentId>;
   location: NormalizedValue<DocumentId>;
+  tags: string[] | undefined;
   languagesExtract: string[];
   languagesTranslateInto: string[];
 };

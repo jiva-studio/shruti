@@ -27,6 +27,7 @@ type TracksDBSchema = {
     type: "original" | "generated" | "edited";
   }[];
   transcripts: Record<string, { path: string }>;
+  tags?: string[];
 }
 
 const trackSerializer = (item: Track): TracksDBSchema => item
