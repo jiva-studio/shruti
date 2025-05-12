@@ -16,10 +16,14 @@ keys = [
     "artifacts/bundled-data/index.db",
     "artifacts/bundled-data/dictionary.db",
 ]
-output_path = "./modules/apps/mobile/android/app/src/main/assets/databases/"
+output_paths = [
+  "./modules/apps/mobile/android/app/src/main/assets/databases/"
+  "./modules/apps/mobile/ios/App/App/databases/",
+]
 
 # Ensure output directory exists
-os.makedirs(output_path, exist_ok=True)
+for output_path in output_paths:
+  os.makedirs(output_path, exist_ok=True)
 
 # Create S3 client
 s3 = boto3.client(
@@ -40,14 +44,14 @@ for key in keys:
     )
 
     filename = os.path.basename(key)
-    output_file = os.path.join(output_path, filename)
 
-    print(f"Downloading {key} to {output_file}...")
-
+    print(f"Downloading {key}")
     response = requests.get(signed_url)
     response.raise_for_status()
 
-    with open(output_file, "wb") as f:
-        f.write(response.content)
+    for output_path in output_paths:
+      output_file = os.path.join(output_path, filename)
+      with open(output_file, "wb") as f:
+          f.write(response.content)
 
     print(f"✅ Downloaded {filename}")
