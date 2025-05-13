@@ -30,6 +30,7 @@ LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/shruti"
 LABEL org.opencontainers.image.authors="AKd Studios"
 
 COPY --from=build /akd-stidios/shruti/apps/landing/dist /usr/share/nginx/html
+COPY --from=base  /akd-stidios/shruti/apps/landing/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
