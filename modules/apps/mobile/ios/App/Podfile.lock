@@ -20,6 +20,12 @@ PODS:
     - CapacitorCordova
   - LectoriumAudioPlayer (0.0.1):
     - Capacitor
+  - PurchasesHybridCommon (13.28.0):
+    - RevenueCat (= 5.21.0)
+  - RevenueCat (5.21.0)
+  - RevenuecatPurchasesCapacitor (10.2.3):
+    - Capacitor
+    - PurchasesHybridCommon (= 13.28.0)
   - Sentry/HybridSDK (8.48.0)
   - SentryCapacitor (1.4.0):
     - Capacitor
@@ -39,11 +45,14 @@ DEPENDENCIES:
   - "CapacitorStatusBar (from `../../../../node_modules/@capacitor/status-bar`)"
   - CordovaPlugins (from `../capacitor-cordova-ios-plugins`)
   - LectoriumAudioPlayer (from `../../../../libs/audioPlayer`)
+  - "RevenuecatPurchasesCapacitor (from `../../../../node_modules/@revenuecat/purchases-capacitor`)"
   - "SentryCapacitor (from `../../../../node_modules/@sentry/capacitor`)"
   - "SquareetlabsCapacitorNavigationBar (from `../../../../node_modules/@squareetlabs/capacitor-navigation-bar`)"
 
 SPEC REPOS:
   trunk:
+    - PurchasesHybridCommon
+    - RevenueCat
     - Sentry
 
 EXTERNAL SOURCES:
@@ -69,6 +78,8 @@ EXTERNAL SOURCES:
     :path: "../capacitor-cordova-ios-plugins"
   LectoriumAudioPlayer:
     :path: "../../../../libs/audioPlayer"
+  RevenuecatPurchasesCapacitor:
+    :path: "../../../../node_modules/@revenuecat/purchases-capacitor"
   SentryCapacitor:
     :path: "../../../../node_modules/@sentry/capacitor"
   SquareetlabsCapacitorNavigationBar:
@@ -86,10 +97,13 @@ SPEC CHECKSUMS:
   CapacitorStatusBar: 6e7af040d8fc4dd655999819625cae9c2d74c36f
   CordovaPlugins: be68e3a329c1f58ec4461ab75ba0c73191495188
   LectoriumAudioPlayer: 3639f83e1f08face878e0610530fbbdbc8ad867c
+  PurchasesHybridCommon: f0d344e7073314988b3d98fbb9da69db85aaff38
+  RevenueCat: 57028a8673201fdaacd1354065e8adbcba5739a4
+  RevenuecatPurchasesCapacitor: 6ff3a8bdcc3bf5510d563298ece22a3950f4e896
   Sentry: 1ca8405451040482877dcd344dfa3ef80b646631
   SentryCapacitor: 5555ac5b8c2cf3fbdac6973e7d1d62c9b7d5277b
   SquareetlabsCapacitorNavigationBar: fd191c658abe8e5033e7091587f939f71347fd72
 
-PODFILE CHECKSUM: 74fe10ede7ccf1aab87bb8bb8ed5bb77a7e1f20b
+PODFILE CHECKSUM: f608f42736acc45175e17f973a736c0e3fe7f8b2
 
 COCOAPODS: 1.16.2

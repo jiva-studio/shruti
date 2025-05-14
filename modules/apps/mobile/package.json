@@ -24,6 +24,7 @@
     "@ionic/vue": "^8.0.0",
     "@ionic/vue-router": "^8.0.0",
     "@lectorium/audio-player": "^0.0.1",
+    "@revenuecat/purchases-capacitor": "^10.2.3",
     "@sentry/capacitor": "^1.4.0",
     "@sentry/vue": "^8.55.0",
     "@squareetlabs/capacitor-navigation-bar": "^1.1.0",

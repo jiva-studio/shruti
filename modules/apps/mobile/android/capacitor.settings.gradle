@@ -23,6 +23,9 @@ project(':capacitor-status-bar').projectDir = new File('../../../node_modules/@c
 include ':lectorium-audio-player'
 project(':lectorium-audio-player').projectDir = new File('../../../libs/audioPlayer/android')
 
+include ':revenuecat-purchases-capacitor'
+project(':revenuecat-purchases-capacitor').projectDir = new File('../../../node_modules/@revenuecat/purchases-capacitor/android')
+
 include ':sentry-capacitor'
 project(':sentry-capacitor').projectDir = new File('../../../node_modules/@sentry/capacitor/android')
 

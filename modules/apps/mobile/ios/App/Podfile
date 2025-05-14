@@ -18,6 +18,7 @@ def capacitor_pods
   pod 'CapacitorKeyboard', :path => '../../../../node_modules/@capacitor/keyboard'
   pod 'CapacitorStatusBar', :path => '../../../../node_modules/@capacitor/status-bar'
   pod 'LectoriumAudioPlayer', :path => '../../../../libs/audioPlayer'
+  pod 'RevenuecatPurchasesCapacitor', :path => '../../../../node_modules/@revenuecat/purchases-capacitor'
   pod 'SentryCapacitor', :path => '../../../../node_modules/@sentry/capacitor'
   pod 'SquareetlabsCapacitorNavigationBar', :path => '../../../../node_modules/@squareetlabs/capacitor-navigation-bar'
   pod 'CapacitorPluginSafeArea', :path => '../../../../node_modules/capacitor-plugin-safe-area'
