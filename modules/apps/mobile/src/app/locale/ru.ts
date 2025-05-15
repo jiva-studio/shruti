@@ -7,4 +7,5 @@ export const ru = {
   to: 'До',
   apply: 'Применить',
   select: 'Выбрать',
+  cancel: 'Отмена',
 }

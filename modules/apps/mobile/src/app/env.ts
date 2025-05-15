@@ -5,6 +5,7 @@ export const ENVIRONMENT = {
   apiUrl: 'https://api.lectorium.dev/',
   databaseUrl: 'https://couchdb.lectorium.dev/',
   bucketName: 'lectorium-dev',
+  revenueCatKey: '',
   readonlyAuthToken: 
     'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyZWFkb25seSIsImlhdCI6MTc0NDk4' +
     'MjczOCwiZXhwIjozNzQ0OTg2MzM4LCJyb2xlcyI6WyJyZWFkb25seSJdfQ.FUHE5gM6cI7H-RzsfM' +
