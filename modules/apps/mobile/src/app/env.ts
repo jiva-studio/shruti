@@ -5,6 +5,7 @@ export const ENVIRONMENT = {
   apiUrl: 'https://api.shruti.dev/',
   databaseUrl: 'https://couchdb.shruti.dev/',
   bucketName: 'shruti-dev',
+  revenueCatKey: '',
   readonlyAuthToken: 
     '' +
     '' +
