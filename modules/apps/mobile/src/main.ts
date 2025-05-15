@@ -67,6 +67,7 @@ import { locale as localeHome } from './home/locale'
 import { locale as localeSearch } from './search/locale'
 import { locale as localeLibrary } from './library/locale'
 import { locale as localeSettings } from './settings/locale'
+import { useInAppPurchasesFeatures } from './app/features/useInAppPurchasesFeatures'
 
 const i18n = createI18n({
   locale: 'ru',
@@ -134,6 +135,8 @@ router.isReady().then(async () => {
   useSetPlayerControlsInfoFeature()
 
   // Rest //
+
+  useInAppPurchasesFeatures().init()
 
   const config = useConfig()
   i18n.global.locale = config.appLanguage.value as 'en' | 'ru'

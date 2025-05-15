@@ -7,4 +7,5 @@ export const en = {
   to: 'To',
   apply: 'Apply',
   select: 'Select',
+  cancel: 'Cancel',
 }

@@ -43,6 +43,9 @@ inputs:
   gemRequired:
     description: 'Gem required for the build'
     required: false
+  revenueCatKey:
+    description: 'RevenueCat key'
+    required: false
 
 runs:
   using: 'composite'
@@ -144,6 +147,7 @@ runs:
         DATABASE_URL: ${{ inputs.databaseUrl }}
         BUCKET_NAME: ${{ inputs.bucketName }}
         READONLY_AUTH_TOKEN: ${{ inputs.readonlyAuthToken }}
+        REVENUE_CAT_KEY: ${{ inputs.revenueCatKey }}
       run: python3 scripts/update-envs.py
 
     - name: 🧮 Update Version

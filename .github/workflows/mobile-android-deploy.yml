@@ -51,6 +51,7 @@ jobs:
           gemRequired: false
           readonlyAuthToken: ${{ secrets.READONLY_AUTH_TOKEN }}
           googleCertificates: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+          revenueCatKey: ${{ secrets.GOOGLE_REVENUE_CAT_KEY }}
 
       # ---------------------------------------------------------------------------- #
       #                                 Build Plugins                                #
