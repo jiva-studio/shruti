@@ -8,4 +8,6 @@ export const en = {
   apply: 'Apply',
   select: 'Select',
   cancel: 'Cancel',
+  soon: 'Soon',
+  back: 'Back',
 }

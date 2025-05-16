@@ -8,4 +8,6 @@ export const ru = {
   apply: 'Применить',
   select: 'Выбрать',
   cancel: 'Отмена',
+  soon: 'Скоро',
+  back: 'Назад',
 }
