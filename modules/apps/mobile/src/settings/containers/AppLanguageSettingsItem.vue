@@ -5,6 +5,10 @@
     lines="none"
     @click="open = true"
   >
+    <div slot="start">
+      🌎
+    </div>
+    
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t('settings.appLanguage.title') }}</h2>
       <p>{{ $t('settings.appLanguage.description') }}</p>
