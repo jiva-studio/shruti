@@ -41,7 +41,7 @@ const isVisible = computed(() => {
 
 <style scoped>
 .player {
-  z-index: 100000;
+  z-index: 10000;
   position: fixed;
   transition: all .5s ease-in-out;
 }

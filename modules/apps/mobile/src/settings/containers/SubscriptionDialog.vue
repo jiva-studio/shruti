@@ -25,7 +25,7 @@
       </div>
 
       <!-- Subscription Plans -->
-      <template v-if="!activePlan">
+      <template v-if="!activePlan && subscriptionPlans.length > 0">
         <SubscriptionPlanListItem 
           v-for="plan in subscriptionPlans"
           :key="plan.packageId"
@@ -48,7 +48,6 @@
      
       <!-- Back Button -->
       <IonButton
-        size="small"
         expand="block"
         color="medium"
         fill="clear"
