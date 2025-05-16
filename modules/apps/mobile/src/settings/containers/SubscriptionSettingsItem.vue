@@ -5,6 +5,9 @@
     lines="none"
     @click="open = true"
   >
+    <div slot="start">
+      👑
+    </div>
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t('settings.subscription.title') }}</h2>
       <p>{{ $t('settings.subscription.description') }}</p>
