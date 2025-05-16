@@ -1,6 +1,7 @@
 <template>
   <TranscriptDialog
-    v-model:open="isOpen" 
+    v-model:open="isOpen"
+    class="transcript-dialog"
   >
     <LanguageSelector 
       v-if="langAvailable.length > 1"
@@ -200,6 +201,10 @@ async function loadTranscriptBlocks(
 </script>
 
 <style scoped>
+.transcript-dialog {
+  z-index: 9000 !important;
+}
+
 .transcript-text {
   transition: all .2s linear;
 }
