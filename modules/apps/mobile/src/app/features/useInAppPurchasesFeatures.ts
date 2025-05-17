@@ -12,6 +12,9 @@ export function useInAppPurchasesFeatures() {
     if (Capacitor.getPlatform() === 'web') {
       return
     }
+    if (Capacitor.getPlatform() == 'ios') {
+      return
+    }
     if (!ENVIRONMENT.revenueCatKey) {
       return
     }
