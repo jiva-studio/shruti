@@ -17,7 +17,7 @@ keys = [
     "artifacts/bundled-data/dictionary.db",
 ]
 output_paths = [
-  "./modules/apps/mobile/android/app/src/main/assets/databases/"
+  "./modules/apps/mobile/android/app/src/main/assets/databases/",
   "./modules/apps/mobile/ios/App/App/databases/",
 ]
 
@@ -43,9 +43,8 @@ for key in keys:
         ExpiresIn=3600  # 1 hour
     )
 
-    filename = os.path.basename(key)
-
     print(f"Downloading {key}")
+    filename = os.path.basename(key)
     response = requests.get(signed_url)
     response.raise_for_status()
 
