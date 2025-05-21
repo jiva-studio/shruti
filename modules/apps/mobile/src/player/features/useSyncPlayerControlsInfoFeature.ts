@@ -48,5 +48,6 @@ export function useSetPlayerControlsInfoFeature() {
     playerControls.title.value =
       track.title[language]
         || track.title['en']
+        || track.title[Object.keys(track.title)[0]]
   }
 }
