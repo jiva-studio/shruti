@@ -4,7 +4,7 @@ import { ENVIRONMENT } from '@lectorium/mobile/app/env'
 
 
 export const useConfig = createGlobalState(() => {
-  const appLanguage  = ref('ru')
+  const appLanguage  = ref('??')
   const authToken    = ref(ENVIRONMENT.readonlyAuthToken)
   const apiUrl       = ref(ENVIRONMENT.apiUrl)
   const databaseUrl  = ref(ENVIRONMENT.databaseUrl)

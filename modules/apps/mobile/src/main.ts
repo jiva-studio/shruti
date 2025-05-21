@@ -68,6 +68,7 @@ import { locale as localeSearch } from './search/locale'
 import { locale as localeLibrary } from './library/locale'
 import { locale as localeSettings } from './settings/locale'
 import { useInAppPurchasesFeatures } from './app/features/useInAppPurchasesFeatures'
+import { Device } from '@capacitor/device'
 
 const i18n = createI18n({
   locale: 'ru',
@@ -139,6 +140,14 @@ router.isReady().then(async () => {
   useInAppPurchasesFeatures().init()
 
   const config = useConfig()
+  if (config.appLanguage.value === '??') {
+    const languageCode = await Device.getLanguageCode()
+    if (['en', 'ru'].includes(languageCode.value)) {
+      config.appLanguage.value = languageCode.value
+    } else {
+      config.appLanguage.value = 'ru'
+    }
+  }
   i18n.global.locale = config.appLanguage.value as 'en' | 'ru'
 
   // Steps //
