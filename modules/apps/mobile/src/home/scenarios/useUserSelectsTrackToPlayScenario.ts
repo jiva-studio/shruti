@@ -38,7 +38,8 @@ export function useUserSelectsTrackToPlayScenario() {
       trackId: trackId,
       url: r.uri, 
       title: track.title[config.appLanguage.value]
-        || track.title['en'],
+        || track.title['en']
+        || track.title[Object.keys(track.title)[0]],
       author: author.fullName[config.appLanguage.value] 
         || author.fullName['en'] 
         || track.author
