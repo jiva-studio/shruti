@@ -34,13 +34,13 @@ const trackSerializer = (item: Track): TracksDBSchema => item
 const trackDeserializer = (document: TracksDBSchema): Track => document
 
 export type FindTracksRequest = {
-  ids: string[] | undefined
-  authors: string[]
-  sources: string[]
-  locations: string[]
-  languages: string[]
-  duration: { min: number; max: number }
-  dates: { from: string; to: string }
+  ids?: string[]
+  authors?: string[]
+  sources?: string[]
+  locations?: string[]
+  languages?: string[]
+  duration?: { min: number; max: number }
+  dates?: { from: string; to: string }
   limit: number
   skip: number
 }
@@ -65,21 +65,21 @@ export class TracksService extends DatabaseService<Track, TracksDBSchema> {
       selector._id = { $in: request.ids }
     }
 
-    if (request.authors.length > 0) { 
+    if (request.authors) { 
       selector.author = { $in: request.authors } 
     }
 
-    if (request.sources.length > 0) {
+    if (request.sources) {
       selector.references = { 
         $elemMatch: { 0: { $in: request.sources } }
       } 
     }
 
-    if (request.locations.length > 0) { 
+    if (request.locations) { 
       selector.location = { $in: request.locations } 
     }
        
-    if (request.languages.length > 0) {
+    if (request.languages) {
       selector.languages = {
         $elemMatch: {
           language: { $in: request.languages },
@@ -99,7 +99,7 @@ export class TracksService extends DatabaseService<Track, TracksDBSchema> {
       if (request.dates.to)   { selector.date.$lte = date(request.dates.to) }
     }
 
-    if (request.duration.min > 0 || request.duration.max > 0) {
+    if (request.duration) {
       selector.audio = {
         "original.duration": {
           "$gt": request.duration.min,

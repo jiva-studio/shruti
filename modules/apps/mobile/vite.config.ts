@@ -9,34 +9,12 @@ import { defineConfig } from 'vite'
 // https://vitejs.dev/config/
 export default defineConfig({
   build: {
+    minify: true,
     rollupOptions: {
       treeshake: true,
       output: {
-        manualChunks(id) {
-
-          if (id.includes('@ionic/core/components/')) {
-            const match = id.match(/@ionic\/core\/components\/([^/]+)/)
-            if (match) {
-              return `vendor-ionic-core-${match[1]}`
-            }
-            return 'vendor-ionic-core'
-          }
-
-          
-          // vendor
-          if (id.includes('@ionic/core')) { return 'vendor-ionic-core' }
-          if (id.includes('@ionic/vue')) { return 'vendor-ionic-vue' }
-          if (id.includes('pouchdb')) { return 'vendor-pouchdb' }
-
-          // app :: modules
-          // if (id.includes('src/app')) { return 'shruti-app' }
-          // if (id.includes('src/home')) { return 'shruti-home' }
-          // if (id.includes('src/library')) { return 'shruti-library' }
-          // if (id.includes('src/player')) { return 'shruti-player' }
-          // if (id.includes('src/settings')) { return 'shruti-settings' }
-
-          // app :: libs
-          if (id.includes('/modules/libs/dal/')) { return 'shruti-dal' }
+        manualChunks() {
+          return 'shruti'
         }
       },
     },

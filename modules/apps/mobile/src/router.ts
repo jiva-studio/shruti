@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router'
 import { RouteRecordRaw } from 'vue-router'
-import { AppMainPage } from '@shruti/mobile/app'
+import { default as AppMainPage } from '@shruti/mobile/pages/AppMainPage.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -18,22 +18,17 @@ const routes: Array<RouteRecordRaw> = [
       {
         path: 'home',
         name: 'home',
-        component: () => import('@shruti/mobile/home/pages/HomePage.vue')
-      },
-      {
-        path: 'library',
-        name: 'library',
-        component: () => import('@shruti/mobile/library/pages/LibraryPage.vue')
+        component: () => import('@shruti/mobile/pages/HomePage.vue')
       },
       {
         path: 'search',
         name: 'search',
-        component: () => import('@shruti/mobile/search/pages/SearchPage.vue')
+        component: () => import('@shruti/mobile/pages/SearchPage.vue')
       },
       {
         path: 'settings',
         name: 'settings',
-        component: () => import('@shruti/mobile/settings/pages/SettingsPage.vue')
+        component: () => import('@shruti/mobile/pages/SettingsPage.vue')
       }
     ]
   }

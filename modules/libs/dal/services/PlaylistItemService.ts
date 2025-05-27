@@ -9,9 +9,9 @@ type PlaylistItemDBSchema = {
   _id: string
   type: "playlistItem"
   trackId: string
-  played: number
   addedAt: number
   completedAt: number | undefined
+  archivedAt: number | undefined
 }
 
 const playlistItemSerializer   = (item: PlaylistItem): PlaylistItemDBSchema => item
@@ -28,5 +28,14 @@ export class PlaylistItemsService extends DatabaseService<
       playlistItemSerializer,
       playlistItemDeserializer, { type: "playlistItem" },
     )
+  }
+
+  /**
+   * Archives a playlist item by setting its archivedAt 
+   * property to the current timestamp.
+   * @param id The ID of the playlist item to archive. 
+   */
+  async archiveOne(id: string): Promise<void> {
+    await this.patchOne(id, { archivedAt: Date.now() })
   }
 }
