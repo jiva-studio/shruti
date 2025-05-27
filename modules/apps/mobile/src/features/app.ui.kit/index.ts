@@ -1,0 +1,6 @@
+export { default as IconHome } from './components/IconHome.vue'
+export { default as IconSettings } from './components/IconSettings.vue'
+export { default as IconSearch } from './components/IconSearch.vue'
+export { default as IconBookmark } from './components/IconBookmark.vue'
+export { default as IconCaretDown } from './components/IconCaretDown.vue'
+export { default as IconPlay } from './components/IconPlay.vue'
