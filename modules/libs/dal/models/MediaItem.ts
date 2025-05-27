@@ -3,11 +3,6 @@ export type MediaItem = {
   type: 'mediaItem'
 
   /**
-   * Title of the media item.
-   */
-  title: string
-
-  /**
    * Remote URL of a media item to be downloaded.
    */
   remoteUrl: string

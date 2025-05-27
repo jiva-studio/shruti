@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Lectorium</string>
-    <string name="title_activity_main">Lectorium</string>
+    <string name="app_name">Shruti</string>
+    <string name="title_activity_main">Shruti</string>
     <string name="package_name">studio.jiva.shruti</string>
     <string name="custom_url_scheme">studio.jiva.shruti</string>
 </resources>

@@ -8,7 +8,6 @@ import { DatabaseService } from './DatabaseService'
 type MediaItemDBSchema = {
   _id: string
   type: "mediaItem"
-  title: string
   remoteUrl: string
   localPath: string
   trackId: string,

@@ -10,8 +10,10 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationBarHolder, useSyncService, useSafeOperation } from '@lectorium/mobile/app'
-import { Player, Transcript } from '@lectorium/mobile/player'
+import { NavigationBarHolder } from '@lectorium/mobile/features/app.appearance'
+import { Player, Transcript } from '@lectorium/mobile/features/player'
+import { useSyncService } from './features/app.services.sync'
+import { useSafeOperation } from './features/app.core'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

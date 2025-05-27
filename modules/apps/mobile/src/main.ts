@@ -33,27 +33,10 @@ import '@ionic/vue/css/display.css'
 /* import '@ionic/vue/css/palettes/dark.system.css' */
 
 /* Theme variables */
-import './app/theme/variables.css'
+import './features/app.ui.kit/styles/variables.css'
 
 import { createI18n } from 'vue-i18n'
-import { 
-  useConfig,
-  useConfigPersistenceFeature,
-  useNavigationBarFeature,
-  useSafeAreaFeature,
-  useCleanupMediaItemsFeature,
-  useCleanupFilesFeature,
-  useMarkCompletedPlaylistItem,
-  useRemoveCompletedPlaylistItemsFeature,
-  useSentryFeature,
-  useDatabase,
-  useShowTrackDownloadingStatusFeature,
-  useShowTrackInPlaylistStatusFeature,
-} from './app'
-import { 
-  useSyncAudioPlayerPluginStateFeature, 
-  useSetPlayerControlsInfoFeature,
-} from '@lectorium/mobile/player'
+import { useArchiveCompletedPlaylistItemsFeature } from './features/playlist/composables/useArchiveCompletedPlaylistItemsFeature'
 
 /** 
  * Configure PouchDB to use SQLite adapter for Cordova
@@ -62,33 +45,29 @@ import PouchDB from 'pouchdb'
 import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
 PouchDB.plugin(PouchDBAdapterSqlLite)
 
-import { locale as localeApp } from './app/locale'
-import { locale as localeHome } from './home/locale'
-import { locale as localeSearch } from './search/locale'
-import { locale as localeLibrary } from './library/locale'
-import { locale as localeSettings } from './settings/locale'
-import { useInAppPurchasesFeatures } from './app/features/useInAppPurchasesFeatures'
+import { useInAppPurchasesFeatures } from './features/app.purchases/composables/useInAppPurchasesFeatures'
 import { Device } from '@capacitor/device'
+import { initTrackStateFeature } from './init/initTrackStateFeature'
+import { initTrackSearchFeature } from './init/initTrackSearchFeature'
+import { useTracksCountFeature } from './features/tracks.count'
+import { useTracksDownloadFeature } from './features/tracks.download'
+import { useTrackStateStore } from './features/tracks.state'
+import { locale } from './features/app.localization'
+import { useCleanupMediaItemsFeature, useMarkCompletedPlaylistItem, usePlaylistFeature, useSyncPlaylistStoreTask } from './features/playlist'
+import { useBucketService } from './features/app.services.bucket'
+import { useMediaService } from './features/app.services.media'
+import { useConfig, useConfigPersistenceTask } from './features/app.config'
+import { useDAL, useDatabase } from './features/app.database'
+import { useSentryFeature } from './features/app.infra.sentry'
+import { useNavigationBarAppearanceTask, useSafeAreaTask } from './features/app.appearance'
+import { useCleanupFilesFeature } from './features/app.storage'
+import { usePlayerTranscript, useSetPlayerControlsInfoFeature, useSyncAudioPlayerPluginStateFeature } from './features/player'
+
 
 const i18n = createI18n({
   locale: 'ru',
   fallbackLocale: 'en',
-  messages: {
-    en: {
-      app: localeApp.en,
-      home: localeHome.en,
-      search: localeSearch.en,
-      library: localeLibrary.en,
-      settings: localeSettings.en,
-    },
-    ru: {
-      app: localeApp.ru,
-      home: localeHome.ru,
-      search: localeSearch.ru,
-      library: localeLibrary.ru,
-      settings: localeSettings.ru,
-    }
-  }
+  messages: locale
 })
 const pinia = createPinia()
 const app = createApp(App)
@@ -103,32 +82,51 @@ useSentryFeature(app)
 router.isReady().then(async () => {
   const start = new Date().getTime()
 
+  // Core //
+
+  await useDatabase().init({
+    remoteDatabaseUrl: useConfig().databaseUrl.value 
+  })
+
   // App //
 
-  console.log('useConfigPersistenceFeature...')
-  await useConfigPersistenceFeature()
+  await useConfigPersistenceTask().start()
 
-  console.log('useNavigationBarFeature...')
-  await useNavigationBarFeature()
+  // app.appearance //
+  await useNavigationBarAppearanceTask({
+    isTranscriptDialogOpen: usePlayerTranscript().isOpen
+  }).start()
+  await useSafeAreaTask().start()
 
-  console.log('useSafeAreaFeature...')
-  await useSafeAreaFeature()
 
-  console.log('useCleanupMediaItemsFeature...')
+  
+  useMarkCompletedPlaylistItem()
+  useArchiveCompletedPlaylistItemsFeature()
   useCleanupMediaItemsFeature()
-
-  console.log('useCleanupFilesFeature...')
   useCleanupFilesFeature()
 
-  console.log('useConfigPersistenceFeature...')
-  useMarkCompletedPlaylistItem()
+  // Features //
 
-  console.log('useRemoveCompletedPlaylistItemsFeature...')
-  useRemoveCompletedPlaylistItemsFeature()
+  await initTrackStateFeature()
+  initTrackSearchFeature()
 
-  console.log('useShowTrackDownloadingStatusFeature...')
-  await useShowTrackDownloadingStatusFeature().init()
-  await useShowTrackInPlaylistStatusFeature().init()
+  const dal = useDAL()
+  await useTracksCountFeature().init({
+    tracksService: dal.tracks
+  })
+  useTracksDownloadFeature().init({
+    tracksService: useDAL().tracks,
+    bucketName: useConfig().bucketName.value,
+    bucketService: useBucketService(),
+    mediaService: useMediaService(),
+    onTrackFailed: (trackId) => {
+      useTrackStateStore().setState(trackId, { isFailed: true })
+    }
+  })
+  usePlaylistFeature().init({
+    playlistService: dal.playlistItems,
+  })
+  
 
   // Player //
 
@@ -150,11 +148,13 @@ router.isReady().then(async () => {
   }
   i18n.global.locale = config.appLanguage.value as 'en' | 'ru'
 
-  // Steps //
-
-  const database = useDatabase()
-  await database.init()
   
+
+  // Should be after database.init()
+  await useSyncPlaylistStoreTask({
+    playlistItemService: dal.playlistItems,
+    language: config.appLanguage
+  }).start()
 
   const elapsed = new Date().getTime() - start
   console.log(`Initialization time: ${elapsed}ms`)

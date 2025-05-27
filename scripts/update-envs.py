@@ -26,7 +26,7 @@ export const ENVIRONMENT = {{
 
 # Step 4: Write the final content to a file
 try:
-  with open('./modules/apps/mobile/src/app/env.ts', 'w') as file:
+  with open('./modules/apps/mobile/src/env.ts', 'w') as file:
     file.write(config)
   print('Config: File updated.')
 except Exception as err:

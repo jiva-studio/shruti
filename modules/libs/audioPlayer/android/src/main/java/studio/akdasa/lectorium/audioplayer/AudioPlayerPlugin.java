@@ -54,8 +54,8 @@ public final class AudioPlayerPlugin extends Plugin {
     public void open(PluginCall call) {
         String url = call.getString("url");
         String trackId = call.getString("trackId");
-        String title = call.getString("title");
-        String author = call.getString("author");
+        String title = call.getString("title", "");
+        String author = call.getString("author", "");
 
         // Validate input arguments
         if (url == null) {
