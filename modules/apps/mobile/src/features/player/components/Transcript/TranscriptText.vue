@@ -128,6 +128,8 @@ function createLanguageSpeakerMapping(
   -moz-user-select: text;
   -ms-user-select: text;
   user-select: text !important;
+
+  padding-bottom: calc(var(--ion-safe-area-bottom) + 56px);
 }
 
 .prompter {
