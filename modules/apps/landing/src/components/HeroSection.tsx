@@ -63,7 +63,7 @@ const HeroSection = () => {
           
           <div className="flex flex-col sm:flex-row gap-4 pt-4 opacity-0 animate-fade-in animate-delay-300">
             <Button size="lg" className="bg-black hover:bg-black/80 text-white flex items-center" 
-              onClick={() => window.open("https://testflight.apple.com/join/KYVY7r3a", "_blank")}>
+              onClick={() => window.open("https://apps.apple.com/us/app/listen-to-sadhu/id6745510353", "_blank")}>
               <Apple className="mr-2 h-5 w-5" />
               {t('hero.appStore')}
             </Button>
