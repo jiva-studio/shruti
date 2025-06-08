@@ -16,7 +16,7 @@ platform :ios do
   desc "Push a new beta build to TestFlight"
   lane :staging do
     commit = last_git_commit
-    tag = last_git_tag.gsub(/^v/, '')
+    tag = last_git_tag.gsub(/^v/, '').gsub(/-.*/, '')
 
     # Set App Store Connect API Key to be able to upload
     # the build to App Store and submit it to TestFlight
