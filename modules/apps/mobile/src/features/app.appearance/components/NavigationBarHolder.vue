@@ -1,14 +1,8 @@
 <template>
   <div
-    v-if="!isPlayerTranscriptOpen"
     class="NavigationBarHolder"
   />
 </template>
-
-<script setup lang="ts">
-import { usePlayerTranscript } from '@shruti/mobile/features/player'
-const { isOpen: isPlayerTranscriptOpen } = usePlayerTranscript()
-</script>
 
 <style scoped>
 .NavigationBarHolder {

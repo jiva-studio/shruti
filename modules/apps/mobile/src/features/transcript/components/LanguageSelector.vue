@@ -16,15 +16,11 @@
 </template>
 
 <script setup lang="ts">
+import { TranscriptLanguage } from '../models'
+
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
-
-export type TranscriptLanguage = {
-  code: string
-  name: string
-  icon: string
-}
 
 const props = defineProps<{
   languages: TranscriptLanguage[]

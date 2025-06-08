@@ -17,6 +17,7 @@ export { useWaiter } from './composables/useWaiter'
 export { useIdGenerator } from './composables/useIdGenerator'
 export { useLogger } from './composables/useLogger'
 export { useSafeOperation } from './composables/useSafeOperation'
+export { useKeyboardVisible } from './composables/useKeyboardVisible'
 
 /* -------------------------------------------------------------------------- */
 /*                                   Library                                  */

@@ -10,4 +10,5 @@ export default {
   cancel: 'Cancel',
   soon: 'Soon',
   back: 'Back',
+  notes: 'Notes'
 }
