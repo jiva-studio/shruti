@@ -21,6 +21,11 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@shruti/mobile/pages/HomePage.vue')
       },
       {
+        path: 'notes',
+        name: 'notes',
+        component: () => import('@shruti/mobile/pages/NotesPage.vue')
+      },
+      {
         path: 'search',
         name: 'search',
         component: () => import('@shruti/mobile/pages/SearchPage.vue')

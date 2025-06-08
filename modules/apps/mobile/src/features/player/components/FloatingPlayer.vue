@@ -1,41 +1,45 @@
 <template>
   <PlayerControls
-    :playing="isPlaying"
+    :playing="playing"
     :title="title"
     :author="author"
+    :duration="duration"
+    :position="position"
     :class="{
       'player': true,
-      'closed': !isPlayerTranscriptOpen,
-      'opened': isPlayerTranscriptOpen,
-      'hidden': !isVisible
+      'floating': !isSticked,
+      'stick': isSticked,
+      'hidden': hidden
     }"
     @play="togglePause"
-    @click="toggleTranscriptOpen"
+    @click="isSticked = !isSticked"
   />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { usePlayerControls } from '../composables/usePlayerControls'
-import { usePlayerTranscript } from '../composables/usePlayerTranscript'
 import { usePlayerControlsPlayerScenario } from '../composables/usePlayerControlsPlayerScenario'
-import { default as PlayerControls } from './Player/PlayerControls.vue'
+import { default as PlayerControls } from './PlayerControls.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const { togglePause } = usePlayerControlsPlayerScenario()
-const { isPlaying, title, author } = usePlayerControls()
-const { isOpen: isPlayerTranscriptOpen, toggleTranscriptOpen } = usePlayerTranscript()
 
 /* -------------------------------------------------------------------------- */
-/*                                    State                                   */
+/*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-const isVisible = computed(() => {
-  return title.value !== '' || author.value !== ''
-})
+defineProps<{
+  playing: boolean
+  title: string
+  author: string
+  hidden: boolean
+  duration: number
+  position: number
+}>()
+
+const isSticked = defineModel<boolean>('sticked', { default: true, required: true })
 </script>
 
 <style scoped>
@@ -45,7 +49,7 @@ const isVisible = computed(() => {
   transition: all .5s ease-in-out;
 }
 
-.closed {
+.floating {
   bottom: calc(56px + var(--ion-safe-area-bottom));
   height: 58px;
   left: 16px;
@@ -53,7 +57,7 @@ const isVisible = computed(() => {
   border-radius: 10px;
 }
 
-.opened {
+.stick {
   height: calc(56px + (var(--ion-safe-area-bottom)));
   padding-bottom: calc(var(--ion-safe-area-bottom));
 
