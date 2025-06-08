@@ -3,6 +3,8 @@ PODS:
     - CapacitorCordova
   - CapacitorApp (7.0.1):
     - Capacitor
+  - CapacitorClipboard (7.0.1):
+    - Capacitor
   - CapacitorCordova (7.2.0)
   - CapacitorDevice (7.0.1):
     - Capacitor
@@ -36,6 +38,7 @@ PODS:
 DEPENDENCIES:
   - "Capacitor (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../../../node_modules/@capacitor/app`)"
+  - "CapacitorClipboard (from `../../../../node_modules/@capacitor/clipboard`)"
   - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
   - "CapacitorDevice (from `../../../../node_modules/@capacitor/device`)"
   - "CapacitorFilesystem (from `../../../../node_modules/@capacitor/filesystem`)"
@@ -60,6 +63,8 @@ EXTERNAL SOURCES:
     :path: "../../../../node_modules/@capacitor/ios"
   CapacitorApp:
     :path: "../../../../node_modules/@capacitor/app"
+  CapacitorClipboard:
+    :path: "../../../../node_modules/@capacitor/clipboard"
   CapacitorCordova:
     :path: "../../../../node_modules/@capacitor/ios"
   CapacitorDevice:
@@ -88,6 +93,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Capacitor: 03bc7cbdde6a629a8b910a9d7d78c3cc7ed09ea7
   CapacitorApp: febecbb9582cb353aed037e18ec765141f880fe9
+  CapacitorClipboard: 70bfdb42b877b320a6e511ab94fa7a6a55d57ecb
   CapacitorCordova: 5967b9ba03915ef1d585469d6e31f31dc49be96f
   CapacitorDevice: c6f6d587dd310527f8a48bf09c4e7b4a4cf14329
   CapacitorFilesystem: e6261c410436f54908c11f94336c5b58286b1db0
@@ -104,6 +110,6 @@ SPEC CHECKSUMS:
   SentryCapacitor: 5555ac5b8c2cf3fbdac6973e7d1d62c9b7d5277b
   SquareetlabsCapacitorNavigationBar: fd191c658abe8e5033e7091587f939f71347fd72
 
-PODFILE CHECKSUM: f608f42736acc45175e17f973a736c0e3fe7f8b2
+PODFILE CHECKSUM: d45178eadb680aef2d33b227324f6a770b2fb8fa
 
 COCOAPODS: 1.16.2

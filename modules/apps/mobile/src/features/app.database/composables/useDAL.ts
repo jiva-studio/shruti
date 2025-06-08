@@ -2,7 +2,7 @@ import { createSharedComposable } from '@vueuse/core'
 import { 
   AuthorsService, LanguagesService, LocationsService, MediaItemsService,
   PlaylistItemsService, SourcesService, IndexService, TracksService,
-  TagsService, DurationsService
+  TagsService, DurationsService, NotesService
 } from '@lectorium/dal/index'
 import { useDatabase } from './useDatabase'
 
@@ -26,5 +26,6 @@ export const useDAL = createSharedComposable(() => {
     // User data
     mediaItems: new MediaItemsService(database.local.userData),
     playlistItems: new PlaylistItemsService(database.local.userData),
+    notes: new NotesService(database.local.userData)
   }
 })

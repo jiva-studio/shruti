@@ -11,13 +11,13 @@
           <IonLabel>{{ $t('app.home') }}</IonLabel>
         </IonTabButton>
 
-        <!-- <IonTabButton
+        <IonTabButton
           tab="tab2"
-          href="/app/library"
+          href="/app/notes"
         >
-          <IconLibrary />
-          <IonLabel>{{ $t('app.library') }}</IonLabel>
-        </IonTabButton> -->
+          <IconBookmark />
+          <IonLabel>{{ $t('app.notes') }}</IonLabel>
+        </IonTabButton>
 
         <IonTabButton
           tab="tab3"
@@ -41,7 +41,7 @@
 
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
-import { IconHome, IconSearch, IconSettings } from '@lectorium/mobile/features/app.ui.kit'
+import { IconHome, IconBookmark, IconSearch, IconSettings } from '@lectorium/mobile/features/app.ui.kit'
 </script>
 
 <style scoped>

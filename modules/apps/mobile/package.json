@@ -13,6 +13,7 @@
   "dependencies": {
     "@capacitor/android": "^7.2.0",
     "@capacitor/app": "7.0.1",
+    "@capacitor/clipboard": "^7.0.1",
     "@capacitor/core": "7.2.0",
     "@capacitor/device": "^7.0.1",
     "@capacitor/filesystem": "^7.0.1",
@@ -34,6 +35,7 @@
     "capacitor-plugin-safe-area": "^4.0.0",
     "cordova-sqlite-storage": "^7.0.0",
     "events": "^3.3.0",
+    "flexsearch": "^0.8.204",
     "ionicons": "^7.0.0",
     "pinia": "^3.0.2",
     "pouchdb": "^9.0.0",

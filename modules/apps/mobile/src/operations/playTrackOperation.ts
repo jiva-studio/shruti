@@ -2,7 +2,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { useDAL } from '@lectorium/mobile/features/app.database'
 import { useConfig } from '@lectorium/mobile/features/app.config'
-import { usePlayer, usePlayerControls, usePlayerTranscript } from '../features/player'
+import { usePlayer, usePlayerControls } from '../features/player'
 
 export function playTrackOperation() {
 
@@ -14,7 +14,6 @@ export function playTrackOperation() {
   const config = useConfig()
   const player = usePlayer()
   const playerControls = usePlayerControls()
-  const playerTranscript = usePlayerTranscript()
 
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */
@@ -58,7 +57,6 @@ export function playTrackOperation() {
     // whey will update their state accordingly
     playerControls.trackId.value = track._id
     playerControls.playlistItemId.value = playlistItem._id
-    playerTranscript.trackId.value = track._id
   }
 
   /* -------------------------------------------------------------------------- */
