@@ -20,7 +20,7 @@
           :icon="$t(`settings.subscription.benefits.benefit${index}.icon`)"
           :title="$t(`settings.subscription.benefits.benefit${index}.title`)"
           :description="$t(`settings.subscription.benefits.benefit${index}.description`)"
-          :tag="index !== 0 ? $t('app.soon') : undefined"
+          :tag="index > 1 ? $t('app.soon') : undefined"
         />
       </div>
 
