@@ -16,24 +16,24 @@ export default {
         icon: '🌟'
       },
       benefit1: {
+        title: 'Bookmarks',
+        description: 'Save important moments from lectures to return to them later.',
+        icon: '🔖'
+      },
+      benefit2: {
         title: 'Automatic Lecture Downloads',
         description: 'You will always have lectures without needing to manually add them from the library.',
         icon: '📥'
       },
-      benefit2: { 
+      benefit3: { 
         title: 'Seminars and Courses',
         description: 'Add seminars and courses to your playlist to listen to them in a convenient order.',
         icon: '📚'
       },
-      benefit3: { 
+      benefit4: { 
         title: 'Dynamic Collections',
         description: 'Create collections for lectures that will automatically update based on specified criteria.',
         icon: '🗃️'
-      },
-      benefit4: {
-        title: 'Bookmarks',
-        description: 'Save important moments from lectures to return to them later.',
-        icon: '🔖'
       },
       benefit5: {
         title: 'Advanced Search',

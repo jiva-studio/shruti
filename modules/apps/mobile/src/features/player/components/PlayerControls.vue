@@ -15,7 +15,7 @@
       color="primary"
       @click.stop="emit('play')"
     >
-      <RadialProgress
+      <!-- <RadialProgress
         style="position: absolute;"
         :stroke-width="3"
         :inner-stroke-width="3"
@@ -26,7 +26,7 @@
         start-color="rgba(255, 255, 255, .5)"
         stop-color="rgba(255, 255, 255, .5)"
         inner-stroke-color="rgba(255, 255, 255, 0)"
-      />
+      /> -->
       <IonIcon
         slot="icon-only"
         :icon="playButtonIcon"
@@ -39,7 +39,7 @@
 import { IonButton, IonIcon, IonLabel } from '@ionic/vue'
 import { play, pause } from 'ionicons/icons'
 import { computed, toRefs } from 'vue'
-import RadialProgress from 'vue3-radial-progress'
+// import RadialProgress from 'vue3-radial-progress'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
