@@ -12,6 +12,7 @@
         </IonTabButton>
 
         <IonTabButton
+          v-if="config.showNotesTab.value"
           tab="tab2"
           href="/app/notes"
         >
@@ -42,6 +43,9 @@
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
 import { IconHome, IconBookmark, IconSearch, IconSettings } from '@lectorium/mobile/features/app.ui.kit'
+import { useConfig } from '@lectorium/mobile/features/app.config'
+
+const config = useConfig()
 </script>
 
 <style scoped>

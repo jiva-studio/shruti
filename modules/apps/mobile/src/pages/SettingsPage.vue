@@ -6,6 +6,7 @@
     </IonListHeader>
     <AppLanguageSettingsItem />
     <ShowPlayerProgressSettingsItem />
+    <ShowNotesTabSettingsItem />
 
     <!-- Pro Features -->
     <IonListHeader>
@@ -21,4 +22,5 @@ import { Page } from '@lectorium/mobile/features/app.core'
 import { SubscriptionSettingsItem } from '@lectorium/mobile/features/app.purchases'
 import { AppLanguageSettingsItem } from '@lectorium/mobile/features/app.localization'
 import { ShowPlayerProgressSettingsItem } from '@lectorium/mobile/features/player.progress'
+import { ShowNotesTabSettingsItem } from '@lectorium/mobile/features/notes'
 </script>

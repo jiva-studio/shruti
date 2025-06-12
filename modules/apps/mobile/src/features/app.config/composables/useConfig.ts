@@ -9,8 +9,9 @@ export const useConfig = createGlobalState(() => {
   const apiUrl       = ref(ENVIRONMENT.apiUrl)
   const databaseUrl  = ref(ENVIRONMENT.databaseUrl)
   const bucketName   = ref(ENVIRONMENT.bucketName)
-  const subscriptionPlan = ref('')
+  const subscriptionPlan   = ref('')
   const showPlayerProgress = ref(true)
+  const showNotesTab       = ref(true)
 
   return {
     appLanguage,
@@ -19,6 +20,7 @@ export const useConfig = createGlobalState(() => {
     authToken,
     bucketName,
     subscriptionPlan,
-    showPlayerProgress
+    showPlayerProgress,
+    showNotesTab
   }
 })
