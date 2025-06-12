@@ -9,12 +9,14 @@ export const useConfig = createGlobalState(() => {
   const apiUrl       = ref(ENVIRONMENT.apiUrl)
   const databaseUrl  = ref(ENVIRONMENT.databaseUrl)
   const bucketName   = ref(ENVIRONMENT.bucketName)
+  const subscriptionPlan = ref('')
 
   return {
     appLanguage,
     apiUrl,
     databaseUrl,
     authToken,
-    bucketName
+    bucketName,
+    subscriptionPlan
   }
 })

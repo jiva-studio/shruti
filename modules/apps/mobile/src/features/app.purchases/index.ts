@@ -1,4 +1,5 @@
 export * from './composables/useInAppPurchasesFeatures'
+export * from './composables/useRestoreSubscriptionPlan'
 
 export { default as SubscriptionActive } from './components/SubscriptionActive.vue'
 export { default as SubscriptionBenefit } from './components/SubscriptionBenefit.vue'
