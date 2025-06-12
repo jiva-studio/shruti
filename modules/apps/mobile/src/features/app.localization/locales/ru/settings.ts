@@ -3,6 +3,16 @@ export default {
     title: 'Язык',
     description: 'Язык интерфейса',
   },
+  groups: {
+    appearance: 'Внешний вид',
+    pro: 'Про-функции',
+  },
+  player: {
+    showProgress: {
+      title: 'Прогресс проигрывания',
+      description: 'Индикатор вокруг кнопки воспроизведения',
+    }
+  },
   subscription: {
     title: 'Подписка',
     description: 'Управление подпиской',

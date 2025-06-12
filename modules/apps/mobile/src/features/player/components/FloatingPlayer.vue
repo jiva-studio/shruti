@@ -5,6 +5,7 @@
     :author="author"
     :duration="duration"
     :position="position"
+    :show-progress="showProgress"
     :class="{
       'player': true,
       'floating': !isSticked,
@@ -37,6 +38,7 @@ defineProps<{
   hidden: boolean
   duration: number
   position: number
+  showProgress: boolean
 }>()
 
 const isSticked = defineModel<boolean>('sticked', { default: true, required: true })

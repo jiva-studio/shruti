@@ -9,37 +9,44 @@
       </IonLabel>
     </div>
 
-    <IonButton
-      class="play"
-      shape="round"
-      color="primary"
-      @click.stop="emit('play')"
-    >
-      <!-- <RadialProgress
-        style="position: absolute;"
-        :stroke-width="3"
-        :inner-stroke-width="3"
-        :diameter="44"
-        :completed-steps="position"
-        :total-steps="duration"
-        :animate-speed="750"
-        start-color="rgba(255, 255, 255, .5)"
-        stop-color="rgba(255, 255, 255, .5)"
-        inner-stroke-color="rgba(255, 255, 255, 0)"
-      /> -->
-      <IonIcon
-        slot="icon-only"
-        :icon="playButtonIcon"
-      />
-    </IonButton>
+    <div style="position: relative; overflow: visible;">
+      <IonButton
+        class="play"
+        shape="round"
+        color="primary"
+        @click.stop="emit('play')"
+      >
+        <IonIcon
+          slot="icon-only"
+          :icon="playButtonIcon"
+        />
+      </IonButton>
+      <div
+        v-if="showProgress"
+        class="progress"
+      >
+        <RadialProgress
+          :stroke-width="4"
+          :inner-stroke-width="4"
+          :diameter="playButtonSize"
+          :completed-steps="position"
+          :total-steps="duration"
+          :animate-speed="750"
+          start-color="rgba(255, 255, 255, .65)"
+          stop-color="rgba(255, 255, 255, .65)"
+          inner-stroke-color="rgba(255, 255, 255, 0)"
+        />
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { Capacitor } from '@capacitor/core'
 import { IonButton, IonIcon, IonLabel } from '@ionic/vue'
 import { play, pause } from 'ionicons/icons'
-import { computed, toRefs } from 'vue'
-// import RadialProgress from 'vue3-radial-progress'
+import { computed, ref, toRefs } from 'vue'
+import RadialProgress from 'vue3-radial-progress'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -51,6 +58,7 @@ const props = defineProps<{
   title: string
   duration: number
   position: number
+  showProgress: boolean
 }>()
 
 const emit = defineEmits<{
@@ -62,6 +70,7 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const { playing } = toRefs(props)
+const playButtonSize = ref(Capacitor.getPlatform() === 'android' ? 48 : 44)
 
 const playButtonIcon = computed(() => {
   return playing.value ? pause : play
@@ -106,5 +115,14 @@ const playButtonIcon = computed(() => {
 
 .play {
   --box-shadow: none;
+}
+
+.progress {
+  position: absolute; 
+  top: 50%; 
+  left: 50%; 
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  pointer-events: none;
 }
 </style>
