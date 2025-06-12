@@ -49,8 +49,8 @@
       <!-- Back Button -->
       <IonButton
         expand="block"
-        color="medium"
-        fill="clear"
+        :color="activePlan ? 'primary' : 'medium'"
+        :fill="activePlan ? 'outline' : 'clear'"
         @click="isOpen = false"
       >
         {{ $t('app.back') }}

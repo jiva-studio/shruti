@@ -64,6 +64,7 @@ import { useCleanupFilesFeature } from './features/app.storage'
 import { usePlayerControls, useSetPlayerControlsInfoFeature, useSyncAudioPlayerPluginStateFeature } from './features/player'
 import { useSyncTranscriptTask, useTranscriptStore } from './features/transcript'
 import { useNotesLoader, useNotesSearchIndex, useNotesSearchTask, useNotesStore } from './features/notes'
+import { useRestoreSubscriptionPlan } from './features/app.purchases'
 
 const i18n = createI18n({
   locale: 'ru',
@@ -151,7 +152,8 @@ router.isReady().then(async () => {
 
   // Rest //
 
-  useInAppPurchasesFeatures().init()
+  await useInAppPurchasesFeatures().init()
+  await useRestoreSubscriptionPlan().init()
 
   const config = useConfig()
   if (config.appLanguage.value === '??') {

@@ -27,7 +27,7 @@
     />
     
     <!-- Navigation Bar Footer -->
-    <NavigationBarHolder />
+    <NavigationBarHolder v-if="!keyboardVisible.isKeyboardVisible.value" />
   </IonApp>
 </template>
 
