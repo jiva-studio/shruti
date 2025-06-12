@@ -29,6 +29,7 @@ export function useConfigPersistenceTask() {
     await bind(config.subscriptionPlan, 'app.subscription.plan', '')
     await bind(config.showPlayerProgress, 'app.player.progress.show', true)
     await bind(config.showNotesTab, 'app.notes.tab.show', true)
+    await bind(config.highlightCurrentSentence, 'app.transcript.highlightCurrentSentence', true)
   }
 
   /* -------------------------------------------------------------------------- */

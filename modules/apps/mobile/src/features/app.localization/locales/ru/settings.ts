@@ -19,6 +19,12 @@ export default {
       description: 'Показывать вкладку заметок внизу'
     }
   },
+  transcript: {
+    highlightCurrentSentence: {
+      title: 'Выделение предложения',
+      description: 'Следить за текущим предложением в тексте'
+    }
+  },
   subscription: {
     title: 'Подписка',
     description: 'Управление подпиской',
