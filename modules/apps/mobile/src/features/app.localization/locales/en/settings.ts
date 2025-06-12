@@ -19,6 +19,12 @@ export default {
       description: 'Show notes tab at the bottom'
     }
   },
+  transcript: {
+    highlightCurrentSentence: {
+      title: 'Highlight sentence',
+      description: 'Follow the current sentence in the transcript'
+    }
+  },
   subscription: {
     title: 'Subscription',
     description: 'Subscription management',

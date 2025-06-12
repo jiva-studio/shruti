@@ -7,6 +7,7 @@
     <AppLanguageSettingsItem />
     <ShowPlayerProgressSettingsItem />
     <ShowNotesTabSettingsItem />
+    <HighlightCurrentSentenceSettingsItem />
 
     <!-- Pro Features -->
     <IonListHeader>
@@ -23,4 +24,5 @@ import { SubscriptionSettingsItem } from '@lectorium/mobile/features/app.purchas
 import { AppLanguageSettingsItem } from '@lectorium/mobile/features/app.localization'
 import { ShowPlayerProgressSettingsItem } from '@lectorium/mobile/features/player.progress'
 import { ShowNotesTabSettingsItem } from '@lectorium/mobile/features/notes'
+import { HighlightCurrentSentenceSettingsItem } from '@lectorium/mobile/features/transcript'
 </script>
