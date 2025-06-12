@@ -11,6 +11,7 @@
       :duration="player.duration.value"
       :position="player.position.value"
       :hidden="!player.trackId.value || keyboardVisible.isKeyboardVisible.value"
+      :show-progress="config.showPlayerProgress.value"
     />
 
     <!-- Transcript Dialog -->
@@ -41,11 +42,13 @@ import { useSyncService } from './features/app.services.sync'
 import { useKeyboardVisible, useSafeOperation } from './features/app.core'
 import { useNotesFeature } from './features/notes'
 import { Clipboard } from '@capacitor/clipboard'
+import { useConfig } from '@lectorium/mobile/features/app.config'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
+const config = useConfig()
 const syncService = useSyncService()
 const safeOperation = useSafeOperation()
 const player = usePlayerControls()
