@@ -30,12 +30,12 @@ const trackStateStore = useTrackStateStore()
 /* -------------------------------------------------------------------------- */
 
 const state = computed<State>((): State => {
-  const isInPlaylist = trackStateStore.getState(props.trackId).inPlaylist
-  const isCompleted = trackStateStore.getState(props.trackId).isCompleted
+  const trackState = trackStateStore.getState(props.trackId)
   
   let state: State = 'none'
-  if (isInPlaylist) { state = 'added' }
-  if (isCompleted)  { state = 'completed' }
+  if (trackState.inPlaylist)  { state = 'added' }
+  if (trackState.isCompleted) { state = 'completed' }
+  if (trackState.isFailed)    { state = 'failed' }
   if (props.ignoreStates && props.ignoreStates.includes(state)) {
     return 'none'
   }

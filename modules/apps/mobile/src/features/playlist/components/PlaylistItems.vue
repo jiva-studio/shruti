@@ -14,6 +14,7 @@
         :references="item.references"
         :tags="item.tags"
         :date="item.date"
+        :disabled="trackStateStore.getState(item.trackId).isFailed"
         @click="emit('click', item.playlistItemId)"
       >
         <template #state="{ trackId }">
@@ -31,7 +32,7 @@
 <script setup lang="ts">
 import { WithDeleteAction } from '@lectorium/mobile/features/app.core'
 import { TrackListItem } from '@lectorium/mobile/features/tracks.view'
-import { TrackStateIndicator } from '@lectorium/mobile/features/tracks.state'
+import { TrackStateIndicator, useTrackStateStore } from '@lectorium/mobile/features/tracks.state'
 import { usePlaylistStore } from '../composables/usePlaylistStore'
 
 /* -------------------------------------------------------------------------- */
@@ -39,6 +40,7 @@ import { usePlaylistStore } from '../composables/usePlaylistStore'
 /* -------------------------------------------------------------------------- */
 
 const playlistStore = usePlaylistStore()
+const trackStateStore = useTrackStateStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

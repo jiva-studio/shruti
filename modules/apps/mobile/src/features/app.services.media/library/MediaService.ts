@@ -21,7 +21,14 @@ export class MediaService implements IMediaService {
   constructor(
     private readonly mediaItems: MediaItemsService,
     private readonly downloader: IDownloaderService
-  ) { }
+  ) {
+    downloader.completedEvent.subscribe(async e => { 
+      await this.mediaItems.patchOne(e.meta.mediaItemId, { state: 'ready' })
+    })
+    downloader.failedEvent.subscribe(async e => { 
+      await this.mediaItems.patchOne(e.meta.mediaItemId, { state: 'failed' })
+    })
+  }
 
   /**
    * Gets media item.

@@ -27,7 +27,10 @@ export function useSyncPlaylistStateTask(
   async function onRemoved(
     event: { trackId: string }
   ) {
-    trackStateStore.setState(event.trackId, { inPlaylist: false })
+    trackStateStore.setState(event.trackId, { 
+      inPlaylist: false, 
+      isFailed: undefined 
+    })
   }
 
   function onCompleted(
