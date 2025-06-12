@@ -13,6 +13,12 @@ export default {
       description: 'Show progress around play button',
     }
   },
+  notes: {
+    showTab: {
+      title: 'Notes tab',
+      description: 'Show notes tab at the bottom'
+    }
+  },
   subscription: {
     title: 'Subscription',
     description: 'Subscription management',
