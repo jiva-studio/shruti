@@ -297,6 +297,10 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         
+        if (currentItem.duration.isIndefinite) {
+            return
+        }
+        
         let position = player.currentTime().seconds
         let duration = currentItem.duration.isIndefinite ? 0 : currentItem.duration.seconds
         let playing = player.rate != 0
