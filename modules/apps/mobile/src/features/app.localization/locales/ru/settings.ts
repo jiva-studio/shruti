@@ -13,6 +13,12 @@ export default {
       description: 'Индикатор вокруг кнопки воспроизведения',
     }
   },
+  notes: {
+    showTab: {
+      title: 'Вкладка заметок',
+      description: 'Показывать вкладку заметок внизу'
+    }
+  },
   subscription: {
     title: 'Подписка',
     description: 'Управление подпиской',
