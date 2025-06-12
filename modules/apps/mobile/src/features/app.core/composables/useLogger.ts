@@ -16,11 +16,16 @@ export function useLogger({ module }: LoggerOptions) {
     console.debug(`${module}: ${message}`)
   }
 
+  function error(message: string) {
+    console.error(`${module}: ${message}`)
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                                  Intefface                                 */
   /* -------------------------------------------------------------------------- */
 
   return {
+    error,
     debug,
     info
   }

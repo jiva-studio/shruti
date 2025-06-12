@@ -26,6 +26,7 @@ export function useConfigPersistenceTask() {
     logger.info('Starting config persistence task...')
     await storage.create()
     await bind(config.appLanguage, 'app.language', '??')
+    await bind(config.subscriptionPlan, 'app.subscription.plan', '')
   }
 
   /* -------------------------------------------------------------------------- */

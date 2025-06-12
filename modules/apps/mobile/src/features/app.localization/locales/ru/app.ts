@@ -10,5 +10,6 @@ export default {
   cancel: 'Отмена',
   soon: 'Скоро',
   back: 'Назад',
-  notes: 'Заметки'
+  notes: 'Заметки',
+  ok: 'Ok'
 }
