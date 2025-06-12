@@ -3,6 +3,16 @@ export default {
     title: 'Language',
     description: 'Language of an interface',
   },
+  groups: {
+    appearance: 'Appearance',
+    pro: 'Pro Features',
+  },
+  player: {
+    showProgress: {
+      title: 'Player progress',
+      description: 'Show progress around play button',
+    }
+  },
   subscription: {
     title: 'Subscription',
     description: 'Subscription management',

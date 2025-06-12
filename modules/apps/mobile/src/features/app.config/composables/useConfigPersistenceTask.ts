@@ -27,6 +27,7 @@ export function useConfigPersistenceTask() {
     await storage.create()
     await bind(config.appLanguage, 'app.language', '??')
     await bind(config.subscriptionPlan, 'app.subscription.plan', '')
+    await bind(config.showPlayerProgress, 'app.player.progress.show', true)
   }
 
   /* -------------------------------------------------------------------------- */
