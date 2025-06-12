@@ -2,6 +2,7 @@
   <IonItem
     class="track"
     lines="none"
+    :disabled="disabled"
   >
     <slot
       name="state"
@@ -41,6 +42,7 @@ export type TrackListItemProps = {
   title: string
   author?: string
   location?: string
+  disabled?: boolean
   references: string[]
 }
 
@@ -59,7 +61,7 @@ defineProps<
 .track,
 .info,
 .details {
-  opacity: 1;
+  /* opacity: 1; */
   transition: all 1s ease;
 }
 </style>
