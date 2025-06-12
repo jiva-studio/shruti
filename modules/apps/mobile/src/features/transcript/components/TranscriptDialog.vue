@@ -4,10 +4,7 @@
     class="transcript-dialog"
     @did-dismiss="open = false"
   >
-    <IonContent
-      :fullscreen="true"
-      class="ion-padding"
-    >
+    <Content>
       <!-- Transcript Language Selector -->
       <LanguageSelector 
         v-if="availableLanguages.length > 1"
@@ -18,6 +15,7 @@
 
       <!-- Transcript Text -->
       <TranscriptText
+        class="transcript-text"
         :paragraphs="paragraphs"
         :position="position"
         :show-speaker-icons="allowMultipleLanguages"
@@ -37,18 +35,19 @@
       >
         <SelectionActions @action="onTextSelectionActionClicked" />
       </IonPopover>
-    </IonContent>
+    </Content>
   </IonModal>
 </template>
 
 
 <script setup lang="ts">
-import { IonModal, IonContent, IonPopover } from '@ionic/vue'
-import { TranscriptLanguage, TranscriptParagraph } from '../models'
-import { default as LanguageSelector } from './LanguageSelector.vue'
-import { TextSelectedEvent, default as TranscriptText } from './TranscriptText.vue'
-import { default as SelectionActions } from './SelectionActions.vue'
 import { ref } from 'vue'
+import { IonModal, IonPopover } from '@ionic/vue'
+import { Content } from '@lectorium/mobile/features/app.core'
+import { TranscriptLanguage, TranscriptParagraph } from '../models'
+import { TextSelectedEvent, default as TranscriptText } from './TranscriptText.vue'
+import { default as LanguageSelector } from './LanguageSelector.vue'
+import { default as SelectionActions } from './SelectionActions.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -106,7 +105,6 @@ function onTextSelectionActionDismissed() {
       blocks: lastTextSelectedEvent.value.blocks 
     })
   }
-  
 }
 </script>
 
@@ -118,6 +116,11 @@ ion-modal ion-content {
 
 ion-modal ion-toolbar {
   --background: #1D263B;
+}
+
+.transcript-text {
+  /* Floating player covers 56px */
+  padding-bottom: 56px;
 }
 
 .transcript-dialog {

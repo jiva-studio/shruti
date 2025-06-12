@@ -1,6 +1,5 @@
 <template>
   <TextSelector
-    ref="htmlRefHook"
     class="transcript-text"
     dataset-field="data-block-id"
     @selecting="onSelecting"
