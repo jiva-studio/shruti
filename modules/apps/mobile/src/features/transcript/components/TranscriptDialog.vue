@@ -21,6 +21,7 @@
         :paragraphs="paragraphs"
         :position="position"
         :show-speaker-icons="allowMultipleLanguages"
+        :highlight-current-sentence="highlightCurrentSentence"
         @seek="position => emit('seek', position)"
         @text-selected="onTextSelected"
       />
@@ -58,6 +59,7 @@ defineProps<{
   availableLanguages: TranscriptLanguage[]
   paragraphs: TranscriptParagraph[]
   position: number
+  highlightCurrentSentence: boolean
 }>()
 
 const emit = defineEmits<{

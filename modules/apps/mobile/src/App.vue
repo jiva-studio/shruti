@@ -22,6 +22,7 @@
       :available-languages="transcriptStore.availableLanguages"
       :paragraphs="transcriptStore.localizedTranscript"
       :position="player.position.value"
+      :highlight-current-sentence="config.highlightCurrentSentence.value"
       @seek="position => p.seek({ position: position })"
       @selection-action="onTextSelectionAction"
       @selection-dismissed="onTextSelectionDismissed"

@@ -7,6 +7,7 @@
     <AppLanguageSettingsItem />
     <ShowPlayerProgressSettingsItem />
     <ShowNotesTabSettingsItem />
+    <HighlightCurrentSentenceSettingsItem />
 
     <!-- Pro Features -->
     <IonListHeader>
@@ -23,4 +24,5 @@ import { SubscriptionSettingsItem } from '@shruti/mobile/features/app.purchases'
 import { AppLanguageSettingsItem } from '@shruti/mobile/features/app.localization'
 import { ShowPlayerProgressSettingsItem } from '@shruti/mobile/features/player.progress'
 import { ShowNotesTabSettingsItem } from '@shruti/mobile/features/notes'
+import { HighlightCurrentSentenceSettingsItem } from '@shruti/mobile/features/transcript'
 </script>

@@ -12,6 +12,7 @@ export const useConfig = createGlobalState(() => {
   const subscriptionPlan   = ref('')
   const showPlayerProgress = ref(true)
   const showNotesTab       = ref(true)
+  const highlightCurrentSentence = ref(true)
 
   return {
     appLanguage,
@@ -21,6 +22,7 @@ export const useConfig = createGlobalState(() => {
     bucketName,
     subscriptionPlan,
     showPlayerProgress,
-    showNotesTab
+    showNotesTab,
+    highlightCurrentSentence
   }
 })

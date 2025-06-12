@@ -24,7 +24,7 @@
         :key="block.id"
         :lang="block.speaker"
         :class="{
-          'current': block.start <= position && block.end >= position,
+          'current': highlightCurrentSentence && block.start <= position && block.end >= position,
           'highlighted': block.highlighted,
           'selected': block.selected,
         }"
@@ -60,6 +60,7 @@ const props = defineProps<{
   showSpeakerIcons: boolean
   paragraphs: TranscriptParagraph[]
   position: number
+  highlightCurrentSentence: boolean
 }>()
 
 const emit = defineEmits<{
