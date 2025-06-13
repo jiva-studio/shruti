@@ -53,9 +53,10 @@ export const useDatabase = createSharedComposable(() => {
         tracks: new Database({
           name: 'tracks.db',
           adapter: adapter,
-          // indices: [
-          //   { name: 'type', fields: ['type'] }
-          // ]
+          indices: [
+            { name: 'sort_reference', fields: ['sort_reference'] },
+            { name: 'sort_date', fields: ['sort_date'] },
+          ]
         }),
         dictionary: new Database({
           name: 'dictionary.db',

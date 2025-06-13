@@ -18,10 +18,6 @@
       />
     </template>
   </TrackListItem>
-  
-  <SearchSpecifyCriteria 
-    v-if="searchResultsStore.pagesLoaded === searchResultsStore.maximumPagesToLoad"
-  />
 
   <IonInfiniteScroll
     v-if="!searchResultsStore.isLastPage"
@@ -37,7 +33,6 @@ import { IonInfiniteScroll, IonInfiniteScrollContent, InfiniteScrollCustomEvent 
 import { TrackListItem } from '@shruti/mobile/features/tracks.view'
 import { useWaiter } from '@shruti/mobile/features/app.core'
 import { useTrackSearchResultsStore } from '../composables/useTrackSearchResultsStore'
-import SearchSpecifyCriteria from './SearchSpecifyCriteria.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
