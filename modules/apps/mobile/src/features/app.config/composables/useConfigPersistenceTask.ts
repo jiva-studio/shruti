@@ -30,6 +30,7 @@ export function useConfigPersistenceTask() {
     await bind(config.showPlayerProgress, 'app.player.progress.show', true)
     await bind(config.showNotesTab, 'app.notes.tab.show', true)
     await bind(config.highlightCurrentSentence, 'app.transcript.highlightCurrentSentence', true)
+    await bind(config.savedTracksFilter, 'app.tracks.filter', { authors: ['acbsp'], sort: 'reference' })
   }
 
   /* -------------------------------------------------------------------------- */
@@ -46,7 +47,7 @@ export function useConfigPersistenceTask() {
       logger.debug(`Updating '${key}' => '${value}'`)
       await storage.set(key, toRaw(value))
     }, { deep: true })
-    logger.info(`Bound '${key}' => '${config.value}'`)
+    logger.info(`Bound '${key}' => '${JSON.stringify(config.value)}'`)
   }
 
   /* -------------------------------------------------------------------------- */
