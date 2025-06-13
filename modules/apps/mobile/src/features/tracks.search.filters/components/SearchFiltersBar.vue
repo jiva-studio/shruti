@@ -1,5 +1,10 @@
 <template>
   <SearchFilterChipsList>
+    <SearchFilterChipWithListItem
+      v-model="value.sort"
+      :items="dictionary.sort"
+      :title="$t('search.filters.sort')"
+    />
     <SearchFilterChipWithListItems
       v-model="value.authors"
       :items="dictionary.authors"
@@ -51,6 +56,7 @@ export type SearchFilters = {
   languages?: string[]
   duration?: string
   dates?: { from: string, to: string }
+  sort?: 'reference' | 'date'
 }
 
 /* -------------------------------------------------------------------------- */

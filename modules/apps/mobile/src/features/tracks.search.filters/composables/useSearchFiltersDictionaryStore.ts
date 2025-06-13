@@ -17,6 +17,7 @@ export const useSearchFiltersDictionaryStore = defineStore('searchFiltersDiction
   const locations = ref<SearchFilterItem[]>([])
   const languages = ref<SearchFilterItem[]>([])
   const durations = ref<SearchFilterItem[]>([])
+  const sort = ref<SearchFilterItem[]>([])
 
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
@@ -28,5 +29,6 @@ export const useSearchFiltersDictionaryStore = defineStore('searchFiltersDiction
     locations, 
     languages, 
     durations,
+    sort,
   }
 })

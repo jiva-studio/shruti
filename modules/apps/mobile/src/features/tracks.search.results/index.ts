@@ -7,4 +7,3 @@ export { useSyncTrackSearchResultsTask } from './composables/useSyncTrackSearchR
 export { type TrackSearchFilters } from './models/TrackSearchFilters'
 export { type TrackSearchResultItem } from './models/TrackSearchResultItem'
 export { default as SearchResultsSection } from './components/SearchResultsSection.vue'
-export { default as SearchSpecifyCriteria } from './components/SearchSpecifyCriteria.vue'

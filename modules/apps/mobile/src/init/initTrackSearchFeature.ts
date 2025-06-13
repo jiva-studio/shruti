@@ -11,6 +11,7 @@ export async function initTrackSearchFeature() {
     locationsService: useDAL().locations,
     languagesService: useDAL().languages,
     durationsService: useDAL().durations,
+    sortMethodsService: useDAL().sortMethods,
     language: useConfig().appLanguage
   })
 
