@@ -8,6 +8,7 @@
   </SearchFilterChip> 
   <ListItemsSelectorDialog
     :items="items"
+    :selected="modelValue"
     :title="title"
     :open="isDialogOpen"
     @close="setDialogOpen(false)"

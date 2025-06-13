@@ -21,6 +21,7 @@
         <IonCheckbox
           label-placement="end"
           justify="start"
+          :checked="selectedItemIds.includes(item.id)"
           @ion-change="e => onCheckboxClicked(item.id, e.detail.checked)"
         >
           {{ item.title }}
@@ -32,7 +33,7 @@
 
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, toRefs, watch } from 'vue'
 import { IonList, IonCheckbox, IonItem } from '@ionic/vue'
 import { SearchInput } from '@lectorium/mobile/features/app.core'
 import SelectorDialog from './SelectorDialog.vue'
@@ -51,6 +52,7 @@ const props = defineProps<{
   title: string,
   open: boolean,
   items: Item[],
+  selected?: ItemId[]
 }>()
 
 const emit = defineEmits<{
@@ -64,7 +66,8 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const query = ref('')
-const selectedItemIds = ref<ItemId[]>([])
+const selectedItemIds = ref<ItemId[]>(props.selected || [])
+const { selected } = toRefs(props)
 
 const filteredItems = computed(() =>
   props.items.filter((item) => 
@@ -72,6 +75,12 @@ const filteredItems = computed(() =>
     selectedItemIds.value.includes(item.id),
   )
 )
+
+/* -------------------------------------------------------------------------- */
+/*                                    Hooks                                   */
+/* -------------------------------------------------------------------------- */
+
+watch(selected, (v) => selectedItemIds.value = v || [])
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */

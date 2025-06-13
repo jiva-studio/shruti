@@ -1,7 +1,7 @@
 import { Ref, watch } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
 import { useSearchFiltersDictionaryStore } from './useSearchFiltersDictionaryStore'
-import { AuthorsService, DurationsService, LanguagesService, LocationsService, SourcesService } from '@lectorium/dal/index'
+import { AuthorsService, DurationsService, LanguagesService, LocationsService, SourcesService, SortMethodsService } from '@lectorium/dal/index'
 
 export type Options = {
   authorsService: AuthorsService,
@@ -9,6 +9,7 @@ export type Options = {
   locationsService: LocationsService,
   languagesService: LanguagesService,
   durationsService: DurationsService,
+  sortMethodsService: SortMethodsService,
   language: Ref<string>
 }
 
@@ -18,6 +19,7 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
   locationsService,
   languagesService,
   durationsService,
+  sortMethodsService,
   language
 }: Options) => {
   /* -------------------------------------------------------------------------- */
@@ -39,13 +41,14 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
 
   async function onRefresh() {
     const [
-      authors, sources, locations, languages, durations
+      authors, sources, locations, languages, durations, sortMethods
     ] = await Promise.all([
       authorsService.getAll(),
       sourcesService.getAll(),
       locationsService.getAll(),
       languagesService.getAll(),
       durationsService.getAll(),
+      sortMethodsService.getAll(),
     ])
 
     searchFiltersDictionaryStore.authors = authors.map((item) => ({
@@ -81,6 +84,14 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
                || item.fullName[Object.keys(item.fullName)[0]]
                || item._id,
       }))
+
+    searchFiltersDictionaryStore.sort = sortMethods.map((item) => ({
+      id: item._id.replace('sort::', ''),
+      title: item.fullName[language.value] 
+             || item.fullName['en']
+             || item.fullName[Object.keys(item.fullName)[0]]
+             || item._id,
+    })).sort((a, b) => a.title.localeCompare(b.title))
 
     searchFiltersDictionaryStore.languages = languages.map((item) => ({
       id: item._id.replace('language::', ''),

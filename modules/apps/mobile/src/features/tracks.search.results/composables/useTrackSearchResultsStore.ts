@@ -10,11 +10,10 @@ export const useTrackSearchResultsStore = defineStore('trackSearchResults', () =
   /* -------------------------------------------------------------------------- */
 
   const items = reactive<Array<TrackSearchResultItem>>([])
-  const filters = reactive<TrackSearchFilters>({})
+  const filters = reactive<TrackSearchFilters>({ authors: ['acbsp'], sort: 'reference' })
   const isLoading = ref(false)
   const isLastPage = ref(false)
   const pagesLoaded = ref<number>(0)
-  const maximumPagesToLoad = ref<number>(4)
 
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
@@ -24,16 +23,16 @@ export const useTrackSearchResultsStore = defineStore('trackSearchResults', () =
     value: TrackSearchResultItem[], 
     options? : { replace?: boolean }
   ) {
-    if (options?.replace) { items.length = 0 }
+    if (options?.replace) { 
+      items.length = 0
+      isLastPage.value = false
+      pagesLoaded.value = 0
+    }
     items.push(...value)
     isLastPage.value = value.length < 25
   }
 
   function loadNextPage() {
-    if (pagesLoaded.value >= maximumPagesToLoad.value) { 
-      isLastPage.value = true
-      return
-    }
     pagesLoaded.value += 1
   }
 
@@ -43,6 +42,6 @@ export const useTrackSearchResultsStore = defineStore('trackSearchResults', () =
 
   return { 
     items, filters, setItems, isLastPage, isLoading, 
-    pagesLoaded, loadNextPage, maximumPagesToLoad
+    pagesLoaded, loadNextPage
   }
 })

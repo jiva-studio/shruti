@@ -79,6 +79,7 @@ export function useSearchResultsLoader({
       duration: duration 
         ? { min: duration.minDuration, max: duration.maxDuration } 
         : { min: 0, max: Number.MAX_SAFE_INTEGER },
+      sort: filters.sort,
       skip: offset,
       limit: limit,
     })

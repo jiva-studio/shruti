@@ -7,4 +7,5 @@ export type TrackSearchFilters = {
   languages?: string[]
   duration?: string
   dates?: { from: string, to: string }
+  sort?: 'reference' | 'date'
 }

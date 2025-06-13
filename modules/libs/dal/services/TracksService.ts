@@ -41,6 +41,7 @@ export type FindTracksRequest = {
   languages?: string[]
   duration?: { min: number; max: number }
   dates?: { from: string; to: string }
+  sort?: 'reference' | 'date'
   limit: number
   skip: number
 }
@@ -108,10 +109,15 @@ export class TracksService extends DatabaseService<Track, TracksDBSchema> {
       }
     }
 
+    if (request.sort) {
+      selector['sort_' + request.sort] = { $exists: true }
+    }
+
     return await this.getMany({ 
       selector, 
       limit: request.limit, 
-      skip: request.skip 
+      skip: request.skip,
+      sort: request.sort ? ['sort_' + request.sort] : undefined
     })
   }
 }
