@@ -69,13 +69,11 @@ export default {
     tapToManage: 'Вы уже подписаны. Нажмите, чтобы управлять подпиской.',
     periods: {
       'P1M': 'месяц',
-      'P3M': '3 месяца',
       'P1Y': 'год',
     },
     plans: {
-      '$rc_monthly': 'Индра',
-      '$rc_three_month': 'Брахма',
-      '$rc_annual': 'Вишну',
+      '$rc_monthly': 'Ежемесячная',
+      '$rc_annual': 'Годовая',
     }
   }
 }

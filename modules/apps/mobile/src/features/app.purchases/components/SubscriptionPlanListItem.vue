@@ -8,8 +8,8 @@
       ⭐️
     </div>
     <IonLabel>
-      <h2>{{ title }}</h2>
-      <p> {{ price }} / {{ period }}</p>
+      <h2><b>{{ title }}</b></h2>
+      <p>{{ price }} / {{ period }}</p>
     </IonLabel>
     <IonIcon
       v-if="selected"
