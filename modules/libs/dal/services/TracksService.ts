@@ -28,6 +28,7 @@ type TracksDBSchema = {
   }[];
   transcripts: Record<string, { path: string }>;
   tags?: string[];
+  hidden: boolean;
 }
 
 const trackSerializer = (item: Track): TracksDBSchema => item
@@ -60,7 +61,12 @@ export class TracksService extends DatabaseService<Track, TracksDBSchema> {
   }
 
   async find(request: FindTracksRequest): Promise<Track[]> {
-    const selector: any = {}
+    const selector: any = {
+      $or: [
+        { hidden: { $exists: false } },
+        { hidden: false }
+      ]
+    }
 
     if (request.ids) {
       selector._id = { $in: request.ids }

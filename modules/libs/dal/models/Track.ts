@@ -23,4 +23,5 @@ export type Track = {
     path: string;
   }>;
   tags?: string[];
+  hidden: boolean
 }
