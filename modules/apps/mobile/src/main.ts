@@ -65,6 +65,7 @@ import { usePlayerControls, useSetPlayerControlsInfoFeature, useSyncAudioPlayerP
 import { useSyncTranscriptTask, useTranscriptStore } from './features/transcript'
 import { useNotesLoader, useNotesSearchIndex, useNotesSearchTask, useNotesStore } from './features/notes'
 import { useRestoreSubscriptionPlan } from './features/app.purchases'
+import { useTrackSearchFiltersPersistenceTask } from './features/tracks.search.results'
 
 const i18n = createI18n({
   locale: 'ru',
@@ -154,6 +155,7 @@ router.isReady().then(async () => {
 
   await useInAppPurchasesFeatures().init()
   await useRestoreSubscriptionPlan().init()
+  await useTrackSearchFiltersPersistenceTask().start()
 
   const config = useConfig()
   if (config.appLanguage.value === '??') {
