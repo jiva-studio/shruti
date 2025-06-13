@@ -29,6 +29,7 @@
     :title="$t('settings.subscription.title')"
     :subscription-plans="subscriptionPlans"
     :active-plan="config.subscriptionPlan.value"
+    :legal-documents="legalDocuments"
     @subscribe="subscribe"
   />
 </template>
@@ -44,6 +45,7 @@ import { useSound } from '@vueuse/sound'
 import subscriptionCompleteSound from '../assets/subscribed.mp3'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@shruti/mobile/features/app.config'
+import { Capacitor } from '@capacitor/core'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -59,6 +61,16 @@ const config = useConfig()
 const open = ref(false)
 const subscriptionPlans = ref<SubscriptionPlan[]>([])
 const isSubscribedAlertOpen = ref(false)
+
+const legalDocuments = [
+  { title: 'Privacy Policy', link: 'https://shruti.app/policy' },
+]
+if (Capacitor.getPlatform() === 'ios') {
+  legalDocuments.push({ 
+    title: 'Terms Of Use',
+    link: 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/' 
+  })
+}
 
 
 /* -------------------------------------------------------------------------- */
