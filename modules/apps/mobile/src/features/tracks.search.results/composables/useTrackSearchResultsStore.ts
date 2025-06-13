@@ -3,14 +3,14 @@ import { defineStore } from 'pinia'
 import { TrackSearchFilters } from '../models/TrackSearchFilters'
 import { TrackSearchResultItem } from '../models/TrackSearchResultItem'
 
-export const useTrackSearchResultsStore = defineStore('trackSearchResults', () =>{
+export const useTrackSearchResultsStore = defineStore('trackSearchResults', () => {
   
   /* -------------------------------------------------------------------------- */
   /*                                    State                                   */
   /* -------------------------------------------------------------------------- */
 
   const items = reactive<Array<TrackSearchResultItem>>([])
-  const filters = reactive<TrackSearchFilters>({ authors: ['acbsp'], sort: 'reference' })
+  const filters = reactive<TrackSearchFilters>({})
   const isLoading = ref(false)
   const isLastPage = ref(false)
   const pagesLoaded = ref<number>(0)

@@ -29,7 +29,7 @@ export function useSyncTrackSearchResultsTask(
   watch(
     trackSearchResultsStore.filters, 
     async (value: TrackSearchFilters) => await onFiltersChanged(value),
-    { immediate: true }
+    { immediate: false }
   )
 
   watch(
