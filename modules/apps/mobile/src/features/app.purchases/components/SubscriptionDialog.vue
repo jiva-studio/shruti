@@ -3,8 +3,24 @@
     :is-open="isOpen"
     @did-dismiss="isOpen = false"
   >
+    <!-- Close Button -->
+    <IonButton
+      size="small"
+      shape="round"
+      class="close"
+      color="medium"
+      @click="isOpen = false"
+    >
+      <IonIcon
+        slot="icon-only"
+        :icon="close"
+      />
+    </IonButton>
     <Content>
-      <SubscriptionHeader />
+      <!-- Header -->
+      <SubscriptionHeader class="header" />
+
+      <!-- Active Subscription -->
       <SubscriptionActive
         v-if="activePlan"
         package-id="studio.jiva.shruti"
@@ -45,22 +61,24 @@
           {{ $t('settings.subscription.subscribe') }}
         </IonButton>
       </template>
-     
-      <!-- Back Button -->
-      <IonButton
-        expand="block"
-        :color="activePlan ? 'primary' : 'medium'"
-        :fill="activePlan ? 'outline' : 'clear'"
-        @click="isOpen = false"
-      >
-        {{ $t('app.back') }}
-      </IonButton>
+ 
+      <!-- Legal Documents -->
+      <IonNote class="legal">
+        <a
+          v-for="doc in legalDocuments"
+          :key="doc.title"
+          :href="doc.link"
+        >
+          {{ doc.title }}
+        </a>
+      </IonNote>
     </Content>
   </IonModal>
 </template>
 
 <script setup lang="ts">
-import { IonModal, IonButton } from '@ionic/vue'
+import { IonModal, IonButton, IonNote, IonIcon } from '@ionic/vue'
+import { close } from 'ionicons/icons'
 import { ref, toRefs, watch } from 'vue'
 import { Content } from '@shruti/mobile/features/app.core'
 import SubscriptionActive from '../components/SubscriptionActive.vue'
@@ -87,6 +105,7 @@ export type SubscriptionPlan = {
 const props = defineProps<{
   subscriptionPlans: SubscriptionPlan[];
   activePlan?: string;
+  legalDocuments: { title: string, link: string }[]
 }>()
 
 const emit = defineEmits<{
@@ -138,5 +157,24 @@ const subscribe = async () => {
   margin-top: 1.5rem;
   margin-bottom: 1rem;
   --box-shadow: none;
+}
+
+.legal {
+  display: flex;
+  justify-content: space-evenly;
+  margin: 1rem;
+}
+
+.legal a {
+  color: var(--ion-color-medium);
+  text-decoration: none;
+  font-size: .9rem;
+}
+
+.close {
+  position: absolute;
+  top: var(--ion-safe-area-top, 2rem);
+  left: 10px;
+  z-index: 999999;
 }
 </style>
