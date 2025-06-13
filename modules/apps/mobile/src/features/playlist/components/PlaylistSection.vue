@@ -7,7 +7,7 @@
   />
   <PlaylistEmpty
     v-else
-    navigation-path="library"
+    navigation-path="search"
   />
 </template>
 
