@@ -12,6 +12,7 @@
 		4D47D3CA2DD23DDE009A9FB5 /* index.db in Resources */ = {isa = PBXBuildFile; fileRef = 4D47D3BF2DD23D88009A9FB5 /* index.db */; };
 		4D47D3CB2DD23DDE009A9FB5 /* tracks.db in Resources */ = {isa = PBXBuildFile; fileRef = 4D47D3C02DD23D88009A9FB5 /* tracks.db */; };
 		4D47D3CD2DD245B5009A9FB5 /* DatabaseHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D47D3CC2DD245AF009A9FB5 /* DatabaseHelper.swift */; };
+		4DB2E7A02DFEBF570055ABF3 /* DevStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */; };
 		4DB6E2DF2DDE1A2C00361F63 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4DB6E2DE2DDE1A2C00361F63 /* InfoPlist.xcstrings */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -28,6 +29,7 @@
 		4D47D3BF2DD23D88009A9FB5 /* index.db */ = {isa = PBXFileReference; lastKnownFileType = file; path = index.db; sourceTree = "<group>"; };
 		4D47D3C02DD23D88009A9FB5 /* tracks.db */ = {isa = PBXFileReference; lastKnownFileType = file; path = tracks.db; sourceTree = "<group>"; };
 		4D47D3CC2DD245AF009A9FB5 /* DatabaseHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseHelper.swift; sourceTree = "<group>"; };
+		4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = DevStoreKit.storekit; sourceTree = "<group>"; };
 		4DB6E2DE2DDE1A2C00361F63 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +77,7 @@
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
+				4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
 				7F8756D8B27F46E3366F6CEA /* Pods */,
@@ -181,6 +184,7 @@
 			files = (
 				4D47D3C92DD23DDE009A9FB5 /* dictionary.db in Resources */,
 				4D47D3CA2DD23DDE009A9FB5 /* index.db in Resources */,
+				4DB2E7A02DFEBF570055ABF3 /* DevStoreKit.storekit in Resources */,
 				4D47D3CB2DD23DDE009A9FB5 /* tracks.db in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
