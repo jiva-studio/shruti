@@ -39,10 +39,6 @@
 import { onMounted, ref } from 'vue'
 import { IonItem, IonLabel, IonAlert } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
-import confetti from 'canvas-confetti'
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
-import { useSound } from '@vueuse/sound'
-import subscriptionCompleteSound from '../assets/subscribed.mp3'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
@@ -51,7 +47,6 @@ import { Capacitor } from '@capacitor/core'
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const { play: playSubscriptionCompleteSound } = useSound(subscriptionCompleteSound)
 const config = useConfig()
 
 /* -------------------------------------------------------------------------- */
@@ -121,23 +116,20 @@ async function loadItems() {
 }
 
 async function subscribe(plan: SubscriptionPlan) {
-  // TODO: execute only if purchased complete vvv
-  Haptics.impact({ style: ImpactStyle.Medium })
-  confetti({
-    particleCount: 100,
-    spread: 70,
-    origin: { y: 0.6 },
-  })
-  playSubscriptionCompleteSound()
-  isSubscribedAlertOpen.value = true
-  config.subscriptionPlan.value = plan.packageId
-  // ^^^
-
   const offerings = await Purchases.getOfferings()
   const aPackage = offerings.current?.availablePackages
     .find((pkg) => pkg.identifier === plan.packageId)
   if (aPackage) {
     await Purchases.purchasePackage({ aPackage })
+    // Haptics.impact({ style: ImpactStyle.Medium })
+    // confetti({
+    //   particleCount: 100,
+    //   spread: 70,
+    //   origin: { y: 0.6 },
+    // })
+    // playSubscriptionCompleteSound()
+    // isSubscribedAlertOpen.value = true
+    config.subscriptionPlan.value = plan.packageId
   }
 }
 </script>
