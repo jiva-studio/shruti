@@ -121,15 +121,8 @@ async function subscribe(plan: SubscriptionPlan) {
     .find((pkg) => pkg.identifier === plan.packageId)
   if (aPackage) {
     await Purchases.purchasePackage({ aPackage })
-    // Haptics.impact({ style: ImpactStyle.Medium })
-    // confetti({
-    //   particleCount: 100,
-    //   spread: 70,
-    //   origin: { y: 0.6 },
-    // })
-    // playSubscriptionCompleteSound()
-    // isSubscribedAlertOpen.value = true
     config.subscriptionPlan.value = plan.packageId
+    open.value = false
   }
 }
 </script>
