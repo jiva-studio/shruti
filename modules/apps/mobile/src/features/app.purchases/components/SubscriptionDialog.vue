@@ -147,7 +147,6 @@ watch(
 const subscribe = async () => {
   if (selectedPlan.value) {
     emit('subscribe', selectedPlan.value)
-    isOpen.value = false
   }
 }
 </script>
