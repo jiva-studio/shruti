@@ -31,23 +31,26 @@
     :active-plan="config.subscriptionPlan.value"
     :legal-documents="legalDocuments"
     @subscribe="subscribe"
+    @restore="restore"
   />
 </template>
 
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { IonItem, IonLabel, IonAlert } from '@ionic/vue'
+import { IonItem, IonLabel, IonAlert, alertController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
+import { useI18n } from 'vue-i18n'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
 const config = useConfig()
+const i18n = useI18n()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -123,6 +126,43 @@ async function subscribe(plan: SubscriptionPlan) {
     await Purchases.purchasePackage({ aPackage })
     config.subscriptionPlan.value = plan.packageId
     open.value = false
+  }
+}
+
+async function restore() {
+  try {
+    const customerInfo = await Purchases.restorePurchases()
+    const offerings = await Purchases.getOfferings()
+    const activeSubscriptions = customerInfo.customerInfo.activeSubscriptions
+
+    if (customerInfo.customerInfo.activeSubscriptions.length > 0) {
+      console.log(
+        'Active subscriptions:', 
+        customerInfo.customerInfo.activeSubscriptions
+      )
+      
+      config.subscriptionPlan.value = offerings.current?.availablePackages
+        .find((pkg) => pkg.product.identifier === activeSubscriptions[0])
+        ?.identifier || ''
+
+      const alert = await alertController.create({
+        header: i18n.t('settings.subscription.title'),
+        message: i18n.t('settings.subscription.restored'),
+        buttons: [i18n.t('app.ok')],
+      })
+      await alert.present()
+      open.value = false
+    } else {
+      const alert = await alertController.create({
+        header: i18n.t('settings.subscription.title'),
+        message: i18n.t('settings.subscription.noSubscriptionFound'),
+        buttons: [i18n.t('app.ok')],
+      })
+      await alert.present()
+    }
+  } catch (error) {
+    console.error('Error restoring purchases:', error)
+    alert('Error restoring subscription')
   }
 }
 </script>

@@ -60,6 +60,15 @@
         >
           {{ $t('settings.subscription.subscribe') }}
         </IonButton>
+        
+        <!-- Restore Purchases -->
+        <IonButton
+          expand="block"
+          fill="clear"
+          @click="emit('restore')"
+        >
+          {{ $t('settings.subscription.restore') }}
+        </IonButton>
       </template>
  
       <!-- Legal Documents -->
@@ -109,7 +118,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'subscribe', plan: SubscriptionPlan): void;
+  (e: 'subscribe', plan: SubscriptionPlan): void
+  (e: 'restore'): void
 }>()
 
 const isOpen = defineModel<boolean>('open', { default: false })
