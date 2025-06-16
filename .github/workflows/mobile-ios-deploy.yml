@@ -88,5 +88,10 @@ jobs:
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+          BUCKET_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
+          BUCKET_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
+          BUCKET_ENDPOINT_URL: ${{ secrets.BUCKET_ENDPOINT_URL }}
+          BUCKET_REGION_NAME: ${{ secrets.BUCKET_REGION_NAME }}
         run: |
           bundle exec fastlane staging    
