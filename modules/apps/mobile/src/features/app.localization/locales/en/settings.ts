@@ -33,6 +33,7 @@ export default {
     subscribed: 'Subscription completed',
     restore: 'Restore',
     restored: 'Your subscription has been successfully restored!',
+    error: 'An error occurred while processing the subscription. Please try again.',
     noSubscriptionFound: 'No active subscription found. Please subscribe to access premium features.',
     thanks: 'Thank you for your subscription and support 🙏 May your heart be filled with happiness, and each day bring you closer to Truth. We are glad that you are with us on this path.',
     benefits: {

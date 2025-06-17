@@ -84,48 +84,40 @@ onMounted(() => {
 /* -------------------------------------------------------------------------- */
 
 async function loadItems() {
-  try {
-    const offerings = await Purchases.getOfferings()
-
-    if (offerings.current) {
-      subscriptionPlans.value = offerings.current.availablePackages.map((pkg) => {
-        return {
-          packageId: pkg.identifier,
-          name: pkg.product.title,
-          price: pkg.product.priceString,
-          billingPeriod: pkg.product.subscriptionPeriod ?? '???',
-          description: pkg.product.description,
-        }
-      })
-    }
-  } catch {
-    subscriptionPlans.value = [
-      {
-        packageId: '$rc_monthly',
-        name: 'Индра',
-        price: '$2.99',
-        billingPeriod: 'P1M',
-        description: ''
-      },
-      {
-        packageId: '$rc_annual',
-        name: 'Индра',
-        price: '$19.99',
-        billingPeriod: 'P1Y',
-        description: ''
+  const offerings = await Purchases.getOfferings()
+  if (offerings.current) {
+    subscriptionPlans.value = offerings.current.availablePackages.map((pkg) => {
+      return {
+        packageId: pkg.identifier,
+        name: pkg.product.title,
+        price: pkg.product.priceString,
+        billingPeriod: pkg.product.subscriptionPeriod ?? '???',
+        description: pkg.product.description,
       }
-    ]
+    })
   }
 }
 
 async function subscribe(plan: SubscriptionPlan) {
-  const offerings = await Purchases.getOfferings()
-  const aPackage = offerings.current?.availablePackages
-    .find((pkg) => pkg.identifier === plan.packageId)
-  if (aPackage) {
-    await Purchases.purchasePackage({ aPackage })
-    config.subscriptionPlan.value = plan.packageId
-    open.value = false
+  try {
+    const offerings = await Purchases.getOfferings()
+    const aPackage = offerings.current?.availablePackages
+      .find((pkg) => pkg.identifier === plan.packageId)
+    if (aPackage) {
+      await Purchases.purchasePackage({ aPackage })
+      config.subscriptionPlan.value = plan.packageId
+      open.value = false
+    }
+  } catch (e: any) {
+    console.error(e)
+    const alert = await alertController.create({
+      header: i18n.t('settings.subscription.title'),
+      message: 
+        i18n.t('settings.subscription.error') + ' ' +
+        (e.message || e.errorMessage),
+      buttons: [i18n.t('app.ok')],
+    })
+    await alert.present()
   }
 }
 
