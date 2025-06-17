@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { IonItem, IonLabel, IonAlert, alertController } from '@ionic/vue'
-import { Purchases, PurchasesError, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor'
+import { Purchases, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
@@ -119,7 +119,7 @@ async function subscribe(plan: SubscriptionPlan) {
       header: i18n.t('settings.subscription.title'),
       message: 
         i18n.t('settings.subscription.error') + ' ' +
-        `${e.message} ${e.underlyingErrorMessage}`,
+        `${e.message} ${e.underlyingErrorMessage || ''}`,
       buttons: [i18n.t('app.ok')],
     })
     await alert.present()
@@ -157,9 +157,17 @@ async function restore() {
       })
       await alert.present()
     }
-  } catch (error) {
-    console.error('Error restoring purchases:', error)
-    alert('Error restoring subscription')
+  } catch (e: any) {
+    console.error('Error restoring purchases:', e)
+
+    const alert = await alertController.create({
+      header: i18n.t('settings.subscription.title'),
+      message: 
+        i18n.t('settings.subscription.error') + ' ' +
+        `${e.message} ${e.underlyingErrorMessage || ''}`,
+      buttons: [i18n.t('app.ok')],
+    })
+    await alert.present()
   }
 }
 </script>
