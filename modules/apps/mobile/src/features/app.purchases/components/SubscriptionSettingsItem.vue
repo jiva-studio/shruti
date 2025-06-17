@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { IonItem, IonLabel, IonAlert, alertController } from '@ionic/vue'
-import { Purchases } from '@revenuecat/purchases-capacitor'
+import { Purchases, PurchasesError, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
@@ -109,12 +109,17 @@ async function subscribe(plan: SubscriptionPlan) {
       open.value = false
     }
   } catch (e: any) {
-    console.error(e)
+    console.error(`${e.message}: ${e.underlyingErrorMessage}`)
+
+    if (e.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
+      return
+    }
+
     const alert = await alertController.create({
       header: i18n.t('settings.subscription.title'),
       message: 
         i18n.t('settings.subscription.error') + ' ' +
-        (e.message || e.errorMessage),
+        `${e.message} ${e.underlyingErrorMessage}`,
       buttons: [i18n.t('app.ok')],
     })
     await alert.present()
