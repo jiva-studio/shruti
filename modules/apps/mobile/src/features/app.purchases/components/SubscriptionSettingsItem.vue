@@ -3,7 +3,7 @@
     button
     detail
     lines="none"
-    @click="open = true"
+    @click="onMenuItemClicked"
   >
     <div slot="start">
       👑
@@ -38,12 +38,13 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { IonItem, IonLabel, IonAlert, alertController } from '@ionic/vue'
 import { Purchases, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor'
-import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
-import { useI18n } from 'vue-i18n'
+import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
+import { useAnalytics } from '@lectorium/mobile/features/app.analytics'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -51,6 +52,7 @@ import { useI18n } from 'vue-i18n'
 
 const config = useConfig()
 const i18n = useI18n()
+const analytics = useAnalytics()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -78,6 +80,11 @@ if (Capacitor.getPlatform() === 'ios') {
 onMounted(() => {
   loadItems()
 })
+
+function onMenuItemClicked() {
+  open.value = true
+  analytics.track('app.subscriptions.open')
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
