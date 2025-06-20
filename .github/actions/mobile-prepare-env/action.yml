@@ -46,6 +46,9 @@ inputs:
   revenueCatKey:
     description: 'RevenueCat key'
     required: false
+  amplitudeKey:
+    description: 'Amplitude key'
+    required: false
 
 runs:
   using: 'composite'
@@ -148,6 +151,7 @@ runs:
         BUCKET_NAME: ${{ inputs.bucketName }}
         READONLY_AUTH_TOKEN: ${{ inputs.readonlyAuthToken }}
         REVENUE_CAT_KEY: ${{ inputs.revenueCatKey }}
+        AMPLITUDE_KEY: ${{ inputs.amplitudeKey }}
       run: python3 scripts/update-envs.py
 
     - name: 🧮 Update Version
