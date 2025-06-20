@@ -9,6 +9,7 @@ on:
       - "modules/libs/audioPlayer/**"
       - "modules/package.json"
       - "modules/package-lock.json"
+      - "scripts/update-envs.py"
       - ".github/workflows/mobile-android-deploy.yml"
 
 # ---------------------------------------------------------------------------- #
