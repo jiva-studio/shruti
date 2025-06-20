@@ -6,6 +6,7 @@ export default {
   groups: {
     appearance: 'Appearance',
     pro: 'Pro Features',
+    misc: 'Misc',
   },
   player: {
     showProgress: {
@@ -24,6 +25,10 @@ export default {
       title: 'Highlight sentence',
       description: 'Follow the current sentence in the transcript'
     }
+  },
+  social: {
+    socialNetworks: 'Social networks',
+    stayConnected: 'Let\'s stay connected',
   },
   subscription: {
     title: 'Subscription',

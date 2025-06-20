@@ -6,6 +6,7 @@ export default {
   groups: {
     appearance: 'Внешний вид',
     pro: 'Про-функции',
+    misc: 'Разное',
   },
   player: {
     showProgress: {
@@ -24,6 +25,10 @@ export default {
       title: 'Выделение предложения',
       description: 'Следить за текущим предложением в тексте'
     }
+  },
+  social: {
+    socialNetworks: 'Социальные сети',
+    stayConnected: 'Будем на связи',
   },
   subscription: {
     title: 'Подписка',
