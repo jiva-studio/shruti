@@ -8,6 +8,7 @@ api_url             = os.getenv('API_URL', 'http://localhost:8101/')
 database_url        = os.getenv('DATABASE_URL', 'http://localhost:5984/')
 bucket_name         = os.getenv('BUCKET_NAME', 'lectorium-dev')
 revenue_cat_key     = os.getenv('REVENUE_CAT_KEY', '')
+amplitude_key       = os.getenv('AMPLITUDE_KEY', '')
 readonly_auth_token = os.getenv('READONLY_AUTH_TOKEN', '')
 
 # Step 2: Define the content template
@@ -20,6 +21,7 @@ export const ENVIRONMENT = {{
   databaseUrl: "{database_url}",
   bucketName: "{bucket_name}",
   revenueCatKey: "{revenue_cat_key}",
+  amplitudeKey: "{amplitude_key}",
   readonlyAuthToken: "{readonly_auth_token}"
 }}
 """
