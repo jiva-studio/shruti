@@ -66,6 +66,7 @@ import { useSyncTranscriptTask, useTranscriptStore } from './features/transcript
 import { useNotesLoader, useNotesSearchIndex, useNotesSearchTask, useNotesStore } from './features/notes'
 import { useRestoreSubscriptionPlan } from './features/app.purchases'
 import { useTrackSearchFiltersPersistenceTask } from './features/tracks.search.results'
+import { useAnalyticsRecorderTask } from './features/app.analytics'
 
 const i18n = createI18n({
   locale: 'ru',
@@ -94,6 +95,7 @@ router.isReady().then(async () => {
   // App //
 
   await useConfigPersistenceTask().start()
+  useAnalyticsRecorderTask()
 
   // app.appearance //
   await useNavigationBarAppearanceTask({
