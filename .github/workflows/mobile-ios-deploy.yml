@@ -59,6 +59,7 @@ jobs:
           readonlyAuthToken: ${{ secrets.READONLY_AUTH_TOKEN }}
           appleCertificates: ${{ secrets.APPLE_CERTIFICATES }}
           revenueCatKey: ${{ secrets.APPLE_REVENUE_CAT_KEY }}
+          amplitudeKey: ${{ secrets.AMPLITUDE_KEY }} 
 
       # ---------------------------------------------------------------------------- #
       #                                 Build Plugins                                #

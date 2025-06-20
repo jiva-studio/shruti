@@ -60,6 +60,7 @@ jobs:
           readonlyAuthToken: ${{ secrets.READONLY_AUTH_TOKEN }}
           googleCertificates: ${{ secrets.ANDROID_KEYSTORE_FILE }}
           revenueCatKey: ${{ secrets.GOOGLE_REVENUE_CAT_KEY }}
+          amplitudeKey: ${{ secrets.AMPLITUDE_KEY }} 
 
       # ---------------------------------------------------------------------------- #
       #                                 Build Plugins                                #
