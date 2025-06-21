@@ -4,11 +4,22 @@ import android.os.Bundle;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
+import com.appsflyer.AppsFlyerLib;
+
 
 public class MainActivity extends BridgeActivity {
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
+
+    // Configure appsflyer
+    AppsFlyerLib.getInstance().setDebugLog(true);
+    AppsFlyerLib.getInstance().init(
+            BuildConfig.APPSFLYER_KEY,
+            null,
+            getApplicationContext());
+    AppsFlyerLib.getInstance().start(getApplicationContext());
+
 
     // Copy the database from assets to the databases folder
     DatabaseHelper databaseHelper = new DatabaseHelper(this);
