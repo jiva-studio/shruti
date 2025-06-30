@@ -26,4 +26,10 @@ export default registerAs('auth', () => ({
     process.env.SHRUTI_AUTH_USER_PERMISSIONS_CACHE_TTL ?? '0',
     10,
   ),
+
+  /**
+   * Google OAuth client ID.
+   * This is used to authenticate users with Google OAuth.
+   */
+  googleOAuthClientId: process.env.SHRUTI_AUTH_GOOGLE_OAUTH_CLIENT_ID || '',
 }));

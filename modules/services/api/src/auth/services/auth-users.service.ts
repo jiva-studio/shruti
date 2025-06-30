@@ -32,4 +32,40 @@ export class AuthUsersService {
       return null;
     }
   }
+
+  /**
+   * Finds or creates new user by email.
+   * @param name User name.
+   * @returns User object if found, null otherwise.
+   */
+  async findOrCreateByName(name: string): Promise<User> {
+    // Sanitize the name to create a valid CouchDB collection name
+    const couchDbSafeName = 'users-' + name.replace(/[^a-zA-Z0-9_]/g, '-');
+
+    // Create a new collection for the user's data if it doesn't exist
+    // (will not throw an error if it already exists)
+    await this.couchDbService.createCollection(couchDbSafeName);
+
+    // Configure collection to be accessible only by the user
+    // (will not throw an error if security is already set)
+    await this.couchDbService.setCollectionSecurity(couchDbSafeName, [name]);
+
+    // Create a new user document in the _users collection
+    const existingUser = await this.findByName(name);
+    if (existingUser) {
+      return existingUser;
+    }
+
+    await this.couchDbService.insert('_users', {
+      _id: 'org.couchdb.user:' + name,
+      name: name,
+      roles: [],
+      type: 'user',
+    });
+
+    return {
+      name: name,
+      roles: [],
+    };
+  }
 }

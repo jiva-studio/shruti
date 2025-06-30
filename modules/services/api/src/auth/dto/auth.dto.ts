@@ -32,6 +32,32 @@ export class OtpSignInResponse implements protocol.OtpSignInResponse {
   refreshToken: string;
 }
 
+export class JwtSignInRequest implements protocol.JwtSignInRequest {
+  @ApiProperty()
+  @IsNotEmpty()
+  jwt: string;
+
+  @ApiProperty({ example: 'google' })
+  @IsString()
+  @IsNotEmpty()
+  provider: 'google';
+}
+
+export class JwtSignInResponse implements protocol.OtpSignInResponse {
+  constructor(options: { accessToken: string; refreshToken: string }) {
+    this.accessToken = options.accessToken;
+    this.refreshToken = options.refreshToken;
+  }
+
+  @ApiProperty({ example: 'token' })
+  @IsString()
+  accessToken: string;
+
+  @ApiProperty({ example: 'token' })
+  @IsString()
+  refreshToken: string;
+}
+
 export class RefreshTokensRequest implements protocol.RefreshTokensRequest {
   @ApiProperty({ example: 'refreshToken' })
   @IsString()
