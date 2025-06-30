@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   HttpCode,
+  Inject,
   Post,
   UnauthorizedException,
   UseGuards,
@@ -25,9 +26,12 @@ import {
   RevokedTokensService,
 } from '@lectorium/api/auth/services';
 import { Routes } from '@lectorium/protocol';
+import { OAuth2Client } from 'google-auth-library';
 
 import { Authentication } from '../decorators';
 import { UserAuthentication } from '../utils';
+import { AuthConfig } from '@lectorium/api/configs';
+import { ConfigType } from '@nestjs/config';
 
 @Controller()
 @ApiTags('🔐 Authentication')
@@ -37,6 +41,8 @@ export class UserAuthenticationController {
     private readonly usersService: AuthUsersService,
     private readonly authService: AuthService,
     private readonly revokedTokensService: RevokedTokensService,
+    @Inject(AuthConfig.KEY)
+    private readonly authConfig: ConfigType<typeof AuthConfig>,
   ) {}
 
   /* -------------------------------------------------------------------------- */
@@ -47,13 +53,13 @@ export class UserAuthenticationController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Signs user in with OTP',
-    operationId: 'auth::signIn',
+    operationId: 'auth::signIn::otp',
     description:
       `Signs user in with one-time password.\n\n` +
       `Returns access and refresh tokens if the user has been authenticated.`,
   })
   @ApiOkResponse({
-    type: dto.OtpSignInRequest,
+    type: dto.OtpSignInResponse,
     description: 'User has been authenticated.',
   })
   @ApiUnauthorizedResponse({
@@ -95,6 +101,83 @@ export class UserAuthenticationController {
     const tokens = await this.authService.generateTokens(user.name, user.roles);
 
     return new dto.OtpSignInResponse({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    });
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                           POST /auth/signin/google                         */
+  /* -------------------------------------------------------------------------- */
+
+  @Post(Routes().auth.signIn('jwt'))
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Signs user in with third-party JWT token',
+    operationId: 'auth::signIn::jwt',
+    description:
+      `Signs user in with third-party JWT token.\n\n` +
+      `Returns access and refresh tokens if the user has been authenticated.`,
+  })
+  @ApiOkResponse({
+    type: dto.JwtSignInResponse,
+    description: 'User has been authenticated.',
+  })
+  @ApiUnauthorizedResponse({
+    type: dtoShared.ErrorResponse,
+    description: 'JWT is invalid.',
+  })
+  @ApiTooManyRequestsResponse({
+    type: dtoShared.ErrorResponse,
+    description: 'Too many requests',
+  })
+  async signinWithJWT(
+    @Body() request: dto.JwtSignInRequest,
+  ): Promise<dto.JwtSignInResponse> {
+    // TODO rate limit login attempts by login
+
+    // validate JWT token using Google OAuth2 client
+    let userEmail = '';
+    try {
+      if (request.provider === 'google') {
+        const oauthClientId = this.authConfig.googleOAuthClientId;
+        const client = new OAuth2Client(oauthClientId);
+        const ticket = await client.verifyIdToken({
+          idToken: request.jwt,
+          audience: oauthClientId,
+        });
+        const payload = ticket.getPayload();
+
+        // validate payload
+        if (!payload?.email_verified || !payload.email) {
+          throw new UnauthorizedException(
+            new dtoShared.ErrorResponse({
+              message: ['No email provided or it is not verified yet'],
+              statusCode: 401,
+              error: 'Unauthorized',
+            }),
+          );
+        }
+        userEmail = payload.email;
+      } else {
+        throw new Error('Unsupported provider');
+      }
+    } catch (error: any) {
+      throw new UnauthorizedException(
+        new dtoShared.ErrorResponse({
+          message: [error.message || 'Invalid JWT token'],
+          statusCode: 401,
+          error: 'Unauthorized',
+        }),
+      );
+    }
+
+    // get or create user by login and start new session
+    const user = await this.usersService.findOrCreateByName(userEmail);
+
+    // generate new JWT tokens
+    const tokens = await this.authService.generateTokens(user.name, user.roles);
+    return new dto.JwtSignInResponse({
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     });

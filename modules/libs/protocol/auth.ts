@@ -58,7 +58,7 @@ export const RevokedTokenStorageKey = (token: JwtToken) => `tokens:revoked:${tok
 /* -------------------------------------------------------------------------- */
 
 export interface OtpSignInRequest {
-  /** Login to sign up with */
+  /** Login to sign in with */
   login: string;
 
   /** OTP to validate */
@@ -66,6 +66,19 @@ export interface OtpSignInRequest {
 }
 
 export interface OtpSignInResponse {
+  /** Access token to authenticate user */
+  accessToken: string;
+
+  /** Refresh token to refresh the access token */
+  refreshToken: string;
+}
+
+export interface JwtSignInRequest {
+  provider: 'google';
+  jwt: string
+}
+
+export interface JwtSignInResponse {
   /** Access token to authenticate user */
   accessToken: string;
 
