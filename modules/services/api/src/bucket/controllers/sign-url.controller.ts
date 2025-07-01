@@ -59,7 +59,8 @@ export class SignUrlController {
   ): Promise<dto.SignUrlResponse | dtoShared.ErrorResponse> {
     if (
       !auth.roles.includes('contentManager') &&
-      !auth.roles.includes('readonly')
+      !auth.roles.includes('readonly') &&
+      !auth.roles.includes('user')
     ) {
       throw new ForbiddenException(
         new dtoShared.ErrorResponse({
