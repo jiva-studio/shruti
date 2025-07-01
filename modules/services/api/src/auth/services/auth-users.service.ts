@@ -59,7 +59,7 @@ export class AuthUsersService {
     await this.couchDbService.insert('_users', {
       _id: 'org.couchdb.user:' + name,
       name: name,
-      roles: [],
+      roles: ['user'],
       type: 'user',
     });
 
