@@ -144,7 +144,6 @@ export class UserAuthenticationController {
         const client = new OAuth2Client(oauthClientId);
         const ticket = await client.verifyIdToken({
           idToken: request.jwt,
-          audience: oauthClientId,
         });
         const payload = ticket.getPayload();
 
