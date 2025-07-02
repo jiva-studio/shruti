@@ -32,6 +32,7 @@ import { Authentication } from '../decorators';
 import { UserAuthentication } from '../utils';
 import { AuthConfig } from '@lectorium/api/configs';
 import { ConfigType } from '@nestjs/config';
+import { verifyIdToken } from 'apple-signin-auth';
 
 @Controller()
 @ApiTags('🔐 Authentication')
@@ -149,6 +150,23 @@ export class UserAuthenticationController {
 
         // validate payload
         if (!payload?.email_verified || !payload.email) {
+          throw new UnauthorizedException(
+            new dtoShared.ErrorResponse({
+              message: ['No email provided or it is not verified yet'],
+              statusCode: 401,
+              error: 'Unauthorized',
+            }),
+          );
+        }
+        userEmail = payload.email;
+      } else if (request.provider === 'apple') {
+        const payload = await verifyIdToken(request.jwt, {
+          audience: 'studio.jiva.shruti',
+          ignoreExpiration: false,
+        });
+
+        // validate payload
+        if (!payload.email_verified || !payload.email) {
           throw new UnauthorizedException(
             new dtoShared.ErrorResponse({
               message: ['No email provided or it is not verified yet'],
