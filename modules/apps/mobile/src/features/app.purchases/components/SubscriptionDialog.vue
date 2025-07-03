@@ -3,19 +3,6 @@
     :is-open="isOpen"
     @did-dismiss="isOpen = false"
   >
-    <!-- Close Button -->
-    <IonButton
-      size="small"
-      shape="round"
-      class="close"
-      color="medium"
-      @click="isOpen = false"
-    >
-      <IonIcon
-        slot="icon-only"
-        :icon="close"
-      />
-    </IonButton>
     <Content>
       <!-- Header -->
       <SubscriptionHeader class="header" />
@@ -82,6 +69,21 @@
         </a>
       </IonNote>
     </Content>
+
+    <!-- Close Button -->
+    <IonButton
+      size="small"
+      shape="round"
+      class="close top-most"
+      color="medium"
+      @click="isOpen = false"
+    >
+      <IonIcon
+        slot="icon-only"
+        class="top-most"
+        :icon="close"
+      />
+    </IonButton>
   </IonModal>
 </template>
 
@@ -184,6 +186,9 @@ const subscribe = async () => {
   position: absolute;
   top: var(--ion-safe-area-top, 2rem);
   left: 10px;
-  z-index: 999999;
+}
+
+.top-most {
+  z-index: 99999999;
 }
 </style>

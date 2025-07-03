@@ -24,8 +24,8 @@ import { SearchFiltersBar } from '@shruti/mobile/features/tracks.search.filters'
 import { TrackStateIndicator } from '@shruti/mobile/features/tracks.state'
 import { SearchResultsSection, useTrackSearchResultsStore } from '@shruti/mobile/features/tracks.search.results' 
 import { useTracksCountStore } from '@shruti/mobile/features/tracks.count'
-import { useTracksDownloadFeature } from '@shruti/mobile/features/tracks.download'
 import { usePlaylistFeature } from '@shruti/mobile/features/playlist'
+import { Events } from '@shruti/mobile/events'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -41,7 +41,7 @@ const tracksCountStore = useTracksCountStore()
 async function onTrackClicked(trackId: string) {
   const isTrackAdded = await usePlaylistFeature().addTrackToPlaylist(trackId)
   if (isTrackAdded) {
-    useTracksDownloadFeature().download({ trackId })
+    Events.trackDownloadRequested.notify({ trackId })
   }
 }
 </script>

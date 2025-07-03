@@ -1,5 +1,12 @@
 <template>
   <Page>
+    <!-- Account -->
+    <IonListHeader>
+      <IonLabel>{{ $t('settings.groups.auth') }}</IonLabel>
+    </IonListHeader>
+    <SignInSettingsItem />
+    <SubscriptionSettingsItem />
+
     <!-- App Appearance -->
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.appearance') }}</IonLabel>
@@ -8,12 +15,6 @@
     <ShowPlayerProgressSettingsItem />
     <ShowNotesTabSettingsItem />
     <HighlightCurrentSentenceSettingsItem />
-
-    <!-- Pro Features -->
-    <IonListHeader>
-      <IonLabel>{{ $t('settings.groups.pro') }}</IonLabel>
-    </IonListHeader>
-    <SubscriptionSettingsItem />
 
     <!-- Social -->
     <IonListHeader>
@@ -50,6 +51,7 @@ import { AppLanguageSettingsItem } from '@shruti/mobile/features/app.localizatio
 import { ShowPlayerProgressSettingsItem } from '@shruti/mobile/features/player.progress'
 import { ShowNotesTabSettingsItem } from '@shruti/mobile/features/notes'
 import { HighlightCurrentSentenceSettingsItem } from '@shruti/mobile/features/transcript'
+import { SignInSettingsItem } from '@shruti/mobile/features/app.auth'
 import { IconTelegram } from '@shruti/mobile/features/app.ui.kit'
 import { IconFacebook } from '@shruti/mobile/features/app.ui.kit'
 import { IconVk } from '@shruti/mobile/features/app.ui.kit'

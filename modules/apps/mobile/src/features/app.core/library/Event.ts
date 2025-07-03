@@ -1,7 +1,10 @@
-type EventHandler<TArgument> = (arg: TArgument) => void
+type EventHandler<TArgument> = (arg: TArgument) => Promise<void>
 
 export class Event<TArgument> {
   private _handlers: EventHandler<TArgument>[] = []
+
+  constructor(private readonly name?: string) {
+  }
 
   /**
    * Subscribes to the event.
@@ -31,7 +34,8 @@ export class Event<TArgument> {
    * Notifies all handlers.
    * @param arg Argument to pass to the handlers.
    */
-  public notify(arg: TArgument): void {
-    this._handlers.forEach(x => x(arg))
+  public async notify(arg: TArgument): Promise<void> {
+    console.log(`[LCT] Event ${this.name || '???'}: ${JSON.stringify(arg)}`)
+    await Promise.all(this._handlers.map(x => x(arg)))
   }
 }

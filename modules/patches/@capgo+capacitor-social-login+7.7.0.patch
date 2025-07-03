@@ -1,0 +1,44 @@
+diff --git a/node_modules/@capgo/capacitor-social-login/android/src/main/java/ee/forgr/capacitor/social/login/GoogleProvider.java b/node_modules/@capgo/capacitor-social-login/android/src/main/java/ee/forgr/capacitor/social/login/GoogleProvider.java
+index a0b2337..9e7e531 100644
+--- a/node_modules/@capgo/capacitor-social-login/android/src/main/java/ee/forgr/capacitor/social/login/GoogleProvider.java
++++ b/node_modules/@capgo/capacitor-social-login/android/src/main/java/ee/forgr/capacitor/social/login/GoogleProvider.java
+@@ -5,6 +5,7 @@ import android.app.PendingIntent;
+ import android.content.Context;
+ import android.content.Intent;
+ import android.content.IntentSender;
++import android.util.Base64;
+ import android.util.Log;
+ import androidx.annotation.NonNull;
+ import androidx.concurrent.futures.CallbackToFutureAdapter;
+@@ -31,6 +32,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
+ import com.google.common.util.concurrent.ListenableFuture;
+ import ee.forgr.capacitor.social.login.helpers.SocialProvider;
+ import java.io.IOException;
++import java.nio.charset.StandardCharsets;
+ import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.List;
+@@ -241,7 +243,10 @@ public class GoogleProvider implements SocialProvider {
+             }
+ 
+             // Decode payload (second part)
+-            String payload = new String(android.util.Base64.decode(parts[1], android.util.Base64.DEFAULT));
++            String payload = new String(
++                    android.util.Base64.decode(parts[1], Base64.URL_SAFE),
++                    StandardCharsets.UTF_8
++            );
+             JSONObject parsed = new JSONObject(payload);
+ 
+             // Get current time in seconds
+@@ -655,7 +660,10 @@ public class GoogleProvider implements SocialProvider {
+                     }
+ 
+                     // Decode payload (second part)
+-                    String payload = new String(android.util.Base64.decode(parts[1], android.util.Base64.DEFAULT));
++                    String payload = new String(
++                            android.util.Base64.decode(parts[1], Base64.URL_SAFE),
++                            StandardCharsets.UTF_8
++                    );
+                     JSONObject parsed = new JSONObject(payload);
+ 
+                     // Get current time in seconds

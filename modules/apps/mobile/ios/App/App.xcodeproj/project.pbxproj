@@ -30,6 +30,7 @@
 		4D47D3BF2DD23D88009A9FB5 /* index.db */ = {isa = PBXFileReference; lastKnownFileType = file; path = index.db; sourceTree = "<group>"; };
 		4D47D3C02DD23D88009A9FB5 /* tracks.db */ = {isa = PBXFileReference; lastKnownFileType = file; path = tracks.db; sourceTree = "<group>"; };
 		4D47D3CC2DD245AF009A9FB5 /* DatabaseHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseHelper.swift; sourceTree = "<group>"; };
+		4D638ACB2E151F2800DE9770 /* AppRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppRelease.entitlements; sourceTree = "<group>"; };
 		4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = DevStoreKit.storekit; sourceTree = "<group>"; };
 		4DB6E2DE2DDE1A2C00361F63 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		4DDECDC92E00499100373BA5 /* StoreKitTestCertificate.cer */ = {isa = PBXFileReference; lastKnownFileType = file; path = StoreKitTestCertificate.cer; sourceTree = "<group>"; };
@@ -99,6 +100,7 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				4D638ACB2E151F2800DE9770 /* AppRelease.entitlements */,
 				4D47D3CF2DD24F00009A9FB5 /* databases */,
 				4D47D3CC2DD245AF009A9FB5 /* DatabaseHelper.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
@@ -410,6 +412,7 @@
 			baseConfigurationReference = AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/AppRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;

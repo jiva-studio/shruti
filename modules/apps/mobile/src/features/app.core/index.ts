@@ -24,3 +24,4 @@ export { useKeyboardVisible } from './composables/useKeyboardVisible'
 /* -------------------------------------------------------------------------- */
 
 export { Event } from './library/Event'
+export { Connection } from './library/Connection'
