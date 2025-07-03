@@ -1,1 +1,1 @@
-export * from './composables/useSyncService'
+export * from './composables/useSyncStore'

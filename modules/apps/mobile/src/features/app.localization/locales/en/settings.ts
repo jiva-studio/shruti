@@ -7,6 +7,19 @@ export default {
     appearance: 'Appearance',
     pro: 'Pro Features',
     misc: 'Misc',
+    auth: 'Profile'
+  },
+  auth: {
+    actions: 'Actions',
+    syncCompleted: 'Everything is synced',
+    syncing: 'Syncing...',
+    signedIn: 'You are signed in',
+    signOut: 'Sign Out',
+    signIn: {
+      title: 'Sign In',
+      subtitle: 'Sign In With',
+      description: 'For data and subscription synchronization'
+    },
   },
   player: {
     showProgress: {
@@ -33,6 +46,7 @@ export default {
   subscription: {
     title: 'Subscription',
     description: 'Subscription management',
+    yourSubscriptionPlanIs: 'You are a {plan} user!',
     choose: 'Support "Shruti"',
     subscribe: 'Subscribe',
     subscribed: 'Subscription completed',

@@ -1,5 +1,4 @@
 import { createSharedComposable } from '@vueuse/core'
-import { useNotesStore } from './useNotesStore'
 import { useDAL } from '../../app.database'
 import { useIdGenerator } from '../../app.core'
 
@@ -16,7 +15,6 @@ export const useNotesFeature = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const dal = useDAL()
-  const notesStore = useNotesStore()
   const idGenerator = useIdGenerator()
 
   /* -------------------------------------------------------------------------- */
@@ -29,14 +27,6 @@ export const useNotesFeature = createSharedComposable(() => {
    */
   function addNote(request: AddNoteRequest) {
     const id = idGenerator.generateId(24)
-    notesStore.items.push({
-      id: id,
-      trackId: request.trackId,
-      text: request.text,
-      blocks: request.blocks,
-      trackAuthor: '',
-      trackTitle: '',
-    })
     dal.notes.addOne({
       _id: id,
       type: 'note',
