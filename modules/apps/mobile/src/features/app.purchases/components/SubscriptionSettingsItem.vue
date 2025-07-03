@@ -10,7 +10,17 @@
     </div>
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t('settings.subscription.title') }}</h2>
-      <p>{{ $t('settings.subscription.description') }}</p>
+      <p v-if="!config.subscriptionPlan.value">
+        {{ $t('settings.subscription.description') }}
+      </p>
+      <p v-else>
+        {{ 
+          $t(
+            'settings.subscription.yourSubscriptionPlanIs', 
+            { plan: subscriptionPlanName }
+          ) 
+        }}
+      </p>
     </IonLabel>
   </IonItem>
   
@@ -37,21 +47,22 @@
 
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { IonItem, IonLabel, IonAlert, alertController } from '@ionic/vue'
-import { Purchases, PURCHASES_ERROR_CODE } from '@revenuecat/purchases-capacitor'
+import { Purchases, PURCHASES_ERROR_CODE, PurchasesOfferings } from '@revenuecat/purchases-capacitor'
 import { useConfig } from '@lectorium/mobile/features/app.config'
 import { Capacitor } from '@capacitor/core'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useAnalytics } from '@lectorium/mobile/features/app.analytics'
+import { Events } from '@lectorium/mobile/events'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const config = useConfig()
 const i18n = useI18n()
+const config = useConfig()
 const analytics = useAnalytics()
 
 /* -------------------------------------------------------------------------- */
@@ -60,7 +71,13 @@ const analytics = useAnalytics()
 
 const open = ref(false)
 const subscriptionPlans = ref<SubscriptionPlan[]>([])
+const subscriptionPlanName = computed(() => { 
+  const plan = config.subscriptionPlan.value
+  if (!plan) return ''
+  return plan[0].toUpperCase() + plan.slice(1).toLowerCase()
+})
 const isSubscribedAlertOpen = ref(false)
+let offerings: PurchasesOfferings | null = null
 
 const legalDocuments = [
   { title: 'Privacy Policy', link: 'https://shruti.app/policy' },
@@ -91,28 +108,27 @@ function onMenuItemClicked() {
 /* -------------------------------------------------------------------------- */
 
 async function loadItems() {
-  const offerings = await Purchases.getOfferings()
-  if (offerings.current) {
-    subscriptionPlans.value = offerings.current.availablePackages.map((pkg) => {
-      return {
-        packageId: pkg.identifier,
-        name: pkg.product.title,
-        price: pkg.product.priceString,
-        billingPeriod: pkg.product.subscriptionPeriod ?? '???',
-        description: pkg.product.description,
-      }
-    })
-  }
+  offerings = await Purchases.getOfferings()
+  if (!offerings.current) { return }
+  subscriptionPlans.value = offerings.current.availablePackages.map((pkg) => {
+    return {
+      packageId: pkg.identifier,
+      name: pkg.product.title,
+      price: pkg.product.priceString,
+      billingPeriod: pkg.product.subscriptionPeriod ?? '???',
+      description: pkg.product.description,
+    }
+  })
 }
 
 async function subscribe(plan: SubscriptionPlan) {
+  if (!offerings || !offerings.current) { return }
   try {
-    const offerings = await Purchases.getOfferings()
     const aPackage = offerings.current?.availablePackages
       .find((pkg) => pkg.identifier === plan.packageId)
     if (aPackage) {
       await Purchases.purchasePackage({ aPackage })
-      config.subscriptionPlan.value = plan.packageId
+      Events.restoreSubscriptionPlanRequested.notify()
       open.value = false
     }
   } catch (e: any) {
@@ -134,21 +150,12 @@ async function subscribe(plan: SubscriptionPlan) {
 }
 
 async function restore() {
+  if (!offerings) { return }
   try {
-    const customerInfo = await Purchases.restorePurchases()
-    const offerings = await Purchases.getOfferings()
-    const activeSubscriptions = customerInfo.customerInfo.activeSubscriptions
+    await Purchases.restorePurchases()
+    await Events.restoreSubscriptionPlanRequested.notify()
 
-    if (customerInfo.customerInfo.activeSubscriptions.length > 0) {
-      console.log(
-        'Active subscriptions:', 
-        customerInfo.customerInfo.activeSubscriptions
-      )
-      
-      config.subscriptionPlan.value = offerings.current?.availablePackages
-        .find((pkg) => pkg.product.identifier === activeSubscriptions[0])
-        ?.identifier || ''
-
+    if (config.subscriptionPlan.value) {
       const alert = await alertController.create({
         header: i18n.t('settings.subscription.title'),
         message: i18n.t('settings.subscription.restored'),

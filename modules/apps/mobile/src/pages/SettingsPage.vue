@@ -1,5 +1,12 @@
 <template>
   <Page>
+    <!-- Account -->
+    <IonListHeader>
+      <IonLabel>{{ $t('settings.groups.auth') }}</IonLabel>
+    </IonListHeader>
+    <SignInSettingsItem />
+    <SubscriptionSettingsItem />
+
     <!-- App Appearance -->
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.appearance') }}</IonLabel>
@@ -8,12 +15,6 @@
     <ShowPlayerProgressSettingsItem />
     <ShowNotesTabSettingsItem />
     <HighlightCurrentSentenceSettingsItem />
-
-    <!-- Pro Features -->
-    <IonListHeader>
-      <IonLabel>{{ $t('settings.groups.pro') }}</IonLabel>
-    </IonListHeader>
-    <SubscriptionSettingsItem />
 
     <!-- Social -->
     <IonListHeader>
@@ -50,6 +51,7 @@ import { AppLanguageSettingsItem } from '@lectorium/mobile/features/app.localiza
 import { ShowPlayerProgressSettingsItem } from '@lectorium/mobile/features/player.progress'
 import { ShowNotesTabSettingsItem } from '@lectorium/mobile/features/notes'
 import { HighlightCurrentSentenceSettingsItem } from '@lectorium/mobile/features/transcript'
+import { SignInSettingsItem } from '@lectorium/mobile/features/app.auth'
 import { IconTelegram } from '@lectorium/mobile/features/app.ui.kit'
 import { IconFacebook } from '@lectorium/mobile/features/app.ui.kit'
 import { IconVk } from '@lectorium/mobile/features/app.ui.kit'

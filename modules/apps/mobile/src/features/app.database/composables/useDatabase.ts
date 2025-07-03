@@ -1,9 +1,25 @@
 import { Capacitor } from '@capacitor/core'
 import { Database } from '@lectorium/dal/persistence'
 import { createSharedComposable } from '@vueuse/core'
+import { watch } from 'vue'
 
 type Options = {
-  remoteDatabaseUrl: string
+  /**
+   * URL of the remote database to connect to.
+   */
+  remoteDatabaseUrl: string,
+  
+  /**
+   * Remote database authentication token.
+   * @returns A function that returns the authentication token for the remote database.
+   */
+  remoteDatabaseAuthToken: () => string,
+  
+  /**
+   * Remote user data collection name.
+   * @returns The name of the remote user data collection.
+   */
+  remoteUserDataCollectionName: () => string
 }
 
 type Databases = {
@@ -17,6 +33,7 @@ type Databases = {
     index: Database,
     tracks: Database,
     dictionary: Database,
+    userData?: Database,
   } 
 }
 
@@ -34,9 +51,20 @@ export const useDatabase = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   async function init({
-    remoteDatabaseUrl 
+    remoteDatabaseUrl,
+    remoteDatabaseAuthToken,
+    remoteUserDataCollectionName,
   }: Options): Promise<void> {
     console.debug('Initializing database...')
+
+    watch(remoteUserDataCollectionName, (newUrl) => {
+      if (!databases) { return }
+      databases.remote.userData = newUrl ? new Database({
+        name: remoteDatabaseUrl + '/' + newUrl,
+        authToken: remoteDatabaseAuthToken
+      }) : undefined
+    })
+
     databases = {
       local: {
         userData: new Database({ 
@@ -80,6 +108,10 @@ export const useDatabase = createSharedComposable(() => {
         index: new Database({
           name: remoteDatabaseUrl + '/index',
         }),
+        userData: remoteUserDataCollectionName() ? new Database({
+          name: remoteDatabaseUrl + '/' + remoteUserDataCollectionName(),
+          authToken: remoteDatabaseAuthToken
+        }) : undefined, 
       },
     }
 

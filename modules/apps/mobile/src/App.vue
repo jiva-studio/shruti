@@ -34,13 +34,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
 import { NavigationBarHolder } from '@lectorium/mobile/features/app.appearance'
 import { FloatingPlayer, usePlayer, usePlayerControls } from '@lectorium/mobile/features/player'
 import { TranscriptDialog, useTranscriptStore } from '@lectorium/mobile/features/transcript'
-import { useSyncService } from './features/app.services.sync'
-import { useKeyboardVisible, useSafeOperation } from './features/app.core'
+import { useKeyboardVisible } from './features/app.core'
 import { useNotesFeature } from './features/notes'
 import { Clipboard } from '@capacitor/clipboard'
 import { useConfig } from '@lectorium/mobile/features/app.config'
@@ -50,8 +48,6 @@ import { useConfig } from '@lectorium/mobile/features/app.config'
 /* -------------------------------------------------------------------------- */
 
 const config = useConfig()
-const syncService = useSyncService()
-const safeOperation = useSafeOperation()
 const player = usePlayerControls()
 const p = usePlayer()
 const notesFeature = useNotesFeature()
@@ -77,14 +73,4 @@ async function onTextSelectionAction(
 function onTextSelectionDismissed() {
   transcriptStore.removeSelection()
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                    Hooks                                   */
-/* -------------------------------------------------------------------------- */
-
-onMounted(async () => {
-  safeOperation.execute({
-    operation: async () => { await syncService.sync() }
-  })
-})
 </script>

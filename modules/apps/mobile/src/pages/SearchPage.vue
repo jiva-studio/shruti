@@ -24,8 +24,8 @@ import { SearchFiltersBar } from '@lectorium/mobile/features/tracks.search.filte
 import { TrackStateIndicator } from '@lectorium/mobile/features/tracks.state'
 import { SearchResultsSection, useTrackSearchResultsStore } from '@lectorium/mobile/features/tracks.search.results' 
 import { useTracksCountStore } from '@lectorium/mobile/features/tracks.count'
-import { useTracksDownloadFeature } from '@lectorium/mobile/features/tracks.download'
 import { usePlaylistFeature } from '@lectorium/mobile/features/playlist'
+import { Events } from '@lectorium/mobile/events'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -41,7 +41,7 @@ const tracksCountStore = useTracksCountStore()
 async function onTrackClicked(trackId: string) {
   const isTrackAdded = await usePlaylistFeature().addTrackToPlaylist(trackId)
   if (isTrackAdded) {
-    useTracksDownloadFeature().download({ trackId })
+    Events.trackDownloadRequested.notify({ trackId })
   }
 }
 </script>

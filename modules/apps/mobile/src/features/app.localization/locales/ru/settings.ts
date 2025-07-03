@@ -7,6 +7,19 @@ export default {
     appearance: 'Внешний вид',
     pro: 'Про-функции',
     misc: 'Разное',
+    auth: 'Профиль'
+  },
+  auth: {
+    actions: 'Действия',
+    syncCompleted: 'Синхронизовано',
+    syncing: 'Синхронизация...',
+    signedIn: 'Вы авторизованы',
+    signOut: 'Выйти',
+    signIn: {
+      title: 'Авторизоваться',
+      subtitle: 'Войти с помощью',
+      description: 'Для синхронизации данных и подписки'
+    }
   },
   player: {
     showProgress: {
@@ -33,6 +46,7 @@ export default {
   subscription: {
     title: 'Подписка',
     description: 'Управление подпиской',
+    yourSubscriptionPlanIs: 'Вы {plan} пользователь!',
     choose: 'Поддержите «Слушай Садху»',
     subscribe: 'Подписаться',
     subscribed: 'Подписка оформлена',

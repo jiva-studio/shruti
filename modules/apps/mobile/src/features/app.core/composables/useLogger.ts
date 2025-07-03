@@ -9,15 +9,15 @@ export function useLogger({ module }: LoggerOptions) {
   /* -------------------------------------------------------------------------- */
 
   function info(message: string) {
-    console.log(`${module}: ${message}`)
+    console.log(`[LCT] ${module}: ${message}`)
   }
 
   function debug(message: string) {
-    console.debug(`${module}: ${message}`)
+    console.debug(`[LCT] ${module}: ${message}`)
   }
 
   function error(message: string) {
-    console.error(`${module}: ${message}`)
+    console.error(`[LCT] ${module}: ${message}`)
   }
 
   /* -------------------------------------------------------------------------- */

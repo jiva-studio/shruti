@@ -18,6 +18,7 @@ def capacitor_pods
   pod 'CapacitorHaptics', :path => '../../../../node_modules/@capacitor/haptics'
   pod 'CapacitorKeyboard', :path => '../../../../node_modules/@capacitor/keyboard'
   pod 'CapacitorStatusBar', :path => '../../../../node_modules/@capacitor/status-bar'
+  pod 'CapgoCapacitorSocialLogin', :path => '../../../../node_modules/@capgo/capacitor-social-login'
   pod 'LectoriumAudioPlayer', :path => '../../../../libs/audioPlayer'
   pod 'RevenuecatPurchasesCapacitor', :path => '../../../../node_modules/@revenuecat/purchases-capacitor'
   pod 'SentryCapacitor', :path => '../../../../node_modules/@sentry/capacitor'

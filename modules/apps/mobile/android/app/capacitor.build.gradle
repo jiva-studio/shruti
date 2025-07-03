@@ -16,6 +16,7 @@ dependencies {
     implementation project(':capacitor-haptics')
     implementation project(':capacitor-keyboard')
     implementation project(':capacitor-status-bar')
+    implementation project(':capgo-capacitor-social-login')
     implementation project(':lectorium-audio-player')
     implementation project(':revenuecat-purchases-capacitor')
     implementation project(':sentry-capacitor')

@@ -1,62 +1,41 @@
+import { Events, Slots } from '@lectorium/mobile/events'
 import { useTrackStateStore } from './useTrackStateStore'
 
-export type EventArgs = { progress?: number, meta: any } 
-export type EventHandler = (event: EventArgs) => void
 
 export type Options = {
-  subscribeTaskEnqueued: (handler: EventHandler) => void
-  subscribeTaskStatus: (handler: EventHandler) => void
-  subscribeTaskFailed: (handler: EventHandler) => void
-  getTasks: () =>  Array<{ meta: any, progress?: number }>
+  downloaderGetTasksSlot: typeof Slots.getDownloaderTasks
+  downloaderTaskFailedEvent: typeof Events.downloaderTaskFailed
+  downloaderTaskStatusEvent: typeof Events.downloaderTaskStatus
+  downloaderTaskEnqueuedEvent: typeof Events.downloaderTaskEnqueued
 }
 
-export function useSyncDownloadingStateTask(
-  options: Options
-) {
+export function useSyncDownloadingStateTask(options: Options) {
+
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
   const trackStateStore = useTrackStateStore()
 
-
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  function onDownloaderTaskEnqueued(
-    event: EventArgs
-  ) {
+  options.downloaderTaskEnqueuedEvent.subscribe(async event => {
     if (!event.meta.trackId) { return }
     trackStateStore.setState(event.meta.trackId, { downloadProgress: 0 })
-  }
+  })
 
-  function onDownloaderStatus(
-    event: EventArgs
-  ) {
+  options.downloaderTaskStatusEvent.subscribe(async event => {
     if (!event.meta.trackId) { return }
-    const tasksRelatedToTrack = options.getTasks()
+    const tasksRelatedToTrack = options.downloaderGetTasksSlot.call()
       .filter(x => x.meta.trackId === event.meta.trackId)
     const downloadProgress = Math.min(...tasksRelatedToTrack.map(x => x.progress || 0))
     trackStateStore.setState(event.meta.trackId, { downloadProgress })
-  }
+  })
 
-  function onDownloaderTaskFailed(
-   event: EventArgs
-  ) {
+  options.downloaderTaskFailedEvent.subscribe(async event => {
     if (!event.meta.trackId) { return }
     trackStateStore.setState(event.meta.trackId, { downloadFailed: true })
-  }
-
-  function start() {
-    options.subscribeTaskEnqueued(onDownloaderTaskEnqueued)
-    options.subscribeTaskStatus(onDownloaderStatus)
-    options.subscribeTaskFailed(onDownloaderTaskFailed)
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                                  Interface                                 */
-  /* -------------------------------------------------------------------------- */
-
-  return { start }
+  })
 }

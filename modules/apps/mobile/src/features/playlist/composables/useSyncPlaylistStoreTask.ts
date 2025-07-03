@@ -1,17 +1,12 @@
-import { Ref, watch } from 'vue'
 import { PlaylistItemsService } from '@lectorium/dal/index'
 import { usePlaylistStore } from './usePlaylistStore'
 import { usePlaylistItemMapper } from './usePlaylistItemMapper'
 
 export type Options = {
   playlistItemService: PlaylistItemsService
-  language: Ref<string>
 }
 
-export function useSyncPlaylistStoreTask({
-  playlistItemService,
-  language
-}: Options) {
+export function useSyncPlaylistStoreTask(options: Options) {
 
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
@@ -23,9 +18,9 @@ export function useSyncPlaylistStoreTask({
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function onSync() {
+  async function sync(language: string) {
     // Get playlist items from the database
-    const dbPlaylistItems = await playlistItemService.getMany({
+    const dbPlaylistItems = await options.playlistItemService.getMany({
       limit: 25,
       sort: ['addedAt'],
       selector: { 
@@ -39,7 +34,7 @@ export function useSyncPlaylistStoreTask({
     const vmPlaylistItems = await Promise.all(
       dbPlaylistItems.map(playlistItem => mapper.map({ 
         playlistItem, 
-        language: language.value 
+        language: language 
       }))
     )
 
@@ -48,23 +43,8 @@ export function useSyncPlaylistStoreTask({
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                                    Hooks                                   */
-  /* -------------------------------------------------------------------------- */
-
-  watch(language, async () => { await onSync() })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                   Actions                                  */
-  /* -------------------------------------------------------------------------- */
-
-  async function start() {
-    playlistItemService.subscribe(async () => { await onSync() })
-    await onSync()
-  }
-
-  /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { start }
+  return { sync }
 }

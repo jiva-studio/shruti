@@ -3,34 +3,26 @@ import { useConfig } from '@lectorium/mobile/features/app.config'
 import { useLogger } from '@lectorium/mobile/features/app.core'
 
 export function useRestoreSubscriptionPlan() {
-  /* -------------------------------------------------------------------------- */
-  /*                                Dependencies                                */
-  /* -------------------------------------------------------------------------- */
-
   const config = useConfig()
   const logger = useLogger({ module: 'app.purchases' })
 
-  /* -------------------------------------------------------------------------- */
-  /*                                   Actions                                  */
-  /* -------------------------------------------------------------------------- */
-
-  async function init() {
+  async function restore() {
     try {
-      const offerings = await Purchases.getOfferings()
-      const customerInfo = await Purchases.getCustomerInfo()
-      const activeSubscriptions = customerInfo.customerInfo.activeSubscriptions
+      if (!config.userEmail.value) { return }
+      const result = await Purchases
+        .logIn({ appUserID: config.userEmail.value })
 
-      config.subscriptionPlan.value = offerings.current?.availablePackages
-        .find((pkg) => pkg.product.identifier === activeSubscriptions[0])
-        ?.identifier || ''
-    } catch {
-      logger.error('Unable to restore subscription plan')
+      const activeEntitlements = Object.keys(result.customerInfo.entitlements.active)
+      if (activeEntitlements.length === 0) {
+        logger.info(`No active entitlements found for user: ${config.userEmail.value}`)
+        config.subscriptionPlan.value = ''
+        return
+      }
+      config.subscriptionPlan.value = activeEntitlements[0]
+    } catch(error) {
+      logger.error(`Unable to restore subscription: ${error}`)
     }
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                                  Interface                                 */
-  /* -------------------------------------------------------------------------- */
-
-  return { init }
+  return { restore }
 }
