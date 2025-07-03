@@ -22,7 +22,9 @@ export const ENVIRONMENT = {{
   bucketName: "{bucket_name}",
   revenueCatKey: "{revenue_cat_key}",
   amplitudeKey: "{amplitude_key}",
-  readonlyAuthToken: "{readonly_auth_token}"
+  readonlyAuthToken: "{readonly_auth_token}",
+  iOSClientId: "",
+  googleWebClientId: "",
 }}
 """
 
