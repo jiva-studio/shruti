@@ -28,7 +28,8 @@ export const Events = {
   /* -------------------------------------------------------------------------- */
   /*                                  Playlist                                  */
   /* -------------------------------------------------------------------------- */
-  
+
+  playTrackRequested: new Event<{ playlistItemId: string }>('playTrackRequested'),
   playlistUpdateRequested: new Event<{ language: string }>('playlistUpdateRequested'),
 
   /* -------------------------------------------------------------------------- */

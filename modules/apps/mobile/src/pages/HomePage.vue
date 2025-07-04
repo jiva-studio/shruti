@@ -1,7 +1,7 @@
 <template>
   <Page>
     <PlaylistSection
-      @click="playlistItemId => playTrackOperation().execute(playlistItemId)"
+      @click="playlistItemId => Events.playTrackRequested.notify({ playlistItemId })"
       @delete="playlistItemId => archivePlaylistItem().execute(playlistItemId)"
     />
   </Page>
@@ -11,5 +11,6 @@
 <script setup lang="ts">
 import { Page } from '@shruti/mobile/features/app.core'
 import { PlaylistSection } from '@shruti/mobile/features/playlist'
-import { playTrackOperation, archivePlaylistItem } from '@shruti/mobile/operations'
+import { archivePlaylistItem } from '@shruti/mobile/operations'
+import { Events } from '@shruti/mobile/events'
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="floatingPlayer">
+  <div class="player">
     <div class="info">
       <IonLabel class="title">
         {{ title }}
@@ -78,7 +78,7 @@ const playButtonIcon = computed(() => {
 </script>
 
 <style scoped>
-.floatingPlayer {
+.player {
   background-color: var(--ion-color-primary-tint);
   color: var(--ion-color-primary-contrast);
   box-shadow: 0px 0px 15px rgba(0, 0, 0, .2);
