@@ -8,24 +8,17 @@
     :show-progress="showProgress"
     :class="{
       'player': true,
-      'floating': !isSticked,
-      'stick': isSticked,
+      'floating': !sticked,
+      'stick': sticked,
       'hidden': hidden
     }"
-    @play="togglePause"
-    @click="isSticked = !isSticked"
+    @play="emit('playClicked')"
   />
 </template>
 
 <script setup lang="ts">
-import { usePlayerControlsPlayerScenario } from '../composables/usePlayerControlsPlayerScenario'
+import { defineEmits } from 'vue'
 import { default as PlayerControls } from './PlayerControls.vue'
-
-/* -------------------------------------------------------------------------- */
-/*                                Dependencies                                */
-/* -------------------------------------------------------------------------- */
-
-const { togglePause } = usePlayerControlsPlayerScenario()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -39,9 +32,12 @@ defineProps<{
   duration: number
   position: number
   showProgress: boolean
+  sticked: boolean
 }>()
 
-const isSticked = defineModel<boolean>('sticked', { default: true, required: true })
+const emit = defineEmits<{
+  playClicked: []
+}>()
 </script>
 
 <style scoped>

@@ -39,6 +39,7 @@ export function useConfigPersistenceTask() {
       bind(config.authToken, 'app.auth.authToken', ENVIRONMENT.readonlyAuthToken),
       bind(config.authTokenExpiresAt, 'app.auth.authToken.expiresAt', 0),
       bind(config.refreshToken, 'app.auth.refreshToken', ''),
+      bind(config.openTranscriptAutomatically, 'app.transcript.openAutomatically', true),
     ])
   }
 
@@ -51,7 +52,7 @@ export function useConfigPersistenceTask() {
     key: string, 
     defaultValue: T
   ) {
-    config.value = await storage.get(key) || defaultValue
+    config.value = await storage.get(key) ?? defaultValue
     watch(config, async (value) => {
       logger.debug(`Updating '${key}' => '${JSON.stringify(value)}'`)
       await storage.set(key, toRaw(value))

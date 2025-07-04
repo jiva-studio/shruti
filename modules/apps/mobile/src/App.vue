@@ -12,6 +12,8 @@
       :position="player.position.value"
       :hidden="!player.trackId.value || keyboardVisible.isKeyboardVisible.value"
       :show-progress="config.showPlayerProgress.value"
+      @click="transcriptStore.toggleTranscriptOpen"
+      @play-clicked="onPlayButtonClicked"
     />
 
     <!-- Transcript Dialog -->
@@ -47,12 +49,16 @@ import { useConfig } from '@lectorium/mobile/features/app.config'
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
+const p = usePlayer()
 const config = useConfig()
 const player = usePlayerControls()
-const p = usePlayer()
 const notesFeature = useNotesFeature()
 const transcriptStore = useTranscriptStore()
 const keyboardVisible = useKeyboardVisible()
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
 
 async function onTextSelectionAction(
   opts: { text: string, blocks: string[], action: string }
@@ -72,5 +78,12 @@ async function onTextSelectionAction(
 
 function onTextSelectionDismissed() {
   transcriptStore.removeSelection()
+}
+
+async function onPlayButtonClicked() {
+  await p.togglePause()
+  if (player.isPlaying.value && config.openTranscriptAutomatically.value) {
+    transcriptStore.open = true
+  }
 }
 </script>

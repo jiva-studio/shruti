@@ -46,6 +46,8 @@ import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
 PouchDB.plugin(PouchDBAdapterSqlLite)
 
 import { useInAppPurchasesFeatures } from './features/app.purchases/composables/useInAppPurchasesFeatures'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
+import { Filesystem, Directory } from '@capacitor/filesystem'
 import * as amplitude from '@amplitude/analytics-browser'
 import { Purchases } from '@revenuecat/purchases-capacitor'
 import { Device } from '@capacitor/device'
@@ -60,7 +62,7 @@ import { useDAL, useDatabase } from './features/app.database'
 import { useSentryFeature } from './features/app.infra.sentry'
 import { useNavigationBarAppearanceTask, useSafeAreaTask } from './features/app.appearance'
 import { useCleanupFilesFeature } from './features/app.storage'
-import { usePlayerControls, useSetPlayerControlsInfoFeature, useSyncAudioPlayerPluginStateFeature } from './features/player'
+import { usePlayer, usePlayerControls, useSetPlayerControlsInfoFeature, useSyncAudioPlayerPluginStateFeature } from './features/player'
 import { useSyncTranscriptTask, useTranscriptStore } from './features/transcript'
 import { useNotesLoader, useNotesSearchIndex, useNotesSearchTask, useNotesStore } from './features/notes'
 import { useRestoreSubscriptionPlan } from './features/app.purchases'
@@ -184,8 +186,11 @@ router.isReady().then(async () => {
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
+  const player = usePlayer()
+  const playerControls = usePlayerControls()
   const databases = useDatabase().get()
   const userInfo = useUserInfo({ database: databases.local.userData })
+  const transcriptStore = useTranscriptStore()
 
 
   /* -------------------------------------------------------------------------- */
@@ -262,6 +267,48 @@ router.isReady().then(async () => {
   /* -------------------------------------------------------------------------- */
   /*                                  Playlist                                  */
   /* -------------------------------------------------------------------------- */
+
+  Events.playTrackRequested.subscribe(async (event) => {
+    // Notify user
+    await Haptics.impact({ style: ImpactStyle.Light })
+    
+    const playlistItem = await dal.playlistItems.getOne(event.playlistItemId)
+    const track = await dal.tracks.getOne(playlistItem.trackId)
+    const author = await dal.authors.getOne('author::' + track.author)
+
+    // open track with Audio Player plugin and
+    // pass required information for media session widget
+    const r = await Filesystem.getUri({
+      path: track.audio.original.path, // TODO: use audio type [original, normalized, etc]
+      directory: Directory.External,
+    })
+
+    await player.open({
+      trackId: track._id,
+      url: r.uri, 
+      title: track.title[config.appLanguage.value]
+        || track.title['en']
+        || track.title[Object.keys(track.title)[0]]
+        || 'No title',
+      author: author.fullName[config.appLanguage.value] 
+        || author.fullName['en'] 
+        || author.fullName[Object.keys(author.fullName)[0]]
+        || track.author
+        || 'Unknown author',
+    })
+
+    // Start playing the track
+    await player.play()
+
+    // Set the trackId in the player controls and transcript
+    // whey will update their state accordingly
+    playerControls.trackId.value = track._id
+    playerControls.playlistItemId.value = playlistItem._id
+
+    if (config.openTranscriptAutomatically.value) {
+      transcriptStore.open = true
+    }
+  })
 
   Events.playlistUpdateRequested.subscribe(async (event) => {
     useSyncPlaylistStoreTask({
