@@ -37,6 +37,10 @@ export default {
     highlightCurrentSentence: {
       title: 'Highlight sentence',
       description: 'Follow the current sentence in the transcript'
+    },
+    showAutomatically: {
+      title: 'Open transcript automatically',
+      description: 'Open transcript when playing a lecture'
     }
   },
   social: {

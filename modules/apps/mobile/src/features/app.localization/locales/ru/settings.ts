@@ -37,6 +37,10 @@ export default {
     highlightCurrentSentence: {
       title: 'Выделение предложения',
       description: 'Следить за текущим предложением в тексте'
+    },
+    showAutomatically: {
+      title: 'Открывать транскрипт',
+      description: 'Автоматически при воспроизведении лекции'
     }
   },
   social: {

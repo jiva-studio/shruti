@@ -19,6 +19,7 @@ export const useConfig = createGlobalState(() => {
   const userName                 = ref('')
   const userEmail                = ref('')
   const userAvatarUrl            = ref('')
+  const openTranscriptAutomatically = ref(true)
 
   return {
     appLanguage,
@@ -35,6 +36,7 @@ export const useConfig = createGlobalState(() => {
     savedTracksFilter,
     userName,
     userEmail,
-    userAvatarUrl
+    userAvatarUrl,
+    openTranscriptAutomatically
   }
 })

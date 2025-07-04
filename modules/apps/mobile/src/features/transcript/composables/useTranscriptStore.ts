@@ -37,7 +37,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
   /*                                   Actions                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function toggleTranscriptOpen() {
+  function toggleTranscriptOpen() {
     open.value = !open.value
   }
 
