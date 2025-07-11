@@ -36,6 +36,6 @@ const value = defineModel<string[]>('tags', { default: () => [] })
 
 const mvalue = computed({
   get: () => value.value.map((v) => props.items.find((l) => l.value === v)),
-  set: (val) => (value.value = val.map((x) => x?.value)),
+  set: (val) => (value.value = val.map((x) => x?.value!)),
 })
 </script>

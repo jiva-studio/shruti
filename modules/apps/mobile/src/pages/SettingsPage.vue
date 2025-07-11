@@ -4,7 +4,12 @@
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.auth') }}</IonLabel>
     </IonListHeader>
-    <SignInSettingsItem />
+    <SignInSettingsItem 
+      :name="config.userName.value"
+      :email="config.userEmail.value"
+      :avatar-url="config.userAvatarUrl.value"
+      :synced-at="syncDataStore.lastSyncedAt"
+    />
     <SubscriptionSettingsItem />
 
     <!-- App Appearance -->
@@ -27,12 +32,21 @@
 
 <script setup lang="ts">
 import { IonListHeader, IonLabel } from '@ionic/vue'
-import { Page } from '@shruti/mobile/features/app.core'
-import { SubscriptionSettingsItem } from '@shruti/mobile/features/app.purchases'
-import { AppLanguageSettingsItem } from '@shruti/mobile/features/app.localization'
-import { ShowPlayerProgressSettingsItem } from '@shruti/mobile/features/player.progress'
-import { ShowNotesTabSettingsItem } from '@shruti/mobile/features/notes'
-import { HighlightCurrentSentenceSettingsItem, OpenTranscriptAutomaticallySettingsItem } from '@shruti/mobile/features/transcript'
-import { SignInSettingsItem } from '@shruti/mobile/features/app.auth'
-import { SocialNetworksSettingsItem } from '@shruti/mobile/features/app.settings.contacts'
+import { Page } from '@blocks/app.core'
+import { SubscriptionSettingsItem } from '@blocks/app.purchases'
+import { AppLanguageSettingsItem } from '@blocks/app.localization'
+import { ShowPlayerProgressSettingsItem } from '@blocks/app.player.progress'
+import { ShowNotesTabSettingsItem } from '@blocks/app.notes'
+import { HighlightCurrentSentenceSettingsItem, OpenTranscriptAutomaticallySettingsItem } from '@blocks/app.transcript'
+import { SignInSettingsItem } from '@blocks/app.auth'
+import { SocialNetworksSettingsItem } from '@blocks/app.settings.contacts'
+import { useConfig } from '@blocks/app.config'
+import { useSyncDataStore } from '@blocks/app.sync.data'
+
+/* -------------------------------------------------------------------------- */
+/*                                Dependencies                                */
+/* -------------------------------------------------------------------------- */
+
+const config = useConfig()
+const syncDataStore = useSyncDataStore()
 </script>

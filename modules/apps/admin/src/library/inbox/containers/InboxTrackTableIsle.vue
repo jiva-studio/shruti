@@ -55,7 +55,14 @@ const { state: inboxTracks, execute } = useAsyncState<InboxTrackTableRow[]>(
 
 async function getTracks() {
   const result: InboxTrackTableRow[] = []
-  const inboxTracks = await inboxTracksService.getProcessable()
+  const inboxTracks = await inboxTracksService.getMany({
+    selector: {
+      status: {
+        $in: ['verification', 'pending', 'error'],
+      },
+    },
+    limit: 8192,
+  })
   for (const track of inboxTracks) {
     const r = await Promise.all(
       (track.references.normalized || []).map(async (x) => ({

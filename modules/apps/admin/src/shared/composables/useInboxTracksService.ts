@@ -1,8 +1,8 @@
-import { InboxTracksService } from '@shruti/dal/index'
+import { InboxTracksRepository } from '@shruti/dal/index'
 import { createSharedComposable } from '@vueuse/core'
 import { useDatabase } from './useDatabase'
 
 export const useInboxTracksService = createSharedComposable(() => {
   const database = useDatabase()
-  return new InboxTracksService(database.local.inbox)
+  return new InboxTracksRepository(database.local.inbox)
 })

@@ -13,6 +13,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
+      "@blocks/*": ["./src/blocks/*"],
       "@shruti/mobile/*": ["./src/*"],
       "@shruti/dal/*": ["../../libs/dal/*"],
       "@shruti/protocol/*": ["../../libs/protocol/*"],

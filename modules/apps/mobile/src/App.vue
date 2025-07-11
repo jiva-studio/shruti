@@ -12,7 +12,8 @@
       :position="player.position.value"
       :hidden="!player.trackId.value || keyboardVisible.isKeyboardVisible.value"
       :show-progress="config.showPlayerProgress.value"
-      @click="transcriptStore.toggleTranscriptOpen"
+      :pulsing="!config.tutorialStepsCompleted.value.includes('transcript:open')"
+      @click="onFloatingPlayerClicked"
       @play-clicked="onPlayButtonClicked"
     />
 
@@ -25,34 +26,33 @@
       :paragraphs="transcriptStore.localizedTranscript"
       :position="player.position.value"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
-      @seek="position => p.seek({ position: position })"
+      @seek="position => eventBus.playerSeek.notify(position)"
       @selection-action="onTextSelectionAction"
       @selection-dismissed="onTextSelectionDismissed"
     />
     
     <!-- Navigation Bar Footer -->
-    <NavigationBarHolder v-if="!keyboardVisible.isKeyboardVisible.value" />
+    <NavigationFooter v-if="!keyboardVisible.isKeyboardVisible.value" />
   </IonApp>
 </template>
 
 <script setup lang="ts">
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationBarHolder } from '@shruti/mobile/features/app.appearance'
-import { FloatingPlayer, usePlayer, usePlayerControls } from '@shruti/mobile/features/player'
-import { TranscriptDialog, useTranscriptStore } from '@shruti/mobile/features/transcript'
-import { useKeyboardVisible } from './features/app.core'
-import { useNotesFeature } from './features/notes'
+import { NavigationFooter } from '@blocks/app.appearance'
+import { FloatingPlayer, usePlayer } from '@blocks/app.player'
+import { TranscriptDialog, useTranscriptStore } from '@blocks/app.transcript'
+import { useKeyboardVisible } from '@blocks/app.core'
 import { Clipboard } from '@capacitor/clipboard'
-import { useConfig } from '@shruti/mobile/features/app.config'
+import { useConfig } from '@blocks/app.config'
+import { useEventBus } from '@shruti/mobile/core'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const p = usePlayer()
+const player = usePlayer()
 const config = useConfig()
-const player = usePlayerControls()
-const notesFeature = useNotesFeature()
+const eventBus = useEventBus()
 const transcriptStore = useTranscriptStore()
 const keyboardVisible = useKeyboardVisible()
 
@@ -66,7 +66,7 @@ async function onTextSelectionAction(
   if (opts.action === 'copy') {
      await Clipboard.write({ string: opts.text })
   } else if (opts.action === 'bookmark') {
-    notesFeature.addNote({
+    eventBus.notesAdd.notify({
       trackId: player.trackId.value,
       text: opts.text,
       blocks: opts.blocks
@@ -81,9 +81,16 @@ function onTextSelectionDismissed() {
 }
 
 async function onPlayButtonClicked() {
-  await p.togglePause()
+  await eventBus.playerTogglePause.notify()
   if (player.isPlaying.value && config.openTranscriptAutomatically.value) {
     transcriptStore.open = true
+  }
+}
+
+function onFloatingPlayerClicked() {
+  transcriptStore.toggleTranscriptOpen()
+  if (!config.tutorialStepsCompleted.value.includes('transcript:open')) {
+    config.tutorialStepsCompleted.value.push('transcript:open')
   }
 }
 </script>

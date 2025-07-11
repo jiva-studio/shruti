@@ -1,8 +1,8 @@
 import { createSharedComposable } from '@vueuse/core'
-import { SourcesService } from '@shruti/dal/index'
+import { SourcesRepository } from '@shruti/dal/index'
 import { useDatabase } from '@shruti/admin/shared'
 
 export const useSourcesService = createSharedComposable(() => {
   const database = useDatabase()
-  return new SourcesService(database.local.dictionary)
+  return new SourcesRepository(database.local.dictionary)
 })
