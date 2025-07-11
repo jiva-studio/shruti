@@ -57,6 +57,10 @@
       "path": "./modules/services/couchdb"
     },
     {
+      "name": "🧪 Tests :: Manual",
+      "path": "./tests/manual"
+    },
+    {
       "name": "📜 Misc :: Scripts",
       "path": "./scripts"
     },

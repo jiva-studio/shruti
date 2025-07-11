@@ -30,6 +30,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@blocks': path.resolve(__dirname, './src/blocks'),
       '@shruti/mobile': path.resolve(__dirname, './src'),
       '@shruti/protocol': fileURLToPath(
         new URL('../../libs/protocol', import.meta.url),
