@@ -30,6 +30,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
+      '@blocks': path.resolve(__dirname, './src/blocks'),
       '@lectorium/mobile': path.resolve(__dirname, './src'),
       '@lectorium/protocol': fileURLToPath(
         new URL('../../libs/protocol', import.meta.url),

@@ -1,0 +1,63 @@
+import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
+import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.downloader'
+import { useTracksState } from '@blocks/app.tracks.state'
+import { useEventBus } from '@lectorium/mobile/core'
+
+export function setupTracksDownloadFeature() {
+  /* -------------------------------------------------------------------------- */
+  /*                                Dependencies                                */
+  /* -------------------------------------------------------------------------- */
+
+  const eventBus = useEventBus()
+  const tracksState = useTracksState()
+  const trackMediaItems = useTrackMediaItems()
+  const trackMediaItemsDownloader = useTrackMediaItemsDownloader()
+
+  /* -------------------------------------------------------------------------- */
+  /*                                    Hooks                                   */
+  /* -------------------------------------------------------------------------- */
+
+  eventBus.trackDownload.subscribe(async (event) => {
+    // logger.info(`Track download requested: ${event.trackId}`)
+
+    for (const trackId of event.trackId) {
+      // Check if the track is already being downloaded
+      const downloadingTasks = trackMediaItemsDownloader.getTasksByTrackId(trackId)
+      if (downloadingTasks.length > 0) { continue }
+
+      // Start downloading the track
+      try { 
+        // Create media items for the track and start downloading them
+        // logger.info(`Creating media items for track: ${trackId}`)
+        const mediaItems = await trackMediaItems.createMediaItems(trackId)
+        if (mediaItems.length === 0) { continue }
+
+        // Update track state to indicate that the download has started
+        tracksState.store.setState(trackId, { 
+          downloadProgress: 0, 
+          isFailed: undefined 
+        })
+
+        // Enqueue media items for download
+        // logger.info(`Enqueuing media items for download: ${mediaItems.length} items`)      
+        for (const mediaItem of mediaItems) {
+          trackMediaItemsDownloader.enqueue(mediaItem)
+        }
+      } catch (error) {
+        tracksState.store.setState(trackId, { isFailed: true })
+        // logger.error(`Failed to download track ${trackId}: `, error)
+      }
+    }
+  })
+
+  trackMediaItemsDownloader.status.subscribe(async (mediaItem) => {
+    const relatedDownloads = trackMediaItemsDownloader.getTasksByTrackId(mediaItem.trackId)
+    const downloadProgress = Math.min(...relatedDownloads.map(x => x.progress || 0))
+    tracksState.store.setState(mediaItem.trackId, { downloadProgress })
+  })
+
+  trackMediaItemsDownloader.failed.subscribe(async (mediaItem) => {
+    tracksState.store.setState(mediaItem.trackId, { isFailed: true, downloadProgress: undefined })
+    // logger.error(`Download failed for track ${mediaItem.trackId}: ` + JSON.stringify(mediaItem))
+  })
+}

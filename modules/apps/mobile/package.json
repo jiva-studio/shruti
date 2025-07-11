@@ -47,9 +47,9 @@
     "pouchdb-find": "^9.0.0",
     "prettier": "^3.5.3",
     "sqids": "^0.3.0",
-    "vue": "^3.3.0",
+    "vue": "^3.5.17",
     "vue-i18n": "^10.0.7",
-    "vue-router": "^4.2.0",
+    "vue-router": "^4.5.1",
     "vue3-radial-progress": "^1.1.1"
   },
   "devDependencies": {

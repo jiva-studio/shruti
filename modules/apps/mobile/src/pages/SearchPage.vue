@@ -2,8 +2,9 @@
   <Page>
     <!-- Search input text -->
     <SearchInput
-      v-model="trackSearchResultsStore.filters.query"
+      :model-value="trackSearchResultsStore.filters.query"
       :placeholder="$t('search.search', { count: tracksCountStore.totalCount })"
+      @update:model-value="onSearchQueryChange"
     />
 
     <!-- Search filter bar with filter chips -->
@@ -19,18 +20,20 @@
 </template>
 
 <script setup lang="ts">
-import { Page, SearchInput } from '@lectorium/mobile/features/app.core'
-import { SearchFiltersBar } from '@lectorium/mobile/features/tracks.search.filters'
-import { TrackStateIndicator } from '@lectorium/mobile/features/tracks.state'
-import { SearchResultsSection, useTrackSearchResultsStore } from '@lectorium/mobile/features/tracks.search.results' 
-import { useTracksCountStore } from '@lectorium/mobile/features/tracks.count'
-import { usePlaylistFeature } from '@lectorium/mobile/features/playlist'
-import { Events } from '@lectorium/mobile/events'
+import { useEventBus } from '@lectorium/mobile/core'
+import { Page, SearchInput } from '@blocks/app.core'
+import { SearchFiltersBar } from '@blocks/app.tracks.search.filters'
+import { TrackStateIndicator } from '@blocks/app.tracks.state'
+import { SearchResultsSection, useTrackSearchResultsStore } from '@blocks/app.tracks.search.results' 
+import { useTracksCountStore } from '@blocks/app.tracks.count'
+import { usePlaylist } from '@blocks/app.playlist'
+import { useDebounceFn } from '@vueuse/core'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
+const eventBus = useEventBus()
 const trackSearchResultsStore = useTrackSearchResultsStore()
 const tracksCountStore = useTracksCountStore()
 
@@ -38,10 +41,13 @@ const tracksCountStore = useTracksCountStore()
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
+const onSearchQueryChange = useDebounceFn((value: string) => {
+  trackSearchResultsStore.filters.query = value
+}, 200)
+
+
 async function onTrackClicked(trackId: string) {
-  const isTrackAdded = await usePlaylistFeature().addTrackToPlaylist(trackId)
-  if (isTrackAdded) {
-    Events.trackDownloadRequested.notify({ trackId })
-  }
+  await usePlaylist().add(trackId)
+  eventBus.trackDownload.notify({ trackId: [trackId] })
 }
 </script>

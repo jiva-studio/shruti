@@ -1,46 +1,14 @@
 import type { MediaItem } from '../models'
-import { Database } from '../persistence'
-import { DatabaseService } from './DatabaseService'
-
-/**
- * Schema of the MediaItem documents in the userData collection.
- */
-type MediaItemDBSchema = {
-  _id: string
-  type: "mediaItem"
-  remoteUrl: string
-  localPath: string
-  trackId: string,
-  state: 'pending' | 'ready' | 'failed'
-}
-
-const mediaItemSerializer = (item: MediaItem): MediaItemDBSchema => item
-const mediaItemDeserializer = (document: MediaItemDBSchema): MediaItem => document
-
+import { MediaItemsRepository } from '../repositories/MediaItemsRepository'
 
 /**
  * Service for managing MediaItems
  */
-export class MediaItemsService 
-  extends DatabaseService<
-    MediaItem, 
-    MediaItemDBSchema
-  > {
+export class MediaItemsService {
   
-  /**
-   * Constructs a new instance of the MediaItemsService class.
-   * @param database The database instance to be used for data operations.
-   */
   constructor(
-    database: Database
-  ) {
-    super(
-      database, 
-      mediaItemSerializer, 
-      mediaItemDeserializer, 
-      { type: "mediaItem" }
-    )
-  }
+    private readonly mediaItemsRepository: MediaItemsRepository
+  ) { }
 
   /**
    * Gets all media items in the specified states.
@@ -50,7 +18,7 @@ export class MediaItemsService
   async getInState(
     states: MediaItem['state'][]
   ): Promise<MediaItem[]> {
-    return await this.getMany({
+    return await this.mediaItemsRepository.getMany({
       selector: {
         state: { $in: states }
       }

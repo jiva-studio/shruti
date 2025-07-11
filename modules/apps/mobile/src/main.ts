@@ -1,4 +1,4 @@
-import { createApp, watch } from 'vue'
+import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import LectoriumApp from './App.vue'
 import router from './router'
@@ -33,10 +33,7 @@ import '@ionic/vue/css/display.css'
 /* import '@ionic/vue/css/palettes/dark.system.css' */
 
 /* Theme variables */
-import './features/app.ui.kit/styles/variables.css'
-
-import { createI18n } from 'vue-i18n'
-import { useArchiveCompletedPlaylistItemsFeature } from './features/playlist/composables/useArchiveCompletedPlaylistItemsFeature'
+import '@blocks/app.ui.kit/styles/variables.css'
 
 /** 
  * Configure PouchDB to use SQLite adapter for Cordova
@@ -45,48 +42,48 @@ import PouchDB from 'pouchdb'
 import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
 PouchDB.plugin(PouchDBAdapterSqlLite)
 
-import { useInAppPurchasesFeatures } from './features/app.purchases/composables/useInAppPurchasesFeatures'
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
-import { Filesystem, Directory } from '@capacitor/filesystem'
-import * as amplitude from '@amplitude/analytics-browser'
-import { Purchases } from '@revenuecat/purchases-capacitor'
-import { Device } from '@capacitor/device'
-import { initTrackSearchFeature } from './init/initTrackSearchFeature'
-import { useTracksCountFeature } from './features/tracks.count'
-import { useTracksDownloadTask } from './features/tracks.download'
-import { locale } from './features/app.localization'
-import { useCleanupMediaItemsFeature, useMarkCompletedPlaylistItem, usePlaylistFeature, useSyncPlaylistStoreTask } from './features/playlist'
-import { useBucketService } from './features/app.services.bucket'
-import { useConfig, useConfigPersistenceTask } from './features/app.config'
-import { useDAL, useDatabase } from './features/app.database'
-import { useSentryFeature } from './features/app.infra.sentry'
-import { useNavigationBarAppearanceTask, useSafeAreaTask } from './features/app.appearance'
-import { useCleanupFilesFeature } from './features/app.storage'
-import { usePlayer, usePlayerControls, useSetPlayerControlsInfoFeature, useSyncAudioPlayerPluginStateFeature } from './features/player'
-import { useSyncTranscriptTask, useTranscriptStore } from './features/transcript'
-import { useNotesLoader, useNotesSearchIndex, useNotesSearchTask, useNotesStore } from './features/notes'
-import { useRestoreSubscriptionPlan } from './features/app.purchases'
-import { useTrackSearchFiltersPersistenceTask } from './features/tracks.search.results'
-import { useAnalytics, useAnalyticsRecorderTask } from './features/app.analytics'
-import { AuthenticationResponse, initSocialAuth, useAppleAuthentication, useGoogleAuthentication, useUserAvatarDownloader } from './features/app.auth'
-import { useCommonDataSyncTask } from './features/app.services.sync.commonData'
-import { Events, Slots } from './events'
-import { useUserDataSyncTask } from './features/app.services.sync.userData'
-import { useMediaSyncTask } from './features/app.services.sync.media'
-import { useIdGenerator } from './features/app.core'
-import { useDownloadingTask } from './features/app.services.download'
-import { initTrackState, useSyncDownloadingStateTask, useSyncPlaylistStateTask } from './features/tracks.state'
-import { useDebounceFn } from '@vueuse/core'
-import { useSyncStore } from './features/app.services.sync'
-import { Routes } from '@lectorium/protocol/index'
-import { ENVIRONMENT } from './env'
-import { useUserInfo } from './features/app.user.info'
+import { useTracksCountFeature } from '@blocks/app.tracks.count'
 
-const i18n = createI18n({
-  locale: 'ru',
-  fallbackLocale: 'en',
-  messages: locale
-})
+import { usePlaylist } from '@blocks/app.playlist'
+import { useConfig, useConfigPersistenceTask } from '@blocks/app.config'
+import { useDAL, useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
+import { useSentryFeature } from '@blocks/app.infra.sentry'
+import { useNavigationBar, useSafeAreaTask } from '@blocks/app.appearance'
+import { useTranscriptLoader } from '@blocks/app.transcript'
+import { useTrackSearchFiltersPersistenceTask } from '@blocks/app.tracks.search.results'
+import { useAnalytics } from '@blocks/app.analytics'
+import { setupAuthenticationFeature } from './features/setupAuthenticationFeature'
+import { setupFilesFeature } from './features/setupFilesFeature'
+import { setupNotesFeature } from './features/setupNotesFeature'
+import { setupPlayerFeature } from './features/setupPlayerFeature'
+import { setupPlaylistFeature } from './features/setupPlaylistFeature'
+import { setupSubscriptionFeature } from './features/setupSubscriptionFeature'
+import { setupSyncFeature } from './features/setupSyncFeature'
+import { setupTracksDownloadFeature } from './features/setupTracksDownloadFeature'
+import { setupTracksStateFeature } from './features/setupTracksStateFeature.ts'
+import { setupTranscriptFeature } from './features/setupTranscriptFeature'
+import { setupI18nFeature } from './features/seupI18nFeature'
+import { setupTracksSearchFeature } from './features/setupTracksSearchFeature'
+import { setupAnalyticsFeature } from './features/setupAnalyticsFeature'
+import { setupAppearanceFeature } from './features/setupAppearanceFeature'
+import { setupTutorialFeature } from './features/setupTutorialFeature'
+
+import { useEventBus } from '@lectorium/mobile/core'
+import { useSyncData } from '@blocks/app.sync.data'
+import { useSubscription } from '@blocks/app.purchases'
+import { useAuthTokenRefresher } from '@blocks/app.auth'
+import { useUserInfo } from '@blocks/app.auth/composables/useUserInfo'
+import { useIdGenerator } from '@blocks/app.core'
+import { useBucketService } from '@blocks/app.services.bucket'
+import { useSyncMedia } from '@blocks/app.sync.media'
+import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
+import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.downloader'
+import { useTracksState } from '@blocks/app.tracks.state'
+import { useNotes } from '@blocks/app.notes'
+import { useLocalization } from '@blocks/app.localization'
+
+
+const i18n = useLocalization()
 const pinia = createPinia()
 const app = createApp(LectoriumApp)
   .use(IonicVue)
@@ -100,413 +97,110 @@ useSentryFeature(app)
 router.isReady().then(async () => {
   const start = new Date().getTime()
 
-
-  // Core //
   await useConfigPersistenceTask().start()
-  
-  /**
-   * Initialize local and remote databases.
-   */
-  await useDatabase().init({
-    remoteDatabaseUrl: useConfig().databaseUrl.value,
-    remoteDatabaseAuthToken: () => {
-      const token = useConfig().authToken.value
-      return token
-    },
-    remoteUserDataCollectionName: () => {
-      if (!useConfig().userEmail.value) { return '' }
-      const dbname = 'users-' + useConfig().userEmail.value?.replace(/[^a-zA-Z0-9_]/g, '-')
-      return dbname
-    }
+
+  await useLocalDatabase().init()
+  useRemoteDatabase().init({
+    url: useConfig().databaseUrl.value,
+    authToken: useConfig().authToken.value,
+    userId: useConfig().userEmail.value
   })
-
-  // App //
-
-  useAnalyticsRecorderTask()
-
-  // app.appearance //
-  await useNavigationBarAppearanceTask({
-    isTranscriptDialogOpen: useTranscriptStore().isOpen
-  }).start()
-  await useSafeAreaTask().start()
-  
-  useMarkCompletedPlaylistItem()
-  useArchiveCompletedPlaylistItemsFeature()
-  useCleanupMediaItemsFeature()
-  useCleanupFilesFeature()
-  
-  useSyncTranscriptTask({ 
-    trackId: usePlayerControls().trackId,
-    languagesService: useDAL().languages,
-    tracksService: useDAL().tracks,
-    notesService: useDAL().notes,
-  })
-
-  // Features //
-
-  initTrackSearchFeature()
 
   const dal = useDAL()
+  const config = useConfig()
+  useSyncData().init({
+    local: () => useLocalDatabase().get(),
+    remote: () => useRemoteDatabase().get(),
+  })
+  useSyncMedia().init({
+    mediaItemsRepository: dal.mediaItems, 
+    playlistItemsRepository: dal.playlistItems,
+  })
+  useTracksState().init({
+    mediaItemsRepository: dal.mediaItems,
+    playlistItemsRepository: dal.playlistItems,
+  })
+  useAuthTokenRefresher().init({
+    apiUrl: config.apiUrl.value,
+  })
+  // const userAvatarDownloader = useUserAvatarDownloader()
+  useUserInfo().init({
+    database: useLocalDatabase().get().userData,
+  })
+  useSubscription().init(config.userEmail.value)
+  useTrackMediaItems().init({
+    bucketName: config.bucketName.value,
+    bucketService: useBucketService(),
+    tracksRepository: dal.tracks,
+    mediaItemsRepository: dal.mediaItems,
+    uniqueIdGenerator: () => useIdGenerator().generateId(24)
+  })
+  useTrackMediaItemsDownloader().init({ 
+    mediaItemsRepository: dal.mediaItems,
+    maxConcurrentDownloads: 3
+  })
+  useNotes().init({
+    idGenerator: () => useIdGenerator().generateId(24),
+    notesRepository: dal.notes,
+    tracksRepository: dal.tracks,
+  })
+  useTranscriptLoader().init({
+    tracksRepository: dal.tracks,
+    languagesRepository: dal.languages,
+    notesRepository: dal.notes,
+  })
+  
+  await Promise.all([
+    dal.tags.getAll({ limit: 1000 }),
+    dal.authors.getAll({ limit: 1000 }),
+    dal.sources.getAll({ limit: 1000 }),
+    dal.locations.getAll({ limit: 1000 }),
+    dal.languages.getAll({ limit: 1000 }),
+    dal.durations.getAll({ limit: 1000 }),
+    dal.sortMethods.getAll({ limit: 1000 }),
+  ])
+
+  await useNavigationBar().init()
+  await useSafeAreaTask().start()
+  
   await useTracksCountFeature().init({
-    tracksService: dal.tracks
+    tracksRepo: dal.tracks
   })
-  usePlaylistFeature().init({
-    playlistService: dal.playlistItems,
+  usePlaylist().init({
+    playlistItemsRepository: dal.playlistItems,
+    tracksRepository: dal.tracks,
+    idGenerator: () => useIdGenerator().generateId(24),
   })
-  await useNotesSearchIndex().init({
-    notesService: useDAL().notes
-  })
-  useNotesSearchTask({
-    notesStore: useNotesStore()
-  })
-
-  // Player //
-
-  useSyncAudioPlayerPluginStateFeature()
-  useSetPlayerControlsInfoFeature()
-
-  // Rest //
 
 
   await useTrackSearchFiltersPersistenceTask().start()
+  useAnalytics().init(config.userEmail.value)
 
+  setupAnalyticsFeature()
+  setupAppearanceFeature()
+  setupAuthenticationFeature()
+  setupFilesFeature()
+  setupNotesFeature()
+  setupPlayerFeature()
+  setupPlaylistFeature()
+  setupSubscriptionFeature()
+  setupSyncFeature()
+  setupTracksDownloadFeature()
+  setupTracksSearchFeature()
+  setupTracksStateFeature()
+  setupTranscriptFeature()
+  setupI18nFeature()
+  setupTutorialFeature()
 
-  const config = useConfig()
-  if (config.appLanguage.value === '??') {
-    const languageCode = await Device.getLanguageCode()
-    if (['en', 'ru'].includes(languageCode.value)) {
-      config.appLanguage.value = languageCode.value
-    } else {
-      config.appLanguage.value = 'ru'
-    }
-  }
-  i18n.global.locale = config.appLanguage.value as 'en' | 'ru'
-
-  /* -------------------------------------------------------------------------- */
-  /*                                Dependencies                                */
-  /* -------------------------------------------------------------------------- */
-
-  const player = usePlayer()
-  const playerControls = usePlayerControls()
-  const databases = useDatabase().get()
-  const userInfo = useUserInfo({ database: databases.local.userData })
-  const transcriptStore = useTranscriptStore()
-
-
-  /* -------------------------------------------------------------------------- */
-  /*                               Authentication                               */
-  /* -------------------------------------------------------------------------- */
-
-  await initSocialAuth({
-    googleOAuthClientId: ENVIRONMENT.googleWebClientId,
-    appleOAuthClientId: ENVIRONMENT.iOSClientId,
-  })
-
-  Events.authenticationRequestedEvent.subscribe(async (event) => {
-    const authenticateUrl = Routes(config.apiUrl.value).auth.signIn('jwt')
-    let results: AuthenticationResponse|null = null
-    if (event.provider === 'google') {
-      results = await useGoogleAuthentication({ authenticateUrl }).authenticate()
-    } else if (event.provider === 'apple') {
-      results = await useAppleAuthentication({ authenticateUrl }).authenticate()
-    }
-    if (results === null) { return } // user canceled the login
-
-    // update config with user data and tokens
-    config.authToken.value = results?.accessToken || ''
-    config.refreshToken.value = results?.refreshToken || ''
-    config.userName.value = `${results?.userFirstName} ${results?.userLastName}`.trim()
-    config.userEmail.value = results?.userEmail || ''
-   
-    if (config.authToken.value) {
-      const parts = config.authToken.value.split('.')
-      const payload = JSON.parse(atob(parts[1]))
-      if (payload.exp) { config.authTokenExpiresAt.value = payload.exp * 1000 }
-    }
-
-    // download avatar image if available
-    if (results.avatarUrl) {
-      const avatar = await useUserAvatarDownloader().download(results.avatarUrl)
-      config.userAvatarUrl.value = avatar || ''
-    }
-
-    // persist user info in database for further use
-    await userInfo.save({
-      name: config.userName.value,
-      email: config.userEmail.value,
-      avatarUrl: results.avatarUrl || undefined,
-    })
-    
-    // Sync data and restore subscription plan
-    Events.syncRequested.notify()
-    Events.restoreSubscriptionPlanRequested.notify()
-  })
-
-  Events.logOutRequestedEvent.subscribe(async () => {
-    config.authToken.value = ENVIRONMENT.readonlyAuthToken
-    config.refreshToken.value = ''
-    config.userName.value = ''
-    config.userEmail.value = ''
-    config.userAvatarUrl.value = ''
-    config.subscriptionPlan.value = ''
-    config.authTokenExpiresAt.value = 0
-    await Purchases.logOut()
-    amplitude.setUserId(undefined)
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                Subscriptions                               */
-  /* -------------------------------------------------------------------------- */
-
-  await useInAppPurchasesFeatures().init()
-
-  Events.restoreSubscriptionPlanRequested.subscribe(async () => {
-    await useRestoreSubscriptionPlan().restore()
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                  Playlist                                  */
-  /* -------------------------------------------------------------------------- */
-
-  Events.playTrackRequested.subscribe(async (event) => {
-    // Notify user
-    await Haptics.impact({ style: ImpactStyle.Light })
-    
-    const playlistItem = await dal.playlistItems.getOne(event.playlistItemId)
-    const track = await dal.tracks.getOne(playlistItem.trackId)
-    const author = await dal.authors.getOne('author::' + track.author)
-
-    // open track with Audio Player plugin and
-    // pass required information for media session widget
-    const r = await Filesystem.getUri({
-      path: track.audio.original.path, // TODO: use audio type [original, normalized, etc]
-      directory: Directory.External,
-    })
-
-    await player.open({
-      trackId: track._id,
-      url: r.uri, 
-      title: track.title[config.appLanguage.value]
-        || track.title['en']
-        || track.title[Object.keys(track.title)[0]]
-        || 'No title',
-      author: author.fullName[config.appLanguage.value] 
-        || author.fullName['en'] 
-        || author.fullName[Object.keys(author.fullName)[0]]
-        || track.author
-        || 'Unknown author',
-    })
-
-    // Start playing the track
-    await player.play()
-
-    // Set the trackId in the player controls and transcript
-    // whey will update their state accordingly
-    playerControls.trackId.value = track._id
-    playerControls.playlistItemId.value = playlistItem._id
-
-    if (config.openTranscriptAutomatically.value) {
-      transcriptStore.open = true
-    }
-  })
-
-  Events.playlistUpdateRequested.subscribe(async (event) => {
-    useSyncPlaylistStoreTask({
-      playlistItemService: dal.playlistItems,
-    }).sync(event.language)
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                    Sync                                    */
-  /* -------------------------------------------------------------------------- */
-
-  const debouncedFn = useDebounceFn(async () => {
-    try {
-      useSyncStore().isSyncing = true
-
-      // refresh authToken
-      const now = Date.now()
-      const authTokenExpiresAt = useConfig().authTokenExpiresAt.value
-      const authTokenTTL = authTokenExpiresAt - now
-      const authTokenIsAboutToExpire = authTokenTTL < 15 * 60 * 1000 // 15 minutes
-      const shouldUpdateAuthToken = authTokenIsAboutToExpire && config.refreshToken.value 
-
-      if (shouldUpdateAuthToken) {
-        const response = await fetch(
-          Routes(config.apiUrl.value).auth.tokens.refresh(), 
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              refreshToken: config.refreshToken.value
-            }),
-          })
-
-        if (response.ok) {
-          const tokens = await response.json()
-          config.authToken.value = tokens.accessToken
-          config.refreshToken.value = tokens.refreshToken
-        } else {
-          // TODO: logout user if unable to refresh token and it is expired
-        }
-      }
-
-      // sync common data
-      await useCommonDataSyncTask({
-        localDatabasesSource: useDatabase().get().local,
-        remoteDatabasesSource: useDatabase().get().remote,
-      }).sync()
-      Events.syncTaskCompleted.notify({ task: 'commonData' })
-
-      // sync user data
-      if (useDatabase().get().remote) {
-        await useUserDataSyncTask({
-          localDatabasesSource: useDatabase().get().local,
-          remoteDatabasesSource: useDatabase().get().remote,
-        }).sync()
-        Events.syncTaskCompleted.notify({ task: 'userData' })
-      }
-
-      // sync media items
-      const result = await useMediaSyncTask({
-        mediaItemsService: useDAL().mediaItems,
-        playlistItemsService: useDAL().playlistItems,
-      }).sync()
-      result.newTrackIds.forEach((trackId) => {
-        Events.trackDownloadRequested.notify({ trackId })
-      })
-      Events.syncTaskCompleted.notify({ task: 'media' })
-
-      // sync user info
-      const res = await userInfo.load()
-      if (res && res.name)  { config.userName.value = res.name }
-      // if (res && res.email) { config.userEmail.value = res.email }
-      if (res?.avatarUrl) {
-        const avatar = await useUserAvatarDownloader().download(res.avatarUrl)
-        config.userAvatarUrl.value = avatar || ''
-      }
-
-    } finally {
-      useSyncStore().isSyncing = false
-      useSyncStore().lastSyncedAt = new Date().getTime()
-    }
-  }, 5000, { maxWait: 15000 })
-
-  Events.syncRequested.subscribe(async () => {
-    debouncedFn()
-  })
-
-  Events.syncTaskCompleted.subscribe(async (event) => {
-    if (event.task === 'userData') { 
-      await Events.playlistUpdateRequested.notify({ 
-        language: useConfig().appLanguage.value
-      })
-      await Events.notesUpdateRequested.notify()
-    }
-  })
-
-  useDAL().playlistItems.subscribe(async () => {
-    Events.syncRequested.notify()
-  })
-
-  useDAL().notes.subscribe(async () => {
-    Events.syncRequested.notify()
-  })
-
-
-  /* -------------------------------------------------------------------------- */
-  /*                                 Downloader                                 */
-  /* -------------------------------------------------------------------------- */
-
-  Events.downloaderTaskEnqueueRequested.subscribe(async (event) => {
-    const task = await useDownloadingTask({
-      downloaderTaskFailedEvent: Events.downloaderTaskFailed,
-      downloaderTaskStatusEvent: Events.downloaderTaskStatus,
-      downloaderTaskEnqueuedEvent: Events.downloaderTaskEnqueued,
-      downloaderTaskCompletedEvent: Events.downloaderTaskCompleted,
-      getDownloaderTasksSlot: Slots.getDownloaderTasks
-    })
-    task.enqueue(event)
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                               Tracks Download                              */
-  /* -------------------------------------------------------------------------- */
-
-  Events.trackDownloadRequested.subscribe(async (event) => {
-    useTracksDownloadTask({
-      trackDownloadFailedEvent: Events.trackDownloadFailed,
-      downloaderTaskFailedEvent: Events.downloaderTaskFailed,
-      downloaderTaskCompletedEvent: Events.downloaderTaskCompleted,
-      downloaderTaskEnqueueRequestedEvent: Events.downloaderTaskEnqueueRequested,
-      bucketName: () => useConfig().bucketName.value,
-      bucketService: () => useBucketService(),
-      tracksService: () => useDAL().tracks,
-      mediaItemsService: () => useDAL().mediaItems,
-      uniqueIdGenerator: () => useIdGenerator().generateId(22)
-    }).download(event.trackId)
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                Tracks State                                */
-  /* -------------------------------------------------------------------------- */
-
-  await initTrackState({
-    mediaItemsService: useDAL().mediaItems,
-    playlistItemsService: useDAL().playlistItems
-  })
-  
-  useSyncPlaylistStateTask({
-    playlistItemService: dal.playlistItems
-  })
-
-  useSyncDownloadingStateTask({
-    downloaderGetTasksSlot: Slots.getDownloaderTasks,
-    downloaderTaskFailedEvent: Events.downloaderTaskFailed,
-    downloaderTaskStatusEvent: Events.downloaderTaskStatus,
-    downloaderTaskEnqueuedEvent: Events.downloaderTaskEnqueued,
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                    Notes                                   */
-  /* -------------------------------------------------------------------------- */
-  
-  Events.notesUpdateRequested.subscribe(async () => {
-    await useNotesLoader({
-      notesService: useDAL().notes,
-      tracksService: useDAL().tracks,
-      notesStore: useNotesStore()
-    }).load()
-  })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                   Screens                                  */
-  /* -------------------------------------------------------------------------- */
-
-  useDAL().playlistItems.subscribe(async () => {
-    Events.playlistUpdateRequested.notify({
-      language: useConfig().appLanguage.value
-    })
-  })
-
-  useDAL().notes.subscribe(async () => {
-    Events.notesUpdateRequested.notify()
-  })
-
-  watch(config.appLanguage, (language: string) => {
-    Events.playlistUpdateRequested.notify({ language })
-  })
 
   /* -------------------------------------------------------------------------- */
   /*                             Fire Initial Events                            */
   /* -------------------------------------------------------------------------- */
 
-  Events.syncRequested.notify()
-  Events.playlistUpdateRequested.notify({ language: useConfig().appLanguage.value })
-  Events.notesUpdateRequested.notify()
-  Events.restoreSubscriptionPlanRequested.notify()
+  useEventBus().sync.notify()
+  useEventBus().playlistLoad.notify()
+  useEventBus().notesLoad.notify()
+  useEventBus().subscriptionLoad.notify()
 
   /* -------------------------------------------------------------------------- */
   /*                          Initialization Analytics                          */

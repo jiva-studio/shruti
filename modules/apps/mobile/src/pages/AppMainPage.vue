@@ -42,8 +42,8 @@
 
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
-import { IconHome, IconBookmark, IconSearch, IconSettings } from '@lectorium/mobile/features/app.ui.kit'
-import { useConfig } from '@lectorium/mobile/features/app.config'
+import { IconHome, IconBookmark, IconSearch, IconSettings } from '@blocks/app.ui.kit'
+import { useConfig } from '@blocks/app.config'
 
 const config = useConfig()
 </script>
