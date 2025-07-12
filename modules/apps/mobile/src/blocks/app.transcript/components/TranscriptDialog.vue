@@ -5,6 +5,21 @@
     @did-dismiss="open = false"
   >
     <Content>
+      <div class="card">
+        <h1
+          v-if="title"
+          class="title"
+        >
+          {{ title }}
+        </h1>
+        <p
+          v-if="author"
+          class="author"
+        >
+          {{ author }}
+        </p>
+      </div>
+
       <!-- Transcript Language Selector -->
       <LanguageSelector 
         v-if="availableLanguages.length > 1"
@@ -59,6 +74,8 @@ defineProps<{
   paragraphs: TranscriptParagraph[]
   position: number
   highlightCurrentSentence: boolean
+  author: string
+  title: string
 }>()
 
 const emit = defineEmits<{
@@ -125,5 +142,26 @@ ion-modal ion-toolbar {
 
 .transcript-dialog {
   z-index: 9000 !important;
+}
+
+.card {
+  padding: 2px;
+}
+
+.title {
+  color: white;
+  text-align: center;
+  font-size: 1.4rem;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  line-height: 1.1;
+}
+
+.author {
+  opacity: 0.8;
+  color: white;
+  text-align: center;
+  font-size: 14px;
+  margin: 12px 0px;
 }
 </style>

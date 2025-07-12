@@ -10,10 +10,13 @@ export const useTranscriptStore = defineStore('transcript', () => {
   /* -------------------------------------------------------------------------- */
 
   const open = ref(false)
+  const title = ref<Record<string, string>>({})
+  const author = ref<Record<string, string>>({})
   const transcript = ref<TranscriptParagraph[]>([])
   const activeLanguages = ref<string[]>([])
   const availableLanguages = ref<TranscriptLanguage[]>([])
   const allowMultipleLanguages = ref<boolean>(false)
+  const isLoading = ref<boolean>(false)
 
   /* -------------------------------------------------------------------------- */
   /*                                   Getters                                  */
@@ -29,6 +32,16 @@ export const useTranscriptStore = defineStore('transcript', () => {
           )
         }
       })
+  })
+
+  const localizedTitle = computed(() => {
+    const lang = activeLanguages.value[0] || 'en'
+    return title.value[lang] || title.value['en'] || Object.values(title.value)[0] || ''
+  })
+
+  const localizedAuthorName = computed(() => {
+    const lang = activeLanguages.value[0] || 'en'
+    return author.value[lang] || author.value['en'] || Object.values(author.value)[0] || ''
   })
 
 
@@ -66,14 +79,19 @@ export const useTranscriptStore = defineStore('transcript', () => {
 
   return { 
     open,
+    title,
+    author,
     transcript, 
     activeLanguages,
     availableLanguages,
     allowMultipleLanguages,
     localizedTranscript,
+    localizedAuthorName,
+    localizedTitle,
     toggleTranscriptOpen,
     removeSelection,
     highlight,
     removeHighlights,
+    isLoading,
   }
 })

@@ -42,6 +42,17 @@ export function setupSyncFeature() {
       eventBus.notesLoad.notify()
       eventBus.userInfoLoad.notify()
     }
+
+    // Invalidate caches
+    dal.tags.invalidateCache()
+    dal.authors.invalidateCache()
+    dal.sources.invalidateCache()
+    dal.locations.invalidateCache()
+    dal.languages.invalidateCache()
+    dal.durations.invalidateCache()
+    dal.sortMethods.invalidateCache()
+
+    eventBus.syncEnd.notify()
   }))
 
   dal.playlistItems.subscribe(async () => {

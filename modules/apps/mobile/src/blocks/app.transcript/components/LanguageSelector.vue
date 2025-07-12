@@ -50,7 +50,6 @@ function onLanguageClicked(language: string) {
 
 <style scoped>
 .language-selector {
-  padding-top: 2rem;
   display: flex;
   justify-content: center;
   align-items: center;

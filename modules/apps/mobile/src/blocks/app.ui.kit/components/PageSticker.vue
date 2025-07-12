@@ -62,9 +62,8 @@ function onLoad() {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  transition: all 0.3s ease-in-out;
+  transition: all 0.15s ease-in-out;
   opacity: 0;
-  filter: drop-shadow(0 0 15px rgba(0, 0, 0, 0.25));
 }
 
 .visible {

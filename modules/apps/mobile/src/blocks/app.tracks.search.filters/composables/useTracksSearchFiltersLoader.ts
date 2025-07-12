@@ -1,4 +1,3 @@
-import { Ref, watch } from 'vue'
 import { createSharedComposable } from '@vueuse/core'
 import { useSearchFiltersDictionaryStore } from './useSearchFiltersDictionaryStore'
 import { IRepository } from '@shruti/dal/index'
@@ -11,50 +10,50 @@ export type Options = {
   languagesService: IRepository<Language>
   durationsService: IRepository<Duration>
   sortMethodsService: IRepository<SortMethod>
-  language: Ref<string>
 }
 
-export const useTracksSearchFiltersTask = createSharedComposable(({
-  authorsService,
-  sourcesService,
-  locationsService,
-  languagesService,
-  durationsService,
-  sortMethodsService,
-  language
-}: Options) => {
+export const useTracksSearchFilters = createSharedComposable(() => {
+
+  /* -------------------------------------------------------------------------- */
+  /*                                    State                                   */
+  /* -------------------------------------------------------------------------- */
+
+  let options: Options | null = null
+
+  /* -------------------------------------------------------------------------- */
+  /*                                 Initialize                                 */
+  /* -------------------------------------------------------------------------- */
+
+  function init(o: Options) {
+    options = o
+  }
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
   const searchFiltersDictionaryStore = useSearchFiltersDictionaryStore()
 
-  /* -------------------------------------------------------------------------- */
-  /*                                    Hooks                                   */
-  /* -------------------------------------------------------------------------- */
-
-  watch(language, async () => await onRefresh(), { immediate: true })
-
 
   /* -------------------------------------------------------------------------- */
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function onRefresh() {
+  async function load(language: string) {
+    if (!options) { throw new Error('useTracksSearchFiltersLoader is not initialized. Call init(options) first.') }
     const [
       authors, sources, locations, languages, durations, sortMethods
     ] = await Promise.all([
-      authorsService.getAll(),
-      sourcesService.getAll(),
-      locationsService.getAll(),
-      languagesService.getAll(),
-      durationsService.getAll(),
-      sortMethodsService.getAll(),
+      options.authorsService.getAll(),
+      options.sourcesService.getAll(),
+      options.locationsService.getAll(),
+      options.languagesService.getAll(),
+      options.durationsService.getAll(),
+      options.sortMethodsService.getAll(),
     ])
 
     searchFiltersDictionaryStore.authors = authors.map((item) => ({
       id: item._id.replace('author::', ''),
-      title: item.fullName[language.value] 
+      title: item.fullName[language] 
              || item.fullName['en']
              || item.fullName[Object.keys(item.fullName)[0]]
              || item._id,
@@ -62,7 +61,7 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
 
     searchFiltersDictionaryStore.sources = sources.map((item) => ({
       id: item._id.replace('source::', ''),
-      title: item.fullName[language.value] 
+      title: item.fullName[language] 
              || item.fullName['en']
              || item.fullName[Object.keys(item.fullName)[0]]
              || item._id,
@@ -70,7 +69,7 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
 
     searchFiltersDictionaryStore.locations = locations.map((item) => ({
       id: item._id.replace('location::', ''),
-      title: item.fullName[language.value] 
+      title: item.fullName[language] 
              || item.fullName['en']
              || item.fullName[Object.keys(item.fullName)[0]]
              || item._id,
@@ -80,7 +79,7 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
       .sort((a, b) => a.minDuration - b.minDuration)
       .map((item) => ({
         id: item._id.replace('duration::', ''),
-        title: item.fullName[language.value] 
+        title: item.fullName[language] 
                || item.fullName['en']
                || item.fullName[Object.keys(item.fullName)[0]]
                || item._id,
@@ -88,7 +87,7 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
 
     searchFiltersDictionaryStore.sort = sortMethods.map((item) => ({
       id: item._id.replace('sort::', ''),
-      title: item.fullName[language.value] 
+      title: item.fullName[language] 
              || item.fullName['en']
              || item.fullName[Object.keys(item.fullName)[0]]
              || item._id,
@@ -99,4 +98,10 @@ export const useTracksSearchFiltersTask = createSharedComposable(({
       title: item.icon + ' ' + item.fullName,
     })).sort((a, b) => a.title.localeCompare(b.title))
   }
+
+  /* -------------------------------------------------------------------------- */
+  /*                                  Interface                                 */
+  /* -------------------------------------------------------------------------- */
+
+  return { load, init } 
 })
