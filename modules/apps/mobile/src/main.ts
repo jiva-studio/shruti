@@ -197,7 +197,11 @@ router.isReady().then(async () => {
   /*                             Fire Initial Events                            */
   /* -------------------------------------------------------------------------- */
 
+  useEventBus().playlistLoadEnd.subscribe(async () => {
+    app.mount('#app')
+  })
   useEventBus().sync.notify()
+  useEventBus().playlistArchive.notify()
   useEventBus().playlistLoad.notify()
   useEventBus().notesLoad.notify()
   useEventBus().subscriptionLoad.notify()
@@ -211,5 +215,4 @@ router.isReady().then(async () => {
   useAnalytics().track('app.open')
   console.log(`Initialization time: ${elapsed}ms`)
 
-  app.mount('#app')
 })
