@@ -22,6 +22,7 @@ export async function setupPlaylistFeature() {
 
   eventBus.playlistLoad.subscribe(async () => {
     await playlist.load(config.appLanguage.value)
+    eventBus.playlistLoadEnd.notify()
   })
 
   /* ---------------------------- Mark As Completed --------------------------- */
@@ -50,7 +51,7 @@ export async function setupPlaylistFeature() {
 
   /* ----------------------- Archive Old Playlist Items ----------------------- */
 
-  dal.playlistItems.subscribe(async () => { 
+  eventBus.playlistArchive.subscribe(async () => { 
     // Get items that were completed more than 24 hours ago
     const oneDayInMs = 24 * 60 * 60 * 1000
     const date = Date.now() - oneDayInMs
@@ -89,4 +90,5 @@ export async function setupPlaylistFeature() {
       )
     }
   })
+
 }
