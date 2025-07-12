@@ -12,6 +12,11 @@ export class CachingRepository<
   ) {
   }
 
+  public invalidateCache() {
+    this._cache.clear()
+    this._cacheAllLoaded = false
+  }
+
   public subscribe(
     handler: ItemChangedEventHandler<TItem>
   ) {

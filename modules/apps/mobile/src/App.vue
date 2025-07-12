@@ -26,25 +26,30 @@
       :paragraphs="transcriptStore.localizedTranscript"
       :position="player.position.value"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
+      :title="transcriptStore.localizedTitle"
+      :author="transcriptStore.localizedAuthorName"
       @seek="position => eventBus.playerSeek.notify(position)"
       @selection-action="onTextSelectionAction"
       @selection-dismissed="onTextSelectionDismissed"
     />
     
     <!-- Navigation Bar Footer -->
+    <NavigationHeader :visible="transcriptStore.open" />
     <NavigationFooter v-if="!keyboardVisible.isKeyboardVisible.value" />
   </IonApp>
 </template>
 
 <script setup lang="ts">
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
-import { NavigationFooter } from '@blocks/app.appearance'
+import { NavigationFooter, NavigationHeader } from '@blocks/app.appearance'
 import { FloatingPlayer, usePlayer } from '@blocks/app.player'
 import { TranscriptDialog, useTranscriptStore } from '@blocks/app.transcript'
 import { useKeyboardVisible } from '@blocks/app.core'
 import { Clipboard } from '@capacitor/clipboard'
 import { useConfig } from '@blocks/app.config'
 import { useEventBus } from '@lectorium/mobile/core'
+import { watch } from 'vue'
+import { StatusBar, Style } from '@capacitor/status-bar'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -93,4 +98,12 @@ function onFloatingPlayerClicked() {
     config.tutorialStepsCompleted.value.push('transcript:open')
   }
 }
+
+watch(
+  () => transcriptStore.open,
+  (open) => {
+    StatusBar.setStyle({ style: open ? Style.Dark : Style.Light })
+    StatusBar.setBackgroundColor({ color: open ? '#1D263B' : '#FFFFFF' })
+  }
+)
 </script>

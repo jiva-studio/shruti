@@ -3,7 +3,7 @@
  */
 
 export { useTrackSearchResultsStore } from './composables/useTrackSearchResultsStore'
-export { useSyncTrackSearchResultsTask } from './composables/useSyncTrackSearchResultsTask'
+export { useTracksSearchResults } from './composables/useTracksSearchResults'
 export { useTrackSearchFiltersPersistenceTask } from './composables/useTrackSearchFiltersPersistenceTask'
 export { type TrackSearchFilters } from './models/TrackSearchFilters'
 export { type TrackSearchResultItem } from './models/TrackSearchResultItem'

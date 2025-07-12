@@ -23,7 +23,7 @@ export function useTrackSearchFiltersPersistenceTask() {
   /*                                   Actions                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function start() {
+  function start() {
     if (config.savedTracksFilter.value) {
       store.filters.query = config.savedTracksFilter.value.query
       store.filters.authors = config.savedTracksFilter.value.authors

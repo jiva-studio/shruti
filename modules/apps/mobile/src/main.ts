@@ -50,7 +50,7 @@ import { useDAL, useLocalDatabase, useRemoteDatabase } from '@blocks/app.databas
 import { useSentryFeature } from '@blocks/app.infra.sentry'
 import { useNavigationBar, useSafeAreaTask } from '@blocks/app.appearance'
 import { useTranscriptLoader } from '@blocks/app.transcript'
-import { useTrackSearchFiltersPersistenceTask } from '@blocks/app.tracks.search.results'
+import { useTrackSearchFiltersPersistenceTask, useTracksSearchResults } from '@blocks/app.tracks.search.results'
 import { useAnalytics } from '@blocks/app.analytics'
 import { setupAuthenticationFeature } from './features/setupAuthenticationFeature'
 import { setupFilesFeature } from './features/setupFilesFeature'
@@ -81,24 +81,32 @@ import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.down
 import { useTracksState } from '@blocks/app.tracks.state'
 import { useNotes } from '@blocks/app.notes'
 import { useLocalization } from '@blocks/app.localization'
+import { useTracksSearchFilters } from '@blocks/app.tracks.search.filters'
 
 
-const i18n = useLocalization()
 const pinia = createPinia()
 const app = createApp(LectoriumApp)
   .use(IonicVue)
   .use(router)
-  .use(i18n)
+  .use(useLocalization())
   .use(pinia)
 
 useSentryFeature(app)
 
 
 router.isReady().then(async () => {
+  // Mount the app as soon as the router is ready. Splash screen will be shown 
+  // until the app is fully initialized.
+  app.mount('#app')
+
+  /* -------------------------------------------------------------------------- */
+  /*                             App Initialization                             */
+  /* -------------------------------------------------------------------------- */
+
   const start = new Date().getTime()
 
-  await useConfigPersistenceTask().start()
 
+  await useConfigPersistenceTask().start()
   await useLocalDatabase().init()
   useRemoteDatabase().init({
     url: useConfig().databaseUrl.value,
@@ -106,75 +114,102 @@ router.isReady().then(async () => {
     userId: useConfig().userEmail.value
   })
 
-  const dal = useDAL()
-  const config = useConfig()
+  /* -------------------------------------------------------------------------- */
+  /*                                Preload Data                                */
+  /* -------------------------------------------------------------------------- */
+
+  // await Promise.all([
+  //   useDAL().tags.getAll({ limit: 1000 }),
+  //   useDAL().authors.getAll({ limit: 1000 }),
+  //   useDAL().sources.getAll({ limit: 1000 }),
+  //   useDAL().locations.getAll({ limit: 1000 }),
+  //   useDAL().languages.getAll({ limit: 1000 }),
+  //   useDAL().durations.getAll({ limit: 1000 }),
+  //   useDAL().sortMethods.getAll({ limit: 1000 }),
+  // ])
+
+  /* -------------------------------------------------------------------------- */
+  /*                              Initialize Blocks                             */
+  /* -------------------------------------------------------------------------- */
+
   useSyncData().init({
     local: () => useLocalDatabase().get(),
     remote: () => useRemoteDatabase().get(),
   })
   useSyncMedia().init({
-    mediaItemsRepository: dal.mediaItems, 
-    playlistItemsRepository: dal.playlistItems,
+    mediaItemsRepository: useDAL().mediaItems, 
+    playlistItemsRepository: useDAL().playlistItems,
   })
   useTracksState().init({
-    mediaItemsRepository: dal.mediaItems,
-    playlistItemsRepository: dal.playlistItems,
+    mediaItemsRepository: useDAL().mediaItems,
+    playlistItemsRepository: useDAL().playlistItems,
   })
   useAuthTokenRefresher().init({
-    apiUrl: config.apiUrl.value,
+    apiUrl: useConfig().apiUrl.value,
   })
   // const userAvatarDownloader = useUserAvatarDownloader()
   useUserInfo().init({
     database: useLocalDatabase().get().userData,
   })
-  useSubscription().init(config.userEmail.value)
+  useSubscription().init(useConfig().userEmail.value)
   useTrackMediaItems().init({
-    bucketName: config.bucketName.value,
+    bucketName: useConfig().bucketName.value,
     bucketService: useBucketService(),
-    tracksRepository: dal.tracks,
-    mediaItemsRepository: dal.mediaItems,
+    tracksRepository: useDAL().tracks,
+    mediaItemsRepository: useDAL().mediaItems,
     uniqueIdGenerator: () => useIdGenerator().generateId(24)
   })
   useTrackMediaItemsDownloader().init({ 
-    mediaItemsRepository: dal.mediaItems,
+    mediaItemsRepository: useDAL().mediaItems,
     maxConcurrentDownloads: 3
+  })
+  useTracksSearchFilters().init({
+    authorsService: useDAL().authors,
+    sourcesService: useDAL().sources,
+    locationsService: useDAL().locations,
+    languagesService: useDAL().languages,
+    durationsService: useDAL().durations,
+    sortMethodsService: useDAL().sortMethods,
+  })
+  useTracksSearchResults().init({
+    indexService: useDAL().index,
+    tracksService: useDAL().tracksSearchService,
+    sourcesRepository: useDAL().sources,
+    durationsRepository: useDAL().durations,
   })
   useNotes().init({
     idGenerator: () => useIdGenerator().generateId(24),
-    notesRepository: dal.notes,
-    tracksRepository: dal.tracks,
+    notesRepository: useDAL().notes,
+    tracksRepository: useDAL().tracks,
   })
   useTranscriptLoader().init({
-    tracksRepository: dal.tracks,
-    languagesRepository: dal.languages,
-    notesRepository: dal.notes,
+    authorsRepository: useDAL().authors,
+    tracksRepository: useDAL().tracks,
+    languagesRepository: useDAL().languages,
+    notesRepository: useDAL().notes,
   })
-  
-  await Promise.all([
-    dal.tags.getAll({ limit: 1000 }),
-    dal.authors.getAll({ limit: 1000 }),
-    dal.sources.getAll({ limit: 1000 }),
-    dal.locations.getAll({ limit: 1000 }),
-    dal.languages.getAll({ limit: 1000 }),
-    dal.durations.getAll({ limit: 1000 }),
-    dal.sortMethods.getAll({ limit: 1000 }),
-  ])
+  useTracksCountFeature().init({
+    tracksRepo: useDAL().tracks
+  })
+  usePlaylist().init({
+    playlistItemsRepository: useDAL().playlistItems,
+    tracksRepository: useDAL().tracks,
+    idGenerator: () => useIdGenerator().generateId(24),
+  })
+  useAnalytics().init(
+    useConfig().userEmail.value
+  )
+
+  /* -------------------------------------------------------------------------- */
+  /*                                 Appearance                                 */
+  /* -------------------------------------------------------------------------- */
 
   await useNavigationBar().init()
   await useSafeAreaTask().start()
   
-  await useTracksCountFeature().init({
-    tracksRepo: dal.tracks
-  })
-  usePlaylist().init({
-    playlistItemsRepository: dal.playlistItems,
-    tracksRepository: dal.tracks,
-    idGenerator: () => useIdGenerator().generateId(24),
-  })
-
-
-  await useTrackSearchFiltersPersistenceTask().start()
-  useAnalytics().init(config.userEmail.value)
+  /* -------------------------------------------------------------------------- */
+  /*                               Setup Features                               */
+  /* -------------------------------------------------------------------------- */
 
   setupAnalyticsFeature()
   setupAppearanceFeature()
@@ -192,19 +227,24 @@ router.isReady().then(async () => {
   setupI18nFeature()
   setupTutorialFeature()
 
+  /* -------------------------------------------------------------------------- */
+  /*                                    Misc                                    */
+  /* -------------------------------------------------------------------------- */
+
+  // TODO: put under related setupFeature 
+  useTracksCountFeature().load()
+  useTrackSearchFiltersPersistenceTask().start()
 
   /* -------------------------------------------------------------------------- */
   /*                             Fire Initial Events                            */
   /* -------------------------------------------------------------------------- */
 
-  useEventBus().playlistLoadEnd.subscribe(async () => {
-    app.mount('#app')
-  })
   useEventBus().sync.notify()
   useEventBus().playlistArchive.notify()
-  useEventBus().playlistLoad.notify()
   useEventBus().notesLoad.notify()
   useEventBus().subscriptionLoad.notify()
+  useEventBus().dictionaryLoad.notify()
+  await useEventBus().playlistLoad.notify()
 
   /* -------------------------------------------------------------------------- */
   /*                          Initialization Analytics                          */
@@ -214,5 +254,5 @@ router.isReady().then(async () => {
   useAnalytics().track('app.init', { initTime: elapsed })
   useAnalytics().track('app.open')
   console.log(`Initialization time: ${elapsed}ms`)
-
+  useEventBus().appReady.notify()
 })

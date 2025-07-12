@@ -18,12 +18,14 @@ export function setupTranscriptFeature() {
   /* -------------------------------------------------------------------------- */
 
   eventBus.transcriptLoad.subscribe(async (event) => {
+    if (transcriptStore.isLoading.value) { return }
     await transcriptLoader.load(event.trackId) 
   })
 
   player.progress.subscribe(async (status) => {
     if (!status.trackId) { return }
+    if (transcriptStore.isLoading.value) { return }
     if (transcriptStore.transcript.value.length > 0) { return }
-    await transcriptLoader.load(status.trackId)
+    eventBus.transcriptLoad.notify({ trackId: status.trackId })
   })
 }

@@ -1,4 +1,4 @@
-import { Language, Note, Track, Transcript } from '@lectorium/dal/models'
+import { Author, Language, Note, Track, Transcript } from '@lectorium/dal/models'
 import { useTranscriptStore } from './useTranscriptStore'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { TranscriptParagraph, TranscriptSentence } from '../models'
@@ -7,6 +7,7 @@ import { IRepository } from '@lectorium/dal/index'
 import { createSharedComposable } from '@vueuse/core'
 
 export type Options = {
+  authorsRepository: IRepository<Author>
   tracksRepository: IRepository<Track>
   languagesRepository: IRepository<Language>
   notesRepository: IRepository<Note>
@@ -39,29 +40,39 @@ export const useTranscriptLoader = createSharedComposable(() => {
 
   async function load(trackId: string) {
     if (!options) { throw new Error('useTranscriptLoader is not initialized. Call init(options) first.') }
-    const track = await options.tracksRepository.getOne(trackId)
-    if (!track) return
+    transcriptStore.isLoading = true
+    try {
+      const track = await options.tracksRepository.getOne(trackId)
+      const author = await options.authorsRepository.getOne('author::' + track.author)
+      if (!track) { return }
 
-    // get all available transcript languages
-    const languages = Object.keys(track.transcripts)
-    const transcriptFiles = await getTranscriptFiles(
-      languages.map(lang => ({ lang, path: track.transcripts[lang].path }))
-    )
+      transcriptStore.title = track.title
+      transcriptStore.author = author ? author.fullName : {}
 
-    // 
-    // TODO: it loads only 1000 notes only
-    const notes = await options.notesRepository.getMany({ selector: { trackId }, limit: 1000 })
-    const highlightedSentences = notes.flatMap(x => x.blocks)
-    
-    // 
-    const speakerIcons = useSpeakerIcons(languages)
+      // get all available transcript languages
+      const languages = Object.keys(track.transcripts)
+      const transcriptFiles = await getTranscriptFiles(
+        languages.map(lang => ({ lang, path: track.transcripts[lang].path }))
+      )
 
-    // enrich the transcript blocks with the speaker information
-    let sentences: TranscriptSentence[] = []
-    for (const transcriptFile of transcriptFiles) {
-      const { lang, transcript } = transcriptFile
-      sentences.push(
-        ...transcript.blocks
+      // load notes
+      // TODO: it loads only 1000 notes only
+      const notes = await options.notesRepository.getMany({ selector: { trackId }, limit: 1000 })
+      const highlightedSentences = notes.flatMap(x => x.blocks)
+      
+      // 
+      const speakerIcons = useSpeakerIcons(languages)
+
+      // normalize and enrich transcript blocks:
+      // - normalize start time of the blocks
+      // - enrich blocks speaker information: icon, language
+      // - enrich blocks with highlighted state
+      let sentences: TranscriptSentence[] = []
+      for (const transcriptFile of transcriptFiles) {
+        const { lang, transcript } = transcriptFile
+        
+        // enrich blocks with additional information
+        const enrichedBlocks = transcript.blocks
           .map((block, index) => ({ 
             ...block, 
             id: `${lang}${index}`,
@@ -72,70 +83,79 @@ export const useTranscriptLoader = createSharedComposable(() => {
             selected: false,
             icon: speakerIcons[lang]
           }))
-      )
-    }
+        
+        // add the enriched blocks to the final sentences array
+        sentences.push(...enrichedBlocks)
+      }
 
-    // sort sentences by start time
-    sentences = sentences.sort((a, b) => {
-      if (a.start < b.start) return -1
-      if (a.start > b.start) return 1
-      return 0
-    })
+      // sort sentences by start time, because there may be sentences of
+      // different languages and they are not in the correct order, because
+      // they are loaded from different files
+      sentences = sentences.sort((a, b) => {
+        if (a.start < b.start) return -1
+        if (a.start > b.start) return 1
+        return 0
+      })
 
-    // set sequentalId for sentence
-    sentences.forEach((v, i) => v.sequentalId = i)
+      let previousSentenceEndTime = 0
+      for (const sentence of sentences) {
+        sentence.start = previousSentenceEndTime
+        previousSentenceEndTime = sentence.end ? sentence.end : previousSentenceEndTime
+      }
 
-    // convert transcript to sections
-    const paragraphs: TranscriptParagraph[] = []
-    let sentencesAdded = 0
-    let lastSentenceEndTime = 0
-    let lastParagraph: TranscriptSentence[] = []
+      // set sequentalId for sentence
+      sentences.forEach((v, i) => v.sequentalId = i)
 
-    for (const sentence of sentences) {
-      if (sentence.type === 'paragraph' || sentencesAdded > 5) {
+      // convert transcript to sections
+      const paragraphs: TranscriptParagraph[] = []
+      let lastParagraph: TranscriptSentence[] = []
+      const sentencesLength: Record<string, number> = 
+        Object.fromEntries(languages.map(lang => [lang, 0]))
+
+      for (const sentence of sentences) {
+        if (Object.values(sentencesLength).some(value => value > 512)) {
+          paragraphs.push({ sentences: lastParagraph })
+          lastParagraph = []
+          Object.keys(sentencesLength).forEach(key => { sentencesLength[key] = 0 })
+        }
+        if (sentence.type !== 'paragraph') {
+          lastParagraph.push({ ...sentence, })
+          sentencesLength[sentence.language] += sentence.text.length
+        }
+      }
+      if (lastParagraph.length > 0) {
         paragraphs.push({ sentences: lastParagraph })
-        lastParagraph = []
-        sentencesAdded = 0
       }
-      sentencesAdded++
-      if (sentence.type !== 'paragraph') {
-        lastParagraph.push({ 
-          ...sentence, 
-          ...{ start: lastSentenceEndTime } 
-        })
-        lastSentenceEndTime = sentence.end
-      }
+
+      // Set paragraphs
+      transcriptStore.transcript = paragraphs
+
+      const originalLanguage = 
+        track.languages
+          .find(x => x.source === 'track' && x.type === 'original')
+          ?.language || track.languages[0].language || 'en'
+
+
+      // Allow to select multiple languages if there several
+      // original languges in the track
+      transcriptStore.allowMultipleLanguages = track.languages
+        .filter(x => x.type === 'original')
+        .length > 1
+
+      const languageItems = await options.languagesRepository.getMany({
+        selector: { code : { $in: languages } },
+      })
+      transcriptStore.availableLanguages = languageItems.map((lang) => ({
+        code: lang.code,
+        name: lang.fullName,
+        icon: lang.icon,
+      })) 
+
+      // Set active language
+      transcriptStore.activeLanguages = [originalLanguage]
+    } finally {
+      transcriptStore.isLoading = false
     }
-    if (lastParagraph.length > 0) {
-      paragraphs.push({ sentences: lastParagraph })
-    }
-
-    // Set paragraphs
-    transcriptStore.transcript = paragraphs
-
-    const originalLanguage = 
-      track.languages
-        .find(x => x.source === 'track' && x.type === 'original')
-        ?.language || track.languages[0].language || 'en'
-
-
-    // Allow to select multiple languages if there several
-    // original languges in the track
-    transcriptStore.allowMultipleLanguages = track.languages
-      .filter(x => x.type === 'original')
-      .length > 1
-
-    const languageItems = await options.languagesRepository.getMany({
-      selector: { code : { $in: languages } },
-    })
-    transcriptStore.availableLanguages = languageItems.map((lang) => ({
-      code: lang.code,
-      name: lang.fullName,
-      icon: lang.icon,
-    })) 
-
-    // Set active language
-    transcriptStore.activeLanguages = [originalLanguage]
   }
 
   /* -------------------------------------------------------------------------- */
