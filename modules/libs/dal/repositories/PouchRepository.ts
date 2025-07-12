@@ -112,8 +112,6 @@ export abstract class PouchRepository<
   async getAll(
     request?: GetAllRequest
   ): Promise<TItem[]> {
-    console.debug(`[LCT] db.${this._database.db.name}.getAll(${JSON.stringify(request)})`)
-
     const r = {
       selector: {
         ...this._scope,
@@ -122,6 +120,8 @@ export abstract class PouchRepository<
       skip: request?.skip ?? 0,
       sort: request?.sort ?? undefined
     }
+
+    console.debug(`[LCT] db.${this._database.db.name}.getAll(${JSON.stringify(r)})`)
     const response = await this._database.db.find(r)
     if (response.warning) {
       console.warn(response.warning, JSON.stringify(r))

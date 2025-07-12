@@ -3,6 +3,12 @@ import { createSharedComposable } from '@vueuse/core'
 
 export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
+  /*                                     App                                    */
+  /* -------------------------------------------------------------------------- */
+
+  const appReady = new Event<void>('appReady')
+
+  /* -------------------------------------------------------------------------- */
   /*                                    User                                    */
   /* -------------------------------------------------------------------------- */
 
@@ -15,6 +21,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const sync = new Event<void>('sync')
+  const syncEnd = new Event<void>('syncEnd')
 
   /* -------------------------------------------------------------------------- */
   /*                                    Notes                                   */
@@ -76,17 +83,27 @@ export const useEventBus = createSharedComposable(() => {
   const tutorialCompleteStep = new Event<{ step: string }>('tutorialCompleteStep')
 
   /* -------------------------------------------------------------------------- */
+  /*                                 Dictionary                                 */
+  /* -------------------------------------------------------------------------- */
+
+  const dictionaryLoad = new Event<void>('dictionaryLoad')
+
+  /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
   return { 
-    //
+    // app
+    appReady,
+    
+    // user
     userInfoLoad,
     userInfoSave,
     userInfoDownloadAvatar,
 
     // sync
     sync,
+    syncEnd,
 
     // notes
     notesAdd,
@@ -121,5 +138,8 @@ export const useEventBus = createSharedComposable(() => {
 
     // tutorial
     tutorialCompleteStep,
+
+    // dictionary
+    dictionaryLoad
   }
 })

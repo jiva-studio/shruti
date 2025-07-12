@@ -32,7 +32,6 @@ import { useConfig } from '@blocks/app.config'
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const dal = useDAL()
 const config = useConfig()
 const eventBus = useEventBus()
 const playlist = usePlaylistStore()
@@ -46,6 +45,7 @@ function onPlaylistItemClicked(playlistItemId: string) {
 }
 
 function onArchivePlaylistItem(playlistItemId: string) {
+  const dal = useDAL()
   dal.archiveService.archiveOne(playlistItemId)
 }
 </script>
