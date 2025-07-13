@@ -54,7 +54,7 @@ export const useRemoteDatabase = createSharedComposable(() => {
 
   function get(): Databases {
     if (!databases) {
-      throw new Error('Database is not initialized. Call init() first.')
+      throw new Error('Remote Database is not initialized. Call init() first.')
     }
     return databases
   }
