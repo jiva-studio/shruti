@@ -35,7 +35,9 @@ export class Event<TArgument> {
    * @param arg Argument to pass to the handlers.
    */
   public async notify(arg: TArgument): Promise<void> {
-    console.log(`[LCT] Event ${this.name || '???'}: ${JSON.stringify(arg)}`)
+    if (this.name) {
+      console.log(`[LCT] Event ${this.name || '???'}: ${JSON.stringify(arg)}`)
+    }
     await Promise.all(this._handlers.map(x => x(arg)))
   }
 }
