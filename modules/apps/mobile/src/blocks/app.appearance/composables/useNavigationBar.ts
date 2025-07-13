@@ -40,6 +40,8 @@ export const useNavigationBar = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   async function setState(state: 'normal' | 'transcript') {
+    if (Capacitor.getPlatform() !== 'android') { return }
+    
     logger.debug(`Changing navigation bar appearance ${state}`)
     if (state === 'transcript') {
       await NavigationBar.setColor({ color: '#833ad4', darkButtons: false })
