@@ -18,7 +18,7 @@ export function useGetTracksIfMediaItemsFailed(
       limit: 1000, // TODO: Remove limit when pagination is implemented
     })
     return failedMediaItems
-      .map(track => track.trackId)
+      .map(mediaItem => mediaItem.trackId)
       .filter(id => id !== undefined)
   }
 

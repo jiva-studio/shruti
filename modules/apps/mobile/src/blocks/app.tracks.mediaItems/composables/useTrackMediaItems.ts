@@ -10,7 +10,6 @@ type Options = {
   bucketService: IBucketService
   tracksRepository: IRepository<Track>
   mediaItemsRepository: IRepository<MediaItem>
-  uniqueIdGenerator: () => string
 }
 
 export const useTrackMediaItems = createSharedComposable(() => {
@@ -48,7 +47,6 @@ export const useTrackMediaItems = createSharedComposable(() => {
     })
     const trackMediaItemCreator = useTrackMediaItemsCreator({
       mediaItemsRepository: options.mediaItemsRepository,
-      uniqueIdGenerator: options.uniqueIdGenerator,
     })
 
     const signedMediaUrls = await trackMediaUrlSigner.getTrackSignedMediaUrls(trackId)

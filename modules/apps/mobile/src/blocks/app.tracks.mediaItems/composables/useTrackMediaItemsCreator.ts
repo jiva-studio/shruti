@@ -4,12 +4,10 @@ import { TrackMediaSignedUrl } from '../models/TrackMediaSignedUrl'
 
 type Options = {
   mediaItemsRepository: IRepository<MediaItem, MediaItemDBSchema>
-  uniqueIdGenerator: () => string
 }
 
 export function useTrackMediaItemsCreator({ 
   mediaItemsRepository, 
-  uniqueIdGenerator 
 }: Options) {
 
   /* -------------------------------------------------------------------------- */
@@ -26,12 +24,9 @@ export function useTrackMediaItemsCreator({
     media: TrackMediaSignedUrl[]
   ): Promise<MediaItem[]> {
     const result: MediaItem[] = []
-    
     // Download all files using MediaService and prepared task infos from above
     for (const task of media) {
-      const mediaItem = await mediaItemsRepository.findOne({ 
-        localPath: task.path,
-      })
+      const mediaItem = await mediaItemsRepository.findOne({ _id: task.path })
       if (mediaItem && ['failed', 'pending'].includes(mediaItem.state)) {
         // Media item failed, remove it and start download again
         await mediaItemsRepository.removeOne(mediaItem._id)
@@ -42,7 +37,7 @@ export function useTrackMediaItemsCreator({
         
       // add to media items
       const newMediaItem = {
-        _id: uniqueIdGenerator(), 
+        _id: task.path,
         type: 'mediaItem',
         remoteUrl: task.url,
         localPath: task.path,
