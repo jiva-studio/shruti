@@ -25,6 +25,7 @@ const props = defineProps<{
 
 const { visible } = toRefs(props)
 const display = ref(false)
+let timeoutId: ReturnType<typeof setTimeout> | null = null
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
@@ -32,8 +33,10 @@ const display = ref(false)
 
 watch(visible, (newValue) => {
   if (newValue) {
-    setTimeout(() => display.value = true, 1000)
+    if (timeoutId) { clearTimeout(timeoutId) }
+    timeoutId = setTimeout(() => display.value = true, 1000)
  } else {
+    if (timeoutId) { clearTimeout(timeoutId) }
     display.value = false
   }
 })
