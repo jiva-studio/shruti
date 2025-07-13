@@ -16,7 +16,9 @@
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.appearance') }}</IonLabel>
     </IonListHeader>
-    <AppLanguageSettingsItem />
+    <AppLanguageSettingsItem
+      :items="tracksSearchFilters.languages"
+    />
     <ShowPlayerProgressSettingsItem />
     <ShowNotesTabSettingsItem />
     <HighlightCurrentSentenceSettingsItem />
@@ -42,6 +44,7 @@ import { SignInSettingsItem } from '@blocks/app.auth'
 import { SocialNetworksSettingsItem } from '@blocks/app.settings.contacts'
 import { useConfig } from '@blocks/app.config'
 import { useSyncDataStore } from '@blocks/app.sync.data'
+import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filters'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -49,4 +52,5 @@ import { useSyncDataStore } from '@blocks/app.sync.data'
 
 const config = useConfig()
 const syncDataStore = useSyncDataStore()
+const tracksSearchFilters = useSearchFiltersDictionaryStore()
 </script>
