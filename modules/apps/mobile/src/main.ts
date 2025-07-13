@@ -103,167 +103,161 @@ const app = createApp(ShrutiApp)
 
 useSentryFeature(app)
 
+const start = new Date().getTime()
 
-router.isReady().then(async () => {
-  // Mount the app as soon as the router is ready. Splash screen will be shown 
-  // until the app is fully initialized.
-  app.mount('#app')
+Promise.all([
+  useConfigPersistenceTask().start(),
+  useLocalDatabase().init(),
+  useNavigationBar().init(),
+  useSafeAreaTask().start(),
+]).then(() => {
 
-  /* -------------------------------------------------------------------------- */
-  /*                             App Initialization                             */
-  /* -------------------------------------------------------------------------- */
-
-  const start = new Date().getTime()
-
-
-  await useConfigPersistenceTask().start()
-  await useLocalDatabase().init()
+  // Should be initialized after config is loaded
   useRemoteDatabase().init({
     url: useConfig().databaseUrl.value,
     authToken: useConfig().authToken.value,
     userId: useConfig().userEmail.value
-  })
+  }),
 
-  /* -------------------------------------------------------------------------- */
-  /*                                Preload Data                                */
-  /* -------------------------------------------------------------------------- */
+  router.isReady().then(async () => {
+    // Mount the app as soon as the router is ready. Splash screen will be shown 
+    // until the app is fully initialized.
+    app.mount('#app')
 
-  // await Promise.all([
-  //   useDAL().tags.getAll({ limit: 1000 }),
-  //   useDAL().authors.getAll({ limit: 1000 }),
-  //   useDAL().sources.getAll({ limit: 1000 }),
-  //   useDAL().locations.getAll({ limit: 1000 }),
-  //   useDAL().languages.getAll({ limit: 1000 }),
-  //   useDAL().durations.getAll({ limit: 1000 }),
-  //   useDAL().sortMethods.getAll({ limit: 1000 }),
-  // ])
+    /* -------------------------------------------------------------------------- */
+    /*                                Preload Data                                */
+    /* -------------------------------------------------------------------------- */
 
-  /* -------------------------------------------------------------------------- */
-  /*                              Initialize Blocks                             */
-  /* -------------------------------------------------------------------------- */
+    // await Promise.all([
+    //   useDAL().tags.getAll({ limit: 1000 }),
+    //   useDAL().authors.getAll({ limit: 1000 }),
+    //   useDAL().sources.getAll({ limit: 1000 }),
+    //   useDAL().locations.getAll({ limit: 1000 }),
+    //   useDAL().languages.getAll({ limit: 1000 }),
+    //   useDAL().durations.getAll({ limit: 1000 }),
+    //   useDAL().sortMethods.getAll({ limit: 1000 }),
+    // ])
 
-  useSyncData().init({
-    local: () => useLocalDatabase().get(),
-    remote: () => useRemoteDatabase().get(),
-  })
-  useSyncMedia().init({
-    mediaItemsRepository: useDAL().mediaItems, 
-    playlistItemsRepository: useDAL().playlistItems,
-  })
-  useTracksState().init({
-    mediaItemsRepository: useDAL().mediaItems,
-    playlistItemsRepository: useDAL().playlistItems,
-  })
-  useAuthTokenRefresher().init({
-    apiUrl: useConfig().apiUrl.value,
-  })
-  // const userAvatarDownloader = useUserAvatarDownloader()
-  useUserInfo().init({
-    database: useLocalDatabase().get().userData,
-  })
-  useSubscription().init(useConfig().userEmail.value)
-  useTrackMediaItems().init({
-    bucketName: useConfig().bucketName.value,
-    bucketService: useBucketService(),
-    tracksRepository: useDAL().tracks,
-    mediaItemsRepository: useDAL().mediaItems,
-    uniqueIdGenerator: () => useIdGenerator().generateId(24)
-  })
-  useTrackMediaItemsDownloader().init({ 
-    mediaItemsRepository: useDAL().mediaItems,
-    maxConcurrentDownloads: 3
-  })
-  useTracksSearchFilters().init({
-    authorsService: useDAL().authors,
-    sourcesService: useDAL().sources,
-    locationsService: useDAL().locations,
-    languagesService: useDAL().languages,
-    durationsService: useDAL().durations,
-    sortMethodsService: useDAL().sortMethods,
-  })
-  useTracksSearchResults().init({
-    indexService: useDAL().index,
-    tracksService: useDAL().tracksSearchService,
-    sourcesRepository: useDAL().sources,
-    durationsRepository: useDAL().durations,
-  })
-  useNotes().init({
-    idGenerator: () => useIdGenerator().generateId(24),
-    notesRepository: useDAL().notes,
-    tracksRepository: useDAL().tracks,
-  })
-  useTranscriptLoader().init({
-    authorsRepository: useDAL().authors,
-    tracksRepository: useDAL().tracks,
-    languagesRepository: useDAL().languages,
-    notesRepository: useDAL().notes,
-  })
-  useTracksCountFeature().init({
-    tracksRepo: useDAL().tracks
-  })
-  usePlaylist().init({
-    playlistItemsRepository: useDAL().playlistItems,
-    tracksRepository: useDAL().tracks,
-    idGenerator: () => useIdGenerator().generateId(24),
-  })
-  useAnalytics().init(
-    useConfig().userEmail.value
-  )
+    /* -------------------------------------------------------------------------- */
+    /*                              Initialize Blocks                             */
+    /* -------------------------------------------------------------------------- */
 
-  /* -------------------------------------------------------------------------- */
-  /*                                 Appearance                                 */
-  /* -------------------------------------------------------------------------- */
+    useSyncData().init({
+      local: () => useLocalDatabase().get(),
+      remote: () => useRemoteDatabase().get(),
+    })
+    useSyncMedia().init({
+      mediaItemsRepository: useDAL().mediaItems, 
+      playlistItemsRepository: useDAL().playlistItems,
+    })
+    useTracksState().init({
+      mediaItemsRepository: useDAL().mediaItems,
+      playlistItemsRepository: useDAL().playlistItems,
+    })
+    useAuthTokenRefresher().init({
+      apiUrl: useConfig().apiUrl.value,
+    })
+    // const userAvatarDownloader = useUserAvatarDownloader()
+    useUserInfo().init({
+      database: useLocalDatabase().get().userData,
+    })
+    useSubscription().init(useConfig().userEmail.value)
+    useTrackMediaItems().init({
+      bucketName: useConfig().bucketName.value,
+      bucketService: useBucketService(),
+      tracksRepository: useDAL().tracks,
+      mediaItemsRepository: useDAL().mediaItems,
+      uniqueIdGenerator: () => useIdGenerator().generateId(24)
+    })
+    useTrackMediaItemsDownloader().init({ 
+      mediaItemsRepository: useDAL().mediaItems,
+      maxConcurrentDownloads: 3
+    })
+    useTracksSearchFilters().init({
+      authorsService: useDAL().authors,
+      sourcesService: useDAL().sources,
+      locationsService: useDAL().locations,
+      languagesService: useDAL().languages,
+      durationsService: useDAL().durations,
+      sortMethodsService: useDAL().sortMethods,
+    })
+    useTracksSearchResults().init({
+      indexService: useDAL().index,
+      tracksService: useDAL().tracksSearchService,
+      sourcesRepository: useDAL().sources,
+      durationsRepository: useDAL().durations,
+    })
+    useNotes().init({
+      idGenerator: () => useIdGenerator().generateId(24),
+      notesRepository: useDAL().notes,
+      tracksRepository: useDAL().tracks,
+    })
+    useTranscriptLoader().init({
+      authorsRepository: useDAL().authors,
+      tracksRepository: useDAL().tracks,
+      languagesRepository: useDAL().languages,
+      notesRepository: useDAL().notes,
+    })
+    useTracksCountFeature().init({
+      tracksRepo: useDAL().tracks
+    })
+    usePlaylist().init({
+      playlistItemsRepository: useDAL().playlistItems,
+      tracksRepository: useDAL().tracks,
+      idGenerator: () => useIdGenerator().generateId(24),
+    })
+    useAnalytics().init(
+      useConfig().userEmail.value
+    )
 
-  await useNavigationBar().init()
-  await useSafeAreaTask().start()
-  
-  /* -------------------------------------------------------------------------- */
-  /*                               Setup Features                               */
-  /* -------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------------- */
+    /*                               Setup Features                               */
+    /* -------------------------------------------------------------------------- */
 
-  setupAnalyticsFeature()
-  setupAppearanceFeature()
-  setupAuthenticationFeature()
-  setupFilesFeature()
-  setupNotesFeature()
-  setupPlayerFeature()
-  setupPlaylistFeature()
-  setupSubscriptionFeature()
-  setupSyncFeature()
-  setupTracksDownloadFeature()
-  setupTracksSearchFeature()
-  setupTracksStateFeature()
-  setupTranscriptFeature()
-  setupI18nFeature()
-  setupTutorialFeature()
-  setupToastFeature()
+    setupAnalyticsFeature()
+    setupAppearanceFeature()
+    setupAuthenticationFeature()
+    setupFilesFeature()
+    setupNotesFeature()
+    setupPlayerFeature()
+    setupPlaylistFeature()
+    setupSubscriptionFeature()
+    setupSyncFeature()
+    setupTracksDownloadFeature()
+    setupTracksSearchFeature()
+    setupTracksStateFeature()
+    setupTranscriptFeature()
+    setupI18nFeature()
+    setupTutorialFeature()
+    setupToastFeature()
 
-  /* -------------------------------------------------------------------------- */
-  /*                                    Misc                                    */
-  /* -------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------------- */
+    /*                                    Misc                                    */
+    /* -------------------------------------------------------------------------- */
 
-  // TODO: put under related setupFeature 
-  useTracksCountFeature().load()
-  useTrackSearchFiltersPersistenceTask().start()
+    // TODO: put under related setupFeature 
+    useTracksCountFeature().load()
+    useTrackSearchFiltersPersistenceTask().start()
 
-  /* -------------------------------------------------------------------------- */
-  /*                             Fire Initial Events                            */
-  /* -------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------------- */
+    /*                             Fire Initial Events                            */
+    /* -------------------------------------------------------------------------- */
 
-  useEventBus().sync.notify()
-  useEventBus().playlistArchive.notify()
-  useEventBus().notesLoad.notify()
-  useEventBus().subscriptionLoad.notify()
-  useEventBus().dictionaryLoad.notify()
-  await useEventBus().playlistLoad.notify()
+    useEventBus().sync.notify()
+    useEventBus().playlistArchive.notify()
+    useEventBus().notesLoad.notify()
+    useEventBus().subscriptionLoad.notify()
+    useEventBus().dictionaryLoad.notify()
+    await useEventBus().playlistLoad.notify()
 
-  /* -------------------------------------------------------------------------- */
-  /*                          Initialization Analytics                          */
-  /* -------------------------------------------------------------------------- */
+    /* -------------------------------------------------------------------------- */
+    /*                          Initialization Analytics                          */
+    /* -------------------------------------------------------------------------- */
 
-  const elapsed = new Date().getTime() - start
-  useAnalytics().track('app.init', { initTime: elapsed })
-  useAnalytics().track('app.open')
-  console.log(`Initialization time: ${elapsed}ms`)
-  useEventBus().appReady.notify()
+    const elapsed = new Date().getTime() - start
+    useAnalytics().track('app.init', { initTime: elapsed })
+    useAnalytics().track('app.open')
+    console.log(`Initialization time: ${elapsed}ms`)
+    useEventBus().appReady.notify()
+  })
 })

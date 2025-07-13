@@ -72,7 +72,7 @@ export const useLocalDatabase = createSharedComposable(() => {
 
   function get(): Databases {
     if (!databases) {
-      throw new Error('Database is not initialized. Call init() first.')
+      throw new Error('Local Database is not initialized. Call init() first.')
     }
     return databases
   }
