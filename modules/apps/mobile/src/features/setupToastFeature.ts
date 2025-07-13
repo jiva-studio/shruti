@@ -20,7 +20,9 @@ export function setupToastFeature() {
       color: event.color || 'primary',
       duration: event.duration || 3000,
       position: 'top',
+      swipeGesture: 'vertical',
     })
+    
     await toast.present()
   })
 }
