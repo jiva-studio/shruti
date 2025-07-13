@@ -1,4 +1,3 @@
-import { MediaItem } from '@lectorium/dal/models'
 import { InitOptions } from '../models/InitOptions'
 
 export function useGetTracksIfNoMediaItemsFound(
@@ -9,7 +8,6 @@ export function useGetTracksIfNoMediaItemsFound(
   /* -------------------------------------------------------------------------- */
 
   async function get() {
-    const failedStates: MediaItem['state'][] = ['pending', 'failed']
     const result = []
     
     const activePlaylistItems = await options.playlistItemsRepository.getMany({ 
@@ -29,12 +27,7 @@ export function useGetTracksIfNoMediaItemsFound(
       const relatedMediaItems = allRelatedMediaItems.filter(
         x => x.trackId === playlistItem.trackId
       )
-      const mediaItemsEmpty = relatedMediaItems.length === 0
-      const mediaItemsFailed = relatedMediaItems.some(
-        x => failedStates.includes(x.state)
-      )
-
-      if (mediaItemsEmpty || mediaItemsFailed) {
+      if (relatedMediaItems.length === 0) {
         result.push(playlistItem.trackId)
       }
     }

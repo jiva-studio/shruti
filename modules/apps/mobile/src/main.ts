@@ -167,7 +167,6 @@ Promise.all([
       bucketService: useBucketService(),
       tracksRepository: useDAL().tracks,
       mediaItemsRepository: useDAL().mediaItems,
-      uniqueIdGenerator: () => useIdGenerator().generateId(24)
     })
     useTrackMediaItemsDownloader().init({ 
       mediaItemsRepository: useDAL().mediaItems,
