@@ -4,9 +4,11 @@ import { useConfig } from '@blocks/app.config'
 import { useLocalization } from '@blocks/app.localization'
 
 export async function setupI18nFeature() {
+  
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
+
   const config = useConfig()
   const i18n = useLocalization()
 
