@@ -62,6 +62,12 @@ export const useTrackMediaItemsDownloader = createSharedComposable(() => {
   }
 
   async function enqueue(mediaItem: MediaItem) {
+    const alreadyExist = queue.some(item => item.remoteUrl === mediaItem.remoteUrl)
+    if (alreadyExist) {
+      logger.info(`Media item already in queue: ${mediaItem.remoteUrl}`)
+      return
+    }
+
     tasks[mediaItem.remoteUrl] = { ...mediaItem, progress: 0 }
     queue.push(mediaItem)
     await processQueue()
