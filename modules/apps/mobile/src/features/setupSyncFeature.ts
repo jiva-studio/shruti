@@ -36,7 +36,7 @@ export function setupSyncFeature() {
     if (config.userEmail.value) {
       const result = await syncMedia.checkTracksWithoutMedia()
       result.newTrackIds.forEach(x => tracksState.store.setState(x, { downloadProgress: 0 }))
-      eventBus.trackDownload.notify({ trackId: result.newTrackIds })
+      eventBus.trackDownload.notify({ trackIds: result.newTrackIds, skipFailed: true })
       eventBus.playlistLoad.notify()
       eventBus.trackStateLoad.notify(['completed', 'inPlaylist'])
       eventBus.notesLoad.notify()

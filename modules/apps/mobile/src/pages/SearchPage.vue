@@ -48,6 +48,9 @@ const onSearchQueryChange = useDebounceFn((value: string) => {
 
 async function onTrackClicked(trackId: string) {
   await usePlaylist().add(trackId)
-  eventBus.trackDownload.notify({ trackId: [trackId] })
+  eventBus.trackDownload.notify({ 
+    trackIds: [trackId], 
+    skipFailed: false 
+  })
 }
 </script>

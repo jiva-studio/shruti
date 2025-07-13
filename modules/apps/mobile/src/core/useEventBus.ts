@@ -9,6 +9,17 @@ export const useEventBus = createSharedComposable(() => {
   const appReady = new Event<void>('appReady')
 
   /* -------------------------------------------------------------------------- */
+  /*                                   Toasts                                   */
+  /* -------------------------------------------------------------------------- */
+
+  const toastShow = new Event<{ 
+    header?: string, 
+    duration?: number 
+    color?: string,
+    message: string, 
+  }>('toastShow')
+
+  /* -------------------------------------------------------------------------- */
   /*                                    User                                    */
   /* -------------------------------------------------------------------------- */
 
@@ -35,7 +46,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const trackPlay      = new Event<{ playlistItemId: string }>('trackPlay')
-  const trackDownload  = new Event<{ trackId: string[] }>('trackDownload')
+  const trackDownload  = new Event<{ trackIds: string[], skipFailed: boolean }>('trackDownload')
   const trackStateLoad = new Event<string[]>('trackStateLoad')
 
   /* -------------------------------------------------------------------------- */
@@ -96,6 +107,9 @@ export const useEventBus = createSharedComposable(() => {
     // app
     appReady,
     
+    // toasts
+    toastShow,
+
     // user
     userInfoLoad,
     userInfoSave,

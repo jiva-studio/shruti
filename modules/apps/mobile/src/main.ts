@@ -52,21 +52,10 @@ import { useNavigationBar, useSafeAreaTask } from '@blocks/app.appearance'
 import { useTranscriptLoader } from '@blocks/app.transcript'
 import { useTrackSearchFiltersPersistenceTask, useTracksSearchResults } from '@blocks/app.tracks.search.results'
 import { useAnalytics } from '@blocks/app.analytics'
-import { setupAuthenticationFeature } from './features/setupAuthenticationFeature'
-import { setupFilesFeature } from './features/setupFilesFeature'
-import { setupNotesFeature } from './features/setupNotesFeature'
-import { setupPlayerFeature } from './features/setupPlayerFeature'
-import { setupPlaylistFeature } from './features/setupPlaylistFeature'
-import { setupSubscriptionFeature } from './features/setupSubscriptionFeature'
-import { setupSyncFeature } from './features/setupSyncFeature'
-import { setupTracksDownloadFeature } from './features/setupTracksDownloadFeature'
-import { setupTracksStateFeature } from './features/setupTracksStateFeature.ts'
-import { setupTranscriptFeature } from './features/setupTranscriptFeature'
-import { setupI18nFeature } from './features/seupI18nFeature'
-import { setupTracksSearchFeature } from './features/setupTracksSearchFeature'
-import { setupAnalyticsFeature } from './features/setupAnalyticsFeature'
-import { setupAppearanceFeature } from './features/setupAppearanceFeature'
-import { setupTutorialFeature } from './features/setupTutorialFeature'
+
+/* -------------------------------------------------------------------------- */
+/*                                   Blocks                                   */
+/* -------------------------------------------------------------------------- */
 
 import { useEventBus } from '@lectorium/mobile/core'
 import { useSyncData } from '@blocks/app.sync.data'
@@ -82,6 +71,27 @@ import { useTracksState } from '@blocks/app.tracks.state'
 import { useNotes } from '@blocks/app.notes'
 import { useLocalization } from '@blocks/app.localization'
 import { useTracksSearchFilters } from '@blocks/app.tracks.search.filters'
+
+/* -------------------------------------------------------------------------- */
+/*                                    Setup                                   */
+/* -------------------------------------------------------------------------- */
+
+import { setupAuthenticationFeature } from './features/setupAuthenticationFeature'
+import { setupFilesFeature } from './features/setupFilesFeature'
+import { setupNotesFeature } from './features/setupNotesFeature'
+import { setupPlayerFeature } from './features/setupPlayerFeature'
+import { setupPlaylistFeature } from './features/setupPlaylistFeature'
+import { setupSubscriptionFeature } from './features/setupSubscriptionFeature'
+import { setupSyncFeature } from './features/setupSyncFeature'
+import { setupTracksDownloadFeature } from './features/setupTracksDownloadFeature'
+import { setupTracksStateFeature } from './features/setupTracksStateFeature.ts'
+import { setupTranscriptFeature } from './features/setupTranscriptFeature'
+import { setupI18nFeature } from './features/setupI18nFeature'
+import { setupTracksSearchFeature } from './features/setupTracksSearchFeature'
+import { setupAnalyticsFeature } from './features/setupAnalyticsFeature'
+import { setupAppearanceFeature } from './features/setupAppearanceFeature'
+import { setupTutorialFeature } from './features/setupTutorialFeature'
+import { setupToastFeature } from './features/setupToastFeature'
 
 
 const pinia = createPinia()
@@ -226,6 +236,7 @@ router.isReady().then(async () => {
   setupTranscriptFeature()
   setupI18nFeature()
   setupTutorialFeature()
+  setupToastFeature()
 
   /* -------------------------------------------------------------------------- */
   /*                                    Misc                                    */

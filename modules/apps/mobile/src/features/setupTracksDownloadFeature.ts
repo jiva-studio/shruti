@@ -1,13 +1,16 @@
+import { useLocalization } from '@blocks/app.localization'
 import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
 import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.downloader'
 import { useTracksState } from '@blocks/app.tracks.state'
-import { useEventBus } from '@lectorium/mobile/core'
+import { useEventBus, useLogger } from '@lectorium/mobile/core'
 
 export function setupTracksDownloadFeature() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
+  const i18n = useLocalization()
+  const logger = useLogger({ module: 'tracks.download' })
   const eventBus = useEventBus()
   const tracksState = useTracksState()
   const trackMediaItems = useTrackMediaItems()
@@ -18,9 +21,16 @@ export function setupTracksDownloadFeature() {
   /* -------------------------------------------------------------------------- */
 
   eventBus.trackDownload.subscribe(async (event) => {
-    // logger.info(`Track download requested: ${event.trackId}`)
+    logger.info(`Track download requested: ${event.trackIds}`)
 
-    for (const trackId of event.trackId) {
+    for (const trackId of event.trackIds) {
+      // Skip failed tracks if the option is set
+      const currentTrackState = tracksState.store.getState(trackId)
+      if (currentTrackState.isFailed && event.skipFailed) { 
+        logger.info(`Track ${trackId} is in failed state, skipping download`)
+        continue
+      }
+
       // Check if the track is already being downloaded
       const downloadingTasks = trackMediaItemsDownloader.getTasksByTrackId(trackId)
       if (downloadingTasks.length > 0) { continue }
@@ -44,8 +54,16 @@ export function setupTracksDownloadFeature() {
           trackMediaItemsDownloader.enqueue(mediaItem)
         }
       } catch (error) {
-        tracksState.store.setState(trackId, { isFailed: true })
-        // logger.error(`Failed to download track ${trackId}: `, error)
+        logger.error(`Failed to download track ${trackId}: `, error)
+        tracksState.store.setState(trackId, { 
+          isFailed: true, 
+          downloadProgress: undefined 
+        })
+        eventBus.toastShow.notify({
+          message: i18n.global.t(`errors.downloadFailed`),
+          color: 'danger',
+          duration: 5000,
+        })
       }
     }
   })

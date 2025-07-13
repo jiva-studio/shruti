@@ -115,7 +115,7 @@
           "build+sync"
         ],
         "presentation": {
-          "reveal": "always"
+          "reveal": "silent"
         },
         "problemMatcher": [
           {
