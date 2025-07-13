@@ -39,7 +39,7 @@ export function setupPlayerFeature() {
     const trackState = tracksState.store.getState(playlistItem.trackId)
     if (trackState.isFailed) {
       // Track is in failed state, start download again
-      eventBus.trackDownload.notify({ trackId: [track._id] })
+      eventBus.trackDownload.notify({ trackIds: [track._id], skipFailed: false })
       return
     }
     if (trackState.downloadProgress && trackState.downloadProgress < 100) {

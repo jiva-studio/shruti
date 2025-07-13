@@ -21,8 +21,9 @@ export function useSyncCommonDataTask(options: InitOptions) {
       logger.info('Sync started...')
       await onSync()
       logger.info('Sync completed successfully')
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`Sync failed: ${JSON.stringify(error)}`)
+      throw new Error(`Sync failed.`, { cause: error })
     }
   }
   
