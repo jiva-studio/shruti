@@ -29,24 +29,28 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { IonItem, IonLabel } from '@ionic/vue'
-import { useAsyncState } from '@vueuse/core'
 import { ListItemSelectorDialog } from '@blocks/app.ui.selectors'
 import { useConfig } from '@blocks/app.config'
-import { useDAL } from '@blocks/app.database'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const dal = useDAL()
 const config = useConfig()
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+defineProps<{
+  items: { id: string, title: string }[]
+}>()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const open = ref(false)
-const { state: items } = useAsyncState(loadItems, [], { immediate: true, shallow: false })
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -55,21 +59,5 @@ const { state: items } = useAsyncState(loadItems, [], { immediate: true, shallow
 function onSelect(value?: string) {
   if (!value) return
   config.appLanguage.value = value
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                   Helpers                                  */
-/* -------------------------------------------------------------------------- */
-
-async function loadItems() {
-  const allItems = await dal.languages.getAll()
-  return allItems
-    .sort((a, b) => a.fullName.localeCompare(b.fullName))
-    .map((item) => ({
-      id: item._id.replace('language::', ''),
-      title: item.icon + ' ' + item.fullName,
-      checked: false,
-    }))
-    
 }
 </script>
