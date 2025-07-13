@@ -42,7 +42,7 @@ export function setupPlayerFeature() {
       eventBus.trackDownload.notify({ trackIds: [track._id], skipFailed: false })
       return
     }
-    if (trackState.downloadProgress && trackState.downloadProgress < 100) {
+    if (trackState.downloadProgress !== undefined && trackState.downloadProgress < 100) {
       // Track is being downloaded, do not play it
       return
     }
