@@ -40,6 +40,12 @@ jobs:
       # ---------------------------------------------------------------------------- #
       #                                  Prepare Env                                 #
       # ---------------------------------------------------------------------------- #
+
+      - name: Get Release Version
+        id: release_version
+        shell: bash
+        run: |
+          echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1) | sed 's/^v//')" >> $GITHUB_OUTPUT
       
       - name: Set version with offset
         run: echo "BUILD_NUMBER=$((${{ github.run_number }} + 200))" >> $GITHUB_ENV
