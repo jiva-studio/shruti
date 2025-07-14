@@ -87,9 +87,6 @@ function onTextSelectionDismissed() {
 
 async function onPlayButtonClicked() {
   await eventBus.playerTogglePause.notify()
-  if (player.isPlaying.value && config.openTranscriptAutomatically.value) {
-    transcriptStore.open = true
-  }
 }
 
 function onFloatingPlayerClicked() {
