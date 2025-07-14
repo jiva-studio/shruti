@@ -41,6 +41,12 @@ jobs:
       #                                  Prepare Env                                 #
       # ---------------------------------------------------------------------------- #
 
+      - name: Get Release Version
+        id: release_version
+        shell: bash
+        run: |
+          echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1) | sed 's/^v//')" >> $GITHUB_OUTPUT
+
       - name: Set version with offset
         run: echo "BUILD_NUMBER=$((${{ github.run_number }} + 200))" >> $GITHUB_ENV
       
@@ -79,6 +85,8 @@ jobs:
         working-directory: modules/apps/mobile
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_RELEASE: ${{ steps.release_version.outputs.tag }}
+          SENTRY_DIST: ${{ github.sha }}
         run: npm i && npm run build+sync
 
       - name: 👷 Build Android ABB
