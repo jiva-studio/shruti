@@ -31,7 +31,11 @@ export default defineConfig({
     legacy(), 
     sentryVitePlugin({
       org: 'akdasa-studios',
-      project: 'lectorium'
+      project: 'lectorium',
+      release: {
+        name: process.env.SENTRY_RELEASE || 'unknown',
+        dist: process.env.SENTRY_DIST || 'unknown',
+      }
     })
   ],
   resolve: {
