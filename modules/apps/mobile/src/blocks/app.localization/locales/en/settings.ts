@@ -7,7 +7,8 @@ export default {
     appearance: 'Appearance',
     pro: 'Pro Features',
     contacts: 'Contact Us',
-    auth: 'Profile'
+    auth: 'Profile',
+    status: 'Status',
   },
   auth: {
     actions: 'Actions',

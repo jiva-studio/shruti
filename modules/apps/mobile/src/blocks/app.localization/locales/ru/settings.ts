@@ -7,7 +7,8 @@ export default {
     appearance: 'Внешний вид',
     pro: 'Про-функции',
     contacts: 'Связаться с нами',
-    auth: 'Профиль'
+    auth: 'Профиль',
+    status: 'Статус',
   },
   auth: {
     actions: 'Действия',
