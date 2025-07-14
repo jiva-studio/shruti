@@ -3,13 +3,16 @@ import { S3SignedUrlRequest, S3SignedUrlResponse, Routes } from '@lectorium/prot
 export class BucketService {
   constructor(
     private readonly baseUrl: string,
-    private readonly token: string,
+    private token: string,
   ) {}
 
   async getSignedUrl(
     request: S3SignedUrlRequest
   ): Promise<S3SignedUrlResponse> {
     try {
+      console.log(
+        `Signing URL at ${Routes(this.baseUrl).bucket.signUrl()} ` +
+        `with payload ${JSON.stringify(request)}`)
       const response = await fetch(Routes(this.baseUrl).bucket.signUrl(), {
         method: 'POST',
         headers: {
@@ -18,9 +21,6 @@ export class BucketService {
         },
         body: JSON.stringify(request),
       })
-      console.log(
-        `Signing URL at ${Routes(this.baseUrl).bucket.signUrl()} ` +
-        `with payload ${JSON.stringify(request)}`)
       if (response.status !== 200) {
         const errorResponse = await response.json()
         console.error('Failed to sign URL', response.status, errorResponse, this.token)
@@ -33,5 +33,9 @@ export class BucketService {
       console.error('Unhandled exception while signing URL', JSON.stringify(e))
       throw e
     }
+  }
+
+  setAuthToken(token: string) {
+    this.token = token
   }
 }
