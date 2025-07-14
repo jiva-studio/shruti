@@ -91,6 +91,7 @@ import { setupAppearanceFeature } from './features/setupAppearanceFeature'
 import { setupTutorialFeature } from './features/setupTutorialFeature'
 import { setupToastFeature } from './features/setupToastFeature'
 import { setupSentryFeature } from './features/setupSentryFeature'
+import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -246,6 +247,7 @@ Promise.all([
     setupI18nFeature()
     setupTutorialFeature()
     setupToastFeature()
+    setupAppStatusFeature()
 
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
@@ -264,6 +266,7 @@ Promise.all([
     useEventBus().notesLoad.notify()
     useEventBus().subscriptionLoad.notify()
     useEventBus().dictionaryLoad.notify()
+    useEventBus().appStatusCheck.notify()
     await useEventBus().playlistLoad.notify()
 
     /* -------------------------------------------------------------------------- */
