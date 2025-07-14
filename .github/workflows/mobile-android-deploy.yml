@@ -77,6 +77,8 @@ jobs:
 
       - name: 👷 Build Ionic App
         working-directory: modules/apps/mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: npm i && npm run build+sync
 
       - name: 👷 Build Android ABB
