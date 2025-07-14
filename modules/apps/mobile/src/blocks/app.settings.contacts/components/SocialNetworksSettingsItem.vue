@@ -4,8 +4,8 @@
       🔗
     </div>
     <IonLabel>
-      <h2>{{ $t('settings.social.socialNetworks') }}</h2>
-      <p>{{ $t('settings.social.stayConnected') }}</p>
+      <h2>{{ $t('settings.contacts.socialNetworks.title') }}</h2>
+      <p>{{ $t('settings.contacts.socialNetworks.description') }}</p>
     </IonLabel>
     <div slot="end">
       <a href="https://t.me/shrutiapp">
