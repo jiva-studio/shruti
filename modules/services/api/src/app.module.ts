@@ -11,6 +11,7 @@ import {
 } from './configs';
 import { ConfigModule } from '@nestjs/config';
 import { BucketModule } from './bucket/bucket.module';
+import { StatusModule } from './status/status.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BucketModule } from './bucket/bucket.module';
     }),
     AuthModule,
     BucketModule,
+    StatusModule,
   ],
   controllers: [],
   providers: [],

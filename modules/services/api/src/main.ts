@@ -18,6 +18,7 @@ async function bootstrap() {
     .addTag('🎟️ Authentication :: One-Time Password')
     .addTag('🔐 Authentication', 'Endpoints for authentication')
     .addServer('https://api.shruti.dev', 'Development server')
+    .addServer('https://api.shruti.app', 'Production server')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('swagger', app, documentFactory);
