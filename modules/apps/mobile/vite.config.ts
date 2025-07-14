@@ -31,7 +31,11 @@ export default defineConfig({
     legacy(), 
     sentryVitePlugin({
       org: 'jiva-studio',
-      project: 'shruti'
+      project: 'shruti',
+      release: {
+        name: process.env.SENTRY_RELEASE || 'unknown',
+        dist: process.env.SENTRY_DIST || 'unknown',
+      }
     })
   ],
   resolve: {
