@@ -14,4 +14,7 @@ export const Routes = (baseUrl: string = '') => ({
   bucket: {
     signUrl: () => `${baseUrl}/bucket/sign-url`,
   },
+  status: {
+    root: () => `${baseUrl}/status`,
+  }
 });
