@@ -38,6 +38,11 @@ export class Event<TArgument> {
     if (this.name) {
       console.log(`[LCT] Event ${this.name || '???'}: ${JSON.stringify(arg)}`)
     }
-    await Promise.all(this._handlers.map(x => x(arg)))
+    try {
+      await Promise.all(this._handlers.map(x => x(arg)))
+    } catch (error) {
+      console.error(`[LCT] Error in event ${this.name || '???'}: ${JSON.stringify(error)}`)
+      throw error
+    }
   }
 }
