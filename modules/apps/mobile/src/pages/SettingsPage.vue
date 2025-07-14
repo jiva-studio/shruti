@@ -26,9 +26,10 @@
 
     <!-- Social -->
     <IonListHeader>
-      <IonLabel>{{ $t('settings.groups.misc') }}</IonLabel>
+      <IonLabel>{{ $t('settings.groups.contacts') }}</IonLabel>
     </IonListHeader>
     <SocialNetworksSettingsItem />
+    <SendUsEmailSettingsItem />
   </Page>
 </template>
 
@@ -41,7 +42,7 @@ import { ShowPlayerProgressSettingsItem } from '@blocks/app.player.progress'
 import { ShowNotesTabSettingsItem } from '@blocks/app.notes'
 import { HighlightCurrentSentenceSettingsItem, OpenTranscriptAutomaticallySettingsItem } from '@blocks/app.transcript'
 import { SignInSettingsItem } from '@blocks/app.auth'
-import { SocialNetworksSettingsItem } from '@blocks/app.settings.contacts'
+import { SocialNetworksSettingsItem, SendUsEmailSettingsItem } from '@blocks/app.settings.contacts'
 import { useConfig } from '@blocks/app.config'
 import { useSyncDataStore } from '@blocks/app.sync.data'
 import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filters'
