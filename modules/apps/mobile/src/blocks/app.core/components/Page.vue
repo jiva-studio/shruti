@@ -12,14 +12,20 @@
         <slot />
       </div>
 
-      <!-- <div class="placeholder" /> -->
+      <div
+        v-if="player.trackId.value"
+        class="placeholder"
+      />
     </IonContent>
   </IonPage>
 </template>
 
 
 <script setup lang="ts">
+import { usePlayer } from '@blocks/app.player'
 import { IonContent, IonPage, IonSpinner } from '@ionic/vue'
+
+const player = usePlayer()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -39,7 +45,7 @@ ion-content {
 
 .placeholder {
   width: 100%;
-  height: 50px;
+  height: 35px;
 }
 
 .header {
