@@ -30,6 +30,18 @@
     </IonListHeader>
     <SocialNetworksSettingsItem />
     <SendUsEmailSettingsItem />
+
+    <!-- Server Status -->
+    <IonListHeader>
+      <IonLabel>{{ $t('settings.groups.status') }}</IonLabel>
+    </IonListHeader>
+    <ServerStatus
+      v-for="server in appStatusStore.serverStatuses"
+      :key="server.name"
+      :name="server.name"
+      :description="server.description"
+      :status="server.status"
+    />
   </Page>
 </template>
 
@@ -46,6 +58,7 @@ import { SocialNetworksSettingsItem, SendUsEmailSettingsItem } from '@blocks/app
 import { useConfig } from '@blocks/app.config'
 import { useSyncDataStore } from '@blocks/app.sync.data'
 import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filters'
+import { ServerStatus, useAppStatusStore } from '@blocks/app.status'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -54,4 +67,5 @@ import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filte
 const config = useConfig()
 const syncDataStore = useSyncDataStore()
 const tracksSearchFilters = useSearchFiltersDictionaryStore()
+const appStatusStore = useAppStatusStore()
 </script>

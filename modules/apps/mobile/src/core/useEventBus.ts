@@ -7,6 +7,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const appReady = new Event<void>('appReady')
+  const appStatusCheck = new Event<void>('appStatusCheck')
 
   /* -------------------------------------------------------------------------- */
   /*                                   Toasts                                   */
@@ -107,6 +108,7 @@ export const useEventBus = createSharedComposable(() => {
   return { 
     // app
     appReady,
+    appStatusCheck,
     
     // toasts
     toastShow,
