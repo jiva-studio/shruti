@@ -6,7 +6,7 @@ export default {
   groups: {
     appearance: 'Внешний вид',
     pro: 'Про-функции',
-    misc: 'Разное',
+    contacts: 'Связаться с нами',
     auth: 'Профиль'
   },
   auth: {
@@ -47,9 +47,15 @@ export default {
       description: 'Автоматически при воспроизведении лекции'
     }
   },
-  social: {
-    socialNetworks: 'Социальные сети',
-    stayConnected: 'Будем на связи',
+  contacts: {
+    socialNetworks: {
+      title: 'Социальные сети',
+      description: 'Будем на связи',
+    },
+    email: {
+      title: 'Напишите нам',
+      description: 'Есть вопросы или предложения?',
+    }
   },
   subscription: {
     title: 'Подписка',

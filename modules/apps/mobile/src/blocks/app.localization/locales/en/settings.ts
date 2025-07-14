@@ -6,14 +6,14 @@ export default {
   groups: {
     appearance: 'Appearance',
     pro: 'Pro Features',
-    misc: 'Misc',
+    contacts: 'Contact Us',
     auth: 'Profile'
   },
   auth: {
     actions: 'Actions',
     syncing: 'Syncing...',
     syncCompletedAt: 
-      'Synced at {hour}:{min} | '+
+      'Synced at {hour}:{min} | ' +
       'Synced {count} day ago | ' +
       'Synced {count} days ago',
     signedIn: 'You are signed in',
@@ -46,9 +46,15 @@ export default {
       description: 'Open transcript when playing a lecture'
     }
   },
-  social: {
-    socialNetworks: 'Social networks',
-    stayConnected: 'Let\'s stay connected',
+  contacts: {
+    socialNetworks: {
+      title: 'Social networks',
+      description: 'Let\'s stay connected',
+    },
+    email: {
+      title: 'Send us an email',
+      description: 'Have questions or suggestions?',
+    }
   },
   subscription: {
     title: 'Subscription',
