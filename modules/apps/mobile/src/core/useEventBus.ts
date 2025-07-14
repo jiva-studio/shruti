@@ -83,6 +83,7 @@ export const useEventBus = createSharedComposable(() => {
 
   const authSignIn = new Event<{ provider: 'google' | 'apple' }>('authSignIn')
   const authSignOut = new Event<void>('authSignOut')
+  const authSignInEnd = new Event<{ userEmail: string }>('authSignInEnd')
   const authTokenRefresh = new Event<void>('authTokenRefresh')
   const authSelectProvider = new Event<void>('authSelectProvider')
   const authSelectAuthenticatedActions = new Event<void>('authSelectAuthenticatedActions')
@@ -146,6 +147,7 @@ export const useEventBus = createSharedComposable(() => {
     // authentication
     authSignIn,
     authSignOut,
+    authSignInEnd,
     authTokenRefresh,
     authSelectProvider,
     authSelectAuthenticatedActions,
