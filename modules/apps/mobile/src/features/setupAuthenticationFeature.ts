@@ -9,6 +9,7 @@ import { useRemoteDatabase } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
 import { ENVIRONMENT } from '../env'
 import { Capacitor } from '@capacitor/core'
+import { useBucketService } from '@blocks/app.services.bucket'
 
 export async function setupAuthenticationFeature() {
   /* -------------------------------------------------------------------------- */
@@ -20,6 +21,7 @@ export async function setupAuthenticationFeature() {
   const config = useConfig()
   const userInfo = useUserInfo()
   const eventBus = useEventBus()
+  const bucketService = useBucketService()
   const remoteDatabase = useRemoteDatabase()
   const authTokenRefresher = useAuthTokenRefresher()
   const userAvatarDownloader = useUserAvatarDownloader()
@@ -164,6 +166,8 @@ export async function setupAuthenticationFeature() {
       userId: config.userEmail.value,
       authToken: result.accessToken,
     })
+
+    bucketService.setAuthToken(result.accessToken)
   })
 
   eventBus.userInfoLoad.subscribe(async () => {
