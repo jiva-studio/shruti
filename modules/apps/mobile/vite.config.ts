@@ -1,4 +1,5 @@
 /// <reference types="vitest" />
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 import { fileURLToPath } from 'node:url'
 
 import legacy from '@vitejs/plugin-legacy'
@@ -18,6 +19,7 @@ export default defineConfig({
         }
       },
     },
+    sourcemap: true
   },
   server: {
     host: '0.0.0.0',
@@ -25,8 +27,12 @@ export default defineConfig({
     allowedHosts: ['mobile.lectorium.dev'],
   },
   plugins: [
-    vue(),
-    legacy()
+    vue(), 
+    legacy(), 
+    sentryVitePlugin({
+      org: 'akdasa-studios',
+      project: 'lectorium'
+    })
   ],
   resolve: {
     alias: {
