@@ -55,6 +55,7 @@ watch(visible, (newValue) => {
   height: calc(var(--ion-safe-area-top) * 1.8);
   z-index: 10000;
   opacity: 0;
+  pointer-events: none;
 }
 
 .NavigationHeader.show {
