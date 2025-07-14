@@ -1,1 +1,1 @@
-export * from './composables/useSentryFeature'
+export * from './composables/useSentry'
