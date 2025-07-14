@@ -42,17 +42,6 @@ import PouchDB from 'pouchdb'
 import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
 PouchDB.plugin(PouchDBAdapterSqlLite)
 
-import { useTracksCountFeature } from '@blocks/app.tracks.count'
-
-import { usePlaylist } from '@blocks/app.playlist'
-import { useConfig, useConfigPersistenceTask } from '@blocks/app.config'
-import { useDAL, useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
-import { useSentryFeature } from '@blocks/app.infra.sentry'
-import { useNavigationBar, useSafeAreaTask } from '@blocks/app.appearance'
-import { useTranscriptLoader } from '@blocks/app.transcript'
-import { useTrackSearchFiltersPersistenceTask, useTracksSearchResults } from '@blocks/app.tracks.search.results'
-import { useAnalytics } from '@blocks/app.analytics'
-
 /* -------------------------------------------------------------------------- */
 /*                                   Blocks                                   */
 /* -------------------------------------------------------------------------- */
@@ -71,6 +60,15 @@ import { useTracksState } from '@blocks/app.tracks.state'
 import { useNotes } from '@blocks/app.notes'
 import { useLocalization } from '@blocks/app.localization'
 import { useTracksSearchFilters } from '@blocks/app.tracks.search.filters'
+import { usePlaylist } from '@blocks/app.playlist'
+import { useConfig, useConfigPersistenceTask } from '@blocks/app.config'
+import { useDAL, useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
+import { useSentry } from '@blocks/app.infra.sentry'
+import { useNavigationBar, useSafeAreaTask } from '@blocks/app.appearance'
+import { useTranscriptLoader } from '@blocks/app.transcript'
+import { useTrackSearchFiltersPersistenceTask, useTracksSearchResults } from '@blocks/app.tracks.search.results'
+import { useAnalytics } from '@blocks/app.analytics'
+import { useTracksCountFeature } from '@blocks/app.tracks.count'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Setup                                   */
@@ -92,7 +90,17 @@ import { setupAnalyticsFeature } from './features/setupAnalyticsFeature'
 import { setupAppearanceFeature } from './features/setupAppearanceFeature'
 import { setupTutorialFeature } from './features/setupTutorialFeature'
 import { setupToastFeature } from './features/setupToastFeature'
+import { setupSentryFeature } from './features/setupSentryFeature'
 
+/* -------------------------------------------------------------------------- */
+/*                                    Misc                                    */
+/* -------------------------------------------------------------------------- */
+
+import { ENVIRONMENT } from './env'
+
+/* -------------------------------------------------------------------------- */
+/*                                    Init                                    */
+/* -------------------------------------------------------------------------- */
 
 const pinia = createPinia()
 const app = createApp(LectoriumApp)
@@ -101,7 +109,12 @@ const app = createApp(LectoriumApp)
   .use(useLocalization())
   .use(pinia)
 
-useSentryFeature(app)
+useSentry().init({
+  app: app,
+  dsn: ENVIRONMENT.sentryDsn,
+  release: ENVIRONMENT.release,
+  dist: ENVIRONMENT.dist,
+})
 
 const start = new Date().getTime()
 
@@ -111,6 +124,9 @@ Promise.all([
   useNavigationBar().init(),
   useSafeAreaTask().start(),
 ]).then(() => {
+
+  // Set user ID for Sentry
+  useSentry().setUserId(useConfig().userEmail.value)
 
   // Should be initialized after config is loaded
   useRemoteDatabase().init({
@@ -213,6 +229,7 @@ Promise.all([
     /*                               Setup Features                               */
     /* -------------------------------------------------------------------------- */
 
+    setupSentryFeature()
     setupAnalyticsFeature()
     setupAppearanceFeature()
     setupAuthenticationFeature()

@@ -110,6 +110,7 @@ export async function setupAuthenticationFeature() {
     if (result.avatarUrl) {
       eventBus.userInfoDownloadAvatar.notify({ avatarUrl: result.avatarUrl })
     }
+    eventBus.authSignInEnd.notify({ userEmail: result.userEmail })
   })
 
   /**
