@@ -1,8 +1,8 @@
 import { actionSheetController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
 import { Routes } from '@shruti/protocol/routes'
-import { useEventBus } from '@shruti/mobile/core'
-import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth } from '@blocks/app.auth'
+import { useDedupedCallFunction, useEventBus, useLogger } from '@shruti/mobile/core'
+import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError } from '@blocks/app.auth'
 import { useUserInfo } from '@blocks/app.auth/composables/useUserInfo'
 import { useConfig } from '@blocks/app.config'
 import { useRemoteDatabase } from '@blocks/app.database'
@@ -19,6 +19,7 @@ export async function setupAuthenticationFeature() {
   const i18n = useLocalization()
   const auth = useAuth()
   const config = useConfig()
+  const logger = useLogger({ module: 'app.auth' })
   const userInfo = useUserInfo()
   const eventBus = useEventBus()
   const bucketService = useBucketService()
@@ -84,15 +85,13 @@ export async function setupAuthenticationFeature() {
     const result = await auth.signIn(event.provider)
     if (!result) { return }
 
-    remoteDatabase.init({
-      url: config.databaseUrl.value,
-      authToken: result.accessToken,
-      userId: result.userEmail
-    })
-    config.authToken.value = result.accessToken
-    config.refreshToken.value = result.refreshToken
     config.userName.value = `${result.userFirstName} ${result.userLastName}`.trim()
     config.userEmail.value = result.userEmail
+
+    await eventBus.authCredentialsReceived.notify({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    })
 
     eventBus.userInfoSave.notify({
       firstName: result.userFirstName,
@@ -100,13 +99,6 @@ export async function setupAuthenticationFeature() {
       email: result.userEmail,
       avatarUrl: result.avatarUrl || undefined
     })
-
-    if (result.accessToken) {
-      const parts = result.accessToken.split('.')
-      const payload = JSON.parse(atob(parts[1]))
-      if (payload.exp) { config.authTokenExpiresAt.value = payload.exp * 1000 }
-    }
-
     eventBus.sync.notify()
     eventBus.subscriptionLoad.notify()
     if (result.avatarUrl) {
@@ -137,6 +129,10 @@ export async function setupAuthenticationFeature() {
     })
   })
 
+  /* -------------------------------------------------------------------------- */
+  /*                                  Sign Out                                  */
+  /* -------------------------------------------------------------------------- */
+
   /**
    * Sign out user and reset authentication data.
    */
@@ -154,21 +150,66 @@ export async function setupAuthenticationFeature() {
     await Purchases.logOut()
   })
 
-  eventBus.authTokenRefresh.subscribe(async () => {
-    const result = await authTokenRefresher.refresh(config.refreshToken.value)
-    if (!result) { return }
-    config.authToken.value = result.accessToken
-    config.refreshToken.value = result.refreshToken
-    config.authTokenExpiresAt.value = result.accessTokenExpiresAt
+  /* -------------------------------------------------------------------------- */
+  /*                   Authentication Token : Refresh Request                   */
+  /* -------------------------------------------------------------------------- */
 
+  eventBus.authTokenRefresh.subscribe(
+    // Deduped function to prevent multiple refresh requests with the same token.
+    // Refreshed token will be marked as used (revoked) after successful refresh, 
+    // so consecutive calls with the same token will lead to Unauthorized error.
+    // In order to prevent multiple refresh requests with the same token, we use
+    // a deduped call function here.
+    useDedupedCallFunction(async ({ refreshToken }) => {
+      try {
+        const result = await authTokenRefresher.refresh(refreshToken)
+        await eventBus.authCredentialsReceived.notify({
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+        })
+      } catch (error: unknown) {
+        if (
+          error instanceof AuthTokenRefreshError && 
+          (error.status === 401 || error.status === 403)
+        ) {
+          // If the error is related to token refresh, we need to sign out user.
+          logger.error(error.message)
+          alert(error.message)
+          await eventBus.authSignOut.notify()
+        } else {
+          logger.error(`Failed to refresh authentication token`, error)
+        }
+      } 
+    })
+  )
+
+  /* -------------------------------------------------------------------------- */
+  /*                       Authentication Token : Received                      */
+  /* -------------------------------------------------------------------------- */
+
+  // Authentication and refresh token received from the server. It may
+  // happen after successful sign-in or after token refresh.
+  eventBus.authCredentialsReceived.subscribe(async (event) => {
+    config.authToken.value = event.accessToken
+    config.refreshToken.value = event.refreshToken
+
+    const parts = event.accessToken.split('.')
+    const payload = JSON.parse(atob(parts[1]))
+    if (payload.exp) { 
+      // config.authTokenExpiresAt.value = payload.exp * 1000 
+      config.authTokenExpiresAt.value = Date.now() + 30 * 1000 // Set to 1 minute in the future for simplicity
+    }
+    bucketService.setAuthToken(event.accessToken)
     remoteDatabase.init({
       url: config.databaseUrl.value,
       userId: config.userEmail.value,
-      authToken: result.accessToken,
+      authToken: event.accessToken,
     })
-
-    bucketService.setAuthToken(result.accessToken)
   })
+
+  /* -------------------------------------------------------------------------- */
+  /*                           User Info : Load Request                         */
+  /* -------------------------------------------------------------------------- */
 
   eventBus.userInfoLoad.subscribe(async () => {
     const result = await userInfo.load()
@@ -180,6 +221,7 @@ export async function setupAuthenticationFeature() {
       config.userAvatarUrl.value = avatar || ''
     }
   })
+
 
   /* -------------------------------------------------------------------------- */
   /*                                    Setup                                   */
