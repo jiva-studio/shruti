@@ -1,6 +1,16 @@
 import { Routes } from '@lectorium/protocol/routes'
 import { createSharedComposable } from '@vueuse/core'
 
+export class AuthTokenRefreshError extends Error {
+  constructor(
+    message: string, 
+    public readonly status?: number
+  ) {
+    super(message)
+    this.name = 'AuthTokenRefreshError'
+  }
+}
+
 export type Options = {
   apiUrl: string
 }
@@ -40,26 +50,19 @@ export const useAuthTokenRefresher = createSharedComposable(() => {
       })
 
     if (response.ok) {
-      let accessTokenExpiresAt: number | null = null
       const tokens = await response.json()
-      
-      if (tokens.accessToken) {
-        const parts = tokens.accessToken.split('.')
-        const payload = JSON.parse(atob(parts[1]))
-        accessTokenExpiresAt = payload.exp * 1000
-      }
-
       return {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        accessTokenExpiresAt,
-      } as {
-        accessToken: string,
-        refreshToken: string,
-        accessTokenExpiresAt: number
+        accessToken: tokens.accessToken as string,
+        refreshToken: tokens.refreshToken as string,
       }
+    } else if (response.status === 401 || response.status === 403) {
+      throw new AuthTokenRefreshError(
+        `Unable to refresh token: access denied`, 
+        response.status)
     } else {
-      return null
+      throw new AuthTokenRefreshError(
+        `Unable to refresh token: ${response.statusText}`, 
+        response.status)
     }
   }
 

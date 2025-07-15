@@ -124,7 +124,7 @@ export const useTrackMediaItemsDownloader = createSharedComposable(() => {
     }).then(async () => {
       await onDownloadComplete(mediaItem)
     }).catch(async (error) => {
-      logger.error(`Failed to download media item: ${mediaItem.remoteUrl}`, error)
+      logger.error(`Failed to download media item`, error)
       await onDownloadFailed(mediaItem)
     })
   }

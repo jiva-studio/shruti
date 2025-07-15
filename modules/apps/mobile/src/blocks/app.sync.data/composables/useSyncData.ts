@@ -5,6 +5,7 @@ import { InitOptions } from '../models/InitOptions'
 import { createSharedComposable } from '@vueuse/core'
 
 export const useSyncData = createSharedComposable(() => {
+  
   /* -------------------------------------------------------------------------- */
   /*                                    State                                   */
   /* -------------------------------------------------------------------------- */

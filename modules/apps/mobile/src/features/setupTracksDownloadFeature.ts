@@ -1,3 +1,4 @@
+import { useConfig } from '@blocks/app.config'
 import { useLocalization } from '@blocks/app.localization'
 import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
 import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.downloader'
@@ -10,6 +11,7 @@ export function setupTracksDownloadFeature() {
   /* -------------------------------------------------------------------------- */
 
   const i18n = useLocalization()
+  const config = useConfig()
   const logger = useLogger({ module: 'tracks.download' })
   const eventBus = useEventBus()
   const tracksState = useTracksState()
@@ -23,6 +25,13 @@ export function setupTracksDownloadFeature() {
   eventBus.trackDownload.subscribe(async (event) => {
     logger.info(`Track download requested: ${event.trackIds}`)
 
+    // refresh token if required
+    const isAuthTokenExpired =  Date.now() >= config.authTokenExpiresAt.value
+    if (config.refreshToken.value && isAuthTokenExpired) {
+      await eventBus.authTokenRefresh.notify({ refreshToken: config.refreshToken.value })
+    }
+
+    // Download each track
     for (const trackId of event.trackIds) {
       // Skip failed tracks if the option is set
       const currentTrackState = tracksState.store.getState(trackId)
@@ -36,7 +45,7 @@ export function setupTracksDownloadFeature() {
       if (downloadingTasks.length > 0) { continue }
 
       // Start downloading the track
-      try { 
+      try {
         // Create media items for the track and start downloading them
         // logger.info(`Creating media items for track: ${trackId}`)
         const mediaItems = await trackMediaItems.createMediaItems(trackId)
@@ -54,7 +63,7 @@ export function setupTracksDownloadFeature() {
           trackMediaItemsDownloader.enqueue(mediaItem)
         }
       } catch (error) {
-        logger.error(`Failed to download track ${trackId}: `, error)
+        logger.error(`Failed to download track`, error)
         tracksState.store.setState(trackId, { 
           isFailed: true, 
           downloadProgress: undefined 
