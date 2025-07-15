@@ -24,7 +24,6 @@
 import { Page } from '@blocks/app.core'
 import { PlaylistSection, usePlaylistStore } from '@blocks/app.playlist'
 import { useEventBus } from '@shruti/mobile/core'
-import { useDAL } from '@blocks/app.database'
 import { Message } from '@blocks/app.ui.kit'
 import { useConfig } from '@blocks/app.config'
 
@@ -45,8 +44,7 @@ function onPlaylistItemClicked(playlistItemId: string) {
 }
 
 function onArchivePlaylistItem(playlistItemId: string) {
-  const dal = useDAL()
-  dal.archiveService.archiveOne(playlistItemId)
+  eventBus.playlistArchiveItem.notify({ playlistItemId })
 }
 </script>
 

@@ -3,7 +3,7 @@ import { useEventBus } from '@shruti/mobile/core'
 import { useDAL } from '@blocks/app.database'
 import { useConfig } from '@blocks/app.config'
 import { usePlayer } from '@blocks/app.player'
-import { usePlaylist } from '@blocks/app.playlist'
+import { usePlaylist, usePlaylistStore } from '@blocks/app.playlist'
 
 export async function setupPlaylistFeature() {
   /* -------------------------------------------------------------------------- */
@@ -15,15 +15,30 @@ export async function setupPlaylistFeature() {
   const player = usePlayer()
   const playlist = usePlaylist()
   const eventBus = useEventBus()
+  const playlistStore = usePlaylistStore()
  
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
+  // Loads all playlist items
   eventBus.playlistLoad.subscribe(async () => {
     await playlist.load(config.appLanguage.value)
     eventBus.playlistLoadEnd.notify()
   })
+
+  /* --------------------------------- Archive -------------------------------- */
+
+  eventBus.playlistArchiveItem.subscribe(async ({ playlistItemId }) => {
+    playlistStore.remove(playlistItemId)
+    await dal.archiveService.archiveOne(playlistItemId)
+
+    // If the archived item is currently playing, stop the player
+    // if (player.playlistItemId.value === playlistItemId) {
+    //   await player.close()
+    // }
+  })
+
 
   /* ---------------------------- Mark As Completed --------------------------- */
 
@@ -51,7 +66,7 @@ export async function setupPlaylistFeature() {
 
   /* ----------------------- Archive Old Playlist Items ----------------------- */
 
-  eventBus.playlistArchive.subscribe(async () => { 
+  eventBus.playlistArchiveCompleted.subscribe(async () => { 
     // Get items that were completed more than 24 hours ago
     const oneDayInMs = 24 * 60 * 60 * 1000
     const date = Date.now() - oneDayInMs
@@ -76,12 +91,10 @@ export async function setupPlaylistFeature() {
     const isRemoved = x.event === 'removed'
     const isArchived = x.item.archivedAt !== undefined
     if (isRemoved || isArchived) {
-      // TODO: it will return first page only
       // Get all media items related to 
       const mediaItems = await dal.mediaItems.getMany({
-        selector: {
-          trackId: x.item.trackId
-        }
+        selector: { trackId: x.item.trackId },
+        limit: 1000 // TODO: it will return first page only
       })
 
       // Remove all media items
