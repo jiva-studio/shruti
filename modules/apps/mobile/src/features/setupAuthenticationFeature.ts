@@ -196,8 +196,7 @@ export async function setupAuthenticationFeature() {
     const parts = event.accessToken.split('.')
     const payload = JSON.parse(atob(parts[1]))
     if (payload.exp) { 
-      // config.authTokenExpiresAt.value = payload.exp * 1000 
-      config.authTokenExpiresAt.value = Date.now() + 30 * 1000 // Set to 1 minute in the future for simplicity
+      config.authTokenExpiresAt.value = payload.exp * 1000 
     }
     bucketService.setAuthToken(event.accessToken)
     remoteDatabase.init({
