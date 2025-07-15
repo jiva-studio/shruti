@@ -24,9 +24,9 @@ export function setupSyncFeature() {
 
   eventBus.sync.subscribe(useBlockingFunction(async () => {
     // refresh token if required
-    const isAuthTokenExpired =  Date.now() > config.authTokenExpiresAt.value
+    const isAuthTokenExpired =  Date.now() >= config.authTokenExpiresAt.value
     if (config.refreshToken.value && isAuthTokenExpired) {
-      await eventBus.authTokenRefresh.notify()
+      await eventBus.authTokenRefresh.notify({ refreshToken: config.refreshToken.value })
     }
 
     // sync data
@@ -36,7 +36,9 @@ export function setupSyncFeature() {
     if (config.userEmail.value) {
       const result = await syncMedia.checkTracksWithoutMedia()
       result.newTrackIds.forEach(x => tracksState.store.setState(x, { downloadProgress: 0 }))
-      eventBus.trackDownload.notify({ trackIds: result.newTrackIds, skipFailed: true })
+      if (result.newTrackIds.length > 0) {
+        eventBus.trackDownload.notify({ trackIds: result.newTrackIds, skipFailed: true })
+      }
       eventBus.playlistLoad.notify()
       eventBus.trackStateLoad.notify(['completed', 'inPlaylist'])
       eventBus.notesLoad.notify()

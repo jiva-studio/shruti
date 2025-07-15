@@ -159,6 +159,10 @@ Promise.all([
     /*                              Initialize Blocks                             */
     /* -------------------------------------------------------------------------- */
 
+    useBucketService().init({
+      apiUrl: useConfig().apiUrl.value,
+      authToken: useConfig().authToken.value,
+    })
     useSyncData().init({
       local: () => useLocalDatabase().get(),
       remote: () => useRemoteDatabase().get(),
