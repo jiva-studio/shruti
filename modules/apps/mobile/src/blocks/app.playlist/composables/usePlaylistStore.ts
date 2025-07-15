@@ -37,6 +37,13 @@ export const usePlaylistStore = defineStore('playlist', () =>{
     return items.find(item => item.trackId === trackId)
   }
 
+  function remove(playlistItemId: string) {
+    const index = items.findIndex(item => item.playlistItemId === playlistItemId)
+    if (index !== -1) {
+      items.splice(index, 1)
+    }
+  }
+
   function updateByTrackId(
     trackId: string, 
     data: Partial<PlaylistStoreItem>
@@ -51,5 +58,5 @@ export const usePlaylistStore = defineStore('playlist', () =>{
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { items, setItems, getByTrackId, updateByTrackId, isEmpty }
+  return { items, setItems, getByTrackId, updateByTrackId, isEmpty, remove }
 })
