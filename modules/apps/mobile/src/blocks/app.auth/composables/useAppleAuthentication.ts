@@ -55,6 +55,9 @@ export function useAppleAuthentication(options: {
         avatarUrl: '' // Apple does not provide avatar URL, so we return an empty string
       }
     } catch (error: any) {
+      // Unknown error during authentication. Connection issues?
+      if (error?.errorMessage?.includes('1000')) { return null }
+
       // apple: user canceled the login. 1001 is the error code in the text
       if (error?.errorMessage?.includes('1001')) { return null }
       alert(`Authentication failed. Please try again. ${JSON.stringify(error)}`)
