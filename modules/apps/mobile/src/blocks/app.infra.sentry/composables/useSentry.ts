@@ -43,6 +43,14 @@ export const useSentry = createSharedComposable(() => {
             maskAllText: false,
             maskAllInputs: false,
           }),
+          SentryVue.rewriteFramesIntegration({
+            iteratee(frame) {
+              if (frame.filename) {
+                 frame.filename = frame.filename.replace('app:///assets/', '')
+              }
+              return frame
+            },
+          })
         ],
         replaysSessionSampleRate: 0.1,
         replaysOnErrorSampleRate: 1.0,
