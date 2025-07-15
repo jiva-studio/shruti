@@ -76,6 +76,9 @@ export function setupPlayerFeature() {
     // Open transcript if it is enabled in the config
     if (config.openTranscriptAutomatically.value) {
       transcriptStore.open = true
+      if (!config.tutorialStepsCompleted.value.includes('transcript:open')) {
+        config.tutorialStepsCompleted.value.push('transcript:open')
+      }
     }
   })
 
