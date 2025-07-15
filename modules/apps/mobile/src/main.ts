@@ -266,7 +266,7 @@ Promise.all([
     /* -------------------------------------------------------------------------- */
 
     useEventBus().sync.notify()
-    useEventBus().playlistArchive.notify()
+    useEventBus().playlistArchiveCompleted.notify()
     useEventBus().notesLoad.notify()
     useEventBus().subscriptionLoad.notify()
     useEventBus().dictionaryLoad.notify()
