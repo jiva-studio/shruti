@@ -16,5 +16,8 @@ export const Routes = (baseUrl: string = '') => ({
   },
   status: {
     root: () => `${baseUrl}/status`,
+  },
+  account: {
+    delete: () => `${baseUrl}/account`,
   }
 });

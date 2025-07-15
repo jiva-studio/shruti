@@ -24,7 +24,7 @@ export class UserAuthentication {
    * @returns User roles
    */
   get roles() {
-    return this._accessToken.roles as string[];
+    return this._accessToken.roles;
   }
 }
 

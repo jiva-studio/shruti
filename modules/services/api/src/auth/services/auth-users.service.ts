@@ -68,4 +68,25 @@ export class AuthUsersService {
       roles: [],
     };
   }
+
+  /**
+   * Deletes a user by their name.
+   * @param name User name.
+   */
+  async deleteByName(name: string): Promise<void> {
+    const user = await this.findByName(name);
+    if (!user) {
+      this.logger.warn(`User ${name} not found for deletion.`);
+      return;
+    }
+
+    // Delete the user document from the _users collection
+    await this.couchDbService.delete('_users', 'org.couchdb.user:' + name);
+
+    // Delete the user's data collection
+    const couchDbSafeName = 'users-' + name.replace(/[^a-zA-Z0-9_]/g, '-');
+    await this.couchDbService.deleteCollection(couchDbSafeName);
+
+    this.logger.log(`User ${name} and their data have been deleted.`);
+  }
 }
