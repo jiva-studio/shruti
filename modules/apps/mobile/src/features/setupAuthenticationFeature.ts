@@ -144,6 +144,13 @@ export async function setupAuthenticationFeature() {
     config.userAvatarUrl.value = ''
     config.subscriptionPlan.value = ''
     config.authTokenExpiresAt.value = 0
+
+    bucketService.setAuthToken(ENVIRONMENT.readonlyAuthToken)
+    remoteDatabase.init({
+      url: config.databaseUrl.value,
+      userId: config.userEmail.value,
+      authToken: ENVIRONMENT.readonlyAuthToken,
+    })
   })
 
   eventBus.authSignOut.subscribe(async () => {

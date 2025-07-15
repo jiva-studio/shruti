@@ -61,7 +61,9 @@ export const useAuth = createSharedComposable(() => {
         authenticateUrl: options.authenticateUrl
       }).authenticate()
     }
-    if (results === null) { return } // user canceled the login
+    // user canceled the login, internet connection issues,
+    // or other unknown error.
+    if (results === null) { return } 
 
     return {
       accessToken: results.accessToken,
