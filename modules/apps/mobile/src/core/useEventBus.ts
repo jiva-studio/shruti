@@ -69,7 +69,8 @@ export const useEventBus = createSharedComposable(() => {
 
   const playlistLoad = new Event<void>('playlistLoad')
   const playlistLoadEnd = new Event<void>('playlistLoadEnd')
-  const playlistArchive = new Event<void>('playlistArchive')
+  const playlistArchiveItem = new Event<{ playlistItemId: string }>('playlistArchiveItem')
+  const playlistArchiveCompleted = new Event<void>('playlistArchiveCompleted')
 
   /* -------------------------------------------------------------------------- */
   /*                                Subscription                                */
@@ -142,7 +143,8 @@ export const useEventBus = createSharedComposable(() => {
     // playlist
     playlistLoad,
     playlistLoadEnd,
-    playlistArchive,
+    playlistArchiveItem,
+    playlistArchiveCompleted,
 
     // subscription
     subscriptionLoad,
