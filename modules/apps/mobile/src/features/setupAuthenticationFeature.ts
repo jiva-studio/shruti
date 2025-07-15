@@ -1,15 +1,16 @@
+import { modalController } from '@ionic/vue'
 import { actionSheetController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
+import { Capacitor } from '@capacitor/core'
 import { Routes } from '@shruti/protocol/routes'
 import { useDedupedCallFunction, useEventBus, useLogger } from '@shruti/mobile/core'
-import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError } from '@blocks/app.auth'
+import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError, DeleteAccountDialog } from '@blocks/app.auth'
 import { useUserInfo } from '@blocks/app.auth/composables/useUserInfo'
 import { useConfig } from '@blocks/app.config'
 import { useRemoteDatabase } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
-import { ENVIRONMENT } from '../env'
-import { Capacitor } from '@capacitor/core'
 import { useBucketService } from '@blocks/app.services.bucket'
+import { ENVIRONMENT } from '../env'
 
 export async function setupAuthenticationFeature() {
   /* -------------------------------------------------------------------------- */
@@ -31,6 +32,11 @@ export async function setupAuthenticationFeature() {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
+  /* ------------------------- Authentication Actions ------------------------- */
+
+  // User can select multiple authentication providers to sign in. It shows an 
+  // action sheet with available options. If user selects an option, it will
+  // trigger the `authSignIn` event with the selected provider.
   eventBus.authSelectProvider.subscribe(async () => {
     // On android there is only Google sign-in available, so where is no
     // need to show action sheet with only one option.
@@ -40,6 +46,7 @@ export async function setupAuthenticationFeature() {
       return
     }
     
+    // Action Sheet buttons with available authentication providers.
     const { t } = i18n.global 
     const googleAction = { text: 'Google',  data: { action: 'google' } }
     const appleAction  = { text: 'Apple',   data: { action: 'apple' } }
@@ -61,26 +68,29 @@ export async function setupAuthenticationFeature() {
     })
   })
 
+  /* ----------------------- Authenticated User Actions ----------------------- */
+
   eventBus.authSelectAuthenticatedActions.subscribe(async () => {
     const { t } = i18n.global 
     const logoutAction = { text: t('settings.auth.signOut'), data: { action: 'logout' } }
+    const deleteAction = { text: t('settings.auth.delete'), role: 'destructive', data: { action: 'delete' } }
     const cancelAction = { text: t('app.cancel'),  role: 'cancel', data: { action: 'cancel' } }
 
     const actionSheet = await actionSheetController.create({
       header: t('settings.auth.actions'),
-      buttons: [logoutAction, cancelAction]
+      buttons: [logoutAction, deleteAction, cancelAction]
     })
 
     await actionSheet.present()
     actionSheet.onDidDismiss().then((result) => {
       if (result.role === 'cancel' || !result.data?.action) { return }
+      if (result.data.action === 'delete') { eventBus.authDeleteAccount.notify() }
       if (result.data.action === 'logout') { eventBus.authSignOut.notify() }
     })
   })
 
-  /**
-   * Saves user authentication data to the configuration.
-   */
+  /* --------------------------------- Sign In -------------------------------- */
+
   eventBus.authSignIn.subscribe(async (event) => {
     const result = await auth.signIn(event.provider)
     if (!result) { return }
@@ -107,9 +117,45 @@ export async function setupAuthenticationFeature() {
     eventBus.authSignInEnd.notify({ userEmail: result.userEmail })
   })
 
-  /**
-   * Download user avatar if available and save it to the configuration.
-   */
+  /* ----------------------------- Delete Account ----------------------------- */
+
+  eventBus.authDeleteAccount.subscribe(async () => {
+    const modal = await modalController.create({
+      component: DeleteAccountDialog,
+    })
+
+    modal.present()
+
+    const { data, role } = await modal.onWillDismiss()
+    if (role !== 'confirm') { return }
+    
+    // alert(JSON.stringify(data))
+
+    if (role === 'confirm') {
+      const response = await fetch(
+        Routes(config.apiUrl.value).account.delete(), {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${config.authToken.value}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const json = await response.json()
+      if (!response.ok) {
+        logger.error('Failed to delete account', json)
+        alert(json.message || 'Failed to delete account')
+        return
+      } else {
+        logger.info('Account deleted successfully')
+        alert('Your account has been deleted successfully.')
+      }
+    }
+  })
+
+  /* -------------------------------- User Info ------------------------------- */
+
   eventBus.userInfoDownloadAvatar.subscribe(async (event) => {
     if (event.avatarUrl) {
       const avatar = await userAvatarDownloader.download(event.avatarUrl)
@@ -117,9 +163,17 @@ export async function setupAuthenticationFeature() {
     }
   })
 
-  /**
-   * Save user information to the database.
-   */
+  eventBus.userInfoLoad.subscribe(async () => {
+    const result = await userInfo.load()
+    if (result && (result.firstName || result.lastName)) {
+      config.userName.value = `${result.firstName} ${result.lastName}`.trim()
+    }
+    if (result?.avatarUrl) {
+      const avatar = await userAvatarDownloader.download(result.avatarUrl)
+      config.userAvatarUrl.value = avatar || ''
+    }
+  })
+
   eventBus.userInfoSave.subscribe(async (event) => {
     await userInfo.save({
       firstName: event.firstName,
@@ -129,13 +183,8 @@ export async function setupAuthenticationFeature() {
     })
   })
 
-  /* -------------------------------------------------------------------------- */
-  /*                                  Sign Out                                  */
-  /* -------------------------------------------------------------------------- */
+  /* -------------------------------- Sign Out -------------------------------- */
 
-  /**
-   * Sign out user and reset authentication data.
-   */
   eventBus.authSignOut.subscribe(async () => {
     config.authToken.value = ENVIRONMENT.readonlyAuthToken
     config.refreshToken.value = ''
@@ -157,9 +206,7 @@ export async function setupAuthenticationFeature() {
     await Purchases.logOut()
   })
 
-  /* -------------------------------------------------------------------------- */
-  /*                   Authentication Token : Refresh Request                   */
-  /* -------------------------------------------------------------------------- */
+  /* -------------------------- Auth Token : Refresh -------------------------- */
 
   eventBus.authTokenRefresh.subscribe(
     // Deduped function to prevent multiple refresh requests with the same token.
@@ -190,9 +237,7 @@ export async function setupAuthenticationFeature() {
     })
   )
 
-  /* -------------------------------------------------------------------------- */
-  /*                       Authentication Token : Received                      */
-  /* -------------------------------------------------------------------------- */
+  /* -------------------------- Auth Token : Refresh -------------------------- */
 
   // Authentication and refresh token received from the server. It may
   // happen after successful sign-in or after token refresh.
@@ -212,22 +257,6 @@ export async function setupAuthenticationFeature() {
       authToken: event.accessToken,
     })
   })
-
-  /* -------------------------------------------------------------------------- */
-  /*                           User Info : Load Request                         */
-  /* -------------------------------------------------------------------------- */
-
-  eventBus.userInfoLoad.subscribe(async () => {
-    const result = await userInfo.load()
-    if (result && (result.firstName || result.lastName)) {
-      config.userName.value = `${result.firstName} ${result.lastName}`.trim()
-    }
-    if (result?.avatarUrl) {
-      const avatar = await userAvatarDownloader.download(result.avatarUrl)
-      config.userAvatarUrl.value = avatar || ''
-    }
-  })
-
 
   /* -------------------------------------------------------------------------- */
   /*                                    Setup                                   */
