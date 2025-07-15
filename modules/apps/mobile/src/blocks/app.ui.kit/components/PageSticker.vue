@@ -28,7 +28,7 @@ const router = useRouter()
 /* -------------------------------------------------------------------------- */
 
 const props = defineProps<{
-  navigationPath: string
+  navigationPath?: string
   image: string
   header: string
   message: string
@@ -45,7 +45,9 @@ const visible = ref(false)
 /* -------------------------------------------------------------------------- */
 
 function goTonavigationPath() {
-  router.replace({ name: props.navigationPath })
+  if (props.navigationPath) {
+    router.replace({ name: props.navigationPath })
+  }
 }
 
 function onLoad() {

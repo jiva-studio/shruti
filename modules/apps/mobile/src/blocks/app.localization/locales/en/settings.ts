@@ -19,6 +19,11 @@ export default {
       'Synced {count} days ago',
     signedIn: 'You are signed in',
     signOut: 'Sign Out',
+    delete: 'Delete Account',
+    deleteAccount: {
+      sure: 'Delete account?',
+      description: 'All your data will be permanently deleted from our servers. This action is irreversible.',
+    },
     signIn: {
       title: 'Sign In',
       subtitle: 'Sign In With',

@@ -8,6 +8,7 @@ export default {
   apply: 'Apply',
   select: 'Select',
   cancel: 'Cancel',
+  delete: 'Delete',
   soon: 'Soon',
   back: 'Back',
   notes: 'Notes',

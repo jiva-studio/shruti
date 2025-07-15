@@ -12,6 +12,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { BucketModule } from './bucket/bucket.module';
 import { StatusModule } from './status/status.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { StatusModule } from './status/status.module';
     AuthModule,
     BucketModule,
     StatusModule,
+    AccountModule,
   ],
   controllers: [],
   providers: [],

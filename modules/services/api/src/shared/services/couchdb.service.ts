@@ -113,4 +113,31 @@ export class CouchDbService {
       throw error;
     }
   }
+
+  async delete(collection: string, id: string) {
+    try {
+      const database = this.couchDbClient.use(collection);
+      const doc = await database.get(id);
+      await database.destroy(id, doc._rev);
+    } catch (error) {
+      this.logger.error(
+        `Error deleting document with ID ${id} from collection ${collection}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async deleteCollection(collection: string): Promise<void> {
+    try {
+      await this.couchDbClient.db.destroy(collection);
+    } catch (error) {
+      if (error.statusCode === 404) {
+        this.logger.warn(`Collection ${collection} does not exist.`);
+      } else {
+        this.logger.error(`Error deleting collection ${collection}:`, error);
+        throw error;
+      }
+    }
+  }
 }

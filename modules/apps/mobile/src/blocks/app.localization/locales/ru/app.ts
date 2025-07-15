@@ -8,6 +8,7 @@ export default {
   apply: 'Применить',
   select: 'Выбрать',
   cancel: 'Отмена',
+  delete: 'Удалить',
   soon: 'Скоро',
   back: 'Назад',
   notes: 'Заметки',

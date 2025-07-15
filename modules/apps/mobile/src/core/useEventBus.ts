@@ -90,6 +90,7 @@ export const useEventBus = createSharedComposable(() => {
   const authCredentialsReceived = new Event<{ accessToken: string, refreshToken: string }>('authCredentialsReceived')
   const authSelectProvider = new Event<void>('authSelectProvider')
   const authSelectAuthenticatedActions = new Event<void>('authSelectAuthenticatedActions')
+  const authDeleteAccount = new Event<void>('authDeleteAccount')
 
   /* -------------------------------------------------------------------------- */
   /*                                  Tutorial                                  */
@@ -157,6 +158,7 @@ export const useEventBus = createSharedComposable(() => {
     authSelectProvider,
     authCredentialsReceived,
     authSelectAuthenticatedActions,
+    authDeleteAccount,
 
     // tutorial
     tutorialCompleteStep,
