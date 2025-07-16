@@ -50,6 +50,7 @@ export const russianTranslations: TranslationMap = {
   'footer.rights': '© 2025 AKd Studios',
   'footer.terms': 'Условия',
   'footer.privacy': 'Конфиденциальность',
+  'footer.account-deletion': 'Удаление аккаунта',
   'footer.legal': 'Юридическая информация',
   'footer.connect': 'Связаться',
   'footer.follow': 'Следите за нами',

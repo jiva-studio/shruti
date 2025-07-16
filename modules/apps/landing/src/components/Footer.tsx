@@ -30,6 +30,7 @@ const Footer = () => {
               <ul className="space-y-2 text-sm text-gray-300">
                 <li><Link to="/terms" className="hover:text-white transition-colors">{t('footer.terms')}</Link></li>
                 <li><Link to="/policy" className="hover:text-white transition-colors">{t('footer.privacy')}</Link></li>
+                <li><Link to="/account-deletion" className="hover:text-white transition-colors">{t('footer.account-deletion')}</Link></li>
               </ul>
             </div>
           </div>

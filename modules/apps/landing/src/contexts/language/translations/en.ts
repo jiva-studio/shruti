@@ -50,6 +50,7 @@ export const englishTranslations: TranslationMap = {
   'footer.rights': '© 2025 AKd Studios',
   'footer.terms': 'Terms',
   'footer.privacy': 'Privacy',
+  'footer.account-deletion': 'Account Deletion',
   'footer.legal': 'Legal',
   'footer.connect': 'Connect',
   'footer.follow': 'Follow Us',

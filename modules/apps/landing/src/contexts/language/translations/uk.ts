@@ -50,6 +50,7 @@ export const ukrainianTranslations: TranslationMap = {
   'footer.rights': '© 2025 AKd Studios',
   'footer.terms': 'Умови',
   'footer.privacy': 'Конфіденційність',
+  'footer.account-deletion': 'Видалення акаунта',
   'footer.legal': 'Юридична інформація',
   'footer.connect': 'Зв\'язок',
   'footer.follow': 'Слідкуйте за нами',
