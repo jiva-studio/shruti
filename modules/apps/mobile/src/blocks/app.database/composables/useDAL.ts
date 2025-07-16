@@ -1,12 +1,10 @@
 import { createSharedComposable } from '@vueuse/core'
 import { useLocalDatabase } from './useLocalDatabase'
 import { 
-  ArchiveService,
   AuthorsRepository, CachingRepository, DurationsRepository, IndexService, 
   LanguagesRepository, LocationsRepository, MediaItemsRepository, NotesRepository, 
   PlaylistItemsRepository, SortMethodsRepository, SourcesRepository, TagsRepository,
-  TracksRepository,
-  TracksSearchService
+  TracksRepository, TracksSearchService, ArchiveService,
 } from '@shruti/dal/index'
 
 export const useDAL = createSharedComposable(() => {

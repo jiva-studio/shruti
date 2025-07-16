@@ -9,6 +9,7 @@ export default {
   select: 'Select',
   cancel: 'Cancel',
   delete: 'Delete',
+  deleted: 'Deleted',
   soon: 'Soon',
   back: 'Back',
   notes: 'Notes',

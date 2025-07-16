@@ -9,6 +9,7 @@ export default {
   select: 'Выбрать',
   cancel: 'Отмена',
   delete: 'Удалить',
+  deleted: 'Удалено',
   soon: 'Скоро',
   back: 'Назад',
   notes: 'Заметки',

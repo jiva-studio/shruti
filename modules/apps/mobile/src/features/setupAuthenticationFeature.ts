@@ -1,3 +1,4 @@
+import { Filesystem, Directory, ProgressStatus } from '@capacitor/filesystem'
 import { modalController } from '@ionic/vue'
 import { actionSheetController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
@@ -7,10 +8,11 @@ import { useDedupedCallFunction, useEventBus, useLogger } from '@shruti/mobile/c
 import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError, DeleteAccountDialog } from '@blocks/app.auth'
 import { useUserInfo } from '@blocks/app.auth/composables/useUserInfo'
 import { useConfig } from '@blocks/app.config'
-import { useRemoteDatabase } from '@blocks/app.database'
+import { useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
 import { useBucketService } from '@blocks/app.services.bucket'
 import { ENVIRONMENT } from '../env'
+import { useTracksStateStore } from '@blocks/app.tracks.state'
 
 export async function setupAuthenticationFeature() {
   /* -------------------------------------------------------------------------- */
@@ -27,6 +29,8 @@ export async function setupAuthenticationFeature() {
   const remoteDatabase = useRemoteDatabase()
   const authTokenRefresher = useAuthTokenRefresher()
   const userAvatarDownloader = useUserAvatarDownloader()
+  const localDatabase = useLocalDatabase()
+  const tracksStateStore = useTracksStateStore()
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
@@ -73,7 +77,7 @@ export async function setupAuthenticationFeature() {
   eventBus.authSelectAuthenticatedActions.subscribe(async () => {
     const { t } = i18n.global 
     const logoutAction = { text: t('settings.auth.signOut'), data: { action: 'logout' } }
-    const deleteAction = { text: t('settings.auth.delete'), role: 'destructive', data: { action: 'delete' } }
+    const deleteAction = { text: t('settings.auth.delete'), data: { action: 'delete' } }
     const cancelAction = { text: t('app.cancel'),  role: 'cancel', data: { action: 'cancel' } }
 
     const actionSheet = await actionSheetController.create({
@@ -120,36 +124,52 @@ export async function setupAuthenticationFeature() {
   /* ----------------------------- Delete Account ----------------------------- */
 
   eventBus.authDeleteAccount.subscribe(async () => {
-    const modal = await modalController.create({
-      component: DeleteAccountDialog,
-    })
-
-    modal.present()
-
+    // Show confirmation dialog before deleting the account.
+    const modal = await modalController.create({ component: DeleteAccountDialog })
+    await modal.present()
     const { data, role } = await modal.onWillDismiss()
     if (role !== 'confirm') { return }
     
-    // alert(JSON.stringify(data))
+    // Delete user account from the server.
+    const response = await fetch(
+      Routes(config.apiUrl.value).account.delete(), {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${config.authToken.value}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    )
 
-    if (role === 'confirm') {
-      const response = await fetch(
-        Routes(config.apiUrl.value).account.delete(), {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${config.authToken.value}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
+    // Check if account deletion was successful.
+    const json = await response.json()
+    if (!response.ok) {
+      logger.error('Failed to delete account', json)
+      alert(i18n.global.t('settings.auth.deleteAccount.error'))
+      return
+    }
 
-      const json = await response.json()
-      if (!response.ok) {
-        logger.error('Failed to delete account', json)
-        alert(json.message || 'Failed to delete account')
-        return
-      } else {
-        logger.info('Account deleted successfully')
-        alert('Your account has been deleted successfully.')
+    // Account was deleted successfully. Sign user out locally.
+    logger.info('User\'s account was deleted successfully')
+    alert(i18n.global.t('settings.auth.deleteAccount.deleted'))
+    eventBus.authSignOut.notify()
+
+    // Clear user data from the local database if requested.
+    if (!data.keepMyProgress) {
+      await localDatabase.destroyUserData()
+      eventBus.notesLoad.notify()
+      eventBus.playlistLoad.notify()
+      tracksStateStore.clear()
+      
+      // Delete files
+      try {
+        Filesystem.rmdir({
+          path: 'library/tracks',
+          directory: Directory.External,
+          recursive: true,
+        })
+      } catch (error: any) {
+        // pass
       }
     }
   })
@@ -228,7 +248,6 @@ export async function setupAuthenticationFeature() {
         ) {
           // If the error is related to token refresh, we need to sign out user.
           logger.error(error.message)
-          alert(error.message)
           await eventBus.authSignOut.notify()
         } else {
           logger.error(`Failed to refresh authentication token`, error)
