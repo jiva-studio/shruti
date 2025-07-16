@@ -77,9 +77,15 @@ export const useLocalDatabase = createSharedComposable(() => {
     return databases
   }
 
+  async function destroyUserData() {
+    if (!databases) { throw new Error('Local Database is not initialized. Call init() first.') }
+    await databases.userData.destroy()
+    await databases.userData.init()
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { get, init }
+  return { get, init, destroyUserData }
 })

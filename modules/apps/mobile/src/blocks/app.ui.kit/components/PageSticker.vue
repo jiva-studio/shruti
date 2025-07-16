@@ -6,6 +6,7 @@
   >
     <img
       :src="image"
+      class="image"
       @load="onLoad"
     >
     <b class="header">{{ header }}</b>
@@ -59,6 +60,7 @@ function onLoad() {
 <style scoped>
 .PageSticker {
   max-width: 80%;
+  width: 80%;
   display: flex;
   gap: .75rem;
   flex-direction: column;
@@ -82,5 +84,9 @@ function onLoad() {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+
+.image {
+  max-width: 75%;
 }
 </style>
