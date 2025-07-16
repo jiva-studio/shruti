@@ -56,17 +56,14 @@ export class AuthUsersService {
       return existingUser;
     }
 
-    await this.couchDbService.insert('_users', {
+    const userDoc = {
       _id: 'org.couchdb.user:' + name,
       name: name,
       roles: ['user'],
       type: 'user',
-    });
-
-    return {
-      name: name,
-      roles: [],
     };
+    await this.couchDbService.insert('_users', userDoc);
+    return userDoc;
   }
 
   /**
