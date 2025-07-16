@@ -34,6 +34,10 @@ export const useTracksStateStore = defineStore('tracksState', () => {
     }
   }
 
+  function clear() {
+    statuses.value = {}
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                                   Getters                                  */
   /* -------------------------------------------------------------------------- */
@@ -43,6 +47,6 @@ export const useTracksStateStore = defineStore('tracksState', () => {
   }
 
   return {
-    statuses, getState, setState
+    statuses, getState, setState, clear
   }
 })

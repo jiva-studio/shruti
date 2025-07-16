@@ -38,6 +38,7 @@ export interface DatabaseReplicationOptions {
 export class Database {
   private _db: PouchDB.Database
   private _config: DatabaseConfig
+  private _factory: (config: DatabaseConfig) => PouchDB.Database 
 
   /**
    * Initialize a new database using the given configuration
@@ -47,7 +48,7 @@ export class Database {
     config: DatabaseConfig
   ) {
     this._config = config
-    this._db = new PouchDB(this._config.name, {
+    this._factory = () => new PouchDB(this._config.name, {
       adapter: this._config.adapter,
       // @ts-ignore
       location: 'default',
@@ -62,6 +63,7 @@ export class Database {
         return PouchDB.fetch(url, opts);
       }
     })
+    this._db = this._factory(config)
   }
 
   /* -------------------------------------------------------------------------- */
@@ -77,6 +79,14 @@ export class Database {
     }
   }
 
+  /* -------------------------------------------------------------------------- */
+  /*                                   Destroy                                  */
+  /* -------------------------------------------------------------------------- */
+
+  async destroy() {
+    await this._db.destroy()
+    this._db = this._factory(this._config)
+  }
 
   /* -------------------------------------------------------------------------- */
   /*                                 Replication                                */

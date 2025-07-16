@@ -23,6 +23,11 @@ export default {
     deleteAccount: {
       sure: 'Delete account?',
       description: 'All your data will be permanently deleted from our servers. This action is irreversible.',
+      keepProgress: 'Keep my progress',
+      keepProgressDetails: 'Playlist, notes will be kept on this device.',
+      pressAndHold: 'Press and hold',
+      deleted: 'Your account has been deleted successfully.',
+      error: 'An error occurred while deleting your account. Please try again later.',
     },
     signIn: {
       title: 'Sign In',

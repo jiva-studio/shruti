@@ -1,58 +1,69 @@
 <template>
-  <IonContent
-    class="ion-padding"
-  >
-    <PageSticker 
+  <IonContent :scroll-y="false">
+    <PageSticker
+      style="transform: translate(-50%, -35%);"
       :image="deleteAccountImg"
       :header="$t('settings.auth.deleteAccount.sure')"
       :message="$t('settings.auth.deleteAccount.description')"
     />
   </IonContent>
 
-  <IonFooter class="ion-no-border ion-padding">
-    <IonToolbar>
-      <div class="actions">
-        <IonCheckbox
-          v-if="false"
-          v-model="wipeMyProgressAlso"
-          label-placement="end"
-          color="danger"
-        >
-          {{ $t('settings.auth.deleteAccount.myProgressAlso') }}
-        </IonCheckbox>
-        <IonButton
-          fill="solid"
-          expand="block"
-          color="danger"
-          @click="confirm"
-        >
-          {{ $t('app.delete') }}
-        </IonButton>
-        <IonButton
-          fill="clear"
-          expand="block"
-          color="medium"
-          @click="cancel"
-        > 
-          {{ $t('app.cancel') }}
-        </IonButton>
-      </div>
-    </IonToolbar>
+  <!-- Actions Section -->
+  <IonFooter class="ion-no-border ion-padding actions">
+    <IonCheckbox
+      v-model="keepMyProgress"
+      :helper-text="$t('settings.auth.deleteAccount.keepProgressDetails')"
+      label-placement="end"
+      color="danger"
+      style="align-self: center; padding-bottom: 1rem;"
+    >
+      {{ $t('settings.auth.deleteAccount.keepProgress') }}
+    </IonCheckbox>
+
+    <HoldButton
+      :text="$t('app.delete')"
+      :confirmed-text="$t('app.deleted')"
+      @confirm="onConfirm"
+      @confirm-start="onConfirmStart"
+      @confirming="onConfirming"
+    />
+
+    <IonNote class="ion-text-center">
+      {{ $t('settings.auth.deleteAccount.pressAndHold') }}
+    </IonNote>
   </IonFooter>
+
+  <!-- Close Button -->
+  <IonButton
+    size="small"
+    shape="round"
+    class="close top-most"
+    color="medium"
+    @click="cancel"
+  >
+    <IonIcon
+      slot="icon-only"
+      class="top-most"
+      :icon="close"
+    />
+  </IonButton>
 </template>
 
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IonButton, IonCheckbox, IonFooter, IonToolbar, IonContent, modalController } from '@ionic/vue'
+import { close } from 'ionicons/icons'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
+import { IonButton, IonIcon, IonNote, IonCheckbox, IonFooter, IonContent, modalController } from '@ionic/vue'
+import { PageSticker, HoldButton } from '@blocks/app.ui.kit'
 import deleteAccountImg from '../assets/delete.png'
-import { PageSticker } from '@blocks/app.ui.kit'
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const wipeMyProgressAlso = ref(false)
+const keepMyProgress = ref(true)
+const elapsedNotified = ref(0)
 
 /* -------------------------------------------------------------------------- */
 /*                                   Actions                                  */
@@ -62,10 +73,29 @@ function cancel() {
   modalController.dismiss(null, 'cancel')
 }
 
-function confirm() {
-  modalController.dismiss({
-    wipeMyProgressAlso: wipeMyProgressAlso.value
-  }, 'confirm')
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+function onConfirmStart() {
+  elapsedNotified.value = 0
+}
+
+function onConfirming(elapsed: number, holdTime: number) {
+  if (elapsed > elapsedNotified.value) {
+    Haptics.impact({ style: ImpactStyle.Light })
+    elapsedNotified.value += Math.max(((holdTime - elapsed) / 5), 100)
+  }
+}
+
+function onConfirm() {
+  Haptics.impact({ style: ImpactStyle.Heavy })
+  setTimeout(() => {
+    modalController.dismiss({
+      keepMyProgress: keepMyProgress.value
+    }, 'confirm')
+  }, 1000)
 }
 </script>
 
@@ -74,5 +104,16 @@ function confirm() {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-bottom: var(--ion-safe-area-bottom, 0px);
+}
+
+.close {
+  position: absolute;
+  top: var(--ion-safe-area-top, 2rem);
+  left: 10px;
+}
+
+.top-most {
+  z-index: 99999999;
 }
 </style>
