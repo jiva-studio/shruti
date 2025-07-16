@@ -1,4 +1,3 @@
-
 import React from 'react';
 import NavBar from "@/components/NavBar";
 import Footer from "@/components/Footer";
@@ -12,12 +11,12 @@ const Privacy = () => {
           <h1 className="text-3xl font-bold text-sadu-dark-purple mb-6">Privacy Policy</h1>
           
           <div className="prose prose-purple max-w-none">
-            <p className="text-gray-700 mb-4">Last updated: May 10, 2025</p>
+            <p className="text-gray-700 mb-4">Last updated: July 16, 2025</p>
             
             <p className="text-gray-700 mb-4">
               This privacy policy applies to the Shruti app (hereby referred to as "Application") 
               for mobile devices that was created by Aleksey Leontev (hereby referred to as "Service Provider") 
-              as a Free service. This service is intended for use "AS IS".
+              as a Commercial service. This service is intended for use "AS IS".
             </p>
             
             <h2 className="text-xl font-semibold text-sadu-dark-purple mt-8 mb-4">Information Collection and Use</h2>
@@ -52,7 +51,7 @@ const Privacy = () => {
             
             <p className="text-gray-700 mb-4">
               For a better experience, while using the Application, the Service Provider may require you to provide us 
-              with certain personally identifiable information, including but not limited to userId. The information that 
+              with certain personally identifiable information, including but not limited to email, userid. The information that 
               the Service Provider request will be retained by them and used as described in this privacy policy.
             </p>
             
@@ -70,6 +69,8 @@ const Privacy = () => {
             <ul className="list-disc pl-6 mb-4 text-gray-700">
               <li><a href="https://www.google.com/policies/privacy/" className="text-sadu-purple hover:underline" target="_blank" rel="noopener noreferrer">Google Play Services</a></li>
               <li><a href="https://sentry.io/privacy/" className="text-sadu-purple hover:underline" target="_blank" rel="noopener noreferrer">Sentry</a></li>
+              <li><a href="https://amplitude.com/privacy" className="text-sadu-purple hover:underline" target="_blank" rel="noopener noreferrer">Amplitude</a></li>
+              <li><a href="https://www.revenuecat.com/privacy" className="text-sadu-purple hover:underline" target="_blank" rel="noopener noreferrer">RevenueCat</a></li>
             </ul>
             
             <p className="text-gray-700 mb-4">
@@ -123,7 +124,7 @@ const Privacy = () => {
             </p>
             
             <p className="text-gray-700 mb-4">
-              This privacy policy is effective as of 2025-05-10
+              This privacy policy is effective as of 2025-07-16
             </p>
             
             <h2 className="text-xl font-semibold text-sadu-dark-purple mt-8 mb-4">Your Consent</h2>
