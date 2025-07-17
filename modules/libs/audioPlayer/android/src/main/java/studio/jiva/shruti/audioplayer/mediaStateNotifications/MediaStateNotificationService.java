@@ -43,6 +43,7 @@ public final class MediaStateNotificationService {
 
     public void update() {
         state.setPosition(mediaPlayer.getCurrentPosition());
+        state.setState(mediaPlayer.isPlaying() ? "playing" : "paused");
         for (IMediaStateNotifier notifier : notifiers) {
             notifier.send(state);
         }

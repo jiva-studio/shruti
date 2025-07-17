@@ -1,3 +1,4 @@
+import { useAnalytics } from '@blocks/app.analytics'
 import { useConfig } from '@blocks/app.config'
 import { useLocalization } from '@blocks/app.localization'
 import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
@@ -14,6 +15,7 @@ export function setupTracksDownloadFeature() {
   const config = useConfig()
   const logger = useLogger({ module: 'tracks.download' })
   const eventBus = useEventBus()
+  const analytics = useAnalytics()
   const tracksState = useTracksState()
   const trackMediaItems = useTrackMediaItems()
   const trackMediaItemsDownloader = useTrackMediaItemsDownloader()
@@ -62,8 +64,11 @@ export function setupTracksDownloadFeature() {
         for (const mediaItem of mediaItems) {
           trackMediaItemsDownloader.enqueue(mediaItem)
         }
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`Failed to download track`, error)
+        analytics.track('track.download.failed', { 
+          trackId, message: error?.message || 'Unknown error'
+        })
         tracksState.store.setState(trackId, { 
           isFailed: true, 
           downloadProgress: undefined 
@@ -85,6 +90,6 @@ export function setupTracksDownloadFeature() {
 
   trackMediaItemsDownloader.failed.subscribe(async (mediaItem) => {
     tracksState.store.setState(mediaItem.trackId, { isFailed: true, downloadProgress: undefined })
-    // logger.error(`Download failed for track ${mediaItem.trackId}: ` + JSON.stringify(mediaItem))
+    analytics.track('track.download.failed', { trackId: mediaItem.trackId })
   })
 }
