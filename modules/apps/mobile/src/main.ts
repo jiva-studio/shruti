@@ -92,6 +92,7 @@ import { setupTutorialFeature } from './features/setupTutorialFeature'
 import { setupToastFeature } from './features/setupToastFeature'
 import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
+import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
