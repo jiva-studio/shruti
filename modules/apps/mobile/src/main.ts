@@ -252,6 +252,7 @@ Promise.all([
     setupTutorialFeature()
     setupToastFeature()
     setupAppStatusFeature()
+    setupPlayerAnalyticsFeature()
 
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
