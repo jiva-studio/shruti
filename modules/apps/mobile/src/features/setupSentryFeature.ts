@@ -14,10 +14,10 @@ export function setupSentryFeature() {
   /* -------------------------------------------------------------------------- */
 
   eventBus.authSignInEnd.subscribe(async (data) => {
-    sentry.setUserId(data.userEmail)
+    sentry.setUserInfo({ id: data.userId })
   })
 
   eventBus.authSignOut.subscribe(async () => {
-    sentry.setUserId(null)
+    sentry.setUserInfo(null)
   })
 }

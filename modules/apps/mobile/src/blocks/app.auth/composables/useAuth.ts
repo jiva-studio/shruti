@@ -51,28 +51,16 @@ export const useAuth = createSharedComposable(() => {
     if (options === null) {
       throw new Error('Authentication options are not initialized. Call init() first.')
     }
-    let results: AuthenticationResponse | null = null
     if (provider === 'google') {
-      results = await useGoogleAuthentication({ 
+      return await useGoogleAuthentication({ 
         authenticateUrl: options.authenticateUrl 
       }).authenticate()
     } else if (provider === 'apple') {
-      results = await useAppleAuthentication({ 
+      return await useAppleAuthentication({ 
         authenticateUrl: options.authenticateUrl
       }).authenticate()
     }
-    // user canceled the login, internet connection issues,
-    // or other unknown error.
-    if (results === null) { return } 
-
-    return {
-      accessToken: results.accessToken,
-      refreshToken: results.refreshToken,
-      userFirstName: results.userFirstName,
-      userLastName: results.userLastName,
-      userEmail: results.userEmail,
-      avatarUrl: results.avatarUrl,
-    }
+   
   }
 
   /* -------------------------------------------------------------------------- */
