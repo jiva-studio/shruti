@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthConfig, JwtConfig } from '@shruti/api/configs';
 import { RefreshToken } from '@shruti/protocol';
 import { v4 as uuidv4 } from 'uuid';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 export type Tokens = {
   accessToken: string;
