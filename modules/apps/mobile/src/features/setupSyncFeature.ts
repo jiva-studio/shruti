@@ -33,7 +33,7 @@ export function setupSyncFeature() {
     await syncData.sync()
 
     // download new media items for new tracks
-    if (config.userEmail.value) {
+    if (config.userId.value) {
       const result = await syncMedia.checkTracksWithoutMedia()
       result.newTrackIds.forEach(x => tracksState.store.setState(x, { downloadProgress: 0 }))
       if (result.newTrackIds.length > 0) {
@@ -42,7 +42,7 @@ export function setupSyncFeature() {
       eventBus.playlistLoad.notify()
       eventBus.trackStateLoad.notify(['completed', 'inPlaylist'])
       eventBus.notesLoad.notify()
-      eventBus.userInfoLoad.notify()
+      // eventBus.userInfoLoad.notify()
     }
 
     // Invalidate caches

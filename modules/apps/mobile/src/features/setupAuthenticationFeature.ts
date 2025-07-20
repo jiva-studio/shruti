@@ -1,4 +1,4 @@
-import { Filesystem, Directory, ProgressStatus } from '@capacitor/filesystem'
+import { Filesystem, Directory } from '@capacitor/filesystem'
 import { modalController } from '@ionic/vue'
 import { actionSheetController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
@@ -6,7 +6,6 @@ import { Capacitor } from '@capacitor/core'
 import { Routes } from '@shruti/protocol/routes'
 import { useDedupedCallFunction, useEventBus, useLogger } from '@shruti/mobile/core'
 import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError, DeleteAccountDialog } from '@blocks/app.auth'
-import { useUserInfo } from '@blocks/app.auth/composables/useUserInfo'
 import { useConfig } from '@blocks/app.config'
 import { useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
@@ -23,7 +22,6 @@ export async function setupAuthenticationFeature() {
   const auth = useAuth()
   const config = useConfig()
   const logger = useLogger({ module: 'app.auth' })
-  const userInfo = useUserInfo()
   const eventBus = useEventBus()
   const bucketService = useBucketService()
   const remoteDatabase = useRemoteDatabase()
@@ -100,25 +98,25 @@ export async function setupAuthenticationFeature() {
     if (!result) { return }
 
     config.userName.value = `${result.userFirstName} ${result.userLastName}`.trim()
-    config.userEmail.value = result.userEmail
+    config.userId.value = result.userId
 
     await eventBus.authCredentialsReceived.notify({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
     })
 
-    eventBus.userInfoSave.notify({
-      firstName: result.userFirstName,
-      lastName: result.userLastName,
-      email: result.userEmail,
-      avatarUrl: result.avatarUrl || undefined
-    })
+    // eventBus.userInfoSave.notify({
+    //   firstName: result.userFirstName,
+    //   lastName: result.userLastName,
+    //   email: result.userEmail,
+    //   avatarUrl: result.avatarUrl || undefined
+    // })
     eventBus.sync.notify()
     eventBus.subscriptionLoad.notify()
-    if (result.avatarUrl) {
-      eventBus.userInfoDownloadAvatar.notify({ avatarUrl: result.avatarUrl })
+    if (result.userImageUrl) {
+      eventBus.userInfoDownloadAvatar.notify({ avatarUrl: result.userImageUrl })
     }
-    eventBus.authSignInEnd.notify({ userEmail: result.userEmail })
+    eventBus.authSignInEnd.notify({ userId: result.userId })
   })
 
   /* ----------------------------- Delete Account ----------------------------- */
@@ -183,25 +181,25 @@ export async function setupAuthenticationFeature() {
     }
   })
 
-  eventBus.userInfoLoad.subscribe(async () => {
-    const result = await userInfo.load()
-    if (result && (result.firstName || result.lastName)) {
-      config.userName.value = `${result.firstName} ${result.lastName}`.trim()
-    }
-    if (result?.avatarUrl) {
-      const avatar = await userAvatarDownloader.download(result.avatarUrl)
-      config.userAvatarUrl.value = avatar || ''
-    }
-  })
+  // eventBus.userInfoLoad.subscribe(async () => {
+  //   const result = await userInfo.load()
+  //   if (result && (result.firstName || result.lastName)) {
+  //     config.userName.value = `${result.firstName} ${result.lastName}`.trim()
+  //   }
+  //   if (result?.avatarUrl) {
+  //     const avatar = await userAvatarDownloader.download(result.avatarUrl)
+  //     config.userAvatarUrl.value = avatar || ''
+  //   }
+  // })
 
-  eventBus.userInfoSave.subscribe(async (event) => {
-    await userInfo.save({
-      firstName: event.firstName,
-      lastName: event.lastName,
-      email: event.email,
-      avatarUrl: event.avatarUrl || undefined,
-    })
-  })
+  // eventBus.userInfoSave.subscribe(async (event) => {
+  //   await userInfo.save({
+  //     firstName: event.firstName,
+  //     lastName: event.lastName,
+  //     email: event.email,
+  //     avatarUrl: event.avatarUrl || undefined,
+  //   })
+  // })
 
   /* -------------------------------- Sign Out -------------------------------- */
 
@@ -209,7 +207,7 @@ export async function setupAuthenticationFeature() {
     config.authToken.value = ENVIRONMENT.readonlyAuthToken
     config.refreshToken.value = ''
     config.userName.value = ''
-    config.userEmail.value = ''
+    config.userId.value = ''
     config.userAvatarUrl.value = ''
     config.subscriptionPlan.value = ''
     config.authTokenExpiresAt.value = 0
@@ -217,7 +215,7 @@ export async function setupAuthenticationFeature() {
     bucketService.setAuthToken(ENVIRONMENT.readonlyAuthToken)
     remoteDatabase.init({
       url: config.databaseUrl.value,
-      userId: config.userEmail.value,
+      userId: config.userId.value,
       authToken: ENVIRONMENT.readonlyAuthToken,
     })
   })
@@ -272,7 +270,7 @@ export async function setupAuthenticationFeature() {
     bucketService.setAuthToken(event.accessToken)
     remoteDatabase.init({
       url: config.databaseUrl.value,
-      userId: config.userEmail.value,
+      userId: config.userId.value,
       authToken: event.accessToken,
     })
   })

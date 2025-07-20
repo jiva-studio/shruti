@@ -13,7 +13,7 @@ export const useSubscription = createSharedComposable(() => {
 
   /* ---------------------------------- Init ---------------------------------- */
 
-  async function init(email: string | null = null) {
+  async function init(userId: string | null = null) {
     if (Capacitor.getPlatform() === 'web') { return }
     if (!ENVIRONMENT.revenueCatKey) { return }
 
@@ -21,7 +21,7 @@ export const useSubscription = createSharedComposable(() => {
       Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }),
       Purchases.configure({ 
         apiKey: ENVIRONMENT.revenueCatKey,
-        appUserID: email,
+        appUserID: userId,
       })
     ])
     console.log('RevenueCat SDK configured!')
@@ -29,15 +29,15 @@ export const useSubscription = createSharedComposable(() => {
 
   /* --------------------------------- Restore -------------------------------- */
   
-  async function restore(email: string) {
+  async function restore(userId: string) {
     try {
-      if (!email) { return }
+      if (!userId) { return }
       const result = await Purchases
-        .logIn({ appUserID: email })
+        .logIn({ appUserID: userId })
 
       const activeEntitlements = Object.keys(result.customerInfo.entitlements.active)
       if (activeEntitlements.length === 0) {
-        logger.info(`No active entitlements found for user: ${email}`)
+        logger.info(`No active entitlements found for user: ${userId}`)
         return null
       }
       return activeEntitlements[0]

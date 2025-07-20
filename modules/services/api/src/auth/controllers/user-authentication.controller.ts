@@ -89,7 +89,8 @@ export class UserAuthenticationController {
     }
 
     // get or create user by login and start new session
-    const user = await this.usersService.findByName(request.login);
+    const userId = this.authService.getUserIdFromEmail(request.login);
+    const user = await this.usersService.findById(userId);
     if (!user) {
       throw new UnauthorizedException(
         new dtoShared.ErrorResponse({
@@ -138,7 +139,7 @@ export class UserAuthenticationController {
     // TODO rate limit login attempts by login
 
     // validate JWT token using Google OAuth2 client
-    let userEmail = '';
+    let userId = '';
     try {
       if (request.provider === 'google') {
         const oauthClientId = this.authConfig.googleOAuthClientId;
@@ -158,7 +159,7 @@ export class UserAuthenticationController {
             }),
           );
         }
-        userEmail = payload.email;
+        userId = this.authService.getUserIdFromEmail(payload.email);
       } else if (request.provider === 'apple') {
         const payload = await verifyIdToken(request.jwt, {
           audience: 'studio.jiva.shruti',
@@ -175,7 +176,7 @@ export class UserAuthenticationController {
             }),
           );
         }
-        userEmail = payload.email;
+        userId = this.authService.getUserIdFromEmail(payload.email);
       } else {
         throw new Error('Unsupported provider');
       }
@@ -190,7 +191,7 @@ export class UserAuthenticationController {
     }
 
     // get or create user by login and start new session
-    const user = await this.usersService.findOrCreateByName(userEmail);
+    const user = await this.usersService.findOrCreateById(userId);
 
     // generate new JWT tokens
     const tokens = await this.authService.generateTokens(user.name, user.roles);

@@ -43,7 +43,7 @@ export class JwtSignInRequest implements protocol.JwtSignInRequest {
   provider: 'google';
 }
 
-export class JwtSignInResponse implements protocol.OtpSignInResponse {
+export class JwtSignInResponse implements protocol.JwtSignInResponse {
   constructor(options: { accessToken: string; refreshToken: string }) {
     this.accessToken = options.accessToken;
     this.refreshToken = options.refreshToken;

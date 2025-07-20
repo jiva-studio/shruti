@@ -11,18 +11,18 @@
     </div>
     <IonAvatar slot="end">
       <img
-        :src="avatarUrl"
+        :src="userImageUrl"
         @error="onAvatarLoadError"
       >
     </IonAvatar>
     
     <!-- Text -->
     <IonLabel
-      v-if="!email"
+      v-if="!signedIn"
       class="ion-text-nowrap"
     >
       <h2>{{ $t('settings.auth.signIn.title') }}</h2>
-      <p v-if="syncDataStore.isSyncing">
+      <p v-if="syncing">
         {{ $t('settings.auth.syncing') }}
       </p>
       <p v-else>
@@ -30,8 +30,8 @@
       </p>
     </IonLabel>
     <IonLabel v-else>
-      <h2>{{ name || $t('settings.auth.signedIn') }}</h2>
-      <p v-if="syncDataStore.isSyncing">
+      <h2>{{ userName || $t('settings.auth.signedIn') }}</h2>
+      <p v-if="syncing">
         {{ $t('settings.auth.syncing') }}
       </p>
       <p v-else>
@@ -50,22 +50,21 @@
 import { ref, computed, watch } from 'vue'
 import { IonItem, IonLabel, IonAvatar } from '@ionic/vue'
 import { Capacitor } from '@capacitor/core'
-import { useSyncDataStore } from '@blocks/app.sync.data'
 import { useEventBus } from '@shruti/mobile/core'
 import { useRelativeDate } from '../composables/useRelativeDate'
 
 const eventBus = useEventBus()
 const relativeDate = useRelativeDate()
-const syncDataStore = useSyncDataStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
 const props = defineProps<{
-  email: string,
-  name: string,
-  avatarUrl: string,
+  userName: string,
+  userImageUrl: string,
+  signedIn: boolean,
+  syncing: boolean,
   syncedAt: number
 }>()
 
@@ -74,15 +73,15 @@ const props = defineProps<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const avatarUrl = ref(props.avatarUrl || 'avatar-placeholder.png')
+const userImageUrl = ref(props.userImageUrl || 'avatar-placeholder.png')
 const lastSyncInfo = computed(() => relativeDate.parse(props.syncedAt))
 
 /* -------------------------------------------------------------------------- */
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
 
-watch(() => props.avatarUrl, (newUrl) => {
-  avatarUrl.value = newUrl || 'avatar-placeholder.png'
+watch(() => props.userImageUrl, (newUrl) => {
+  userImageUrl.value = newUrl || 'avatar-placeholder.png'
 })
 
 /* -------------------------------------------------------------------------- */
@@ -90,7 +89,7 @@ watch(() => props.avatarUrl, (newUrl) => {
 /* -------------------------------------------------------------------------- */
 
 function onClicked() {
-  if (!props.email) {
+  if (!props.signedIn) {
     eventBus.authSelectProvider.notify()
   } else {
     eventBus.authSelectAuthenticatedActions.notify()
@@ -99,6 +98,6 @@ function onClicked() {
 
 function onAvatarLoadError() {
   // If avatar image fails to load, use placeholder image.
-  avatarUrl.value = Capacitor.convertFileSrc('avatar-placeholder.png')
+  userImageUrl.value = Capacitor.convertFileSrc('avatar-placeholder.png')
 }
 </script>

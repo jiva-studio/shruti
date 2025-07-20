@@ -77,7 +77,7 @@ export class TokensController {
     await this.revokedTokensService.revoke(refreshToken);
 
     // get user
-    const user = await this.usersService.findByName(refreshToken.sub);
+    const user = await this.usersService.findById(refreshToken.sub);
     if (!user) {
       throw new UnauthorizedException();
     }

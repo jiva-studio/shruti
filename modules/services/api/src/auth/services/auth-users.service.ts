@@ -21,26 +21,21 @@ export class AuthUsersService {
    * @param name User name.
    * @returns User object if found, null otherwise.
    */
-  async findByName(name: string): Promise<User | null> {
-    const documents = await this.couchDbService.find<User>('_users', {
-      selector: { name },
-      limit: 1,
-    });
-    if (documents.length === 1) {
-      return documents[0];
-    } else {
-      return null;
-    }
+  async findById(userId: string): Promise<User | null> {
+    return await this.couchDbService.getById<User>(
+      '_users',
+      'org.couchdb.user:' + userId,
+    );
   }
 
   /**
    * Finds or creates new user by email.
-   * @param name User name.
+   * @param userId User ID.
    * @returns User object if found, null otherwise.
    */
-  async findOrCreateByName(name: string): Promise<User> {
+  async findOrCreateById(userId: string): Promise<User> {
     // Sanitize the name to create a valid CouchDB collection name
-    const couchDbSafeName = 'users-' + name.replace(/[^a-zA-Z0-9_]/g, '-');
+    const couchDbSafeName = 'users-' + userId;
 
     // Create a new collection for the user's data if it doesn't exist
     // (will not throw an error if it already exists)
@@ -48,17 +43,17 @@ export class AuthUsersService {
 
     // Configure collection to be accessible only by the user
     // (will not throw an error if security is already set)
-    await this.couchDbService.setCollectionSecurity(couchDbSafeName, [name]);
+    await this.couchDbService.setCollectionSecurity(couchDbSafeName, [userId]);
 
     // Create a new user document in the _users collection
-    const existingUser = await this.findByName(name);
+    const existingUser = await this.findById(userId);
     if (existingUser) {
       return existingUser;
     }
 
     const userDoc = {
-      _id: 'org.couchdb.user:' + name,
-      name: name,
+      _id: 'org.couchdb.user:' + userId,
+      name: userId,
       roles: ['user'],
       type: 'user',
     };
@@ -67,23 +62,23 @@ export class AuthUsersService {
   }
 
   /**
-   * Deletes a user by their name.
-   * @param name User name.
+   * Deletes a user by their ID.
+   * @param userId User Id.
    */
-  async deleteByName(name: string): Promise<void> {
-    const user = await this.findByName(name);
+  async deleteById(userId: string): Promise<void> {
+    const user = await this.findById(userId);
     if (!user) {
-      this.logger.warn(`User ${name} not found for deletion.`);
+      this.logger.warn(`User ${userId} not found for deletion.`);
       return;
     }
 
     // Delete the user document from the _users collection
-    await this.couchDbService.delete('_users', 'org.couchdb.user:' + name);
+    await this.couchDbService.delete('_users', 'org.couchdb.user:' + userId);
 
     // Delete the user's data collection
-    const couchDbSafeName = 'users-' + name.replace(/[^a-zA-Z0-9_]/g, '-');
+    const couchDbSafeName = 'users-' + userId;
     await this.couchDbService.deleteCollection(couchDbSafeName);
 
-    this.logger.log(`User ${name} and their data have been deleted.`);
+    this.logger.log(`User ${userId} and their data have been deleted.`);
   }
 }

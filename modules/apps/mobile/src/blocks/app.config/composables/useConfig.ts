@@ -16,8 +16,8 @@ export const useConfig = createGlobalState(() => {
   const showNotesTab             = ref(true)
   const highlightCurrentSentence = ref(true)
   const savedTracksFilter        = ref<any>({})
+  const userId                   = ref('')
   const userName                 = ref('')
-  const userEmail                = ref('')
   const userAvatarUrl            = ref('')
   const openTranscriptAutomatically = ref(false)
   const tutorialStepsCompleted = ref<string[]>([])
@@ -36,7 +36,7 @@ export const useConfig = createGlobalState(() => {
     highlightCurrentSentence,
     savedTracksFilter,
     userName,
-    userEmail,
+    userId,
     userAvatarUrl,
     openTranscriptAutomatically,
     tutorialStepsCompleted,

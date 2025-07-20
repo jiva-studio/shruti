@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { JwtConfig } from '@shruti/api/configs';
+import { AuthConfig, JwtConfig } from '@shruti/api/configs';
 import { RefreshToken } from '@shruti/protocol';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 export type Tokens = {
   accessToken: string;
@@ -15,8 +16,22 @@ export class AuthService {
   constructor(
     @Inject(JwtConfig.KEY)
     private readonly jwtConfig: ConfigType<typeof JwtConfig>,
+    @Inject(AuthConfig.KEY)
+    private readonly authConfig: ConfigType<typeof AuthConfig>,
     private readonly jwtService: JwtService,
   ) {}
+
+  /**
+   * Converts email to user ID.
+   * @param email Email to convert to user ID.
+   * @returns Resulting user ID.
+   */
+  getUserIdFromEmail(email: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(email.toLowerCase().trim() + this.authConfig.userIdGenerationSalt)
+      .digest('hex');
+  }
 
   /**
    * Generates access and refresh tokens for the user.

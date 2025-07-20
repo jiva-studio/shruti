@@ -62,7 +62,7 @@ export class AccountController {
     }
 
     try {
-      await this.users.deleteByName(auth.userId);
+      await this.users.deleteById(auth.userId);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
