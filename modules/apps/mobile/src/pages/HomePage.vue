@@ -3,7 +3,7 @@
     <!-- Sign In Settings Item -->
     <Transition>
       <Message 
-        v-if="!config.userEmail.value && playlist.items.length > 0 && !config.tutorialStepsCompleted.value.includes('signInInvitation')"
+        v-if="!config.userId.value && playlist.items.length > 0 && !config.tutorialStepsCompleted.value.includes('signInInvitation')"
         @click="eventBus.authSelectProvider.notify()"
         @close="eventBus.tutorialCompleteStep.notify({ step: 'signInInvitation' })"
       >

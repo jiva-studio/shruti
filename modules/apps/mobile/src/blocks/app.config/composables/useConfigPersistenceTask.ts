@@ -34,7 +34,7 @@ export function useConfigPersistenceTask() {
       bind(config.highlightCurrentSentence, 'app.transcript.highlightCurrentSentence', true),
       bind(config.savedTracksFilter, 'app.tracks.filter', { authors: ['acbsp'], sort: 'reference' }),
       bind(config.userName, 'app.user.name', ''),
-      bind(config.userEmail, 'app.user.email', ''),
+      bind(config.userId, 'app.user.id', ''),
       bind(config.userAvatarUrl, 'app.user.avatar', ''),
       bind(config.authToken, 'app.auth.authToken', ENVIRONMENT.readonlyAuthToken),
       bind(config.authTokenExpiresAt, 'app.auth.authToken.expiresAt', 0),

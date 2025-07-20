@@ -21,17 +21,16 @@ export function setupAnalyticsFeature() {
   /*                                 Initialize                                 */
   /* -------------------------------------------------------------------------- */
 
-  analytics.init(config.userEmail.value)
+  analytics.init(config.userId.value)
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  // TODO: return it
-  // eventBus.authSignIn.subscribe(async (results) => {
-  //   if (!results) { return }
-  //   analytics.setUserId(results.userEmail)
-  // }) 
+  eventBus.authSignInEnd.subscribe(async (results) => {
+    if (!results) { return }
+    analytics.setUserId(results.userId)
+  }) 
 
   eventBus.authSignOut.subscribe(async () => {
     analytics.setUserId(undefined)

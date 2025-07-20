@@ -32,4 +32,10 @@ export default registerAs('auth', () => ({
    * This is used to authenticate users with Google OAuth.
    */
   googleOAuthClientId: process.env.LECTORIUM_AUTH_GOOGLE_OAUTH_CLIENT_ID || '',
+
+  /**
+   * User id generation salt.
+   */
+  userIdGenerationSalt:
+    process.env.LECTORIUM_AUTH_USER_ID_GENERATION_SALT || '',
 }));

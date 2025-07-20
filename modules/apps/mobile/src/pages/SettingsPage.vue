@@ -5,10 +5,11 @@
       <IonLabel>{{ $t('settings.groups.auth') }}</IonLabel>
     </IonListHeader>
     <SignInSettingsItem 
-      :name="config.userName.value"
-      :email="config.userEmail.value"
-      :avatar-url="config.userAvatarUrl.value"
+      :signed-in="config.userId.value !== ''"
+      :user-name="config.userName.value"
+      :user-image-url="config.userAvatarUrl.value"
       :synced-at="syncDataStore.lastSyncedAt"
+      :syncing="syncDataStore.isSyncing"
     />
     <SubscriptionSettingsItem />
 

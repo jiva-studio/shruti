@@ -60,19 +60,14 @@ export const useSentry = createSharedComposable(() => {
     )
   }
 
-  function setUserId(userId: string | null) {
+  function setUserInfo(userInfo: Sentry.User | null) {
     if (!options) { return }
-    if (!userId) {
-      Sentry.setUser(null)
-    } else {
-      Sentry.setUser({ id: userId })
-    }
+    Sentry.setUser(userInfo)
   }
 
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { init, setUserId }
-
+  return { init, setUserInfo }
 })

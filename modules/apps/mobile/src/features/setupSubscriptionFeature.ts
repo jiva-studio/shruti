@@ -18,7 +18,7 @@ export async function setupSubscriptionFeature() {
   /* -------------------------- Restore Subscription -------------------------- */
 
   eventBus.subscriptionLoad.subscribe(async () => {
-    const result = await subscription.restore(config.userEmail.value)
+    const result = await subscription.restore(config.userId.value)
     config.subscriptionPlan.value = result || ''
   })
 }

@@ -1,4 +1,5 @@
 import { SocialLogin } from '@capgo/capacitor-social-login'
+import { JwtSignInResponse } from '@lectorium/protocol/auth'
 import { AuthenticationResponse } from '../models/AuthenticationResponse'
 
 /**
@@ -37,9 +38,16 @@ export function useGoogleAuthentication(options: {
         })
         
       // Check if the response is ok and tokens are received
-      const tokens = await response.json()
+      const tokens = await response.json() as JwtSignInResponse
       if (!tokens.accessToken || !tokens.refreshToken) {
         throw new Error('No access token received from server.')
+      }
+
+      // Extract userId from the access token
+      const parts = tokens.accessToken.split('.')
+      const accessTokenPayload = JSON.parse(atob(parts[1]))
+      if (!accessTokenPayload.sub) { 
+        throw new Error('Invalid access token received from server: no user ID found.')
       }
 
       // Update config with user data and tokens
@@ -48,8 +56,8 @@ export function useGoogleAuthentication(options: {
         refreshToken: tokens.refreshToken,
         userFirstName: res.result.profile.givenName || '',
         userLastName: res.result.profile.familyName || '',
-        userEmail: res.result.profile.email || '',
-        avatarUrl: res.result.profile.imageUrl,
+        userImageUrl: res.result.profile.imageUrl,
+        userId: accessTokenPayload.sub,
       }
     } catch (error: any) {
       // google: user canceled the login.

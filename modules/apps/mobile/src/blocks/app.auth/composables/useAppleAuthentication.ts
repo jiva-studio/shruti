@@ -1,4 +1,5 @@
 import { SocialLogin } from '@capgo/capacitor-social-login'
+import { JwtSignInResponse } from '@lectorium/protocol/auth'
 import { AuthenticationResponse } from '../models/AuthenticationResponse'
 
 /**
@@ -33,9 +34,16 @@ export function useAppleAuthentication(options: {
         })
 
       // Check if the response is ok and tokens are received
-      const tokens = await response.json()
+      const tokens = await response.json() as JwtSignInResponse
       if (!tokens.accessToken || !tokens.refreshToken) {
         throw new Error('No access token received from server.')
+      }
+
+      // Extract userId from the access token
+      const parts = tokens.accessToken.split('.')
+      const accessTokenPayload = JSON.parse(atob(parts[1]))
+      if (!accessTokenPayload.sub) { 
+        throw new Error('Invalid access token received from server: no user ID found.')
       }
 
       // Update config with user data and tokens
@@ -43,7 +51,7 @@ export function useAppleAuthentication(options: {
       //       for the second time it will be empty. User have to delete the app,
       //       delete app-account in icloud get the names again. So we have to get
       //       the names from the another source in case they are missing.
-      const { givenName, familyName, email } = res.result.profile
+      const { givenName, familyName } = res.result.profile
 
       // Return the authentication result
       return {
@@ -51,8 +59,8 @@ export function useAppleAuthentication(options: {
         refreshToken: tokens.refreshToken,
         userFirstName: givenName || '',
         userLastName: familyName || '',
-        userEmail: email || '',
-        avatarUrl: '' // Apple does not provide avatar URL, so we return an empty string
+        userId: accessTokenPayload.sub,
+        userImageUrl: '' // Apple does not provide avatar URL, so we return an empty string
       }
     } catch (error: any) {
       // Unknown error during authentication. Connection issues?

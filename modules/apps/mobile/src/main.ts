@@ -128,13 +128,15 @@ Promise.all([
 ]).then(() => {
 
   // Set user ID for Sentry
-  useSentry().setUserId(useConfig().userEmail.value)
+  useSentry().setUserInfo({
+    id: useConfig().userId.value,
+  })
 
   // Should be initialized after config is loaded
   useRemoteDatabase().init({
     url: useConfig().databaseUrl.value,
     authToken: useConfig().authToken.value,
-    userId: useConfig().userEmail.value
+    userId: useConfig().userId.value
   }),
 
   router.isReady().then(async () => {
@@ -183,7 +185,7 @@ Promise.all([
     useUserInfo().init({
       database: useLocalDatabase().get().userData,
     })
-    useSubscription().init(useConfig().userEmail.value)
+    useSubscription().init(useConfig().userId.value)
     useTrackMediaItems().init({
       bucketName: useConfig().bucketName.value,
       bucketService: useBucketService(),
@@ -228,7 +230,7 @@ Promise.all([
       idGenerator: () => useIdGenerator().generateId(24),
     })
     useAnalytics().init(
-      useConfig().userEmail.value
+      useConfig().userId.value
     )
 
     /* -------------------------------------------------------------------------- */

@@ -3,6 +3,6 @@ export type AuthenticationResponse = {
   refreshToken: string;
   userFirstName: string;
   userLastName: string;
-  userEmail: string;
-  avatarUrl: string | null;
+  userId: string;
+  userImageUrl: string | null;
 }
