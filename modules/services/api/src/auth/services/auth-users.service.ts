@@ -22,10 +22,16 @@ export class AuthUsersService {
    * @returns User object if found, null otherwise.
    */
   async findById(userId: string): Promise<User | null> {
-    return await this.couchDbService.getById<User>(
-      '_users',
-      'org.couchdb.user:' + userId,
-    );
+    // TODO: use getById instead of find for better performance
+    const documents = await this.couchDbService.find<User>('_users', {
+      selector: { name: userId },
+      limit: 1,
+    });
+    if (documents.length === 1) {
+      return documents[0];
+    } else {
+      return null;
+    }
   }
 
   /**
