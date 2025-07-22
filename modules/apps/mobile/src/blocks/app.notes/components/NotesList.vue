@@ -6,13 +6,12 @@
     :tags="note.tags"
     :author="note.trackAuthor"
     :source="note.trackTitle"
-    @click="onClick(note)"
+    @click="emit('share', note.id)"
   />
 </template>
 
 
 <script lang="ts" setup>
-import { Share } from '@capacitor/share'
 import { Note } from '../models'
 import NotesListItem from './NotesListItem.vue'
 
@@ -24,12 +23,8 @@ defineProps<{
   notes: Note[]
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
-
-async function onClick(note: Note) {
-  await Share.share({ text: note.text })
-}
+const emit = defineEmits<{
+  share: [noteId: string]
+}>()
 </script>
 

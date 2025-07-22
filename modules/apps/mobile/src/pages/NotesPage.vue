@@ -11,6 +11,7 @@
     <NotesList 
       v-if="!notesStore.isEmpty"
       :notes="notesStore.searchQuery ? notesStore.searchResults : notesStore.items"
+      @share="onShareNoteClicked"
     />
 
     <!-- No notes -->
@@ -26,9 +27,11 @@
 
 
 <script setup lang="ts">
+import { Share } from '@capacitor/share'
 import { Page, SearchInput } from '@blocks/app.core'
 import { NotesList, useNotesStore } from '@blocks/app.notes'
 import { PageSticker } from '@blocks/app.ui.kit'
+import { useDAL } from '@blocks/app.database'
 import notesAreEmptyImg from '../assets/empty.png'
 
 /* -------------------------------------------------------------------------- */
@@ -36,4 +39,14 @@ import notesAreEmptyImg from '../assets/empty.png'
 /* -------------------------------------------------------------------------- */
 
 const notesStore = useNotesStore()
+const dal = useDAL()
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+async function onShareNoteClicked(noteId: string) {
+  const note = await dal.notes.getOne(noteId)
+  await Share.share({ text: note.text })
+}
 </script>
