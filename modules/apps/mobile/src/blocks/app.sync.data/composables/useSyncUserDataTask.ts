@@ -1,5 +1,6 @@
 import { useLogger } from '@shruti/mobile/core'
 import { InitOptions } from '../models/InitOptions'
+import { SyncResult } from '@shruti/dal/persistence'
 
 export function useSyncUserDataTask(options: InitOptions) {
 
@@ -13,13 +14,15 @@ export function useSyncUserDataTask(options: InitOptions) {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  async function sync() {
+  async function sync() : Promise<SyncResult> {
     try {
       logger.info('Sync started...')
-      await onSync()
+      const syncResult = await onSync()
       logger.info('Sync completed successfully')
+      return syncResult
     } catch (error) {
       logger.error(`Sync failed: ${JSON.stringify(error)}`)
+      return {}
     }
   }
   
@@ -27,12 +30,12 @@ export function useSyncUserDataTask(options: InitOptions) {
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function onSync() {
+  async function onSync() : Promise<SyncResult> {
     const localDb = options.local()
     const remoteDb = options.remote()
     if (!localDb.userData || !remoteDb.userData) {
       logger.info('User data databases are not available for sync')
-      return
+      return {}
     }
 
     // Document filters
@@ -41,7 +44,7 @@ export function useSyncUserDataTask(options: InitOptions) {
     }
 
     // Sync user data
-    await localDb.userData.sync(remoteDb.userData, { filter: userDocumentsToSync })
+    return await localDb.userData.sync(remoteDb.userData, { filter: userDocumentsToSync })
   }
 
   /* -------------------------------------------------------------------------- */

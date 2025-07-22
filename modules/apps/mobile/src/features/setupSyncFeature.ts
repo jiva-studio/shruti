@@ -30,7 +30,7 @@ export async function setupSyncFeature() {
     }
 
     // sync data
-    await syncData.sync()
+    const syncResult = await syncData.sync()
 
     // download new media items for new tracks
     if (config.userId.value) {
@@ -54,7 +54,8 @@ export async function setupSyncFeature() {
     dal.durations.invalidateCache()
     dal.sortMethods.invalidateCache()
 
-    eventBus.syncEnd.notify()
+    // Notify sync end
+    eventBus.syncEnd.notify(syncResult)
   }))
 
   dal.playlistItems.subscribe(async () => {

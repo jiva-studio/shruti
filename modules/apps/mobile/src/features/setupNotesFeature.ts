@@ -11,6 +11,7 @@ export async function setupNotesFeature() {
   const notes = useNotes()
   const eventBus = useEventBus()
   const notesStore = useNotesStore()
+  const notesSearchIndex = useNotesSearchIndex()
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
@@ -27,6 +28,13 @@ export async function setupNotesFeature() {
 
   eventBus.notesLoad.subscribe(async () => {
     await notes.load()
+  })
+
+  eventBus.syncEnd.subscribe(async (results) => {
+    const hasNewNotes = results.userData.pull?.docs.some(doc => doc.type === 'note')
+    if (hasNewNotes) {
+      await notesSearchIndex.reload()
+    }
   })
 
   /* -------------------------------------------------------------------------- */

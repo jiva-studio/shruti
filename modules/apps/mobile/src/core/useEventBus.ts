@@ -1,3 +1,4 @@
+import { SyncResult } from '@shruti/dal/persistence'
 import { Event } from './Event'
 import { createSharedComposable } from '@vueuse/core'
 
@@ -33,7 +34,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const sync = new Event<void>('sync')
-  const syncEnd = new Event<void>('syncEnd')
+  const syncEnd = new Event<{ userData: SyncResult }>('syncEnd')
 
   /* -------------------------------------------------------------------------- */
   /*                                    Notes                                   */
