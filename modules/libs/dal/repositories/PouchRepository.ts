@@ -235,7 +235,6 @@ export abstract class PouchRepository<
     await this.notifyChange({ item: updatedItem, event: 'updated' })
   }
 
-
   /**
    * Removes a document from the database.
    * @param id The ID of the document to be removed.
@@ -250,5 +249,24 @@ export abstract class PouchRepository<
     const item = this._deserializer(document)
     await this._database.db.remove(document)
     await this.notifyChange({ item, event: 'removed' })
+  }
+
+  /**
+   * Removes a document from the database by adding _deleted flag. It allows
+   * deleted documents to be replicated and synced with other databases while using
+   * filtered replication (See PouchDB documentation for more information).
+   * @param id The ID of the document to be removed.
+   * @returns A promise that resolves when the document is successfully removed.
+   */
+  async softRemoveOne(
+    id: string
+  ): Promise<void> {
+    console.debug(`[LCT] db.${this._database.db.name}.softRemoveOne(${id})`)
+
+    const document = await this._database.db.get<TDbScheme>(id)
+    const updatedItem = { ...this._deserializer(document), _deleted: true }
+    const updatedDocument = this._serializer(updatedItem)
+    await this._database.db.put(updatedDocument)
+    await this.notifyChange({ item: updatedItem, event: 'removed' })
   }
 }

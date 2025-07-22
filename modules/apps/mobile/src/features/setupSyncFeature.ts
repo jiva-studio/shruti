@@ -41,7 +41,6 @@ export async function setupSyncFeature() {
       }
       eventBus.playlistLoad.notify()
       eventBus.trackStateLoad.notify(['completed', 'inPlaylist'])
-      eventBus.notesLoad.notify()
       // eventBus.userInfoLoad.notify()
     }
 

@@ -13,5 +13,6 @@ export default {
   soon: 'Скоро',
   back: 'Назад',
   notes: 'Заметки',
-  ok: 'Ok'
+  ok: 'Oк',
+  share: 'Поделиться',
 }
