@@ -34,6 +34,11 @@ export const useLocalDatabase = createSharedComposable(() => {
         // { name: 'type', fields: ['type'] },
         // { name: 'taskStatus', fields: [ 'taskStatus' ] },
         // { name: 'trackId', fields: ['trackId'] }
+        { 
+          name: 'createdAt', 
+          fields: ['createdAt'],
+          partial_filter_selector: { type: { $eq: 'note' } }
+        }
       ]
     })
     const tracks = new Database({
