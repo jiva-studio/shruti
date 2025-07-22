@@ -10,6 +10,7 @@ PouchDB.plugin(PouchDBFind)
 export type IndexConfig = {
   name: string
   fields: string[],
+  partial_filter_selector?: PouchDB.Find.Selector | undefined;
 }
 
 export interface DatabaseConfig {
