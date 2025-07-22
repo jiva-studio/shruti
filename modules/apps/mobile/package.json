@@ -50,7 +50,7 @@
     "prettier": "^3.5.3",
     "sqids": "^0.3.0",
     "vue": "^3.5.17",
-    "vue-i18n": "^10.0.7",
+    "vue-i18n": "^10.0.8",
     "vue-router": "^4.5.1",
     "vue3-radial-progress": "^1.1.1"
   },
