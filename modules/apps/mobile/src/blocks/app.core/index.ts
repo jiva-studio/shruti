@@ -7,6 +7,7 @@ export { default as Content } from './components/Content.vue'
 export { default as Header } from './components/Header.vue'
 export { default as Page } from './components/Page.vue'
 export { default as WithDeleteAction } from './components/WithDeleteAction.vue'
+export { default as WithLongPress } from './components/WithLongPress.vue'
 export { default as SectionHeader } from './components/SectionHeader.vue'
 
 /* -------------------------------------------------------------------------- */
