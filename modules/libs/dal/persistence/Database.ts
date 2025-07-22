@@ -19,6 +19,10 @@ export interface DatabaseConfig {
   authToken?: () => string
 }
 
+export type SyncResult = {
+  pull?: { docs: any[] }
+  push?: { docs: any[] }
+}
 /* -------------------------------------------------------------------------- */
 /*                                 Replication                                */
 /* -------------------------------------------------------------------------- */
@@ -106,8 +110,26 @@ export class Database {
   async sync(
     remote: Database,
     options?: DatabaseReplicationOptions,
-  ) {
-    await this._db.sync(remote.db, options)
+  ) : Promise<SyncResult> {
+    const pushChanges: PouchDB.Core.ExistingDocument<{}>[] = []
+    const pullChanges: PouchDB.Core.ExistingDocument<{}>[] = []
+
+    const syncResult = await this._db
+      .sync(remote.db, options)
+      .on('change', (info) => {
+        if (info.direction === 'pull') {
+          pullChanges.push(...info.change.docs)
+        } else if (info.direction === 'push') {
+          pushChanges.push(...info.change.docs)
+        }
+      })
+
+    // Enhance the result with pull and push changes
+    if (syncResult.pull) { syncResult.pull.docs = pullChanges }
+    if (syncResult.push) { syncResult.push.docs = pushChanges }
+
+    // Return the sync result
+    return syncResult
   }
 
   /**
