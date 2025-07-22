@@ -1,8 +1,10 @@
 import { useEventBus } from '@lectorium/mobile/core'
 import { usePlayer } from '@blocks/app.player'
 import { useAnalytics } from '@blocks/app.analytics'
+import { App } from '@capacitor/app'
 
 export function setupPlayerAnalyticsFeature() {
+
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
@@ -18,7 +20,10 @@ export function setupPlayerAnalyticsFeature() {
   let listeningStartPosition: number | null = null
   let isPlaying = false
 
-  function endListeningSession(endPosition: number) {
+  function endListeningSession(
+    endPosition: number, 
+    startPosition: number | null = null 
+  ) {
     if (listeningStartPosition !== null && endPosition > listeningStartPosition) {
       const listeningTime = Math.floor(endPosition - listeningStartPosition)
       
@@ -28,7 +33,7 @@ export function setupPlayerAnalyticsFeature() {
         seconds: listeningTime,
       })
     }
-    listeningStartPosition = null
+    listeningStartPosition = startPosition
   }
 
   /* -------------------------------------------------------------------------- */
@@ -51,6 +56,12 @@ export function setupPlayerAnalyticsFeature() {
       // Paused via status (fallback safety)
       isPlaying = false
       endListeningSession(status.position)
+    }
+  })
+
+  App.addListener('appStateChange', (state) => {
+    if (!state.isActive && isPlaying) {
+      endListeningSession(player.position.value, player.position.value)
     }
   })
 }
