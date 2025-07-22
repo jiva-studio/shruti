@@ -1,12 +1,12 @@
 import { App } from '@capacitor/app'
 import { useBlockingFunction, useEventBus } from '@shruti/mobile/core'
-import { useSyncData } from '@blocks/app.sync.data'
+import { useSyncData, useSyncDataStorePersistenceTask } from '@blocks/app.sync.data'
 import { useSyncMedia } from '@blocks/app.sync.media'
 import { useTracksState } from '@blocks/app.tracks.state'
 import { useDAL } from '@blocks/app.database'
 import { useConfig } from '@blocks/app.config'
 
-export function setupSyncFeature() {
+export async function setupSyncFeature() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
@@ -68,4 +68,10 @@ export function setupSyncFeature() {
   App.addListener('appStateChange', ({ isActive }) => {
     if (isActive) { eventBus.sync.notify() }
   })
+
+  /* -------------------------------------------------------------------------- */
+  /*                               Initialization                               */
+  /* -------------------------------------------------------------------------- */
+
+  await useSyncDataStorePersistenceTask().start()
 }
