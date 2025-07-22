@@ -22,7 +22,7 @@ export const useSyncData = createSharedComposable(() => {
   /*                                    State                                   */
   /* -------------------------------------------------------------------------- */
 
-  const syncInterval = 60 * 1000
+  const syncInterval = 10 * 1000
   const store = useSyncDataStore()
   let userData: ReturnType<typeof useSyncUserDataTask> | null = null
   let commonData: ReturnType<typeof useSyncCommonDataTask> | null = null
