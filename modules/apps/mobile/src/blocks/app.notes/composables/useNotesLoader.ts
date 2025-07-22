@@ -21,7 +21,12 @@ export function useNotesLoader(options: Options) {
 
   async function load() {
     const result = []
-    const notes = await options.notesRepository.getAll({
+    const notes = await options.notesRepository.getMany({
+      selector: { 
+        type: 'note', 
+        createdAt: { $gte: null } 
+      },
+      sort: ['createdAt'],
       limit: 1000 // TODO: add pagination
     })
 
