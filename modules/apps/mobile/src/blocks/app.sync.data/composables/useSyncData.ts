@@ -1,9 +1,14 @@
-import { useLogger } from '@lectorium/mobile/core'
 import { createSharedComposable } from '@vueuse/core'
+import { useLogger } from '@lectorium/mobile/core'
+import { SyncResult } from '@lectorium/dal/persistence'
 import { useSyncCommonDataTask } from './useSyncCommonDataTask'
 import { useSyncUserDataTask } from './useSyncUserDataTask'
 import { useSyncDataStore } from './useSyncDataStore'
 import { InitOptions } from '../models/InitOptions'
+
+export type SyncDataResult = {
+  userData: SyncResult
+}
 
 export const useSyncData = createSharedComposable(() => {
 
@@ -21,7 +26,7 @@ export const useSyncData = createSharedComposable(() => {
   const store = useSyncDataStore()
   let userData: ReturnType<typeof useSyncUserDataTask> | null = null
   let commonData: ReturnType<typeof useSyncCommonDataTask> | null = null
-  let pendingSyncPromise: Promise<void> | null = null
+  let pendingSyncPromise: Promise<SyncDataResult> | null = null
 
   /* -------------------------------------------------------------------------- */
   /*                                 Initialize                                 */
@@ -51,8 +56,8 @@ export const useSyncData = createSharedComposable(() => {
       const timeUntilNextSync = syncInterval - (now - store.lastSyncedAt)
       pendingSyncPromise = new Promise((resolve) => {
         setTimeout(async () => {
-          await performSync()
-          resolve()
+          const result = await performSync()
+          resolve(result)
         }, timeUntilNextSync)
       })
       return pendingSyncPromise
@@ -62,19 +67,26 @@ export const useSyncData = createSharedComposable(() => {
     return performSync()
   }
 
-  async function performSync() {
-    if (!commonData || !userData) return
+  async function performSync() : Promise<SyncDataResult> {
+    if (!commonData || !userData) {
+      return { userData: {} }
+    }
 
     store.isSyncing = true
 
     try {
-      await Promise.all([
+      const [
+        commonDataSyncResult, 
+        userDataSyncResult,
+      ] = await Promise.all([
         commonData.sync(),
         userData.sync(),
       ])
       store.lastSyncedAt = Date.now()
+      return { userData: userDataSyncResult }
     } catch (error) {
       logger.error('Sync failed', error)
+      return { userData: {} }
     } finally {
       store.isSyncing = false
       pendingSyncPromise = null

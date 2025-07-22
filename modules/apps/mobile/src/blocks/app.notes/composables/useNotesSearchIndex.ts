@@ -13,6 +13,8 @@ export const useNotesSearchIndex = createSharedComposable(() => {
   /*                                    State                                   */
   /* -------------------------------------------------------------------------- */
 
+  let options: Options | null = null
+
   const index = new FlexSearch.Document({
     document: {
       id: '_id',
@@ -29,12 +31,10 @@ export const useNotesSearchIndex = createSharedComposable(() => {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  async function init({ notesRepo }: Options) {
-    // TODO: it might take long for big amount of notes.
-    // FIX: use .import / .export methods to load baked search index 
-    const items = await notesRepo.getAll({ limit: 1000 })
-    for (const i of items) { index.add(i) }
-    notesRepo.subscribe(onNotesChange)
+  async function init(o: Options): Promise<void> {
+    options = o
+    await reload()
+    options.notesRepo.subscribe(onNotesChange)
   } 
 
   /* -------------------------------------------------------------------------- */
@@ -54,6 +54,15 @@ export const useNotesSearchIndex = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
   /* -------------------------------------------------------------------------- */
+
+  async function reload() {
+    if (!options) { throw new Error('useNoteSearchIndex is not initialized') }
+    // TODO: it might take long for big amount of notes.
+    // FIX: use index.import / index.export methods to load baked search index 
+    index.clear()
+    const items = await options.notesRepo.getAll({ limit: 1000 })
+    for (const i of items) { index.add(i) }
+  }
 
   async function search(query: string) {
     const result = index.search({
@@ -76,6 +85,6 @@ export const useNotesSearchIndex = createSharedComposable(() => {
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { init, search }
+  return { init, search, reload }
   
 })
