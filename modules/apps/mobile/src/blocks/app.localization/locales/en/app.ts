@@ -13,5 +13,6 @@ export default {
   soon: 'Soon',
   back: 'Back',
   notes: 'Notes',
-  ok: 'Ok'
+  ok: 'Ok',
+  share: 'Share',
 }

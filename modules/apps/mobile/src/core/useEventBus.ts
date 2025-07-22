@@ -42,6 +42,7 @@ export const useEventBus = createSharedComposable(() => {
 
   const notesAdd = new Event<{ trackId: string, text: string, blocks: string[] }>('notesAdd')
   const notesLoad = new Event<void>('notesLoad')
+  const notesDelete = new Event<{ noteId: string }>('notesDelete')
 
   /* -------------------------------------------------------------------------- */
   /*                                   Tracks                                   */
@@ -129,6 +130,7 @@ export const useEventBus = createSharedComposable(() => {
     // notes
     notesAdd,
     notesLoad,
+    notesDelete,
     
     // tracks
     trackDownload,

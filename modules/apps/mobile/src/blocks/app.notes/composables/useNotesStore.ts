@@ -22,8 +22,19 @@ export const useNotesStore = defineStore('notes', () =>{
   })
   
   /* -------------------------------------------------------------------------- */
+  /*                                   Actions                                  */
+  /* -------------------------------------------------------------------------- */
+
+  function deleteNote(noteId: string) {
+    const index = items.value.findIndex(x => x.id === noteId)
+    if (index !== -1) {
+      items.value.splice(index, 1)
+    }
+  }
+
+  /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { items, getHighligtedBlockIds, searchQuery, searchResults, isEmpty }
+  return { items, getHighligtedBlockIds, searchQuery, searchResults, isEmpty, deleteNote }
 })
