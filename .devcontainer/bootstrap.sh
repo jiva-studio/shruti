@@ -23,3 +23,11 @@
 # ---------------------------------------------------------------------------- #
 
 mkdir -p /workspaces/shruti/gateway/data/logs
+
+# ---------------------------------------------------------------------------- #
+#                                   CocoaPods                                  #
+# ---------------------------------------------------------------------------- #
+
+sudo apt update
+sudo apt install -y ruby-full build-essential
+sudo gem install cocoapods
