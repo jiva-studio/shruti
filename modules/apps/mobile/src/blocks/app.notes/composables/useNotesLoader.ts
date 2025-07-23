@@ -42,11 +42,17 @@ export function useNotesLoader(options: Options) {
         continue
       }
 
+      // Get unique languages from block ids
+      // TODO: we need better a way to extract language from block ids
+      const langs = [...new Set(note.blocks.map(block => block.slice(0, 2)))]
+
+      // Add note to result
       result.push({
         id: note._id,
         trackId: note.trackId,
         text: note.text,
         blocks: note.blocks,
+        language: langs.length > 0 ? langs[0] : '',
         trackAuthor: track.author,
         trackTitle: track.title['ru'], // TODO: lang
       })
