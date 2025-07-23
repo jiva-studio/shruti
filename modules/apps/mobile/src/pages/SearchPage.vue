@@ -50,7 +50,8 @@ async function onTrackClicked(trackId: string) {
   await usePlaylist().add(trackId)
   eventBus.trackDownload.notify({ 
     trackIds: [trackId], 
-    skipFailed: false 
+    skipFailed: false ,
+    showError: true,
   })
 }
 </script>
