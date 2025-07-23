@@ -13,7 +13,7 @@ from lectorium.transcripts import (
 from lectorium.config.transcripts_proofread import PROOFREAD_PROMPT_PREFIX
 from lectorium.shared import LANGUAGE_PARAMS
 
-from lectorium.bucket import bucket_download_json_data, bucket_upload_data
+from lectorium.bucket import bucket_download_json_data, bucket_upload_data, bucket_download_data
 from lectorium.claude import (
   claude_run_prompt, claude_run_batch_prompt, claude_batch_prompt_sensor,
   claude_get_batch_results
@@ -138,10 +138,13 @@ def transcript_proofread():
     chunks: list[str],
     language: str,
   ):
+    result_paths = []
     for idx, chunk in enumerate(chunks):
       object_key = f"library/tracks/{track_id}/artifacts/transcripts/{language}/raw/chunks/proofread/{idx}.txt"
       print(f"Uploading chunk to {object_key}")
       bucket_upload_data.function(object_key=object_key, data=chunk)
+      result_paths.append(object_key)
+    return result_paths
 
 
   @task(task_display_name="🏁 Complete")
@@ -182,14 +185,15 @@ def transcript_proofread():
   chunks_original.set_downstream([fast_lane, normal_lane])
 
   with TaskGroup("enrich", tooltip="Enrich the transcript") as enrich_transcript:
-    chunks_proofread     = proofreading_completed(fast=fast_chunks_proofread, normal=normal_chunks_proofread)
-    merged_chunks        = transcript_enrich_chunk.expand(chunks=chunks_original.zip(chunks_proofread))
+    chunks_proofread            = proofreading_completed(fast=fast_chunks_proofread, normal=normal_chunks_proofread)
+    chunks_proofread_uploaded   = transcript_chunks_upload_to_bucket(track_id=conf_track_id, chunks=chunks_proofread, language=conf_language)
+    chunks_proofread_downloaded = bucket_download_data.override(task_display_name="⬇️ Bucket: Download Chunks").expand(object_key=chunks_proofread_uploaded)
+    merged_chunks        = transcript_enrich_chunk.expand(chunks=chunks_original.zip(chunks_proofread_downloaded))
     transcript_proofread = transcript_enrich(transcript_original, merged_chunks)
     uploaded_files_1     = bucket_upload_data.override(task_display_name="⬆️ Bucket: Upload Transcript")(conf_result_path, transcript_proofread)
-    uploaded_files_2     = transcript_chunks_upload_to_bucket(track_id=conf_track_id, chunks=chunks_proofread, language=conf_language)
 
     [fast_lane, normal_lane] >> enrich_transcript
 
-  [uploaded_files_1, uploaded_files_2] >> complete(conf_result_path)
+  [uploaded_files_1] >> complete(conf_result_path)
 
 transcript_proofread()
