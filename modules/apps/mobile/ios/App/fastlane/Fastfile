@@ -112,6 +112,7 @@ platform :ios do
       expire_previous_builds: false,
       groups: ["External"],
       changelog: commit[:message],
+      skip_waiting_for_build_processing: true,
       beta_app_description: \
         'Shruti is your pocket companion for Vedic wisdom. ' + \
         'Explore a rich library of spiritual lectures by A. C. Bhaktivedanta Swami ' + \
