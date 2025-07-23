@@ -73,11 +73,13 @@ export function setupTracksDownloadFeature() {
           isFailed: true, 
           downloadProgress: undefined 
         })
-        eventBus.toastShow.notify({
-          message: i18n.global.t(`errors.downloadFailed`),
-          color: 'danger',
-          duration: 5000,
-        })
+        if (event.showError) {
+          eventBus.toastShow.notify({
+            message: i18n.global.t(`errors.downloadFailed`),
+            color: 'danger',
+            duration: 5000,
+          })
+        }
       }
     }
   })

@@ -49,7 +49,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const trackPlay      = new Event<{ playlistItemId: string }>('trackPlay')
-  const trackDownload  = new Event<{ trackIds: string[], skipFailed: boolean }>('trackDownload')
+  const trackDownload  = new Event<{ trackIds: string[], skipFailed: boolean, showError: boolean }>('trackDownload')
   const trackStateLoad = new Event<string[]>('trackStateLoad')
 
   /* -------------------------------------------------------------------------- */
