@@ -132,7 +132,7 @@ def transcript_transcribe_audio():
           end=float(sentence["end"]),
         ) for sentence in paragraph["sentences"]]
       )
-      blocks.append(TranscriptBlock(type="paragraph"))
+      # blocks.append(TranscriptBlock(type="paragraph"))
 
     return Transcript(version=1, blocks=blocks)
 
