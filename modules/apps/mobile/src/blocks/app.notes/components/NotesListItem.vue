@@ -4,6 +4,7 @@
     class="note"
   >
     <HighlightText
+      :lang="language"
       :text="text"
     />
   </IonItem>
@@ -17,6 +18,7 @@ import { HighlightText } from '@blocks/app.ui.kit'
 
 defineProps<{
   text: string
+  language: string
   author: string,
   source: string,
   tags?: string[]
@@ -29,5 +31,10 @@ defineProps<{
   border-left: 5px solid;
   border-color: var(--ion-color-primary-tint);
   margin: 1rem 0rem;
+
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+  -moz-hyphens: auto;
 }
 </style>

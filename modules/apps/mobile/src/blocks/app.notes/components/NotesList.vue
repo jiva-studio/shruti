@@ -7,6 +7,7 @@
   >
     <NotesListItem
       :text="note.text"
+      :language="note.language"
       :tags="note.tags"
       :author="note.trackAuthor"
       :source="note.trackTitle"
