@@ -63,6 +63,23 @@ def bucket_download_json_data(
   return json_loads(response)
 
 
+@task(task_display_name="⬇️ Bucket: Download Data")
+def bucket_download_data(
+  object_key: str,
+  raise_if_not_found: bool = True,
+):
+  print("Downloading: ", object_key)
+  object_key  = object_key.replace('//', '/')
+  bucket_name  = Variable.get(VAR_APP_BUCKET_NAME)
+  bucket_client = __get_bucket_client()
+  try:
+    return bucket_client.get_object(Bucket=bucket_name, Key=object_key)['Body'].read().decode('utf-8')
+  except bucket_client.exceptions.NoSuchKey:
+    if raise_if_not_found:
+      raise Exception(f"Object not found: {object_key}")
+    return None
+
+
 @task(task_display_name="⬇️ Bucket: Download File")
 def bucket_download_file(
   object_key: str,
