@@ -87,7 +87,7 @@ export function setupTracksDownloadFeature() {
   trackMediaItemsDownloader.status.subscribe(async (mediaItem) => {
     const relatedDownloads = trackMediaItemsDownloader.getTasksByTrackId(mediaItem.trackId)
     const downloadProgress = Math.min(...relatedDownloads.map(x => x.progress || 0))
-    tracksState.store.setState(mediaItem.trackId, { downloadProgress })
+    tracksState.store.setState( mediaItem.trackId, { downloadProgress })
   })
 
   trackMediaItemsDownloader.failed.subscribe(async (mediaItem) => {

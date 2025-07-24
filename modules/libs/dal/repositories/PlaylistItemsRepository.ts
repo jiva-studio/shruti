@@ -12,6 +12,7 @@ type PlaylistItemDBSchema = {
   addedAt: number
   completedAt: number | undefined
   archivedAt: number | undefined
+  progress: number | undefined
 }
 
 const playlistItemSerializer   = (item: PlaylistItem): PlaylistItemDBSchema => item

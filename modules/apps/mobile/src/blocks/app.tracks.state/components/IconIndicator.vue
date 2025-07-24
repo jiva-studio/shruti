@@ -16,10 +16,14 @@ import { closeCircle, checkmarkCircle, checkmarkDoneCircle } from 'ionicons/icon
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-type State = 'none' | 'failed' | 'added' | 'completed'
+export type StateIcon = 
+  | 'none'
+  | 'failed'
+  | 'added'
+  | 'completed'
 
 const props = defineProps<{
-  state: State,
+  icon: StateIcon,
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -27,7 +31,7 @@ const props = defineProps<{
 /* -------------------------------------------------------------------------- */
 
 type StateIconMap = {
-  [key in State]: { icon?: string, color?: string }
+  [key in StateIcon]: { icon?: string, color?: string }
 }
 
 const stateIconMaps: StateIconMap = {
@@ -37,6 +41,6 @@ const stateIconMaps: StateIconMap = {
   'completed': { icon: checkmarkDoneCircle, color: 'medium' },
 }
 const statusIcon = computed(
-  () => stateIconMaps[props.state]
+  () => stateIconMaps[props.icon]
 )
 </script>

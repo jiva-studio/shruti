@@ -28,4 +28,9 @@ export type PlaylistItem = {
    * Archived date (in milliseconds since epoch)
    */
   archivedAt: number | undefined
+
+  /**
+   * Playback progress of the track (0 to 100)
+   */
+  progress: number | undefined
 }
