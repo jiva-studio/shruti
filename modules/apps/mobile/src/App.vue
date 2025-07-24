@@ -25,6 +25,7 @@
       :available-languages="transcriptStore.availableLanguages"
       :paragraphs="transcriptStore.localizedTranscript"
       :position="player.position.value"
+      :duration="player.duration.value"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
       :title="transcriptStore.localizedTitle"
       :author="transcriptStore.localizedAuthorName"

@@ -1,6 +1,7 @@
 <template>
   <div class="timestamp">
-    {{ formatTime(start) }}
+    <div>{{ formatTime(start) }}</div>
+    <div>-{{ formatTime(duration - start) }}</div>
   </div>
 </template>
 
@@ -8,6 +9,7 @@
 <script setup lang="ts">
 defineProps<{
   start: number
+  duration: number
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -36,7 +38,13 @@ function formatTime(ms: number) {
 
 <style scoped>
 .timestamp {
-  margin-top: 1rem;
   font-size: .6rem;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  opacity: .5;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
 }
 </style>
