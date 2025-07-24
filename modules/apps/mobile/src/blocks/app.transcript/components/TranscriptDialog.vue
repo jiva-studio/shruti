@@ -33,6 +33,7 @@
         class="transcript-text"
         :paragraphs="paragraphs"
         :position="position"
+        :duration="duration"
         :show-speaker-icons="allowMultipleLanguages"
         :highlight-current-sentence="highlightCurrentSentence"
         @seek="position => emit('seek', position)"
@@ -41,11 +42,11 @@
 
       <!-- Text Selection Actions Popover -->
       <IonPopover
-        :is-open="isSelectionActionsOpen"
         :translucent="true"
         :animated="true"
-        :event="lastTextSelectedEvent?.event"
         :arrow="false"
+        :is-open="isSelectionActionsOpen"
+        :event="lastTextSelectedEvent?.event"
         @did-dismiss="onTextSelectionActionDismissed"
       >
         <SelectionActions @action="onTextSelectionActionClicked" />
@@ -73,6 +74,7 @@ defineProps<{
   availableLanguages: TranscriptLanguage[]
   paragraphs: TranscriptParagraph[]
   position: number
+  duration: number
   highlightCurrentSentence: boolean
   author: string
   title: string
