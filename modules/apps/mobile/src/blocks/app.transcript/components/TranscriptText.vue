@@ -16,6 +16,7 @@
       <Timestamp
         v-if="section.sentences[0]?.start"
         :start="section.sentences[0]?.start"
+        :duration="duration"
       />
       <component
         :is="'span'"
@@ -59,6 +60,7 @@ const props = defineProps<{
   showSpeakerIcons: boolean
   paragraphs: TranscriptParagraph[]
   position: number
+  duration: number
   highlightCurrentSentence: boolean
 }>()
 
