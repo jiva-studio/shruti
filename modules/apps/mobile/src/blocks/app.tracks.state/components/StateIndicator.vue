@@ -7,13 +7,14 @@
       v-if="mode === 'icon'"
       slot="end"
       key="icon"
-      :state="state"
+      :icon="icon"
     />
     <RadialIndicator
       v-else-if="mode === 'progress'"
       slot="end"
       key="progress"
-      :progress="progress || 0"
+      :value="progressValue || 0"
+      :color="progressColor || 'primary'"
     />
   </Transition>
 </template>
@@ -21,25 +22,24 @@
 
 <script lang="ts" setup>
 import { toRefs, ref, watch } from 'vue'
-import IconIndicator from './IconIndicator.vue'
+import { default as IconIndicator, type StateIcon } from './IconIndicator.vue'
 import RadialIndicator from './RadialIndicator.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-export type State = 'none' | 'failed' | 'added' | 'completed'
-
 const props = defineProps<{
-  state: State,
-  progress?: number | undefined
+  icon: StateIcon,
+  progressValue?: number | undefined
+  progressColor?: string | undefined
 }>()
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { progress } = toRefs(props) 
+const { progressValue } = toRefs(props) 
 const mode = ref<'none'|'icon'|'progress'>('none')
 
 /* -------------------------------------------------------------------------- */
@@ -47,7 +47,7 @@ const mode = ref<'none'|'icon'|'progress'>('none')
 /* -------------------------------------------------------------------------- */
 
 watch(
-  (): [State, number|undefined] => [props.state, props.progress], 
+  (): [StateIcon, number|undefined] => [props.icon, props.progressValue], 
   ([i, p]) => onStateChanged(i, p),
   { immediate: true }
 )
@@ -57,7 +57,7 @@ watch(
 /* -------------------------------------------------------------------------- */
 
 function onStateChanged(
-  state: State, 
+  state: StateIcon, 
   progress: number|undefined
 ) {
   if (progress !== undefined && progress < 100) { 

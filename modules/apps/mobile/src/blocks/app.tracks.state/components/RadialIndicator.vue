@@ -3,11 +3,11 @@
     :stroke-width="4"
     :inner-stroke-width="4"
     :diameter="24"
-    :completed-steps="progress"
+    :completed-steps="value"
     :total-steps="100"
     :animate-speed="750"
-    start-color="var(--ion-color-primary)"
-    stop-color="var(--ion-color-primary)"
+    :start-color="`var(--ion-color-${color})`"
+    :stop-color="`var(--ion-color-${color})`"
     inner-stroke-color="var(--ion-color-light)"
   />
 </template>
@@ -16,7 +16,11 @@
 <script lang="ts" setup>
 import RadialProgress from 'vue3-radial-progress'
 
-defineProps<{
-  progress: number
-}>()
+withDefaults(defineProps<{
+  value: number
+  color: string
+}>(), {
+  value: 0,
+  color: 'primary'
+})
 </script>

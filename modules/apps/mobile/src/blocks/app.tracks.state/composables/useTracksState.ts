@@ -1,7 +1,7 @@
 import { useTracksStateStore } from './useTracksStateStore'
 import { InitOptions } from '../models/InitOptions'
 import { createSharedComposable } from '@vueuse/core'
-import { useGetTracksIfCompleted } from './useGetTracksIfCompleted'
+import { useGetTracksIfCompletedAndArchived } from './useGetTracksIfCompletedAndArchived'
 import { useGetTracksIfInPlaylist } from './useGetTracksIfInPlaylist'
 import { useGetTracksIfMediaItemsFailed } from './useGetTracksIfMediaItemsFailed'
 import { useGetTracksIfNoMediaItemsFound } from './useGetTracksIfNoMediaItemsFound'
@@ -37,14 +37,14 @@ export const useTracksState = createSharedComposable(() => {
     if (!options) { throw new Error('useTracksState is not initialized. Call init(options) first.') }
 
     if (groups.includes('completed')) {
-      useGetTracksIfCompleted(options).get().then(r => r.forEach(trackId => {
+      useGetTracksIfCompletedAndArchived(options).get().then(r => r.forEach(trackId => {
         store.setState(trackId, { isCompleted: true })
       }))
     }
 
     if (groups.includes('inPlaylist')) {
-      useGetTracksIfInPlaylist(options).get().then(r => r.forEach(trackId => {
-        store.setState(trackId, { inPlaylist: true })
+      useGetTracksIfInPlaylist(options).get().then(r => r.forEach(({ trackId, progress }) => {
+        store.setState(trackId, { inPlaylist: true, playbackProgress: progress })
       }))
     }
 

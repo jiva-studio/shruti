@@ -7,6 +7,7 @@ export type TrackState = {
   isFailed?: boolean
   downloadProgress?: number
   downloadFailed?: boolean
+  playbackProgress?: number
 }
 
 export const useTracksStateStore = defineStore('tracksState', () => {

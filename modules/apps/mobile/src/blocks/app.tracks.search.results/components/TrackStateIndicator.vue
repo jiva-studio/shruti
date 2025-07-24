@@ -1,14 +1,13 @@
 <template>
   <StateIndicator
-    :state="state"
-    :progress="trackStateStore.getState(trackId).downloadProgress"
+    :icon="icon"
+    :progress-value="trackStateStore.getState(trackId).downloadProgress"
   />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useTracksStateStore } from '../composables/useTracksStateStore'
-import { default as StateIndicator, type State } from './StateIndicator.vue'
+import { useTracksStateStore, StateIndicator, type StateIcon } from '@blocks/app.tracks.state'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -16,7 +15,6 @@ import { default as StateIndicator, type State } from './StateIndicator.vue'
 
 const props = defineProps<{
   trackId: string
-  ignoreStates?: string[]
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -29,16 +27,12 @@ const trackStateStore = useTracksStateStore()
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const state = computed<State>((): State => {
+const icon = computed<StateIcon>((): StateIcon => {
   const trackState = trackStateStore.getState(props.trackId)
-  
-  let state: State = 'none'
+  let state: StateIcon = 'none'
   if (trackState.inPlaylist)  { state = 'added' }
   if (trackState.isCompleted) { state = 'completed' }
   if (trackState.isFailed)    { state = 'failed' }
-  if (props.ignoreStates && props.ignoreStates.includes(state)) {
-    return 'none'
-  }
   return state
 })
 </script>
