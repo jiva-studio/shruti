@@ -1,6 +1,6 @@
 import { InitOptions } from '../models/InitOptions'
 
-export function useGetTracksIfCompleted(
+export function useGetTracksIfCompletedAndArchived(
   options: InitOptions
 ) {
   /* -------------------------------------------------------------------------- */
@@ -9,13 +9,14 @@ export function useGetTracksIfCompleted(
 
   async function get() {
     // Get all tracks that are in the completed state
-    const completedPlaylistItems = await options.playlistItemsRepository.getMany({
+    const items = await options.playlistItemsRepository.getMany({
       selector: {
         completedAt: { $exists: true },
+        archivedAt: { $exists: true },
       },
       limit: 1000, // TODO: Remove limit when pagination is implemented
     })
-    return completedPlaylistItems.map(item => item.trackId)
+    return items.map(item => item.trackId)
   }
 
   /* -------------------------------------------------------------------------- */

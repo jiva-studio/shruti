@@ -44,6 +44,7 @@ export const usePlaylist = createSharedComposable(() => {
       addedAt: Date.now(),
       completedAt: undefined,
       archivedAt: undefined,
+      progress: undefined,
     })
 
     return true

@@ -72,10 +72,15 @@ export function setupPlayerFeature() {
         || track.author
         || 'Unknown author',
     })
-    eventBus.transcriptLoad.notify({ trackId: track._id })
+    await eventBus.transcriptLoad.notify({ trackId: track._id })
 
     // Start playing the track
     await player.play.call()
+
+    // Set playback progress if it exists
+    if (trackState.playbackProgress) {
+      await player.seek.call(track.audio.original.duration * trackState.playbackProgress / 100)
+    }
 
     // Open transcript if it is enabled in the config
     if (config.openTranscriptAutomatically.value) {

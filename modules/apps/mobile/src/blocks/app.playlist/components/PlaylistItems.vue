@@ -17,10 +17,7 @@
         @click="emit('click', item.playlistItemId)"
       >
         <template #state="{ trackId }">
-          <TrackStateIndicator 
-            :track-id="trackId"
-            :ignore-states="['added']"
-          />
+          <PlaylistStateIndicator :track-id="trackId" />
         </template>
       </TrackListItem>
     </WithDeleteAction>
@@ -31,8 +28,8 @@
 <script setup lang="ts">
 import { WithDeleteAction } from '@blocks/app.core'
 import { TrackListItem } from '@blocks/app.tracks.view'
-import { TrackStateIndicator } from '@blocks/app.tracks.state'
 import { usePlaylistStore } from '../composables/usePlaylistStore'
+import PlaylistStateIndicator from './PlaylistStateIndicator.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
