@@ -49,13 +49,18 @@ export async function setupSyncFeature() {
     }
 
     // Invalidate caches
-    dal.tags.invalidateCache()
-    dal.authors.invalidateCache()
-    dal.sources.invalidateCache()
-    dal.locations.invalidateCache()
-    dal.languages.invalidateCache()
-    dal.durations.invalidateCache()
-    dal.sortMethods.invalidateCache()
+    const hasChangesFor = (type: string) => {
+      return syncResult.commonData.pull?.docs?.some(doc => doc.type === type)
+    }
+
+    // Invalidate cache for dictionary repositories if there are changes
+    if (hasChangesFor('tag'))      { dal.tags.invalidateCache() }
+    if (hasChangesFor('author'))   { dal.authors.invalidateCache() }
+    if (hasChangesFor('source'))   { dal.sources.invalidateCache() }
+    if (hasChangesFor('location')) { dal.locations.invalidateCache() }
+    if (hasChangesFor('language')) { dal.languages.invalidateCache() }
+    if (hasChangesFor('duration')) { dal.durations.invalidateCache() }
+    if (hasChangesFor('sort'))     { dal.sortMethods.invalidateCache() }
 
     // Notify sync end
     eventBus.syncEnd.notify(syncResult)

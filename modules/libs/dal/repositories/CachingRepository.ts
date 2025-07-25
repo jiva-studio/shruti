@@ -15,6 +15,7 @@ export class CachingRepository<
   public invalidateCache() {
     this._cache.clear()
     this._cacheAllLoaded = false
+    console.log('[LCT] [DAL] Invalidate cache')
   }
 
   public subscribe(

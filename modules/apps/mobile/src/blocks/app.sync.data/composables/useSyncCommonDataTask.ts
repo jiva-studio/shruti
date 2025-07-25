@@ -1,5 +1,6 @@
 import { useLogger } from '@lectorium/mobile/core'
 import { InitOptions } from '../models/InitOptions'
+import { SyncResult } from '@lectorium/dal/persistence'
 
 /**
  * Task for synchronizing common data between local and remote db. 
@@ -16,11 +17,12 @@ export function useSyncCommonDataTask(options: InitOptions) {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  async function sync() {
+  async function sync() : Promise<SyncResult> {
     try {
       logger.info('Sync started...')
-      await onSync()
+      const result = await onSync()
       logger.info('Sync completed successfully')
+      return result
     } catch (error: any) {
       logger.error(`Sync failed: ${JSON.stringify(error)}`)
       throw new Error(`Sync failed.`, { cause: error })
@@ -31,7 +33,7 @@ export function useSyncCommonDataTask(options: InitOptions) {
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function onSync() {
+  async function onSync() : Promise<SyncResult> {
     const localDb = options.local()
     const remoteDb = options.remote()
 
@@ -41,11 +43,25 @@ export function useSyncCommonDataTask(options: InitOptions) {
     }
 
     // Execute all sync tasks in parallel
-    await Promise.all([
+    const [ 
+      indexSyncResult, 
+      tracksSyncResult, 
+      dictionarySyncResult 
+    ] = await Promise.all([
       localDb.index.replicateFrom(remoteDb.index, { filter: ignoreSystemDocs }),
       localDb.tracks.replicateFrom(remoteDb.tracks, { filter: ignoreSystemDocs }),
       localDb.dictionary.replicateFrom(remoteDb.dictionary, { filter: ignoreSystemDocs }),
     ])
+
+    return {
+      pull: {
+        docs: [
+          ...indexSyncResult?.pull?.docs || [],
+          ...tracksSyncResult?.pull?.docs || [],
+          ...dictionarySyncResult?.pull?.docs || []
+        ],
+      }
+    }
   }
 
   // Interface

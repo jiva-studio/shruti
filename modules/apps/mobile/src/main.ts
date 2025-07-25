@@ -145,15 +145,18 @@ Promise.all([
     /*                                Preload Data                                */
     /* -------------------------------------------------------------------------- */
 
-    // await Promise.all([
-    //   useDAL().tags.getAll({ limit: 1000 }),
-    //   useDAL().authors.getAll({ limit: 1000 }),
-    //   useDAL().sources.getAll({ limit: 1000 }),
-    //   useDAL().locations.getAll({ limit: 1000 }),
-    //   useDAL().languages.getAll({ limit: 1000 }),
-    //   useDAL().durations.getAll({ limit: 1000 }),
-    //   useDAL().sortMethods.getAll({ limit: 1000 }),
-    // ])
+    // NOTE: Load all dictionary data into memory, because it is used in many places
+    //       and it is more efficient to have it in memory than to query the database 
+    //       every time.
+    await Promise.all([
+      useDAL().tags.getAll({ limit: 1000 }),
+      useDAL().authors.getAll({ limit: 1000 }),
+      useDAL().sources.getAll({ limit: 1000 }),
+      useDAL().locations.getAll({ limit: 1000 }),
+      useDAL().languages.getAll({ limit: 1000 }),
+      useDAL().durations.getAll({ limit: 1000 }),
+      useDAL().sortMethods.getAll({ limit: 1000 }),
+    ])
 
     /* -------------------------------------------------------------------------- */
     /*                              Initialize Blocks                             */

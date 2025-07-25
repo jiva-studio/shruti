@@ -103,9 +103,13 @@ export class Database {
   async replicateFrom(
     source: Database,
     options?: DatabaseReplicationOptions,
-  ) {
+  ) : Promise<SyncResult> {
+    const pullChanges: PouchDB.Core.ExistingDocument<{}>[] = []
+
     await this._db.replicate
       .from(source.db, options)
+      .on('change', (info) => { pullChanges.push(...info.docs) })
+    return { pull: { docs: pullChanges } }
   }
 
   async sync(

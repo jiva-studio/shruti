@@ -43,12 +43,12 @@ export const useTracksSearchFilters = createSharedComposable(() => {
     const [
       authors, sources, locations, languages, durations, sortMethods
     ] = await Promise.all([
-      options.authorsService.getAll(),
-      options.sourcesService.getAll(),
-      options.locationsService.getAll(),
-      options.languagesService.getAll(),
-      options.durationsService.getAll(),
-      options.sortMethodsService.getAll(),
+      options.authorsService.getAll({ limit: 1000 }),
+      options.sourcesService.getAll({ limit: 1000 }),
+      options.locationsService.getAll({ limit: 1000 }),
+      options.languagesService.getAll({ limit: 1000 }),
+      options.durationsService.getAll({ limit: 1000 }),
+      options.sortMethodsService.getAll({ limit: 1000 }),
     ])
 
     searchFiltersDictionaryStore.authors = authors.map((item) => ({

@@ -71,7 +71,7 @@ export abstract class PouchRepository<
   async getOne(
     id: string
   ): Promise<TItem> {
-    console.debug(`[LCT] db.${this._database.db.name}.getOne(${id})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getOne(${id})`)
 
     const response = await this._database.db.find({
       selector: { _id: id, ...this._scope },
@@ -91,7 +91,7 @@ export abstract class PouchRepository<
   async findOne(
     request: FindOneRequest<TDbScheme>
   ): Promise<TItem | undefined> {
-    console.debug(`[LCT] db.${this._database.db.name}.findOne(${JSON.stringify(request)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.findOne(${JSON.stringify(request)})`)
 
     const response = await this._database.db.find({
       selector: { ...request, ...this._scope },
@@ -121,7 +121,7 @@ export abstract class PouchRepository<
       sort: request?.sort ?? undefined
     }
 
-    console.debug(`[LCT] db.${this._database.db.name}.getAll(${JSON.stringify(r)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getAll(${JSON.stringify(r)})`)
     const response = await this._database.db.find(r)
     if (response.warning) {
       console.warn(response.warning, JSON.stringify(r))
@@ -132,7 +132,7 @@ export abstract class PouchRepository<
   async getMany(
     request: GetManyRequest
   ): Promise<TItem[]> {
-    console.debug(`[LCT] db.${this._database.db.name}.getMany(${JSON.stringify(request)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getMany(${JSON.stringify(request)})`)
 
     const r = {
       selector: {
@@ -156,7 +156,7 @@ export abstract class PouchRepository<
   async getIds(
     request: GetManyRequest
   ): Promise<string[]> {
-    console.debug(`[LCT] db.${this._database.db.name}.getIds(${JSON.stringify(request)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getIds(${JSON.stringify(request)})`)
 
     const r = {
       selector: {
@@ -180,7 +180,7 @@ export abstract class PouchRepository<
    * @returns A promise that resolves to the count of items in the database.
    */
   async getCount(): Promise<number> {
-    console.debug(`[LCT] db.${this._database.db.name}.getCount()`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getCount()`)
     const info = await this._database.db.info()
     return info.doc_count
   }
@@ -193,7 +193,7 @@ export abstract class PouchRepository<
   async addOne(
     item: TItem
   ): Promise<void> {
-    console.debug(`[LCT] db.${this._database.db.name}.addOne(${JSON.stringify(item)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.addOne(${JSON.stringify(item)})`)
     try {
       await this._database.db.put({
         ...this._serializer(item)
@@ -214,7 +214,7 @@ export abstract class PouchRepository<
     id: string,
     item: TItem
   ): Promise<void> {
-    console.debug(`[LCT] db.${this._database.db.name}.updateOne(${id}, ${JSON.stringify(item)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.updateOne(${id}, ${JSON.stringify(item)})`)
     const document = await this._database.db.get<TDbScheme>(id)
     const updatedDocument = { ...document, ...this._serializer(item) }
     const updatedItem = this._deserializer(updatedDocument)
@@ -226,7 +226,7 @@ export abstract class PouchRepository<
     id: string,
     item: Partial<TItem>
   ): Promise<void> {
-    console.debug(`[LCT] db.${this._database.db.name}.patchOne(${id}, ${JSON.stringify(item)})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.patchOne(${id}, ${JSON.stringify(item)})`)
 
     const document = await this._database.db.get<TDbScheme>(id)
     const updatedItem = { ...this._deserializer(document), ...item }
@@ -243,7 +243,7 @@ export abstract class PouchRepository<
   async removeOne(
     id: string
   ): Promise<void> {
-    console.debug(`[LCT] db.${this._database.db.name}.removeOne(${id})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.removeOne(${id})`)
     
     const document = await this._database.db.get<TDbScheme>(id)
     const item = this._deserializer(document)
@@ -261,7 +261,7 @@ export abstract class PouchRepository<
   async softRemoveOne(
     id: string
   ): Promise<void> {
-    console.debug(`[LCT] db.${this._database.db.name}.softRemoveOne(${id})`)
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.softRemoveOne(${id})`)
 
     const document = await this._database.db.get<TDbScheme>(id)
     const updatedItem = { ...this._deserializer(document), _deleted: true }
