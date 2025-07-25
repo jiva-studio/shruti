@@ -9,6 +9,10 @@
         >
           <IconHome />
           <IonLabel>{{ $t('app.home') }}</IonLabel>
+          <div
+            v-if="playlistStore.hasChanges"
+            class="badge"
+          />
         </IonTabButton>
 
         <IonTabButton
@@ -44,8 +48,10 @@
 import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
 import { IconHome, IconBookmark, IconSearch, IconSettings } from '@blocks/app.ui.kit'
 import { useConfig } from '@blocks/app.config'
+import { usePlaylistStore } from '@blocks/app.playlist'
 
 const config = useConfig()
+const playlistStore = usePlaylistStore()
 </script>
 
 <style scoped>
@@ -62,5 +68,17 @@ ion-tab-bar {
 
 ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
+}
+</style>
+
+<style>
+.badge {
+  width: 8px;
+  height: 8px;
+  position: absolute;
+  background-color: var(--ion-color-danger);
+  border-radius: 8px;
+  top: 12%;
+  right: 33%;
 }
 </style>
