@@ -7,6 +7,7 @@ import { useSyncDataStore } from './useSyncDataStore'
 import { InitOptions } from '../models/InitOptions'
 
 export type SyncDataResult = {
+  commonData: SyncResult
   userData: SyncResult
 }
 
@@ -69,7 +70,7 @@ export const useSyncData = createSharedComposable(() => {
 
   async function performSync() : Promise<SyncDataResult> {
     if (!commonData || !userData) {
-      return { userData: {} }
+      return { commonData: {}, userData: {} }
     }
 
     store.isSyncing = true
@@ -83,10 +84,13 @@ export const useSyncData = createSharedComposable(() => {
         userData.sync(),
       ])
       store.lastSyncedAt = Date.now()
-      return { userData: userDataSyncResult }
+      return { 
+        commonData: commonDataSyncResult, 
+        userData: userDataSyncResult 
+      }
     } catch (error) {
       logger.error('Sync failed', error)
-      return { userData: {} }
+      return { commonData: {}, userData: {} }
     } finally {
       store.isSyncing = false
       pendingSyncPromise = null
