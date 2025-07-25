@@ -4,6 +4,7 @@ import ShrutiApp from './App.vue'
 import router from './router'
 
 import { IonicVue } from '@ionic/vue'
+import { SplashScreen } from '@capacitor/splash-screen'
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css'
@@ -140,10 +141,6 @@ Promise.all([
   }),
 
   router.isReady().then(async () => {
-    // Mount the app as soon as the router is ready. Splash screen will be shown 
-    // until the app is fully initialized.
-    app.mount('#app')
-
     /* -------------------------------------------------------------------------- */
     /*                                Preload Data                                */
     /* -------------------------------------------------------------------------- */
@@ -285,6 +282,8 @@ Promise.all([
     useAnalytics().track('app.init', { initTime: elapsed })
     useAnalytics().track('app.open')
     console.log(`Initialization time: ${elapsed}ms`)
-    useEventBus().appReady.notify()
+
+    app.mount('#app')
+    await SplashScreen.hide()
   })
 })
