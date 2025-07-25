@@ -1,14 +1,15 @@
 import { createRouter, createWebHistory } from '@ionic/vue-router'
 import { RouteRecordRaw } from 'vue-router'
+import AppMainPage from '@lectorium/mobile/pages/AppMainPage.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
-    component: () => import('@lectorium/mobile/pages/SplashPage.vue'),
+    redirect: '/app'
   },
   {
     path: '/app/',
-    component: () => import('@lectorium/mobile/pages/AppMainPage.vue'),
+    component: AppMainPage,
     children: [
       {
         path: '',
