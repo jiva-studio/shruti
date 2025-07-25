@@ -1,10 +1,10 @@
 <template>
   <SectionHeader 
-    v-if="!playlistStore.isEmpty()"
+    v-if="!playlistStore.isEmpty"
     :title="$t('home.upNext')"
   />
   <PlaylistItems
-    v-if="!playlistStore.isEmpty()"
+    v-if="!playlistStore.isEmpty"
     @click="emit('click', $event)"
     @delete="emit('delete', $event)"
   />

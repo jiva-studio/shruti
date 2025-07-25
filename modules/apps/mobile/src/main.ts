@@ -94,6 +94,7 @@ import { setupToastFeature } from './features/setupToastFeature'
 import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
+import { setupOnboardingFeature } from './features/setupOnboardingFeature'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -256,6 +257,7 @@ Promise.all([
     setupToastFeature()
     setupAppStatusFeature()
     setupPlayerAnalyticsFeature()
+    setupOnboardingFeature()
 
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
@@ -287,6 +289,20 @@ Promise.all([
     console.log(`Initialization time: ${elapsed}ms`)
 
     app.mount('#app')
+
+    /* -------------------------------------------------------------------------- */
+    /*                  Start from Search page for the first run                  */
+    /* -------------------------------------------------------------------------- */
+
+    const shouldLaunchFromSearchPage = !useConfig().tutorialStepsCompleted.value.includes('searchPage')
+    if (shouldLaunchFromSearchPage) {
+      router.replace('/app/search')
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                                    Done                                    */
+    /* -------------------------------------------------------------------------- */
+
     await SplashScreen.hide()
   })
 })

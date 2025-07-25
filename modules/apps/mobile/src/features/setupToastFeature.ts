@@ -21,6 +21,7 @@ export function setupToastFeature() {
       duration: event.duration || 3000,
       position: 'top',
       swipeGesture: 'vertical',
+      translucent: true,
     })
     
     await toast.present()

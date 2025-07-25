@@ -15,6 +15,6 @@ export default {
     durationExtraLong: '60+ minutes',
   },
   notifications: {
-    newTrackAddedToPlaylist: 'Track added to playlist',
+    newTrackAddedToPlaylist: 'The track has been added to the playlist. You can listen to it on the Home tab after downloading.',
   }
 }

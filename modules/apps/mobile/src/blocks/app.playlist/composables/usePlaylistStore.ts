@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 
 export type PlaylistStoreItem = {
@@ -19,14 +19,15 @@ export const usePlaylistStore = defineStore('playlist', () =>{
   /* -------------------------------------------------------------------------- */
 
   const items = reactive<Array<PlaylistStoreItem>>([])
+  const hasChanges = ref(false)
 
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
   /* -------------------------------------------------------------------------- */
 
-  function isEmpty() {
+  const isEmpty = computed(() => {
     return items.length === 0
-  }
+  })
 
   function setItems(value: PlaylistStoreItem[]) {
     items.length = 0
@@ -58,5 +59,5 @@ export const usePlaylistStore = defineStore('playlist', () =>{
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { items, setItems, getByTrackId, updateByTrackId, isEmpty, remove }
+  return { items, setItems, getByTrackId, updateByTrackId, isEmpty, remove, hasChanges }
 })
