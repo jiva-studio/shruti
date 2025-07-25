@@ -8,7 +8,13 @@ const config: CapacitorConfig = {
   server: {
     cleartext: true,
     androidScheme: 'http',
-  }
+  },
+  plugins: {
+    SplashScreen: {
+      launchAutoHide: false,
+      androidScaleType: 'CENTER_CROP',
+      backgroundColor: '#ffffff',
+    }
+  },
 }
-
 export default config
