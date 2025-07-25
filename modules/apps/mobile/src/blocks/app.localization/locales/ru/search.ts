@@ -15,6 +15,6 @@ export default {
     durationExtraLong: 'Более 60 минут',
   },
   notifications: {
-    newTrackAddedToPlaylist: 'Трек добавлен в плейлист',
+    newTrackAddedToPlaylist: 'Трек добавлен в плейлист. Прослушать его можно на вкладке Главная после загрузки.',
   }
 }
