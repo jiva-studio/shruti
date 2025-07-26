@@ -46,9 +46,9 @@ def bake_database_for_app():
     )
 
     files = [
-      'dictionary',
-      'index',
-      'tracks',
+      'dictionary.db',
+      'index.db',
+      'tracks.db',
       'tracks.db-mrview-901296fddda39433e93ca2223f2f0cd6',
       'tracks.db-mrview-3b9f49811f1b73b6da3d10c5dc9876fb',
     ]
@@ -79,8 +79,8 @@ def bake_database_for_app():
         task_id=f'upload_{file}_file',
         task_display_name=f'⬆️ Bucket: Upload `{file}` file',
       )(
-        path=f'/tmp/lectorium/{file}.db',
-        object_key=f'artifacts/bundled-data/{file}.db',
+        path=f'/tmp/lectorium/{file}',
+        object_key=f'artifacts/bundled-data/{file}',
       )
       run_node_app >> uploaded_file
 
