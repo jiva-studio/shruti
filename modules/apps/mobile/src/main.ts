@@ -296,7 +296,7 @@ Promise.all([
 
     const shouldLaunchFromSearchPage = !useConfig().tutorialStepsCompleted.value.includes('searchPage')
     if (shouldLaunchFromSearchPage) {
-      router.replace('/app/search')
+      await router.replace('/app/search')
     }
 
     /* -------------------------------------------------------------------------- */
