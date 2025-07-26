@@ -79,7 +79,8 @@ export class Database {
    * Initializes the database.
    */
   async init() {
-    for (const index of this._config.indices || []) {
+    if (!this._config.indices) { return }
+    for (const index of this._config.indices) {
       await this._db.createIndex({ index })
     }
   }

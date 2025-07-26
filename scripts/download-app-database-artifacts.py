@@ -13,6 +13,8 @@ bucket_name = os.getenv("BUCKET_NAME")
 # Keys to download and output directory
 keys = [
     "artifacts/bundled-data/tracks.db",
+    "artifacts/bundled-data/tracks.db-mrview-901296fddda39433e93ca2223f2f0cd6",
+    "artifacts/bundled-data/tracks.db-mrview-3b9f49811f1b73b6da3d10c5dc9876fb",
     "artifacts/bundled-data/index.db",
     "artifacts/bundled-data/dictionary.db",
 ]
