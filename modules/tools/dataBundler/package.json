@@ -8,6 +8,7 @@
     "pouchdb-core": "^9.0.0",
     "pouchdb-replication": "^9.0.0",
     "pouchdb-replication-stream": "^1.2.9",
+    "pouchdb-find": "^9.0.0",
     "progress": "^2.0.3",
     "yargs": "^17.7.2"
   }

@@ -56,6 +56,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     DatabaseHelper databaseHelper = new DatabaseHelper(this);
     try {
       databaseHelper.copyDatabaseFromAssets("tracks.db");
+      databaseHelper.copyDatabaseFromAssets("tracks.db-mrview-901296fddda39433e93ca2223f2f0cd6");
+      databaseHelper.copyDatabaseFromAssets("tracks.db-mrview-3b9f49811f1b73b6da3d10c5dc9876fb");
       databaseHelper.copyDatabaseFromAssets("dictionary.db");
       databaseHelper.copyDatabaseFromAssets("index.db");
     } catch (RuntimeException e) {
