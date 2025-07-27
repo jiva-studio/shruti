@@ -43,8 +43,8 @@ export const useTracksState = createSharedComposable(() => {
     }
 
     if (groups.includes('inPlaylist')) {
-      useGetTracksIfInPlaylist(options).get().then(r => r.forEach(({ trackId, progress }) => {
-        store.setState(trackId, { inPlaylist: true, playbackProgress: progress })
+      useGetTracksIfInPlaylist(options).get().then(r => r.forEach(trackId => {
+        store.setState(trackId, { inPlaylist: true })
       }))
     }
 

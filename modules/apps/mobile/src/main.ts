@@ -95,6 +95,7 @@ import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
 import { setupOnboardingFeature } from './features/setupOnboardingFeature'
+import { featureUpdateProgress } from './features/playlist/featureUpdateProgress'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -258,6 +259,10 @@ Promise.all([
     setupAppStatusFeature()
     setupPlayerAnalyticsFeature()
     setupOnboardingFeature()
+   
+    /* -------------------------------- Playlist -------------------------------- */
+    
+    featureUpdateProgress()
 
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
@@ -305,4 +310,6 @@ Promise.all([
 
     await SplashScreen.hide()
   })
+}).catch((error: any) => {
+  alert('Initialization error:' + JSON.stringify(error))
 })

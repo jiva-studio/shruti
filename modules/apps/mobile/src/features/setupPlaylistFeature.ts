@@ -2,7 +2,6 @@ import { watch } from 'vue'
 import { useEventBus } from '@lectorium/mobile/core'
 import { useDAL } from '@blocks/app.database'
 import { useConfig } from '@blocks/app.config'
-import { usePlayer } from '@blocks/app.player'
 import { usePlaylist, usePlaylistStore } from '@blocks/app.playlist'
 
 export async function setupPlaylistFeature() {
@@ -12,7 +11,6 @@ export async function setupPlaylistFeature() {
 
   const dal = useDAL()
   const config = useConfig()
-  const player = usePlayer()
   const playlist = usePlaylist()
   const eventBus = useEventBus()
   const playlistStore = usePlaylistStore()
@@ -41,20 +39,6 @@ export async function setupPlaylistFeature() {
 
 
   /* ---------------------------- Mark As Completed --------------------------- */
-
-  watch(player.position, async (pos) => {
-    if (player.duration.value === 0 || player.duration.value === undefined) { return }
-    const isTrackAlmostCompleted = player.duration.value - pos < 10
-
-    if (isTrackAlmostCompleted) {
-      const playListItem = await dal.playlistItems.getOne(player.playlistItemId.value)
-      if (playListItem.completedAt) { 
-        return // If completedAt is already set, do not update it again
-      }
-      playListItem.completedAt = Date.now()
-      await dal.playlistItems.updateOne(playListItem._id, playListItem)
-    }
-  }) 
 
   watch(config.appLanguage, () => {
     eventBus.playlistLoad.notify()

@@ -4,9 +4,11 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { useTracksState } from '@blocks/app.tracks.state'
 import { usePlayer } from '@blocks/app.player'
+import { usePlayerStore } from '@blocks/app.player.state'
 import { useTranscriptStore } from '@blocks/app.transcript'
 import { useDAL } from '@blocks/app.database'
 import { useConfig } from '@blocks/app.config'
+import { usePlaylistStore } from '@blocks/app.playlist'
 
 
 export function setupPlayerFeature() {
@@ -19,6 +21,8 @@ export function setupPlayerFeature() {
   const config = useConfig()
   const eventBus = useEventBus()
   const tracksState = useTracksState()
+  const playerStore = usePlayerStore()
+  const playlistStore = usePlaylistStore()
   const transcriptStore = useTranscriptStore()
 
   /* -------------------------------------------------------------------------- */
@@ -30,6 +34,7 @@ export function setupPlayerFeature() {
   eventBus.trackPlay.subscribe(async (event) => {
     // Notify user
     await Haptics.impact({ style: ImpactStyle.Light })
+    if (playerStore.playlistItemId === event.playlistItemId) { return }
     
     const playlistItem = await dal.playlistItems.getOne(event.playlistItemId)
     const track = await dal.tracks.getOne(playlistItem.trackId)
@@ -59,8 +64,7 @@ export function setupPlayerFeature() {
     })
 
     await player.open({
-      trackId: track._id,
-      playlistItemId: playlistItem._id,
+      itemId: playlistItem._id,
       url: r.uri, 
       title: track.title[config.appLanguage.value]
         || track.title['en']
@@ -78,8 +82,9 @@ export function setupPlayerFeature() {
     await player.play.call()
 
     // Set playback progress if it exists
-    if (trackState.playbackProgress) {
-      await player.seek.call(track.audio.original.duration * trackState.playbackProgress / 100)
+    const playlistItemState = playlistStore.getState(playlistItem._id)
+    if (playlistItemState.progress && playlistItemState.progress !== 100) {
+      await player.seek.call(track.audio.original.duration * playlistItemState.progress / 100)
     }
 
     // Open transcript if it is enabled in the config
@@ -104,13 +109,18 @@ export function setupPlayerFeature() {
   /* -------------------------- Playlist Update Event ------------------------- */
 
   player.progress.subscribe(async (status) => {
-    if (!status.trackId) { return }
-    if (player.title.value && player.title.value) { return }
-    setInfo(status.trackId, config.appLanguage.value)
+    if (!status.itemId) { return }
+    if (status.itemId !== playerStore.playlistItemId) {
+      setInfo(status.itemId, config.appLanguage.value)
+      playerStore.playlistItemId = status.itemId
+    }
+    playerStore.position = status.position
+    playerStore.duration = status.duration
+    playerStore.isPlaying = status.playing
   })
 
   watch(config.appLanguage, async (value) => {
-    await setInfo(player.trackId.value, value)
+    await setInfo(playerStore.playlistItemId, value)
   })
 
   /* -------------------------------------------------------------------------- */
@@ -118,21 +128,23 @@ export function setupPlayerFeature() {
   /* -------------------------------------------------------------------------- */
 
   async function setInfo(
-    trackId: string, 
+    playlistItemId: string, 
     language: string
   ) {
-    if (!trackId) { return }
+    if (!playlistItemId) { return }
     if (!language) { return }
 
-    const track = await dal.tracks.getOne(trackId)
+    const playlistItem = await dal.playlistItems.getOne(playlistItemId)
+    const track = await dal.tracks.getOne(playlistItem.trackId)
     const author = await dal.authors.getOne('author::' + track.author)
 
-    player.title.value =
+    playerStore.trackId = playlistItem.trackId
+    playerStore.title =
       track.title[config.appLanguage.value]
         || track.title['en']
         || track.title[Object.keys(track.title)[0]]
         || 'No title'
-    player.author.value =
+    playerStore.author =
       author.fullName[config.appLanguage.value]
         || author.fullName['en']
         || author.fullName[Object.keys(author.fullName)[0]]

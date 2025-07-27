@@ -3,14 +3,14 @@
     <IonRouterOutlet />
 
     <!-- Floating Player -->
-    <FloatingPlayer 
+    <FloatingPlayer
       v-model:sticked="transcriptStore.open"
-      :playing="player.isPlaying.value"
-      :title="player.title.value"
-      :author="player.author.value"
-      :duration="player.duration.value"
-      :position="player.position.value"
-      :hidden="!player.trackId.value || keyboardVisible.isKeyboardVisible.value"
+      :playing="playerStore.isPlaying"
+      :title="playerStore.title"
+      :author="playerStore.author"
+      :duration="playerStore.duration"
+      :position="playerStore.position"
+      :hidden="!playerStore.playlistItemId || keyboardVisible.isKeyboardVisible.value"
       :show-progress="config.showPlayerProgress.value"
       :pulsing="!config.tutorialStepsCompleted.value.includes('transcript:open')"
       @click="onFloatingPlayerClicked"
@@ -24,8 +24,8 @@
       :allow-multiple-languages="transcriptStore.allowMultipleLanguages"
       :available-languages="transcriptStore.availableLanguages"
       :paragraphs="transcriptStore.localizedTranscript"
-      :position="player.position.value"
-      :duration="player.duration.value"
+      :position="playerStore.position"
+      :duration="playerStore.duration"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
       :title="transcriptStore.localizedTitle"
       :author="transcriptStore.localizedAuthorName"
@@ -41,24 +41,25 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
 import { IonApp, IonRouterOutlet } from '@ionic/vue'
+import { Clipboard } from '@capacitor/clipboard'
+import { StatusBar, Style } from '@capacitor/status-bar'
+import { useEventBus } from '@lectorium/mobile/core'
 import { NavigationFooter, NavigationHeader } from '@blocks/app.appearance'
-import { FloatingPlayer, usePlayer } from '@blocks/app.player'
+import { FloatingPlayer } from '@blocks/app.player'
 import { TranscriptDialog, useTranscriptStore } from '@blocks/app.transcript'
 import { useKeyboardVisible } from '@blocks/app.core'
-import { Clipboard } from '@capacitor/clipboard'
 import { useConfig } from '@blocks/app.config'
-import { useEventBus } from '@lectorium/mobile/core'
-import { watch } from 'vue'
-import { StatusBar, Style } from '@capacitor/status-bar'
+import { usePlayerStore } from '@blocks/app.player.state'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const player = usePlayer()
 const config = useConfig()
 const eventBus = useEventBus()
+const playerStore = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const keyboardVisible = useKeyboardVisible()
 
@@ -73,7 +74,7 @@ async function onTextSelectionAction(
      await Clipboard.write({ string: opts.text })
   } else if (opts.action === 'bookmark') {
     eventBus.notesAdd.notify({
-      trackId: player.trackId.value,
+      trackId: playerStore.trackId,
       text: opts.text,
       blocks: opts.blocks
     })

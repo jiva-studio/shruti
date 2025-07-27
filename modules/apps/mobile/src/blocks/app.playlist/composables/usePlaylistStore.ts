@@ -1,17 +1,7 @@
 import { reactive, ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 
-export type PlaylistStoreItem = {
-  playlistItemId: string
-  trackId: string
-  tags: string[]
-  date?: string
-  title: string
-  author?: string
-  location?: string
-  completedAt?: number
-  references: string[]
-}
 
 export const usePlaylistStore = defineStore('playlist', () =>{
   /* -------------------------------------------------------------------------- */
@@ -32,6 +22,26 @@ export const usePlaylistStore = defineStore('playlist', () =>{
   function setItems(value: PlaylistStoreItem[]) {
     items.length = 0
     items.push(...value)
+  }
+
+  function setState(
+    playlistItemId: string, 
+    status: Partial<Pick<PlaylistStoreItem, 'progress'>>
+  ) {
+    const item = items.find(item => item.playlistItemId === playlistItemId)
+    if (!item) { return }
+
+    if (status.progress !== undefined) {
+      item.progress = status.progress
+    }
+  }
+
+  function getState(playlistItemId: string): Partial<PlaylistStoreItem> {
+    const item = items.find(item => item.playlistItemId === playlistItemId)
+    if (!item) { return {} }
+    return {
+      progress: item.progress
+    }
   }
 
   function getByTrackId(trackId: string) {
@@ -59,5 +69,5 @@ export const usePlaylistStore = defineStore('playlist', () =>{
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { items, setItems, getByTrackId, updateByTrackId, isEmpty, remove, hasChanges }
+  return { items, setItems, getByTrackId, updateByTrackId, isEmpty, remove, hasChanges, setState, getState }
 })

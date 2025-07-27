@@ -8,12 +8,11 @@ export function useGetTracksIfInPlaylist(
   /* -------------------------------------------------------------------------- */
 
   async function get() {
-    // Set inPlaylist for each track
     const activePlaylistItems = await options.playlistItemsRepository.getMany({ 
       selector: { archivedAt: { $exists: false } },
       limit: 1000, // TODO: Remove limit when pagination is implemented
     })
-    return activePlaylistItems.map(item => ({ trackId: item.trackId, progress: item.progress }))
+    return activePlaylistItems.map(item => item.trackId)
   }
 
   /* -------------------------------------------------------------------------- */

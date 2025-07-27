@@ -13,7 +13,7 @@
       </div>
 
       <div
-        v-if="player.trackId.value"
+        v-if="playerStore.playlistItemId"
         class="placeholder"
       />
     </IonContent>
@@ -22,10 +22,10 @@
 
 
 <script setup lang="ts">
-import { usePlayer } from '@blocks/app.player'
+import { usePlayerStore } from '@blocks/app.player.state'
 import { IonContent, IonPage, IonSpinner } from '@ionic/vue'
 
-const player = usePlayer()
+const playerStore = usePlayerStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
