@@ -44,7 +44,7 @@ function formatTime(ms: number) {
   justify-content: space-between;
   align-items: center;
   opacity: .5;
-  font-variant-numeric: tabular-nums;
+  /* font-variant-numeric: tabular-nums; */
   letter-spacing: 0.03em;
 }
 </style>

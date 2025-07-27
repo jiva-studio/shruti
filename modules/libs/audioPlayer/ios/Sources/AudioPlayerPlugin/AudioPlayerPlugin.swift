@@ -264,7 +264,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         
-        let time = CMTime(seconds: position, preferredTimescale: 1)
+        let time = CMTime(seconds: position, preferredTimescale: 1000)
         player?.seek(to: time) { [weak self] finished in
             if finished {
                 self?.updatePlaybackInfo()

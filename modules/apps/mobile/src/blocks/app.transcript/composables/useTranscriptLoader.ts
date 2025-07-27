@@ -97,10 +97,12 @@ export const useTranscriptLoader = createSharedComposable(() => {
         return 0
       })
 
-      let previousSentenceEndTime = 0
-      for (const sentence of sentences) {
-        sentence.start = previousSentenceEndTime
-        previousSentenceEndTime = sentence.end ? sentence.end : previousSentenceEndTime
+      const sentencesOnly = sentences.filter(x => x.type !== 'paragraph')
+      if (sentencesOnly.length > 0) { sentencesOnly[0].start = 0 }
+      for (let i = 0; i < sentencesOnly.length - 1; i++) {
+        const currentSentence = sentencesOnly[i]
+        const nextSentence = sentencesOnly[i + 1]
+        currentSentence.end = nextSentence.start
       }
 
       // set sequentalId for sentence
