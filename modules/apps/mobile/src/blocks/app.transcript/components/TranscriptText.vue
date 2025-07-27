@@ -29,7 +29,7 @@
           'selected': block.selected,
         }"
         :data-block-id="block.sequentalId"
-        @click="emit('seek', block.start)"
+        @click="emit('seek', block.start + .01)"
       >
         <SpeakerLine
           :text="block.text"
