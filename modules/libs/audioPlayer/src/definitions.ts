@@ -1,17 +1,33 @@
 import type { Plugin } from '@capacitor/core'
 
+/**
+ * Open file request parameters for the audio player.
+ */
 export type OpenParams = {
+  // The ID of the playlist item associated with this file
+  itemId: string,
+
+  // The URL of the audio track to play
   url: string,
+
+  // The title of the audio track to be displayed
+  // in the system player UI
   title: string,
+
+  // The author of the audio track to be displayed
+  // in the system player UI
   author: string,
-  trackId: string,
 }
 
+/**
+ * Status of the audio player.
+ * Contains information about the current playback state.
+ */
 export type Status = {
-  position: number,
+  itemId: string,
   playing: boolean,
+  position: number,
   duration: number,
-  trackId: string,
 }
 
 export interface AudioPlayerListenerResult {

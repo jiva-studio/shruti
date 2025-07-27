@@ -22,7 +22,7 @@ public final class MediaStateNotificationService {
         public void run() {
             if (!isRunning) { return; }
             update();
-            handler.postDelayed(this, 1000);
+            handler.postDelayed(this, 500);
         }
     };
 
@@ -30,6 +30,13 @@ public final class MediaStateNotificationService {
             MediaPlayer mediaPlayer
     ) {
         this.mediaPlayer = mediaPlayer;
+        this.mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mp) {
+                state.setPosition(mediaPlayer.getDuration());
+                mediaPlayer.seekTo(mediaPlayer.getDuration());
+            }
+        });
     }
 
     public void run() {

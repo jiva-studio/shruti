@@ -1,6 +1,7 @@
-import { InitOptions } from '../models/InitOptions'
-import { usePlaylistItemMapper } from './usePlaylistItemMapper'
 import { Track } from '@shruti/dal/models'
+import { InitOptions } from '../models/InitOptions'
+import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
+import { usePlaylistItemMapper } from './usePlaylistItemMapper'
 
 
 export function usePlaylistLoader(options: InitOptions) {
@@ -14,7 +15,9 @@ export function usePlaylistLoader(options: InitOptions) {
   /*                                  Handlers                                  */
   /* -------------------------------------------------------------------------- */
 
-  async function load(language: string) {
+  async function load(
+    language: string
+  ) : Promise<PlaylistStoreItem[]> {
     
     // Get playlist items from the database
     const dbPlaylistItems = await options.playlistItemsRepository.getMany({
