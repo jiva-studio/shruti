@@ -14,6 +14,7 @@
         class="play"
         shape="round"
         color="primary"
+        :disabled="position === duration"
         @click.stop="emit('play')"
       >
         <IonIcon
@@ -44,7 +45,7 @@
 <script setup lang="ts">
 import { Capacitor } from '@capacitor/core'
 import { IonButton, IonIcon, IonLabel } from '@ionic/vue'
-import { play, pause } from 'ionicons/icons'
+import { play, pause, checkmarkDone } from 'ionicons/icons'
 import { computed, ref, toRefs } from 'vue'
 import RadialProgress from 'vue3-radial-progress'
 
@@ -69,10 +70,11 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { playing } = toRefs(props)
+const { playing, position, duration } = toRefs(props)
 const playButtonSize = ref(Capacitor.getPlatform() === 'android' ? 48 : 44)
 
 const playButtonIcon = computed(() => {
+  if (position.value === duration.value) { return checkmarkDone }
   return playing.value ? pause : play
 })
 </script>

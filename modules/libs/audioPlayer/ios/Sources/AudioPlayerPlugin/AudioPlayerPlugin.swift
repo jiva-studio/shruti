@@ -153,7 +153,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // Store track metadata
         let title = call.getString("title") ?? "Unknown Title"
         let author = call.getString("author") ?? "Unknown Artist"
-        currentTrackId = call.getString("trackId") ?? ""
+        currentTrackId = call.getString("itemId") ?? ""
         
         // Clear any existing player
         removeProgressObserver()
@@ -278,6 +278,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func stop(_ call: CAPPluginCall) {
         player?.pause()
         player?.seek(to: .zero)
+        currentTrackId = ""
         updatePlaybackInfo()
         call.resolve()
     }
@@ -309,7 +310,28 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             "position": position,
             "playing": playing,
             "duration": duration,
-            "trackId": currentTrackId
+            "itemId": currentTrackId
+        ]
+        
+        for (_, callback) in statusCallbacks {
+            callback.resolve(status)
+        }
+    }
+    
+    private func notifyPprogressCompleted() {
+        guard let player = player, let currentItem = player.currentItem else {
+            return
+        }
+        
+        if (currentItem.duration.isIndefinite) {
+            return
+        }
+        
+        let status: [String: Any] = [
+            "position": currentItem.duration.seconds,
+            "playing": false,
+            "duration": currentItem.duration.seconds,
+            "itemId": currentTrackId
         ]
         
         for (_, callback) in statusCallbacks {
@@ -319,9 +341,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     
     @objc func playerItemDidReachEnd(notification: Notification) {
         // Reset to beginning
-        player?.seek(to: .zero)
+        // player?.seek(to: .zero)
         updatePlaybackInfo()
-        notifyProgressChanged()
+        notifyPprogressCompleted()
     }
     
     override public func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {

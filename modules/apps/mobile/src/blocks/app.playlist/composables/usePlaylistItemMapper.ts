@@ -1,6 +1,6 @@
 import { PlaylistItem, Track } from '@shruti/dal/models'
-import { PlaylistStoreItem } from './usePlaylistStore'
 import { mapAuthorFullNameById, mapLocationFullNameById, mapReference, mapTagFullNameById, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
+import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 
 type Options = {
   playlistItem: PlaylistItem
@@ -19,6 +19,7 @@ export function usePlaylistItemMapper() {
       playlistItemId: playlistItem._id,
       trackId: track._id,
       completedAt: playlistItem.completedAt,
+      progress: playlistItem.progress,
       title: mapTrackTitle(track.title, language),
       author: await mapAuthorFullNameById(track.author, language), 
       location: await mapLocationFullNameById(track.location, language),

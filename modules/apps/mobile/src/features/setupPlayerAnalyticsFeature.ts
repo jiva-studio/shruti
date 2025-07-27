@@ -1,7 +1,8 @@
+import { App } from '@capacitor/app'
 import { useEventBus } from '@shruti/mobile/core'
 import { usePlayer } from '@blocks/app.player'
 import { useAnalytics } from '@blocks/app.analytics'
-import { App } from '@capacitor/app'
+import { usePlayerStore } from '@blocks/app.player.state'
 
 export function setupPlayerAnalyticsFeature() {
 
@@ -10,6 +11,7 @@ export function setupPlayerAnalyticsFeature() {
   /* -------------------------------------------------------------------------- */
 
   const player = usePlayer()
+  const playerStore = usePlayerStore()
   const eventBus = useEventBus()
   const analytics = useAnalytics()
 
@@ -42,7 +44,7 @@ export function setupPlayerAnalyticsFeature() {
 
   eventBus.playerSeek.subscribe(async (position) => {
     if (isPlaying) {
-      endListeningSession(player.position.value)
+      endListeningSession(playerStore.position)
       listeningStartPosition = position 
     }
   })
@@ -61,7 +63,7 @@ export function setupPlayerAnalyticsFeature() {
 
   App.addListener('appStateChange', (state) => {
     if (!state.isActive && isPlaying) {
-      endListeningSession(player.position.value, player.position.value)
+      endListeningSession(playerStore.position, playerStore.position)
     }
   })
 }

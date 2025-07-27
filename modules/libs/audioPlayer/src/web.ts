@@ -6,7 +6,7 @@ import type { AudioPlayerPlugin, OpenParams, AudioPlayerListenerResult, Status }
 export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   private audio: HTMLAudioElement | null = null;
   private callback: ((status: Status) => void) | null = null;
-  private currentTrackId: string | null = null;
+  private currentItemId: string | null = null;
 
 
   constructor () {
@@ -17,7 +17,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
         position: this.audio.currentTime,
         playing: !this.audio.paused,
         duration: this.audio.duration,
-        trackId: this.currentTrackId || "",
+        itemId: this.currentItemId || "",
       });
     }, 1000);
   }
@@ -27,7 +27,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     params: OpenParams
   ): Promise<void> {
     this.audio = new Audio(params.url);
-    this.currentTrackId = params.trackId;
+    this.currentItemId = params.itemId;
   }
 
   async play(): Promise<void> {
@@ -57,7 +57,7 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     if (this.audio) {
       this.audio.pause();
       this.audio.remove();
-      this.currentTrackId = null;
+      this.currentItemId = null;
     }
   }
 

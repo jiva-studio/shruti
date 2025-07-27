@@ -17,7 +17,10 @@
         @click="emit('click', item.playlistItemId)"
       >
         <template #state="{ trackId }">
-          <PlaylistStateIndicator :track-id="trackId" />
+          <PlaylistStateIndicator
+            :track-id="trackId"
+            :playlist-item-id="item.playlistItemId"
+          />
         </template>
       </TrackListItem>
     </WithDeleteAction>

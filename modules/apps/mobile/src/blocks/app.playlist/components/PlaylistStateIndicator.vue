@@ -10,18 +10,18 @@
       :icon="icon"
     />
     <RadialIndicator
-      v-else-if="state.downloadProgress !== undefined && state.downloadProgress !== 100"
+      v-else-if="trackState.downloadProgress !== undefined && trackState.downloadProgress !== 100"
       slot="end"
       key="downloadProgress"
       color="primary"
-      :value="state.downloadProgress || 0"
+      :value="trackState.downloadProgress || 0"
     />
     <RadialIndicator
-      v-else-if="state.playbackProgress !== undefined"
+      v-else-if="playlistItemState.progress !== undefined"
       slot="end"
       key="playbackProgress"
       color="medium"
-      :value="state.playbackProgress || 0"
+      :value="playlistItemState.progress || 0"
     />
   </Transition>
 </template>
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { type StateIcon, useTracksStateStore, RadialIndicator, IconIndicator } from '@blocks/app.tracks.state'
+import { usePlaylistStore } from '@blocks/app.playlist'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -36,6 +37,7 @@ import { type StateIcon, useTracksStateStore, RadialIndicator, IconIndicator } f
 
 const props = defineProps<{
   trackId: string
+  playlistItemId: string
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -43,17 +45,23 @@ const props = defineProps<{
 /* -------------------------------------------------------------------------- */
 
 const trackStateStore = useTracksStateStore()
-const state = computed(() => trackStateStore.getState(props.trackId))
+const playlistStore = usePlaylistStore()
+
+/* -------------------------------------------------------------------------- */
+/*                                    State                                   */
+/* -------------------------------------------------------------------------- */
+
+const trackState = computed(() => trackStateStore.getState(props.trackId))
+const playlistItemState = computed(() => playlistStore.getState(props.playlistItemId))
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const icon = computed<StateIcon>((): StateIcon => {
-  const trackState = trackStateStore.getState(props.trackId)
   let state: StateIcon = 'none'
-  if (trackState.playbackProgress && trackState.playbackProgress >= 100) { state = 'completed' }
-  if (trackState.isFailed)    { state = 'failed' }
+  if ((playlistItemState.value.progress || 0) >= 100) { state = 'completed' }
+  if (trackState.value.isFailed)  { state = 'failed' }
   return state
 })
 </script>

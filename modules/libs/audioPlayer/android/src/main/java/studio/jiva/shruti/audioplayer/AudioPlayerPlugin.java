@@ -53,7 +53,7 @@ public final class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void open(PluginCall call) {
         String url = call.getString("url");
-        String trackId = call.getString("trackId");
+        String trackId = call.getString("itemId");
         String title = call.getString("title", "");
         String author = call.getString("author", "");
 
