@@ -4,24 +4,24 @@
     mode="out-in"
   >
     <IconIndicator
-      v-if="icon !== 'none'"
+      v-if="state.mode === 'icon'"
       slot="end"
       key="icon"
-      :icon="icon"
+      :icon="state.icon"
     />
     <RadialIndicator
-      v-else-if="trackState.downloadProgress !== undefined && trackState.downloadProgress !== 100"
+      v-else-if="state.mode === 'downloading'"
       slot="end"
       key="downloadProgress"
       color="primary"
-      :value="trackState.downloadProgress || 0"
+      :value="state.downloadProgress || 0"
     />
     <RadialIndicator
-      v-else-if="playlistItemState.progress !== undefined"
+      v-else-if="state.mode === 'progress'"
       slot="end"
       key="playbackProgress"
       color="medium"
-      :value="playlistItemState.progress || 0"
+      :value="state.playbackProgress || 0"
     />
   </Transition>
 </template>
@@ -51,29 +51,33 @@ const playlistStore = usePlaylistStore()
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const trackState = computed(() => trackStateStore.getState(props.trackId))
-const playlistItemState = computed(() => playlistStore.getState(props.playlistItemId))
+const state = computed(() => {
+  const track = trackStateStore.getState(props.trackId)
+  const item = playlistStore.getState(props.playlistItemId)
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
+  // ICON
+  let icon: StateIcon = 'none'
+  if (track.isFailed) {
+    icon = 'failed'
+  } else if (item.progress !== undefined && item.progress >= 100) {
+    icon = 'completed'
+  }
 
-const icon = computed<StateIcon>((): StateIcon => {
-  let state: StateIcon = 'none'
-  
-  if (
-    playlistItemState.value.progress !== undefined && 
-    playlistItemState.value.progress >= 100
-  ) { state = 'completed' }
-  
-  if (
-    trackState.value.downloadProgress !== undefined && 
-    trackState.value.downloadProgress < 100
-  ) { state = 'none'}
+  // MODE
+  let mode: 'downloading' | 'icon' | 'progress' | undefined = undefined
+  if (track.downloadProgress !== undefined && track.downloadProgress !== 100) {
+    mode = 'downloading'
+  } else if (track.isFailed || (item.progress !== undefined && item.progress === 100)) {
+    mode = 'icon'
+  } else if (item.progress !== undefined) {
+    mode = 'progress'
+  }
 
-  if (trackState.value.isFailed) { state = 'failed' }
-  
-  return state
+  return { 
+    mode, icon, 
+    downloadProgress: track.downloadProgress, 
+    playbackProgress: item.progress 
+  }
 })
 </script>
 

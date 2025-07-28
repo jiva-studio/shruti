@@ -44,8 +44,10 @@ export async function setupPlaylistFeature() {
     eventBus.playlistLoad.notify()
   })
 
-  dal.playlistItems.subscribe(async () => {
-    eventBus.playlistLoad.notify()
+  dal.playlistItems.subscribe(async (event) => {
+    if (event.event === 'added' || event.event === 'removed') {
+      eventBus.playlistLoad.notify()
+    }
   })
 
   /* ----------------------- Archive Old Playlist Items ----------------------- */

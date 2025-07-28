@@ -87,6 +87,7 @@ public final class AudioPlayerService extends Service {
             String trackArtist
     ) {
         try {
+            mediaStateNotificationService.setUpdating(false);
             mediaPlayer.reset();
             mediaPlayer.setDataSource(url);
             mediaPlayer.prepare();
@@ -96,6 +97,7 @@ public final class AudioPlayerService extends Service {
             mediaStateNotificationService.getState().setPosition(0);
             mediaStateNotificationService.getState().setDuration(mediaPlayer.getDuration());
             mediaStateNotificationService.getState().setState("stopped");
+            mediaStateNotificationService.setUpdating(true);
             mediaStateNotificationService.update();
         } catch (Exception e) {
             e.printStackTrace();
@@ -139,6 +141,11 @@ public final class AudioPlayerService extends Service {
         mediaPlayer.reset();
         mediaStateNotificationService.getState().setState("stopped");
         mediaStateNotificationService.getState().setPosition(0);
+        mediaStateNotificationService.getState().setTrackId(""); 
+        mediaStateNotificationService.getState().setTitle("");
+        mediaStateNotificationService.getState().setArtist("");
+        mediaStateNotificationService.getState().setPosition(0);
+        mediaStateNotificationService.getState().setDuration(0);
         mediaStateNotificationService.update();
     }
 

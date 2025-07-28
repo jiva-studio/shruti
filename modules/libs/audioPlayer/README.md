@@ -109,11 +109,16 @@ onProgressChanged(callback: (status: Status) => void) => Promise<AudioPlayerList
 
 #### OpenParams
 
-<code>{ url: string, title: string, author: string, trackId: string, }</code>
+Open file request parameters for the audio player.
+
+<code>{ // The ID of the playlist item associated with this file itemId: string, // The URL of the audio track to play url: string, // The title of the audio track to be displayed // in the system player UI title: string, // The author of the audio track to be displayed // in the system player UI author: string, }</code>
 
 
 #### Status
 
-<code>{ position: number, playing: boolean, duration: number, trackId: string, }</code>
+<a href="#status">Status</a> of the audio player.
+Contains information about the current playback state.
+
+<code>{ itemId: string, playing: boolean, position: number, duration: number, }</code>
 
 </docgen-api>
