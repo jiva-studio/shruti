@@ -60,8 +60,19 @@ const playlistItemState = computed(() => playlistStore.getState(props.playlistIt
 
 const icon = computed<StateIcon>((): StateIcon => {
   let state: StateIcon = 'none'
-  if ((playlistItemState.value.progress || 0) >= 100) { state = 'completed' }
-  if (trackState.value.isFailed)  { state = 'failed' }
+  
+  if (
+    playlistItemState.value.progress !== undefined && 
+    playlistItemState.value.progress >= 100
+  ) { state = 'completed' }
+  
+  if (
+    trackState.value.downloadProgress !== undefined && 
+    trackState.value.downloadProgress < 100
+  ) { state = 'none'}
+
+  if (trackState.value.isFailed) { state = 'failed' }
+  
   return state
 })
 </script>
