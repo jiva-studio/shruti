@@ -15,13 +15,14 @@ public final class MediaStateNotificationService {
     private final List<IMediaStateNotifier> notifiers = new ArrayList<>();
     private final MediaPlayer mediaPlayer;
     private boolean isRunning = true;
+    private boolean isUpdating = false;
     private final MediaState state = new MediaState("", "stopped", "", "", 0, 0);
     private final Handler handler = new Handler(); 
     private final Runnable runnable = new Runnable() {
         @Override
         public void run() {
             if (!isRunning) { return; }
-            update();
+            if (isUpdating) { update(); }
             handler.postDelayed(this, 500);
         }
     };
@@ -42,6 +43,10 @@ public final class MediaStateNotificationService {
     public void run() {
         isRunning = true;
         this.runnable.run();
+    }
+
+    public void setUpdating(boolean updating) {
+        isUpdating = updating;
     }
 
     public MediaState getState() {

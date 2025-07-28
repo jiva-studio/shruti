@@ -26,7 +26,7 @@ export function setupTracksStateFeature() {
         isFailed: undefined 
       })
     }
-    if (event === 'updated' && item.completedAt !== undefined) {
+    if (event === 'updated' && (item.completedAt !== undefined && item.archivedAt !== undefined)) {
       tracksState.store.setState(item.trackId, { isCompleted: true })
     }
     if (event === 'updated' && item.archivedAt !== undefined) { 
