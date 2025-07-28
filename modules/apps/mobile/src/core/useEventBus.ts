@@ -34,7 +34,7 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const sync = new Event<void>('sync')
-  const syncEnd = new Event<{ userData: SyncResult }>('syncEnd')
+  const syncEnd = new Event<{ commonData: SyncResult, userData: SyncResult }>('syncEnd')
 
   /* -------------------------------------------------------------------------- */
   /*                                    Notes                                   */

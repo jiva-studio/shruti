@@ -94,7 +94,6 @@ import { setupToastFeature } from './features/setupToastFeature'
 import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
-import { setupOnboardingFeature } from './features/setupOnboardingFeature'
 import { featureUpdateProgress } from './features/playlist/featureUpdateProgress'
 
 /* -------------------------------------------------------------------------- */
@@ -258,7 +257,6 @@ Promise.all([
     setupToastFeature()
     setupAppStatusFeature()
     setupPlayerAnalyticsFeature()
-    setupOnboardingFeature()
    
     /* -------------------------------- Playlist -------------------------------- */
     
@@ -294,15 +292,6 @@ Promise.all([
     console.log(`Initialization time: ${elapsed}ms`)
 
     app.mount('#app')
-
-    /* -------------------------------------------------------------------------- */
-    /*                  Start from Search page for the first run                  */
-    /* -------------------------------------------------------------------------- */
-
-    const shouldLaunchFromSearchPage = !useConfig().tutorialStepsCompleted.value.includes('searchPage')
-    if (shouldLaunchFromSearchPage) {
-      await router.replace('/app/search')
-    }
 
     /* -------------------------------------------------------------------------- */
     /*                                    Done                                    */
