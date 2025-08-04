@@ -7,7 +7,8 @@ export type NoteDbScheme = {
   type: 'note'
   trackId: string
   text: string
-  blocks: string[]
+  timeStart: number
+  timeEnd: number
   createdAt: number
 }
 

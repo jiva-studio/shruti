@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-import { TranscriptLanguage, TranscriptParagraph } from '../models'
+import { TranscriptLanguage, TranscriptBlocksGroupView } from '../models'
 
 
 export const useTranscriptStore = defineStore('transcript', () => {
@@ -12,7 +12,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
   const open = ref(false)
   const title = ref<Record<string, string>>({})
   const author = ref<Record<string, string>>({})
-  const transcript = ref<TranscriptParagraph[]>([])
+  const transcript = ref<TranscriptBlocksGroupView[]>([])
   const activeLanguages = ref<string[]>([])
   const availableLanguages = ref<TranscriptLanguage[]>([])
   const allowMultipleLanguages = ref<boolean>(false)
@@ -27,8 +27,8 @@ export const useTranscriptStore = defineStore('transcript', () => {
       .map(paragraph => {
         return {
           ...paragraph,
-          sentences: paragraph.sentences.filter(sentence => 
-            activeLanguages.value.includes(sentence.language)
+          blocks: paragraph.blocks.filter(block => 
+            activeLanguages.value.includes(block.language)
           )
         }
       })
@@ -54,23 +54,14 @@ export const useTranscriptStore = defineStore('transcript', () => {
   }
 
   function removeSelection() {
-    transcript.value.flatMap(x => x.sentences).forEach(x => x.selected = false)
+    transcript.value.flatMap(x => x.blocks).forEach(x => x.selected = false)
   }
 
-  function highlight(blocks: string[]) {
-    const sentences = transcript.value.flatMap(x => x.sentences)
-    for (const block of blocks) {
-      const sentence = sentences.find(x => x.id === block)
-      if (sentence) { sentence.highlighted = true }
-    }
-  }
-
-  function removeHighlights(blocks: string[]) {
-    const sentences = transcript.value.flatMap(x => x.sentences)
-    for (const block of blocks) {
-      const sentence = sentences.find(x => x.id === block)
-      if (sentence) { sentence.highlighted = false }
-    }
+  function bookmark(startTime: number, endTime: number) {
+    transcript.value
+      .flatMap(x => x.blocks)
+      .filter(x => x.block.start >= startTime && x.block.end <= endTime)
+      .forEach(x => x.bookmarked = true)
   }
 
   /* -------------------------------------------------------------------------- */
@@ -90,8 +81,7 @@ export const useTranscriptStore = defineStore('transcript', () => {
     localizedTitle,
     toggleTranscriptOpen,
     removeSelection,
-    highlight,
-    removeHighlights,
+    bookmark,
     isLoading,
   }
 })

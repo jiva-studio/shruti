@@ -1,0 +1,1 @@
+export { default as ToastsDeck } from './components/ToastsDeck.vue'

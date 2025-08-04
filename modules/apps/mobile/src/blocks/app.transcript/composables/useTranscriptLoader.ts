@@ -1,7 +1,7 @@
-import { Author, Language, Note, Track, Transcript } from '@lectorium/dal/models'
+import { Author, Language, Note, Source, Track, Transcript, TranscriptBlock } from '@lectorium/dal/models'
 import { useTranscriptStore } from './useTranscriptStore'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
-import { TranscriptParagraph, TranscriptSentence } from '../models'
+import { TranscriptBlocksGroupView, TranscriptBlockView, TranscriptParagraphBlockView, TranscriptSentenceBlockView, TranscriptVerseTextBlockView, TranscriptVerseTranslationBlockView } from '../models'
 import { useSpeakerIcons } from './useSpeakerIcons'
 import { IRepository } from '@lectorium/dal/index'
 import { createSharedComposable } from '@vueuse/core'
@@ -11,6 +11,7 @@ export type Options = {
   tracksRepository: IRepository<Track>
   languagesRepository: IRepository<Language>
   notesRepository: IRepository<Note>
+  sourcesRepository: IRepository<Source>
 }
 
 export const useTranscriptLoader = createSharedComposable(() => {
@@ -58,75 +59,91 @@ export const useTranscriptLoader = createSharedComposable(() => {
       // load notes
       // TODO: it loads only 1000 notes only
       const notes = await options.notesRepository.getMany({ selector: { trackId }, limit: 1000 })
-      const highlightedSentences = notes.flatMap(x => x.blocks)
+      const bookmarkedTimings = notes.flatMap(note => ({ timeStart: note.timeStart, timeEnd: note.timeEnd }))
       
-      // 
+      // Speaker icons
       const speakerIcons = useSpeakerIcons(languages)
 
       // normalize and enrich transcript blocks:
       // - normalize start time of the blocks
       // - enrich blocks speaker information: icon, language
       // - enrich blocks with highlighted state
-      let sentences: TranscriptSentence[] = []
+      let sentences: TranscriptBlockView[] = []
       for (const transcriptFile of transcriptFiles) {
         const { lang, transcript } = transcriptFile
-        
+
+        // Map all transcript blocks into transcript block views
+        const blockViews = await Promise.all(
+          transcript.blocks.map(x => mapTranscriptBlock(x, lang))
+        )
+
+        // Filter out blocks we didn't recognize
+        const knownBlockViews = blockViews.filter(x => x !== undefined)
+
         // enrich blocks with additional information
-        const enrichedBlocks = transcript.blocks
-          .map((block, index) => ({ 
-            ...block, 
-            id: `${lang}${index}`,
-            sequentalId: 0,
+        const enrichedBlocks = knownBlockViews
+          .map(block => ({ 
+            block: block, 
             language: lang, 
             speaker: lang,
-            highlighted: highlightedSentences.includes(`${lang}${index}`),
+            bookmarked: block && bookmarkedTimings.some(timing =>
+              block.start >= timing.timeStart && block.end <= timing.timeEnd
+            ), 
             selected: false,
             icon: speakerIcons[lang]
           }))
         
         // add the enriched blocks to the final sentences array
+        //@ts-ignore
         sentences.push(...enrichedBlocks)
       }
-
+      
       // sort sentences by start time, because there may be sentences of
       // different languages and they are not in the correct order, because
       // they are loaded from different files
       sentences = sentences.sort((a, b) => {
-        if (a.start < b.start) return -1
-        if (a.start > b.start) return 1
+        if (a.block.start < b.block.start) return -1
+        if (a.block.start > b.block.start) return 1
         return 0
       })
 
-      const sentencesOnly = sentences.filter(x => x.type !== 'paragraph')
-      if (sentencesOnly.length > 0) { sentencesOnly[0].start = 0 }
+      const sentencesOnly = sentences.filter(x => x.block.type !== 'paragraph')
+      if (sentencesOnly.length > 0) { sentencesOnly[0].block.start = 0 }
       for (let i = 0; i < sentencesOnly.length - 1; i++) {
         const currentSentence = sentencesOnly[i]
         const nextSentence = sentencesOnly[i + 1]
-        currentSentence.end = nextSentence.start
+        currentSentence.block.end = nextSentence.block.start
       }
 
-      // set sequentalId for sentence
-      sentences.forEach((v, i) => v.sequentalId = i)
-
       // convert transcript to sections
-      const paragraphs: TranscriptParagraph[] = []
-      let lastParagraph: TranscriptSentence[] = []
+      const paragraphs: TranscriptBlocksGroupView[] = []
+      let lastParagraph: TranscriptBlockView[] = []
       const sentencesLength: Record<string, number> = 
         Object.fromEntries(languages.map(lang => [lang, 0]))
 
       for (const sentence of sentences) {
-        if (Object.values(sentencesLength).some(value => value > 512)) {
-          paragraphs.push({ sentences: lastParagraph })
+        if (
+          Object.values(sentencesLength).some(value => value > 512) || 
+          sentence.block.type === 'verse:text' ||
+          (
+            sentence.block.type === 'sentence' && 
+            lastParagraph && lastParagraph.length > 0 && 
+            lastParagraph[0].block.type === 'verse:text'
+          )
+        ) {
+          paragraphs.push({ blocks: lastParagraph })
           lastParagraph = []
           Object.keys(sentencesLength).forEach(key => { sentencesLength[key] = 0 })
         }
-        if (sentence.type !== 'paragraph') {
+        if (sentence.block.type !== 'paragraph') {
           lastParagraph.push({ ...sentence, })
-          sentencesLength[sentence.language] += sentence.text.length
+          if (sentence.block.type === 'sentence') {
+            sentencesLength[sentence.language] += sentence.block.text.length
+          }
         }
       }
       if (lastParagraph.length > 0) {
-        paragraphs.push({ sentences: lastParagraph })
+        paragraphs.push({ blocks: lastParagraph })
       }
 
       // Set paragraphs
@@ -187,6 +204,46 @@ export const useTranscriptLoader = createSharedComposable(() => {
       encoding: Encoding.UTF8,
     })
     return JSON.parse(file.data as string) as Transcript
+  }
+
+  async function mapTranscriptBlock(
+    block: TranscriptBlock,
+    language: string,
+  ): Promise<    
+    | TranscriptParagraphBlockView
+    | TranscriptSentenceBlockView
+    | TranscriptVerseTextBlockView 
+    | TranscriptVerseTranslationBlockView
+    | undefined
+  > {
+    if (!options) { throw new Error('useTranscriptLoader is not initialized. Call init(options) first.') }
+
+    if (block.type === 'paragraph') { return block }
+    else if (block.type === 'sentence') {
+      return {
+        ...block,
+        reference: block.reference 
+          ? block.reference.join(' ') 
+          : undefined
+        }
+    } else if (block.type === 'verse:text') {
+      let referenceView = ''
+      if (block.reference) {
+        const source = await options.sourcesRepository
+          .getOne('source::' + block.reference[0])
+        if (source) {
+          block.reference.shift()
+          referenceView = 
+            (source.shortName[language] || source.shortName['en']) +
+            ' ' + block.reference.join('.')
+        }
+      }
+      return { ...block, reference: referenceView }
+    } else if (block.type === 'verse:translation') {
+      return block
+    }
+
+    return undefined
   }
 
   /* -------------------------------------------------------------------------- */

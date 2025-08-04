@@ -40,7 +40,7 @@ export const useEventBus = createSharedComposable(() => {
   /*                                    Notes                                   */
   /* -------------------------------------------------------------------------- */
 
-  const notesAdd = new Event<{ trackId: string, text: string, blocks: string[] }>('notesAdd')
+  const notesAdd = new Event<{ trackId: string, text: string, timeStart: number, timeEnd: number }>('notesAdd')
   const notesLoad = new Event<void>('notesLoad')
   const notesDelete = new Event<{ noteId: string }>('notesDelete')
 

@@ -1,6 +1,6 @@
 import { Note, Track } from '@lectorium/dal/models'
 import { IRepository } from '@lectorium/dal/index'
-import { useLogger } from '@lectorium/mobile/core'
+import { useLanguageDetector, useLogger } from '@lectorium/mobile/core'
 
 export type Options = {
   notesRepository: IRepository<Note>
@@ -14,6 +14,7 @@ export function useNotesLoader(options: Options) {
   /* -------------------------------------------------------------------------- */
 
   const logger = useLogger({ module: 'notes'})
+  const languageDetector = useLanguageDetector()
 
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
@@ -42,18 +43,15 @@ export function useNotesLoader(options: Options) {
         continue
       }
 
-      // Get unique languages from block ids
-      // TODO: we need better a way to extract language from block ids
-      const langs = [...new Set(note.blocks.map(block => block.slice(0, 2)))]
-
       // Add note to result
       result.push({
         id: note._id,
         trackId: note.trackId,
         text: note.text,
-        blocks: note.blocks,
-        language: langs.length > 0 ? langs[0] : '',
+        language: languageDetector.detect(note.text),
         trackAuthor: track.author,
+        timeStart: note.timeStart,
+        timeEnd: note.timeEnd,
         trackTitle: track.title['ru'], // TODO: lang
       })
     }
