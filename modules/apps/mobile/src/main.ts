@@ -5,6 +5,8 @@ import router from './router'
 
 import { IonicVue } from '@ionic/vue'
 import { SplashScreen } from '@capacitor/splash-screen'
+import VueSafeHTML from 'vue-safe-html'
+
 
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css'
@@ -112,6 +114,7 @@ const app = createApp(ShrutiApp)
   .use(router)
   .use(useLocalization())
   .use(pinia)
+  .use(VueSafeHTML)
 
 useSentry().init({
   app: app,
@@ -221,6 +224,7 @@ Promise.all([
       tracksRepository: useDAL().tracks,
       languagesRepository: useDAL().languages,
       notesRepository: useDAL().notes,
+      sourcesRepository: useDAL().sources,
     })
     useTracksCountFeature().init({
       tracksRepo: useDAL().tracks
