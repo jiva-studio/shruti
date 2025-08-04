@@ -1,7 +1,8 @@
 <template>
   <div class="timestamp">
     <div>{{ formatTime(start) }}</div>
-    <div>-{{ formatTime(duration - start) }}</div>
+    <div>•</div>
+    <div>{{ formatTime(duration - start) }}</div>
   </div>
 </template>
 
@@ -41,10 +42,9 @@ function formatTime(ms: number) {
   font-size: .6rem;
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: flex-end;
   opacity: .5;
-  /* font-variant-numeric: tabular-nums; */
   letter-spacing: 0.03em;
+  gap: .4rem;
 }
 </style>

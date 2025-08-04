@@ -15,18 +15,18 @@ import { onLongPress } from '@vueuse/core'
 import { useTemplateRef } from 'vue'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
-
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
 const props = defineProps<{
-  datasetField: string
+  datasetFieldStart: string
+  datasetFieldEnd: string
 }>()
 
 const emit = defineEmits<{
-  selected: [firstItemId: number, lastItemId: number, event: TouchEvent]
-  selecting: [firstItemId: number, lastItemId: number]
+  selected: [start: number, end: number, event: TouchEvent]
+  selecting: [start: number, end: number]
 }>()
 
 
@@ -35,8 +35,10 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const textSelector = useTemplateRef<HTMLElement>('textSelector')
-const firstSelectedId = ref<number>()
-const lastSelectedId = ref<number>()
+const initialTimeStart = ref<number>(-1)
+const initialTimeEnd   = ref<number>(-1)
+const currentTimeStart = ref<number>(-1)
+const currentTimeEnd   = ref<number>(-1)
 const isInSelectionMode = ref<boolean>(false)
 
 
@@ -57,9 +59,11 @@ onLongPress(
 function onTouchStart(event: TouchEvent) {
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const element = document.elementFromPoint(touchX, touchY)
-  const elementId = parseInt(element?.getAttribute(props.datasetField) || '-1')
-  if (element && elementId && elementId !== -1) {
-    firstSelectedId.value = elementId
+  const timeStart = parseFloat(element?.getAttribute(props.datasetFieldStart) || '-1')
+  const timeEnd   = parseFloat(element?.getAttribute(props.datasetFieldEnd) || '-1')
+  if (timeStart !== -1 && timeEnd !== -1) {
+    initialTimeStart.value = currentTimeStart.value = timeStart
+    initialTimeEnd.value = currentTimeEnd.value = timeEnd
   }
 }
 
@@ -70,43 +74,32 @@ function onTouchMove(event: TouchEvent) {
 
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const element = document.elementFromPoint(touchX, touchY)
-  const elementId = parseInt(element?.getAttribute(props.datasetField) || '-1')
-  
-  if (element && elementId && elementId !== -1) {
-    lastSelectedId.value = elementId
-  }
-  if (firstSelectedId.value && lastSelectedId.value) {
-    emit(
-      'selecting', 
-      Math.min(firstSelectedId.value, lastSelectedId.value),
-      Math.max(firstSelectedId.value, lastSelectedId.value)
-    )
+  const timeStart = parseFloat(element?.getAttribute(props.datasetFieldStart) || '-1')
+  const timeEnd   = parseFloat(element?.getAttribute(props.datasetFieldEnd)   || '-1')
+
+  if (timeStart !== -1 && timeStart < initialTimeStart.value) {
+    currentTimeStart.value = timeStart
+    emit('selecting', currentTimeStart.value, initialTimeEnd.value)
+  } else if (timeEnd !== -1 && timeEnd > initialTimeEnd.value) {
+    currentTimeEnd.value = timeEnd
+    emit('selecting', initialTimeStart.value, currentTimeEnd.value)
   }
 }
 
 function onTouchEnd(event: TouchEvent) {
-  if (firstSelectedId.value && isInSelectionMode.value) {
-    emit(
-      'selected', 
-      firstSelectedId.value, 
-      lastSelectedId.value || firstSelectedId.value, 
-      event
-    )
+  if (currentTimeStart.value !== -1 && currentTimeEnd.value !== -1 && isInSelectionMode.value) {
+    emit('selected', currentTimeStart.value, currentTimeEnd.value, event)
   }
   isInSelectionMode.value = false
-  firstSelectedId.value = undefined
-  lastSelectedId.value = undefined
+  initialTimeStart.value = -1
+  initialTimeEnd.value = -1
 }
 
 function onLongPressed() {
   isInSelectionMode.value = true
-  if (firstSelectedId.value) {
-    emit(
-      'selecting', 
-      Math.min(firstSelectedId.value, lastSelectedId.value || firstSelectedId.value),
-      Math.max(firstSelectedId.value, lastSelectedId.value || firstSelectedId.value)
-    )
+  if (initialTimeStart.value !== -1) {
+    emit('selecting', initialTimeStart.value, initialTimeEnd.value)
+    Haptics.impact({ style: ImpactStyle.Light })
   }
-  Haptics.impact({ style: ImpactStyle.Light })
 }
 </script>

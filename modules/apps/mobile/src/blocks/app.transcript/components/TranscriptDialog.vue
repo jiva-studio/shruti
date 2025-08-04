@@ -31,7 +31,7 @@
       <!-- Transcript Text -->
       <TranscriptText
         class="transcript-text"
-        :paragraphs="paragraphs"
+        :block-groups="blockGroups"
         :position="position"
         :duration="duration"
         :show-speaker-icons="allowMultipleLanguages"
@@ -60,7 +60,7 @@
 import { ref } from 'vue'
 import { IonModal, IonPopover } from '@ionic/vue'
 import { Content } from '@blocks/app.core'
-import { TranscriptLanguage, TranscriptParagraph } from '../models'
+import { TranscriptLanguage, TranscriptBlocksGroupView } from '../models'
 import { TextSelectedEvent, default as TranscriptText } from './TranscriptText.vue'
 import { default as LanguageSelector } from './LanguageSelector.vue'
 import { default as SelectionActions } from './SelectionActions.vue'
@@ -69,21 +69,28 @@ import { default as SelectionActions } from './SelectionActions.vue'
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
+export type SelectionActionEvent = Pick<TextSelectedEvent, 'timeStart' | 'timeEnd' | 'text'> & { action: string }
+
+
 defineProps<{
-  allowMultipleLanguages: boolean
+  blockGroups: TranscriptBlocksGroupView[]
   availableLanguages: TranscriptLanguage[]
-  paragraphs: TranscriptParagraph[]
+  
+  // track info
+  title: string
+  author: string
   position: number
   duration: number
+
+  // options
+  allowMultipleLanguages: boolean
   highlightCurrentSentence: boolean
-  author: string
-  title: string
 }>()
 
 const emit = defineEmits<{
   seek: [position: number]
-  selectionAction: [{ text: string, blocks: string[], action: string }]
-  selectionDismissed: [{ blocks: string[] }]
+  selectionAction: [action: SelectionActionEvent]
+  selectionDismissed: []
 }>()
 
 const open = defineModel<boolean>('open', { default: false, required: true })
@@ -107,11 +114,7 @@ function onTextSelectionActionClicked(action: 'copy' | 'bookmark') {
   isSelectionActionsOpen.value = false 
   if (!lastTextSelectedEvent.value) { return }
   lastTextSelectionAction.value = action
-  emit('selectionAction', { 
-    text: lastTextSelectedEvent.value.text,
-    blocks: lastTextSelectedEvent.value.blocks,
-    action
-  })
+  emit('selectionAction', { ...lastTextSelectedEvent.value, action })
 }
 
 function onTextSelectionActionDismissed() {
@@ -120,9 +123,7 @@ function onTextSelectionActionDismissed() {
     lastTextSelectedEvent.value && 
     !lastTextSelectionAction.value
   ) {
-    emit('selectionDismissed', { 
-      blocks: lastTextSelectedEvent.value.blocks 
-    })
+    emit('selectionDismissed')
   }
 }
 </script>

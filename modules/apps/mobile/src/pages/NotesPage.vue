@@ -91,7 +91,8 @@ const actionSheetButtons = [
 async function onShareNoteClicked(noteId: string) {
   Haptics.impact({ style: ImpactStyle.Light })
   const note = await dal.notes.getOne(noteId)
-  await Share.share({ text: note.text })
+  const textWithoutTags = note.text.replace(/<[^>]*>/g, '')
+  await Share.share({ text: textWithoutTags })
 }
 
 async function onNoteClicked(noteId: string) {

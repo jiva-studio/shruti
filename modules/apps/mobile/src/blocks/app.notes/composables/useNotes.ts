@@ -6,7 +6,8 @@ import { useNotesStore } from './useNotesStore'
 
 export type AddNoteRequest = {
   trackId: string,
-  blocks: string[]
+  timeStart: number,
+  timeEnd: number,
   text: string,
 }
 
@@ -55,8 +56,9 @@ export const useNotes = createSharedComposable(() => {
       type: 'note',
       trackId: request.trackId,
       text: request.text,
-      blocks: request.blocks,
-      createdAt: Date.now()
+      timeStart: request.timeStart,
+      timeEnd: request.timeEnd,
+      createdAt: Date.now(),
     })
   }
 

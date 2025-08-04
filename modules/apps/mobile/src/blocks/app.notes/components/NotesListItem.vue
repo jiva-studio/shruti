@@ -4,8 +4,8 @@
     class="note"
   >
     <HighlightText
-      :lang="language"
       :text="text"
+      :lang="language"
     />
   </IonItem>
 </template>
@@ -15,12 +15,11 @@
 import { IonItem } from '@ionic/vue'
 import { HighlightText } from '@blocks/app.ui.kit'
 
-
 defineProps<{
   text: string
+  author: string
+  source: string
   language: string
-  author: string,
-  source: string,
   tags?: string[]
 }>()
 </script>

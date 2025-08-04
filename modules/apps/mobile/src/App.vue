@@ -23,7 +23,7 @@
       v-model:active-languages="transcriptStore.activeLanguages"
       :allow-multiple-languages="transcriptStore.allowMultipleLanguages"
       :available-languages="transcriptStore.availableLanguages"
-      :paragraphs="transcriptStore.localizedTranscript"
+      :block-groups="transcriptStore.localizedTranscript"
       :position="playerStore.position"
       :duration="playerStore.duration"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
@@ -48,7 +48,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { useEventBus } from '@shruti/mobile/core'
 import { NavigationFooter, NavigationHeader } from '@blocks/app.appearance'
 import { FloatingPlayer } from '@blocks/app.player'
-import { TranscriptDialog, useTranscriptStore } from '@blocks/app.transcript'
+import { SelectionActionEvent, TranscriptDialog, useTranscriptStore } from '@blocks/app.transcript'
 import { useKeyboardVisible } from '@blocks/app.core'
 import { useConfig } from '@blocks/app.config'
 import { usePlayerStore } from '@blocks/app.player.state'
@@ -67,18 +67,18 @@ const keyboardVisible = useKeyboardVisible()
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
-async function onTextSelectionAction(
-  opts: { text: string, blocks: string[], action: string }
-) {
-  if (opts.action === 'copy') {
-     await Clipboard.write({ string: opts.text })
-  } else if (opts.action === 'bookmark') {
+async function onTextSelectionAction(event: SelectionActionEvent) {
+  if (event.action === 'copy') {
+    const textWithoutTags = event.text.replace(/<[^>]*>/g, '')
+    await Clipboard.write({ string: textWithoutTags })
+  } else if (event.action === 'bookmark') {
     eventBus.notesAdd.notify({
       trackId: playerStore.trackId,
-      text: opts.text,
-      blocks: opts.blocks
+      text: event.text,
+      timeStart: event.timeStart,
+      timeEnd: event.timeEnd,
     })
-    transcriptStore.highlight(opts.blocks)
+    transcriptStore.bookmark(event.timeStart, event.timeEnd)
   }
   transcriptStore.removeSelection()
 }
