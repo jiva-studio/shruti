@@ -7,5 +7,6 @@ import { RedisService } from '../shared/services';
 @Module({
   controllers: [SignUrlController],
   providers: [S3Service, RevokedTokensService, RedisService],
+  exports: [S3Service],
 })
 export class BucketModule {}
