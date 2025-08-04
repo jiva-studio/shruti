@@ -13,6 +13,7 @@ import { ConfigModule } from '@nestjs/config';
 import { BucketModule } from './bucket/bucket.module';
 import { StatusModule } from './status/status.module';
 import { AccountModule } from './account/account.module';
+import { AudioModule } from './audio/audio.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AccountModule } from './account/account.module';
     BucketModule,
     StatusModule,
     AccountModule,
+    AudioModule,
   ],
   controllers: [],
   providers: [],

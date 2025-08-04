@@ -33,7 +33,9 @@ LABEL org.opencontainers.image.authors="AKd Studios"
 WORKDIR /akd-stidios/lectorium/
 COPY services/api/package*.json .
 COPY --from=build /akd-stidios/lectorium/services/api/dist .
-RUN npm i
+RUN apt update && \
+    apt install -y ffmpeg && \
+    npm i
 
 # Copy assets
 COPY services/api/src/auth/templates src/auth/templates

@@ -22,6 +22,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",
     "@aws-sdk/s3-request-presigner": "^3.782.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/common": "^11.0.17",
     "@nestjs/config": "^4.0.2",
@@ -33,6 +34,7 @@
     "apple-signin-auth": "^2.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "ffmpeg-static": "^5.2.0",
     "google-auth-library": "^10.1.0",
     "ioredis": "^5.6.0",
     "nano": "^10.1.4",
