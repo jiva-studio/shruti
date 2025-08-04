@@ -17,6 +17,10 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { unlink } from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
 import * as dto from '@lectorium/api/audio/dto';
 import * as dtoShared from '@lectorium/api/shared/dto';
 import {
@@ -52,8 +56,9 @@ export class AudioSegmentController {
     operationId: 'audio::segment',
     description:
       `Checks if a cached audio segment exists in S3 at notes/{trackId}_{timeStart}_{timeEnd}_{audioType}.mp3. ` +
-      `If it exists, returns a signed URL for download. If not, extracts the segment from the original audio file, ` +
-      `uploads it to S3, and returns a signed URL for the newly created segment.`,
+      `If it exists, returns a signed URL for download. If not, downloads the original audio file to temp folder, ` +
+      `extracts the segment using file-based processing, uploads it to S3, cleans up temp files, ` +
+      `and returns a signed URL for the newly created segment.`,
   })
   @ApiBody({ type: dto.AudioSegmentRequest })
   @ApiOkResponse({
@@ -85,63 +90,67 @@ export class AudioSegmentController {
       );
     }
 
+    // Generate the cache key for the segment
+    const cacheKey = `notes/${request.trackId}_${request.timeStart}_${request.timeEnd}_${request.audioType}.mp3`;
+    const bucketName = this.audioS3Service.getBucketName();
+
+    // Check if the segment already exists in cache
+    const segmentExists = await this.audioS3Service.fileExists(cacheKey);
+    if (segmentExists) {
+      this.logger.log(`Found cached segment: ${cacheKey}`);
+      const signedUrl = await this.s3Service.getSignedUrl(
+        bucketName,
+        cacheKey,
+        S3Operation.GetObject,
+        3600, // 1 hour expiration
+      );
+      return new dto.AudioSegmentUrlResponse({ signedUrl });
+    }
+
+    // Check if ffmpeg is available
+    const ffmpegAvailable =
+      await this.audioProcessingService.checkFfmpegAvailability();
+    if (!ffmpegAvailable) {
+      this.logger.error('FFmpeg is not available on this system');
+      throw new HttpException(
+        new dtoShared.ErrorResponse({
+          error: 'Service unavailable',
+          statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+          message: ['Audio processing service is not available.'],
+        }),
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    this.logger.log(`Segment not found in cache, generating: ${cacheKey}`);
+
+    // Generate unique filenames for temp files
+    const tempId = uuidv4();
+    const tempDir = tmpdir();
+    const inputFilePath = join(tempDir, `input_${tempId}.mp3`);
+    const outputFilePath = join(tempDir, `output_${tempId}.mp3`);
+
     try {
-      // Generate the cache key for the segment
-      const cacheKey = `notes/${request.trackId}_${request.timeStart}_${request.timeEnd}_${request.audioType}.mp3`;
-      const bucketName = this.audioS3Service.getBucketName();
-
-      // Check if the segment already exists in cache
-      const segmentExists = await this.audioS3Service.fileExists(cacheKey);
-      if (segmentExists) {
-        this.logger.log(`Found cached segment: ${cacheKey}`);
-        const signedUrl = await this.s3Service.getSignedUrl(
-          bucketName,
-          cacheKey,
-          S3Operation.GetObject,
-          3600, // 1 hour expiration
-        );
-        return new dto.AudioSegmentUrlResponse({ signedUrl });
-      }
-
-      // Check if ffmpeg is available
-      const ffmpegAvailable =
-        await this.audioProcessingService.checkFfmpegAvailability();
-      if (!ffmpegAvailable) {
-        this.logger.error('FFmpeg is not available on this system');
-        throw new HttpException(
-          new dtoShared.ErrorResponse({
-            error: 'Service unavailable',
-            statusCode: HttpStatus.SERVICE_UNAVAILABLE,
-            message: ['Audio processing service is not available.'],
-          }),
-          HttpStatus.SERVICE_UNAVAILABLE,
-        );
-      }
-
-      this.logger.log(`Segment not found in cache, generating: ${cacheKey}`);
-
-      // Get the audio file stream from S3
-      const audioStream = await this.audioS3Service.getAudioStream(
+      // Step 1: Download file from S3 to temp folder
+      this.logger.log(`Downloading original audio file to temp: ${inputFilePath}`);
+      await this.audioS3Service.downloadAudioFile(
         request.trackId,
         request.audioType,
+        inputFilePath,
       );
 
-      // Extract the segment
-      const segmentStream = await this.audioProcessingService.extractSegment(
-        audioStream,
+      // Step 2: Make a segment from it in the temp folder
+      this.logger.log(`Extracting segment to temp file: ${outputFilePath}`);
+      await this.audioProcessingService.extractSegment(
+        inputFilePath,
+        outputFilePath,
         request.timeStart,
         request.timeEnd,
       );
 
-      // Convert stream to buffer for upload
-      const chunks: Buffer[] = [];
-      for await (const chunk of segmentStream) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const segmentBuffer = Buffer.concat(chunks);
-
-      // Upload the segment to S3 cache
-      await this.audioS3Service.uploadBuffer(cacheKey, segmentBuffer);
+      // Step 3: Upload segment to S3
+      this.logger.log(`Uploading segment to S3: ${cacheKey}`);
+      await this.audioS3Service.uploadFile(cacheKey, outputFilePath);
       this.logger.log(`Successfully cached segment: ${cacheKey}`);
 
       // Generate signed URL for the newly uploaded segment
@@ -165,6 +174,21 @@ export class AudioSegmentController {
         }),
         statusCode,
       );
+    } finally {
+      // Step 4: Remove created files
+      try {
+        await unlink(inputFilePath);
+        this.logger.log(`Cleaned up temp file: ${inputFilePath}`);
+      } catch (error) {
+        this.logger.warn(`Failed to clean up input file ${inputFilePath}: ${error.message}`);
+      }
+
+      try {
+        await unlink(outputFilePath);
+        this.logger.log(`Cleaned up temp file: ${outputFilePath}`);
+      } catch (error) {
+        this.logger.warn(`Failed to clean up output file ${outputFilePath}: ${error.message}`);
+      }
     }
   }
 }

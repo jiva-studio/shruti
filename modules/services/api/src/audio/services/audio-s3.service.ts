@@ -8,6 +8,8 @@ import {
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import { createWriteStream, createReadStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import S3Config from '@lectorium/api/configs/s3.config';
 
 @Injectable()
@@ -117,6 +119,73 @@ export class AudioS3Service {
       this.logger.log(`Successfully uploaded: ${bucketName}/${key}`);
     } catch (error) {
       this.logger.error(`Failed to upload stream ${key}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Downloads an audio file from S3 to a local file
+   * @param trackId - The track identifier
+   * @param audioType - The audio type (e.g., 'original', 'compressed')
+   * @param localFilePath - The local file path to save the audio file
+   * @returns A promise that resolves when the download is complete
+   */
+  async downloadAudioFile(trackId: string, audioType: string, localFilePath: string): Promise<void> {
+    const key = `library/tracks/${trackId}/audio/${audioType}.mp3`;
+    const bucketName = this.s3Config.bucketName || 'lectorium'; // Default bucket
+
+    this.logger.log(`Downloading audio file from S3: ${bucketName}/${key} to ${localFilePath}`);
+
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+
+      const response = await this.s3.send(command);
+
+      if (!response.Body) {
+        throw new NotFoundException(`Audio file not found: ${key}`);
+      }
+
+      // Create a write stream and pipe the S3 response to it
+      const writeStream = createWriteStream(localFilePath);
+      await pipeline(response.Body as Readable, writeStream);
+
+      this.logger.log(`Successfully downloaded audio file to: ${localFilePath}`);
+    } catch (error) {
+      this.logger.error(`Failed to download audio file ${key}: ${error.message}`);
+      if (error.name === 'NoSuchKey') {
+        throw new NotFoundException(`Audio file not found: ${key}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Uploads a local file to S3
+   * @param key - The S3 object key
+   * @param localFilePath - The local file path to upload
+   * @returns A promise that resolves when the upload is complete
+   */
+  async uploadFile(key: string, localFilePath: string): Promise<void> {
+    const bucketName = this.s3Config.bucketName || 'lectorium'; // Default bucket
+
+    this.logger.log(`Uploading file to S3: ${localFilePath} to ${bucketName}/${key}`);
+
+    try {
+      const fileStream = createReadStream(localFilePath);
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: fileStream,
+        ContentType: 'audio/mpeg',
+      });
+
+      await this.s3.send(command);
+      this.logger.log(`Successfully uploaded file: ${bucketName}/${key}`);
+    } catch (error) {
+      this.logger.error(`Failed to upload file ${key}: ${error.message}`);
       throw error;
     }
   }

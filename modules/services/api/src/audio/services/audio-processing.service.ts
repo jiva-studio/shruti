@@ -3,7 +3,6 @@ import {
   Logger,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { Readable, PassThrough } from 'stream';
 import { spawn } from 'child_process';
 
 @Injectable()
@@ -11,36 +10,38 @@ export class AudioProcessingService {
   private readonly logger = new Logger(AudioProcessingService.name);
 
   /**
-   * Extracts a segment from an MP3 stream using ffmpeg
-   * @param inputStream - The input MP3 stream
+   * Extracts a segment from an MP3 file using ffmpeg
+   * @param inputFilePath - The input MP3 file path
+   * @param outputFilePath - The output MP3 file path
    * @param timeStart - Start time in seconds
    * @param timeEnd - End time in seconds
-   * @returns A stream containing the extracted MP3 segment
+   * @returns A promise that resolves when the extraction is complete
    */
   async extractSegment(
-    inputStream: Readable,
+    inputFilePath: string,
+    outputFilePath: string,
     timeStart: number,
     timeEnd: number,
-  ): Promise<PassThrough> {
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const outputStream = new PassThrough();
       const duration = timeEnd - timeStart;
+
+      this.logger.log(`Extracting segment from ${inputFilePath} to ${outputFilePath}, start: ${timeStart}s, duration: ${duration}s`);
 
       // Use ffmpeg to extract the segment
       const ffmpeg = spawn(
         'ffmpeg',
         [
           '-i',
-          'pipe:0', // Input from stdin
+          inputFilePath, // Input file
           '-ss',
           timeStart.toString(), // Start time
           '-t',
           duration.toString(), // Duration
           '-c',
           'copy', // Copy codec (no re-encoding for speed)
-          '-f',
-          'mp3', // Output format
-          'pipe:1', // Output to stdout
+          '-y', // Overwrite output file
+          outputFilePath, // Output file
         ],
         {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -59,27 +60,16 @@ export class AudioProcessingService {
             `FFmpeg exited with code ${code}, signal ${signal}`,
           );
           reject(new InternalServerErrorException('Audio processing failed'));
+        } else {
+          this.logger.log(`Successfully extracted segment to ${outputFilePath}`);
+          resolve();
         }
       });
-
-      // Connect streams
-      inputStream.pipe(ffmpeg.stdin);
-      ffmpeg.stdout.pipe(outputStream);
 
       // Log stderr for debugging
       ffmpeg.stderr.on('data', (data) => {
         this.logger.debug(`FFmpeg stderr: ${data.toString()}`);
       });
-
-      // Handle input stream errors
-      inputStream.on('error', (error) => {
-        this.logger.error(`Input stream error: ${error.message}`);
-        ffmpeg.kill();
-        reject(new InternalServerErrorException('Input stream error'));
-      });
-
-      // Return the output stream immediately
-      resolve(outputStream);
     });
   }
 
