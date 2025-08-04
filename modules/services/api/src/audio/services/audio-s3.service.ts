@@ -1,7 +1,12 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { S3, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+} from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 import S3Config from '@lectorium/api/configs/s3.config';
 
@@ -58,5 +63,69 @@ export class AudioS3Service {
       }
       throw error;
     }
+  }
+
+  /**
+   * Checks if a file exists in S3
+   * @param key - The S3 object key
+   * @returns A promise that resolves to true if the file exists, false otherwise
+   */
+  async fileExists(key: string): Promise<boolean> {
+    const bucketName = this.s3Config.bucketName || 'lectorium'; // Default bucket
+
+    this.logger.log(`Checking if file exists: ${bucketName}/${key}`);
+
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+
+      await this.s3.send(command);
+      return true;
+    } catch (error) {
+      if (error.name === 'NotFound' || error.name === 'NoSuchKey') {
+        return false;
+      }
+      this.logger.error(
+        `Failed to check file existence ${key}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Uploads a stream to S3
+   * @param key - The S3 object key
+   * @param buffer - The buffer to upload
+   * @returns A promise that resolves when the upload is complete
+   */
+  async uploadBuffer(key: string, buffer: Buffer<ArrayBuffer>): Promise<void> {
+    const bucketName = this.s3Config.bucketName || 'lectorium'; // Default bucket
+
+    this.logger.log(`Uploading buffer to: ${bucketName}/${key}`);
+
+    try {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: 'audio/mpeg',
+      });
+
+      await this.s3.send(command);
+      this.logger.log(`Successfully uploaded: ${bucketName}/${key}`);
+    } catch (error) {
+      this.logger.error(`Failed to upload stream ${key}: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Gets the configured bucket name
+   * @returns The bucket name from configuration
+   */
+  getBucketName(): string {
+    return this.s3Config.bucketName || 'lectorium';
   }
 }

@@ -36,3 +36,16 @@ export class AudioSegmentResponse implements protocol.AudioSegmentResponse {
   @ApiProperty({ example: 1024000, required: false })
   contentLength?: number;
 }
+
+export class AudioSegmentUrlResponse {
+  constructor(options: { signedUrl: string }) {
+    this.signedUrl = options.signedUrl;
+  }
+
+  @ApiProperty({
+    example:
+      'https://s3.example.com/bucket/notes/track-123_30.5_90.5_original.mp3?signature=...',
+    description: 'Signed URL to download the audio segment',
+  })
+  signedUrl: string;
+}
