@@ -14,6 +14,9 @@ export const Routes = (baseUrl: string = '') => ({
   bucket: {
     signUrl: () => `${baseUrl}/bucket/sign-url`,
   },
+  audio: {
+    segment: () => `${baseUrl}/audio/segment`,
+  },
   status: {
     root: () => `${baseUrl}/status`,
   },

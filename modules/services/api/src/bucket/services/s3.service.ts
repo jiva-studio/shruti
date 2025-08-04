@@ -72,7 +72,7 @@ export class S3Service {
           params,
         );
       default:
-        throw new Error(`Unsupported S3 operation: ${operation}`);
+        throw new Error(`Unsupported S3 operation: ${String(operation)}`);
     }
   }
 }
