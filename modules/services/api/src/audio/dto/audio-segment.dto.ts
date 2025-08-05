@@ -24,20 +24,7 @@ export class AudioSegmentRequest implements protocol.AudioSegmentRequest {
   timeEnd: number;
 }
 
-export class AudioSegmentResponse implements protocol.AudioSegmentResponse {
-  constructor(options?: { contentType?: string; contentLength?: number }) {
-    this.contentType = options?.contentType ?? 'audio/mpeg';
-    this.contentLength = options?.contentLength;
-  }
-
-  @ApiProperty({ example: 'audio/mpeg' })
-  contentType: string;
-
-  @ApiProperty({ example: 1024000, required: false })
-  contentLength?: number;
-}
-
-export class AudioSegmentUrlResponse {
+export class AudioSegmentUrlResponse implements protocol.AudioSegmentResponse {
   constructor(options: { signedUrl: string }) {
     this.signedUrl = options.signedUrl;
   }

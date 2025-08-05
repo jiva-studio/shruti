@@ -107,6 +107,25 @@ export const useEventBus = createSharedComposable(() => {
   const dictionaryLoad = new Event<void>('dictionaryLoad')
 
   /* -------------------------------------------------------------------------- */
+  /*                                    Share                                   */
+  /* -------------------------------------------------------------------------- */
+
+  const shareSendTrackExcerpt = new Event<{ 
+    trackId: string, 
+    text?: string, 
+    timeStart?: number, 
+    timeEnd?: number,
+    shareAudio?: boolean,
+  }>('shareTrackExcerpt')
+
+  const shareCopyTrackExcerpt = new Event<{ 
+    trackId: string, 
+    text: string, 
+    // timeStart?: number, 
+    // timeEnd?: number,
+  }>('shareTrackExcerpt')
+
+  /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
@@ -167,6 +186,11 @@ export const useEventBus = createSharedComposable(() => {
     tutorialCompleteStep,
 
     // dictionary
-    dictionaryLoad
+    dictionaryLoad,
+
+
+    // share
+    shareSendTrackExcerpt,
+    shareCopyTrackExcerpt,
   }
 })

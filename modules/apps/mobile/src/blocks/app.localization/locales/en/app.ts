@@ -15,4 +15,6 @@ export default {
   notes: 'Notes',
   ok: 'Ok',
   share: 'Share',
+  copy: 'Copy',
+  save: 'Save',
 }

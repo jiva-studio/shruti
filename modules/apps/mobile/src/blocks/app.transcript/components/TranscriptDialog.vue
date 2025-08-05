@@ -69,7 +69,9 @@ import { default as SelectionActions } from './SelectionActions.vue'
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-export type SelectionActionEvent = Pick<TextSelectedEvent, 'timeStart' | 'timeEnd' | 'text'> & { action: string }
+export type SelectionActionEvent = 
+  Pick<TextSelectedEvent, 'timeStart' | 'timeEnd' | 'text'> & 
+  { action: 'copy' | 'bookmark' | 'share' }
 
 
 defineProps<{
@@ -110,7 +112,7 @@ async function onTextSelected(event: TextSelectedEvent) {
   lastTextSelectionAction.value = ''
 }
 
-function onTextSelectionActionClicked(action: 'copy' | 'bookmark') {
+function onTextSelectionActionClicked(action: 'copy' | 'bookmark' | 'share') {
   isSelectionActionsOpen.value = false 
   if (!lastTextSelectedEvent.value) { return }
   lastTextSelectionAction.value = action

@@ -37,12 +37,20 @@
     <!-- Navigation Bar Footer -->
     <NavigationHeader :visible="transcriptStore.open" />
     <NavigationFooter v-if="!keyboardVisible.isKeyboardVisible.value" />
+    <IonToast
+      :is-open="trackAudioExcerptStore.busy"
+      :duration="3500"
+      :translucent="true"
+      :message="$t('share.loadingAudioExcerpt')"
+      color="warning"
+      position="top"
+    />
   </IonApp>
 </template>
 
 <script setup lang="ts">
 import { watch } from 'vue'
-import { IonApp, IonRouterOutlet } from '@ionic/vue'
+import { IonApp, IonRouterOutlet, IonToast } from '@ionic/vue'
 import { Clipboard } from '@capacitor/clipboard'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { useEventBus } from '@lectorium/mobile/core'
@@ -52,6 +60,7 @@ import { SelectionActionEvent, TranscriptDialog, useTranscriptStore } from '@blo
 import { useKeyboardVisible } from '@blocks/app.core'
 import { useConfig } from '@blocks/app.config'
 import { usePlayerStore } from '@blocks/app.player.state'
+import { useTrackAudioExcerptStore } from '@blocks/app.share.track.audio.excerpt'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -62,6 +71,7 @@ const eventBus = useEventBus()
 const playerStore = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const keyboardVisible = useKeyboardVisible()
+const trackAudioExcerptStore = useTrackAudioExcerptStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -79,6 +89,14 @@ async function onTextSelectionAction(event: SelectionActionEvent) {
       timeEnd: event.timeEnd,
     })
     transcriptStore.bookmark(event.timeStart, event.timeEnd)
+  } else if (event.action === 'share') {
+    eventBus.shareSendTrackExcerpt.notify({
+      trackId: playerStore.trackId,
+      text: event.text,
+      timeStart: event.timeStart,
+      timeEnd: event.timeEnd,
+      shareAudio: true,
+    })
   }
   transcriptStore.removeSelection()
 }
