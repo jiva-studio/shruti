@@ -97,6 +97,7 @@ import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
 import { featureUpdateProgress } from './features/playlist/featureUpdateProgress'
+import { featureShareTrackExcerpt } from './features/share/featureShareTrackExcerpt'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -265,6 +266,10 @@ Promise.all([
     /* -------------------------------- Playlist -------------------------------- */
     
     featureUpdateProgress()
+
+    /* ---------------------------------- Share --------------------------------- */
+
+    featureShareTrackExcerpt()
 
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
