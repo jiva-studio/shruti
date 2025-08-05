@@ -15,4 +15,6 @@ export default {
   notes: 'Заметки',
   ok: 'Oк',
   share: 'Поделиться',
+  copy: 'Копировать',
+  save: 'Сохранить',
 }

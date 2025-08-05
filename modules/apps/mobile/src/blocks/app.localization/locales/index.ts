@@ -9,6 +9,7 @@ import ruSearch from './ru/search'
 import ruSettings from './ru/settings'
 import ruNotes from './ru/notes'
 import ruErrors from './ru/errors'
+import ruShare from './ru/share'
 
 /* -------------------------------------------------------------------------- */
 /*                                   English                                  */
@@ -21,6 +22,7 @@ import enSearch from './en/search'
 import enSettings from './en/settings'
 import enNotes from './en/notes'
 import enErrors from './en/errors'
+import enShare from './en/share'
 
 /* -------------------------------------------------------------------------- */
 /*                                   Export                                   */
@@ -35,6 +37,7 @@ export const locale = {
     settings: ruSettings,
     notes: ruNotes,
     errors: ruErrors,
+    share: ruShare,
   },
   en: {
     app: enApp,
@@ -44,5 +47,6 @@ export const locale = {
     settings: enSettings,
     notes: enNotes,
     errors: enErrors,
+    share: enShare,
   }
 }

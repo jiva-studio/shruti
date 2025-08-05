@@ -8,11 +8,6 @@ export type AudioSegmentRequest = {
   timeEnd: number;
 };
 
-/**
- * Type representing the response for an audio segment extraction.
- * The response is an MP3 stream, so this is mainly used for documentation.
- */
 export type AudioSegmentResponse = {
-  contentType: string;
-  contentLength?: number;
+  signedUrl: string
 };

@@ -37,16 +37,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Share } from '@capacitor/share'
 import { IonActionSheet } from '@ionic/vue'
+import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { useEventBus } from '@shruti/mobile/core'
 import { Page, SearchInput } from '@blocks/app.core'
 import { NotesList, useNotesStore } from '@blocks/app.notes'
 import { PageSticker } from '@blocks/app.ui.kit'
 import { useDAL } from '@blocks/app.database'
-import notesAreEmptyImg from '../assets/empty.png'
 import { useLocalization } from '@blocks/app.localization'
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
+import notesAreEmptyImg from '../assets/empty.png'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -67,7 +66,13 @@ const actionSheetButtons = [
   {
     text: i18n.global.t('app.share'),
     handler: () => {
-      onShareNoteClicked(selectedNoteId.value!)
+      onShareNoteClicked(selectedNoteId.value!, true)
+    },
+  },
+  {
+    text: i18n.global.t('app.copy'),
+    handler: () => {
+      onCopyNoteClicked(selectedNoteId.value!)
     },
   },
   {
@@ -88,11 +93,29 @@ const actionSheetButtons = [
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
-async function onShareNoteClicked(noteId: string) {
-  Haptics.impact({ style: ImpactStyle.Light })
+async function onShareNoteClicked(
+  noteId: string, 
+  shareAudio: boolean = false
+) {
   const note = await dal.notes.getOne(noteId)
-  const textWithoutTags = note.text.replace(/<[^>]*>/g, '')
-  await Share.share({ text: textWithoutTags })
+  eventBus.shareSendTrackExcerpt.notify({
+    trackId: note.trackId,
+    text: note.text,
+    timeStart: note.timeStart,
+    timeEnd: note.timeEnd,
+    shareAudio: shareAudio,
+  })
+}
+
+async function onCopyNoteClicked(
+  noteId: string
+) {
+  const note = await dal.notes.getOne(noteId)
+  eventBus.shareCopyTrackExcerpt.notify({
+    trackId: note.trackId,
+    text: note.text,
+  })
+
 }
 
 async function onNoteClicked(noteId: string) {

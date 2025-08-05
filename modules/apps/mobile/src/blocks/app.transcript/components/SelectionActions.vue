@@ -10,28 +10,41 @@
         slot="start"
         :icon="copyOutline"
       />
-      Copy
+      <!-- {{ $t("app.copy") }} -->
     </IonButton>
     <IonButton
       size="small"
+      color="dark"
       fill="clear"
       @click="emit('action', 'bookmark')"
     >
       <IonIcon
         slot="start"
-        :icon="bookmark"
+        :icon="bookmarkOutline"
       />
-      Bookmark
+      <!-- {{ $t('app.save') }} -->
+    </IonButton>
+    <IonButton
+      size="small"
+      color="dark"
+      fill="clear"
+      @click="emit('action', 'share')"
+    >
+      <IonIcon
+        slot="start"
+        :icon="shareOutline"
+      />
+      <!-- {{ $t('app.share') }} -->
     </IonButton>
   </div>
 </template>
 
 <script lang="ts" setup>
 import { IonButton, IonIcon } from '@ionic/vue'
-import { copyOutline, bookmark } from 'ionicons/icons'
+import { copyOutline, bookmarkOutline, shareOutline } from 'ionicons/icons'
 
 const emit = defineEmits<{
-  action: [action: 'copy' | 'bookmark']
+  action: [action: 'copy' | 'bookmark' | 'share']
 }>()
 </script>
 
