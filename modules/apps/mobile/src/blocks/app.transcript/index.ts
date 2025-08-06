@@ -1,4 +1,5 @@
 export { default as SentenceBlock } from './components/SentenceBlock.vue'
+export { default as VerseTextInlineBlock } from './components/VerseTextInlineBlock.vue'
 export { default as VerseTextBlock } from './components/VerseTextBlock.vue'
 export { default as VerseTranslationBlock } from './components/VerseTranslationBlock.vue'
 export { default as TranscriptDialog, type SelectionActionEvent } from './components/TranscriptDialog.vue'

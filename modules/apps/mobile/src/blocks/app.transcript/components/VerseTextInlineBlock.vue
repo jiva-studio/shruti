@@ -1,31 +1,16 @@
 <template>
-  <span>
-    <!-- Speaker Icon -->
+  <span class="text">
     <span
-      v-if="icon"
-      data-block-id="12"
-      class="icon"
+      v-if="reference"
+      class="reference floating"
+      :class="{
+        'visible': referenceVisible,
+        'hidden': !referenceVisible,
+      }"
     >
-      {{ icon }}
+      {{ reference }}
     </span>
-
-    <!-- Formated Text -->
-    <span>
-      <span
-        v-if="reference"
-        class="reference floating"
-        :class="{
-          'visible': referenceVisible,
-          'hidden': !referenceVisible,
-        }"
-      >
-        {{ reference }}
-      </span>
-      <span 
-        v-safe-html="text + ' '"
-        v-bind="$attrs"
-      />
-    </span>
+    {{ text }}.
   </span>
 </template>
 
@@ -36,27 +21,16 @@
 /* -------------------------------------------------------------------------- */
 
 defineProps<{
-  text: string,
-  icon?: string
   reference?: string
   referenceVisible: boolean
+  text: string
 }>()
 </script>
 
 
 <style scoped>
-.icon {
-  opacity: .8;
-  font-size: .6rem;
-  text-align: right;
-  transform: translateY(-100px);
-  position: relative;
-  top: -2px;
-}
-
-.speaker {
-  font-weight: bold;
-  margin-right: .25rem;
+.text {
+  font-style: italic;
 }
 
 .reference {
