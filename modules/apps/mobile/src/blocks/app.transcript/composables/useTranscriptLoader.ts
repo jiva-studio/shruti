@@ -5,6 +5,7 @@ import { TranscriptBlocksGroupView, TranscriptBlockView, TranscriptParagraphBloc
 import { useSpeakerIcons } from './useSpeakerIcons'
 import { IRepository } from '@shruti/dal/index'
 import { createSharedComposable } from '@vueuse/core'
+import { mapReference } from '@blocks/app.tracks'
 
 export type Options = {
   authorsRepository: IRepository<Author>
@@ -124,11 +125,11 @@ export const useTranscriptLoader = createSharedComposable(() => {
       for (const sentence of sentences) {
         if (
           Object.values(sentencesLength).some(value => value > 512) || 
-          sentence.block.type === 'verse:text' ||
           (
             sentence.block.type === 'sentence' && 
             lastParagraph && lastParagraph.length > 0 && 
-            lastParagraph[0].block.type === 'verse:text'
+            lastParagraph[0].block.type === 'verse:text' &&
+            lastParagraph[0].block.text.length > 1
           )
         ) {
           paragraphs.push({ blocks: lastParagraph })
@@ -220,24 +221,14 @@ export const useTranscriptLoader = createSharedComposable(() => {
 
     if (block.type === 'paragraph') { return block }
     else if (block.type === 'sentence') {
-      return {
-        ...block,
-        reference: block.reference 
-          ? block.reference.join(' ') 
-          : undefined
-        }
+      const referenceView = block.reference 
+        ? await mapReference(block.reference, language) 
+        : block.reference
+      return { ...block, reference: referenceView }
     } else if (block.type === 'verse:text') {
-      let referenceView = ''
-      if (block.reference) {
-        const source = await options.sourcesRepository
-          .getOne('source::' + block.reference[0])
-        if (source) {
-          block.reference.shift()
-          referenceView = 
-            (source.shortName[language] || source.shortName['en']) +
-            ' ' + block.reference.join('.')
-        }
-      }
+      const referenceView = block.reference 
+        ? await mapReference(block.reference, language) 
+        : block.reference
       return { ...block, reference: referenceView }
     } else if (block.type === 'verse:translation') {
       return block

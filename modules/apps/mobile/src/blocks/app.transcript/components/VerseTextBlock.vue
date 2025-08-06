@@ -29,7 +29,7 @@
 
 defineProps<{
   reference?: string
-  lines?: string[]
+  lines: string[]
 }>()
 </script>
 
@@ -57,7 +57,7 @@ defineProps<{
   color: black;
   border-radius: 3px;
   font-size: .75rem;
-  padding: .125rem;
+  padding: .25rem;
   white-space: nowrap;
 }
 </style>
