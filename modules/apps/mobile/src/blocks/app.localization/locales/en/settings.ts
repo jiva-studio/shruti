@@ -1,15 +1,27 @@
 export default {
-  appLanguage: {
-    title: 'Language',
-    description: 'Language of an interface',
-  },
+  /* -------------------------------------------------------------------------- */
+  /*                                   Groups                                   */
+  /* -------------------------------------------------------------------------- */
+
   groups: {
     appearance: 'Appearance',
     pro: 'Pro Features',
     contacts: 'Contact Us',
     auth: 'Profile',
     status: 'Status',
+    share: 'Share',
   },
+
+
+  appLanguage: {
+    title: 'Language',
+    description: 'Language of an interface',
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /*                                    Auth                                    */
+  /* -------------------------------------------------------------------------- */
+
   auth: {
     actions: 'Actions',
     syncing: 'Syncing...',
@@ -35,6 +47,8 @@ export default {
       description: 'For data and subscription synchronization'
     },
   },
+
+
   player: {
     showProgress: {
       title: 'Player progress',
@@ -57,6 +71,7 @@ export default {
       description: 'Open transcript when playing a lecture'
     }
   },
+
   contacts: {
     socialNetworks: {
       title: 'Social networks',
@@ -67,6 +82,7 @@ export default {
       description: 'Have questions or suggestions?',
     }
   },
+
   subscription: {
     title: 'Subscription',
     description: 'Subscription management',
@@ -121,6 +137,17 @@ export default {
     plans: {
       '$rc_monthly': 'Monthly',
       '$rc_annual': 'Annual',
+    }
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /*                                    Share                                   */
+  /* -------------------------------------------------------------------------- */
+
+  share: {
+    audioExcerpt: {
+      title: 'Audio fragment',
+      description: 'Share audio fragment along with text'
     }
   }
 }

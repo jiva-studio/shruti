@@ -41,6 +41,7 @@ export function useConfigPersistenceTask() {
       bind(config.refreshToken, 'app.auth.refreshToken', ''),
       bind(config.openTranscriptAutomatically, 'app.transcript.openAutomatically', false),
       bind(config.tutorialStepsCompleted, 'app.tutorial.stepsCompleted', []),
+      bind(config.shareAudioExcerpt, 'app.share.audioExcerpt', true),
     ])
   }
 

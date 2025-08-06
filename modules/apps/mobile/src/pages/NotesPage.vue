@@ -45,6 +45,7 @@ import { NotesList, useNotesStore } from '@blocks/app.notes'
 import { PageSticker } from '@blocks/app.ui.kit'
 import { useDAL } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
+import { useConfig } from '@blocks/app.config'
 import notesAreEmptyImg from '../assets/empty.png'
 
 /* -------------------------------------------------------------------------- */
@@ -53,6 +54,7 @@ import notesAreEmptyImg from '../assets/empty.png'
 
 const dal = useDAL()
 const i18n = useLocalization()
+const config = useConfig()
 const eventBus = useEventBus()
 const notesStore = useNotesStore()
 
@@ -66,7 +68,7 @@ const actionSheetButtons = [
   {
     text: i18n.global.t('app.share'),
     handler: () => {
-      onShareNoteClicked(selectedNoteId.value!, true)
+      onShareNoteClicked(selectedNoteId.value!)
     },
   },
   {
@@ -95,7 +97,6 @@ const actionSheetButtons = [
 
 async function onShareNoteClicked(
   noteId: string, 
-  shareAudio: boolean = false
 ) {
   const note = await dal.notes.getOne(noteId)
   eventBus.shareSendTrackExcerpt.notify({
@@ -103,7 +104,7 @@ async function onShareNoteClicked(
     text: note.text,
     timeStart: note.timeStart,
     timeEnd: note.timeEnd,
-    shareAudio: shareAudio,
+    shareAudio: config.shareAudioExcerpt.value,
   })
 }
 

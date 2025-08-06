@@ -51,7 +51,6 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { IonApp, IonRouterOutlet, IonToast } from '@ionic/vue'
-import { Clipboard } from '@capacitor/clipboard'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { useEventBus } from '@lectorium/mobile/core'
 import { NavigationFooter, NavigationHeader } from '@blocks/app.appearance'
@@ -79,8 +78,10 @@ const trackAudioExcerptStore = useTrackAudioExcerptStore()
 
 async function onTextSelectionAction(event: SelectionActionEvent) {
   if (event.action === 'copy') {
-    const textWithoutTags = event.text.replace(/<[^>]*>/g, '')
-    await Clipboard.write({ string: textWithoutTags })
+    eventBus.shareCopyTrackExcerpt.notify({
+      trackId: playerStore.trackId,
+      text: event.text,
+    })
   } else if (event.action === 'bookmark') {
     eventBus.notesAdd.notify({
       trackId: playerStore.trackId,
@@ -95,7 +96,7 @@ async function onTextSelectionAction(event: SelectionActionEvent) {
       text: event.text,
       timeStart: event.timeStart,
       timeEnd: event.timeEnd,
-      shareAudio: true,
+      shareAudio: config.shareAudioExcerpt.value,
     })
   }
   transcriptStore.removeSelection()

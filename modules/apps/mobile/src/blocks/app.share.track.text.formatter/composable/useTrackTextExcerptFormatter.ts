@@ -1,10 +1,10 @@
+import { mapAuthorFullNameById, mapReference, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
 import { IRepository } from '@lectorium/dal/index'
-import { Author, Track } from '@lectorium/dal/models'
+import { Track } from '@lectorium/dal/models'
 import { useTimeFormatter } from '@lectorium/mobile/core'
 
 export type InitOptions = {
   tracksRepository: IRepository<Track>
-  authorsRepository: IRepository<Author>
 }
 
 export type FormatTrackTextExcerptRequest = {
@@ -32,34 +32,24 @@ export function useTrackTextExcerptFormatter(
   async function format(
     request: FormatTrackTextExcerptRequest
   ) : Promise<string> {
-    // fetch related data
     const track  = await options.tracksRepository.getOne(request.trackId)
-    const author = await options.authorsRepository.getOne('author::' + track.author)
 
-    // get related data
-    const authorName = (
-      author.fullName[request.language] || 
-      author.fullName['en'] ||
-      track.title[Object.keys(track.title)[0]]
-    )
-    const trackTitle = (
-      track.title[request.language] || 
-      track.title['en'] || 
-      track.title[Object.keys(track.title)[0]]
-    )
-    const safeText = (
-      request.text.replace(/<[^>]*>/g, '')
-    )
-    const trackInfoText = (
-      `${authorName} – ${trackTitle}`
-    )
+    const qutationSign = '❞'
+    const delimiter    = '•'
+
+    const safeText  = request.text.replace(/<[^>]*>/g, '')
+    const author    = await mapAuthorFullNameById(track.author, request.language)
+    const title     = delimiter + ' ' + mapTrackTitle(track.title, request.language)
+    const date      = track.date       ? delimiter + ' ' + mapTrackDate(track.date) : '' // TODO: use locale
+    const reference = track.references ? delimiter + ' ' + await mapReference(track.references[0], request.language) : ''
+
     const timeRangeText = (
       request.timeStart && request.timeEnd
         ? `[${toTime(request.timeStart)}-${toTime(request.timeEnd)}]`
         : ''
     )
     const formattedText = (
-      `${safeText}\n\n${trackInfoText} ${timeRangeText}`.trim()
+      `${qutationSign} ${safeText}\n\n${author} ${date} ${reference} ${title} ${timeRangeText}`.trim()
     )
 
     return formattedText
