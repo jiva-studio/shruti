@@ -41,10 +41,21 @@ export const useTracksSearchFilters = createSharedComposable(() => {
   async function load(language: string) {
     if (!options) { throw new Error('useTracksSearchFiltersLoader is not initialized. Call init(options) first.') }
     const [
-      authors, sources, locations, languages, durations, sortMethods
+      authors,
+      sources,
+      locations,
+      languages,
+      durations,
+      sortMethods
     ] = await Promise.all([
       options.authorsService.getAll({ limit: 1000 }),
-      options.sourcesService.getAll({ limit: 1000 }),
+      options.sourcesService.getMany({ 
+        selector: { 
+          $or: [ 
+            { 'hidden.forFilters': false }, 
+            { 'hidden.forFilters': { $exists: false } } 
+          ] 
+        }, limit: 1000 }),
       options.locationsService.getAll({ limit: 1000 }),
       options.languagesService.getAll({ limit: 1000 }),
       options.durationsService.getAll({ limit: 1000 }),
