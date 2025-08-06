@@ -112,6 +112,9 @@ export async function mapReference(
     const sourceName = source.shortName[language] || source.shortName['en'] || sourceId
     return sourceName + ' ' + reference.slice(1).join('.')
   } catch {
-    return reference[0].toString().toUpperCase() + ' ' + reference.slice(1).join('.')
+    return (
+      reference[0].toString().toUpperCase() + ' ' + 
+      reference.slice(1).join('.')
+    ).trim()
   }
 }

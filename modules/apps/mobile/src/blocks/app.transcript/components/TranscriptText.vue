@@ -28,6 +28,7 @@
           :text="block.block.text"
           :icon="showSpeakerIcons ? block.icon : undefined"
           :reference="block.block.reference"
+          :reference-visible="block.block.start <= position+1 && block.block.end >= position - 1"
           :lang="block.language"
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
@@ -40,9 +41,20 @@
         />
 
         <VerseTextBlock
-          v-if="block.block.type === 'verse:text'"
+          v-if="block.block.type === 'verse:text' && block.block.text.length > 1"
           :lines="block.block.text"
           :reference="block.block.reference"
+          :class="{
+            'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
+          }"
+          @click="emit('seek', block.block.start + .01)"
+        />
+        
+        <VerseTextInlineBlock
+          v-if="block.block.type === 'verse:text' && block.block.text.length <= 1"
+          :text="block.block.text[0]"
+          :reference="block.block.reference"
+          :reference-visible="block.block.start <= position+1 && block.block.end >= position - 1"
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
           }"
@@ -69,7 +81,7 @@
 <script setup lang="ts">
 import Timestamp from './Timestamp.vue'
 import TextSelector from './TextSelector.vue'
-import { SentenceBlock, VerseTextBlock, VerseTranslationBlock } from '@blocks/app.transcript'
+import { SentenceBlock, VerseTextBlock, VerseTextInlineBlock, VerseTranslationBlock } from '@blocks/app.transcript'
 import { TranscriptBlocksGroupView } from '../models'
 
 /* -------------------------------------------------------------------------- */
