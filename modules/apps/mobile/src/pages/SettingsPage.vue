@@ -25,12 +25,21 @@
     <HighlightCurrentSentenceSettingsItem />
     <OpenTranscriptAutomaticallySettingsItem />
 
+    <!-- Share -->
+    <IonListHeader>
+      <IonLabel>{{ $t('settings.groups.share') }}</IonLabel>
+    </IonListHeader>
+    <ShareAudioExcerptSettingsItem 
+      v-model:value="config.shareAudioExcerpt.value" 
+    />
+
     <!-- Social -->
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.contacts') }}</IonLabel>
     </IonListHeader>
     <SocialNetworksSettingsItem />
     <SendUsEmailSettingsItem />
+
 
     <!-- Server Status -->
     <IonListHeader>
@@ -60,6 +69,7 @@ import { useConfig } from '@blocks/app.config'
 import { useSyncDataStore } from '@blocks/app.sync.data'
 import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filters'
 import { ServerStatus, useAppStatusStore } from '@blocks/app.status'
+import { ShareAudioExcerptSettingsItem } from '@blocks/app.share.settings'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
