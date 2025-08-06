@@ -25,11 +25,7 @@ export function featureShareTrackExcerpt() {
       tracksRepository: dal.tracks,
       authorsRepository: dal.authors,
     })
-  const textFormatter = 
-    useTrackTextExcerptFormatter({
-      tracksRepository: dal.tracks,
-      authorsRepository: dal.authors
-    })
+  const textFormatter = useTrackTextExcerptFormatter({ tracksRepository: dal.tracks })
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
