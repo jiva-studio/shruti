@@ -93,6 +93,10 @@ const color = computed(() => applied ? 'primary' : 'medium')
   color: rgba(0,0,0,.5);
 }
 
+.ios .chip.off {
+  border: 1px dashed rgba(0, 0, 0, 0.06);
+}
+
 .chip .action {
   margin-left: 8px;
   opacity: .5;
