@@ -98,6 +98,7 @@ import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
 import { featureUpdateProgress } from './features/playlist/featureUpdateProgress'
 import { featureShareTrackExcerpt } from './features/share/featureShareTrackExcerpt'
+import { featureSetupInitialLanguageSearchFilter } from './features/localization/featureSetupInitialLanguageSearchFilter'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -271,6 +272,10 @@ Promise.all([
 
     featureShareTrackExcerpt()
 
+    /* ------------------------------ Localization ------------------------------ */
+
+    featureSetupInitialLanguageSearchFilter()
+    
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */
     /* -------------------------------------------------------------------------- */
@@ -308,6 +313,4 @@ Promise.all([
 
     await SplashScreen.hide()
   })
-}).catch((error: any) => {
-  alert('Initialization error:' + JSON.stringify(error))
 })
