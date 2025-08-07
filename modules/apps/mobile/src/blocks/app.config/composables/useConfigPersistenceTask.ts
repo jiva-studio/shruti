@@ -42,6 +42,7 @@ export function useConfigPersistenceTask() {
       bind(config.openTranscriptAutomatically, 'app.transcript.openAutomatically', false),
       bind(config.tutorialStepsCompleted, 'app.tutorial.stepsCompleted', []),
       bind(config.shareAudioExcerpt, 'app.share.audioExcerpt', true),
+      bind(config.migrations, 'app.migrations', []),
     ])
   }
 
