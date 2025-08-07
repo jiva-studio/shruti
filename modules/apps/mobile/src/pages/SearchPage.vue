@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { useDebounceFn } from '@vueuse/core'
 import { useEventBus } from '@shruti/mobile/core'
 import { Page, SearchInput } from '@blocks/app.core'
 import { SearchFiltersBar } from '@blocks/app.tracks.search.filters'
@@ -27,7 +28,6 @@ import { TrackStateIndicator } from '@blocks/app.tracks.search.results'
 import { SearchResultsSection, useTrackSearchResultsStore } from '@blocks/app.tracks.search.results' 
 import { useTracksCountStore } from '@blocks/app.tracks.count'
 import { usePlaylist } from '@blocks/app.playlist'
-import { useDebounceFn } from '@vueuse/core'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
