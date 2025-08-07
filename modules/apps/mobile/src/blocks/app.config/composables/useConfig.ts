@@ -22,6 +22,7 @@ export const useConfig = createGlobalState(() => {
   const openTranscriptAutomatically = ref(false)
   const tutorialStepsCompleted = ref<string[]>([])
   const shareAudioExcerpt      = ref(true)
+  const migrations             = ref<string[]>([])
 
   return {
     appLanguage,
@@ -42,5 +43,6 @@ export const useConfig = createGlobalState(() => {
     openTranscriptAutomatically,
     tutorialStepsCompleted,
     shareAudioExcerpt,
+    migrations,
   }
 })
