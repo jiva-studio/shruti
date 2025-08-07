@@ -15,7 +15,9 @@
   <IonSearchbar
     v-else
     v-model="searchQuery"
+    show-cancel-button="focus"
     :placeholder="placeholder"
+    :cancel-button-text="$t('app.cancel')"
     @input="(e) => searchQuery = e.target.value"
   />
 </template>
