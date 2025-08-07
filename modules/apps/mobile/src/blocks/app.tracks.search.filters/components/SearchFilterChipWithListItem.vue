@@ -4,6 +4,9 @@
     @click="setDialogOpen(true)"
     @remove="modelValue = undefined"
   >
+    <template #icon>
+      <slot name="icon" />
+    </template>
     {{ title }}
   </SearchFilterChip> 
   <ListItemSelectorDialog
