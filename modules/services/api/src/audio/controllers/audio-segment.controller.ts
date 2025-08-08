@@ -21,6 +21,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { unlink } from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
 import * as dto from '@shruti/api/audio/dto';
 import * as dtoShared from '@shruti/api/shared/dto';
 import {
@@ -55,7 +56,7 @@ export class AudioSegmentController {
       'Extracts a segment from an MP3 audio track or returns cached version',
     operationId: 'audio::segment',
     description:
-      `Checks if a cached audio segment exists in S3 at notes/{trackId}_{timeStart}_{timeEnd}_{audioType}.mp3. ` +
+      `Checks if a cached audio segment exists in S3 at notes/{hash}.mp3 where hash is generated from filePath_timeStart_timeEnd. ` +
       `If it exists, returns a signed URL for download. If not, downloads the original audio file to temp folder, ` +
       `extracts the segment using file-based processing, uploads it to S3, cleans up temp files, ` +
       `and returns a signed URL for the newly created segment.`,
@@ -73,7 +74,7 @@ export class AudioSegmentController {
     @Body() request: dto.AudioSegmentRequest,
   ): Promise<dto.AudioSegmentUrlResponse> {
     this.logger.log(
-      `Audio segment request: trackId=${request.trackId}, audioType=${request.audioType}, ` +
+      `Audio segment request: filePath=${request.filePath}, ` +
         `timeStart=${request.timeStart}, timeEnd=${request.timeEnd}`,
     );
 
@@ -90,8 +91,10 @@ export class AudioSegmentController {
       );
     }
 
-    // Generate the cache key for the segment
-    const cacheKey = `notes/${request.trackId}_${request.timeStart}_${request.timeEnd}_${request.audioType}.mp3`;
+    // Generate hash-based cache key
+    const cacheInput = `${request.filePath}_${request.timeStart}_${request.timeEnd}`;
+    const hash = createHash('sha256').update(cacheInput).digest('hex');
+    const cacheKey = `audio-fragments/${hash}.mp3`;
     const bucketName = this.audioS3Service.getBucketName();
 
     // Check if the segment already exists in cache
@@ -132,10 +135,11 @@ export class AudioSegmentController {
 
     try {
       // Step 1: Download file from S3 to temp folder
-      this.logger.log(`Downloading original audio file to temp: ${inputFilePath}`);
-      await this.audioS3Service.downloadAudioFile(
-        request.trackId,
-        request.audioType,
+      this.logger.log(
+        `Downloading original audio file to temp: ${inputFilePath}`,
+      );
+      await this.audioS3Service.downloadAudioFileByPath(
+        request.filePath,
         inputFilePath,
       );
 
@@ -180,14 +184,18 @@ export class AudioSegmentController {
         await unlink(inputFilePath);
         this.logger.log(`Cleaned up temp file: ${inputFilePath}`);
       } catch (error) {
-        this.logger.warn(`Failed to clean up input file ${inputFilePath}: ${error.message}`);
+        this.logger.warn(
+          `Failed to clean up input file ${inputFilePath}: ${error.message}`,
+        );
       }
 
       try {
         await unlink(outputFilePath);
         this.logger.log(`Cleaned up temp file: ${outputFilePath}`);
       } catch (error) {
-        this.logger.warn(`Failed to clean up output file ${outputFilePath}: ${error.message}`);
+        this.logger.warn(
+          `Failed to clean up output file ${outputFilePath}: ${error.message}`,
+        );
       }
     }
   }

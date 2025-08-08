@@ -33,41 +33,6 @@ export class AudioS3Service {
   }
 
   /**
-   * Retrieves an MP3 file stream from S3
-   * @param trackId - The track identifier
-   * @param audioType - The audio type (e.g., 'original', 'compressed')
-   * @returns A readable stream of the MP3 file
-   */
-  async getAudioStream(trackId: string, audioType: string): Promise<Readable> {
-    const key = `library/tracks/${trackId}/audio/${audioType}.mp3`;
-    const bucketName = this.s3Config.bucketName || 'shruti'; // Default bucket
-
-    this.logger.log(`Fetching audio file: ${bucketName}/${key}`);
-
-    try {
-      const command = new GetObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-      });
-
-      const response = await this.s3.send(command);
-
-      if (!response.Body) {
-        throw new NotFoundException(`Audio file not found: ${key}`);
-      }
-
-      // Convert the S3 response body to a readable stream
-      return response.Body as Readable;
-    } catch (error) {
-      this.logger.error(`Failed to fetch audio file ${key}: ${error.message}`);
-      if (error.name === 'NoSuchKey') {
-        throw new NotFoundException(`Audio file not found: ${key}`);
-      }
-      throw error;
-    }
-  }
-
-  /**
    * Checks if a file exists in S3
    * @param key - The S3 object key
    * @returns A promise that resolves to true if the file exists, false otherwise
@@ -97,66 +62,46 @@ export class AudioS3Service {
   }
 
   /**
-   * Uploads a stream to S3
-   * @param key - The S3 object key
-   * @param buffer - The buffer to upload
-   * @returns A promise that resolves when the upload is complete
-   */
-  async uploadBuffer(key: string, buffer: Buffer<ArrayBuffer>): Promise<void> {
-    const bucketName = this.s3Config.bucketName || 'shruti'; // Default bucket
-
-    this.logger.log(`Uploading buffer to: ${bucketName}/${key}`);
-
-    try {
-      const command = new PutObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-        Body: buffer,
-        ContentType: 'audio/mpeg',
-      });
-
-      await this.s3.send(command);
-      this.logger.log(`Successfully uploaded: ${bucketName}/${key}`);
-    } catch (error) {
-      this.logger.error(`Failed to upload stream ${key}: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Downloads an audio file from S3 to a local file
-   * @param trackId - The track identifier
-   * @param audioType - The audio type (e.g., 'original', 'compressed')
+   * Downloads an audio file from S3 to a local file using direct file path
+   * @param filePath - The S3 file path (e.g., 'library/tracks/track-123/audio/original.mp3')
    * @param localFilePath - The local file path to save the audio file
    * @returns A promise that resolves when the download is complete
    */
-  async downloadAudioFile(trackId: string, audioType: string, localFilePath: string): Promise<void> {
-    const key = `library/tracks/${trackId}/audio/${audioType}.mp3`;
+  async downloadAudioFileByPath(
+    filePath: string,
+    localFilePath: string,
+  ): Promise<void> {
     const bucketName = this.s3Config.bucketName || 'shruti'; // Default bucket
 
-    this.logger.log(`Downloading audio file from S3: ${bucketName}/${key} to ${localFilePath}`);
+    this.logger.log(
+      `Downloading audio file from S3: ${bucketName}/${filePath} to ${localFilePath}`,
+    );
 
     try {
       const command = new GetObjectCommand({
         Bucket: bucketName,
-        Key: key,
+        Key: filePath,
       });
 
       const response = await this.s3.send(command);
 
       if (!response.Body) {
-        throw new NotFoundException(`Audio file not found: ${key}`);
+        throw new NotFoundException(`Audio file not found: ${filePath}`);
       }
 
       // Create a write stream and pipe the S3 response to it
       const writeStream = createWriteStream(localFilePath);
       await pipeline(response.Body as Readable, writeStream);
 
-      this.logger.log(`Successfully downloaded audio file to: ${localFilePath}`);
+      this.logger.log(
+        `Successfully downloaded audio file to: ${localFilePath}`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to download audio file ${key}: ${error.message}`);
+      this.logger.error(
+        `Failed to download audio file ${filePath}: ${error.message}`,
+      );
       if (error.name === 'NoSuchKey') {
-        throw new NotFoundException(`Audio file not found: ${key}`);
+        throw new NotFoundException(`Audio file not found: ${filePath}`);
       }
       throw error;
     }
@@ -171,7 +116,9 @@ export class AudioS3Service {
   async uploadFile(key: string, localFilePath: string): Promise<void> {
     const bucketName = this.s3Config.bucketName || 'shruti'; // Default bucket
 
-    this.logger.log(`Uploading file to S3: ${localFilePath} to ${bucketName}/${key}`);
+    this.logger.log(
+      `Uploading file to S3: ${localFilePath} to ${bucketName}/${key}`,
+    );
 
     try {
       const fileStream = createReadStream(localFilePath);
