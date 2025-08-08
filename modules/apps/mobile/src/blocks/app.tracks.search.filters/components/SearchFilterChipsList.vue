@@ -11,8 +11,6 @@
 .chip-list-container {
   padding-left: 10px;
   padding-right: 10px;
-  display: flex;
-  gap: 8px;
   width: 100%;
   overflow-x: auto;
   white-space: nowrap;
