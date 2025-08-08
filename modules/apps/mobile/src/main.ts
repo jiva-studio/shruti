@@ -258,7 +258,7 @@ Promise.all([
     setupTracksSearchFeature()
     setupTracksStateFeature()
     setupTranscriptFeature()
-    setupI18nFeature()
+    await setupI18nFeature()
     setupTutorialFeature()
     setupToastFeature()
     setupAppStatusFeature()
