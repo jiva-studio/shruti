@@ -47,6 +47,8 @@
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
           }"
+          :data-time-start="block.block.start"
+          :data-time-end="block.block.end"
           @click="emit('seek', block.block.start + .01)"
         />
         
@@ -58,6 +60,8 @@
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
           }"
+          :data-time-start="block.block.start"
+          :data-time-end="block.block.end"
           @click="emit('seek', block.block.start + .01)"
         />
 

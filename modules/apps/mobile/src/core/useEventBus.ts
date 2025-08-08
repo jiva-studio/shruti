@@ -112,6 +112,7 @@ export const useEventBus = createSharedComposable(() => {
 
   const shareSendTrackExcerpt = new Event<{ 
     trackId: string, 
+    audioType: 'original' | 'clean',
     text?: string, 
     timeStart?: number, 
     timeEnd?: number,

@@ -3,25 +3,24 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { IRepository } from '@shruti/dal/index'
 import { Author, Track } from '@shruti/dal/models'
 import { useTimeFormatter } from '@shruti/mobile/core'
-import { useTrackAudioExcerptStore } from './useTrackAudioExcerptStore'
+import { useTrackAudioFragmentStore } from './useTrackAudioFragmentStore'
 
 
-export type TrackExcerptGenerationOptions = {
+export type TrackFragmentGenerationOptions = {
   url: string
   tracksRepository: IRepository<Track>
   authorsRepository: IRepository<Author>
 }
 
-export type GenerateTrackExcertRequest = {
-  authToken: string
-  trackId: string
+export type GenerateTrackFragmentRequest = {
+  filePath: string
   timeStart: number
   timeEnd: number
-  audioType: string
   outputPath: string
+  authToken: string
 }
 
-export type GenerateTrackExcerptIdRequest = {
+export type GenerateTrackFragmentIdRequest = {
   trackId: string
   timeStart: number
   timeEnd: number
@@ -29,31 +28,31 @@ export type GenerateTrackExcerptIdRequest = {
   language: string
 }
 
-export type GenerateTrackExcertResponse = {
+export type GenerateTrackFragmentResponse = {
   path: string
 }
 
-export function useTrackAudioExcerptGenerator(
-  options: TrackExcerptGenerationOptions
+export function useTrackAudioFragmentGenerator(
+  options: TrackFragmentGenerationOptions
 ) {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
   const toTime = useTimeFormatter().fromSeconds
-  const store = useTrackAudioExcerptStore()
+  const store = useTrackAudioFragmentStore()
 
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
   /* -------------------------------------------------------------------------- */
 
   /**
-   * Generates excerpt Id
+   * Generates fragment Id
    * @param request Request to generate Id
    * @returns String
    */
-  async function getExcerptId(
-    request: GenerateTrackExcerptIdRequest 
+  async function getFragmentId(
+    request: GenerateTrackFragmentIdRequest 
   ): Promise<string> {
     // fetch related data
     const track  = await options.tracksRepository.getOne(request.trackId)
@@ -73,8 +72,11 @@ export function useTrackAudioExcerptGenerator(
     const timeRange = (
       `[${toTime(request.timeStart)}-${toTime(request.timeEnd)}]`
     )
+    const audioType = (
+      request.audioType !== 'original' ? `(${request.audioType})` : ''
+    )
 
-    return `${authorName} – ${trackTitle} ${timeRange}.mp3`
+    return `${authorName} – ${trackTitle} ${timeRange} ${audioType}.mp3`
       .replace(/[<>"\/\\|?*\x00-\x1F]/g, '_') // Replace invalid filename characters
       .replace(/\s+/g, ' ')                    // Normalize whitespace
       .trim()
@@ -82,23 +84,22 @@ export function useTrackAudioExcerptGenerator(
 
 
   /**
-   * Generate rack audio excerpt
-   * @param request Request to generate track excerpt
-   * @returns Path there generated file was saved
+   * Generate track audio fragment
+   * @param request Request to generate track fragment
+   * @returns Path where generated file was saved
    */
   async function generate(
-    request: GenerateTrackExcertRequest
-  ): Promise<GenerateTrackExcertResponse> {
+    request: GenerateTrackFragmentRequest
+  ): Promise<GenerateTrackFragmentResponse> {
     try {
       store.busy = true
       const payload: AudioSegmentRequest = {
-        trackId: request.trackId,
+        filePath: request.filePath,
         timeStart: request.timeStart,
         timeEnd: request.timeEnd,
-        audioType: request.audioType
       }
       
-      // make request to the service to generate excerpt
+      // make request to the service to generate fragment
       const response = await fetch(
         options.url, 
         {
@@ -114,7 +115,7 @@ export function useTrackAudioExcerptGenerator(
       // get response
       const responsePayload = await response.json() as AudioSegmentResponse
 
-      // download track excerpt
+      // download track fragment
       const res = await Filesystem.downloadFile({
         url: responsePayload.signedUrl,
         path: request.outputPath,
@@ -136,7 +137,5 @@ export function useTrackAudioExcerptGenerator(
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { getExcerptId, generate }
-
-
+  return { getFragmentId, generate }
 }
