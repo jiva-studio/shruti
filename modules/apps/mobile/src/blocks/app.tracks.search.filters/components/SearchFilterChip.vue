@@ -77,7 +77,8 @@ const color = computed(() => applied ? 'primary' : 'medium')
 }
 
 .chip.on {
-  background-color: rgba(var(--ion-color-primary-rgb), .1);
+  /* background-color: rgba(var(--ion-color-primary-rgb), .1); */
+  background-color: #f1e9fa;
   color: var(--ion-color-primary);
   border: 1px solid transparent;
 }
@@ -87,7 +88,8 @@ const color = computed(() => applied ? 'primary' : 'medium')
 }
 
 .chip.off {
-  background-color: rgba(0, 0, 0, 0.02);
+  /* background-color: rgba(0, 0, 0, 0.02); */
+  background-color: #fafafa;
   border: 1px dashed rgba(0, 0, 0, 0.12);
   filter: grayscale(1);
   color: rgba(0,0,0,.5);
