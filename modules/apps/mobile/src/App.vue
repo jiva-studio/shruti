@@ -38,8 +38,8 @@
     <NavigationHeader :visible="transcriptStore.open" />
     <NavigationFooter v-if="!keyboardVisible.isKeyboardVisible.value" />
     <IonToast
-      :is-open="trackAudioExcerptStore.busy"
-      :duration="3500"
+      :is-open="trackAudioFragmentStore.busy"
+      :duration="5000"
       :translucent="true"
       :message="$t('share.loadingAudioExcerpt')"
       color="warning"
@@ -59,7 +59,7 @@ import { SelectionActionEvent, TranscriptDialog, useTranscriptStore } from '@blo
 import { useKeyboardVisible } from '@blocks/app.core'
 import { useConfig } from '@blocks/app.config'
 import { usePlayerStore } from '@blocks/app.player.state'
-import { useTrackAudioExcerptStore } from '@blocks/app.share.track.audio.excerpt'
+import { useTrackAudioFragmentStore } from '@blocks/app.share.track.audio.fragment'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -70,7 +70,7 @@ const eventBus = useEventBus()
 const playerStore = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const keyboardVisible = useKeyboardVisible()
-const trackAudioExcerptStore = useTrackAudioExcerptStore()
+const trackAudioFragmentStore = useTrackAudioFragmentStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -93,6 +93,7 @@ async function onTextSelectionAction(event: SelectionActionEvent) {
   } else if (event.action === 'share') {
     eventBus.shareSendTrackExcerpt.notify({
       trackId: playerStore.trackId,
+      audioType: playerStore.audioType,
       text: event.text,
       timeStart: event.timeStart,
       timeEnd: event.timeEnd,

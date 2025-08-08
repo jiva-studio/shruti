@@ -3,7 +3,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Clipboard } from '@capacitor/clipboard'
 import { useEventBus } from '@lectorium/mobile/core'
 import { Routes } from '@lectorium/protocol/routes'
-import { useTrackAudioExcerptGenerator } from '@blocks/app.share.track.audio.excerpt'
+import { useTrackAudioFragmentGenerator } from '@blocks/app.share.track.audio.fragment'
 import { useTrackTextExcerptFormatter } from '@blocks/app.share.track.text.formatter'
 import { useConfig } from '@blocks/app.config'
 import { useDAL } from '@blocks/app.database'
@@ -20,7 +20,7 @@ export function featureShareTrackExcerpt() {
   const config = useConfig()
   const eventBus = useEventBus()
   const audioExcerptGenerator =  
-    useTrackAudioExcerptGenerator({
+    useTrackAudioFragmentGenerator({
       url: Routes(config.apiUrl.value).audio.segment(),
       tracksRepository: dal.tracks,
       authorsRepository: dal.authors,
@@ -40,13 +40,20 @@ export function featureShareTrackExcerpt() {
     // try to get audio excerpts
     if (event.timeStart && event.timeEnd && event.shareAudio) {
       try {
-        files = await getFiles(
+        const track = await dal.tracks.getOne(event.trackId)
+        const filePath = track.audio[event.audioType]?.path
+        if (!filePath) { throw new Error('No audio file found') }
+
+        const file = await getFile(
           event.trackId,
+          filePath,
+          event.audioType,
           config.appLanguage.value,
           event.timeStart,
           event.timeEnd,
           config.authToken.value
         )
+        files = file ? [file] : undefined
       } catch { /* Do nothing */ }
     }
 
@@ -93,19 +100,21 @@ export function featureShareTrackExcerpt() {
     })
   }
 
-  async function getFiles(
+  async function getFile(
     trackId: string,
+    filePath: string,
+    audioType: string,
     language: string,
     timeStart: number,
     timeEnd: number,
     authToken: string,
-  ): Promise<string[] | undefined> {
+  ): Promise<string | undefined> {
     // generate excerpt Id based on track information
-    const excerptId = await audioExcerptGenerator.getExcerptId({
+    const excerptId = await audioExcerptGenerator.getFragmentId({
       trackId: trackId,
       timeStart: timeStart,
       timeEnd: timeEnd,
-      audioType: 'original',
+      audioType: audioType,
       language: language 
     })
     const trackExceprtPath = `${directoryName}/${excerptId}`
@@ -116,7 +125,7 @@ export function featureShareTrackExcerpt() {
         path: trackExceprtPath,
         directory: Directory.Cache
       })
-      return [fileStat.uri]
+      return fileStat.uri
     } catch { /* do nothing */ }
 
     // create requried folder
@@ -134,14 +143,13 @@ export function featureShareTrackExcerpt() {
     // call generator
     const generatedExcerpt = await audioExcerptGenerator
       .generate({
-        authToken: authToken,
-        trackId: trackId,
+        filePath: filePath,
+        outputPath: trackExceprtPath,
         timeStart: timeStart,
         timeEnd: timeEnd,
-        audioType: 'original',
-        outputPath: trackExceprtPath,
+        authToken: authToken,
       })
 
-    return ['file://' + generatedExcerpt.path]
+    return 'file://' + generatedExcerpt.path
   }
 }

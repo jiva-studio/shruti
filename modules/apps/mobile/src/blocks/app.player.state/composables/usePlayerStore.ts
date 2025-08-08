@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 export const usePlayerStore = defineStore('player', () => {
   const trackId = ref('')
+  const audioType = ref<'original' | 'clean'>('original')
   const playlistItemId = ref('')
   const isPlaying = ref(false)
   const position = ref(0)
@@ -12,6 +13,7 @@ export const usePlayerStore = defineStore('player', () => {
 
   return {
     trackId,
+    audioType,
     playlistItemId,
     isPlaying,
     position,

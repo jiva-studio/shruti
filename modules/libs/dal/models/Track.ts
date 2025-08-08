@@ -13,6 +13,11 @@ export type Track = {
       fileSize: number;
       duration: number;
     };
+    clean?: {
+      path: string;
+      fileSize: number;
+      duration: number;
+    };
   };
   languages: {
     language: string;
