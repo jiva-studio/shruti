@@ -15,13 +15,17 @@ export default defineConfig({
       treeshake: true,
       output: {
         manualChunks(id) {
-          // vendor
-          if (id.includes('@ionic/core')) { return 'vendor-ionic-core' }
-          if (id.includes('@ionic/vue')) { return 'vendor-ionic-vue' }
-          if (id.includes('pouchdb')) { return 'vendor-pouchdb' }
+          if (!id.includes('node_modules')) return
 
-          // lectorium
-          return 'lectorium'
+          // group big families first
+          if (id.includes('vue')) return 'vendor-vue'
+          if (id.includes('@ionic')) return 'vendor-ionic'
+          if (id.includes('@capacitor')) return 'vendor-capacitor'
+
+          // fallback: one chunk per top-level package
+          const m = id.split('node_modules/')[1].split('/')
+          const pkg = m[0].startsWith('@') ? `${m[0]}/${m[1]}` : m[0]
+          return `vendor-${pkg}`
         }
       },
     },

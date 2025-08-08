@@ -48,7 +48,6 @@
     "pouchdb": "^9.0.0",
     "pouchdb-adapter-cordova-sqlite": "^2.0.8",
     "pouchdb-find": "^9.0.0",
-    "prettier": "^3.5.3",
     "sqids": "^0.3.0",
     "vue": "^3.5.17",
     "vue-i18n": "^10.0.8",
@@ -57,6 +56,7 @@
     "vue3-radial-progress": "^1.1.1"
   },
   "devDependencies": {
+    "prettier": "^3.5.3",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "7.2.0",
     "@trapezedev/configure": "^7.1.3",
