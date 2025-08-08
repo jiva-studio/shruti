@@ -14,7 +14,13 @@ export default defineConfig({
     rollupOptions: {
       treeshake: true,
       output: {
-        manualChunks() {
+        manualChunks(id) {
+          // vendor
+          if (id.includes('@ionic/core')) { return 'vendor-ionic-core' }
+          if (id.includes('@ionic/vue')) { return 'vendor-ionic-vue' }
+          if (id.includes('pouchdb')) { return 'vendor-pouchdb' }
+
+          // shruti
           return 'shruti'
         }
       },
@@ -29,14 +35,14 @@ export default defineConfig({
   plugins: [
     vue(), 
     legacy(), 
-    sentryVitePlugin({
-      org: 'akdasa-studios',
-      project: 'shruti',
-      release: {
-        name: process.env.SENTRY_RELEASE || 'unknown',
-        dist: process.env.SENTRY_DIST || 'unknown',
-      }
-    })
+    // sentryVitePlugin({
+    //   org: 'akdasa-studios',
+    //   project: 'shruti',
+    //   release: {
+    //     name: process.env.SENTRY_RELEASE || 'unknown',
+    //     dist: process.env.SENTRY_DIST || 'unknown',
+    //   }
+    // })
   ],
   resolve: {
     alias: {
