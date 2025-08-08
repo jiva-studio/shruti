@@ -2,8 +2,7 @@
  * Type representing the request for an audio segment extraction.
  */
 export type AudioSegmentRequest = {
-  trackId: string;
-  audioType: string;
+  filePath: string;
   timeStart: number;
   timeEnd: number;
 };

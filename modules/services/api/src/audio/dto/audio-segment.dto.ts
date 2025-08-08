@@ -3,15 +3,10 @@ import * as protocol from '@lectorium/protocol';
 import { IsNotEmpty, IsString, IsNumber, Min } from 'class-validator';
 
 export class AudioSegmentRequest implements protocol.AudioSegmentRequest {
-  @ApiProperty({ example: 'track-123' })
+  @ApiProperty({ example: 'library/tracks/track-123/audio/original.mp3' })
   @IsString()
   @IsNotEmpty()
-  trackId: string;
-
-  @ApiProperty({ example: 'original' })
-  @IsString()
-  @IsNotEmpty()
-  audioType: string;
+  filePath: string;
 
   @ApiProperty({ example: 30.5 })
   @IsNumber()
@@ -31,7 +26,7 @@ export class AudioSegmentUrlResponse implements protocol.AudioSegmentResponse {
 
   @ApiProperty({
     example:
-      'https://s3.example.com/bucket/notes/track-123_30.5_90.5_original.mp3?signature=...',
+      'https://s3.example.com/bucket/notes/a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890.mp3?signature=...',
     description: 'Signed URL to download the audio segment',
   })
   signedUrl: string;

@@ -84,6 +84,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@lectorium/api/(.*)$": "<rootDir>/$1",
+      "^@lectorium/protocol$": "<rootDir>/../../libs/protocol/index"
+    }
   }
 }

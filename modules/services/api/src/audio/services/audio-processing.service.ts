@@ -26,7 +26,9 @@ export class AudioProcessingService {
     return new Promise((resolve, reject) => {
       const duration = timeEnd - timeStart;
 
-      this.logger.log(`Extracting segment from ${inputFilePath} to ${outputFilePath}, start: ${timeStart}s, duration: ${duration}s`);
+      this.logger.log(
+        `Extracting segment from ${inputFilePath} to ${outputFilePath}, start: ${timeStart}s, duration: ${duration}s`,
+      );
 
       // Use ffmpeg to extract the segment
       const ffmpeg = spawn(
@@ -61,7 +63,9 @@ export class AudioProcessingService {
           );
           reject(new InternalServerErrorException('Audio processing failed'));
         } else {
-          this.logger.log(`Successfully extracted segment to ${outputFilePath}`);
+          this.logger.log(
+            `Successfully extracted segment to ${outputFilePath}`,
+          );
           resolve();
         }
       });
