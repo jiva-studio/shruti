@@ -99,8 +99,10 @@ async function onShareNoteClicked(
   noteId: string, 
 ) {
   const note = await dal.notes.getOne(noteId)
+  const track = await dal.tracks.getOne(note.trackId)
   eventBus.shareSendTrackExcerpt.notify({
     trackId: note.trackId,
+    audioType: track.audio.clean ? 'clean' : 'original',
     text: note.text,
     timeStart: note.timeStart,
     timeEnd: note.timeEnd,

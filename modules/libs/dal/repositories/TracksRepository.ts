@@ -19,6 +19,11 @@ type TracksDBSchema = {
       path: string;
       fileSize: number;
       duration: number;
+    },
+    clean?: {
+      path: string;
+      fileSize: number;
+      duration: number;
     };
   };
   languages: {

@@ -51,18 +51,25 @@ export function setupPlayerFeature() {
       })
       return
     }
-    if (trackState.downloadProgress !== undefined && trackState.downloadProgress < 100) {
-      // Track is being downloaded, do not play it
+
+    // Track is being downloaded, do not play it
+    if (
+      trackState.downloadProgress !== undefined && 
+      trackState.downloadProgress < 100
+    ) {
       return
     }
 
     // Open track with Audio Player plugin and
     // pass required information for media session widget
     const r = await Filesystem.getUri({
-      path: track.audio.original.path,
+      path: track.audio.clean?.path || 
+            track.audio.original.path,
       directory: Directory.External,
     })
 
+    playerStore.audioType = track.audio.clean ? 'clean' : 'original'
+    
     await player.open({
       itemId: playlistItem._id,
       url: r.uri, 
@@ -84,7 +91,10 @@ export function setupPlayerFeature() {
     // Set playback progress if it exists
     const playlistItemState = playlistStore.getState(playlistItem._id)
     if (playlistItemState.progress && playlistItemState.progress !== 100) {
-      await player.seek.call(track.audio.original.duration * playlistItemState.progress / 100)
+      await player.seek.call(
+        (track.audio.clean?.duration || track.audio.original.duration) * 
+        playlistItemState.progress / 100
+      )
     }
 
     // Open transcript if it is enabled in the config

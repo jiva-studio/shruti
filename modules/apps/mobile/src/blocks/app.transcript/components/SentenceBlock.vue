@@ -3,7 +3,6 @@
     <!-- Speaker Icon -->
     <span
       v-if="icon"
-      data-block-id="12"
       class="icon"
     >
       {{ icon }}
@@ -21,9 +20,9 @@
       >
         {{ reference }}
       </span>
-      <span 
-        v-safe-html="text + ' '"
+      <span
         v-bind="$attrs"
+        v-html="text + ' '"
       />
     </span>
   </span>
@@ -69,6 +68,7 @@ defineProps<{
   transition: all .2s ease-in-out;
   box-shadow: 0px 0px 12px rgba(0, 0, 0, .25);
   font-style: normal;
+  pointer-events: none;
 }
 
 .floating {

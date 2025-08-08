@@ -36,7 +36,8 @@ export function useTrackMediaItemsUrlSigner({
       [
         // Sign url to download original audio file
         { 
-          path: track.audio.original.path,
+          path: track.audio.clean?.path || 
+                track.audio.original.path,
         },
 
         // Sign url to download transcripts

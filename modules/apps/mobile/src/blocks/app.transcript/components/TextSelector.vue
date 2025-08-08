@@ -59,8 +59,17 @@ onLongPress(
 function onTouchStart(event: TouchEvent) {
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const element = document.elementFromPoint(touchX, touchY)
-  const timeStart = parseFloat(element?.getAttribute(props.datasetFieldStart) || '-1')
-  const timeEnd   = parseFloat(element?.getAttribute(props.datasetFieldEnd) || '-1')
+
+  const parentWithTimes = element?.closest(
+    `[${props.datasetFieldStart}][${props.datasetFieldEnd}]`
+  )
+  const timeStart = parentWithTimes
+    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldStart) || '-1')
+    : -1
+  const timeEnd = parentWithTimes
+    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldEnd) || '-1')
+    : -1
+
   if (timeStart !== -1 && timeEnd !== -1) {
     initialTimeStart.value = currentTimeStart.value = timeStart
     initialTimeEnd.value = currentTimeEnd.value = timeEnd
@@ -74,8 +83,16 @@ function onTouchMove(event: TouchEvent) {
 
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const element = document.elementFromPoint(touchX, touchY)
-  const timeStart = parseFloat(element?.getAttribute(props.datasetFieldStart) || '-1')
-  const timeEnd   = parseFloat(element?.getAttribute(props.datasetFieldEnd)   || '-1')
+
+  const parentWithTimes = element?.closest(
+    `[${props.datasetFieldStart}][${props.datasetFieldEnd}]`
+  )
+  const timeStart = parentWithTimes
+    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldStart) || '-1')
+    : -1
+  const timeEnd = parentWithTimes
+    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldEnd) || '-1')
+    : -1
 
   if (timeStart !== -1 && timeStart < initialTimeStart.value) {
     currentTimeStart.value = timeStart
