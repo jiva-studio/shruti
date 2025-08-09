@@ -66,22 +66,30 @@ def index_generate():
   def get_words_to_index(
     document: Track,
   ) -> list[str]:
-    result = set()
+    tokens = ""
     for title in document["title"].values():
-      clean_title = (
-        title.translate(str.maketrans("", "", string.punctuation))
-        .lower())
+      tokens += (
+        title
+          .translate(str.maketrans("", "", string.punctuation))
+          .lower()
+      )
       
-      for reference in document["references"]:
-        clean_title += " " + " ".join([str(r) for r in reference])
+    for reference in document["references"]:
+      ref_parts  = [str(part) for part in reference[1:]]
+      ref_string = ".".join(ref_parts)
 
-      if document["date"]:
-        clean_title += " " + str(document["date"][0])
+      # add separate part of reference as search token
+      # example 'bg', '1', '12'
+      tokens += " " + " ".join([str(r) for r in reference])
 
-      for word in clean_title.split():
-        result.add(word)
+      # add verse number as search token
+      # example '1.2'
+      tokens += " " + ref_string
 
-    return list(result)
+    if document["date"]:
+      tokens += " " + str(document["date"][0])
+
+    return list(set(tokens.split()))
 
   @task(
     task_display_name="📤 Update Index Document",
