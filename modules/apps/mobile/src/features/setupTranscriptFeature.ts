@@ -1,7 +1,10 @@
+import { watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useEventBus } from '@shruti/mobile/core'
 import { usePlayer } from '@blocks/app.player'
 import { useTranscriptLoader, useTranscriptStore } from '@blocks/app.transcript'
 import { useDAL } from '@blocks/app.database'
+import { usePlayerStore } from '@blocks/app.player.state'
 
 export function setupTranscriptFeature() {
   /* -------------------------------------------------------------------------- */
@@ -11,8 +14,10 @@ export function setupTranscriptFeature() {
   const dal = useDAL()
   const player = usePlayer()
   const eventBus = useEventBus()
+  const playerStore = usePlayerStore()
   const transcriptStore = useTranscriptStore()
   const transcriptLoader = useTranscriptLoader()
+  const { activeLanguages } = storeToRefs(transcriptStore)
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
@@ -20,7 +25,7 @@ export function setupTranscriptFeature() {
 
   eventBus.transcriptLoad.subscribe(async (event) => {
     if (transcriptStore.isLoading) { return }
-    await transcriptLoader.load(event.trackId) 
+    await transcriptLoader.load(event.trackId, event.languages) 
   })
 
   player.progress.subscribe(async (status) => {
@@ -32,5 +37,12 @@ export function setupTranscriptFeature() {
     if (!playlistItem) { return }
 
     eventBus.transcriptLoad.notify({ trackId: playlistItem.trackId })
+  })
+
+  watch(activeLanguages, (value) => {
+    eventBus.transcriptLoad.notify({ 
+      trackId: playerStore.trackId,
+      languages: value
+    })
   })
 }

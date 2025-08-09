@@ -23,7 +23,7 @@
       v-model:active-languages="transcriptStore.activeLanguages"
       :allow-multiple-languages="transcriptStore.allowMultipleLanguages"
       :available-languages="transcriptStore.availableLanguages"
-      :block-groups="transcriptStore.localizedTranscript"
+      :block-groups="transcriptStore.transcript"
       :position="playerStore.position"
       :duration="playerStore.duration"
       :highlight-current-sentence="config.highlightCurrentSentence.value"
