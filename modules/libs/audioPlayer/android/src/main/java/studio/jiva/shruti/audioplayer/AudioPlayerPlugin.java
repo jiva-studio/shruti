@@ -35,7 +35,7 @@ public final class AudioPlayerPlugin extends Plugin {
         // If audio service started and playing, just keep it playing.
         boolean isConnectedAndPlaying =
                 audioPlayerServiceConnection.isConnected() &&
-                audioPlayerServiceConnection.getService().getMediaPlayer().isPlaying();
+                audioPlayerServiceConnection.getService().getExoPlayer().isPlaying();
         if (isConnectedAndPlaying) { return; }
 
         // Stop audio player service if it is not playing
