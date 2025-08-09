@@ -1,7 +1,5 @@
 package studio.jiva.shruti.audioplayer;
 
-import static android.media.MediaPlayer.SEEK_PREVIOUS_SYNC;
-
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -9,10 +7,14 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.media.MediaPlayer;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
+
 import androidx.core.app.NotificationCompat;
+import androidx.media3.common.MediaItem;
+import androidx.media3.exoplayer.ExoPlayer;
 import com.getcapacitor.PluginCall;
 
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionCallback;
@@ -25,7 +27,7 @@ public final class AudioPlayerService extends Service {
     private static final String CHANNEL_ID = "MediaPlaybackChannel";
     private static final int NOTIFICATION_ID = 1;
 
-    private MediaPlayer mediaPlayer;
+    private ExoPlayer exoPlayer;
     private MediaStateNotificationService mediaStateNotificationService;
     private NotificationManager notificationManager;
 
@@ -33,8 +35,10 @@ public final class AudioPlayerService extends Service {
     public void onCreate() {
         super.onCreate();
         Context context = getApplicationContext();
-        mediaPlayer = new MediaPlayer();
-        mediaStateNotificationService = new MediaStateNotificationService(mediaPlayer);
+
+        exoPlayer = new ExoPlayer.Builder(context)
+                .build();
+        mediaStateNotificationService = new MediaStateNotificationService(exoPlayer);
 
         // Create notification channel
         notificationManager = getSystemService(NotificationManager.class);
@@ -67,7 +71,7 @@ public final class AudioPlayerService extends Service {
     @Override
     public void onDestroy() {
         mediaStateNotificationService.stop();
-        if (mediaPlayer != null) { mediaPlayer.release(); }
+        if (exoPlayer != null) { exoPlayer.release(); }
         this.stopForeground(true);
         this.stopSelf();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -76,8 +80,8 @@ public final class AudioPlayerService extends Service {
         super.onDestroy();
     }
 
-    MediaPlayer getMediaPlayer() {
-        return mediaPlayer;
+    ExoPlayer getExoPlayer() {
+        return exoPlayer;
     }
 
     public void open(
@@ -87,66 +91,76 @@ public final class AudioPlayerService extends Service {
             String trackArtist
     ) {
         try {
-            mediaStateNotificationService.setUpdating(false);
-            mediaPlayer.reset();
-            mediaPlayer.setDataSource(url);
-            mediaPlayer.prepare();
-            mediaStateNotificationService.getState().setTrackId(trackId); 
-            mediaStateNotificationService.getState().setTitle(trackTitle);
-            mediaStateNotificationService.getState().setArtist(trackArtist);
-            mediaStateNotificationService.getState().setPosition(0);
-            mediaStateNotificationService.getState().setDuration(mediaPlayer.getDuration());
-            mediaStateNotificationService.getState().setState("stopped");
-            mediaStateNotificationService.setUpdating(true);
-            mediaStateNotificationService.update();
+            MediaItem mediaItem = MediaItem.fromUri(url);
+
+            new Handler(Looper.getMainLooper()).post(() -> {
+                mediaStateNotificationService.setUpdating(false);
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
+                exoPlayer.setMediaItem(mediaItem);
+                exoPlayer.prepare();
+                mediaStateNotificationService.getState().setTrackId(trackId);
+                mediaStateNotificationService.getState().setTitle(trackTitle);
+                mediaStateNotificationService.getState().setArtist(trackArtist);
+                mediaStateNotificationService.getState().setPosition(0);
+                // Duration will be updated later when available
+                mediaStateNotificationService.getState().setDuration(0);
+                mediaStateNotificationService.getState().setState("stopped");
+                mediaStateNotificationService.setUpdating(true);
+                mediaStateNotificationService.update();
+            });
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
     public void play() {
-        if (!mediaPlayer.isPlaying()) {
-            mediaPlayer.start();
-            mediaStateNotificationService.getState().setState("playing");
-            mediaStateNotificationService.update();
-        }
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (!exoPlayer.isPlaying()) {
+                exoPlayer.setPlayWhenReady(true);
+                mediaStateNotificationService.getState().setState("playing");
+                mediaStateNotificationService.update();
+            }
+        });
     }
 
     public void togglePause() {
-        if (mediaPlayer.isPlaying()) {
-            mediaPlayer.pause();
-            mediaStateNotificationService.getState().setState("paused");
-        } else {
-            mediaPlayer.start();
-            mediaStateNotificationService.getState().setState("playing");
-        }
-        mediaStateNotificationService.update();
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (exoPlayer.isPlaying()) {
+                exoPlayer.setPlayWhenReady(false);
+                mediaStateNotificationService.getState().setState("paused");
+            } else {
+                exoPlayer.setPlayWhenReady(true);
+                mediaStateNotificationService.getState().setState("playing");
+            }
+            mediaStateNotificationService.update();
+        });
     }
 
     public void seek(long position) {
-        if (mediaPlayer != null && mediaPlayer.isPlaying()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                mediaPlayer.seekTo(position, SEEK_PREVIOUS_SYNC);
-            } else {
-                mediaPlayer.seekTo((int)position);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (exoPlayer != null) {
+                exoPlayer.seekTo(position);
+                mediaStateNotificationService.getState().setState(exoPlayer.isPlaying() ? "playing" : "paused");
+                mediaStateNotificationService.getState().setPosition(position);
+                mediaStateNotificationService.update();
             }
-            mediaStateNotificationService.getState().setState("playing");
-            mediaStateNotificationService.getState().setPosition(position);
-            mediaStateNotificationService.update();
-        }
+        });
     }
 
     public void stop() {
-        mediaPlayer.stop();
-        mediaPlayer.reset();
-        mediaStateNotificationService.getState().setState("stopped");
-        mediaStateNotificationService.getState().setPosition(0);
-        mediaStateNotificationService.getState().setTrackId(""); 
-        mediaStateNotificationService.getState().setTitle("");
-        mediaStateNotificationService.getState().setArtist("");
-        mediaStateNotificationService.getState().setPosition(0);
-        mediaStateNotificationService.getState().setDuration(0);
-        mediaStateNotificationService.update();
+        new Handler(Looper.getMainLooper()).post(() -> {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+            mediaStateNotificationService.getState().setState("stopped");
+            mediaStateNotificationService.getState().setPosition(0);
+            mediaStateNotificationService.getState().setTrackId("");
+            mediaStateNotificationService.getState().setTitle("");
+            mediaStateNotificationService.getState().setArtist("");
+            mediaStateNotificationService.getState().setPosition(0);
+            mediaStateNotificationService.getState().setDuration(0);
+            mediaStateNotificationService.update();
+        });
     }
 
     public void setOnProgressChangeCall(PluginCall call) {
