@@ -73,7 +73,7 @@ export type TranscriptBlockView = {
   /**
    * Icon
    */
-  icon: string
+  icon?: string
 }
 
 

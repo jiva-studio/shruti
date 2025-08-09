@@ -22,18 +22,6 @@ export const useTranscriptStore = defineStore('transcript', () => {
   /*                                   Getters                                  */
   /* -------------------------------------------------------------------------- */
 
-  const localizedTranscript = computed(() => {
-    return transcript.value
-      .map(paragraph => {
-        return {
-          ...paragraph,
-          blocks: paragraph.blocks.filter(block => 
-            activeLanguages.value.includes(block.language)
-          )
-        }
-      })
-  })
-
   const localizedTitle = computed(() => {
     const lang = activeLanguages.value[0] || 'en'
     return title.value[lang] || title.value['en'] || Object.values(title.value)[0] || ''
@@ -43,7 +31,6 @@ export const useTranscriptStore = defineStore('transcript', () => {
     const lang = activeLanguages.value[0] || 'en'
     return author.value[lang] || author.value['en'] || Object.values(author.value)[0] || ''
   })
-
 
   /* -------------------------------------------------------------------------- */
   /*                                   Actions                                  */
@@ -76,7 +63,6 @@ export const useTranscriptStore = defineStore('transcript', () => {
     activeLanguages,
     availableLanguages,
     allowMultipleLanguages,
-    localizedTranscript,
     localizedAuthorName,
     localizedTitle,
     toggleTranscriptOpen,

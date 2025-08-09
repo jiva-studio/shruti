@@ -56,7 +56,7 @@ export const useEventBus = createSharedComposable(() => {
   /*                                 Transcript                                 */
   /* -------------------------------------------------------------------------- */
 
-  const transcriptLoad = new Event<{ trackId: string }>('transcriptLoad')
+  const transcriptLoad = new Event<{ trackId: string, languages?: string[] }>('transcriptLoad')
 
   /* -------------------------------------------------------------------------- */
   /*                                   Player                                   */
