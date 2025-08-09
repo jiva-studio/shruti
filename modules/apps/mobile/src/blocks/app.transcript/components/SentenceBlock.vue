@@ -46,11 +46,11 @@ defineProps<{
 <style scoped>
 .icon {
   opacity: .8;
-  font-size: .6rem;
+  font-size: .8rem;
   text-align: right;
-  transform: translateY(-100px);
   position: relative;
   top: -2px;
+  padding-right: 2px;
 }
 
 .speaker {
