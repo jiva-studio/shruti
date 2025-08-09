@@ -3,7 +3,7 @@ include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../../../node_modules/@capacitor/android/capacitor')
 
 include ':capacitor-app'
-project(':capacitor-app').projectDir = new File('../../../node_modules/@capacitor/app/android')
+project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/android')
 
 include ':capacitor-clipboard'
 project(':capacitor-clipboard').projectDir = new File('../../../node_modules/@capacitor/clipboard/android')
@@ -15,10 +15,10 @@ include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../../../node_modules/@capacitor/filesystem/android')
 
 include ':capacitor-haptics'
-project(':capacitor-haptics').projectDir = new File('../../../node_modules/@capacitor/haptics/android')
+project(':capacitor-haptics').projectDir = new File('../node_modules/@capacitor/haptics/android')
 
 include ':capacitor-keyboard'
-project(':capacitor-keyboard').projectDir = new File('../../../node_modules/@capacitor/keyboard/android')
+project(':capacitor-keyboard').projectDir = new File('../node_modules/@capacitor/keyboard/android')
 
 include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../../../node_modules/@capacitor/share/android')
@@ -27,7 +27,7 @@ include ':capacitor-splash-screen'
 project(':capacitor-splash-screen').projectDir = new File('../../../node_modules/@capacitor/splash-screen/android')
 
 include ':capacitor-status-bar'
-project(':capacitor-status-bar').projectDir = new File('../../../node_modules/@capacitor/status-bar/android')
+project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
 
 include ':capgo-capacitor-social-login'
 project(':capgo-capacitor-social-login').projectDir = new File('../../../node_modules/@capgo/capacitor-social-login/android')
@@ -39,7 +39,7 @@ include ':revenuecat-purchases-capacitor'
 project(':revenuecat-purchases-capacitor').projectDir = new File('../../../node_modules/@revenuecat/purchases-capacitor/android')
 
 include ':sentry-capacitor'
-project(':sentry-capacitor').projectDir = new File('../../../node_modules/@sentry/capacitor/android')
+project(':sentry-capacitor').projectDir = new File('../node_modules/@sentry/capacitor/android')
 
 include ':squareetlabs-capacitor-navigation-bar'
 project(':squareetlabs-capacitor-navigation-bar').projectDir = new File('../../../node_modules/@squareetlabs/capacitor-navigation-bar/android')
