@@ -1,48 +1,58 @@
 package studio.jiva.shruti.audioplayer.mediaStateNotifications;
 
-import android.media.MediaPlayer;
 import android.os.Handler;
-import android.util.Log;
+import android.os.Looper;
+
+import androidx.annotation.OptIn;
+import androidx.media3.common.Player;
+import androidx.media3.common.Timeline;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.ExoPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is responsible for notifying the media state to the registered notifiers.
- * It runs in a separate thread and updates the media state every second.
+ * It runs in a separate thread and updates the media state every 100ms.
  */
 public final class MediaStateNotificationService {
     private final List<IMediaStateNotifier> notifiers = new ArrayList<>();
-    private final MediaPlayer mediaPlayer;
-    private boolean isRunning = true;
-    private boolean isUpdating = false;
+    private final ExoPlayer exoPlayer;
     private final MediaState state = new MediaState("", "stopped", "", "", 0, 0);
-    private final Handler handler = new Handler(); 
-    private final Runnable runnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!isRunning) { return; }
-            if (isUpdating) { update(); }
-            handler.postDelayed(this, 500);
-        }
-    };
 
-    public MediaStateNotificationService(
-            MediaPlayer mediaPlayer
-    ) {
-        this.mediaPlayer = mediaPlayer;
-        this.mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    private boolean isUpdating = false;
+    private boolean isRunning = false;
+
+    public MediaStateNotificationService(ExoPlayer exoPlayer) {
+        this.exoPlayer = exoPlayer;
+        this.exoPlayer.addListener(new Player.Listener() {
             @Override
-            public void onCompletion(MediaPlayer mp) {
-                state.setPosition(mediaPlayer.getDuration());
-                mediaPlayer.seekTo(mediaPlayer.getDuration());
+            public void onPlaybackStateChanged(int playbackState) {
+                if (playbackState == Player.STATE_ENDED) {
+                    state.setPosition(exoPlayer.getDuration());
+                    exoPlayer.seekTo(exoPlayer.getDuration());
+                }
             }
         });
     }
 
     public void run() {
-        isRunning = true;
-        this.runnable.run();
+        //if (isRunning) return;
+        //isRunning = true;
+        executor.scheduleWithFixedDelay(() -> {
+//            if (isUpdating) {
+            try {
+                new Handler(Looper.getMainLooper()).post(this::update);
+            } catch (Exception e) {
+                isRunning = false;
+            }
+//            }
+        }, 0, 500, TimeUnit.MILLISECONDS);
     }
 
     public void setUpdating(boolean updating) {
@@ -54,8 +64,22 @@ public final class MediaStateNotificationService {
     }
 
     public void update() {
-        state.setPosition(mediaPlayer.getCurrentPosition());
-        state.setState(mediaPlayer.isPlaying() ? "playing" : "paused");
+        long currentPosition = exoPlayer.getCurrentPosition();
+        long duration = exoPlayer.getDuration();
+
+//        if (exoPlayer.isPlaying()) {
+//            // Add elapsed time since last position update
+//            val elapsedSinceUpdate = SystemClock.elapsedRealtime() - lastPositionUpdateTime
+//            return currentPos + (elapsedSinceUpdate * playbackSpeed).toLong()
+//        }
+
+        state.setPosition(currentPosition);
+        state.setState(exoPlayer.isPlaying() ? "playing" : "paused");
+
+        if (duration > 0 && duration != state.getDuration()) {
+            state.setDuration(duration);
+        }
+
         for (IMediaStateNotifier notifier : notifiers) {
             notifier.send(state);
         }
@@ -67,5 +91,6 @@ public final class MediaStateNotificationService {
 
     public void stop() {
         isRunning = false;
+        executor.shutdownNow();
     }
 }
