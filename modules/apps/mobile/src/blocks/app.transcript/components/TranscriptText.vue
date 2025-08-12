@@ -28,6 +28,8 @@
           :text="block.block.text"
           :icon="showSpeakerIcons ? block.icon : undefined"
           :reference="block.block.reference"
+          :show-dash="block.block.speakerChanged"
+          :new-line="block.block.speakerChanged && blockIdx !== 0"
           :reference-visible="block.block.start <= position+1 && block.block.end >= position - 1"
           :lang="block.language"
           :class="{
@@ -37,6 +39,7 @@
           }"
           :data-time-start="block.block.start"
           :data-time-end="block.block.end"
+          :data-speaker="block.block.speaker"
           @click="emit('seek', block.block.start + .01)"
         />
 
@@ -46,6 +49,8 @@
           :reference="block.block.reference"
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
+            'highlighted': block.bookmarked,
+            'selected': block.selected,
           }"
           :data-time-start="block.block.start"
           :data-time-end="block.block.end"
@@ -59,6 +64,8 @@
           :reference-visible="block.block.start <= position+1 && block.block.end >= position - 1"
           :class="{
             'current': highlightCurrentSentence && block.block.start <= position && block.block.end >= position,
+            'highlighted': block.bookmarked,
+            'selected': block.selected,
           }"
           :data-time-start="block.block.start"
           :data-time-end="block.block.end"

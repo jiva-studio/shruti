@@ -119,7 +119,9 @@ export const useTranscriptLoader = createSharedComposable(() => {
     let views: TranscriptBlockView[] = []
     for (const { lang, transcript } of files) {
       const blockViews = (await Promise.all(
-        transcript.blocks.map(x => mapTranscriptBlock(x, lang))
+        transcript.blocks.map((x, idx) => mapTranscriptBlock({
+          block: x, blockIdx: idx, transcript: transcript, language: lang
+        }))
       ))
         .filter(x => x !== undefined && x.type !== 'paragraph')
         .map(block => ({ 
@@ -164,8 +166,12 @@ export const useTranscriptLoader = createSharedComposable(() => {
 
     for (const view of views) {
       const isGroupTooLong = blockTextLengths[view.language] > 512
-
-      if (isGroupTooLong) {
+      const isSpeakerTheSame = 
+        view.block.type === 'sentence'
+        && view.block.speaker 
+        && view.block.speakerChanged === false 
+      
+      if (isGroupTooLong && !isSpeakerTheSame) {
         groups.push({ blocks: lastGroup })
         languages.forEach(lang => { blockTextLengths[lang] = 0 })
         lastGroup = []
@@ -214,10 +220,12 @@ export const useTranscriptLoader = createSharedComposable(() => {
     return JSON.parse(file.data as string) as Transcript
   }
 
-  async function mapTranscriptBlock(
+  async function mapTranscriptBlock(data: {
     block: TranscriptBlock,
+    blockIdx: number,
+    transcript: Transcript,
     language: string,
-  ): Promise<    
+  }): Promise<    
     | TranscriptParagraphBlockView
     | TranscriptSentenceBlockView
     | TranscriptVerseTextBlockView 
@@ -225,13 +233,18 @@ export const useTranscriptLoader = createSharedComposable(() => {
     | undefined
   > {
     if (!options) { throw new Error('useTranscriptLoader is not initialized. Call init(options) first.') }
+    const { block, language, transcript, blockIdx } = data
 
     if (block.type === 'paragraph') { return block }
     else if (block.type === 'sentence') {
+      const prevBlock = transcript.blocks[blockIdx-1]
+      const speakerChanged = prevBlock 
+        ? prevBlock.type === 'sentence' && prevBlock.speaker !== block.speaker
+        : false
       const referenceView = block.reference 
         ? await mapReference(block.reference, language) 
         : block.reference
-      return { ...block, reference: referenceView }
+      return { ...block, speakerChanged, reference: referenceView }
     } else if (block.type === 'verse:text') {
       const referenceView = block.reference 
         ? await mapReference(block.reference, language) 
