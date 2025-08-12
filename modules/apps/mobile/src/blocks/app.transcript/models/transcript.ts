@@ -28,6 +28,7 @@ export type TranscriptSentenceBlockView = {
   text: string
   speaker?: string
   reference?: string
+  speakerChanged?: boolean
 } & WithTiming
 
 export type TranscriptVerseTextBlockView = {
@@ -40,7 +41,6 @@ export type TranscriptVerseTranslationBlockView = {
   type: 'verse:translation';
   text: string;
 } & WithTiming
-
 
 /**
  * Transcript block view with additional properties for UI representation.

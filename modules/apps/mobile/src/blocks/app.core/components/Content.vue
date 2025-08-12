@@ -1,5 +1,9 @@
 <template>
-  <IonContent class="ion-padding">
+  <IonContent
+    class="ion-padding"
+    :scroll-events="true"
+    @ion-scroll="onScroll"
+  >
     <div class="safe-padding">
       <slot />
     </div>
@@ -8,7 +12,28 @@
 
 
 <script setup lang="ts">
+import { provide, ref } from 'vue'
 import { IonContent } from '@ionic/vue'
+
+/* -------------------------------------------------------------------------- */
+/*                                    State                                   */
+/* -------------------------------------------------------------------------- */
+
+const scrollTop = ref(0)
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+provide('scrollTop', scrollTop)
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+function onScroll(event: any) {
+  scrollTop.value = event.detail.scrollTop
+}
 </script>
 
 

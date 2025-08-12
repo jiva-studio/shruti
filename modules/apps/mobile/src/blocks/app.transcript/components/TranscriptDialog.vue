@@ -51,6 +51,9 @@
       >
         <SelectionActions @action="onTextSelectionActionClicked" />
       </IonPopover>
+
+      <!-- Speaker Floating Chip -->
+      <SpeakerFloatingChip />
     </Content>
   </IonModal>
 </template>
@@ -64,6 +67,7 @@ import { TranscriptLanguage, TranscriptBlocksGroupView } from '../models'
 import { TextSelectedEvent, default as TranscriptText } from './TranscriptText.vue'
 import { default as LanguageSelector } from './LanguageSelector.vue'
 import { default as SelectionActions } from './SelectionActions.vue'
+import SpeakerFloatingChip from './SpeakerFloatingChip.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
