@@ -22,7 +22,10 @@
       </span>
       
       <br v-else-if="newLine">
-      <span v-if="showDash"> – </span>
+      <span
+        v-if="showDash"
+        class="no-stretch"
+      >–&nbsp;</span>
       
       <span
         v-bind="$attrs"
@@ -88,5 +91,10 @@ defineProps<{
 
 .hidden {
   opacity: 0;
+}
+
+.no-stretch {
+  text-align-last: left;
+  display: inline-block;
 }
 </style>

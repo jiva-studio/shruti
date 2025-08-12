@@ -21,19 +21,28 @@ const scrollTop: Ref<number>|undefined = inject('scrollTop')
 const positionTop = ref('0px')
 const curSpeaker  = ref('')
 const lastSpeaker = ref('')
+let lastEl: HTMLElement | null
 
 
 const intervalId = setInterval(async () => {
   const currentEl: HTMLElement | null = document.querySelector('.current')
   if (currentEl) {
-    const speaker    = currentEl.getAttribute('data-speaker')
-    const rect       = currentEl.getBoundingClientRect()
+    const speaker = currentEl.getAttribute('data-speaker')
+    // NOTE: Fuck you, Safari! Filter out <br> elements without width,
+    //       because speaker line with <br> will return two rects:
+    //       <br> for previous one and normal one. 
+    const top     = Math.min(...Array.from(currentEl.getClientRects())
+                                     .filter(x => x.width > 0)
+                                     .map(x => x.top))
+                         
     curSpeaker.value = speaker || ''
-
-    if (curSpeaker.value !== lastSpeaker.value) {
-      positionTop.value = `${rect.top  + (scrollTop?.value || 0)}px`
+    if (curSpeaker.value !== lastSpeaker.value || currentEl === lastEl) {
+      positionTop.value = `${top  + (scrollTop?.value || 0)}px`
     }
     lastSpeaker.value = speaker || ''
+    lastEl = currentEl
+  } else {
+    curSpeaker.value = ''
   }
 }, 500)
 
@@ -55,7 +64,7 @@ onUnmounted(() => clearInterval(intervalId))
   border-radius: 5px;
   background-color: var(--ion-color-warning);
   transition: all 100ms ease-in-out;
-  transform: translateY(-1.5rem);
+  transform: translateY(-100%);
 }
 
 .hidden {
