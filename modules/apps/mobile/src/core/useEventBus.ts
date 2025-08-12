@@ -117,14 +117,14 @@ export const useEventBus = createSharedComposable(() => {
     timeStart?: number, 
     timeEnd?: number,
     shareAudio?: boolean,
-  }>('shareTrackExcerpt')
+  }>('shareSendTrackExcerpt')
 
   const shareCopyTrackExcerpt = new Event<{ 
     trackId: string, 
     text: string, 
     // timeStart?: number, 
     // timeEnd?: number,
-  }>('shareTrackExcerpt')
+  }>('shareCopyTrackExcerpt')
 
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
