@@ -20,6 +20,10 @@
       >
         {{ reference }}
       </span>
+      
+      <br v-else-if="newLine">
+      <span v-if="showDash"> – </span>
+      
       <span
         v-bind="$attrs"
         v-html="text + ' '"
@@ -35,8 +39,10 @@
 /* -------------------------------------------------------------------------- */
 
 defineProps<{
-  text: string,
+  text: string
   icon?: string
+  newLine?: boolean
+  showDash?: boolean
   reference?: string
   referenceVisible: boolean
 }>()
