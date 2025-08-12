@@ -40,8 +40,9 @@ export function useTrackTextExcerptFormatter(
     const safeText  = request.text.replace(/<[^>]*>/g, '')
     const author    = await mapAuthorFullNameById(track.author, request.language)
     const title     = delimiter + ' ' + mapTrackTitle(track.title, request.language)
-    const date      = track.date       ? delimiter + ' ' + mapTrackDate(track.date) : '' // TODO: use locale
-    const reference = track.references ? delimiter + ' ' + await mapReference(track.references[0], request.language) : ''
+    const date      = track.date ? delimiter + ' ' + mapTrackDate(track.date) : '' // TODO: use locale
+
+    const reference = (track.references && track.references.length > 0) ? delimiter + ' ' + await mapReference(track.references[0], request.language) : ''
 
     const timeRangeText = (
       request.timeStart && request.timeEnd
