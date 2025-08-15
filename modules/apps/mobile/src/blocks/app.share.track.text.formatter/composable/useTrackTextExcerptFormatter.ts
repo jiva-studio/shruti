@@ -1,6 +1,6 @@
 import { mapAuthorFullNameById, mapReference, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
-import { IRepository } from '@shruti/dal/index'
-import { Track } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { Track } from '@shruti/dal'
 import { useTimeFormatter } from '@shruti/mobile/core'
 
 export type InitOptions = {

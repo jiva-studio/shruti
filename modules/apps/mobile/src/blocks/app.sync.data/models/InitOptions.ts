@@ -1,4 +1,4 @@
-import { Database } from '@shruti/dal/persistence'
+import { Database } from '@shruti/dal'
 
 type SyncDatabases = {
   index: Database

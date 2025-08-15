@@ -1,6 +1,6 @@
 import { createSharedComposable } from '@vueuse/core'
 import { useLogger } from '@shruti/mobile/core'
-import { SyncResult } from '@shruti/dal/persistence'
+import { SyncResult } from '@shruti/dal'
 import { useSyncCommonDataTask } from './useSyncCommonDataTask'
 import { useSyncUserDataTask } from './useSyncUserDataTask'
 import { useSyncDataStore } from './useSyncDataStore'

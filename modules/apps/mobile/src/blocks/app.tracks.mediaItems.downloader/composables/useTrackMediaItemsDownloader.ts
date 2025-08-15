@@ -1,6 +1,6 @@
 import { Filesystem, Directory, ProgressStatus } from '@capacitor/filesystem'
-import { IRepository } from '@shruti/dal/index'
-import { MediaItem } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { MediaItem } from '@shruti/dal'
 import { useLogger } from '@shruti/mobile/core'
 import { Event } from '@shruti/mobile/core'
 import { createSharedComposable } from '@vueuse/core'

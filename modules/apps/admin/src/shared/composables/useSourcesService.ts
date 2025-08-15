@@ -1,5 +1,5 @@
 import { createSharedComposable } from '@vueuse/core'
-import { SourcesRepository } from '@shruti/dal/index'
+import { SourcesRepository } from '@shruti/dal'
 import { useDatabase } from '@shruti/admin/shared'
 
 export const useSourcesService = createSharedComposable(() => {

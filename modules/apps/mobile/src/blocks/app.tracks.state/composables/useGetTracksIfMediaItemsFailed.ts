@@ -1,4 +1,4 @@
-import { MediaItem } from '@shruti/dal/models'
+import { MediaItem } from '@shruti/dal'
 import { InitOptions } from '../models/InitOptions'
 
 export function useGetTracksIfMediaItemsFailed(

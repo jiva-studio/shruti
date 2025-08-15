@@ -1,5 +1,5 @@
-import { IRepository, ItemChangedEvent } from '@shruti/dal/index'
-import { Note } from '@shruti/dal/models'
+import { IRepository, ItemChangedEvent } from '@shruti/dal'
+import { Note } from '@shruti/dal'
 import { createSharedComposable } from '@vueuse/core'
 import FlexSearch from 'flexsearch'
 

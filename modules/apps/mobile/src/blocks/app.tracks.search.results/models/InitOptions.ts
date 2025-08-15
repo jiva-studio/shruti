@@ -1,5 +1,5 @@
-import { IndexService, IRepository, TracksSearchService } from '@shruti/dal/index'
-import { Duration, Source } from '@shruti/dal/models'
+import { IndexService, IRepository, TracksSearchService } from '@shruti/dal'
+import { Duration, Source } from '@shruti/dal'
 
 export type InitOptions = {
   indexService: IndexService

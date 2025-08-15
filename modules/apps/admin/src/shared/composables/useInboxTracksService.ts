@@ -1,4 +1,4 @@
-import { InboxTracksRepository } from '@shruti/dal/index'
+import { InboxTracksRepository } from '@shruti/dal'
 import { createSharedComposable } from '@vueuse/core'
 import { useDatabase } from './useDatabase'
 

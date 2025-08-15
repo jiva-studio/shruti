@@ -9,10 +9,6 @@
       "path": "./.github"
     },
     {
-      "name": "🐞 Shruti :: Patches",
-      "path": "./modules/patches"
-    },
-    {
       "name": "👑 Apps :: Admin",
       "path": "./modules/apps/admin"
     },

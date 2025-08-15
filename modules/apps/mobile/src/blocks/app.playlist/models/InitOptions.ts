@@ -1,5 +1,5 @@
-import { IRepository } from '@shruti/dal/index'
-import { PlaylistItem, Track } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { PlaylistItem, Track } from '@shruti/dal'
 
 export type InitOptions = {
   playlistItemsRepository: IRepository<PlaylistItem>

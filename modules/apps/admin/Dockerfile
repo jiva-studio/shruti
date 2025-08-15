@@ -5,19 +5,10 @@
 FROM node:22.10.0-bookworm AS base
 
 WORKDIR /akd-stidios/shruti/
-COPY package*.json ./ 
 COPY apps/admin/package*.json apps/admin/
-RUN npm install \
-    && cd ./apps/admin \
-    && npm i
+RUN cd apps/admin && npm i
 COPY . .
-
-# ---------------------------------------------------------------------------- #
-#                                     Build                                    #
-# ---------------------------------------------------------------------------- #
-
-FROM base AS build
-RUN cd ./apps/admin && npm run build-only
+RUN cd apps/admin && npm run build-only
 
 # ---------------------------------------------------------------------------- #
 #                                    Release                                   #
@@ -29,7 +20,7 @@ LABEL org.opencontainers.image.description="Admin service for Shruti"
 LABEL org.opencontainers.image.source="https://github.com/akdasa-studios/shruti"
 LABEL org.opencontainers.image.authors="AKd Studios"
 
-COPY --from=build /akd-stidios/shruti/apps/admin/dist /usr/share/nginx/html
+COPY --from=base /akd-stidios/shruti/apps/admin/dist /usr/share/nginx/html
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

@@ -39,9 +39,6 @@ import '@blocks/app.ui.kit/styles/variables.css'
 /** 
  * Configure PouchDB to use SQLite adapter for Cordova
  */
-import PouchDB from 'pouchdb'
-import PouchDBAdapterSqlLite from 'pouchdb-adapter-cordova-sqlite'
-PouchDB.plugin(PouchDBAdapterSqlLite)
 
 /* -------------------------------------------------------------------------- */
 /*                                   Blocks                                   */

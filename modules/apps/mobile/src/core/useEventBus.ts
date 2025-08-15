@@ -1,4 +1,4 @@
-import { SyncResult } from '@shruti/dal/persistence'
+import { type SyncResult } from '@shruti/dal'
 import { Event } from './Event'
 import { createSharedComposable } from '@vueuse/core'
 

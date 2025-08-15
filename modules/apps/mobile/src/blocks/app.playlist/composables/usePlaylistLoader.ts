@@ -1,4 +1,4 @@
-import { Track } from '@shruti/dal/models'
+import { Track } from '@shruti/dal'
 import { InitOptions } from '../models/InitOptions'
 import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 import { usePlaylistItemMapper } from './usePlaylistItemMapper'

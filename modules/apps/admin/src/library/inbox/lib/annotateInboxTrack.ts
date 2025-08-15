@@ -1,4 +1,4 @@
-import type { InboxTrack, Reference } from '@shruti/dal/models'
+import type { InboxTrack, Reference } from '@shruti/dal'
 import {
   useAuthorsService,
   useLocationsService,

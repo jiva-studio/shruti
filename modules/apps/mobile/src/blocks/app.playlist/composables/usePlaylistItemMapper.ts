@@ -1,4 +1,4 @@
-import { PlaylistItem, Track } from '@shruti/dal/models'
+import { PlaylistItem, Track } from '@shruti/dal'
 import { mapAuthorFullNameById, mapLocationFullNameById, mapReference, mapTagFullNameById, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
 import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 

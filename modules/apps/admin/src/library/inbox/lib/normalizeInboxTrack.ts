@@ -1,4 +1,4 @@
-import type { Reference } from '@shruti/dal/models'
+import type { Reference } from '@shruti/dal'
 import {
   useAuthorsService,
   useLocationsService,

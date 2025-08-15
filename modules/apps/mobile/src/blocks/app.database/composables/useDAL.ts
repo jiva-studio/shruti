@@ -5,7 +5,7 @@ import {
   LanguagesRepository, LocationsRepository, MediaItemsRepository, NotesRepository, 
   PlaylistItemsRepository, SortMethodsRepository, SourcesRepository, TagsRepository,
   TracksRepository, TracksSearchService, ArchiveService,
-} from '@shruti/dal/index'
+} from '@shruti/dal'
 
 export const useDAL = createSharedComposable(() => {
   const database = useLocalDatabase().get()

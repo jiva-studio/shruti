@@ -20,3 +20,6 @@ export * from './services/IndexService'
 export * from './services/MediaItemsService'
 export * from './services/ArchiveService'
 export * from './services/TracksSearchService'
+
+export * from './persistence'
+export * from './models'

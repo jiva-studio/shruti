@@ -1,7 +1,7 @@
 import { createSharedComposable } from '@vueuse/core'
-import { IRepository } from '@shruti/dal/index'
+import { IRepository } from '@shruti/dal'
 import { useTracksCountStore } from './useTracksCountStore'
-import { Track } from '@shruti/dal/models'
+import { Track } from '@shruti/dal'
 
 export type Options = {
   tracksRepo: IRepository<Track>

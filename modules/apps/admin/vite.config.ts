@@ -7,13 +7,14 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [vue(), vueDevTools()],
   resolve: {
+    preserveSymlinks: true,
     alias: {
       '@shruti/admin': fileURLToPath(new URL('./src', import.meta.url)),
-      '@shruti/dal': fileURLToPath(
-        new URL('../../libs/dal', import.meta.url),
-      ),
       '@shruti/protocol': fileURLToPath(
-        new URL('../../libs/protocol', import.meta.url),
+        new URL('./submodules/protocol', import.meta.url),
+      ),
+      '@shruti/dal': fileURLToPath(
+        new URL('./submodules/dal', import.meta.url),
       ),
     },
   },

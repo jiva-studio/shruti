@@ -1,5 +1,5 @@
-import { IRepository, MediaItemDBSchema } from '@shruti/dal/index'
-import { MediaItem } from '@shruti/dal/models'
+import { IRepository, MediaItemDBSchema } from '@shruti/dal'
+import { MediaItem } from '@shruti/dal'
 import { TrackMediaSignedUrl } from '../models/TrackMediaSignedUrl'
 
 type Options = {

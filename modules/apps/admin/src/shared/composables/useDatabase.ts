@@ -1,5 +1,5 @@
 import { createSharedComposable } from '@vueuse/core'
-import { Database } from '@shruti/dal/persistence/Database'
+import { Database } from '@shruti/dal'
 import { useAuthTokens } from '@shruti/admin/auth'
 import { useConfig } from './useConfig'
 

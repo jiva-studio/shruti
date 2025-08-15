@@ -1,7 +1,7 @@
 import { AudioSegmentRequest, AudioSegmentResponse } from '@shruti/protocol/audio'
 import { Filesystem, Directory } from '@capacitor/filesystem'
-import { IRepository } from '@shruti/dal/index'
-import { Author, Track } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { Author, Track } from '@shruti/dal'
 import { useTimeFormatter } from '@shruti/mobile/core'
 import { useTrackAudioFragmentStore } from './useTrackAudioFragmentStore'
 

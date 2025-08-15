@@ -1,4 +1,4 @@
-import type { InboxTrack } from '@shruti/dal/models'
+import type { InboxTrack } from '@shruti/dal'
 import type { EditInboxTrack } from '@shruti/admin/library/inbox'
 
 export function mapEditInboxTrackToInboxTrack(

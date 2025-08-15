@@ -1,5 +1,5 @@
-import { Source, Duration } from '@shruti/dal/models'
-import { IRepository, IndexService, TracksSearchService } from '@shruti/dal/index'
+import { Source, Duration } from '@shruti/dal'
+import { IRepository, IndexService, TracksSearchService } from '@shruti/dal'
 import { TrackSearchFilters } from '../models/TrackSearchFilters'
 import { useTrackToSearchResultMapper } from './useTrackToSearchResultMapper'
 
