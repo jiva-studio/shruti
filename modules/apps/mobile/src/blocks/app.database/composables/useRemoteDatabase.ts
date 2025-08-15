@@ -1,4 +1,4 @@
-import { Database } from '@shruti/dal/persistence'
+import { Database } from '@shruti/dal'
 import { createSharedComposable } from '@vueuse/core'
 
 type InitOptions = {

@@ -1,8 +1,8 @@
-import { IRepository, IndexService, TracksSearchService } from '@shruti/dal/index'
+import { Duration, Source } from '@shruti/dal'
+import { IRepository, IndexService, TracksSearchService } from '@shruti/dal'
 import { useTrackSearchResultsStore } from './useTrackSearchResultsStore'
 import { TrackSearchFilters } from '../models/TrackSearchFilters'
 import { useSearchResultsLoader } from './useSearchResultsLoader'
-import { Duration, Source } from '@shruti/dal/models'
 import { createSharedComposable } from '@vueuse/core'
 
 type Options = {

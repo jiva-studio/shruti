@@ -1,7 +1,7 @@
 import { createSharedComposable } from '@vueuse/core'
 import { useSearchFiltersDictionaryStore } from './useSearchFiltersDictionaryStore'
-import { IRepository } from '@shruti/dal/index'
-import { Author, Source, Location, Language, Duration, SortMethod } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { Author, Source, Location, Language, Duration, SortMethod } from '@shruti/dal'
 
 export type Options = {
   authorsService: IRepository<Author>

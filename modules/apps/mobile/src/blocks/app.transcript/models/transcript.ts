@@ -1,4 +1,4 @@
-// import { TranscriptBlock } from '@shruti/dal/models'
+// import { TranscriptBlock } from '@shruti/dal'
 
 /**
  * Language for the transcript.

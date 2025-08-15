@@ -14,13 +14,20 @@ export const useSubscription = createSharedComposable(() => {
   /* ---------------------------------- Init ---------------------------------- */
 
   async function init(userId: string | null = null) {
+    let revenueCatKey: string | undefined = undefined
     if (Capacitor.getPlatform() === 'web') { return }
-    if (!ENVIRONMENT.revenueCatKey) { return }
+    if (Capacitor.getPlatform() === 'android') { 
+      revenueCatKey = ENVIRONMENT.revenueCatGoogleKey
+    }
+    if (Capacitor.getPlatform() === 'ios') { 
+      revenueCatKey = ENVIRONMENT.revenueCatAppleKey
+    }
+    if (!revenueCatKey) { return }
 
     await Promise.all([
       Purchases.setLogLevel({ level: LOG_LEVEL.DEBUG }),
       Purchases.configure({ 
-        apiKey: ENVIRONMENT.revenueCatKey,
+        apiKey: revenueCatKey,
         appUserID: userId,
       })
     ])

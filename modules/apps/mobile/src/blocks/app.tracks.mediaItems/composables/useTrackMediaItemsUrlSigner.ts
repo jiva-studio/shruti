@@ -1,6 +1,6 @@
-import { Track } from '@shruti/dal/models'
+import { Track } from '@shruti/dal'
+import { IRepository } from '@shruti/dal'
 import { S3Operation } from '@shruti/protocol/s3'
-import { IRepository } from '@shruti/dal/index'
 import { IBucketService } from '@shruti/mobile/interfaces'
 import { TrackMediaSignedUrl } from '../models/TrackMediaSignedUrl'
 

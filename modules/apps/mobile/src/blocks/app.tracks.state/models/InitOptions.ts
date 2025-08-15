@@ -1,5 +1,5 @@
-import { IRepository } from '@shruti/dal/index'
-import { MediaItem, PlaylistItem } from '@shruti/dal/models'
+import { IRepository } from '@shruti/dal'
+import { MediaItem, PlaylistItem } from '@shruti/dal'
 
 export type InitOptions = {
   mediaItemsRepository: IRepository<MediaItem>,

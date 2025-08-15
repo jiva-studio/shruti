@@ -1,6 +1,6 @@
-import { IRepository } from '@shruti/dal/index'
+import { IRepository } from '@shruti/dal'
 import { createSharedComposable } from '@vueuse/core'
-import { Note, Track } from '@shruti/dal/models'
+import { Note, Track } from '@shruti/dal'
 import { useNotesLoader } from './useNotesLoader'
 import { useNotesStore } from './useNotesStore'
 

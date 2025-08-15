@@ -1,5 +1,5 @@
-import { Note, Track } from '@shruti/dal/models'
-import { IRepository } from '@shruti/dal/index'
+import { Note, Track } from '@shruti/dal'
+import { IRepository } from '@shruti/dal'
 import { useLanguageDetector, useLogger } from '@shruti/mobile/core'
 
 export type Options = {

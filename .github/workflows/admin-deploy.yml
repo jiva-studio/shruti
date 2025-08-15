@@ -7,7 +7,6 @@ on:
     paths:
       - "modules/apps/admin/**"
       - "modules/libs/dal/**"
-      - ".github/workflows/admin-build.yml"
       - ".github/workflows/admin-deploy.yml"
 
 env:

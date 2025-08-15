@@ -1,10 +1,10 @@
 PODS:
   - Alamofire (5.10.2)
-  - AppAuth (1.7.6):
-    - AppAuth/Core (= 1.7.6)
-    - AppAuth/ExternalUserAgent (= 1.7.6)
-  - AppAuth/Core (1.7.6)
-  - AppAuth/ExternalUserAgent (1.7.6):
+  - AppAuth (2.0.0):
+    - AppAuth/Core (= 2.0.0)
+    - AppAuth/ExternalUserAgent (= 2.0.0)
+  - AppAuth/Core (2.0.0)
+  - AppAuth/ExternalUserAgent (2.0.0):
     - AppAuth/Core
   - AppCheckCore (11.2.0):
     - GoogleUtilities/Environment (~> 8.0)
@@ -17,10 +17,11 @@ PODS:
   - CapacitorClipboard (7.0.2):
     - Capacitor
   - CapacitorCordova (7.4.2)
-  - CapacitorDevice (7.0.1):
+  - CapacitorDevice (7.0.2):
     - Capacitor
-  - CapacitorFilesystem (7.0.1):
+  - CapacitorFilesystem (7.1.4):
     - Capacitor
+    - IONFilesystemLib (~> 1.0.1)
   - CapacitorHaptics (7.0.2):
     - Capacitor
   - CapacitorKeyboard (7.0.2):
@@ -33,12 +34,12 @@ PODS:
     - Capacitor
   - CapacitorStatusBar (7.0.2):
     - Capacitor
-  - CapgoCapacitorSocialLogin (7.7.0):
+  - CapgoCapacitorSocialLogin (7.8.3):
     - Alamofire (~> 5.10.2)
     - Capacitor
     - FBSDKCoreKit (= 17.4.0)
     - FBSDKLoginKit (= 17.4.0)
-    - GoogleSignIn (~> 8.0.0)
+    - GoogleSignIn (~> 9.0.0)
   - CordovaPlugins (7.4.2):
     - CapacitorCordova
   - FBAEMKit (17.4.0):
@@ -49,10 +50,10 @@ PODS:
   - FBSDKCoreKit_Basics (17.4.0)
   - FBSDKLoginKit (17.4.0):
     - FBSDKCoreKit (= 17.4.0)
-  - GoogleSignIn (8.0.0):
-    - AppAuth (< 2.0, >= 1.7.3)
+  - GoogleSignIn (9.0.0):
+    - AppAuth (~> 2.0)
     - AppCheckCore (~> 11.0)
-    - GTMAppAuth (< 5.0, >= 4.1.1)
+    - GTMAppAuth (~> 5.0)
     - GTMSessionFetcher/Core (~> 3.3)
   - GoogleUtilities/Environment (8.1.0):
     - GoogleUtilities/Privacy
@@ -63,19 +64,20 @@ PODS:
   - GoogleUtilities/UserDefaults (8.1.0):
     - GoogleUtilities/Logger
     - GoogleUtilities/Privacy
-  - GTMAppAuth (4.1.1):
-    - AppAuth/Core (~> 1.7)
+  - GTMAppAuth (5.0.0):
+    - AppAuth/Core (~> 2.0)
     - GTMSessionFetcher/Core (< 4.0, >= 3.3)
   - GTMSessionFetcher/Core (3.5.0)
+  - IONFilesystemLib (1.0.1)
   - ShrutiAudioPlayer (0.0.1):
     - Capacitor
   - PromisesObjC (2.4.0)
-  - PurchasesHybridCommon (13.28.0):
-    - RevenueCat (= 5.21.0)
-  - RevenueCat (5.21.0)
-  - RevenuecatPurchasesCapacitor (10.2.3):
+  - PurchasesHybridCommon (14.2.0):
+    - RevenueCat (= 5.32.0)
+  - RevenueCat (5.32.0)
+  - RevenuecatPurchasesCapacitor (10.3.8):
     - Capacitor
-    - PurchasesHybridCommon (= 13.28.0)
+    - PurchasesHybridCommon (= 14.2.0)
   - Sentry/HybridSDK (8.53.2)
   - SentryCapacitor (2.1.0):
     - Capacitor
@@ -84,24 +86,24 @@ PODS:
     - Capacitor
 
 DEPENDENCIES:
-  - "Capacitor (from `../../../../node_modules/@capacitor/ios`)"
+  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorApp (from `../../node_modules/@capacitor/app`)"
-  - "CapacitorClipboard (from `../../../../node_modules/@capacitor/clipboard`)"
-  - "CapacitorCordova (from `../../../../node_modules/@capacitor/ios`)"
-  - "CapacitorDevice (from `../../../../node_modules/@capacitor/device`)"
-  - "CapacitorFilesystem (from `../../../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorClipboard (from `../../node_modules/@capacitor/clipboard`)"
+  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorDevice (from `../../node_modules/@capacitor/device`)"
+  - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
-  - CapacitorPluginSafeArea (from `../../../../node_modules/capacitor-plugin-safe-area`)
-  - "CapacitorShare (from `../../../../node_modules/@capacitor/share`)"
-  - "CapacitorSplashScreen (from `../../../../node_modules/@capacitor/splash-screen`)"
+  - CapacitorPluginSafeArea (from `../../node_modules/capacitor-plugin-safe-area`)
+  - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
+  - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
   - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
-  - "CapgoCapacitorSocialLogin (from `../../../../node_modules/@capgo/capacitor-social-login`)"
+  - "CapgoCapacitorSocialLogin (from `../../node_modules/@capgo/capacitor-social-login`)"
   - CordovaPlugins (from `../capacitor-cordova-ios-plugins`)
   - ShrutiAudioPlayer (from `../../../../libs/audioPlayer`)
-  - "RevenuecatPurchasesCapacitor (from `../../../../node_modules/@revenuecat/purchases-capacitor`)"
+  - "RevenuecatPurchasesCapacitor (from `../../node_modules/@revenuecat/purchases-capacitor`)"
   - "SentryCapacitor (from `../../node_modules/@sentry/capacitor`)"
-  - "SquareetlabsCapacitorNavigationBar (from `../../../../node_modules/@squareetlabs/capacitor-navigation-bar`)"
+  - "SquareetlabsCapacitorNavigationBar (from `../../node_modules/@squareetlabs/capacitor-navigation-bar`)"
 
 SPEC REPOS:
   trunk:
@@ -116,6 +118,7 @@ SPEC REPOS:
     - GoogleUtilities
     - GTMAppAuth
     - GTMSessionFetcher
+    - IONFilesystemLib
     - PromisesObjC
     - PurchasesHybridCommon
     - RevenueCat
@@ -123,77 +126,78 @@ SPEC REPOS:
 
 EXTERNAL SOURCES:
   Capacitor:
-    :path: "../../../../node_modules/@capacitor/ios"
+    :path: "../../node_modules/@capacitor/ios"
   CapacitorApp:
     :path: "../../node_modules/@capacitor/app"
   CapacitorClipboard:
-    :path: "../../../../node_modules/@capacitor/clipboard"
+    :path: "../../node_modules/@capacitor/clipboard"
   CapacitorCordova:
-    :path: "../../../../node_modules/@capacitor/ios"
+    :path: "../../node_modules/@capacitor/ios"
   CapacitorDevice:
-    :path: "../../../../node_modules/@capacitor/device"
+    :path: "../../node_modules/@capacitor/device"
   CapacitorFilesystem:
-    :path: "../../../../node_modules/@capacitor/filesystem"
+    :path: "../../node_modules/@capacitor/filesystem"
   CapacitorHaptics:
     :path: "../../node_modules/@capacitor/haptics"
   CapacitorKeyboard:
     :path: "../../node_modules/@capacitor/keyboard"
   CapacitorPluginSafeArea:
-    :path: "../../../../node_modules/capacitor-plugin-safe-area"
+    :path: "../../node_modules/capacitor-plugin-safe-area"
   CapacitorShare:
-    :path: "../../../../node_modules/@capacitor/share"
+    :path: "../../node_modules/@capacitor/share"
   CapacitorSplashScreen:
-    :path: "../../../../node_modules/@capacitor/splash-screen"
+    :path: "../../node_modules/@capacitor/splash-screen"
   CapacitorStatusBar:
     :path: "../../node_modules/@capacitor/status-bar"
   CapgoCapacitorSocialLogin:
-    :path: "../../../../node_modules/@capgo/capacitor-social-login"
+    :path: "../../node_modules/@capgo/capacitor-social-login"
   CordovaPlugins:
     :path: "../capacitor-cordova-ios-plugins"
   ShrutiAudioPlayer:
     :path: "../../../../libs/audioPlayer"
   RevenuecatPurchasesCapacitor:
-    :path: "../../../../node_modules/@revenuecat/purchases-capacitor"
+    :path: "../../node_modules/@revenuecat/purchases-capacitor"
   SentryCapacitor:
     :path: "../../node_modules/@sentry/capacitor"
   SquareetlabsCapacitorNavigationBar:
-    :path: "../../../../node_modules/@squareetlabs/capacitor-navigation-bar"
+    :path: "../../node_modules/@squareetlabs/capacitor-navigation-bar"
 
 SPEC CHECKSUMS:
   Alamofire: 7193b3b92c74a07f85569e1a6c4f4237291e7496
-  AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
+  AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   Capacitor: 156d98aba46ec01dde72c4bbb92fa626837cad29
   CapacitorApp: efc1e9748a8ea5d3e789cd82a4f451341cc7ac93
   CapacitorClipboard: e8b3578b2fce3c4795a5bdf2990b3b7dcef83f65
   CapacitorCordova: 5e58d04631bc5094894ac106e2bf1da18a9e6151
-  CapacitorDevice: fe3f190e1d718f4607bdc6b73993433d1c84f409
-  CapacitorFilesystem: 307f97c27a265edf8396a1c9c235592fd8572fe3
+  CapacitorDevice: a50a45f0d075e55e2392c7a4be5404d4f69515de
+  CapacitorFilesystem: ac0a386949ed6c295a3dffa129ecd26b881ae5be
   CapacitorHaptics: 09d96bcb5a2b74ede8fd039b4cdf58fc43dcacf1
   CapacitorKeyboard: 056bbe3711830ccb782f1705a8ad183b27b6c51e
   CapacitorPluginSafeArea: af80830df43015a915e504a56318a3027d3fc806
   CapacitorShare: 051c3ceee0ddf3bb54574851a622bbb317eed5bd
   CapacitorSplashScreen: 8d6c8cb0542a8e81585c593815db8785ed8ce454
   CapacitorStatusBar: 5526833b87fa9c96a2a90c1322bb1f663c04505f
-  CapgoCapacitorSocialLogin: 6318c6c8c16fe3343eacd28b0ad21c3f6aac3e8e
+  CapgoCapacitorSocialLogin: e97bd122b6d66ef6c3f1cfd736df958c05a390ae
   CordovaPlugins: ab22a3465140a15b724dc02ab8f3b4636a01fb15
   FBAEMKit: 58cb5f302cdd715a56d4c1d0dfdd2e423ac1421a
   FBSDKCoreKit: 94d7461d0cecf441b1ba7c41acfff41daa8ccd41
   FBSDKCoreKit_Basics: 151b43db8b834d3f0e02f95d36a44ffd36265e45
   FBSDKLoginKit: 5c1cd53c91a2282b3a4fe6e6d3dcf2b8b0d33d55
-  GoogleSignIn: ce8c89bb9b37fb624b92e7514cc67335d1e277e4
+  GoogleSignIn: c7f09cfbc85a1abf69187be091997c317cc33b77
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
-  GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
+  GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
+  IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
   ShrutiAudioPlayer: a208c1381dba997ff214c5018f60b576c27b565d
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
-  PurchasesHybridCommon: f0d344e7073314988b3d98fbb9da69db85aaff38
-  RevenueCat: 57028a8673201fdaacd1354065e8adbcba5739a4
-  RevenuecatPurchasesCapacitor: 0a33468ad297574a4416e2955a7ffa7407da9f92
+  PurchasesHybridCommon: f1650b33e9a1dd04d5e8a40dfe757f39e63f935c
+  RevenueCat: 7e1d0768fb287c9983173c9b28e39ccbeeb828a9
+  RevenuecatPurchasesCapacitor: 556c28e9b720bcb7400bb2bcaad003db72f2abb0
   Sentry: 59993bffde4a1ac297ba6d268dc4bbce068d7c1b
   SentryCapacitor: 8056121e380f9b8c2473376da060850c60744ac7
   SquareetlabsCapacitorNavigationBar: b6e54a683e5504db259963b1daf27e723f3cce75
 
-PODFILE CHECKSUM: 55973ce7bac1f1403253fb291d16c49563f03af2
+PODFILE CHECKSUM: 35a36679d5d60401155a84e701c046728c4036a3
 
 COCOAPODS: 1.16.2

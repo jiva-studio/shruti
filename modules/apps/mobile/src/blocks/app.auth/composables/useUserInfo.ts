@@ -1,4 +1,4 @@
-import { Database } from '@shruti/dal/persistence'
+import { Database } from '@shruti/dal'
 import { Signal } from '@shruti/mobile/core'
 import { createSharedComposable } from '@vueuse/core'
 

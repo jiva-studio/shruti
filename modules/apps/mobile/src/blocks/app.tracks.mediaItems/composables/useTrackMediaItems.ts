@@ -1,6 +1,6 @@
-import { IRepository } from '@shruti/dal/index'
+import { IRepository } from '@shruti/dal'
 import { IBucketService } from '@shruti/mobile/interfaces'
-import { MediaItem, Track } from '@shruti/dal/models'
+import { MediaItem, Track } from '@shruti/dal'
 import { useTrackMediaItemsUrlSigner } from './useTrackMediaItemsUrlSigner'
 import { useTrackMediaItemsCreator } from './useTrackMediaItemsCreator'
 import { createSharedComposable } from '@vueuse/core'

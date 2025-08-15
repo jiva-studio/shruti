@@ -4,7 +4,8 @@ platform :ios do
   desc "Push a new beta build to TestFlight"
   lane :staging do
     commit = last_git_commit
-    tag = last_git_tag.gsub(/^v/, '').gsub(/-.*/, '')
+    version = ENV['VERSION']
+    build_number = ENV['BUILD_NUMBER'] or ENV['BUILD_ID']
 
     # Set App Store Connect API Key to be able to upload
     # the build to App Store and submit it to TestFlight
@@ -35,11 +36,11 @@ platform :ios do
     )
 
     increment_build_number(
-      build_number: ENV["BUILD_ID"],
+      build_number: build_number,
       xcodeproj: "App.xcodeproj"
     )
     increment_version_number(
-      version_number: tag,
+      version_number: version,
       xcodeproj: "App.xcodeproj"
     )
 
@@ -85,21 +86,6 @@ platform :ios do
           "studio.jiva.shruti" => "Shruti Distribution"
         },
       }
-    )
-
-    # ---------------------------------------------------------------------------- #
-    #                                  Upload to S3                                #
-    # ---------------------------------------------------------------------------- #
-    
-    aws_s3(
-      access_key: ENV['BUCKET_ACCESS_KEY_ID'],
-      secret_access_key: ENV['BUCKET_SECRET_ACCESS_KEY'],
-      bucket: ENV['BUCKET_NAME'],
-      region: ENV['BUCKET_REGION_NAME'],
-      endpoint: ENV['BUCKET_ENDPOINT_URL'],
-      path: "artifacts/mobile-app/#{tag}/ios",
-      ipa: lane_context[SharedValues::IPA_OUTPUT_PATH],
-      upload_metadata: true
     )
 
     # ---------------------------------------------------------------------------- #

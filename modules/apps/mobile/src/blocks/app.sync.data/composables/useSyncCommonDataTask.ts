@@ -1,6 +1,6 @@
 import { useLogger } from '@shruti/mobile/core'
 import { InitOptions } from '../models/InitOptions'
-import { SyncResult } from '@shruti/dal/persistence'
+import { SyncResult } from '@shruti/dal'
 
 /**
  * Task for synchronizing common data between local and remote db. 

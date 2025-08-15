@@ -1,4 +1,4 @@
-import { Track } from '@shruti/dal/models'
+import { Track } from '@shruti/dal'
 import { TrackSearchResultItem } from '@blocks/app.tracks.search.results'
 import { mapAuthorFullNameById, mapLocationFullNameById, mapReference, mapTagFullNameById, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
 
