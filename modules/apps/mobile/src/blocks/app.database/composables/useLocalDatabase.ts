@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
-import { Database } from '@lectorium/dal/persistence'
+import { Database, DatabaseAddPlugin } from '@lectorium/dal'
 import { createSharedComposable } from '@vueuse/core'
+import AdapterCordovaSqlite from 'pouchdb-adapter-cordova-sqlite'
 
 type Databases = {
   index: Database,
@@ -9,7 +10,8 @@ type Databases = {
   dictionary: Database,
 }
 
-export const useLocalDatabase = createSharedComposable(() => {
+export const useLocalDatabase = createSharedComposable(() => { 
+  DatabaseAddPlugin(AdapterCordovaSqlite)
   const adapter = Capacitor.isNativePlatform() ? 'cordova-sqlite' : undefined
 
   /* -------------------------------------------------------------------------- */

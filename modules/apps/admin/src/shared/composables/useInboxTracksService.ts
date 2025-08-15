@@ -1,4 +1,4 @@
-import { InboxTracksRepository } from '@lectorium/dal/index'
+import { InboxTracksRepository } from '@lectorium/dal'
 import { createSharedComposable } from '@vueuse/core'
 import { useDatabase } from './useDatabase'
 

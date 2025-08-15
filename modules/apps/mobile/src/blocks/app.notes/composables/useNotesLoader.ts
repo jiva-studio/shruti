@@ -1,5 +1,5 @@
-import { Note, Track } from '@lectorium/dal/models'
-import { IRepository } from '@lectorium/dal/index'
+import { Note, Track } from '@lectorium/dal'
+import { IRepository } from '@lectorium/dal'
 import { useLanguageDetector, useLogger } from '@lectorium/mobile/core'
 
 export type Options = {

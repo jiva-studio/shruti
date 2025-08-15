@@ -9,10 +9,6 @@
       "path": "./.github"
     },
     {
-      "name": "🐞 Lectorium :: Patches",
-      "path": "./modules/patches"
-    },
-    {
       "name": "👑 Apps :: Admin",
       "path": "./modules/apps/admin"
     },

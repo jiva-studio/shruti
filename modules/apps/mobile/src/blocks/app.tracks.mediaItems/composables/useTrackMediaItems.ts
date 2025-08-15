@@ -1,6 +1,6 @@
-import { IRepository } from '@lectorium/dal/index'
+import { IRepository } from '@lectorium/dal'
 import { IBucketService } from '@lectorium/mobile/interfaces'
-import { MediaItem, Track } from '@lectorium/dal/models'
+import { MediaItem, Track } from '@lectorium/dal'
 import { useTrackMediaItemsUrlSigner } from './useTrackMediaItemsUrlSigner'
 import { useTrackMediaItemsCreator } from './useTrackMediaItemsCreator'
 import { createSharedComposable } from '@vueuse/core'

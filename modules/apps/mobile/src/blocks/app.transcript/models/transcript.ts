@@ -1,4 +1,4 @@
-// import { TranscriptBlock } from '@lectorium/dal/models'
+// import { TranscriptBlock } from '@lectorium/dal'
 
 /**
  * Language for the transcript.

@@ -1,4 +1,4 @@
-import { Database } from '@lectorium/dal/persistence'
+import { Database } from '@lectorium/dal'
 import { Signal } from '@lectorium/mobile/core'
 import { createSharedComposable } from '@vueuse/core'
 

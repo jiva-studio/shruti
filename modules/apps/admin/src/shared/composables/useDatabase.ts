@@ -1,5 +1,5 @@
 import { createSharedComposable } from '@vueuse/core'
-import { Database } from '@lectorium/dal/persistence/Database'
+import { Database } from '@lectorium/dal'
 import { useAuthTokens } from '@lectorium/admin/auth'
 import { useConfig } from './useConfig'
 

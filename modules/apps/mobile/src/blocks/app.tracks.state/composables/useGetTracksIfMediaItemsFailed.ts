@@ -1,4 +1,4 @@
-import { MediaItem } from '@lectorium/dal/models'
+import { MediaItem } from '@lectorium/dal'
 import { InitOptions } from '../models/InitOptions'
 
 export function useGetTracksIfMediaItemsFailed(

@@ -1,4 +1,4 @@
-import { Track } from '@lectorium/dal/models'
+import { Track } from '@lectorium/dal'
 import { InitOptions } from '../models/InitOptions'
 import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 import { usePlaylistItemMapper } from './usePlaylistItemMapper'

@@ -1,7 +1,7 @@
 import { AudioSegmentRequest, AudioSegmentResponse } from '@lectorium/protocol/audio'
 import { Filesystem, Directory } from '@capacitor/filesystem'
-import { IRepository } from '@lectorium/dal/index'
-import { Author, Track } from '@lectorium/dal/models'
+import { IRepository } from '@lectorium/dal'
+import { Author, Track } from '@lectorium/dal'
 import { useTimeFormatter } from '@lectorium/mobile/core'
 import { useTrackAudioFragmentStore } from './useTrackAudioFragmentStore'
 

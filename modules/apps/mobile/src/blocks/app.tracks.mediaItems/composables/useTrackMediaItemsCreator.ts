@@ -1,5 +1,5 @@
-import { IRepository, MediaItemDBSchema } from '@lectorium/dal/index'
-import { MediaItem } from '@lectorium/dal/models'
+import { IRepository, MediaItemDBSchema } from '@lectorium/dal'
+import { MediaItem } from '@lectorium/dal'
 import { TrackMediaSignedUrl } from '../models/TrackMediaSignedUrl'
 
 type Options = {

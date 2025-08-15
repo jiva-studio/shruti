@@ -1,8 +1,8 @@
-import { IRepository, IndexService, TracksSearchService } from '@lectorium/dal/index'
+import { Duration, Source } from '@lectorium/dal'
+import { IRepository, IndexService, TracksSearchService } from '@lectorium/dal'
 import { useTrackSearchResultsStore } from './useTrackSearchResultsStore'
 import { TrackSearchFilters } from '../models/TrackSearchFilters'
 import { useSearchResultsLoader } from './useSearchResultsLoader'
-import { Duration, Source } from '@lectorium/dal/models'
 import { createSharedComposable } from '@vueuse/core'
 
 type Options = {

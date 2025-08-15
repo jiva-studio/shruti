@@ -1,6 +1,6 @@
 import { mapAuthorFullNameById, mapReference, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
-import { IRepository } from '@lectorium/dal/index'
-import { Track } from '@lectorium/dal/models'
+import { IRepository } from '@lectorium/dal'
+import { Track } from '@lectorium/dal'
 import { useTimeFormatter } from '@lectorium/mobile/core'
 
 export type InitOptions = {

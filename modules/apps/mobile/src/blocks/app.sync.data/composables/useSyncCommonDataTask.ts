@@ -1,6 +1,6 @@
 import { useLogger } from '@lectorium/mobile/core'
 import { InitOptions } from '../models/InitOptions'
-import { SyncResult } from '@lectorium/dal/persistence'
+import { SyncResult } from '@lectorium/dal'
 
 /**
  * Task for synchronizing common data between local and remote db. 

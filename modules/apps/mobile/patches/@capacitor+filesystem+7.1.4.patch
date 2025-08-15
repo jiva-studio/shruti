@@ -1,8 +1,8 @@
-diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
-index 51c7ba2..ccd7f79 100644
---- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
-+++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/Filesystem.swift
-@@ -309,7 +309,9 @@ import Capacitor
+diff --git a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/LegacyFilesystemImplementation.swift b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/LegacyFilesystemImplementation.swift
+index b9dad01..56fce38 100644
+--- a/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/LegacyFilesystemImplementation.swift
++++ b/node_modules/@capacitor/filesystem/ios/Sources/FilesystemPlugin/LegacyFilesystemImplementation.swift
+@@ -131,7 +131,9 @@ import Capacitor
                      let timeElapsed = currentTimestamp - lastEmitTimestamp
  
                      if totalBytesExpectedToWrite > 0 {

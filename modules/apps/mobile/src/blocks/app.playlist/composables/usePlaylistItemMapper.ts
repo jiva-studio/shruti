@@ -1,4 +1,4 @@
-import { PlaylistItem, Track } from '@lectorium/dal/models'
+import { PlaylistItem, Track } from '@lectorium/dal'
 import { mapAuthorFullNameById, mapLocationFullNameById, mapReference, mapTagFullNameById, mapTrackDate, mapTrackTitle } from '@blocks/app.tracks'
 import { PlaylistStoreItem } from '../models/PlaylistStoreItem'
 

@@ -1,6 +1,6 @@
 import { createSharedComposable } from '@vueuse/core'
 import { useLogger } from '@lectorium/mobile/core'
-import { SyncResult } from '@lectorium/dal/persistence'
+import { SyncResult } from '@lectorium/dal'
 import { useSyncCommonDataTask } from './useSyncCommonDataTask'
 import { useSyncUserDataTask } from './useSyncUserDataTask'
 import { useSyncDataStore } from './useSyncDataStore'

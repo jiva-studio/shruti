@@ -7,13 +7,14 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 export default defineConfig({
   plugins: [vue(), vueDevTools()],
   resolve: {
+    preserveSymlinks: true,
     alias: {
       '@lectorium/admin': fileURLToPath(new URL('./src', import.meta.url)),
-      '@lectorium/dal': fileURLToPath(
-        new URL('../../libs/dal', import.meta.url),
-      ),
       '@lectorium/protocol': fileURLToPath(
-        new URL('../../libs/protocol', import.meta.url),
+        new URL('./submodules/protocol', import.meta.url),
+      ),
+      '@lectorium/dal': fileURLToPath(
+        new URL('./submodules/dal', import.meta.url),
       ),
     },
   },

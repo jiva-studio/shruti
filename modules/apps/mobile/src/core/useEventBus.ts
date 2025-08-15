@@ -1,4 +1,4 @@
-import { SyncResult } from '@lectorium/dal/persistence'
+import { type SyncResult } from '@lectorium/dal'
 import { Event } from './Event'
 import { createSharedComposable } from '@vueuse/core'
 

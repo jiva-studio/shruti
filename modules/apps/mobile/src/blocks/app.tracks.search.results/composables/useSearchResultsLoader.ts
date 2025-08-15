@@ -1,5 +1,5 @@
-import { Source, Duration } from '@lectorium/dal/models'
-import { IRepository, IndexService, TracksSearchService } from '@lectorium/dal/index'
+import { Source, Duration } from '@lectorium/dal'
+import { IRepository, IndexService, TracksSearchService } from '@lectorium/dal'
 import { TrackSearchFilters } from '../models/TrackSearchFilters'
 import { useTrackToSearchResultMapper } from './useTrackToSearchResultMapper'
 

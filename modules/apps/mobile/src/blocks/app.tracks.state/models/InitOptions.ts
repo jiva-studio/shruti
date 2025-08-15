@@ -1,5 +1,5 @@
-import { IRepository } from '@lectorium/dal/index'
-import { MediaItem, PlaylistItem } from '@lectorium/dal/models'
+import { IRepository } from '@lectorium/dal'
+import { MediaItem, PlaylistItem } from '@lectorium/dal'
 
 export type InitOptions = {
   mediaItemsRepository: IRepository<MediaItem>,

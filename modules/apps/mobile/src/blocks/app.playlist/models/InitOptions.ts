@@ -1,5 +1,5 @@
-import { IRepository } from '@lectorium/dal/index'
-import { PlaylistItem, Track } from '@lectorium/dal/models'
+import { IRepository } from '@lectorium/dal'
+import { PlaylistItem, Track } from '@lectorium/dal'
 
 export type InitOptions = {
   playlistItemsRepository: IRepository<PlaylistItem>

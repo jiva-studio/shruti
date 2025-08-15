@@ -1,6 +1,6 @@
-import { Track } from '@lectorium/dal/models'
+import { Track } from '@lectorium/dal'
+import { IRepository } from '@lectorium/dal'
 import { S3Operation } from '@lectorium/protocol/s3'
-import { IRepository } from '@lectorium/dal/index'
 import { IBucketService } from '@lectorium/mobile/interfaces'
 import { TrackMediaSignedUrl } from '../models/TrackMediaSignedUrl'
 

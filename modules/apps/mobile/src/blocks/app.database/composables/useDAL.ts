@@ -5,7 +5,7 @@ import {
   LanguagesRepository, LocationsRepository, MediaItemsRepository, NotesRepository, 
   PlaylistItemsRepository, SortMethodsRepository, SourcesRepository, TagsRepository,
   TracksRepository, TracksSearchService, ArchiveService,
-} from '@lectorium/dal/index'
+} from '@lectorium/dal'
 
 export const useDAL = createSharedComposable(() => {
   const database = useLocalDatabase().get()

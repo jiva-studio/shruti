@@ -1,4 +1,4 @@
-import { Database } from '@lectorium/dal/persistence'
+import { Database } from '@lectorium/dal'
 
 type SyncDatabases = {
   index: Database

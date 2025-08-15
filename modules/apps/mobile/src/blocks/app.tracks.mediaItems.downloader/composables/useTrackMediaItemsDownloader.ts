@@ -1,6 +1,6 @@
 import { Filesystem, Directory, ProgressStatus } from '@capacitor/filesystem'
-import { IRepository } from '@lectorium/dal/index'
-import { MediaItem } from '@lectorium/dal/models'
+import { IRepository } from '@lectorium/dal'
+import { MediaItem } from '@lectorium/dal'
 import { useLogger } from '@lectorium/mobile/core'
 import { Event } from '@lectorium/mobile/core'
 import { createSharedComposable } from '@vueuse/core'

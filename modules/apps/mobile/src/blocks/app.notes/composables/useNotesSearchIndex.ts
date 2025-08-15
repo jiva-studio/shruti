@@ -1,5 +1,5 @@
-import { IRepository, ItemChangedEvent } from '@lectorium/dal/index'
-import { Note } from '@lectorium/dal/models'
+import { IRepository, ItemChangedEvent } from '@lectorium/dal'
+import { Note } from '@lectorium/dal'
 import { createSharedComposable } from '@vueuse/core'
 import FlexSearch from 'flexsearch'
 

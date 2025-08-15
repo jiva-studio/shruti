@@ -49,9 +49,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { IonItem, IonLabel, IonAvatar } from '@ionic/vue'
-import { Capacitor } from '@capacitor/core'
 import { useEventBus } from '@lectorium/mobile/core'
 import { useRelativeDate } from '../composables/useRelativeDate'
+import avatarPlaceHolder from '../assets/avatar-placeholder.png'
 
 const eventBus = useEventBus()
 const relativeDate = useRelativeDate()
@@ -73,7 +73,7 @@ const props = defineProps<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const userImageUrl = ref(props.userImageUrl || 'avatar-placeholder.png')
+const userImageUrl = ref(props.userImageUrl || avatarPlaceHolder)
 const lastSyncInfo = computed(() => relativeDate.parse(props.syncedAt))
 
 /* -------------------------------------------------------------------------- */
@@ -98,6 +98,6 @@ function onClicked() {
 
 function onAvatarLoadError() {
   // If avatar image fails to load, use placeholder image.
-  userImageUrl.value = Capacitor.convertFileSrc('avatar-placeholder.png')
+  userImageUrl.value = avatarPlaceHolder
 }
 </script>

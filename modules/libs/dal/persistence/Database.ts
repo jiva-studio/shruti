@@ -1,7 +1,8 @@
-import PouchDB from 'pouchdb'
+import PouchDB from 'pouchdb-browser'
 import PouchDBFind from 'pouchdb-find'
-
 PouchDB.plugin(PouchDBFind)
+
+export const DatabaseAddPlugin = (plugin: any) => PouchDB.plugin(plugin)
 
 /* -------------------------------------------------------------------------- */
 /*                                Configuration                               */

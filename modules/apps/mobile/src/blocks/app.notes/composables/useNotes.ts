@@ -1,6 +1,6 @@
-import { IRepository } from '@lectorium/dal/index'
+import { IRepository } from '@lectorium/dal'
 import { createSharedComposable } from '@vueuse/core'
-import { Note, Track } from '@lectorium/dal/models'
+import { Note, Track } from '@lectorium/dal'
 import { useNotesLoader } from './useNotesLoader'
 import { useNotesStore } from './useNotesStore'
 

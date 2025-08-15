@@ -1,9 +1,9 @@
-import { Author, Language, Note, Source, Track, Transcript, TranscriptBlock } from '@lectorium/dal/models'
+import { Author, Language, Note, Source, Track, Transcript, TranscriptBlock } from '@lectorium/dal'
 import { useTranscriptStore } from './useTranscriptStore'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { TranscriptBlocksGroupView, TranscriptBlockView, TranscriptParagraphBlockView, TranscriptSentenceBlockView, TranscriptVerseTextBlockView, TranscriptVerseTranslationBlockView } from '../models'
 import { useSpeakerIcons } from './useSpeakerIcons'
-import { IRepository } from '@lectorium/dal/index'
+import { IRepository } from '@lectorium/dal'
 import { createSharedComposable } from '@vueuse/core'
 import { mapReference } from '@blocks/app.tracks'
 
