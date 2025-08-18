@@ -7,8 +7,7 @@ on:
     paths:
       - "modules/apps/mobile/**"
       - "modules/libs/audioPlayer/**"
-      - "scripts/update-envs.py"
-      - ".github/workflows/_apps-mobile-build.yml"
+      - ".github/workflows/apps-mobile-build.yml"
 
 concurrency:
   group: mobile-${{ github.ref }}
