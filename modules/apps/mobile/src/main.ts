@@ -35,6 +35,7 @@ import '@ionic/vue/css/display.css'
 
 /* Theme variables */
 import '@blocks/app.ui.kit/styles/variables.css'
+import '@blocks/app.ui.kit/styles/misc.css'
 
 /** 
  * Configure PouchDB to use SQLite adapter for Cordova

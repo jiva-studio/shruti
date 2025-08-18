@@ -3,12 +3,15 @@
     lines="none"
     @click="onClicked"
   >
-    <!-- User avatar -->
+    <!-- Item Icon -->
     <div
       slot="start"
+      class="settings-item-icon"
     >
-      🔑
+      <SignInIcon />
     </div>
+
+    <!-- User avatar -->
     <IonAvatar slot="end">
       <img
         :src="userImageUrl"
@@ -52,6 +55,7 @@ import { IonItem, IonLabel, IonAvatar } from '@ionic/vue'
 import { useEventBus } from '@lectorium/mobile/core'
 import { useRelativeDate } from '../composables/useRelativeDate'
 import avatarPlaceHolder from '../assets/avatar-placeholder.png'
+import SignInIcon from '../icons/SignInIcon.vue'
 
 const eventBus = useEventBus()
 const relativeDate = useRelativeDate()

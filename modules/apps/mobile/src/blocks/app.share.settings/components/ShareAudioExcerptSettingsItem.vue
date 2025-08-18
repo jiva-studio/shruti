@@ -1,7 +1,10 @@
 <template>
   <IonItem lines="none">
-    <div slot="start">
-      🎙️
+    <div
+      slot="start"
+      class="settings-item-icon"
+    >
+      <ShareAudioFragmentIcon />
     </div>
     
     <IonLabel class="ion-text-nowrap">
@@ -20,6 +23,7 @@
 
 <script setup lang="ts">
 import { IonItem, IonLabel, IonToggle } from '@ionic/vue'
+import ShareAudioFragmentIcon from '../icons/ShareAudioFragmentIcon.vue'
 
 const value = defineModel<boolean>('value', { default: false, required: true })
 </script>
