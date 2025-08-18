@@ -1,6 +1,9 @@
 <template>
   <IonItem lines="none">
-    <div slot="start">
+    <div
+      slot="start"
+      class="icon"
+    >
       <div
         class="status-indicator"
         :class="status"
@@ -31,8 +34,8 @@ defineProps<{
 .status-indicator {
   position: relative;
   display: inline-block;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
 }
 
 .status-dot {
@@ -43,7 +46,7 @@ defineProps<{
   border-radius: 50%;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -30%);
   z-index: 2;
 }
 
@@ -55,18 +58,18 @@ defineProps<{
   border-radius: 50%;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -30%);
   animation: pulse 2s infinite;
   z-index: 1;
 }
 
 @keyframes pulse {
   0% {
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -30%) scale(1);
     opacity: 1;
   }
   100% {
-    transform: translate(-50%, -50%) scale(2.5);
+    transform: translate(-50%, -30%) scale(3);
     opacity: 0;
   }
 }
@@ -84,5 +87,10 @@ defineProps<{
 }
 .unknown .status-pulse {
     animation: none;
+}
+
+.icon {
+  border-radius: 5px;
+  padding: 5px 8px;
 }
 </style>

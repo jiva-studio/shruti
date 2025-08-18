@@ -5,9 +5,15 @@
     lines="none"
     @click="onMenuItemClicked"
   >
-    <div slot="start">
-      👑
+    <!-- Item Icon -->
+    <div
+      slot="start"
+      class="settings-item-icon"
+    >
+      <SubscriptionPlanIcon />
     </div>
+    
+    <!-- Text -->
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t('settings.subscription.title') }}</h2>
       <p v-if="!config.subscriptionPlan.value">
@@ -56,6 +62,7 @@ import { Capacitor } from '@capacitor/core'
 import { default as SubscriptionDialog, type SubscriptionPlan } from './SubscriptionDialog.vue'
 import { useAnalytics } from '@blocks/app.analytics'
 import { useEventBus } from '@shruti/mobile/core'
+import SubscriptionPlanIcon from '../icons/SubscriptionPlanIcon.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
