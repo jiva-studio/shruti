@@ -26,6 +26,7 @@ x-airflow-common:
     AIRFLOW__WEBSERVER__ALLOW_RAW_HTML_DESCRIPTIONS: 'true'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
   volumes:
+    - ../data/airflow/logs:/opt/airflow/logs
     - ../modules/services/airflow/dags:/opt/airflow/dags
     - ../modules/services/airflow/config:/opt/airflow/config
     - ../modules/services/airflow/plugins:/opt/airflow/plugins
