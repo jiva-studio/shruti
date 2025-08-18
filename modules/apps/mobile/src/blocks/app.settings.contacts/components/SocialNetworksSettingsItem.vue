@@ -1,12 +1,20 @@
 <template>
   <IonItem lines="none">
-    <div slot="start">
-      🔗
+    <!-- Item Icon -->
+    <div
+      slot="start"
+      class="settings-item-icon"
+    >
+      <LinksIcon />
     </div>
+
+    <!-- Text -->
     <IonLabel>
       <h2>{{ $t('settings.contacts.socialNetworks.title') }}</h2>
       <p>{{ $t('settings.contacts.socialNetworks.description') }}</p>
     </IonLabel>
+
+    <!-- Social Network Icons -->
     <div slot="end">
       <a href="https://t.me/shrutiapp">
         <IconTelegram class="icon" />
@@ -27,6 +35,7 @@ import { IonLabel, IonItem } from '@ionic/vue'
 import { IconTelegram } from '@blocks/app.ui.kit'
 import { IconFacebook } from '@blocks/app.ui.kit'
 import { IconVk } from '@blocks/app.ui.kit'
+import LinksIcon from '../icons/LinksIcon.vue'
 </script>
 
 

@@ -5,15 +5,22 @@
     lines="none"
     @click="open = true"
   >
-    <div slot="start">
-      🌎
+    <!-- Item Icon -->
+    <div
+      slot="start"
+      class="settings-item-icon"
+    >
+      <LanguageIcon />
     </div>
-    
+  
+    <!-- Text -->
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t('settings.appLanguage.title') }}</h2>
       <p>{{ $t('settings.appLanguage.description') }}</p>
     </IonLabel>
   </IonItem>
+  
+  <!-- Language Selection Dialog -->
   <ListItemSelectorDialog 
     v-model:open="open"
     :value="config.appLanguage.value"
@@ -31,6 +38,7 @@ import { ref } from 'vue'
 import { IonItem, IonLabel } from '@ionic/vue'
 import { ListItemSelectorDialog } from '@blocks/app.ui.selectors'
 import { useConfig } from '@blocks/app.config'
+import LanguageIcon from '../icons/LanguageIcon.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

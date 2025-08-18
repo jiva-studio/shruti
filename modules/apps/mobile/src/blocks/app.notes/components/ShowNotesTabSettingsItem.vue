@@ -1,7 +1,10 @@
 <template>
   <IonItem lines="none">
-    <div slot="start">
-      🏷️
+    <div
+      slot="start"
+      class="settings-item-icon"
+    >
+      <BookmarkIcon />
     </div>
     
     <IonLabel class="ion-text-nowrap">
@@ -21,5 +24,11 @@
 <script setup lang="ts">
 import { IonItem, IonLabel, IonToggle } from '@ionic/vue'
 import { useConfig } from '@blocks/app.config'
+import BookmarkIcon from '../icons/BookmarkIcon.vue'
+
+/* -------------------------------------------------------------------------- */
+/*                                Dependencies                                */
+/* -------------------------------------------------------------------------- */
+
 const config = useConfig()
 </script>
