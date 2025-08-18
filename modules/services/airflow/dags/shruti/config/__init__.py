@@ -7,5 +7,6 @@ from shruti.config.pyannoteai import *
 from shruti.config.hugging_face import *
 from shruti.config.beam_cloud import *
 from shruti.config.claude import *
+from shruti.config.openai import *
 from shruti.config.track_inbox_extract_metadata import *
 from shruti.config.track_inbox import *

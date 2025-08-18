@@ -9,3 +9,4 @@ fasttext-langdetect
 boto3
 jellyfish
 sqids
+openai
