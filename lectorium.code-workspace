@@ -65,6 +65,10 @@
       "path": "./modules/services/couchdb"
     },
     {
+      "name": "💾 Services :: Audio Enhancer",
+      "path": "./modules/services/audio-enhancer"
+    },
+    {
       "name": "🧪 Tests :: Manual",
       "path": "./tests/manual"
     },

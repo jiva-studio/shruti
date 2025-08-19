@@ -1,8 +1,8 @@
 {
   "name": "Lectorium",
   "dockerComposeFile": [
-    "../scripts/docker-compose.yml",
-    "../scripts/docker-compose.dev.yml"
+    "../infra/docker-compose.yml",
+    "../infra/docker-compose.dev.yml"
   ],
   "workspaceFolder": "/workspaces/lectorium",
   "service": "dev",
