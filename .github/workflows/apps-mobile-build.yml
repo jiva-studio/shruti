@@ -2,8 +2,8 @@ name: Apps / Mobile
 
 on:
   push:
-    branches:
-      - main
+    # branches:
+    #   - main
     paths:
       - "modules/apps/mobile/**"
       - "modules/libs/audioPlayer/**"
@@ -22,9 +22,8 @@ env:
   ORGANIZATION: jiva-studio
 
 jobs:
-
   # ---------------------------------------------------------------------------- #
-  #                               Build Ionc Bundle                              #
+  #                               Build Ionic Bundle                              #
   # ---------------------------------------------------------------------------- #
 
   build-ionic:
@@ -39,7 +38,6 @@ jobs:
         uses: actions/checkout@v4
 
       # ------------------------------- Get Meta Info ------------------------------ #
-
       - name: Get Version from package.json
         id: release_version
         shell: bash
@@ -60,7 +58,7 @@ jobs:
           cache-dependency-path: |
             modules/apps/mobile/package-lock.json
             modules/libs/audioPlayer/package-lock.json
-    
+
       # ------------------------------- Configuration ------------------------------ #
 
       - name: ✏️ Write env.ts
@@ -112,7 +110,6 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ./databases/
-
           files=(
             "artifacts/bundled-data/tracks.db"
             "artifacts/bundled-data/tracks.db-mrview-901296fddda39433e93ca2223f2f0cd6"
@@ -120,13 +117,12 @@ jobs:
             "artifacts/bundled-data/index.db"
             "artifacts/bundled-data/dictionary.db"
           )
-
           for file in "${files[@]}"; do
             aws --endpoint-url "$BUCKET_ENDPOINT_URL" \
               s3 cp "s3://$BUCKET_NAME/$file" \
               "./databases/$(basename "$file")"
           done
-    
+
       - name: ⬆️ Upload Ionic bundle
         uses: actions/upload-artifact@v4
         with:
@@ -142,7 +138,6 @@ jobs:
           path: /tmp/databases
           if-no-files-found: error
           retention-days: 5
-
 
   # ---------------------------------------------------------------------------- #
   #                               Build Android App                              #
@@ -188,6 +183,13 @@ jobs:
         shell: bash
         run: yes "" | sdkmanager --licenses || true
 
+      - name: 📦 Install Gem Dependencies
+        working-directory: modules/apps/mobile/android
+        shell: bash
+        run: |
+          sudo gem install bundler
+          sudo bundle install
+
       # ------------------------------- Configuration ------------------------------ #
 
       - name: 📜 Install Android Certificates
@@ -219,9 +221,11 @@ jobs:
 
       # ----------------------------------- Build ---------------------------------- #
 
-      - name: 👷 Build Android ABB
+      - name: 👷 Build Android AAB
+        working-directory: modules/apps/mobile
         env:
           APPSFLYER_KEY: ${{ secrets.APPSFLYER_KEY }}
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
         run: |
           npx cap build android \
           --keystorepath ../../../../data/keys/apk/mobile.jks \
@@ -229,9 +233,10 @@ jobs:
           --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
           --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
           --androidreleasetype AAB
+          (cd ./android && bundle exec fastlane deploy)
 
       # --------------------------------- Artifacts -------------------------------- #
-      
+
       - name: ⬆️ Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -239,7 +244,11 @@ jobs:
           path: modules/apps/mobile/android/app/build/outputs/
           if-no-files-found: error
           retention-days: 5
-    
+
+  # ---------------------------------------------------------------------------- #
+  #                                Build & Deploy iOS                            #
+  # ---------------------------------------------------------------------------- #
+
   build-ios:
     name: 📱 Build iOS App
     runs-on: macos-15
@@ -276,7 +285,7 @@ jobs:
         shell: bash
         run: |
           sudo gem install bundler
-          bundle install
+          sudo bundle install
 
       # ----------------------------- App Dependencies ----------------------------- #
 
@@ -316,21 +325,17 @@ jobs:
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
-          BUCKET_NAME: ${{ vars.BUCKET_NAME }}
-          BUCKET_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
-          BUCKET_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
-          BUCKET_ENDPOINT_URL: ${{ vars.BUCKET_ENDPOINT_URL }}
-          BUCKET_REGION_NAME: ${{ vars.BUCKET_REGION_NAME }}
         run: |
           bundle exec fastlane staging
 
-        
       # --------------------------------- Artifacts -------------------------------- #
 
       - name: ⬆️ Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: apps-mobile-ios
-          path: modules/apps/mobile/ios/App/App.ipa
+          path: |
+            modules/apps/mobile/ios/App/build/*.ipa
+            modules/apps/mobile/ios/App/App.ipa
           if-no-files-found: error
           retention-days: 5
