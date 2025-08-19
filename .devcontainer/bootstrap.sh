@@ -30,4 +30,4 @@ mkdir -p /workspaces/shruti/gateway/data/logs
 
 sudo apt update
 sudo apt install -y ruby-full build-essential ffmpeg
-sudo gem install cocoapods
+sudo gem install cocoapods bundler
