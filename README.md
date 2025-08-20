@@ -41,6 +41,6 @@ Got questions? Lectorium lets you ask and get answers straight from the lecture 
 
 If you'd like to help develop the project, here's a list of links to get you started:
 
-1. [Development Environment](<docs/development environment.md>) – Configure your development enviroment to get started.
+1. [Development Environment](<docs/development environment.md>) – Configure your development environment to get started.
 2. [Good First Issues](https://github.com/akdasa-studios/lectorium/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) – a list of simple issues any developer could start from.
 3. [Roadmap](https://github.com/orgs/akdasa-studios/projects/14/views/2) - list of tasks we are working on.
