@@ -8,7 +8,11 @@ x-airflow-common:
   build:
     context: ../modules/services/airflow/
     dockerfile: Dockerfile
-
+  volumes:
+    - ../data/airflow/logs:/opt/airflow/logs
+    - ../modules/services/airflow/dags:/opt/airflow/dags
+    - ../modules/services/airflow/config:/opt/airflow/config
+    - ../modules/services/airflow/plugins:/opt/airflow/plugins
 
 # -------------------------------------------------------------------------- #
 #                                  Services                                  #
@@ -59,7 +63,7 @@ services:
       context: ../modules/
       dockerfile: ./services/gateway/Dockerfile
     environment:
-      - CONFIG_TYPE=dev
+      - SHRUTI_CONFIG_TYPE=dev
 
   couchdb:
     build:
@@ -78,9 +82,9 @@ services:
 
   postgres:
     environment:
-      POSTGRES_USER: shruti
-      POSTGRES_PASSWORD: shruti
-      POSTGRES_DB: shruti
+      SHRUTI_POSTGRES_USER: shruti
+      SHRUTI_POSTGRES_PASSWORD: shruti
+      SHRUTI_POSTGRES_DB: shruti
 
   airflow-webserver:
     build:
@@ -109,7 +113,7 @@ services:
       context: ../modules/
       dockerfile: ./services/airflow/Dockerfile
     environment:
-      _AIRFLOW_DB_MIGRATE: 'true'
-      _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: shruti
-      _AIRFLOW_WWW_USER_PASSWORD: shruti
+      SHRUTI_AIRFLOW_DB_MIGRATE: 'true'
+      SHRUTI_AIRFLOW_WWW_USER_CREATE: 'true'
+      SHRUTI_AIRFLOW_WWW_USER_USERNAME: shruti
+      SHRUTI_AIRFLOW_WWW_USER_PASSWORD: shruti
