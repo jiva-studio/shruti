@@ -1,6 +1,10 @@
 {
   "folders": [
     {
+      "name": "👷 Lectorium :: Dev",
+      "path": "./.devcontainer"
+    },
+    {
       "name": "💾 Lectorium :: Data",
       "path": "./data"
     },

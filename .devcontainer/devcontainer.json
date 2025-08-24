@@ -73,7 +73,8 @@
         "Gruntfuggly.todo-tree",
         "Vue.volar",
         "redhat.vscode-yaml",
-        "alexkrechik.cucumberautocomplete"
+        "alexkrechik.cucumberautocomplete",
+        "eamodio.gitlens"
       ]
     }
   }
