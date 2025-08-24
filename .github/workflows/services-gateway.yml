@@ -1,23 +1,18 @@
-name: Gateway
+name: Services / Gateway
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "modules/services/gateway/**"
-      - ".github/workflows/gateway-build.yml"
-      - ".github/workflows/gateway-deploy-staging.yml"
-
+      - ".github/workflows/services-gateway.yml"
+  
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: jiva-studio
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: 🚀 Deploy to Staging
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -33,8 +28,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           file: modules/services/gateway/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-gateway:staging
-
-      - name: ⬆️ Push staging Image
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-gateway:latest
+      
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-gateway:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-gateway:latest

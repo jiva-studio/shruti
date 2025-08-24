@@ -1,23 +1,18 @@
-name: Admin
+name: Tools / Data Bundler
 
 on:
   push:
-    branches:
-      - main
     paths:
-      - "modules/apps/admin/**"
-      - "modules/libs/dal/**"
-      - ".github/workflows/admin-deploy.yml"
-
+      - "modules/tools/dataBundler/**"
+      - ".github/workflows/tools-data-bundler-build.yml"
+  
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: jiva-studio
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: Deploy
+  build:
+    name: 👷‍♂️ Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -31,10 +26,11 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          file: modules/apps/admin/Dockerfile
+          file: modules/tools/dataBundler/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:staging
-
-      - name: ⬆️ Push staging Image
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-data-bundler:latest
+      
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-data-bundler:latest
