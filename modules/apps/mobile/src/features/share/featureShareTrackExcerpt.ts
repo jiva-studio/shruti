@@ -1,7 +1,7 @@
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import { Clipboard } from '@capacitor/clipboard'
-import { useEventBus } from '@shruti/mobile/core'
+import { useEventBus, useLogger } from '@shruti/mobile/core'
 import { Routes } from '@shruti/protocol/routes'
 import { useTrackAudioFragmentGenerator } from '@blocks/app.share.track.audio.fragment'
 import { useTrackTextExcerptFormatter } from '@blocks/app.share.track.text.formatter'
@@ -10,7 +10,7 @@ import { useDAL } from '@blocks/app.database'
 
 export function featureShareTrackExcerpt() {
 
-  const directoryName = 'track-excerpts'
+  const directoryName = 'track-fragments'
 
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
@@ -18,8 +18,9 @@ export function featureShareTrackExcerpt() {
 
   const dal = useDAL()
   const config = useConfig()
+  const logger = useLogger({ module: 'share.track.fragment' })
   const eventBus = useEventBus()
-  const audioExcerptGenerator =  
+  const audioFragmentGenerator =  
     useTrackAudioFragmentGenerator({
       url: Routes(config.apiUrl.value).audio.segment(),
       tracksRepository: dal.tracks,
@@ -37,7 +38,7 @@ export function featureShareTrackExcerpt() {
     }
     let files: string[] | undefined = undefined
 
-    // try to get audio excerpts
+    // try to get audio fragments
     if (event.timeStart && event.timeEnd && event.shareAudio) {
       try {
         const track = await dal.tracks.getOne(event.trackId)
@@ -54,10 +55,12 @@ export function featureShareTrackExcerpt() {
           config.authToken.value
         )
         files = file ? [file] : undefined
-      } catch { /* Do nothing */ }
+      } catch (err: any) { 
+        logger.error('Unable to get audio fragment to share', err)
+      }
     }
 
-    // share uding system dialog
+    // share using system dialog
     try {
       await Share.share({
         text: event.text 
@@ -109,26 +112,26 @@ export function featureShareTrackExcerpt() {
     timeEnd: number,
     authToken: string,
   ): Promise<string | undefined> {
-    // generate excerpt Id based on track information
-    const excerptId = await audioExcerptGenerator.getFragmentId({
+    // generate fragment Id based on track information
+    const fragmentId = await audioFragmentGenerator.getFragmentId({
       trackId: trackId,
       timeStart: timeStart,
       timeEnd: timeEnd,
       audioType: audioType,
       language: language 
     })
-    const trackExceprtPath = `${directoryName}/${excerptId}`
+    const trackFragmentPath = `${directoryName}/${fragmentId}`
 
     // check if file is already downloaded
     try {
       const fileStat = await Filesystem.stat({ 
-        path: trackExceprtPath,
+        path: trackFragmentPath,
         directory: Directory.Cache
       })
       return fileStat.uri
     } catch { /* do nothing */ }
 
-    // create requried folder
+    // create required folder
     try {
       await Filesystem.mkdir({
         path: directoryName,
@@ -136,20 +139,19 @@ export function featureShareTrackExcerpt() {
         recursive: true
       })
     } catch (err: any) {
-      if (err.message === 'Directory exists') { /* ignore it */ }
+      if (err.code === 'OS-PLUG-FILE-0010') { /* ignore it */ }
       else throw err
     }
 
     // call generator
-    const generatedExcerpt = await audioExcerptGenerator
+    const generatedFragment = await audioFragmentGenerator
       .generate({
         filePath: filePath,
-        outputPath: trackExceprtPath,
+        outputPath: trackFragmentPath,
         timeStart: timeStart,
         timeEnd: timeEnd,
         authToken: authToken,
       })
-
-    return 'file://' + generatedExcerpt.path
+    return 'file://' + generatedFragment.path
   }
 }
