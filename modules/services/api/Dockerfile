@@ -5,19 +5,10 @@
 FROM node:22.10.0-bookworm AS base
 
 WORKDIR /akd-stidios/shruti/
-COPY package*.json ./ 
 COPY services/api/package*.json services/api/
-RUN npm i \
-    && cd ./services/api \
-    && npm i
+RUN cd ./services/api && npm i
 COPY services/api services/api
 COPY libs/protocol libs/protocol
-
-# ---------------------------------------------------------------------------- #
-#                                     Build                                    #
-# ---------------------------------------------------------------------------- #
-
-FROM base AS build
 RUN cd ./services/api && npm run build
 
 # ---------------------------------------------------------------------------- #
@@ -32,7 +23,7 @@ LABEL org.opencontainers.image.authors="AKd Studios"
 
 WORKDIR /akd-stidios/shruti/
 COPY services/api/package*.json .
-COPY --from=build /akd-stidios/shruti/services/api/dist .
+COPY --from=base /akd-stidios/shruti/services/api/dist .
 RUN apt update && \
     apt install -y ffmpeg && \
     npm i

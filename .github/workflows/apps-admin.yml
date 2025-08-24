@@ -1,23 +1,19 @@
-name: Admin
+name: Apps / Admin
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "modules/apps/admin/**"
       - "modules/libs/dal/**"
-      - ".github/workflows/admin-deploy.yml"
+      - ".github/workflows/apps-admin.yml"
 
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: akdasa-studios
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: Deploy
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -25,7 +21,7 @@ jobs:
         with:
           submodules: true
       
-      - name: 👷‍♂️ Build Container
+      - name: Build Container
         uses: ./.github/actions/build-container
         with:
           registry: ${{ env.REGISTRY }}
@@ -33,8 +29,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           file: modules/apps/admin/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:staging
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:latest
 
-      - name: ⬆️ Push staging Image
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-admin:latest

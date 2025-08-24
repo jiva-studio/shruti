@@ -6,9 +6,7 @@ name: shruti
 
 x-airflow-common:
   &airflow-common
-  build:
-    context: ../modules/services/airflow/
-    dockerfile: Dockerfile
+  image: ghcr.io/akdasa-studios/shruti-airflow:latest
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -48,26 +46,34 @@ x-airflow-common:
 services:
 
   api:
+    image: ghcr.io/akdasa-studios/shruti-api:latest
     depends_on:
       - redis
     expose:
       - "8081:8081"
     networks:
       - shruti
+    volumes:
+      - ../data/keys/jwt/:/etc/shruti/keys/
 
   admin:
+    image: ghcr.io/akdasa-studios/shruti-admin:latest
     expose:
       - "80:80"
     networks:
       - shruti
 
   landing:
+    image: ghcr.io/akdasa-studios/shruti-landing:latest
     expose:
       - "80:80"
     networks:
       - shruti
+    volumes:
+      - ../data/landing/res:/usr/share/nginx/html/res
   
   gateway:
+    image: ghcr.io/akdasa-studios/shruti-gateway:latest
     ports:
       - "80:80"
       - "443:443"
@@ -79,8 +85,13 @@ services:
       - landing
     networks:
       - shruti
+    volumes:
+      - ../data/gateway/certs:/workspaces/shruti/data/gateway/certs
+    environment:
+      - CONFIG_TYPE=release
 
   couchdb:
+    image: ghcr.io/akdasa-studios/shruti-couchdb:latest
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5984/_up"]
       interval: 30s
@@ -99,6 +110,7 @@ services:
       - "5984:5984"
 
   couchdb-init:
+    image: ghcr.io/akdasa-studios/shruti-couchdb-init:latest
     depends_on:
       couchdb:
         condition: service_healthy

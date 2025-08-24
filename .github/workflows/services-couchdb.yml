@@ -1,23 +1,18 @@
-name: CouchDB
+name: Services / CouchDB
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "modules/services/couchdb/service/**"
-      - ".github/workflows/couchdb-build.yml"
-      - ".github/workflows/couchdb-deploy-staging.yml"
-
+      - ".github/workflows/services-couchdb.yml"
+  
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: akdasa-studios
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: 🚀 Deploy to Staging
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -25,7 +20,7 @@ jobs:
         with:
           submodules: true
       
-      - name: 👷‍♂️ Build Container
+      - name: Build CouchDB
         uses: ./.github/actions/build-container
         with:
           registry: ${{ env.REGISTRY }}
@@ -33,8 +28,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           file: modules/services/couchdb/service/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-couchdb:staging
-
-      - name: ⬆️ Push staging Image
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-couchdb:latest
+      
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-couchdb:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/shruti-couchdb:latest
