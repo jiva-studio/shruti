@@ -46,7 +46,7 @@ files = CloudBucket(
     workers=2,
     keep_warm_seconds=60,
     volumes=[files],
-    autoscaler=QueueDepthAutoscaler(max_containers=2, tasks_per_container=10),
+    autoscaler=QueueDepthAutoscaler(max_containers=4, tasks_per_container=2),
 )
 def handle(context, **inputs):
     import torch

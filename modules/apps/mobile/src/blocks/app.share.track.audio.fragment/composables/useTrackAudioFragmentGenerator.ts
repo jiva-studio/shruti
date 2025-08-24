@@ -78,7 +78,7 @@ export function useTrackAudioFragmentGenerator(
 
     return `${authorName} – ${trackTitle} ${timeRange} ${audioType}.mp3`
       .replace(/[<>"\/\\|?*\x00-\x1F]/g, '_') // Replace invalid filename characters
-      .replace(/\s+/g, ' ')                    // Normalize whitespace
+      .replace(/\s+/g, ' ')                   // Normalize whitespace
       .trim()
   }
 

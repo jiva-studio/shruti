@@ -11,7 +11,6 @@
     <NotesList 
       v-if="!notesStore.isEmpty"
       :notes="notesStore.searchQuery ? notesStore.searchResults : notesStore.items"
-      @share="onShareNoteClicked"
       @click="onNoteClicked"
     />
 
