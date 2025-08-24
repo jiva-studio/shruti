@@ -24,10 +24,6 @@ x-airflow-common:
     AIRFLOW__WEBSERVER__ALLOW_RAW_HTML_DESCRIPTIONS: 'true'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
   volumes:
-    - ../data/airflow/logs:/opt/airflow/logs
-    - ../modules/services/airflow/dags:/opt/airflow/dags
-    - ../modules/services/airflow/config:/opt/airflow/config
-    - ../modules/services/airflow/plugins:/opt/airflow/plugins
     - /var/run/docker.sock:/var/run/docker.sock
     - /tmp/shruti:/tmp/shruti
   user: "${AIRFLOW_UID:-50000}:0"
@@ -88,7 +84,7 @@ services:
     volumes:
       - ../data/gateway/certs:/workspaces/shruti/data/gateway/certs
     environment:
-      - CONFIG_TYPE=release
+      - SHRUTI_CONFIG_TYPE=release
 
   couchdb:
     image: ghcr.io/jiva-studio/shruti-couchdb:latest
@@ -104,8 +100,8 @@ services:
     networks:
       - shruti
     environment:
-      - COUCHDB_USER=shruti
-      - COUCHDB_PASSWORD=shruti
+      - SHRUTI_COUCHDB_USER=shruti
+      - SHRUTI_COUCHDB_PASSWORD=shruti
     expose:
       - "5984:5984"
 
@@ -115,7 +111,7 @@ services:
       couchdb:
         condition: service_healthy
     environment:
-      - CONNECTION_STRING=http://shruti:shruti@couchdb:5984
+      - SHRUTI_CONNECTION_STRING=http://shruti:shruti@couchdb:5984
     networks:
       - shruti
     volumes:

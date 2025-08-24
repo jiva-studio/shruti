@@ -1,6 +1,10 @@
 {
   "folders": [
     {
+      "name": "👷 Shruti :: Dev",
+      "path": "./.devcontainer"
+    },
+    {
       "name": "💾 Shruti :: Data",
       "path": "./data"
     },
