@@ -27,7 +27,7 @@ jobs:
   # ---------------------------------------------------------------------------- #
 
   build-ionic:
-    name: 👷‍♂️ Build Ionic App
+    name: Build Ionic App
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release_version.outputs.version }}
@@ -144,7 +144,8 @@ jobs:
   # ---------------------------------------------------------------------------- #
 
   build-android:
-    name: 🤖 Build Android App
+    if: github.ref == 'refs/heads/main'
+    name: Build Android App
     runs-on: ubuntu-latest
     needs: [build-ionic]
     defaults:
@@ -250,7 +251,8 @@ jobs:
   # ---------------------------------------------------------------------------- #
 
   build-ios:
-    name: 📱 Build iOS App
+    if: github.ref == 'refs/heads/main'
+    name: Build iOS App
     runs-on: macos-15
     needs: [build-ionic]
     defaults:

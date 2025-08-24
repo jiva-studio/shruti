@@ -1,6 +1,22 @@
 name: lectorium
 
+# -------------------------------------------------------------------------- #
+#                                  Framgents                                 #
+# -------------------------------------------------------------------------- #
+
+x-airflow-common:
+  build:
+    context: ../modules/services/airflow/
+    dockerfile: Dockerfile
+
+
+# -------------------------------------------------------------------------- #
+#                                  Services                                  #
+# -------------------------------------------------------------------------- #
+
 services:
+
+  # ------------------------------- Development ---------------------------- #
 
   dev:
     image: mcr.microsoft.com/devcontainers/base:noble
@@ -8,6 +24,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8101:8101"
+      - "8102:8102"
     networks:
       - lectorium
     volumes:
@@ -18,16 +36,11 @@ services:
       - postgres
       - redis
       
-  # -------------------------------------------------------------------------- #
-  #                                  Services                                  #
-  # -------------------------------------------------------------------------- #
 
   api:
     build:
       context: ../modules/
       dockerfile: ./services/api/Dockerfile
-    volumes:
-      - ../data/keys/jwt/:/etc/lectorium/keys/
 
   admin:
     build:
@@ -39,12 +52,14 @@ services:
       context: ../modules/
       dockerfile: ./apps/landing/Dockerfile
 
+  # ----------------------------- Infrastructure --------------------------- #
+
   gateway:
     build:
       context: ../modules/
       dockerfile: ./services/gateway/Dockerfile
-    volumes:
-      - ../data/gateway/certs:/workspaces/lectorium/data/gateway/certs
+    environment:
+      - CONFIG_TYPE=dev
 
   couchdb:
     build:

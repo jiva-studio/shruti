@@ -1,23 +1,18 @@
-name: CouchDB Init
+name: Services / CouchDB / Init
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "modules/services/couchdb/init/**"
-      - ".github/workflows/couchdb-init-build.yml"
-      - ".github/workflows/couchdb-init-deploy-staging.yml"
-
+      - ".github/workflows/services-couchdb-init.yml"
+  
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: akdasa-studios
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: 🚀 Deploy to Staging
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -25,7 +20,7 @@ jobs:
         with:
           submodules: true
       
-      - name: 👷‍♂️ Build Container
+      - name: Build CouchDB Init
         uses: ./.github/actions/build-container
         with:
           registry: ${{ env.REGISTRY }}
@@ -33,8 +28,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           file: modules/services/couchdb/init/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:staging
-
-      - name: ⬆️ Push staging Image
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:latest
+      
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-couchdb-init:latest

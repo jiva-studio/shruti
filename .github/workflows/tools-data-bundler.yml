@@ -1,23 +1,18 @@
-name: Data Bundler
+name: Tools / Data Bundler
 
 on:
   push:
-    branches:
-      - main
     paths:
       - "modules/tools/dataBundler/**"
-      - ".github/workflows/data-bundler-build.yml"
-      - ".github/workflows/data-bundler-deploy-staging.yml"
-
+      - ".github/workflows/tools-data-bundler-build.yml"
+  
 env:
   REGISTRY: ghcr.io
   ORGANIZATION: akdasa-studios
 
 jobs:
-  deploy:
-    environment:
-      name: staging
-    name: 🚀 Deploy to Staging
+  build:
+    name: 👷‍♂️ Build
     runs-on: ubuntu-latest
     steps:
       - name: 📥 Checkout
@@ -33,8 +28,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           file: modules/tools/dataBundler/Dockerfile
           tags: |
-            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-data-bundler:staging
-
-      - name: ⬆️ Push staging Image
+            ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-data-bundler:latest
+      
+      - name: ⬆️ Push Image
+        if: github.ref == 'refs/heads/main'
         run: |
-          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-data-bundler:staging
+          docker push ${{ env.REGISTRY }}/${{ env.ORGANIZATION }}/lectorium-data-bundler:latest
