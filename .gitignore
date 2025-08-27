@@ -65,5 +65,5 @@ modules/apps/mobile/android/app/src/main/assets/*
 # ---------------------------------------------------------------------------- #
 
 scripts/.scripts
-
 modules/tools/tgDownloader
+*.tar.gz
