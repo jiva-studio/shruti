@@ -34,8 +34,4 @@ export class BucketService {
       throw e
     }
   }
-
-  setAuthToken(token: string) {
-    this.token = token
-  }
 }
