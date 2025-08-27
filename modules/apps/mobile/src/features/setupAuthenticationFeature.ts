@@ -23,7 +23,6 @@ export async function setupAuthenticationFeature() {
   const config = useConfig()
   const logger = useLogger({ module: 'app.auth' })
   const eventBus = useEventBus()
-  const bucketService = useBucketService()
   const remoteDatabase = useRemoteDatabase()
   const authTokenRefresher = useAuthTokenRefresher()
   const userAvatarDownloader = useUserAvatarDownloader()
@@ -212,7 +211,6 @@ export async function setupAuthenticationFeature() {
     config.subscriptionPlan.value = ''
     config.authTokenExpiresAt.value = 0
 
-    bucketService.setAuthToken(ENVIRONMENT.readonlyAuthToken)
     remoteDatabase.init({
       url: config.databaseUrl.value,
       userId: config.userId.value,
@@ -221,6 +219,9 @@ export async function setupAuthenticationFeature() {
   })
 
   eventBus.authSignOut.subscribe(async () => {
+    config.authToken.value = ENVIRONMENT.readonlyAuthToken
+    config.refreshToken.value = ''
+    config.authTokenExpiresAt.value = 0
     await Purchases.logOut()
   })
 
@@ -239,13 +240,13 @@ export async function setupAuthenticationFeature() {
           accessToken: result.accessToken,
           refreshToken: result.refreshToken,
         })
-      } catch (error: unknown) {
+      } catch (error: any) {
         if (
           error instanceof AuthTokenRefreshError && 
           (error.status === 401 || error.status === 403)
         ) {
           // If the error is related to token refresh, we need to sign out user.
-          logger.error(error.message)
+          logger.error(error.message, error)
           await eventBus.authSignOut.notify()
         } else {
           logger.error(`Failed to refresh authentication token`, error)
@@ -267,7 +268,6 @@ export async function setupAuthenticationFeature() {
     if (payload.exp) { 
       config.authTokenExpiresAt.value = payload.exp * 1000 
     }
-    bucketService.setAuthToken(event.accessToken)
     remoteDatabase.init({
       url: config.databaseUrl.value,
       userId: config.userId.value,
