@@ -1,5 +1,4 @@
 import { useAnalytics } from '@blocks/app.analytics'
-import { useConfig } from '@blocks/app.config'
 import { useLocalization } from '@blocks/app.localization'
 import { useTrackMediaItems } from '@blocks/app.tracks.mediaItems'
 import { useTrackMediaItemsDownloader } from '@blocks/app.tracks.mediaItems.downloader'
@@ -12,7 +11,6 @@ export function setupTracksDownloadFeature() {
   /* -------------------------------------------------------------------------- */
 
   const i18n = useLocalization()
-  const config = useConfig()
   const logger = useLogger({ module: 'tracks.download' })
   const eventBus = useEventBus()
   const analytics = useAnalytics()
@@ -26,12 +24,6 @@ export function setupTracksDownloadFeature() {
 
   eventBus.trackDownload.subscribe(async (event) => {
     logger.info(`Track download requested: ${event.trackIds}`)
-
-    // refresh token if required
-    const isAuthTokenExpired =  Date.now() >= config.authTokenExpiresAt.value
-    if (config.refreshToken.value && isAuthTokenExpired) {
-      await eventBus.authTokenRefresh.notify({ refreshToken: config.refreshToken.value })
-    }
 
     // Download each track
     for (const trackId of event.trackIds) {

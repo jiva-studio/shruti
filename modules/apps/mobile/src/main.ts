@@ -165,7 +165,7 @@ Promise.all([
 
     useBucketService().init({
       apiUrl: useConfig().apiUrl.value,
-      authToken: useConfig().authToken.value,
+      authToken: ENVIRONMENT.readonlyAuthToken,
     })
     useSyncData().init({
       local: () => useLocalDatabase().get(),

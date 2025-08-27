@@ -41,17 +41,9 @@ export const useBucketService = createSharedComposable(() => {
     return await service.getSignedUrl(request)
   }
 
-  function setAuthToken(token: string) {
-    if (!service) {
-      throw new Error('BucketService is not initialized. Call init(options) first.')
-    }
-    service.setAuthToken(token)
-  }
-
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
 
-  return { init, getSignedUrl, setAuthToken }
-
+  return { init, getSignedUrl }
 })
