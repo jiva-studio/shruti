@@ -1,24 +1,6 @@
 #!/bin/bash
 
 # ---------------------------------------------------------------------------- #
-#                                   Minio                                      #
-# ---------------------------------------------------------------------------- #
-
-# ARCH=$(uname -m)
-# if [ "$ARCH" == "x86_64" ]; then
-#   MINIO_URL="https://dl.min.io/server/minio/release/linux-amd64/archive/minio_20250228095516.0.0_amd64.deb"
-# elif [ "$ARCH" == "aarch64" ]; then
-#   MINIO_URL="https://dl.min.io/server/minio/release/linux-arm64/archive/minio_20250228095516.0.0_arm64.deb"
-# else
-#   echo "Unsupported architecture: $ARCH"
-#   exit 1
-# fi
-
-# wget $MINIO_URL -O minio.deb
-# sudo dpkg -i minio.deb
-# rm ./minio.deb
-
-# ---------------------------------------------------------------------------- #
 #                                    Gateway                                   #
 # ---------------------------------------------------------------------------- #
 
@@ -31,3 +13,30 @@ mkdir -p /workspaces/shruti/gateway/data/logs
 sudo apt update
 sudo apt install -y ruby-full build-essential ffmpeg
 sudo gem install cocoapods bundler
+
+# ---------------------------------------------------------------------------- #
+#                                     NVim                                     #
+# ---------------------------------------------------------------------------- #
+
+ARCH=$(uname -m)
+if [ "$ARCH" == "x86_64" ]; then
+  curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz
+  sudo rm -rf /opt/nvim
+  sudo tar -C /opt -xzf nvim-linux64.tar.gz
+  export PATH="$PATH:/opt/nvim-linux64/bin"
+elif [ "$ARCH" == "aarch64" ]; then
+  curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-arm64.tar.gz
+  sudo rm -rf /opt/nvim
+  sudo tar -C /opt -xzf nvim-linux-arm64.tar.gz
+  export PATH="$PATH:/opt/nvim-linux-arm64/bin"
+else
+  echo "Unsupported architecture: $ARCH"
+fi
+
+# ---------------------------------------------------------------------------- #
+#                                    NvChad                                    #
+# ---------------------------------------------------------------------------- #
+
+mkdir -p "$HOME/.config"
+ln -s "/workspaces/shruti/.devcontainer/nvim" "$HOME/.config/"
+
