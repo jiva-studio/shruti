@@ -1,23 +1,18 @@
-import { useSentry } from '@blocks/app.infra.sentry'
 import { useEventBus } from '@lectorium/mobile/core'
 
-export function setupSentryFeature() {
+export async function featureUpdateScreensAfterSync() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
 
-  const sentry = useSentry()
   const eventBus = useEventBus()
 
   /* -------------------------------------------------------------------------- */
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  eventBus.authSignInEnd.subscribe(async (data) => {
-    sentry.setUserInfo({ id: data.userId })
-  })
-
-  eventBus.authSignOut.subscribe(async () => {
-    sentry.setUserInfo(null)
+  eventBus.syncComplete.subscribe(async () => {
+    eventBus.playlistLoad.notify()
+    eventBus.trackStateLoad.notify(['completed', 'inPlaylist'])
   })
 }

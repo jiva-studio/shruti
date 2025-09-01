@@ -21,9 +21,14 @@ export interface DatabaseConfig {
   authToken?: () => string
 }
 
+export type SyncError = {
+  code: number
+  message: string
+}
+
 export type SyncResult = {
-  pull?: { docs: any[] }
-  push?: { docs: any[] }
+  pull?: { docs: any[], errors?: SyncError[] }
+  push?: { docs: any[], errors?: SyncError[] }
 }
 /* -------------------------------------------------------------------------- */
 /*                                 Replication                                */
@@ -121,22 +126,31 @@ export class Database {
     const pushChanges: PouchDB.Core.ExistingDocument<{}>[] = []
     const pullChanges: PouchDB.Core.ExistingDocument<{}>[] = []
 
-    const syncResult = await this._db
-      .sync(remote.db, options)
-      .on('change', (info) => {
-        if (info.direction === 'pull') {
-          pullChanges.push(...info.change.docs)
-        } else if (info.direction === 'push') {
-          pushChanges.push(...info.change.docs)
-        }
-      })
+    try {
+      const syncResult = await this._db
+        .sync(remote.db, options)
+        .on('change', (info) => {
+          if (info.direction === 'pull') {
+            pullChanges.push(...info.change.docs)
+          } else if (info.direction === 'push') {
+            pushChanges.push(...info.change.docs)
+          }
+        })
 
-    // Enhance the result with pull and push changes
-    if (syncResult.pull) { syncResult.pull.docs = pullChanges }
-    if (syncResult.push) { syncResult.push.docs = pushChanges }
+      if (syncResult.pull) { syncResult.pull.docs = pullChanges }
+      if (syncResult.push) { syncResult.push.docs = pushChanges }
 
-    // Return the sync result
-    return syncResult
+      return syncResult
+    } catch(err: any) {
+      const normalizedError = { 
+        code: err.code || err.status,
+        message: err.message
+      }
+      return { 
+        pull: { docs:[], errors: [normalizedError] },
+        push: { docs:[], errors: [normalizedError] } 
+      }
+    }
   }
 
   /**

@@ -1,8 +1,7 @@
 import { Filesystem, Directory, ProgressStatus } from '@capacitor/filesystem'
 import { IRepository } from '@lectorium/dal'
 import { MediaItem } from '@lectorium/dal'
-import { useLogger } from '@lectorium/mobile/core'
-import { Event } from '@lectorium/mobile/core'
+import { Event, useLogger, useRetriableFunction } from '@lectorium/mobile/core'
 import { createSharedComposable } from '@vueuse/core'
 
 type Options = {
@@ -87,11 +86,7 @@ export const useTrackMediaItemsDownloader = createSharedComposable(() => {
 
     // Add to active downloads
     activeDownloads.add(mediaItem.remoteUrl)
-
-    // Start the download
     await startDownload(mediaItem)
-
-    // Try to process more items from queue
     await processQueue()
   }
 
@@ -103,18 +98,17 @@ export const useTrackMediaItemsDownloader = createSharedComposable(() => {
 
     // NOTE: downloadFile does not create the folder if it does not exist even if
     //       recursive is set to true. So we need to create the folder manually. 
-    try {
-      await Filesystem.mkdir({
-        path: folder,
-        directory: Directory.External,
-        recursive: true,
-      })
-    } catch (error: any) {
-      if (error.message !== 'Directory exists') {
-        logger.error(`Failed to create folder: ${folder}`, error)
+    const createFolders = useRetriableFunction(async (path: string) => {
+      await Filesystem.mkdir({ path, directory: Directory.External, recursive: true })
+    }, { 
+      isRecoverable(error: any) {
+        const recoverbleErrors = ['OS-PLUG-FILE-0010' /** Folder already exist */]
+        return recoverbleErrors.includes(error.code)
       }
-    }
-    
+    })
+    await createFolders(folder)
+
+    // Downoad files
     Filesystem.downloadFile({
       url: mediaItem.remoteUrl,
       path: mediaItem.localPath,

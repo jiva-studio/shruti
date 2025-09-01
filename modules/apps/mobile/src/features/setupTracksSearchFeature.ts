@@ -24,7 +24,7 @@ export async function setupTracksSearchFeature() {
     await tracksSearchFilters.load(config.appLanguage.value)
   })
 
-  eventBus.syncEnd.subscribe(async () => {
+  eventBus.syncComplete.subscribe(async () => {
     await tracksSearchFilters.load(config.appLanguage.value)
     
     if (tracksSearchResults.store.items.length === 0) {

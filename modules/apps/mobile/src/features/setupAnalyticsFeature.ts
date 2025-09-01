@@ -27,9 +27,8 @@ export function setupAnalyticsFeature() {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  eventBus.authSignInEnd.subscribe(async (results) => {
-    if (!results) { return }
-    analytics.setUserId(results.userId)
+  eventBus.authSignedIn.subscribe(async (event) => {
+    analytics.setUserId(event.userId)
   }) 
 
   eventBus.authSignOut.subscribe(async () => {

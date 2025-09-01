@@ -89,12 +89,24 @@ import { setupAnalyticsFeature } from './features/setupAnalyticsFeature'
 import { setupAppearanceFeature } from './features/setupAppearanceFeature'
 import { setupTutorialFeature } from './features/setupTutorialFeature'
 import { setupToastFeature } from './features/setupToastFeature'
-import { setupSentryFeature } from './features/setupSentryFeature'
 import { setupAppStatusFeature } from './features/setupAppStatusFeature'
 import { setupPlayerAnalyticsFeature } from './features/setupPlayerAnalyticsFeature'
+import { featureSentrySetUserInfo } from './features/sentry/featureSentrySetUserInfo'
 import { featureUpdateProgress } from './features/playlist/featureUpdateProgress'
 import { featureShareTrackExcerpt } from './features/share/featureShareTrackExcerpt'
 import { featureSetupInitialLanguageSearchFilter } from './features/localization/featureSetupInitialLanguageSearchFilter'
+import { featureSetRemoteDbCredentials } from './features/sync/featureSetRemoteDbCredentials'
+import { featureSyncOnceSignedIn } from './features/sync/featureSyncOnceSignedIn'
+import { featureSyncOnceTokenRefreshed } from './features/sync/featureSyncOnceTokenRefreshed'
+import { featureUpdateSubscriptionOnceSignedIn } from './features/subscription/featureUpdateSubscriptionOnceSignedIn'
+import { featureUserSignIn } from './features/authentication/featureUserSignIn'
+import { featureRefreshToken } from './features/authentication/featureRefreshToken'
+import { featurePersistAuthentication } from './features/authentication/featurePersistAuthentication'
+import { featureDownloadUserImage } from './features/authentication/featureDownloadUserImage'
+import { featureUpdateScreensAfterSync } from './features/sync/featureUpdateScreensAfterSync'
+import { featureSyncUserData } from './features/sync/featureSyncUserData'
+import { featureInvalidateCacheAfterSync } from './features/sync/featureInvalidateCacheAfterSync'
+import { featureDownloadMissingFilesAfterSync } from './features/sync/featureDownloadMissingFilesAfterSync'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -239,7 +251,6 @@ Promise.all([
     /*                               Setup Features                               */
     /* -------------------------------------------------------------------------- */
 
-    setupSentryFeature()
     setupAnalyticsFeature()
     setupAppearanceFeature()
     setupAuthenticationFeature()
@@ -258,7 +269,19 @@ Promise.all([
     setupToastFeature()
     setupAppStatusFeature()
     setupPlayerAnalyticsFeature()
+
+    /* ---------------------------------- Infra --------------------------------- */
+
+    featureSentrySetUserInfo()
    
+    /* ---------------------------------- Auth ---------------------------------- */
+    
+    featureSetRemoteDbCredentials()
+    featureDownloadUserImage()
+    featurePersistAuthentication()
+    featureRefreshToken()
+    featureUserSignIn()
+
     /* -------------------------------- Playlist -------------------------------- */
     
     featureUpdateProgress()
@@ -270,6 +293,19 @@ Promise.all([
     /* ------------------------------ Localization ------------------------------ */
 
     featureSetupInitialLanguageSearchFilter()
+
+    /* ------------------------------ Subscriptions ----------------------------- */
+
+    featureUpdateSubscriptionOnceSignedIn()
+
+    /* ---------------------------------- Sync ---------------------------------- */
+
+    featureSyncUserData()
+    featureSyncOnceSignedIn()
+    featureSyncOnceTokenRefreshed()
+    featureUpdateScreensAfterSync()
+    featureInvalidateCacheAfterSync()
+    featureDownloadMissingFilesAfterSync()
     
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */

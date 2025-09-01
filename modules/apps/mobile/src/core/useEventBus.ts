@@ -27,14 +27,13 @@ export const useEventBus = createSharedComposable(() => {
 
   const userInfoLoad = new Event<void>('userInfoLoad')
   const userInfoSave = new Event<{ firstName?: string, lastName?: string, email?: string, avatarUrl?: string }>('userInfoSave')
-  const userInfoDownloadAvatar = new Event<{ avatarUrl: string }>('userInfoDownloadAvatar')
 
   /* -------------------------------------------------------------------------- */
   /*                                    Sync                                    */
   /* -------------------------------------------------------------------------- */
 
   const sync = new Event<void>('sync')
-  const syncEnd = new Event<{ commonData: SyncResult, userData: SyncResult }>('syncEnd')
+  const syncComplete = new Event<{ commonData: SyncResult, userData: SyncResult }>('syncComplete')
 
   /* -------------------------------------------------------------------------- */
   /*                                    Notes                                   */
@@ -86,10 +85,17 @@ export const useEventBus = createSharedComposable(() => {
   /* -------------------------------------------------------------------------- */
 
   const authSignIn = new Event<{ provider: 'google' | 'apple' }>('authSignIn')
+  const authSignedIn = new Event<{ 
+    userId: string, 
+    userFirstName?: string,
+    userLastName?: string,
+    userImageUrl?: string,
+    accessToken: string, 
+    refreshToken: string,
+  }>('authSignedIn')
   const authSignOut = new Event<void>('authSignOut')
-  const authSignInEnd = new Event<{ userId: string }>('authSignInEnd')
   const authTokenRefresh = new Event<{ refreshToken: string }>('authTokenRefresh')
-  const authCredentialsReceived = new Event<{ accessToken: string, refreshToken: string }>('authCredentialsReceived')
+  const authTokenRefreshed = new Event<{ accessToken: string, refreshToken: string }>('authTokenRefreshed')
   const authSelectProvider = new Event<void>('authSelectProvider')
   const authSelectAuthenticatedActions = new Event<void>('authSelectAuthenticatedActions')
   const authDeleteAccount = new Event<void>('authDeleteAccount')
@@ -141,11 +147,10 @@ export const useEventBus = createSharedComposable(() => {
     // user
     userInfoLoad,
     userInfoSave,
-    userInfoDownloadAvatar,
 
     // sync
     sync,
-    syncEnd,
+    syncComplete,
 
     // notes
     notesAdd,
@@ -175,11 +180,11 @@ export const useEventBus = createSharedComposable(() => {
 
     // authentication
     authSignIn,
+    authSignedIn,
     authSignOut,
-    authSignInEnd,
     authTokenRefresh,
+    authTokenRefreshed,
     authSelectProvider,
-    authCredentialsReceived,
     authSelectAuthenticatedActions,
     authDeleteAccount,
 
