@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           version=$(jq -r '.version' modules/apps/mobile/package.json)
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "build_number=$(( GITHUB_RUN_NUMBER + 500 ))" >> "$GITHUB_OUTPUT"
+          echo "build_number=$(( GITHUB_RUN_NUMBER + 600 ))" >> "$GITHUB_OUTPUT"
 
       # -------------------------- Install Dev Environment ------------------------- #
 
