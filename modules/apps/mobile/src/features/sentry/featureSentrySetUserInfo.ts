@@ -1,7 +1,7 @@
 import { useSentry } from '@blocks/app.infra.sentry'
 import { useEventBus } from '@shruti/mobile/core'
 
-export function setupSentryFeature() {
+export function featureSentrySetUserInfo() {
   /* -------------------------------------------------------------------------- */
   /*                                Dependencies                                */
   /* -------------------------------------------------------------------------- */
@@ -13,8 +13,8 @@ export function setupSentryFeature() {
   /*                                    Hooks                                   */
   /* -------------------------------------------------------------------------- */
 
-  eventBus.authSignInEnd.subscribe(async (data) => {
-    sentry.setUserInfo({ id: data.userId })
+  eventBus.authSignedIn.subscribe(async (event) => {
+    sentry.setUserInfo({ id: event.userId })
   })
 
   eventBus.authSignOut.subscribe(async () => {
