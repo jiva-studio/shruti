@@ -4,12 +4,11 @@ import { actionSheetController } from '@ionic/vue'
 import { Purchases } from '@revenuecat/purchases-capacitor'
 import { Capacitor } from '@capacitor/core'
 import { Routes } from '@shruti/protocol/routes'
-import { useDedupedCallFunction, useEventBus, useLogger } from '@shruti/mobile/core'
-import { useAuthTokenRefresher, useUserAvatarDownloader, useAuth, AuthTokenRefreshError, DeleteAccountDialog } from '@blocks/app.auth'
+import { useEventBus, useLogger } from '@shruti/mobile/core'
+import { useAuth, DeleteAccountDialog } from '@blocks/app.auth'
 import { useConfig } from '@blocks/app.config'
 import { useLocalDatabase, useRemoteDatabase } from '@blocks/app.database'
 import { useLocalization } from '@blocks/app.localization'
-import { useBucketService } from '@blocks/app.services.bucket'
 import { ENVIRONMENT } from '../env'
 import { useTracksStateStore } from '@blocks/app.tracks.state'
 
@@ -19,13 +18,10 @@ export async function setupAuthenticationFeature() {
   /* -------------------------------------------------------------------------- */
 
   const i18n = useLocalization()
-  const auth = useAuth()
   const config = useConfig()
   const logger = useLogger({ module: 'app.auth' })
   const eventBus = useEventBus()
   const remoteDatabase = useRemoteDatabase()
-  const authTokenRefresher = useAuthTokenRefresher()
-  const userAvatarDownloader = useUserAvatarDownloader()
   const localDatabase = useLocalDatabase()
   const tracksStateStore = useTracksStateStore()
 
@@ -92,32 +88,6 @@ export async function setupAuthenticationFeature() {
 
   /* --------------------------------- Sign In -------------------------------- */
 
-  eventBus.authSignIn.subscribe(async (event) => {
-    const result = await auth.signIn(event.provider)
-    if (!result) { return }
-
-    config.userName.value = `${result.userFirstName} ${result.userLastName}`.trim()
-    config.userId.value = result.userId
-
-    await eventBus.authCredentialsReceived.notify({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-    })
-
-    // eventBus.userInfoSave.notify({
-    //   firstName: result.userFirstName,
-    //   lastName: result.userLastName,
-    //   email: result.userEmail,
-    //   avatarUrl: result.avatarUrl || undefined
-    // })
-    eventBus.sync.notify()
-    eventBus.subscriptionLoad.notify()
-    if (result.userImageUrl) {
-      eventBus.userInfoDownloadAvatar.notify({ avatarUrl: result.userImageUrl })
-    }
-    eventBus.authSignInEnd.notify({ userId: result.userId })
-  })
-
   /* ----------------------------- Delete Account ----------------------------- */
 
   eventBus.authDeleteAccount.subscribe(async () => {
@@ -171,34 +141,6 @@ export async function setupAuthenticationFeature() {
     }
   })
 
-  /* -------------------------------- User Info ------------------------------- */
-
-  eventBus.userInfoDownloadAvatar.subscribe(async (event) => {
-    if (event.avatarUrl) {
-      const avatar = await userAvatarDownloader.download(event.avatarUrl)
-      config.userAvatarUrl.value = avatar || ''
-    }
-  })
-
-  // eventBus.userInfoLoad.subscribe(async () => {
-  //   const result = await userInfo.load()
-  //   if (result && (result.firstName || result.lastName)) {
-  //     config.userName.value = `${result.firstName} ${result.lastName}`.trim()
-  //   }
-  //   if (result?.avatarUrl) {
-  //     const avatar = await userAvatarDownloader.download(result.avatarUrl)
-  //     config.userAvatarUrl.value = avatar || ''
-  //   }
-  // })
-
-  // eventBus.userInfoSave.subscribe(async (event) => {
-  //   await userInfo.save({
-  //     firstName: event.firstName,
-  //     lastName: event.lastName,
-  //     email: event.email,
-  //     avatarUrl: event.avatarUrl || undefined,
-  //   })
-  // })
 
   /* -------------------------------- Sign Out -------------------------------- */
 
@@ -216,63 +158,7 @@ export async function setupAuthenticationFeature() {
       userId: config.userId.value,
       authToken: ENVIRONMENT.readonlyAuthToken,
     })
-  })
-
-  eventBus.authSignOut.subscribe(async () => {
-    config.authToken.value = ENVIRONMENT.readonlyAuthToken
-    config.refreshToken.value = ''
-    config.authTokenExpiresAt.value = 0
     await Purchases.logOut()
-  })
-
-  /* -------------------------- Auth Token : Refresh -------------------------- */
-
-  eventBus.authTokenRefresh.subscribe(
-    // Deduped function to prevent multiple refresh requests with the same token.
-    // Refreshed token will be marked as used (revoked) after successful refresh, 
-    // so consecutive calls with the same token will lead to Unauthorized error.
-    // In order to prevent multiple refresh requests with the same token, we use
-    // a deduped call function here.
-    useDedupedCallFunction(async ({ refreshToken }) => {
-      try {
-        const result = await authTokenRefresher.refresh(refreshToken)
-        await eventBus.authCredentialsReceived.notify({
-          accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
-        })
-      } catch (error: any) {
-        if (
-          error instanceof AuthTokenRefreshError && 
-          (error.status === 401 || error.status === 403)
-        ) {
-          // If the error is related to token refresh, we need to sign out user.
-          logger.error(error.message, error)
-          await eventBus.authSignOut.notify()
-        } else {
-          logger.error(`Failed to refresh authentication token`, error)
-        }
-      } 
-    })
-  )
-
-  /* -------------------------- Auth Token : Refresh -------------------------- */
-
-  // Authentication and refresh token received from the server. It may
-  // happen after successful sign-in or after token refresh.
-  eventBus.authCredentialsReceived.subscribe(async (event) => {
-    config.authToken.value = event.accessToken
-    config.refreshToken.value = event.refreshToken
-
-    const parts = event.accessToken.split('.')
-    const payload = JSON.parse(atob(parts[1]))
-    if (payload.exp) { 
-      config.authTokenExpiresAt.value = payload.exp * 1000 
-    }
-    remoteDatabase.init({
-      url: config.databaseUrl.value,
-      userId: config.userId.value,
-      authToken: event.accessToken,
-    })
   })
 
   /* -------------------------------------------------------------------------- */

@@ -39,7 +39,7 @@ export async function setupNotesFeature() {
     await notes.load()
   })
 
-  eventBus.syncEnd.subscribe(async (results) => {
+  eventBus.syncComplete.subscribe(async (results) => {
     const hasNewNotes = results.userData.pull?.docs.some(doc => doc.type === 'note')
     if (hasNewNotes) {
       await notes.load()
