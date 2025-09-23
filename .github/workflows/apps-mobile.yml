@@ -234,6 +234,19 @@ jobs:
           --androidreleasetype AAB
           (cd ./android && bundle exec fastlane deploy)
 
+      - name: 👷 Build Android APK
+        working-directory: modules/apps/mobile
+        env:
+          APPSFLYER_KEY: ${{ secrets.APPSFLYER_KEY }}
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+        run: |
+          npx cap build android \
+          --keystorepath ../../../../data/keys/apk/mobile.jks \
+          --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+          --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
+          --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
+          --androidreleasetype APK
+
       # --------------------------------- Artifacts -------------------------------- #
 
       - name: ⬆️ Upload Artifact
