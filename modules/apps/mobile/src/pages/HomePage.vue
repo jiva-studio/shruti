@@ -1,17 +1,6 @@
 <template>
   <Page>
-    <!-- Sign In Settings Item -->
-    <Transition>
-      <Message 
-        v-if="!config.userId.value && playlist.items.length > 0 && !config.tutorialStepsCompleted.value.includes('signInInvitation')"
-        @click="eventBus.authSelectProvider.notify()"
-        @close="eventBus.tutorialCompleteStep.notify({ step: 'signInInvitation' })"
-      >
-        {{ $t('home.signInInvitation') }}
-      </Message>
-    </Transition>
-
-    <!-- Playlist Section -->
+    <OnboardingMessages />
     <PlaylistSection
       @click="onPlaylistItemClicked"
       @delete="onArchivePlaylistItem"
@@ -22,18 +11,15 @@
 
 <script setup lang="ts">
 import { Page } from '@blocks/app.core'
-import { PlaylistSection, usePlaylistStore } from '@blocks/app.playlist'
+import { PlaylistSection  } from '@blocks/app.playlist'
 import { useEventBus } from '@shruti/mobile/core'
-import { Message } from '@blocks/app.ui.kit'
-import { useConfig } from '@blocks/app.config'
+import OnboardingMessages from './home/OnboardingMessages.vue'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
 /* -------------------------------------------------------------------------- */
 
-const config = useConfig()
 const eventBus = useEventBus()
-const playlist = usePlaylistStore()
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -47,16 +33,3 @@ function onArchivePlaylistItem(playlistItemId: string) {
   eventBus.playlistArchiveItem.notify({ playlistItemId })
 }
 </script>
-
-
-<style scoped>
-.v-enter-active,
-.v-leave-active {
-  transition: opacity 0.5s ease;
-}
-
-.v-enter-from,
-.v-leave-to {
-  opacity: 0;
-}
-</style>

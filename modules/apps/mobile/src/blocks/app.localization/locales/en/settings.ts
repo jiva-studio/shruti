@@ -10,6 +10,7 @@ export default {
     auth: 'Profile',
     status: 'Status',
     share: 'Share',
+    sadhana: 'Sadhana',
   },
 
 
@@ -148,6 +149,21 @@ export default {
     audioExcerpt: {
       title: 'Audio fragment',
       description: 'Share audio fragment along with text'
+    }
+  },
+
+  /* -------------------------------------------------------------------------- */
+  /*                                Notifications                               */
+  /* -------------------------------------------------------------------------- */
+
+  notifications: {
+    enabled: {
+      title: 'Notifications',
+      description: 'You will receive notifications.'
+    },
+    daily: {
+      title: 'Reminder time',
+      description: 'The time when notifications will be sent.'
     }
   }
 }

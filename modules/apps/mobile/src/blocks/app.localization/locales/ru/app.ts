@@ -1,4 +1,5 @@
 export default {
+  listenToSadhu: 'Слушай Садху',
   home: 'Главная',
   search: 'Поиск',
   settings: 'Настройки',
