@@ -11,18 +11,20 @@ export const useConfig = createGlobalState(() => {
   const apiUrl             = ref(ENVIRONMENT.apiUrl)
   const databaseUrl        = ref(ENVIRONMENT.databaseUrl)
   const bucketName         = ref(ENVIRONMENT.bucketName)
-  const subscriptionPlan         = ref('')
-  const showPlayerProgress       = ref(true)
-  const showNotesTab             = ref(true)
-  const highlightCurrentSentence = ref(true)
-  const savedTracksFilter        = ref<any>({})
-  const userId                   = ref('')
-  const userName                 = ref('')
-  const userAvatarUrl            = ref('')
+  const subscriptionPlan            = ref('')
+  const showPlayerProgress          = ref(true)
+  const showNotesTab                = ref(true)
+  const highlightCurrentSentence    = ref(true)
+  const savedTracksFilter           = ref<any>({})
+  const userId                      = ref('')
+  const userName                    = ref('')
+  const userAvatarUrl               = ref('')
   const openTranscriptAutomatically = ref(false)
-  const tutorialStepsCompleted = ref<string[]>([])
-  const shareAudioExcerpt      = ref(true)
-  const migrations             = ref<string[]>([])
+  const tutorialStepsCompleted      = ref<string[]>([])
+  const shareAudioExcerpt           = ref(true)
+  const migrations                  = ref<string[]>([])
+  const notificationsEnabled        = ref<boolean|undefined>(undefined)
+  const notificationsTime           = ref<[number, number] | undefined>()
 
   return {
     appLanguage,
@@ -44,5 +46,7 @@ export const useConfig = createGlobalState(() => {
     tutorialStepsCompleted,
     shareAudioExcerpt,
     migrations,
+    notificationsEnabled,
+    notificationsTime,
   }
 })

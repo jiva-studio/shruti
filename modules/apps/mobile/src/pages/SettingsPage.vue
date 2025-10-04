@@ -25,6 +25,17 @@
     <HighlightCurrentSentenceSettingsItem />
     <OpenTranscriptAutomaticallySettingsItem />
 
+    <!-- Sadhana -->
+    <IonListHeader>
+      <IonLabel>{{ $t('settings.groups.sadhana') }}</IonLabel>
+    </IonListHeader>
+    <NotificationsEnabledSettingsItem 
+      v-model:value="config.notificationsEnabled.value"
+    />
+    <DailyNotificationsTimeSettingsItem 
+      v-model:value="config.notificationsTime.value" 
+    />
+
     <!-- Share -->
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.share') }}</IonLabel>
@@ -70,6 +81,7 @@ import { useSyncDataStore } from '@blocks/app.sync.data'
 import { useSearchFiltersDictionaryStore } from '@blocks/app.tracks.search.filters'
 import { ServerStatus, useAppStatusStore } from '@blocks/app.status'
 import { ShareAudioExcerptSettingsItem } from '@blocks/app.share.settings'
+import { NotificationsEnabledSettingsItem, DailyNotificationsTimeSettingsItem } from '@blocks/app.notifications'
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */

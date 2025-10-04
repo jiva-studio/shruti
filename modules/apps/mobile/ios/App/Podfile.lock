@@ -26,6 +26,8 @@ PODS:
     - Capacitor
   - CapacitorKeyboard (7.0.2):
     - Capacitor
+  - CapacitorLocalNotifications (7.0.2):
+    - Capacitor
   - CapacitorPluginSafeArea (4.0.0):
     - Capacitor
   - CapacitorShare (7.0.2):
@@ -94,6 +96,7 @@ DEPENDENCIES:
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
+  - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
   - CapacitorPluginSafeArea (from `../../node_modules/capacitor-plugin-safe-area`)
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
@@ -141,6 +144,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/haptics"
   CapacitorKeyboard:
     :path: "../../node_modules/@capacitor/keyboard"
+  CapacitorLocalNotifications:
+    :path: "../../node_modules/@capacitor/local-notifications"
   CapacitorPluginSafeArea:
     :path: "../../node_modules/capacitor-plugin-safe-area"
   CapacitorShare:
@@ -174,6 +179,7 @@ SPEC CHECKSUMS:
   CapacitorFilesystem: ac0a386949ed6c295a3dffa129ecd26b881ae5be
   CapacitorHaptics: 09d96bcb5a2b74ede8fd039b4cdf58fc43dcacf1
   CapacitorKeyboard: 056bbe3711830ccb782f1705a8ad183b27b6c51e
+  CapacitorLocalNotifications: 0964df8c14ec51aadf2bb4fd6d55fdb1ccfd6721
   CapacitorPluginSafeArea: af80830df43015a915e504a56318a3027d3fc806
   CapacitorShare: 051c3ceee0ddf3bb54574851a622bbb317eed5bd
   CapacitorSplashScreen: 8d6c8cb0542a8e81585c593815db8785ed8ce454
@@ -198,6 +204,6 @@ SPEC CHECKSUMS:
   SentryCapacitor: 8056121e380f9b8c2473376da060850c60744ac7
   SquareetlabsCapacitorNavigationBar: b6e54a683e5504db259963b1daf27e723f3cce75
 
-PODFILE CHECKSUM: 35a36679d5d60401155a84e701c046728c4036a3
+PODFILE CHECKSUM: 90187d883adb6738ae54c6761d24cb675aa54b5a
 
 COCOAPODS: 1.16.2

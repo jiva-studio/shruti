@@ -107,6 +107,10 @@ import { featureUpdateScreensAfterSync } from './features/sync/featureUpdateScre
 import { featureSyncUserData } from './features/sync/featureSyncUserData'
 import { featureInvalidateCacheAfterSync } from './features/sync/featureInvalidateCacheAfterSync'
 import { featureDownloadMissingFilesAfterSync } from './features/sync/featureDownloadMissingFilesAfterSync'
+import { featureScheduleDailyNotification } from './features/notifications/featureScheduleDailyNotification'
+import { featureCancelPendingNotificationsIfDisabled } from './features/notifications/featureCancelPendingNotificationsIfDisabled'
+import { featureScheduleNotificationsIfEnabled } from './features/notifications/featureScheduleNotificationsIfEnabled'
+import { featureScheduleNotificationsIfTimeChanged } from './features/notifications/featureScheduleNotificationsIfTimeChanged'
 
 /* -------------------------------------------------------------------------- */
 /*                                    Misc                                    */
@@ -306,6 +310,13 @@ Promise.all([
     featureUpdateScreensAfterSync()
     featureInvalidateCacheAfterSync()
     featureDownloadMissingFilesAfterSync()
+
+    /* ------------------------------ Notifications ----------------------------- */
+
+    featureScheduleDailyNotification()
+    featureCancelPendingNotificationsIfDisabled()
+    featureScheduleNotificationsIfEnabled()
+    featureScheduleNotificationsIfTimeChanged()
     
     /* -------------------------------------------------------------------------- */
     /*                                    Misc                                    */

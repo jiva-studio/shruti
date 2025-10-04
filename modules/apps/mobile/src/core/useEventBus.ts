@@ -132,6 +132,13 @@ export const useEventBus = createSharedComposable(() => {
     // timeEnd?: number,
   }>('shareCopyTrackExcerpt')
 
+
+  /* -------------------------------------------------------------------------- */
+  /*                                Notifications                               */
+  /* -------------------------------------------------------------------------- */
+
+  const notificationsSchedule = new Event<{ time: [number, number] }>
+
   /* -------------------------------------------------------------------------- */
   /*                                  Interface                                 */
   /* -------------------------------------------------------------------------- */
@@ -194,9 +201,11 @@ export const useEventBus = createSharedComposable(() => {
     // dictionary
     dictionaryLoad,
 
-
     // share
     shareSendTrackExcerpt,
     shareCopyTrackExcerpt,
+
+    // notifications
+    notificationsSchedule,
   }
 })
