@@ -5,8 +5,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -17,6 +19,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.exoplayer.ExoPlayer;
 import com.getcapacitor.PluginCall;
 
+import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionActions;
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionCallback;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaSessionMediaStateNotifier;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaStateNotificationService;
@@ -29,7 +32,9 @@ public final class AudioPlayerService extends Service {
 
     private ExoPlayer exoPlayer;
     private MediaStateNotificationService mediaStateNotificationService;
+    private MediaSessionMediaStateNotifier mediaSessionNotifier;
     private NotificationManager notificationManager;
+    private BroadcastReceiver skipActionReceiver;
 
     @Override
     public void onCreate() {
@@ -49,11 +54,34 @@ public final class AudioPlayerService extends Service {
             );
         }
 
+        // Register BroadcastReceiver for skip actions
+        skipActionReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (MediaSessionActions.ACTION_REWIND.equals(action)) {
+                    seekBy(-15000);
+                } else if (MediaSessionActions.ACTION_FAST_FORWARD.equals(action)) {
+                    seekBy(15000);
+                }
+            }
+        };
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(MediaSessionActions.ACTION_REWIND);
+        filter.addAction(MediaSessionActions.ACTION_FAST_FORWARD);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(skipActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(skipActionReceiver, filter);
+        }
+
         // Set media state change notification service
-        mediaStateNotificationService.addNotifier(new MediaSessionMediaStateNotifier(
+        mediaSessionNotifier = new MediaSessionMediaStateNotifier(
                 context,
                 notificationManager,
-                new MediaSessionCallback(this)));
+                new MediaSessionCallback(this));
+        mediaStateNotificationService.addNotifier(mediaSessionNotifier);
         mediaStateNotificationService.run();
     }
 
@@ -71,6 +99,12 @@ public final class AudioPlayerService extends Service {
     @Override
     public void onDestroy() {
         mediaStateNotificationService.stop();
+        if (mediaSessionNotifier != null) {
+            mediaSessionNotifier.cleanup();
+        }
+        if (skipActionReceiver != null) {
+            unregisterReceiver(skipActionReceiver);
+        }
         if (exoPlayer != null) { exoPlayer.release(); }
         this.stopForeground(true);
         this.stopSelf();
@@ -94,20 +128,17 @@ public final class AudioPlayerService extends Service {
             MediaItem mediaItem = MediaItem.fromUri(url);
 
             new Handler(Looper.getMainLooper()).post(() -> {
-                mediaStateNotificationService.setUpdating(false);
                 exoPlayer.stop();
                 exoPlayer.clearMediaItems();
                 exoPlayer.setMediaItem(mediaItem);
                 exoPlayer.prepare();
+
                 mediaStateNotificationService.getState().setTrackId(trackId);
                 mediaStateNotificationService.getState().setTitle(trackTitle);
                 mediaStateNotificationService.getState().setArtist(trackArtist);
                 mediaStateNotificationService.getState().setPosition(0);
-                // Duration will be updated later when available
                 mediaStateNotificationService.getState().setDuration(0);
                 mediaStateNotificationService.getState().setState("stopped");
-                mediaStateNotificationService.setUpdating(true);
-                mediaStateNotificationService.update();
             });
         } catch (Exception e) {
             e.printStackTrace();
@@ -119,6 +150,16 @@ public final class AudioPlayerService extends Service {
             if (!exoPlayer.isPlaying()) {
                 exoPlayer.setPlayWhenReady(true);
                 mediaStateNotificationService.getState().setState("playing");
+                mediaStateNotificationService.update();
+            }
+        });
+    }
+
+    public void pause() {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (exoPlayer.isPlaying()) {
+                exoPlayer.setPlayWhenReady(false);
+                mediaStateNotificationService.getState().setState("paused");
                 mediaStateNotificationService.update();
             }
         });
@@ -143,6 +184,20 @@ public final class AudioPlayerService extends Service {
                 exoPlayer.seekTo(position);
                 mediaStateNotificationService.getState().setState(exoPlayer.isPlaying() ? "playing" : "paused");
                 mediaStateNotificationService.getState().setPosition(position);
+                mediaStateNotificationService.update();
+            }
+        });
+    }
+
+    public void seekBy(long delta) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (exoPlayer != null) {
+                long currentPosition = exoPlayer.getCurrentPosition();
+                long duration = exoPlayer.getDuration();
+                long newPosition = Math.max(0, Math.min(currentPosition + delta, duration));
+                exoPlayer.seekTo(newPosition);
+                mediaStateNotificationService.getState().setState(exoPlayer.isPlaying() ? "playing" : "paused");
+                mediaStateNotificationService.getState().setPosition(newPosition);
                 mediaStateNotificationService.update();
             }
         });

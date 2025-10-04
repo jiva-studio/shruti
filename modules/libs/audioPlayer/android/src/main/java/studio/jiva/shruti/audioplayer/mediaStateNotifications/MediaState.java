@@ -11,9 +11,9 @@ public class MediaState {
     // Constructor
     public MediaState(
         String trackId,
-        String state, 
-        String artist, 
-        String title, 
+        String state,
+        String artist,
+        String title,
         long position,
         long duration
     ) {
