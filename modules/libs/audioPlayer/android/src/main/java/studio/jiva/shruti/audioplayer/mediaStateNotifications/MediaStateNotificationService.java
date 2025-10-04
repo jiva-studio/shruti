@@ -3,10 +3,7 @@ package studio.jiva.shruti.audioplayer.mediaStateNotifications;
 import android.os.Handler;
 import android.os.Looper;
 
-import androidx.annotation.OptIn;
 import androidx.media3.common.Player;
-import androidx.media3.common.Timeline;
-import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 
 import java.util.ArrayList;
@@ -17,7 +14,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * This class is responsible for notifying the media state to the registered notifiers.
- * It runs in a separate thread and updates the media state every 100ms.
+ * It runs in a separate thread and updates the media state every 500ms when playing.
+ * For paused/stopped states, notifications are sent once on state change.
  */
 public final class MediaStateNotificationService {
     private final List<IMediaStateNotifier> notifiers = new ArrayList<>();
@@ -25,8 +23,11 @@ public final class MediaStateNotificationService {
     private final MediaState state = new MediaState("", "stopped", "", "", 0, 0);
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    private boolean isUpdating = false;
-    private boolean isRunning = false;
+
+    // Track previous state to detect changes
+    private String previousState = "stopped";
+    private String previousTrackId = "";
+    private long previousDuration = 0;
 
     public MediaStateNotificationService(ExoPlayer exoPlayer) {
         this.exoPlayer = exoPlayer;
@@ -42,21 +43,13 @@ public final class MediaStateNotificationService {
     }
 
     public void run() {
-        //if (isRunning) return;
-        //isRunning = true;
         executor.scheduleWithFixedDelay(() -> {
-//            if (isUpdating) {
             try {
                 new Handler(Looper.getMainLooper()).post(this::update);
-            } catch (Exception e) {
-                isRunning = false;
+            } catch (Exception ignored) {
+                // Ignore exceptions during shutdown
             }
-//            }
         }, 0, 500, TimeUnit.MILLISECONDS);
-    }
-
-    public void setUpdating(boolean updating) {
-        isUpdating = updating;
     }
 
     public MediaState getState() {
@@ -67,21 +60,31 @@ public final class MediaStateNotificationService {
         long currentPosition = exoPlayer.getCurrentPosition();
         long duration = exoPlayer.getDuration();
 
-//        if (exoPlayer.isPlaying()) {
-//            // Add elapsed time since last position update
-//            val elapsedSinceUpdate = SystemClock.elapsedRealtime() - lastPositionUpdateTime
-//            return currentPos + (elapsedSinceUpdate * playbackSpeed).toLong()
-//        }
-
         state.setPosition(currentPosition);
         state.setState(exoPlayer.isPlaying() ? "playing" : "paused");
-
         if (duration > 0 && duration != state.getDuration()) {
             state.setDuration(duration);
         }
 
-        for (IMediaStateNotifier notifier : notifiers) {
-            notifier.send(state);
+        // Detect state changes
+        boolean stateChanged = !state.getState().equals(previousState);
+        boolean trackChanged = !state.getTrackId().equals(previousTrackId);
+        boolean durationChanged = state.getDuration() != previousDuration;
+
+        // Only send notifications when:
+        // 1. State changed (play/pause/stop)
+        // 2. Track changed
+        // 3. Duration changed
+        // 4. Currently playing (for progress updates)
+        if (stateChanged || trackChanged || durationChanged || state.getState().equals("playing")) {
+            for (IMediaStateNotifier notifier : notifiers) {
+                notifier.send(state);
+            }
+
+            // Update previous values
+            previousState = state.getState();
+            previousTrackId = state.getTrackId();
+            previousDuration = state.getDuration();
         }
     }
 
@@ -90,7 +93,14 @@ public final class MediaStateNotificationService {
     }
 
     public void stop() {
-        isRunning = false;
-        executor.shutdownNow();
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 }

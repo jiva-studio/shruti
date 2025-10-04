@@ -28,6 +28,30 @@ public final class MediaSessionCallback extends MediaSessionCompat.Callback {
     }
 
     @Override
+    public void onFastForward() {
+        service.seekBy(15000);
+    }
+
+    @Override
+    public void onRewind() {
+        service.seekBy(-15000);
+    }
+
+    @Override
+    public void onSeekTo(long position) {
+        service.seek(position);
+    }
+
+    @Override
+    public void onCustomAction(String action, android.os.Bundle extras) {
+        if (MediaSessionActions.ACTION_REWIND.equals(action)) {
+            service.seekBy(-15000);
+        } else if (MediaSessionActions.ACTION_FAST_FORWARD.equals(action)) {
+            service.seekBy(15000);
+        }
+    }
+
+    @Override
     public boolean onMediaButtonEvent(Intent mediaButtonEvent) {
         // Handle media button event, return true if handled
         return super.onMediaButtonEvent(mediaButtonEvent);

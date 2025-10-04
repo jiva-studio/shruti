@@ -11,7 +11,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.media.session.MediaButtonReceiver;
 
-// .setDeleteIntent(MediaButtonReceiver.buildMediaButtonPendingIntent(service.context, PlaybackStateCompat.ACTION_STOP))
+import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionActions;
 
 public final class MediaSessionMediaStateNotifier implements IMediaStateNotifier {
     private final MediaSessionCompat mediaSession;
@@ -38,7 +38,14 @@ public final class MediaSessionMediaStateNotifier implements IMediaStateNotifier
 
     @Override
     public void send(MediaState state) {
-        if (state.getTitle().isEmpty()) {
+        // If stopped (empty title), cancel notification and set stopped state
+        if (state.getTitle().isEmpty() || state.getState().equals("stopped")) {
+            notificationManager.cancel(1);
+            mediaSession.setPlaybackState(
+                    new PlaybackStateCompat.Builder()
+                        .setState(PlaybackStateCompat.STATE_STOPPED, 0, 1.0f)
+                        .build()
+            );
             return;
         }
 
@@ -58,9 +65,38 @@ public final class MediaSessionMediaStateNotifier implements IMediaStateNotifier
                                 : PlaybackStateCompat.STATE_PAUSED,
                         state.getPosition(), 1.0f)
                     .setActions(
-                        PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PAUSE)
+                        PlaybackStateCompat.ACTION_PLAY |
+                        PlaybackStateCompat.ACTION_PAUSE |
+                        PlaybackStateCompat.ACTION_FAST_FORWARD |
+                        PlaybackStateCompat.ACTION_REWIND |
+                        PlaybackStateCompat.ACTION_SEEK_TO)
+                    .addCustomAction(
+                        new PlaybackStateCompat.CustomAction.Builder(
+                            MediaSessionActions.ACTION_REWIND,
+                            "-15s",
+                            android.R.drawable.ic_media_rew)
+                            .build())
+                    .addCustomAction(
+                        new PlaybackStateCompat.CustomAction.Builder(
+                            MediaSessionActions.ACTION_FAST_FORWARD,
+                            "+15s",
+                            android.R.drawable.ic_media_ff)
+                            .build())
                     .build()
         );
+
+        // Create PendingIntents for custom skip actions
+        Intent rewindIntent = new Intent(MediaSessionActions.ACTION_REWIND);
+        rewindIntent.setPackage(context.getPackageName());
+        PendingIntent rewindPendingIntent = PendingIntent.getBroadcast(
+                context, 1, rewindIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Intent fastForwardIntent = new Intent(MediaSessionActions.ACTION_FAST_FORWARD);
+        fastForwardIntent.setPackage(context.getPackageName());
+        PendingIntent fastForwardPendingIntent = PendingIntent.getBroadcast(
+                context, 2, fastForwardIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         notificationManager.notify(
                 1,
@@ -73,6 +109,10 @@ public final class MediaSessionMediaStateNotifier implements IMediaStateNotifier
                     .setOngoing(true)
                     .setAutoCancel(false)
                     .addAction(new NotificationCompat.Action(
+                            android.R.drawable.ic_media_rew,
+                            "-15s",
+                            rewindPendingIntent))
+                    .addAction(new NotificationCompat.Action(
                             state.getState().equals("playing")
                                     ? android.R.drawable.ic_media_pause
                                     : android.R.drawable.ic_media_play,
@@ -81,8 +121,18 @@ public final class MediaSessionMediaStateNotifier implements IMediaStateNotifier
                                     : "Play",
                             MediaButtonReceiver.buildMediaButtonPendingIntent(
                                     context, PlaybackStateCompat.ACTION_PLAY_PAUSE)))
+                    .addAction(new NotificationCompat.Action(
+                            android.R.drawable.ic_media_ff,
+                            "+15s",
+                            fastForwardPendingIntent))
                     .setStyle(new androidx.media.app.NotificationCompat.MediaStyle()
                             .setMediaSession(mediaSession.getSessionToken())
-                            .setShowActionsInCompactView(0)).build());
+                            .setShowActionsInCompactView(0, 1, 2)).build());
+    }
+
+    public void cleanup() {
+        notificationManager.cancel(1);
+        mediaSession.setActive(false);
+        mediaSession.release();
     }
 }
