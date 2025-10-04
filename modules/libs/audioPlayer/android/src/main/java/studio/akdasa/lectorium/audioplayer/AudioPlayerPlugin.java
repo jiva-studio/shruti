@@ -2,15 +2,12 @@ package studio.jiva.shruti.audioplayer;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Build;
 
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-
-import java.io.File;
 
 
 @CapacitorPlugin(name="AudioPlayer")
@@ -32,13 +29,12 @@ public final class AudioPlayerPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        // If audio service started and playing, just keep it playing.
-        boolean isConnectedAndPlaying =
-                audioPlayerServiceConnection.isConnected() &&
-                audioPlayerServiceConnection.getService().getExoPlayer().isPlaying();
-        if (isConnectedAndPlaying) { return; }
+        // Stop playback and clean up when plugin is destroyed
+        if (audioPlayerServiceConnection.isConnected()) {
+            audioPlayerServiceConnection.getService().stop();
+        }
 
-        // Stop audio player service if it is not playing
+        // Stop and unbind audio player service
         Intent intent = new Intent(getContext(), AudioPlayerService.class);
         getContext().unbindService(audioPlayerServiceConnection);
         getContext().stopService(intent);
@@ -77,18 +73,30 @@ public final class AudioPlayerPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
         audioPlayerServiceConnection.getService().play();
         call.resolve();
     }
 
     @PluginMethod
     public void togglePause(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
         audioPlayerServiceConnection.getService().togglePause();
         call.resolve();
     }
 
     @PluginMethod
     public void seek(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
         Float position = call.getFloat("position", 0.0f);
         if (position == null) { return; }
         audioPlayerServiceConnection.getService().seek((long)(position * 1000.0));
@@ -97,12 +105,20 @@ public final class AudioPlayerPlugin extends Plugin {
 
     @PluginMethod
     public void stop(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
         audioPlayerServiceConnection.getService().stop();
         call.resolve();
     }
 
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     public void onProgressChanged(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
         call.setKeepAlive(true);
         getBridge().saveCall(call);
         audioPlayerServiceConnection.getService().setOnProgressChangeCall(call);
