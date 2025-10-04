@@ -11,7 +11,7 @@ mkdir -p /workspaces/lectorium/gateway/data/logs
 # ---------------------------------------------------------------------------- #
 
 sudo apt update
-sudo apt install -y ruby-full build-essential ffmpeg
+sudo apt install -y ruby-full build-essential ffmpeg ripgrep fd-find
 sudo gem install cocoapods bundler
 
 # ---------------------------------------------------------------------------- #
