@@ -43,6 +43,8 @@ export function useConfigPersistenceTask() {
       bind(config.tutorialStepsCompleted, 'app.tutorial.stepsCompleted', []),
       bind(config.shareAudioExcerpt, 'app.share.audioExcerpt', true),
       bind(config.migrations, 'app.migrations', []),
+      bind(config.notificationsEnabled, 'app.notifications.enabled', undefined),
+      bind(config.notificationsTime, 'app.notifications.time', undefined),
     ])
   }
 

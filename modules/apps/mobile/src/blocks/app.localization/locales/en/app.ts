@@ -1,4 +1,5 @@
 export default {
+  listenToSadhu: 'Shruti',
   home: 'Home',
   search: 'Search',
   settings: 'Settings',
