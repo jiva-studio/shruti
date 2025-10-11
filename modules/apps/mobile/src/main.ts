@@ -118,6 +118,8 @@ import { featureScheduleNotificationsIfTimeChanged } from './features/notificati
 
 import { ENVIRONMENT } from './env'
 
+const start = new Date().getTime()
+
 /* -------------------------------------------------------------------------- */
 /*                                    Init                                    */
 /* -------------------------------------------------------------------------- */
@@ -136,7 +138,6 @@ useSentry().init({
   dist: ENVIRONMENT.dist,
 })
 
-const start = new Date().getTime()
 
 Promise.all([
   useConfigPersistenceTask().start(),
@@ -144,7 +145,7 @@ Promise.all([
   useNavigationBar().init(),
   useSafeAreaTask().start(),
 ]).then(() => {
-
+ 
   // Set user ID for Sentry
   useSentry().setUserInfo({
     id: useConfig().userId.value,

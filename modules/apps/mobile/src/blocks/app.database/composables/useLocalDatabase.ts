@@ -33,7 +33,7 @@ export const useLocalDatabase = createSharedComposable(() => {
       indices: [
         // TODO: add archivedAt?
         { name: 'addedAt', fields: ['addedAt'] },
-        // { name: 'type', fields: ['type'] },
+        { name: 'type', fields: ['type'] },
         // { name: 'taskStatus', fields: [ 'taskStatus' ] },
         // { name: 'trackId', fields: ['trackId'] }
         { 
@@ -54,9 +54,9 @@ export const useLocalDatabase = createSharedComposable(() => {
     const dictionary = new Database({
       name: 'dictionary.db',
       adapter: adapter,
-      // indices: [
-      //   { name: 'type', fields: ['type'] }
-      // ]
+      indices: [
+        { ddoc: 'by-type-ddoc', name: 'by-type-index', fields: ['type'] }
+      ]
     })
     const index = new Database({
       name: 'index.db',
