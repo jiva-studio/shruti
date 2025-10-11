@@ -21,7 +21,7 @@ export class NotesRepository extends PouchRepository<Note, NoteDbScheme> {
       database,
       noteSerializer,
       noteDeserializer, 
-      { type: "note" }
+      { type: { $in: [ "note" ] } }
     )
   }
 }

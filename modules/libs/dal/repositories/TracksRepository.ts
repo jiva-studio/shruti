@@ -48,7 +48,7 @@ export class TracksRepository extends PouchRepository<Track, TracksDBSchema> {
       database, 
       trackSerializer, 
       trackDeserializer, 
-      { type: "track" },
+      // { type: { $in: [ "track" ] } },
     )
   }
 }

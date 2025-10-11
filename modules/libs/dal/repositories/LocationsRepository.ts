@@ -25,7 +25,7 @@ export class LocationsRepository extends PouchRepository<
       database,
       locationSerializer,
       locationDeserializer,
-      { type: "location" },
+      { type: { $in: [ "location" ] } },
     )
   }
 }

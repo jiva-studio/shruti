@@ -23,6 +23,6 @@ export class LanguagesRepository extends PouchRepository<
   LanguageDBSchema
 > {
   constructor(database: Database) {
-    super(database, locationSerializer, locationDeserializer, { type: "language" })
+    super(database, locationSerializer, locationDeserializer, { type: { $in: [ "language"] } })
   }
 }

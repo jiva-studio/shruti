@@ -23,6 +23,6 @@ const sourceDeserializer = (document: DurationsDBSchema): Duration => document
  */
 export class DurationsRepository extends PouchRepository<Duration, DurationsDBSchema> {
   constructor(database: Database) {
-    super(database, sourceSerializer, sourceDeserializer, { type: "duration" })
+    super(database, sourceSerializer, sourceDeserializer, { type: { $in: [ "duration"] } })
   }
 }

@@ -11,6 +11,7 @@ export const DatabaseAddPlugin = (plugin: any) => PouchDB.plugin(plugin)
 export type IndexConfig = {
   name: string
   fields: string[],
+  ddoc?: string | undefined,
   partial_filter_selector?: PouchDB.Find.Selector | undefined;
 }
 
@@ -86,9 +87,9 @@ export class Database {
    */
   async init() {
     if (!this._config.indices) { return }
-    for (const index of this._config.indices) {
-      await this._db.createIndex({ index })
-    }
+    await Promise.all(this._config.indices.map(
+      async indexConfig => await this._db.createIndex({ index: indexConfig }))
+    )
   }
 
   /* -------------------------------------------------------------------------- */
@@ -113,10 +114,20 @@ export class Database {
   ) : Promise<SyncResult> {
     const pullChanges: PouchDB.Core.ExistingDocument<{}>[] = []
 
-    await this._db.replicate
-      .from(source.db, options)
-      .on('change', (info) => { pullChanges.push(...info.docs) })
-    return { pull: { docs: pullChanges } }
+    try {
+      await this._db.replicate
+        .from(source.db, options)
+        .on('change', (info) => { pullChanges.push(...info.docs) })
+      return { pull: { docs: pullChanges } }
+    } catch(err: any) {
+      const normalizedError = {
+        code: err.code ?? err.status ?? 0,
+        message: err.message ?? 'Unknown error'
+      }
+      return {
+        pull: { docs:[], errors: [normalizedError] }
+      }
+    }
   }
 
   async sync(
@@ -142,13 +153,13 @@ export class Database {
 
       return syncResult
     } catch(err: any) {
-      const normalizedError = { 
-        code: err.code || err.status,
-        message: err.message
+      const normalizedError = {
+        code: err.code ?? err.status ?? 0,
+        message: err.message ?? 'Unknown error'
       }
-      return { 
+      return {
         pull: { docs:[], errors: [normalizedError] },
-        push: { docs:[], errors: [normalizedError] } 
+        push: { docs:[], errors: [normalizedError] }
       }
     }
   }

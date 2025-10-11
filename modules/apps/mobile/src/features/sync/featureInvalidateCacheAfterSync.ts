@@ -25,5 +25,6 @@ export async function featureInvalidateCacheAfterSync() {
     if (hasChangesFor('language')) { dal.languages.invalidateCache() }
     if (hasChangesFor('duration')) { dal.durations.invalidateCache() }
     if (hasChangesFor('sort'))     { dal.sortMethods.invalidateCache() }
+    if (hasChangesFor('track'))    { dal.tracks.invalidateCache() }
   })
 }

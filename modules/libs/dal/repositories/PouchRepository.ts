@@ -1,5 +1,5 @@
 import { Database } from '../persistence'
-import type { FindOneRequest, GetAllRequest, GetManyRequest, IRepository, Identifiable, ItemChangedEvent, ItemChangedEventHandler } from './IRepository'
+import type { FindOneRequest, GetAllRequest, GetManyRequest, GetCountRequest, IRepository, Identifiable, ItemChangedEvent, ItemChangedEventHandler, UnsubscribeFn } from './IRepository'
 
 
 export abstract class PouchRepository<
@@ -38,24 +38,35 @@ export abstract class PouchRepository<
   /**
    * Subscribes to item change events.
    * @param handler The event handler function to be called when an item changes.
+   * @returns A function to unsubscribe from the events.
    */
   public subscribe(
     handler: ItemChangedEventHandler<TItem>
-  ) {
-    // TODO: unsubscribe
+  ): UnsubscribeFn {
     this._changeEventHandlers.push(handler)
+    return () => {
+      const index = this._changeEventHandlers.indexOf(handler)
+      if (index > -1) {
+        this._changeEventHandlers.splice(index, 1)
+      }
+    }
   }
 
   /**
    * Notifies all subscribers of a change event.
+   * Handlers are executed in parallel and errors are caught to prevent one handler from blocking others.
    * @param event The event to be broadcasted to all subscribers.
    */
   private async notifyChange(
     event: ItemChangedEvent<TItem>
   ) {
-    for (const handler of this._changeEventHandlers) {
-      await handler(event)
-    }
+    await Promise.allSettled(
+      this._changeEventHandlers.map(handler =>
+        handler(event).catch(error => {
+          console.error('[LCT] [DAL] Error in change event handler:', error)
+        })
+      )
+    )
   }
 
   /* -------------------------------------------------------------------------- */
@@ -130,7 +141,7 @@ export abstract class PouchRepository<
   }
 
   async getMany(
-    request: GetManyRequest
+    request: GetManyRequest<TDbScheme>
   ): Promise<TItem[]> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.getMany(${JSON.stringify(request)})`)
 
@@ -154,7 +165,7 @@ export abstract class PouchRepository<
   }
 
   async getIds(
-    request: GetManyRequest
+    request: GetManyRequest<TDbScheme>
   ): Promise<string[]> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.getIds(${JSON.stringify(request)})`)
 
@@ -176,19 +187,44 @@ export abstract class PouchRepository<
   }
 
   /**
-   * Retrieves the count of items in the database.
+   * Retrieves the count of items in the database, optionally filtered by selector.
+   * Note: When a selector is provided, this method fetches and counts documents,
+   * which may be slow for large datasets. For accurate scoped counts without a selector,
+   * it performs a query with scope.
+   * @param request Optional filter criteria.
    * @returns A promise that resolves to the count of items in the database.
    */
-  async getCount(): Promise<number> {
-    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getCount()`)
-    const info = await this._database.db.info()
-    return info.doc_count
+  async getCount(request?: GetCountRequest<TDbScheme>): Promise<number> {
+    console.debug(`[LCT] [DAL] db.${this._database.db.name}.getCount(${JSON.stringify(request ?? {})})`)
+
+    const hasScope = Object.keys(this._scope).length > 0
+    const hasSelector = request?.selector && Object.keys(request.selector).length > 0
+
+    // Only use db.info() if there's no scope and no selector
+    if (!hasScope && !hasSelector) {
+      const info = await this._database.db.info()
+      return info.doc_count
+    }
+
+    // For scoped or filtered queries, we need to fetch and count
+    // Note: This could be optimized with a view or by using limit/skip approach
+    const response = await this._database.db.find({
+      selector: {
+        ...this._scope,
+        ...(request?.selector ?? {})
+      },
+      fields: ['_id'],
+      limit: 999999 // PouchDB default is much lower, we need to fetch all for accurate count
+    })
+
+    return response.docs.length
   }
 
   /**
    * Adds an item to the database with the specified Id.
    * @param item The item to be added.
    * @returns A promise that resolves when the item is successfully added.
+   * @throws Error if the operation fails.
    */
   async addOne(
     item: TItem
@@ -198,57 +234,80 @@ export abstract class PouchRepository<
       await this._database.db.put({
         ...this._serializer(item)
       })
+      await this.notifyChange({ item, event: 'added' })
     } catch (error) {
-      console.error('Error adding item to database', JSON.stringify(error))
+      console.error('[LCT] [DAL] Error adding item to database:', error)
+      throw error
     }
-    await this.notifyChange({ item, event: 'added' })
   }
 
   /**
    * Updates a single item in the database.
    * @param id - The Id of the item to update.
-   * @param item - The partial item object containing the updated properties.
+   * @param item - The item object containing the updated properties.
    * @returns A promise that resolves to void when the update is complete.
+   * @throws Error if the operation fails or the document is not found.
    */
   async updateOne(
     id: string,
     item: TItem
   ): Promise<void> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.updateOne(${id}, ${JSON.stringify(item)})`)
-    const document = await this._database.db.get<TDbScheme>(id)
-    const updatedDocument = { ...document, ...this._serializer(item) }
-    const updatedItem = this._deserializer(updatedDocument)
-    await this._database.db.put(updatedDocument)
-    await this.notifyChange({ item: updatedItem, event: 'updated' })
+    try {
+      const document = await this._database.db.get<TDbScheme>(id)
+      const updatedDocument = { ...document, ...this._serializer(item) }
+      const updatedItem = this._deserializer(updatedDocument)
+      await this._database.db.put(updatedDocument)
+      await this.notifyChange({ item: updatedItem, event: 'updated' })
+    } catch (error) {
+      console.error(`[LCT] [DAL] Error updating item ${id}:`, error)
+      throw error
+    }
   }
 
+  /**
+   * Partially updates an existing item in the database.
+   * @param id - The Id of the item to patch.
+   * @param item - The partial item object containing the fields to update.
+   * @returns A promise that resolves to void when the update is complete.
+   * @throws Error if the operation fails or the document is not found.
+   */
   async patchOne(
     id: string,
     item: Partial<TItem>
   ): Promise<void> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.patchOne(${id}, ${JSON.stringify(item)})`)
-
-    const document = await this._database.db.get<TDbScheme>(id)
-    const updatedItem = { ...this._deserializer(document), ...item }
-    const updatedDocument = this._serializer(updatedItem)
-    await this._database.db.put(updatedDocument)
-    await this.notifyChange({ item: updatedItem, event: 'updated' })
+    try {
+      const document = await this._database.db.get<TDbScheme>(id)
+      const updatedItem = { ...this._deserializer(document), ...item }
+      const updatedDocument = this._serializer(updatedItem)
+      await this._database.db.put(updatedDocument)
+      await this.notifyChange({ item: updatedItem, event: 'updated' })
+    } catch (error) {
+      console.error(`[LCT] [DAL] Error patching item ${id}:`, error)
+      throw error
+    }
   }
 
   /**
    * Removes a document from the database.
    * @param id The ID of the document to be removed.
    * @returns A promise that resolves when the document is successfully removed.
+   * @throws Error if the operation fails or the document is not found.
    */
   async removeOne(
     id: string
   ): Promise<void> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.removeOne(${id})`)
-    
-    const document = await this._database.db.get<TDbScheme>(id)
-    const item = this._deserializer(document)
-    await this._database.db.remove(document)
-    await this.notifyChange({ item, event: 'removed' })
+    try {
+      const document = await this._database.db.get<TDbScheme>(id)
+      const item = this._deserializer(document)
+      await this._database.db.remove(document)
+      await this.notifyChange({ item, event: 'removed' })
+    } catch (error) {
+      console.error(`[LCT] [DAL] Error removing item ${id}:`, error)
+      throw error
+    }
   }
 
   /**
@@ -257,16 +316,21 @@ export abstract class PouchRepository<
    * filtered replication (See PouchDB documentation for more information).
    * @param id The ID of the document to be removed.
    * @returns A promise that resolves when the document is successfully removed.
+   * @throws Error if the operation fails or the document is not found.
    */
   async softRemoveOne(
     id: string
   ): Promise<void> {
     console.debug(`[LCT] [DAL] db.${this._database.db.name}.softRemoveOne(${id})`)
-
-    const document = await this._database.db.get<TDbScheme>(id)
-    const updatedItem = { ...this._deserializer(document), _deleted: true }
-    const updatedDocument = this._serializer(updatedItem)
-    await this._database.db.put(updatedDocument)
-    await this.notifyChange({ item: updatedItem, event: 'removed' })
+    try {
+      const document = await this._database.db.get<TDbScheme>(id)
+      const updatedItem = { ...this._deserializer(document), _deleted: true } as TItem
+      const updatedDocument = this._serializer(updatedItem)
+      await this._database.db.put(updatedDocument)
+      await this.notifyChange({ item: updatedItem, event: 'removed' })
+    } catch (error) {
+      console.error(`[LCT] [DAL] Error soft removing item ${id}:`, error)
+      throw error
+    }
   }
 }

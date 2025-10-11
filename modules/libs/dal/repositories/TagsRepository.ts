@@ -25,7 +25,7 @@ export class TagsRepository extends PouchRepository<
       database,
       tagSerializer,
       tagDeserializer,
-      { type: "tag" },
+      { type: { $in: [ "tag" ] } },
     )
   }
 }
