@@ -22,6 +22,6 @@ const sourceDeserializer = (document: SourcesDBSchema): Source => document
  */
 export class SourcesRepository extends PouchRepository<Source, SourcesDBSchema> {
   constructor(database: Database) {
-    super(database, sourceSerializer, sourceDeserializer, { type: "source" })
+    super(database, sourceSerializer, sourceDeserializer, { type: { $in: [ "source" ] } })
   }
 }

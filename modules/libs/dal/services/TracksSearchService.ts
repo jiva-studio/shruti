@@ -34,7 +34,7 @@ export class TracksSearchService {
       selector._id = { $in: request.ids }
     }
 
-    if (request.authors) { 
+    if (request.authors) {
       selector.author = { $in: request.authors } 
     }
 
@@ -78,7 +78,10 @@ export class TracksSearchService {
     }
 
     if (request.sort) {
-      selector['sort_' + request.sort] = { $exists: true }
+      // NOTE: { $gte: null } fixes sorting order on android if
+      //       the "sort" arg is defined in getMany. Prvious solution
+      //       { $exists: true } stoped working for some reason.
+      selector['sort_' + request.sort] = { $gte: null }
     }
 
     return await this.tracksRepository.getMany({ 

@@ -27,7 +27,7 @@ export class PlaylistItemsRepository extends PouchRepository<
     super(
       database,
       playlistItemSerializer,
-      playlistItemDeserializer, { type: "playlistItem" },
+      playlistItemDeserializer, { type: { $in: [ "playlistItem" ] } },
     )
   }
 }

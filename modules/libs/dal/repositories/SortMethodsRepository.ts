@@ -18,6 +18,6 @@ const sortMethodDeserializer = (document: SortMethodDBSchema): SortMethod => doc
 
 export class SortMethodsRepository extends PouchRepository<SortMethod, SortMethodDBSchema> {
   constructor(database: Database) {
-    super(database, sortMethodSerializer, sortMethodDeserializer, { type: "sort" })
+    super(database, sortMethodSerializer, sortMethodDeserializer, { type: { $in : [ "sort" ] } })
   }
 }

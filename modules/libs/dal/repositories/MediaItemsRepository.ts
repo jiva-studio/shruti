@@ -38,7 +38,7 @@ export class MediaItemsRepository
       database, 
       mediaItemSerializer, 
       mediaItemDeserializer, 
-      { type: "mediaItem" }
+      { type: { $in: [ "mediaItem" ] } }
     )
   }
 }

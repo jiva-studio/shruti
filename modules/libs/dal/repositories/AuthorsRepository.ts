@@ -18,7 +18,7 @@ export class AuthorsRepository extends PouchRepository<Author, AuthorDbScheme> {
       database,
       authorSerializer,
       authorDeserializer, 
-      { type: "author" }
+      { type: { $in: [ "author" ] } }
     )
   }
 }
