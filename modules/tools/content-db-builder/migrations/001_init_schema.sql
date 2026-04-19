@@ -60,8 +60,11 @@ CREATE TABLE tag_names (
 
 CREATE TABLE tracks (
   id              TEXT PRIMARY KEY,
-  author_id       TEXT NOT NULL,
-  location_id     TEXT NOT NULL,
+  -- author/location may be unknown in legacy content (especially on
+  -- older recordings without metadata). Keep them nullable; the app
+  -- renders a fallback when they're missing.
+  author_id       TEXT,
+  location_id     TEXT,
   date            TEXT,              -- ISO "YYYY-MM-DD", e.g. "1974-10-20"
   hidden          INTEGER NOT NULL DEFAULT 0,
   sort_reference  TEXT NOT NULL,
