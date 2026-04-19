@@ -1,5 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import type { TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type {
   ITrackRepository,
   TrackListQuery,
@@ -157,6 +157,26 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
         [...params, limit, offset]
       )
       return hydrate(contentDb, rows)
+    },
+
+    async getTranscriptPath(trackId: TrackId, language: LanguageCode): Promise<string | null> {
+      const rows = await contentDb.query<{ transcript_path: string | null }>(
+        `SELECT transcript_path FROM track_variants
+         WHERE track_id = ? AND language = ?
+         LIMIT 1`,
+        [trackId, language]
+      )
+      return rows[0]?.transcript_path ?? null
+    },
+
+    async listTranscriptLanguages(trackId: TrackId): Promise<readonly LanguageCode[]> {
+      const rows = await contentDb.query<{ language: string }>(
+        `SELECT language FROM track_variants
+         WHERE track_id = ? AND transcript_path IS NOT NULL
+         ORDER BY language ASC`,
+        [trackId]
+      )
+      return rows.map((r) => r.language)
     },
   }
 }

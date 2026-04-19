@@ -8,10 +8,8 @@ import type {
   IRemoteFilesStorage,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
-import {
-  createAppRepositories,
-  type AppRepositories,
-} from "@infra/repositories.sql/index.js"
+import { createAppRepositories, type AppRepositories } from "./repositories.js"
+import { useStoragePublicUrl } from "@infra/storage.public.url/index.js"
 
 /**
  * App-wide config passed into `initShruti`. Built from `DEFAULT_APP_CONFIG`
@@ -85,9 +83,13 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   const databases: Shruti["databases"] = { content: null, user: null }
   let cachedRepos: AppRepositories | null = null
 
-  const storagePublicUrl: IStoragePublicUrl = {
-    get: (path: string) => activeServer.value.urlTemplate.replace("{path}", path),
-  }
+  // `useStoragePublicUrl` is the canonical adapter — a thin
+  // `{path}`-substitution function. We feed it a getter closure so
+  // the resolver always sees the latest CDN template after
+  // `setActiveServer` swaps it.
+  const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(
+    () => activeServer.value.urlTemplate
+  )
 
   const self: Shruti = {
     appConfig: seed.appConfig,

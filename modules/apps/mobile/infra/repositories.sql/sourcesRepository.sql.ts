@@ -8,10 +8,9 @@ import { rowToSource } from "./contentRowMappers.js"
 export function createSqlSourceRepository(contentDb: IDatabase): ISourceRepository {
   return {
     async getById(id: SourceId): Promise<Source | null> {
-      const rows = await contentDb.query<{ id: string }>(
-        "SELECT id FROM sources WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<{ id: string }>("SELECT id FROM sources WHERE id = ?", [
+        id,
+      ])
       if (rows.length === 0) return null
       const names = await contentDb.query<SourceNameRow>(
         "SELECT * FROM source_names WHERE source_id = ?",

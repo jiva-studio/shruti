@@ -8,10 +8,9 @@ import { rowToAuthor } from "./contentRowMappers.js"
 export function createSqlAuthorRepository(contentDb: IDatabase): IAuthorRepository {
   return {
     async getById(id: AuthorId): Promise<Author | null> {
-      const rows = await contentDb.query<{ id: string }>(
-        "SELECT id FROM authors WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<{ id: string }>("SELECT id FROM authors WHERE id = ?", [
+        id,
+      ])
       if (rows.length === 0) return null
       const names = await contentDb.query<AuthorNameRow>(
         "SELECT * FROM author_names WHERE author_id = ?",

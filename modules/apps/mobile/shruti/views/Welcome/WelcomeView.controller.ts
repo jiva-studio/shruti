@@ -120,14 +120,9 @@ export function useWelcomeController(
     const observedSchemes: number[] = []
 
     for (let attempt = 0; attempt < MAX_SCHEME_RETRIES; attempt++) {
-      const dbPath = await resolveContentDatabaseImpl(
-        buildLocatorDeps(),
-        incompatibleDbPaths
-      )
+      const dbPath = await resolveContentDatabaseImpl(buildLocatorDeps(), incompatibleDbPaths)
       await shruti.openContentDatabase(dbPath)
-      const scheme = await createSqlSchemeVersionRepository(
-        shruti.databases.content!
-      ).read()
+      const scheme = await createSqlSchemeVersionRepository(shruti.databases.content!).read()
 
       if (scheme === 0 || scheme === SUPPORTED_DB_SCHEME) return
 
@@ -138,9 +133,7 @@ export function useWelcomeController(
       incompatibleDbPaths.add(dbPath)
       await shruti.databaseFetcher.delete(dbPath).catch(() => undefined)
       await shruti.filesStorage
-        .delete(
-          shruti.storagePublicUrl.get(shruti.appConfig.publicRemoteConfigPath)
-        )
+        .delete(shruti.storagePublicUrl.get(shruti.appConfig.publicRemoteConfigPath))
         .catch(() => undefined)
     }
 
