@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
@@ -5,11 +6,7 @@ import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepo
 import type { PlaylistItemRow } from "@lib/persistence/user"
 import { rowToPlaylistItem } from "./rowMappers.js"
 
-function randomId(): string {
-  return (
-    Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
-  )
-}
+const newPlaylistItemId = (): string => `playlist_${nanoid(12)}`
 
 export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRepository {
   return {
@@ -36,7 +33,7 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
     },
 
     async add(trackId: TrackId): Promise<PlaylistItem> {
-      const id = randomId()
+      const id = newPlaylistItemId()
       const now = Date.now()
       await db.execute(
         `INSERT INTO playlist_items (id, track_id, added_at, completed_at, archived_at, progress)
