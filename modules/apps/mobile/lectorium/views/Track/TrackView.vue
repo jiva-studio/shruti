@@ -145,23 +145,31 @@ async function loadEverything(): Promise<void> {
   await loadTranscriptForSelected()
 }
 
+// Monotonic token — each call bumps it; stale responses (from a
+// previous language selection) check if their token is still current
+// before writing to `transcript` / `error`. Prevents out-of-order
+// overwrites when the user switches language quickly.
+let transcriptToken = 0
+
 async function loadTranscriptForSelected(): Promise<void> {
   if (!selectedLanguage.value) {
     transcript.value = null
     return
   }
+  const token = ++transcriptToken
   isLoadingTranscript.value = true
   try {
     const result = await loadTranscript(
       { trackId: props.trackId, preferredLanguage: selectedLanguage.value },
       { transcripts: repos.transcripts }
     )
+    if (token !== transcriptToken) return
     transcript.value = result.ok ? result.value.transcript : null
     if (!result.ok && result.error !== "no-transcript-available") {
       error.value = `Transcript failed to load: ${result.error}`
     }
   } finally {
-    isLoadingTranscript.value = false
+    if (token === transcriptToken) isLoadingTranscript.value = false
   }
 }
 

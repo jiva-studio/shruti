@@ -64,7 +64,13 @@ export function createHttpTranscriptRepository(
       if (!response.ok) {
         throw new Error(`Transcript fetch failed: ${response.status} ${response.statusText}`)
       }
-      const raw = (await response.json()) as RawTranscript
+      let raw: RawTranscript
+      try {
+        raw = (await response.json()) as RawTranscript
+      } catch (parseErr) {
+        const message = parseErr instanceof Error ? parseErr.message : String(parseErr)
+        throw new Error(`Transcript JSON is malformed at ${path}: ${message}`)
+      }
       return {
         trackId,
         language,

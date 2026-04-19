@@ -19,6 +19,13 @@ export function useWebRemoteFilesStorage({
         return URL.createObjectURL(blob)
       }
       const response = await fetch(url)
+      // Don't cache error responses — otherwise a transient 5xx gets
+      // pinned and every subsequent `get()` serves the error body.
+      if (!response.ok) {
+        throw new Error(
+          `Remote file fetch failed: ${response.status} ${response.statusText} (${url})`
+        )
+      }
       await cache.put(cacheKey, response.clone())
       const blob = await response.blob()
       return URL.createObjectURL(blob)

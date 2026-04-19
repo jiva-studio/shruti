@@ -38,7 +38,16 @@ export async function loadTranscript(
   input: LoadTranscriptInput,
   deps: LoadTranscriptDeps
 ): Promise<Result<LoadedTranscript, LoadTranscriptError>> {
-  const languages = await deps.transcripts.availableLanguages(input.trackId)
+  let languages: readonly string[]
+  try {
+    languages = await deps.transcripts.availableLanguages(input.trackId)
+  } catch {
+    // The language-list query hitting the content DB shouldn't realistically
+    // throw, but map anything here to fetch-failed so the caller never sees
+    // a rejected promise — the Result<T,E> contract says recoverable
+    // failures come back in `.error`.
+    return err("fetch-failed")
+  }
   if (languages.length === 0) return err("no-transcript-available")
 
   const language = languages.includes(input.preferredLanguage)

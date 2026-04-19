@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
@@ -9,11 +10,7 @@ import type {
 import type { NoteRow } from "@lib/persistence/user"
 import { rowToNote } from "./rowMappers.js"
 
-function randomId(): string {
-  return (
-    Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
-  )
-}
+const newNoteId = (): string => `note_${nanoid(12)}`
 
 export function createSqlNoteRepository(db: IDatabase): INoteRepository {
   return {
@@ -39,7 +36,7 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
     },
 
     async create(input: CreateNoteInput): Promise<Note> {
-      const id = randomId()
+      const id = newNoteId()
       const now = Date.now()
       await db.execute(
         `INSERT INTO notes (id, track_id, text, time_start, time_end, created_at)

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "@ionic/vue-router"
 import type { RouteRecordRaw } from "vue-router"
+import { useLectorium } from "@lectorium/lectorium.js"
 
 const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/welcome" },
@@ -39,6 +40,19 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
+})
+
+// Deep-linking guard: every non-welcome route depends on both databases
+// being open. If someone lands on /tabs/* before the Welcome view has
+// finished its initialize() cycle, bounce them to /welcome so the app
+// doesn't explode inside `repositories()`.
+router.beforeEach((to, _from, next) => {
+  if (to.path === "/welcome" || to.path === "/") return next()
+  const app = useLectorium()
+  if (!app.databases.content || !app.databases.user) {
+    return next("/welcome")
+  }
+  next()
 })
 
 export default router
