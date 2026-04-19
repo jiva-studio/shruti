@@ -107,6 +107,13 @@ platform :android do
   desc "Regenerate fixtures, capture screenshots via Playwright, upload to Google Play"
   lane :screenshots do |options|
     screenshots_tool = File.expand_path("../../tools/screenshots", MOBILE_ROOT)
+    unless Dir.exist?(screenshots_tool)
+      UI.important(
+        "Screenshots tool not present at #{screenshots_tool}. Create modules/tools/screenshots/ " \
+        "first (playwright capture + frame). Lane skipped."
+      )
+      next
+    end
     metadata_root = File.join(__dir__, "metadata/android")
 
     locales = (options[:locales] || "en,ru").split(",").map(&:strip)
@@ -266,7 +273,7 @@ end
 # ---------------------------------------------------------------------------- #
 platform :ios do
   IOS_PROJECT_DIR = File.join(MOBILE_ROOT, "ios/App")
-  IOS_WORKSPACE = File.join(IOS_PROJECT_DIR, "App.xcworkspace")
+  # SPM build — no xcworkspace, xcodebuild operates on the xcodeproj directly.
   IOS_XCODEPROJ = File.join(IOS_PROJECT_DIR, "App.xcodeproj")
   IOS_BUNDLE_ID = "studio.jiva.shruti"
   IOS_SCHEME = "App"
@@ -339,6 +346,13 @@ platform :ios do
   desc "Regenerate fixtures, capture iOS screenshots via Playwright, upload to App Store Connect"
   lane :screenshots do |options|
     screenshots_tool = File.expand_path("../../tools/screenshots", MOBILE_ROOT)
+    unless Dir.exist?(screenshots_tool)
+      UI.important(
+        "Screenshots tool not present at #{screenshots_tool}. Create modules/tools/screenshots/ " \
+        "first (playwright capture + frame). Lane skipped."
+      )
+      next
+    end
     # Outside fastlane/metadata/ on purpose: deliver scans metadata_path for
     # locale subdirs and chokes on a non-locale 'ios' folder. Keep iOS
     # screenshots in their own tree.

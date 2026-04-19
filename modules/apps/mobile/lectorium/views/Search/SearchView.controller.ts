@@ -28,9 +28,7 @@ export interface SearchControllerReturn {
 /*                              Core Dependencies                             */
 /* -------------------------------------------------------------------------- */
 
-export function useSearchController(
-  options: SearchControllerOptions = {}
-): SearchControllerReturn {
+export function useSearchController(options: SearchControllerOptions = {}): SearchControllerReturn {
   const { preferredLanguage = "en" } = options
 
   const app = useLectorium()

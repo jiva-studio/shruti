@@ -10,10 +10,9 @@ export function createSqlTagRepository(contentDb: IDatabase): ITagRepository {
     async getById(id: TagId): Promise<Tag | null> {
       const rows = await contentDb.query<{ id: string }>("SELECT id FROM tags WHERE id = ?", [id])
       if (rows.length === 0) return null
-      const names = await contentDb.query<TagNameRow>(
-        "SELECT * FROM tag_names WHERE tag_id = ?",
-        [id]
-      )
+      const names = await contentDb.query<TagNameRow>("SELECT * FROM tag_names WHERE tag_id = ?", [
+        id,
+      ])
       return rowToTag(rows[0], names)
     },
 

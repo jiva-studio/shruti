@@ -28,36 +28,23 @@ function parseArg(args: string[], flag: string): string | undefined {
   return args[idx + 1]
 }
 
+/**
+ * Only AWS is wired in this phase. The Yandex mirror will be set up
+ * as a separate migration step (rclone one-shot, plus its own script).
+ * Do NOT re-add `S3_YANDEX_*` support here without an accompanying
+ * infra change — we want a single source of truth for the bucket
+ * while we stabilise content ingestion.
+ */
 function s3Targets(): S3Target[] {
-  const out: S3Target[] = []
-  const awsKey = optionalEnv("S3_AWS_ACCESS_KEY_ID")
-  const awsSecret = optionalEnv("S3_AWS_SECRET_ACCESS_KEY")
-  if (awsKey && awsSecret) {
-    out.push({
+  return [
+    {
       label: "aws",
       bucket: requireEnv("S3_AWS_BUCKET"),
       region: optionalEnv("S3_AWS_REGION") ?? "us-east-1",
-      accessKeyId: awsKey,
-      secretAccessKey: awsSecret,
-    })
-  }
-  const yaKey = optionalEnv("S3_YANDEX_ACCESS_KEY_ID")
-  const yaSecret = optionalEnv("S3_YANDEX_SECRET_ACCESS_KEY")
-  if (yaKey && yaSecret) {
-    out.push({
-      label: "yandex",
-      bucket: requireEnv("S3_YANDEX_BUCKET"),
-      endpoint: optionalEnv("S3_YANDEX_ENDPOINT") ?? "https://storage.yandexcloud.net",
-      accessKeyId: yaKey,
-      secretAccessKey: yaSecret,
-    })
-  }
-  if (out.length === 0) {
-    throw new Error(
-      "No S3 credentials configured. Set S3_AWS_* and/or S3_YANDEX_* in the environment."
-    )
-  }
-  return out
+      accessKeyId: requireEnv("S3_AWS_ACCESS_KEY_ID"),
+      secretAccessKey: requireEnv("S3_AWS_SECRET_ACCESS_KEY"),
+    },
+  ]
 }
 
 async function cmdBuild(args: string[]): Promise<void> {
@@ -96,7 +83,7 @@ async function cmdUpload(args: string[]): Promise<void> {
 
   await uploadDirectory({ inputDir, targets })
   await updateConfigJson(targets, version, scheme)
-  console.log(`uploaded version ${version} (scheme ${scheme}) to ${targets.length} target(s)`)
+  console.log(`uploaded version ${version} (scheme ${scheme}) to AWS (${targets[0].bucket})`)
 }
 
 async function main(): Promise<void> {
@@ -116,9 +103,13 @@ async function main(): Promise<void> {
     case undefined:
       console.log(
         `Usage:
-  content-db-builder build [--output DIR]             Build lectorium.{version}.db from CouchDB
+  content-db-builder build [--output DIR]              Build lectorium.{version}.db from CouchDB
   content-db-builder export-transcripts [--output DIR] Export transcripts as JSON files
-  content-db-builder upload [--input DIR]             Upload ./out tree to S3 + update config.json
+  content-db-builder upload [--input DIR]              Upload ./out tree to AWS S3 + update config.json
+
+Env vars (see .env.example):
+  COUCHDB_URL, COUCHDB_USER, COUCHDB_PASSWORD
+  S3_AWS_BUCKET, S3_AWS_REGION, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY
 `
       )
       break

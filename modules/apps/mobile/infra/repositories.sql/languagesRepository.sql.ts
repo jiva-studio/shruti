@@ -8,17 +8,14 @@ import { rowToLanguage } from "./contentRowMappers.js"
 export function createSqlLanguageRepository(contentDb: IDatabase): ILanguageRepository {
   return {
     async getByCode(code: LanguageCode): Promise<Language | null> {
-      const rows = await contentDb.query<LanguageRow>(
-        "SELECT * FROM languages WHERE code = ?",
-        [code]
-      )
+      const rows = await contentDb.query<LanguageRow>("SELECT * FROM languages WHERE code = ?", [
+        code,
+      ])
       return rows[0] ? rowToLanguage(rows[0]) : null
     },
 
     async listAll(): Promise<readonly Language[]> {
-      const rows = await contentDb.query<LanguageRow>(
-        "SELECT * FROM languages ORDER BY code ASC"
-      )
+      const rows = await contentDb.query<LanguageRow>("SELECT * FROM languages ORDER BY code ASC")
       return rows.map(rowToLanguage)
     },
   }

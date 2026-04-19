@@ -28,10 +28,9 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
     },
 
     async listRecent(limit: number): Promise<readonly Note[]> {
-      const rows = await db.query<NoteRow>(
-        "SELECT * FROM notes ORDER BY created_at DESC LIMIT ?",
-        [limit]
-      )
+      const rows = await db.query<NoteRow>("SELECT * FROM notes ORDER BY created_at DESC LIMIT ?", [
+        limit,
+      ])
       return rows.map(rowToNote)
     },
 
@@ -63,10 +62,12 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
         timeStart: input.timeStart ?? existing.timeStart,
         timeEnd: input.timeEnd ?? existing.timeEnd,
       }
-      await db.execute(
-        "UPDATE notes SET text = ?, time_start = ?, time_end = ? WHERE id = ?",
-        [next.text, next.timeStart, next.timeEnd, input.id]
-      )
+      await db.execute("UPDATE notes SET text = ?, time_start = ?, time_end = ? WHERE id = ?", [
+        next.text,
+        next.timeStart,
+        next.timeEnd,
+        input.id,
+      ])
       await db.save()
       return next
     },

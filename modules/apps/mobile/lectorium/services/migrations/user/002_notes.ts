@@ -18,8 +18,6 @@ export const migration_002_notes: Migration = {
       )
     `)
     await db.execute("CREATE INDEX IF NOT EXISTS idx_notes_track ON notes(track_id, time_start)")
-    await db.execute(
-      "CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)"
-    )
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)")
   },
 }

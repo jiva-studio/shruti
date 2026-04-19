@@ -3,9 +3,7 @@ import vue from "@vitejs/plugin-vue"
 import path from "node:path"
 import { readFileSync } from "node:fs"
 
-const dbScheme = JSON.parse(
-  readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8")
-)
+const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8"))
 
 export default defineConfig({
   plugins: [vue()],

@@ -43,3 +43,55 @@ export async function createInMemoryTestDatabase(): Promise<IDatabase> {
     },
   }
 }
+
+/**
+ * Applies the minimal user-DB schema the repositories tests need.
+ * Kept inline here so infra tests don't reach up into `@lectorium/*`.
+ * Mirrors `lectorium/services/migrations/user/{000,001,002,003,004}_*.ts` —
+ * if a migration changes schema-visible shape, update this too.
+ */
+export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS migrations (
+       name TEXT PRIMARY KEY,
+       applied_at TEXT NOT NULL
+     )`
+  )
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS config (
+       key TEXT PRIMARY KEY,
+       value TEXT NOT NULL
+     )`
+  )
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS notes (
+       id         TEXT PRIMARY KEY,
+       track_id   TEXT NOT NULL,
+       text       TEXT NOT NULL,
+       time_start INTEGER NOT NULL,
+       time_end   INTEGER NOT NULL,
+       created_at INTEGER NOT NULL
+     )`
+  )
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_notes_track ON notes(track_id, time_start)`)
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)`)
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS playlist_items (
+       id           TEXT PRIMARY KEY,
+       track_id     TEXT NOT NULL,
+       added_at     INTEGER NOT NULL,
+       completed_at INTEGER,
+       archived_at  INTEGER,
+       progress     INTEGER
+     )`
+  )
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS media_items (
+       id         TEXT PRIMARY KEY,
+       track_id   TEXT NOT NULL,
+       state      TEXT NOT NULL,
+       local_path TEXT,
+       created_at INTEGER NOT NULL
+     )`
+  )
+}

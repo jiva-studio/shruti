@@ -1,14 +1,16 @@
 # content-db-builder
 
-Builds the prebuilt Lectorium content SQLite database from CouchDB and uploads artefacts (DB, transcripts) to the public S3 buckets.
+Builds the prebuilt Lectorium content SQLite database from CouchDB and uploads artefacts (DB, transcripts) to AWS S3.
 
 ## Prerequisites
 
 - Node.js 20+
-- Access to the source CouchDB instance (dictionary + tracks + transcripts databases)
-- S3 credentials for AWS and/or Yandex Object Storage
+- Access to the source CouchDB instance (`dictionary`, `tracks`, `transcripts` databases)
+- AWS S3 credentials for the `akds-lectorium` bucket
 
-Copy `.env.example` to `.env` and fill in the values.
+The Yandex mirror is intentionally **out of scope** for this tool — it will be a separate rclone sync once AWS ingestion has stabilised.
+
+Copy `.env.example` to `.env` and fill in the values. The defaults point at the public CouchDB at `couchdb.shruti.app` with the `lectorium:lectorium` credentials from the service's docker-compose.
 
 ## Commands
 
@@ -19,7 +21,7 @@ npm run build
 # 2. Export all transcripts as JSON files under ./out/public/tracks/{trackId}/transcripts/{language}.json
 npm run export:transcripts
 
-# 3. Upload the entire ./out/ tree to every configured S3 target + update config.json
+# 3. Upload the entire ./out/ tree to AWS S3 + update config.json
 npm run upload
 
 # Run all three in order:

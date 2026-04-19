@@ -3,9 +3,7 @@ import { loadTranscript } from "../loadTranscript.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Transcript } from "@lib/domain/transcript.js"
 
-function makeTranscripts(
-  overrides: Partial<ITranscriptRepository> = {}
-): ITranscriptRepository {
+function makeTranscripts(overrides: Partial<ITranscriptRepository> = {}): ITranscriptRepository {
   return {
     get: async () => {
       throw new Error("get not stubbed")
@@ -32,10 +30,7 @@ describe("loadTranscript", () => {
       availableLanguages: async () => ["en", "ru"],
       get: async () => sampleTranscript,
     })
-    const result = await loadTranscript(
-      { trackId: "t1", preferredLanguage: "ru" },
-      { transcripts }
-    )
+    const result = await loadTranscript({ trackId: "t1", preferredLanguage: "ru" }, { transcripts })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value.matchesPreferred).toBe(true)
@@ -48,10 +43,7 @@ describe("loadTranscript", () => {
       availableLanguages: async () => ["en"],
       get: async () => ({ ...sampleTranscript, language: "en" }),
     })
-    const result = await loadTranscript(
-      { trackId: "t1", preferredLanguage: "ru" },
-      { transcripts }
-    )
+    const result = await loadTranscript({ trackId: "t1", preferredLanguage: "ru" }, { transcripts })
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.value.matchesPreferred).toBe(false)
@@ -61,10 +53,7 @@ describe("loadTranscript", () => {
 
   it("returns no-transcript-available when language list is empty", async () => {
     const transcripts = makeTranscripts({ availableLanguages: async () => [] })
-    const result = await loadTranscript(
-      { trackId: "t1", preferredLanguage: "ru" },
-      { transcripts }
-    )
+    const result = await loadTranscript({ trackId: "t1", preferredLanguage: "ru" }, { transcripts })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("no-transcript-available")
   })
@@ -76,10 +65,7 @@ describe("loadTranscript", () => {
         throw new Error("boom")
       },
     })
-    const result = await loadTranscript(
-      { trackId: "t1", preferredLanguage: "ru" },
-      { transcripts }
-    )
+    const result = await loadTranscript({ trackId: "t1", preferredLanguage: "ru" }, { transcripts })
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("fetch-failed")
   })

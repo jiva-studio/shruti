@@ -120,14 +120,9 @@ export function useWelcomeController(
     const observedSchemes: number[] = []
 
     for (let attempt = 0; attempt < MAX_SCHEME_RETRIES; attempt++) {
-      const dbPath = await resolveContentDatabaseImpl(
-        buildLocatorDeps(),
-        incompatibleDbPaths
-      )
+      const dbPath = await resolveContentDatabaseImpl(buildLocatorDeps(), incompatibleDbPaths)
       await lectorium.openContentDatabase(dbPath)
-      const scheme = await createSqlSchemeVersionRepository(
-        lectorium.databases.content!
-      ).read()
+      const scheme = await createSqlSchemeVersionRepository(lectorium.databases.content!).read()
 
       if (scheme === 0 || scheme === SUPPORTED_DB_SCHEME) return
 
@@ -138,9 +133,7 @@ export function useWelcomeController(
       incompatibleDbPaths.add(dbPath)
       await lectorium.databaseFetcher.delete(dbPath).catch(() => undefined)
       await lectorium.filesStorage
-        .delete(
-          lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath)
-        )
+        .delete(lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath))
         .catch(() => undefined)
     }
 

@@ -1,4 +1,4 @@
-import type { IDatabase, IRemoteFilesStorage, IStoragePublicUrl } from "@ports/app/index.js"
+import type { IDatabase } from "@ports/app/index.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
@@ -9,7 +9,6 @@ import { createSqlLocationRepository } from "./locationsRepository.sql.js"
 import { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 import { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 import { createSqlTagRepository } from "./tagsRepository.sql.js"
-import { createHttpTranscriptRepository } from "@infra/repositories.http/index.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -23,33 +22,31 @@ export { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 export { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 export { createSqlTagRepository } from "./tagsRepository.sql.js"
 
-export interface AppRepositories {
+export interface SqlAppRepositories {
   readonly tracks: ReturnType<typeof createSqlTrackRepository>
   readonly authors: ReturnType<typeof createSqlAuthorRepository>
   readonly locations: ReturnType<typeof createSqlLocationRepository>
   readonly sources: ReturnType<typeof createSqlSourceRepository>
   readonly languages: ReturnType<typeof createSqlLanguageRepository>
   readonly tags: ReturnType<typeof createSqlTagRepository>
-  readonly transcripts: ReturnType<typeof createHttpTranscriptRepository>
   readonly notes: ReturnType<typeof createSqlNoteRepository>
   readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
   readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
 }
 
-export interface CreateAppRepositoriesDeps {
+export interface CreateSqlAppRepositoriesDeps {
   readonly contentDb: IDatabase
   readonly userDb: IDatabase
-  readonly filesStorage: IRemoteFilesStorage
-  readonly storagePublicUrl: IStoragePublicUrl
 }
 
 /**
- * Composition-root factory: bundles every domain-facing repository on
- * top of the two open databases and the remote-files pipeline. Callers
- * pass it once, then interact with ports only.
+ * Bundles every SQL-backed domain repository on top of the two open
+ * databases. Scoped to *SQL* adapters only — HTTP-backed repos (like
+ * transcripts) are wired in the composition root (`lectorium/`),
+ * because a sibling-infra import would violate the layer rules.
  */
-export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepositories {
+export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): SqlAppRepositories {
   return {
     tracks: createSqlTrackRepository(deps.contentDb),
     authors: createSqlAuthorRepository(deps.contentDb),
@@ -57,11 +54,6 @@ export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepos
     sources: createSqlSourceRepository(deps.contentDb),
     languages: createSqlLanguageRepository(deps.contentDb),
     tags: createSqlTagRepository(deps.contentDb),
-    transcripts: createHttpTranscriptRepository({
-      contentDb: deps.contentDb,
-      filesStorage: deps.filesStorage,
-      storagePublicUrl: deps.storagePublicUrl,
-    }),
     notes: createSqlNoteRepository(deps.userDb),
     playlistItems: createSqlPlaylistItemRepository(deps.userDb),
     mediaItems: createSqlMediaItemRepository(deps.userDb),

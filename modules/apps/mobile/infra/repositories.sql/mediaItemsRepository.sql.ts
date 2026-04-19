@@ -32,10 +32,11 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
     ): Promise<MediaItem> {
       const existing = await this.getByTrack(trackId)
       if (existing) {
-        await db.execute(
-          "UPDATE media_items SET state = ?, local_path = ? WHERE id = ?",
-          [state, localPath, existing.id]
-        )
+        await db.execute("UPDATE media_items SET state = ?, local_path = ? WHERE id = ?", [
+          state,
+          localPath,
+          existing.id,
+        ])
         await db.save()
         return { ...existing, state, localPath }
       }
