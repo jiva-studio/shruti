@@ -1,0 +1,42 @@
+name: Mobile Android setup
+description: >
+  Node + Java + Android SDK + Ruby + bundler + npm deps + web artifact + gradle cache.
+  Shared setup for any job that runs Fastlane / gradle in the mobile Android project.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: modules/apps/mobile/package-lock.json
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: 21
+
+    - uses: android-actions/setup-android@v3
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.3"
+        bundler-cache: true
+        working-directory: modules/apps/mobile
+
+    - shell: bash
+      run: cd modules/apps/mobile && npm ci
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: mobile-web-dist
+        path: modules/apps/mobile/dist
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('modules/apps/mobile/android/**/*.gradle*', 'modules/apps/mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
+        restore-keys: ${{ runner.os }}-gradle-

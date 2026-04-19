@@ -1,0 +1,9 @@
+for_platform :android do
+  package_name("studio.jiva.shruti")
+end
+
+# for_platform :ios do
+#   app_identifier("studio.jiva.shruti")
+#   apple_id(ENV["APPLE_ID"])
+#   team_id(ENV["APPLE_STORE_TEAM_ID"])
+# end
