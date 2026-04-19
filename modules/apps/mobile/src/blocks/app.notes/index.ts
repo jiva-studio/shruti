@@ -1,6 +1,0 @@
-export { default as NotesList } from './components/NotesList.vue'
-export { default as ShowNotesTabSettingsItem } from './components/ShowNotesTabSettingsItem.vue'
-export * from './composables/useNotes'
-export * from './composables/useNotesStore'
-export * from './composables/useNotesSearchTask'
-export * from './composables/useNotesSearchIndex'
