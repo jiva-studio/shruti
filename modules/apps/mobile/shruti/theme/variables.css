@@ -1,0 +1,14 @@
+/* Ionic theme variables — minimal starter.
+ * See https://ionicframework.com/docs/theming/color-generator for the full
+ * palette generator; fine-tune the primary/secondary/tertiary sets as the
+ * visual design solidifies.
+ */
+
+:root {
+  --ion-color-primary: #3880ff;
+  --ion-color-primary-rgb: 56, 128, 255;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #3171e0;
+  --ion-color-primary-tint: #4c8dff;
+}
