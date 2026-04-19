@@ -33,4 +33,18 @@ export interface ITrackRepository {
   getById(id: TrackId): Promise<Track | null>
   list(query: TrackListQuery): Promise<readonly Track[]>
   search(query: TrackSearchQuery): Promise<readonly Track[]>
+
+  /**
+   * Returns the stored path (full bucket key, e.g.
+   * `"public/tracks/xxx/transcripts/ru.json"`) of the transcript for a
+   * given (track, language), or `null` when no transcript is advertised.
+   * The path is consumed by transcript repositories — they resolve it to
+   * an URL via `IStoragePublicUrl` without ever looking at SQL.
+   */
+  getTranscriptPath(trackId: TrackId, language: LanguageCode): Promise<string | null>
+
+  /**
+   * Languages for which the track has a transcript advertised.
+   */
+  listTranscriptLanguages(trackId: TrackId): Promise<readonly LanguageCode[]>
 }

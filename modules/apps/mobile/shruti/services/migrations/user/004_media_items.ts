@@ -20,8 +20,6 @@ export const migration_004_media_items: Migration = {
     await db.execute(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_media_items_track ON media_items(track_id)"
     )
-    await db.execute(
-      "CREATE INDEX IF NOT EXISTS idx_media_items_state ON media_items(state)"
-    )
+    await db.execute("CREATE INDEX IF NOT EXISTS idx_media_items_state ON media_items(state)")
   },
 }

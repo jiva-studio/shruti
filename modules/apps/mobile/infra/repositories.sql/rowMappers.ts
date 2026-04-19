@@ -1,11 +1,7 @@
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import type {
-  MediaItemRow,
-  NoteRow,
-  PlaylistItemRow,
-} from "@lib/persistence/user"
+import type { MediaItemRow, NoteRow, PlaylistItemRow } from "@lib/persistence/user"
 
 /**
  * The one and only place that knows the SQL row shapes for the user DB

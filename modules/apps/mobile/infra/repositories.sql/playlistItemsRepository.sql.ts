@@ -11,10 +11,9 @@ const newPlaylistItemId = (): string => `playlist_${nanoid(12)}`
 export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRepository {
   return {
     async getById(id: PlaylistItemId): Promise<PlaylistItem | null> {
-      const rows = await db.query<PlaylistItemRow>(
-        "SELECT * FROM playlist_items WHERE id = ?",
-        [id]
-      )
+      const rows = await db.query<PlaylistItemRow>("SELECT * FROM playlist_items WHERE id = ?", [
+        id,
+      ])
       return rows[0] ? rowToPlaylistItem(rows[0]) : null
     },
 
@@ -52,26 +51,17 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
     },
 
     async updateProgress(id: PlaylistItemId, progressMs: number): Promise<void> {
-      await db.execute("UPDATE playlist_items SET progress = ? WHERE id = ?", [
-        progressMs,
-        id,
-      ])
+      await db.execute("UPDATE playlist_items SET progress = ? WHERE id = ?", [progressMs, id])
       await db.save()
     },
 
     async markCompleted(id: PlaylistItemId): Promise<void> {
-      await db.execute("UPDATE playlist_items SET completed_at = ? WHERE id = ?", [
-        Date.now(),
-        id,
-      ])
+      await db.execute("UPDATE playlist_items SET completed_at = ? WHERE id = ?", [Date.now(), id])
       await db.save()
     },
 
     async archive(id: PlaylistItemId): Promise<void> {
-      await db.execute("UPDATE playlist_items SET archived_at = ? WHERE id = ?", [
-        Date.now(),
-        id,
-      ])
+      await db.execute("UPDATE playlist_items SET archived_at = ? WHERE id = ?", [Date.now(), id])
       await db.save()
     },
 

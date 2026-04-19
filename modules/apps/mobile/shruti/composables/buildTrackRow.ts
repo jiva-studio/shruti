@@ -16,14 +16,15 @@ export interface BuildTrackRowDeps {
  */
 export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow {
   const variant =
-    track.variants.find((v) => v.language === deps.preferredLanguage) ??
-    track.variants[0]
+    track.variants.find((v) => v.language === deps.preferredLanguage) ?? track.variants[0]
   const title = variant?.title ?? track.id
   const durationMs = variant?.audio?.duration ?? null
 
   const author = deps.authorsById.get(track.authorId)
   const authorName =
-    author?.names.get(deps.preferredLanguage) ?? author?.names.values().next().value ?? track.authorId
+    author?.names.get(deps.preferredLanguage) ??
+    author?.names.values().next().value ??
+    track.authorId
 
   const reference = track.references[0]?.join(" ") ?? null
 

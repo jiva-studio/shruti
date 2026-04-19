@@ -37,5 +37,6 @@ export interface UserConfigRow {
 
 export interface UserMigrationRow {
   readonly name: string
-  readonly applied_at: number
+  /** ISO-8601 string (`new Date().toISOString()` in runMigrations). */
+  readonly applied_at: string
 }

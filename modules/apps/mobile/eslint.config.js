@@ -15,10 +15,6 @@ export default defineConfigWithVueTs(
       "ios/**",
       "node_modules/**",
       "submodules/persistence-*/**",
-      "submodules/dal/**",
-      "submodules/protocol/**",
-      "src/**",
-      "patches/**",
       "coverage/**",
       "*.d.ts",
     ],
@@ -87,6 +83,10 @@ export default defineConfigWithVueTs(
             { group: ["@ui/*"], message: "Application must not import UI" },
             { group: ["@shruti/*"], message: "Application must not import composition root" },
             {
+              group: ["@lib/persistence/*"],
+              message: "Application must not import persistence row types",
+            },
+            {
               group: ["vue", "vue-router", "@ionic/*"],
               message: "Application must not import framework code",
             },
@@ -114,9 +114,12 @@ export default defineConfigWithVueTs(
     },
   },
 
-  // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idb.kv only
+  // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idb.kv only.
+  // Sibling-infra imports are forbidden — siblings compose only through the
+  // composition root.
   {
     files: ["infra/**/*.ts"],
+    ignores: ["infra/**/__tests__/**"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -128,10 +131,21 @@ export default defineConfigWithVueTs(
               group: ["@lib/application/*"],
               message: "Infrastructure must not import application layer",
             },
+            {
+              // Allow only @infra/idb.kv; every other sibling is forbidden.
+              // The negated pattern must come after the broad one.
+              group: ["@infra/*", "!@infra/idb.kv"],
+              message: "Infra siblings must not import each other — wire via composition root",
+            },
           ],
         },
       ],
     },
+  },
+  // Tests inside infra may reach outward freely (helpers, app shims).
+  {
+    files: ["infra/**/__tests__/**/*.ts"],
+    rules: { "no-restricted-imports": "off" },
   },
 
   // UI: no imports from domain/application/ports/infra/composition root

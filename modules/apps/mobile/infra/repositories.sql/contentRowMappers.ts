@@ -29,28 +29,19 @@ function narrowVariantKind(raw: string | null): TrackVariantKind | null {
   throw new Error(`Invalid track_variant kind: ${raw}`)
 }
 
-export function rowToAuthor(
-  row: { id: string },
-  names: readonly AuthorNameRow[]
-): Author {
+export function rowToAuthor(row: { id: string }, names: readonly AuthorNameRow[]): Author {
   const byLanguage = new Map<string, string>()
   for (const n of names) if (n.author_id === row.id) byLanguage.set(n.language, n.full_name)
   return { id: row.id, names: byLanguage }
 }
 
-export function rowToLocation(
-  row: { id: string },
-  names: readonly LocationNameRow[]
-): Location {
+export function rowToLocation(row: { id: string }, names: readonly LocationNameRow[]): Location {
   const byLanguage = new Map<string, string>()
   for (const n of names) if (n.location_id === row.id) byLanguage.set(n.language, n.full_name)
   return { id: row.id, names: byLanguage }
 }
 
-export function rowToSource(
-  row: { id: string },
-  names: readonly SourceNameRow[]
-): Source {
+export function rowToSource(row: { id: string }, names: readonly SourceNameRow[]): Source {
   const byLanguage = new Map<string, { fullName: string; shortName: string }>()
   for (const n of names) {
     if (n.source_id === row.id) {
@@ -101,16 +92,12 @@ export interface TrackAssemblyParts {
 
 export function rowToTrack(parts: TrackAssemblyParts): Track {
   const { track } = parts
-  const variants = parts.variants
-    .filter((v) => v.track_id === track.id)
-    .map(rowToTrackVariant)
+  const variants = parts.variants.filter((v) => v.track_id === track.id).map(rowToTrackVariant)
   const tokens = parts.references
     .filter((r) => r.track_id === track.id)
     .sort((a, b) => a.ord - b.ord)
     .map((r) => r.token)
-  const tagIds = parts.tags
-    .filter((t) => t.track_id === track.id)
-    .map((t) => t.tag_id)
+  const tagIds = parts.tags.filter((t) => t.track_id === track.id).map((t) => t.tag_id)
   return {
     id: track.id,
     authorId: track.author_id,

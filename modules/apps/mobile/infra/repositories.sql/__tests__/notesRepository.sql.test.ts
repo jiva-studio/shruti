@@ -1,15 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
 import { createSqlNoteRepository } from "../notesRepository.sql.js"
-import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
-import { createInMemoryTestDatabase } from "./testDb.js"
+import { applyUserSchemaForTests, createInMemoryTestDatabase } from "./testDb.js"
 
 describe("notesRepository.sql", () => {
   let db: IDatabase
 
   beforeEach(async () => {
     db = await createInMemoryTestDatabase()
-    await runUserMigrations(db)
+    await applyUserSchemaForTests(db)
   })
 
   it("creates, reads, lists, updates, and deletes a note", async () => {

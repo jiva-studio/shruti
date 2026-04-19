@@ -8,10 +8,9 @@ import { rowToLocation } from "./contentRowMappers.js"
 export function createSqlLocationRepository(contentDb: IDatabase): ILocationRepository {
   return {
     async getById(id: LocationId): Promise<Location | null> {
-      const rows = await contentDb.query<{ id: string }>(
-        "SELECT id FROM locations WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<{ id: string }>("SELECT id FROM locations WHERE id = ?", [
+        id,
+      ])
       if (rows.length === 0) return null
       const names = await contentDb.query<LocationNameRow>(
         "SELECT * FROM location_names WHERE location_id = ?",
