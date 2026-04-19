@@ -1,3 +1,4 @@
+import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
@@ -5,11 +6,7 @@ import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository
 import type { MediaItemRow } from "@lib/persistence/user"
 import { rowToMediaItem } from "./rowMappers.js"
 
-function randomId(): string {
-  return (
-    Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10)
-  )
-}
+const newMediaItemId = (): string => `media_${nanoid(12)}`
 
 export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepository {
   return {
@@ -42,7 +39,7 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
         await db.save()
         return { ...existing, state, localPath }
       }
-      const id = randomId()
+      const id = newMediaItemId()
       const now = Date.now()
       await db.execute(
         `INSERT INTO media_items (id, track_id, state, local_path, created_at)

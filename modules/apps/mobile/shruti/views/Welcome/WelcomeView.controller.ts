@@ -4,7 +4,6 @@ import { useShruti } from "@shruti/shruti.js"
 import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
 import { probeServers } from "@infra/servers/index.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories.sql/index.js"
-import { openAndValidateContentDatabase as openAndValidateContentDatabaseImpl } from "./composables/openAndValidateContentDatabase.js"
 import {
   resolveContentDatabase as resolveContentDatabaseImpl,
   type ResolveContentDatabaseDeps,
@@ -108,30 +107,51 @@ export function useWelcomeController(
     }
   }
 
-  async function resolveContentDatabase(): Promise<string> {
-    return resolveContentDatabaseImpl(buildLocatorDeps(), incompatibleDbPaths)
-  }
-
   /* -------------------------------------------------------------------------- */
-  /*                  Phase 2: Open & Validate Content Database                 */
+  /*       Phase 1 + 2 combined: resolve → open → validate, with retry cap     */
   /* -------------------------------------------------------------------------- */
 
-  function openAndValidateContentDatabase(dbPath: string): Promise<void> {
-    return openAndValidateContentDatabaseImpl(dbPath, incompatibleDbPaths, {
-      supportedScheme: SUPPORTED_DB_SCHEME,
-      maxRetries: MAX_SCHEME_RETRIES,
-      open: async (path) => {
-        await shruti.openContentDatabase(path)
-      },
-      close: () => shruti.closeContentDatabase(),
-      readScheme: () => createSqlSchemeVersionRepository(shruti.databases.content!).read(),
-      dropDb: (path) => shruti.databaseFetcher.delete(path),
-      invalidateConfig: () =>
-        shruti.filesStorage.delete(
+  /**
+   * Counter-based retry (vs. `Set.size > max`): even if the CDN keeps
+   * advertising the same incompatible version, we still break out
+   * after MAX_SCHEME_RETRIES attempts instead of looping forever.
+   */
+  async function resolveAndValidate(): Promise<void> {
+    const observedSchemes: number[] = []
+
+    for (let attempt = 0; attempt < MAX_SCHEME_RETRIES; attempt++) {
+      const dbPath = await resolveContentDatabaseImpl(
+        buildLocatorDeps(),
+        incompatibleDbPaths
+      )
+      await shruti.openContentDatabase(dbPath)
+      const scheme = await createSqlSchemeVersionRepository(
+        shruti.databases.content!
+      ).read()
+
+      if (scheme === 0 || scheme === SUPPORTED_DB_SCHEME) return
+
+      // Scheme mismatch: close, mark, drop local copy, invalidate cached
+      // config so the next iteration re-probes for a fresh manifest.
+      observedSchemes.push(scheme)
+      await shruti.closeContentDatabase()
+      incompatibleDbPaths.add(dbPath)
+      await shruti.databaseFetcher.delete(dbPath).catch(() => undefined)
+      await shruti.filesStorage
+        .delete(
           shruti.storagePublicUrl.get(shruti.appConfig.publicRemoteConfigPath)
-        ),
-      retry: () => initialize(),
-    })
+        )
+        .catch(() => undefined)
+    }
+
+    const observed = observedSchemes.join(", ") || "none"
+    throw new Error(
+      `Content database scheme validation failed after ${MAX_SCHEME_RETRIES} attempts. ` +
+        `Expected ${SUPPORTED_DB_SCHEME}, got: ${observed}. ` +
+        `The CDN likely hasn't published a compatible DB yet — run ` +
+        `content-db-builder, upload a new shruti.{version}.db with matching ` +
+        `scheme, or bump modules/db-scheme.json to match what's available.`
+    )
   }
 
   /* -------------------------------------------------------------------------- */
@@ -183,8 +203,7 @@ export function useWelcomeController(
       error.value = null
       progress.value = 0
 
-      const dbPath = await resolveContentDatabase()
-      await openAndValidateContentDatabase(dbPath)
+      await resolveAndValidate()
       await bootstrapApp()
 
       // Fire-and-forget: download newer DB version for next launch
