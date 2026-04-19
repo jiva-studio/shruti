@@ -1,4 +1,3 @@
-import GoogleSignIn
 import UIKit
 import Capacitor
 
@@ -8,7 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        DatabaseHelper().setupDatabase()
+        // Copy bundled databases from the app bundle into Documents/
+        // before Capacitor initializes, so the SQLite plugin finds them.
+        BundledDatabaseHelper.copyBundledDatabases()
         return true
     }
 
@@ -35,14 +36,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        // Called when the app was launched with a url. Feel free to add additional processing here,
-        // but if you want the App API to support tracking app url opens, make sure to keep this call
-        var handled: Bool
-
-        handled = GIDSignIn.sharedInstance.handle(url)
-        if handled {
-            return true
-        }
         return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
