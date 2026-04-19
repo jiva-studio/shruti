@@ -8,8 +8,10 @@ import type { TrackVariant } from "./trackVariant.js"
  */
 export interface Track {
   readonly id: TrackId
-  readonly authorId: AuthorId
-  readonly locationId: LocationId
+  /** nullable — legacy recordings may have unknown author */
+  readonly authorId: AuthorId | null
+  /** nullable — legacy recordings may have unknown location */
+  readonly locationId: LocationId | null
   readonly date: IsoDate
   readonly hidden: boolean
   readonly sortReference: string

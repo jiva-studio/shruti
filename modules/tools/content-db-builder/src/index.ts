@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import "dotenv/config"
 import { buildDb } from "./buildDb.js"
-import { exportTranscripts } from "./exportTranscripts.js"
 import {
   uploadDirectory,
   updateConfigJson,
@@ -34,15 +33,23 @@ function parseArg(args: string[], flag: string): string | undefined {
  * Do NOT re-add `S3_YANDEX_*` support here without an accompanying
  * infra change — we want a single source of truth for the bucket
  * while we stabilise content ingestion.
+ *
+ * Credentials are optional: when both `S3_AWS_ACCESS_KEY_ID` and
+ * `S3_AWS_SECRET_ACCESS_KEY` are empty, the SDK falls back to its
+ * default provider chain — env, shared config / credentials files,
+ * SSO, IMDS. That lets `aws sso login` + `AWS_PROFILE=...` just work
+ * without pasting keys into .env.
  */
 function s3Targets(): S3Target[] {
+  const accessKeyId = optionalEnv("S3_AWS_ACCESS_KEY_ID")
+  const secretAccessKey = optionalEnv("S3_AWS_SECRET_ACCESS_KEY")
   return [
     {
       label: "aws",
       bucket: requireEnv("S3_AWS_BUCKET"),
       region: optionalEnv("S3_AWS_REGION") ?? "us-east-1",
-      accessKeyId: requireEnv("S3_AWS_ACCESS_KEY_ID"),
-      secretAccessKey: requireEnv("S3_AWS_SECRET_ACCESS_KEY"),
+      accessKeyId,
+      secretAccessKey,
     },
   ]
 }
@@ -58,16 +65,6 @@ async function cmdBuild(args: string[]): Promise<void> {
     },
   })
   console.log(`built: ${output}`)
-}
-
-async function cmdExportTranscripts(args: string[]): Promise<void> {
-  const outputDir = parseArg(args, "--output") ?? "./out/public/tracks"
-  const stats = await exportTranscripts(outputDir, {
-    url: requireEnv("COUCHDB_URL"),
-    user: optionalEnv("COUCHDB_USER"),
-    password: optionalEnv("COUCHDB_PASSWORD"),
-  })
-  console.log(`exported: ${stats.exported}, skipped: ${stats.skipped}`)
 }
 
 async function cmdUpload(args: string[]): Promise<void> {
@@ -92,9 +89,6 @@ async function main(): Promise<void> {
     case "build":
       await cmdBuild(rest)
       break
-    case "export-transcripts":
-      await cmdExportTranscripts(rest)
-      break
     case "upload":
       await cmdUpload(rest)
       break
@@ -104,7 +98,6 @@ async function main(): Promise<void> {
       console.log(
         `Usage:
   content-db-builder build [--output DIR]              Build shruti.{version}.db from CouchDB
-  content-db-builder export-transcripts [--output DIR] Export transcripts as JSON files
   content-db-builder upload [--input DIR]              Upload ./out tree to AWS S3 + update config.json
 
 Env vars (see .env.example):
