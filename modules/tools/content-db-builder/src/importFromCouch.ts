@@ -57,9 +57,10 @@ interface CouchTrackLanguage {
 interface CouchTrack {
   _id: string
   type: "track"
-  location: string
-  date: [number, number, number] | null
-  author: string
+  // Both fields are nullable in legacy docs — use `?? null` before DB insert.
+  location?: string | null
+  date?: [number, number, number] | null
+  author?: string | null
   title: Record<string, string>
   references?: Array<Array<string | number>>
   audio?: {
@@ -104,11 +105,15 @@ function computeSortReference(references: Array<Array<string | number>> | undefi
     .join("_")
 }
 
-function prefixBucketPath(path: string | undefined): string | null {
+/**
+ * Paths in CouchDB are already the full bucket keys used by the legacy
+ * S3 layout (e.g. `library/tracks/{id}/audio/original.mp3`). Store them
+ * verbatim — mobile's IStoragePublicUrl substitutes them into the CDN
+ * template directly. If we ever re-organise the bucket, rewrite here.
+ */
+function normalizeBucketPath(path: string | undefined): string | null {
   if (!path) return null
-  if (path.startsWith("public/")) return path
-  // Some legacy CouchDB paths don't include the "public/" prefix.
-  return `public/${path.replace(/^\/+/, "")}`
+  return path.replace(/^\/+/, "")
 }
 
 /* ---------- main import ---------------------------------------------------- */
@@ -254,8 +259,8 @@ export async function importFromCouch(
       const sortDate = track.sort_date ?? computeSortDate(track.date)
       insTrack.run(
         trackId,
-        track.author,
-        track.location,
+        track.author ?? null,
+        track.location ?? null,
         toIsoDate(track.date),
         track.hidden ? 1 : 0,
         sortRef,
@@ -288,7 +293,7 @@ export async function importFromCouch(
       for (const lang of track.languages ?? []) languageKeys.add(lang.language)
 
       const audioOriginal = track.audio?.original
-      const audioOriginalPath = prefixBucketPath(audioOriginal?.path)
+      const audioOriginalPath = normalizeBucketPath(audioOriginal?.path)
 
       for (const lang of languageKeys) {
         const title =
@@ -300,7 +305,7 @@ export async function importFromCouch(
         const langMeta = (track.languages ?? []).filter((l) => l.language === lang)
         const audioMeta = langMeta.find((l) => l.source === "track")
         const transcriptMeta = langMeta.find((l) => l.source === "transcript")
-        const transcriptPath = prefixBucketPath(track.transcripts?.[lang]?.path)
+        const transcriptPath = normalizeBucketPath(track.transcripts?.[lang]?.path)
 
         insVariant.run(
           trackId,

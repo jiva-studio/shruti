@@ -73,6 +73,14 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     )
   })
 
+  async function loadAuthorIfKnown(): Promise<void> {
+    if (track.value?.authorId) {
+      author.value = await repos.authors.getById(track.value.authorId)
+    } else {
+      author.value = null
+    }
+  }
+
   const transcriptBlocks = computed(() => buildTranscriptViewData(transcript.value))
 
   /* ---- Loaders ---- */
@@ -84,7 +92,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
       error.value = "Track not found."
       return
     }
-    author.value = await repos.authors.getById(track.value.authorId)
+    await loadAuthorIfKnown()
     availableLanguages.value = await repos.transcripts.availableLanguages(trackId)
     selectedLanguage.value =
       availableLanguages.value.find((l) => l === preferredLanguage) ??

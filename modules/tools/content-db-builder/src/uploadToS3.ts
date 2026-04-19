@@ -8,8 +8,13 @@ export interface S3Target {
   bucket: string
   region?: string
   endpoint?: string
-  accessKeyId: string
-  secretAccessKey: string
+  /**
+   * When both credential fields are absent, the AWS SDK falls back to
+   * its default provider chain (env → shared config/credentials → SSO
+   * → IMDS). That's the `aws sso login` / `AWS_PROFILE=...` path.
+   */
+  accessKeyId?: string
+  secretAccessKey?: string
 }
 
 export interface UploadOptions {
@@ -35,14 +40,19 @@ function contentTypeFor(path: string): string {
 }
 
 function makeClient(target: S3Target): S3Client {
+  const hasExplicit = Boolean(target.accessKeyId && target.secretAccessKey)
   return new S3Client({
     region: target.region ?? "us-east-1",
     endpoint: target.endpoint,
-    credentials: {
-      accessKeyId: target.accessKeyId,
-      secretAccessKey: target.secretAccessKey,
-    },
-    forcePathStyle: Boolean(target.endpoint), // Yandex likes path-style
+    // If creds aren't passed explicitly, let the SDK resolve them
+    // through its default chain (SSO profile / IMDS / env).
+    credentials: hasExplicit
+      ? {
+          accessKeyId: target.accessKeyId!,
+          secretAccessKey: target.secretAccessKey!,
+        }
+      : undefined,
+    forcePathStyle: Boolean(target.endpoint), // Yandex-style path when a custom endpoint is set
   })
 }
 

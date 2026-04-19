@@ -54,8 +54,10 @@ export interface TagNameRow {
 
 export interface TrackRow {
   readonly id: string
-  readonly author_id: string
-  readonly location_id: string
+  /** nullable — legacy content sometimes has no author metadata */
+  readonly author_id: string | null
+  /** nullable — same story for recording location */
+  readonly location_id: string | null
   readonly date: string | null
   readonly hidden: number
   readonly sort_reference: string

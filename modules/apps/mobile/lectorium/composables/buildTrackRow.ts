@@ -20,11 +20,12 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
   const title = variant?.title ?? track.id
   const durationMs = variant?.audio?.duration ?? null
 
-  const author = deps.authorsById.get(track.authorId)
+  const author = track.authorId ? deps.authorsById.get(track.authorId) : null
   const authorName =
     author?.names.get(deps.preferredLanguage) ??
     author?.names.values().next().value ??
-    track.authorId
+    track.authorId ??
+    ""
 
   const reference = track.references[0]?.join(" ") ?? null
 
