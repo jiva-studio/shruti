@@ -66,7 +66,7 @@ the outside world, and platform-specific concerns live behind ports.
 | **Role** | Orchestrate domain logic + repository ports. Pure functions, no Vue, no IO. |
 | **May import** | `@lib/domain` only |
 | **Must NOT import** | `@ports`, `@infra`, `@ui`, `vue`, platform APIs |
-| **Contains** | `loadTranscript`, `searchTracks`, `listTracksByFilters`, `computeFilterCounts`, `parseReferenceQuery`, `addTrackToPlaylist`, `archivePlaylistItem`, `markCompleted`, `updateProgress`, `createNote`, `updateNote`, `deleteNote`, `playTrack` |
+| **Contains** | `addTrackToPlaylist`, `createNote`, `listPlaylistTracks`, `listTracksByFilters`, `loadTranscript`, `searchNotes`, `searchTracks` |
 
 ### `@ports/app` — Technical Contracts (Layer 0)
 
@@ -98,13 +98,9 @@ the outside world, and platform-specific concerns live behind ports.
 | `infra/files.capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
 | `infra/storage.public.url/` | `IStoragePublicUrl` (URL template resolver) |
 | `infra/preferences.capacitor/` | `IPreferences` for native (`@capacitor/preferences`) |
-| `infra/repositories.preferences/` | Preferences-backed adapters |
 | `infra/audio.capacitor/` | `IAudioPlayer` wrapping `@shruti/audio-player` plugin |
 | `infra/audio.web/` | `IAudioPlayer` over `HTMLAudioElement` |
 | `infra/notifications.capacitor/` | `INotificationScheduler` (local notifications) |
-| `infra/share.capacitor/` | `IShareService` |
-| `infra/databaseTransfer.capacitor/` | `IDatabaseTransfer` for native |
-| `infra/databaseTransfer.web/` | `IDatabaseTransfer` for web |
 | `infra/servers/` | CDN server probing (`probeServers`) |
 
 ### `@ui/*` — UI Layer (Layer 3)
@@ -112,28 +108,44 @@ the outside world, and platform-specific concerns live behind ports.
 | | |
 |---|---|
 | **Path** | `modules/apps/mobile/ui/` |
-| **Role** | Reusable, self-contained UI components and composables. Props + events, no infra deps. |
-| **May import** | `vue`, `@ionic/vue`, `@ui/primitives/*` (see below), own files only |
-| **Must NOT import** | `@ports`, `@infra`, `@lib/domain`, `@lib/application`, other `@ui/*` siblings |
-| **Subdirectories** | |
-| `ui/primitives/` | Shared, no-dep building blocks. **Exception to the sibling ban:** any `@ui/*` sublayer may import from `@ui/primitives`; primitives import nothing outside themselves. |
-| `ui/components/` | Generic UI components: counters, layouts, resource state, status badges, search input, list items |
-| `ui/composables/` | Generic composables (`useResource`) |
-| `ui/features/tracks.list/` | Track list item + list container |
-| `ui/features/tracks.search.input/` | Search input with suggestions |
-| `ui/features/tracks.search.filters/` | Filter chips (authors, sources, languages, duration, tags) |
-| `ui/features/playlist/` | Playlist items, swipes, progress bars |
+| **Role** | Reusable, self-contained UI components. Props + events, no infra deps. |
+| **May import** | `vue`, `@ionic/vue`, lower UI sub-layers (see below), own files only |
+| **Must NOT import** | `@ports`, `@infra`, `@lib/domain`, `@lib/application`, `@shruti/*`, cross-feature UI siblings |
+
+The UI layer has four **stacked sub-layers**. Dependencies flow
+downward only. Siblings at the `features/` level may NOT import each
+other — shared widgets must be promoted to `@ui/components/`.
+
+```
+  features/       can import: components, primitives, icons
+     ▼
+  components/     can import: components (siblings), primitives, icons
+     ▼
+  primitives/     can import: nothing UI — zero deps
+  icons/          can import: nothing UI — zero deps (parallel to primitives)
+```
+
+| Sub-layer | Contents |
+|---|---|
+| `ui/primitives/` | No-dep building blocks: `AppPage`, `Header`, `HighlightText`, `HoldButton`, `Message`, `PageSticker`, `SectionHeader`, `WithDeleteAction` |
+| `ui/icons/` | SVG icons (`IconHome`, `IconBookmark`, …). Parallel to primitives — no UI deps |
+| `ui/components/selectors/` | Generic selector dialogs (`SelectorDialog`, `ListItemSelectorDialog`, `ListItemsSelectorDialog`) |
+| `ui/components/tracks.list/` | Track list item + list container (takes `UiTrackRow` mirror type) |
+| `ui/components/tracks.search.input/` | Cross-platform search input (`SearchInput`) |
+| `ui/components/tracks.state/` | Track state indicators (`IconIndicator`, `RadialIndicator`) |
 | `ui/features/notes/` | Note list item + editor |
 | `ui/features/player/` | Audio player controls, waveform, seek |
+| `ui/features/playlist/` | Playlist items, swipes, progress bars |
+| `ui/features/settings/` | Settings items: app language, server, notifications, toggles |
+| `ui/features/tracks.search.filters/` | Filter chips (authors, sources, languages, duration, tags) |
 | `ui/features/transcript/` | Transcript viewer (paragraph/sentence/verse blocks) |
 
 ### UI Mirror Types
 
-`@ui/features/*` can't import from `@lib/domain` (UI must not know the
-domain) or from `@ui/components/*` siblings (the sibling ban). When a
-feature needs a type that already exists there, it declares a **mirror**
-— a structurally identical copy kept alongside the feature's other
-types, typically in a local `types.ts`.
+`@ui/*` can't import from `@lib/domain` (UI must not know the domain).
+When a component needs a type that already exists there, it declares a
+**mirror** — a structurally identical copy kept alongside the
+component's other types, typically in a local `types.ts`.
 
 **When to mirror.** Only for the specific shape the UI actually renders.
 Don't re-export the whole domain entity — lift out the three or four
@@ -186,8 +198,9 @@ shruti/  →  @ui, @infra, @ports, @lib/application, @lib/domain
 ### How to Verify
 
 ```bash
-# No @ui imports inside @ui (primitives is the one allowed exception):
-grep -rn 'from "@ui/' ui/ | grep -v '@ui/primitives'
+# No cross-feature imports inside @ui/features (promote shared widgets
+# to @ui/components/):
+grep -rn 'from "@ui/features/' ui/features/
 
 # No @infra inside @ui or @ports:
 grep -rn 'from "@infra/' ui/ ports/
@@ -203,7 +216,8 @@ grep -rn '@lib/persistence/' infra/ | grep -v 'repositories.sql'
 ```
 
 ESLint's `no-restricted-imports` enforces the same rules at lint time — see
-`eslint.config.js` in the mobile app.
+`eslint.config.js` in the mobile app. Each UI sub-layer has its own rule
+block that encodes the allowed downward imports.
 
 ## Error-Handling Policy
 
@@ -245,10 +259,12 @@ Does it implement a port (SQL, filesystem, HTTP, platform SDK)?
   └─ YES → @infra/<adapter-name>/
 
 Is it a reusable UI component with props+events, no business logic?
-  └─ YES → @ui/components/ (generic) or @ui/features/<area>/ (feature-specific)
+  └─ YES → @ui/primitives/ (atomic, no-dep)
+          or @ui/components/<area>/ (generic widget — used by multiple features)
+          or @ui/features/<area>/ (specific to one feature surface)
 
-Is it a reusable Vue composable with no business logic?
-  └─ YES → @ui/composables/
+Is it a Vue composable that wires stores / use cases / services?
+  └─ YES → shruti/composables/
 
 Is it a Vue view, a route, or app-level wiring?
   └─ YES → shruti/
