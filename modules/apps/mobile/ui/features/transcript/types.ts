@@ -12,7 +12,6 @@ export interface UiTranscriptLanguage {
 
 export type UiTranscriptBlockRaw =
   | UiTranscriptSentenceBlock
-  | UiTranscriptParagraphBlock
   | UiTranscriptVerseTextBlock
   | UiTranscriptVerseTranslationBlock
 
@@ -24,12 +23,6 @@ export interface UiTranscriptSentenceBlock {
   readonly speaker?: string
   readonly speakerChanged?: boolean
   readonly reference?: string
-}
-
-export interface UiTranscriptParagraphBlock {
-  readonly type: "paragraph"
-  readonly start: number
-  readonly end: number
 }
 
 export interface UiTranscriptVerseTextBlock {
