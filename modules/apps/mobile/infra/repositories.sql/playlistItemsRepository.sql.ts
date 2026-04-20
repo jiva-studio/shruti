@@ -69,5 +69,10 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
       await db.execute("DELETE FROM playlist_items WHERE id = ?", [id])
       await db.save()
     },
+
+    async clearAll(): Promise<void> {
+      await db.execute("DELETE FROM playlist_items")
+      await db.save()
+    },
   }
 }

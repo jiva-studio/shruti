@@ -76,5 +76,10 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
       await db.execute("DELETE FROM notes WHERE id = ?", [id])
       await db.save()
     },
+
+    async clearAll(): Promise<void> {
+      await db.execute("DELETE FROM notes")
+      await db.save()
+    },
   }
 }

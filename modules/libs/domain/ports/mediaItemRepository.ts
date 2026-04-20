@@ -7,4 +7,5 @@ export interface IMediaItemRepository {
   upsert(trackId: TrackId, state: MediaItemState, localPath: string | null): Promise<MediaItem>
   deleteByTrack(trackId: TrackId): Promise<void>
   deleteById(id: MediaItemId): Promise<void>
+  clearAll(): Promise<void>
 }
