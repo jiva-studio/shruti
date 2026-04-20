@@ -13,7 +13,7 @@ export interface TranscriptRepositoryDeps {
   /**
    * Domain port — the HTTP repo stays ignorant of the content DB's
    * row shapes. It only asks "what path does track X at language Y
-   * advertise?" and leaves the SQL to `@infra/repositories.sql`.
+   * advertise?" and leaves the SQL to `@infra/repositories/sql`.
    */
   readonly tracks: ITrackRepository
   readonly filesStorage: IRemoteFilesStorage
