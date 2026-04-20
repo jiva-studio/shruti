@@ -1,4 +1,4 @@
-import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { buildServerUrl, SERVERS, type CdnServer } from "@lib/domain/servers.js"
 
 export interface ServerProbeResult {
   server: CdnServer
@@ -23,7 +23,7 @@ export async function probeServers(
   const ordered = buildOrderedList(preferredServerId)
 
   for (const server of ordered) {
-    const url = server.urlTemplate.replace("{path}", configPath)
+    const url = buildServerUrl(server, configPath)
     try {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)

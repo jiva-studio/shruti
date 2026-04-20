@@ -123,6 +123,17 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
+  /** Prefetch audio for every currently-loaded entry. Fire-and-forget. */
+  function prefetchAll(): void {
+    const downloads = useDownloadStore()
+    for (const { track } of entries.value) {
+      const variant = track.variants.find((v) => v.audio)
+      if (!variant?.audio) continue
+      const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
+      downloads.prefetch(track.id, remoteUrl)
+    }
+  }
+
   async function archive(
     itemId: PlaylistItemId
   ): Promise<Result<void, ArchivePlaylistItemError>> {
@@ -159,5 +170,6 @@ export const usePlaylistStore = defineStore("playlist", () => {
     archive,
     archiveByTrackId,
     hasTrack,
+    prefetchAll,
   }
 })
