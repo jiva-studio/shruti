@@ -49,7 +49,7 @@ export function useHomeController(): HomeControllerReturn {
   }
 
   onMounted(async () => {
-    await Promise.all([loadDictionaries(), playlist.ensureLoaded()])
+    await Promise.all([loadDictionaries(), playlist.ensureLoaded(), downloads.hydrate()])
     // Kick off prefetch for every track already in the playlist so the
     // download indicator reflects cache-hits from previous sessions.
     for (const { track } of playlist.entries) {
