@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { WithDeleteAction } from '@ui/primitives/index.js'
-import { TrackListItem, type UiTrackRow } from '@ui/components/tracks.list/index.js'
+import { TrackListItem, type UiTrackRow } from '@ui/components/tracks/list/index.js'
 import PlaylistStateIndicator from './PlaylistStateIndicator.vue'
 
 /* -------------------------------------------------------------------------- */

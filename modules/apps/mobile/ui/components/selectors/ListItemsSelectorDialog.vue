@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from 'vue'
 import { IonList, IonCheckbox, IonItem } from '@ionic/vue'
-import { SearchInput } from '@ui/components/tracks.search.input/index.js'
+import { SearchInput } from '@ui/components/tracks/search/input/index.js'
 import SelectorDialog from './SelectorDialog.vue'
 
 /* -------------------------------------------------------------------------- */

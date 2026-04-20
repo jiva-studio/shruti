@@ -14,9 +14,9 @@ import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownload
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import { useToast } from "@shruti/services/useToast.js"
-import type { UiTrackRow, UiTrackState } from "@ui/components/tracks.list/index.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
-import type { FiltersModel } from "@ui/features/tracks.search.filters/index.js"
+import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 
 export interface SearchControllerReturn {
   query: Ref<string>

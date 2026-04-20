@@ -14,9 +14,9 @@ import type {
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
-import { useStoragePublicUrl } from "@infra/storage.public.url/index.js"
+import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
 import { probeServers as probeServersImpl, type ServerProbeResult } from "@infra/servers/index.js"
-import { createSqlSchemeVersionRepository } from "@infra/repositories.sql/index.js"
+import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 
 /**
  * App-wide config passed into `initShruti`. Built from `DEFAULT_APP_CONFIG`

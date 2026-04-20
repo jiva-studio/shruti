@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { IonActionSheet } from "@ionic/vue"
 import { AppPage, PageSticker } from "@ui/primitives/index.js"
-import { SearchInput } from "@ui/components/tracks.search.input/index.js"
+import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useNotesController } from "./NotesView.controller.js"

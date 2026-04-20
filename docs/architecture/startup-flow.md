@@ -172,7 +172,7 @@ All errors are swallowed — the app works fine with yesterday's DB.
 
 Transcripts are **not** stored in the SQLite content DB — they are public
 JSON files on S3. `ITranscriptRepository` (implemented in
-`@infra/repositories.http/transcriptRepository.http.ts`):
+`@infra/repositories/http/transcriptRepository.http.ts`):
 
 - `availableLanguages(trackId)` reads `track_variants` where
   `transcript_path IS NOT NULL`.

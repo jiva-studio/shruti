@@ -106,36 +106,36 @@ modules/
 │       │       └── index.ts
 │       │
 │       ├── infra/                           # Driven adapters (Layer 2)
-│       │   ├── repositories.sql/            # SQL repository implementations
-│       │   ├── repositories.http/           # HTTP-backed repositories (transcripts)
+│       │   ├── repositories/sql/            # SQL repository implementations
+│       │   ├── repositories/http/           # HTTP-backed repositories (transcripts)
 │       │   ├── repositories.preferences/    # Preferences-backed repositories
-│       │   ├── persistence.sqljs/           # SQL.js adapter (web)
-│       │   ├── persistence.capacitor/       # Capacitor SQLite adapter (native)
-│       │   ├── persistence.fetchers.idb/    # HTTP→IDB fetcher (web)
-│       │   ├── persistence.fetchers.fs/     # FileTransfer→FS fetcher (native)
-│       │   ├── files.web/                   # Cache API storage (web)
-│       │   ├── files.capacitor/             # Filesystem storage (native)
-│       │   ├── storage.public.url/          # URL template resolver
-│       │   ├── preferences.capacitor/       # Capacitor preferences
-│       │   ├── audio.capacitor/             # @shruti/audio-player wrapper (native)
-│       │   ├── audio.web/                   # HTMLAudioElement (web)
-│       │   ├── notifications.capacitor/     # @capacitor/local-notifications
-│       │   ├── share.capacitor/             # @capacitor/share
-│       │   ├── haptics.capacitor/           # @capacitor/haptics
-│       │   ├── haptics.web/                 # Pure no-op
-│       │   ├── mediaDownloader.capacitor/   # @capacitor/file-transfer + Filesystem.Cache
-│       │   ├── mediaDownloader.web/         # fetch + Cache API, streams for progress
+│       │   ├── persistence/sqljs/           # SQL.js adapter (web)
+│       │   ├── persistence/capacitor/       # Capacitor SQLite adapter (native)
+│       │   ├── persistence/fetchers/idb/    # HTTP→IDB fetcher (web)
+│       │   ├── persistence/fetchers/fs/     # FileTransfer→FS fetcher (native)
+│       │   ├── files/web/                   # Cache API storage (web)
+│       │   ├── files/capacitor/             # Filesystem storage (native)
+│       │   ├── storagePublicUrl/          # URL template resolver
+│       │   ├── preferences/capacitor/       # Capacitor preferences
+│       │   ├── audio/capacitor/             # @shruti/audio-player wrapper (native)
+│       │   ├── audio/web/                   # HTMLAudioElement (web)
+│       │   ├── notifications/capacitor/     # @capacitor/local-notifications
+│       │   ├── share/capacitor/             # @capacitor/share
+│       │   ├── haptics/capacitor/           # @capacitor/haptics
+│       │   ├── haptics/web/                 # Pure no-op
+│       │   ├── mediaDownloader/capacitor/   # @capacitor/file-transfer + Filesystem.Cache
+│       │   ├── mediaDownloader/web/         # fetch + Cache API, streams for progress
 │       │   ├── servers/                     # CDN server probing
-│       │   └── idb.kv/                      # Layer 1 primitive — IDB KV store
+│       │   └── idbKv/                      # Layer 1 primitive — IDB KV store
 │       │
 │       ├── ui/                              # UI layer (Layer 3)
 │       │   ├── primitives/                  # Base blocks (zero deps)
 │       │   ├── components/                  # Generic UI primitives
 │       │   ├── composables/                 # Generic composables
 │       │   └── features/                    # Feature-specific UI widgets
-│       │       ├── tracks.list/
-│       │       ├── tracks.search.input/
-│       │       ├── tracks.search.filters/
+│       │       ├── tracks/list/
+│       │       ├── tracks/search/input/
+│       │       ├── tracks/search/filters/
 │       │       ├── playlist/
 │       │       ├── notes/
 │       │       ├── player/
@@ -205,8 +205,8 @@ modules/
 ### `@infra/*` — Driven Adapters (Layer 2)
 
 - **Path:** `modules/apps/mobile/infra/`
-- **May import:** `@ports/app`, `@lib/domain`, `@lib/persistence/*`, `@infra/idb.kv`
-- **Must NOT import:** `@ui`, `@shruti`, `@lib/application`, other `@infra/*` siblings (except `idb.kv`)
+- **May import:** `@ports/app`, `@lib/domain`, `@lib/persistence/*`, `@infra/idbKv`
+- **Must NOT import:** `@ui`, `@shruti`, `@lib/application`, other `@infra/*` siblings (except `idbKv`)
 
 ### `@ui/*` — UI Layer (Layer 3)
 
@@ -226,7 +226,7 @@ modules/
 ```
 shruti/  →  @ui, @infra, @ports, @lib/application, @lib/domain
 @ui/*       →  (nothing external)
-@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idb.kv
+@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idbKv
 @lib/application  →  @lib/domain
 @lib/domain       →  (nothing)
 @ports/app        →  (nothing)
@@ -263,7 +263,7 @@ Is it a Vue view, a route, or app-level wiring?
 - **Controller Pattern:** `*.controller.ts` in views separates business logic from Vue templates.
 - **Unit of Work:** `IUnitOfWork.run()` wraps multi-step operations in a transaction. Used by check-then-act mutation use cases (`archivePlaylistItem`, `markCompleted`, `updateProgress`, `deleteNote`, `updateNote`) so the read and write commit atomically.
 - **Result Type:** `Result<T, E>` forces explicit error handling instead of exceptions. Mutation use cases return `Result`; query use cases throw on infra error — see `docs/architecture/layers.md`.
-- **Row Mappers:** split by DB scope — `@infra/repositories.sql/contentRowMappers.ts` for content DB rows, `@infra/repositories.sql/rowMappers.ts` for user DB rows. Each repository imports only the mapper for its own scope.
+- **Row Mappers:** split by DB scope — `@infra/repositories/sql/contentRowMappers.ts` for content DB rows, `@infra/repositories/sql/rowMappers.ts` for user DB rows. Each repository imports only the mapper for its own scope.
 - **UI Mirror Types:** when `@ui/features/*` needs a type from `@lib/domain`, it declares a local mirror copy — `@ui` never imports `@lib/domain` directly.
 - **Platform Adapters:** web vs native behind shared ports (sql.js/Cache API vs Capacitor SQLite/Filesystem).
 - **Single source of truth for paths:** SQLite rows store full paths from the bucket root (including the `public/` prefix). Client resolves URL via `IStoragePublicUrl.get(path)` without any concatenation.

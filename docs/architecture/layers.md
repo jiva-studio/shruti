@@ -84,23 +84,23 @@ the outside world, and platform-specific concerns live behind ports.
 |---|---|
 | **Path** | `modules/apps/mobile/infra/` |
 | **Role** | Implement ports. Own all SQL, row types, platform SDK calls. |
-| **May import** | `@ports/app`, `@lib/domain` (types + domain services), `@lib/persistence/*` (row types), `@infra/idb.kv` (Layer 1 primitive only) |
-| **Must NOT import** | `@ui`, `@shruti`, `@lib/application`, other `@infra/*` siblings (except `idb.kv`) |
+| **May import** | `@ports/app`, `@lib/domain` (types + domain services), `@lib/persistence/*` (row types), `@infra/idbKv` (Layer 1 primitive only) |
+| **Must NOT import** | `@ui`, `@shruti`, `@lib/application`, other `@infra/*` siblings (except `idbKv`) |
 | **Subdirectories** | |
-| `infra/idb.kv/` | Layer 1 primitive — low-level IDB KV store, zero deps |
-| `infra/repositories.sql/` | Implements domain repository ports via `IDatabase` + SQL. Owns all `rowTo*` mappers. Only place that imports `@lib/persistence/*` row types. |
-| `infra/repositories.http/` | HTTP-backed repositories (transcripts fetched as JSON from S3) |
-| `infra/persistence.sqljs/` | `IPersistence` for web (sql.js + IDB) |
-| `infra/persistence.capacitor/` | `IPersistence` for native (Capacitor SQLite) |
-| `infra/persistence.fetchers.idb/` | `IDatabaseFetcher` for web (HTTP → IDB) |
-| `infra/persistence.fetchers.fs/` | `IDatabaseFetcher` for native (FileTransfer → FS) |
-| `infra/files.web/` | `IRemoteFilesStorage` for web (Cache API) |
-| `infra/files.capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
-| `infra/storage.public.url/` | `IStoragePublicUrl` (URL template resolver) |
-| `infra/preferences.capacitor/` | `IPreferences` for native (`@capacitor/preferences`) |
-| `infra/audio.capacitor/` | `IAudioPlayer` wrapping `@shruti/audio-player` plugin |
-| `infra/audio.web/` | `IAudioPlayer` over `HTMLAudioElement` |
-| `infra/notifications.capacitor/` | `INotificationScheduler` (local notifications) |
+| `infra/idbKv/` | Layer 1 primitive — low-level IDB KV store, zero deps |
+| `infra/repositories/sql/` | Implements domain repository ports via `IDatabase` + SQL. Owns all `rowTo*` mappers. Only place that imports `@lib/persistence/*` row types. |
+| `infra/repositories/http/` | HTTP-backed repositories (transcripts fetched as JSON from S3) |
+| `infra/persistence/sqljs/` | `IPersistence` for web (sql.js + IDB) |
+| `infra/persistence/capacitor/` | `IPersistence` for native (Capacitor SQLite) |
+| `infra/persistence/fetchers/idb/` | `IDatabaseFetcher` for web (HTTP → IDB) |
+| `infra/persistence/fetchers/fs/` | `IDatabaseFetcher` for native (FileTransfer → FS) |
+| `infra/files/web/` | `IRemoteFilesStorage` for web (Cache API) |
+| `infra/files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
+| `infra/storagePublicUrl/` | `IStoragePublicUrl` (URL template resolver) |
+| `infra/preferences/capacitor/` | `IPreferences` for native (`@capacitor/preferences`) |
+| `infra/audio/capacitor/` | `IAudioPlayer` wrapping `@shruti/audio-player` plugin |
+| `infra/audio/web/` | `IAudioPlayer` over `HTMLAudioElement` |
+| `infra/notifications/capacitor/` | `INotificationScheduler` (local notifications) |
 | `infra/servers/` | CDN server probing (`probeServers`) |
 
 ### `@ui/*` — UI Layer (Layer 3)
@@ -130,14 +130,14 @@ other — shared widgets must be promoted to `@ui/components/`.
 | `ui/primitives/` | No-dep building blocks: `AppPage`, `Header`, `HighlightText`, `HoldButton`, `Message`, `PageSticker`, `SectionHeader`, `WithDeleteAction` |
 | `ui/icons/` | SVG icons (`IconHome`, `IconBookmark`, …). Parallel to primitives — no UI deps |
 | `ui/components/selectors/` | Generic selector dialogs (`SelectorDialog`, `ListItemSelectorDialog`, `ListItemsSelectorDialog`) |
-| `ui/components/tracks.list/` | Track list item + list container (takes `UiTrackRow` mirror type) |
-| `ui/components/tracks.search.input/` | Cross-platform search input (`SearchInput`) |
-| `ui/components/tracks.state/` | Track state indicators (`IconIndicator`, `RadialIndicator`) |
+| `ui/components/tracks/list/` | Track list item + list container (takes `UiTrackRow` mirror type) |
+| `ui/components/tracks/search/input/` | Cross-platform search input (`SearchInput`) |
+| `ui/components/tracks/state/` | Track state indicators (`IconIndicator`, `RadialIndicator`) |
 | `ui/features/notes/` | Note list item + editor |
 | `ui/features/player/` | Audio player controls, waveform, seek |
 | `ui/features/playlist/` | Playlist items, swipes, progress bars |
 | `ui/features/settings/` | Settings items: app language, server, notifications, toggles |
-| `ui/features/tracks.search.filters/` | Filter chips (authors, sources, languages, duration, tags) |
+| `ui/features/tracks/search/filters/` | Filter chips (authors, sources, languages, duration, tags) |
 | `ui/features/transcript/` | Transcript viewer (paragraph/sentence/verse blocks) |
 
 ### UI Mirror Types
@@ -179,7 +179,7 @@ domain type, update its mirror, update the builder, update the template
 | **Path** | `modules/libs/persistence/main/`, `modules/libs/persistence/user/` |
 | **Role** | TypeScript types for raw SQL row shapes. Infra concern, not domain. |
 | **May import** | Nothing |
-| **Used by** | Only `@infra/repositories.sql/` |
+| **Used by** | Only `@infra/repositories/sql/` |
 
 ## Dependency Rule
 
@@ -189,7 +189,7 @@ import each other.**
 ```
 shruti/  →  @ui, @infra, @ports, @lib/application, @lib/domain
 @ui/*       →  (nothing external)
-@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idb.kv
+@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idbKv
 @lib/application  →  @lib/domain
 @lib/domain       →  (nothing)
 @ports/app        →  (nothing)
@@ -211,8 +211,8 @@ grep -rn 'from "@' modules/libs/domain/ | grep -v '@lib/domain'
 # Application depends only on domain:
 grep -rn 'from "@' modules/libs/application/ | grep -v '@lib/domain'
 
-# Row types only in repositories.sql:
-grep -rn '@lib/persistence/' infra/ | grep -v 'repositories.sql'
+# Row types only in repositories/sql:
+grep -rn '@lib/persistence/' infra/ | grep -v 'repositories/sql'
 ```
 
 ESLint's `no-restricted-imports` enforces the same rules at lint time — see
