@@ -1,5 +1,5 @@
 <template>
-  <AppPage>
+  <AppPage :player-open="player.open">
     <!-- Search input text -->
     <SearchInput
       v-model="search.query.value"
@@ -40,7 +40,9 @@ import { AppPage } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks.search.input/index.js"
 import { TracksList } from "@ui/components/tracks.list/index.js"
 import { SearchFiltersBar } from "@ui/features/tracks.search.filters/index.js"
+import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useSearchController } from "./SearchView.controller.js"
 
+const player = usePlayerStore()
 const search = useSearchController()
 </script>
