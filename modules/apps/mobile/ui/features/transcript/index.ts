@@ -17,7 +17,6 @@ export type {
   UiTranscriptBlocksGroup,
   UiTranscriptLanguage,
   UiTranscriptSentenceBlock,
-  UiTranscriptParagraphBlock,
   UiTranscriptVerseTextBlock,
   UiTranscriptVerseTranslationBlock,
 } from "./types.js"
