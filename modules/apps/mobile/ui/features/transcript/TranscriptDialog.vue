@@ -38,6 +38,7 @@
         :highlight-current-sentence="highlightCurrentSentence"
         @seek="(pos) => emit('seek', pos)"
         @text-selected="onTextSelected"
+        @pick-start="emit('pickStart')"
       />
 
       <!-- Text Selection Actions Popover -->
@@ -93,6 +94,8 @@ const emit = defineEmits<{
   seek: [position: number]
   selectionAction: [action: SelectionActionEvent]
   selectionDismissed: []
+  /** Long-press on a selectable block — controller fires platform haptics. */
+  pickStart: []
 }>()
 
 const open = defineModel<boolean>('open', { default: false, required: true })

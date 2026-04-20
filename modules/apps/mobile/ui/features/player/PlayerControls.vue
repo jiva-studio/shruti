@@ -43,24 +43,28 @@
 </template>
 
 <script setup lang="ts">
-import { Capacitor } from '@capacitor/core'
 import { IonButton, IonIcon, IonLabel } from '@ionic/vue'
 import { play, pause, checkmarkDone } from 'ionicons/icons'
-import { computed, ref, toRefs } from 'vue'
+import { computed, toRefs } from 'vue'
 import RadialProgress from 'vue3-radial-progress'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-const props = defineProps<{
-  playing: boolean
-  author: string
-  title: string
-  duration: number
-  position: number
-  showProgress: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    playing: boolean
+    author: string
+    title: string
+    duration: number
+    position: number
+    showProgress: boolean
+    /** Diameter in px of the circular play button (and the radial-progress overlay). */
+    playButtonSize?: number
+  }>(),
+  { playButtonSize: 44 }
+)
 
 const emit = defineEmits<{
   play: []
@@ -70,8 +74,7 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const { playing, position, duration } = toRefs(props)
-const playButtonSize = ref(Capacitor.getPlatform() === 'android' ? 48 : 44)
+const { playing, position, duration, playButtonSize } = toRefs(props)
 
 const playButtonIcon = computed(() => {
   if (duration.value > 0 && position.value >= duration.value) return checkmarkDone

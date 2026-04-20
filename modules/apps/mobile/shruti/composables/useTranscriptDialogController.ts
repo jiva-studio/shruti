@@ -29,6 +29,7 @@ export interface TranscriptDialogState {
   onClose(): void
   onSeek(positionSeconds: number): void
   onSelectionAction(action: { action: "copy" | "bookmark" | "share"; text: string }): Promise<void>
+  onPickStart(): void
 }
 
 export function useTranscriptDialogController(
@@ -168,6 +169,10 @@ export function useTranscriptDialogController(
     }
   }
 
+  function onPickStart(): void {
+    void app.haptics.impact("light")
+  }
+
   return {
     isOpen,
     title,
@@ -184,5 +189,6 @@ export function useTranscriptDialogController(
     onClose,
     onSeek,
     onSelectionAction,
+    onPickStart,
   }
 }

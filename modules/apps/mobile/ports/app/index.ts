@@ -20,3 +20,4 @@ export type {
 export type { IMediaDownloader } from "./mediaDownloader.js"
 export type { INotificationScheduler, ScheduledNotification } from "./notifications.js"
 export type { IShareService, ShareOptions } from "./share.js"
+export type { IHaptics, HapticImpactStyle } from "./haptics.js"
