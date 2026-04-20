@@ -28,7 +28,7 @@
     />
 
     <!-- Debug (hidden until unlocked via 5 taps on the build info) -->
-    <template v-if="debug.unlocked">
+    <template v-if="debugUnlocked">
       <IonListHeader>
         <IonLabel>{{ $t('settings.groups.danger') }}</IonLabel>
       </IonListHeader>
@@ -54,8 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
-import { IonItem, IonLabel, IonList, IonListHeader, toastController } from "@ionic/vue"
+import { IonItem, IonLabel, IonListHeader } from "@ionic/vue"
 import { AppPage } from "@ui/primitives/index.js"
 import {
   AppLanguageSettingsItem,
@@ -67,108 +66,31 @@ import {
   ShowNotesTabSettingsItem,
   ShowPlayerProgressSettingsItem,
 } from "@ui/features/settings/index.js"
-import { useLectorium } from "@lectorium/lectorium.js"
-import { useConfig } from "@lectorium/composables/useConfig.js"
-import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { useDebugStore } from "@lectorium/stores/useDebugStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
-import type { Language } from "@lib/domain/language.js"
+import { useSettingsController } from "./SettingsView.controller.js"
 
-declare const __APP_VERSION__: string
-declare const __BUILD_ID__: string
-declare const __DB_SCHEME__: number
-
-const app = useLectorium()
 const player = usePlayerStore()
-const debug = useDebugStore()
-
-const version = __APP_VERSION__
-const buildId = __BUILD_ID__
-const dbScheme = __DB_SCHEME__
-const activeServer = computed(() => app.activeServer.value)
-const contentDbFile = computed(() => app.contentDbFile.value)
-
-/* Config */
-const appLanguage = useConfig<string>("settings.appLanguage", "en")
-const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
-const openTranscriptAutomatically = useConfig<boolean>(
-  "settings.openTranscriptAutomatically",
-  false
-)
-const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", false)
-const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
-const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
-const notificationsTime = useConfig<[number, number] | undefined>(
-  "settings.notificationsTime",
-  [9, 0]
-)
-
-/* Active CDN */
-const activeServerId = ref<string>(app.activeServer.value.id)
-const serverItems = app.appConfig.servers.map((s) => ({ id: s.id, title: s.name }))
-
-watch(activeServerId, (next) => {
-  const server = app.appConfig.servers.find((s) => s.id === next)
-  if (server) app.setActiveServer(server)
-})
-
-/* Language chooser source list */
-const languageItems = ref<{ id: string; title: string }[]>([])
-
-onMounted(async () => {
-  try {
-    const langs: readonly Language[] = await app.repositories().languages.listAll()
-    languageItems.value = langs.map((l) => ({ id: l.code, title: l.fullName }))
-  } catch {
-    languageItems.value = [
-      { id: "en", title: "English" },
-      { id: "ru", title: "Русский" },
-    ]
-  }
-})
-
-/* Notifications scheduler */
-watch(
-  [notificationsEnabled, notificationsTime],
-  ([enabled, time]) => {
-    const hhmm = time ? `${pad(time[0])}:${pad(time[1])}` : "09:00"
-    void applyDailyReminder(
-      { enabled, time: hhmm },
-      { notifications: app.notifications }
-    )
-  },
-  { immediate: true }
-)
-
-function pad(n: number): string {
-  return n.toString().padStart(2, "0")
-}
-
-/* Debug unlock */
-async function onVersionTap(): Promise<void> {
-  if (debug.registerUnlockTap()) {
-    const toast = await toastController.create({
-      message: "Debug mode enabled",
-      duration: 1500,
-      position: "top",
-      color: "success",
-    })
-    await toast.present()
-  }
-}
-
-/* Danger handlers */
-async function onClearCache(): Promise<void> {
-  await app.filesStorage.clearAll()
-}
-
-async function onClearUserData(): Promise<void> {
-  const repos = app.repositories()
-  await repos.notes.clearAll()
-  await repos.playlistItems.clearAll()
-  await repos.mediaItems.clearAll()
-  await app.preferences.remove("search.filters.v2")
-}
+const {
+  version,
+  buildId,
+  dbScheme,
+  activeServer,
+  contentDbFile,
+  debugUnlocked,
+  onVersionTap,
+  appLanguage,
+  showPlayerProgress,
+  showNotesTab,
+  highlightCurrentSentence,
+  openTranscriptAutomatically,
+  notificationsEnabled,
+  notificationsTime,
+  activeServerId,
+  serverItems,
+  languageItems,
+  onClearCache,
+  onClearUserData,
+} = useSettingsController()
 </script>
 
 <style scoped>
