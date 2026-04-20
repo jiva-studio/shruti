@@ -43,6 +43,7 @@ import { useCapacitorPreferences } from "@infra/preferences.capacitor/index.js"
 import { useCapacitorAudioPlayer } from "@infra/audio.capacitor/index.js"
 import { useWebAudioPlayer } from "@infra/audio.web/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications.capacitor/index.js"
+import { useCapacitorShareService } from "@infra/share.capacitor/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -69,6 +70,7 @@ initShruti({
   preferences: useCapacitorPreferences(),
   audioPlayer: isNative ? useCapacitorAudioPlayer() : useWebAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),
+  shareService: useCapacitorShareService(),
   initialServer: SERVERS[0],
 })
 
