@@ -163,12 +163,10 @@ async function onClearCache(): Promise<void> {
 }
 
 async function onClearUserData(): Promise<void> {
-  const userDb = app.databases.user
-  if (!userDb) return
-  await userDb.execute("DELETE FROM notes")
-  await userDb.execute("DELETE FROM playlist_items")
-  await userDb.execute("DELETE FROM media_items")
-  await userDb.save()
+  const repos = app.repositories()
+  await repos.notes.clearAll()
+  await repos.playlistItems.clearAll()
+  await repos.mediaItems.clearAll()
   await app.preferences.remove("search.filters.v2")
 }
 </script>

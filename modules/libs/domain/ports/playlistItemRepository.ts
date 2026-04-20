@@ -10,4 +10,5 @@ export interface IPlaylistItemRepository {
   markCompleted(id: PlaylistItemId): Promise<void>
   archive(id: PlaylistItemId): Promise<void>
   remove(id: PlaylistItemId): Promise<void>
+  clearAll(): Promise<void>
 }
