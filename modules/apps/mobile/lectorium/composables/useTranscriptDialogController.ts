@@ -149,11 +149,7 @@ export function useTranscriptDialogController(
     if (!trackId) return
 
     if (ev.action === "copy") {
-      try {
-        await navigator.clipboard.writeText(ev.text)
-      } catch {
-        // ignore
-      }
+      await app.shareService.copyToClipboard(ev.text)
       return
     }
     if (ev.action === "bookmark") {
@@ -166,15 +162,7 @@ export function useTranscriptDialogController(
       return
     }
     if (ev.action === "share") {
-      if (typeof navigator !== "undefined" && "share" in navigator) {
-        try {
-          await (navigator as Navigator & { share: (d: ShareData) => Promise<void> }).share({
-            text: ev.text,
-          })
-        } catch {
-          // user cancelled
-        }
-      }
+      await app.shareService.share({ text: ev.text })
     }
   }
 

@@ -2,6 +2,7 @@ import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { Haptics, ImpactStyle } from "@capacitor/haptics"
 import { useI18n } from "vue-i18n"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
+import { useLectorium } from "@lectorium/lectorium.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import type { NoteId } from "@lib/domain/core.js"
 
@@ -24,6 +25,7 @@ export interface NotesControllerReturn {
 export function useNotesController(): NotesControllerReturn {
   const { t } = useI18n()
   const store = useNotesStore()
+  const { shareService } = useLectorium()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -53,25 +55,13 @@ export function useNotesController(): NotesControllerReturn {
   async function onCopyNoteClicked(): Promise<void> {
     const note = currentNote()
     if (!note) return
-    try {
-      await navigator.clipboard.writeText(note.text)
-    } catch {
-      // Non-fatal; insecure origin or permission denied.
-    }
+    await shareService.copyToClipboard(note.text)
   }
 
   async function onShareNoteClicked(): Promise<void> {
     const note = currentNote()
     if (!note) return
-    if (typeof navigator !== "undefined" && "share" in navigator) {
-      try {
-        await (navigator as Navigator & { share: (d: ShareData) => Promise<void> }).share({
-          text: note.text,
-        })
-      } catch {
-        // User cancelled — ignore.
-      }
-    }
+    await shareService.share({ text: note.text })
   }
 
   async function onDeleteNoteClicked(): Promise<void> {
