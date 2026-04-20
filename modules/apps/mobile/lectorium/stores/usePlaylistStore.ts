@@ -4,6 +4,10 @@ import {
   addTrackToPlaylist,
   type AddTrackToPlaylistError,
 } from "@lib/application/addTrackToPlaylist.js"
+import {
+  archivePlaylistItem,
+  type ArchivePlaylistItemError,
+} from "@lib/application/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
@@ -119,15 +123,23 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
-  async function archive(itemId: PlaylistItemId): Promise<void> {
-    await app.repositories().playlistItems.archive(itemId)
-    await refresh()
+  async function archive(
+    itemId: PlaylistItemId
+  ): Promise<Result<void, ArchivePlaylistItemError>> {
+    const result = await archivePlaylistItem(
+      { itemId },
+      { playlistItems: app.repositories().playlistItems }
+    )
+    if (result.ok || result.error === "already-archived") await refresh()
+    return result
   }
 
-  async function archiveByTrackId(trackId: TrackId): Promise<void> {
+  async function archiveByTrackId(
+    trackId: TrackId
+  ): Promise<Result<void, ArchivePlaylistItemError> | null> {
     const target = entries.value.find((e) => e.item.trackId === trackId)
-    if (!target) return
-    await archive(target.item.id)
+    if (!target) return null
+    return archive(target.item.id)
   }
 
   function hasTrack(trackId: TrackId): boolean {

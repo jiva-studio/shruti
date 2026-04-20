@@ -1,9 +1,10 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
+import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TrackVariant } from "@lib/domain/trackVariant.js"
+import type { Result } from "@lib/domain/result.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
@@ -16,17 +17,6 @@ interface OpenArgs {
   readonly author?: Author | null
   /** Optional playlist-item id; wiring progress persistence can use it later. */
   readonly itemId?: string
-}
-
-function pickVariantWithAudio(
-  track: Track,
-  preferred: LanguageCode | undefined
-): TrackVariant | null {
-  if (preferred) {
-    const v = track.variants.find((x) => x.language === preferred && x.audio)
-    if (v) return v
-  }
-  return track.variants.find((v) => v.audio) ?? null
 }
 
 /**
@@ -66,44 +56,46 @@ export const usePlayerStore = defineStore("player", () => {
     })
   }
 
-  async function openTrack(args: OpenArgs): Promise<void> {
-    const variant = pickVariantWithAudio(args.track, args.preferredLanguage)
-    if (!variant || !variant.audio) {
-      throw new Error(`Track ${args.track.id} has no audio`)
-    }
-    const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
+  async function openTrack(args: OpenArgs): Promise<Result<void, PlayTrackError>> {
+    const plan = await playTrack({
+      track: args.track,
+      preferredLanguage: args.preferredLanguage,
+      author: args.author,
+      itemId: args.itemId,
+    })
+    if (!plan.ok) return plan
+    const cmd = plan.value
+
+    const remoteUrl = app.storagePublicUrl.get(cmd.audio.path)
     // Play from the local cache when available; `ensureDownloaded`
     // downloads-on-demand if the file isn't there yet, and returns
     // null on error so we gracefully fall back to streaming.
-    const localUrl = await useDownloadStore().ensureDownloaded(args.track.id, remoteUrl)
+    const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, remoteUrl)
     const url = localUrl ?? remoteUrl
-    const nextItemId = args.itemId ?? `track:${args.track.id}`
 
     subscribeOnce()
-    trackId.value = args.track.id
-    title.value = variant.title
-    authorName.value =
-      args.author?.names.get(variant.language) ??
-      args.author?.names.values().next().value ??
-      ""
-    language.value = variant.language
-    itemId.value = nextItemId
+    trackId.value = cmd.trackId
+    title.value = cmd.title
+    authorName.value = cmd.authorName
+    language.value = cmd.language
+    itemId.value = cmd.itemId
     positionMs.value = 0
-    durationMs.value = variant.audio.duration ?? 0
+    durationMs.value = cmd.audio.duration ?? 0
 
     await app.audioPlayer.open({
-      itemId: nextItemId,
+      itemId: cmd.itemId,
       url,
-      title: variant.title,
-      author: authorName.value,
+      title: cmd.title,
+      author: cmd.authorName,
     })
     await app.audioPlayer.play()
 
     // Legacy behaviour: when the user has opted in, the transcript
     // surfaces automatically on every new track — no extra tap required.
     if (autoOpenTranscript.value) {
-      useTranscriptStore().show(args.track.id)
+      useTranscriptStore().show(cmd.trackId)
     }
+    return { ok: true, value: undefined }
   }
 
   async function togglePause(): Promise<void> {

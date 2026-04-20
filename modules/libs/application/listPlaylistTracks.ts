@@ -29,6 +29,7 @@ export interface ActivePlaylistPage {
  * Joins active playlist items with their domain tracks. Items whose track
  * has disappeared from the content DB (e.g. after a catalogue update) are
  * filtered out — they're not a programmer error, just a stale pointer.
+ * The discrepancy is visible to the caller as `entries.length < total`.
  *
  * Track hydration is done in parallel (`Promise.all`) — previously this
  * was a sequential loop, which dominated Home's time-to-first-paint on

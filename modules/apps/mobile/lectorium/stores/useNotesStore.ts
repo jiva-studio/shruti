@@ -1,8 +1,11 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { deleteNote, type DeleteNoteError } from "@lib/application/deleteNote.js"
 import { searchNotes } from "@lib/application/searchNotes.js"
+import { updateNote, type UpdateNoteError } from "@lib/application/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
+import type { Result } from "@lib/domain/result.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 /**
@@ -46,10 +49,19 @@ export const useNotesStore = defineStore("notes", () => {
     await applyFilter()
   }
 
-  async function remove(id: NoteId): Promise<void> {
-    await app.repositories().notes.delete(id)
-    await refresh()
+  async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
+    const result = await deleteNote({ id }, { notes: app.repositories().notes })
+    if (result.ok) await refresh()
+    return result
   }
 
-  return { all, filtered, query, isLoading, error, refresh, setQuery, remove }
+  async function update(
+    input: { id: NoteId; text?: string; timeStart?: number; timeEnd?: number }
+  ): Promise<Result<Note, UpdateNoteError>> {
+    const result = await updateNote(input, { notes: app.repositories().notes })
+    if (result.ok) await refresh()
+    return result
+  }
+
+  return { all, filtered, query, isLoading, error, refresh, setQuery, remove, update }
 })
