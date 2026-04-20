@@ -5,6 +5,7 @@ import type {
   IDatabase,
   IDatabaseFetcher,
   IHaptics,
+  IMediaDownloader,
   INotificationScheduler,
   IPersistence,
   IPreferences,
@@ -48,6 +49,7 @@ export interface Lectorium {
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
   readonly haptics: IHaptics
+  readonly mediaDownloader: IMediaDownloader
   /** Runtime platform, captured at bootstrap. Drives layout constants that can't be inferred from CSS. */
   readonly platform: "ios" | "android" | "web"
 
@@ -91,6 +93,7 @@ export interface InitLectoriumSeed {
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
   readonly haptics: IHaptics
+  readonly mediaDownloader: IMediaDownloader
   readonly platform: "ios" | "android" | "web"
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
@@ -125,6 +128,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     notifications: seed.notifications,
     shareService: seed.shareService,
     haptics: seed.haptics,
+    mediaDownloader: seed.mediaDownloader,
     platform: seed.platform,
     activeServer,
     contentDbFile,

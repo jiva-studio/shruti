@@ -46,6 +46,8 @@ import { useCapacitorNotificationScheduler } from "@infra/notifications.capacito
 import { useCapacitorShareService } from "@infra/share.capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics.capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics.web/index.js"
+import { useCapacitorMediaDownloader } from "@infra/mediaDownloader.capacitor/index.js"
+import { useWebMediaDownloader } from "@infra/mediaDownloader.web/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -75,6 +77,9 @@ initLectorium({
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
   haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),
+  mediaDownloader: isNative
+    ? useCapacitorMediaDownloader({ cacheDir: "lectorium" })
+    : useWebMediaDownloader({ cacheName: "lectorium" }),
   platform,
   initialServer: SERVERS[0],
 })
