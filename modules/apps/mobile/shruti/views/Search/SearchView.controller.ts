@@ -29,6 +29,7 @@ export interface SearchControllerReturn {
   error: Ref<string | null>
   emptyMessage: ComputedRef<string>
   filters: Ref<FiltersModel>
+  hasMore: Ref<boolean>
   authorsItems: ComputedRef<SelectorDialogItem[]>
   languagesItems: ComputedRef<SelectorDialogItem[]>
   locationsItems: ComputedRef<SelectorDialogItem[]>
@@ -41,7 +42,10 @@ export interface SearchControllerReturn {
   sortTitle: ComputedRef<string>
   datesTitle: ComputedRef<string>
   onSelect: (trackId: string) => Promise<void>
+  loadMore: () => Promise<void>
 }
+
+const PAGE_SIZE = 50
 
 export function useSearchController(): SearchControllerReturn {
   const appLanguage = useAppLanguage()
@@ -62,6 +66,8 @@ export function useSearchController(): SearchControllerReturn {
   const languages = ref<readonly Language[]>([])
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
+  const offset = ref<number>(0)
+  const hasMore = ref<boolean>(false)
 
   const filters = ref<FiltersModel>({})
 
@@ -103,11 +109,38 @@ export function useSearchController(): SearchControllerReturn {
 
   let searchToken = 0
 
+  async function fetchPage(pageOffset: number): Promise<readonly Track[]> {
+    const text = query.value.trim()
+    if (text) {
+      // FTS matches across all languages — cross-locale by design.
+      const all = await searchTracks(
+        { query: text, limit: PAGE_SIZE, offset: pageOffset },
+        { tracks: repos.tracks }
+      )
+      return narrowTracks(all)
+    }
+    return listTracksByFilters(
+      {
+        authorIds: filters.value.authors,
+        languageCodes: filters.value.languages,
+        locationIds: filters.value.locations,
+        durationFilter: filters.value.duration as DurationFilterId | undefined,
+        sortBy: filters.value.sort as SortMethod | undefined,
+        limit: PAGE_SIZE,
+        offset: pageOffset,
+      },
+      { tracks: repos.tracks }
+    )
+  }
+
   async function runQuery(): Promise<void> {
     const token = ++searchToken
     error.value = null
     const text = query.value.trim()
     const hasFilter = activeFilters()
+
+    offset.value = 0
+    hasMore.value = false
 
     if (!text && !hasFilter) {
       rawTracks.value = []
@@ -117,35 +150,37 @@ export function useSearchController(): SearchControllerReturn {
 
     isLoading.value = true
     try {
-      let tracks: readonly Track[]
-      if (text) {
-        // FTS matches across all languages — cross-locale by design.
-        const all = await searchTracks(
-          { query: text, limit: 200 },
-          { tracks: repos.tracks }
-        )
-        tracks = narrowTracks(all)
-      } else {
-        tracks = await listTracksByFilters(
-          {
-            authorIds: filters.value.authors,
-            languageCodes: filters.value.languages,
-            locationIds: filters.value.locations,
-            durationFilter: filters.value.duration as DurationFilterId | undefined,
-            sortBy: filters.value.sort as SortMethod | undefined,
-            limit: 200,
-          },
-          { tracks: repos.tracks }
-        )
-      }
+      const tracks = await fetchPage(0)
       if (token !== searchToken) return
       rawTracks.value = tracks
+      // When FTS + client-side filter trims the page heavily, we can
+      // get a short "page" while the DB still has more rows. Use the
+      // raw page size (PAGE_SIZE) as the stop signal — loadMore will
+      // fetch more until the DB itself stops returning data.
+      hasMore.value = tracks.length >= PAGE_SIZE
+      offset.value = PAGE_SIZE
     } catch (err) {
       if (token !== searchToken) return
       error.value = err instanceof Error ? err.message : "Search failed"
       rawTracks.value = []
     } finally {
       if (token === searchToken) isLoading.value = false
+    }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (!hasMore.value || isLoading.value) return
+    const token = searchToken
+    const pageOffset = offset.value
+    try {
+      const tracks = await fetchPage(pageOffset)
+      if (token !== searchToken) return
+      rawTracks.value = [...rawTracks.value, ...tracks]
+      hasMore.value = tracks.length >= PAGE_SIZE
+      offset.value = pageOffset + PAGE_SIZE
+    } catch (err) {
+      if (token !== searchToken) return
+      error.value = err instanceof Error ? err.message : "Search failed"
     }
   }
 
@@ -301,6 +336,7 @@ export function useSearchController(): SearchControllerReturn {
     error,
     emptyMessage,
     filters,
+    hasMore,
     authorsItems,
     languagesItems,
     locationsItems,
@@ -313,5 +349,6 @@ export function useSearchController(): SearchControllerReturn {
     sortTitle,
     datesTitle,
     onSelect,
+    loadMore,
   }
 }

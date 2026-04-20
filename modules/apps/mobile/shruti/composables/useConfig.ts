@@ -11,6 +11,10 @@ const JSON_SERIALIZER: Serializer<unknown> = {
   decode: (s) => JSON.parse(s),
 }
 
+// Shared refs — multiple callers for the same key get the same Ref so
+// a write from Settings is seen live by TabsLayout / App / PlayerStore.
+const CACHE = new Map<string, Ref<unknown>>()
+
 /**
  * Two-way binds a typed config value to `IPreferences`. Returns a ref
  * that hydrates asynchronously from storage on first access and writes
@@ -21,9 +25,17 @@ const JSON_SERIALIZER: Serializer<unknown> = {
  * preferences) that don't warrant a SQL migration. Domain data must
  * still live in repos.
  */
-export function useConfig<T>(key: string, initial: T, serializer: Serializer<T> = JSON_SERIALIZER as Serializer<T>): Ref<T> {
+export function useConfig<T>(
+  key: string,
+  initial: T,
+  serializer: Serializer<T> = JSON_SERIALIZER as Serializer<T>
+): Ref<T> {
+  const cached = CACHE.get(key)
+  if (cached) return cached as Ref<T>
+
   const app = useShruti()
   const state = ref(initial) as Ref<T>
+  CACHE.set(key, state as Ref<unknown>)
 
   let hydrated = false
   let persisting = false

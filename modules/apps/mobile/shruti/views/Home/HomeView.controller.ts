@@ -14,7 +14,9 @@ export interface HomeControllerReturn {
   rows: ComputedRef<readonly UiTrackRow[]>
   isLoading: ComputedRef<boolean>
   error: ComputedRef<string | null>
+  hasMore: ComputedRef<boolean>
   refresh: () => Promise<void>
+  loadMore: () => Promise<void>
   onSelect: (trackId: string) => Promise<void>
   onRemove: (trackId: string) => Promise<void>
 }
@@ -58,10 +60,7 @@ export function useHomeController(): HomeControllerReturn {
     }
   })
 
-  function toUiState(
-    trackId: string,
-    downloadState: DownloadState
-  ): UiTrackState {
+  function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
     if (player.trackId === trackId && player.playing) return "playing"
     switch (downloadState) {
       case "downloading":
@@ -94,9 +93,14 @@ export function useHomeController(): HomeControllerReturn {
 
   const isLoading = computed(() => playlist.isLoading)
   const error = computed(() => playlist.error)
+  const hasMore = computed(() => playlist.hasMore)
 
   async function refresh(): Promise<void> {
     await playlist.refresh()
+  }
+
+  async function loadMore(): Promise<void> {
+    await playlist.loadMore()
   }
 
   // Tap on a playlist item → start playback immediately. Matches legacy
@@ -105,7 +109,7 @@ export function useHomeController(): HomeControllerReturn {
     const entry = playlist.entries.find((e) => e.track.id === trackId)
     if (!entry) return
     const author = entry.track.authorId
-      ? authorsById.value.get(entry.track.authorId) ?? null
+      ? (authorsById.value.get(entry.track.authorId) ?? null)
       : null
     await player.openTrack({
       track: entry.track,
@@ -118,5 +122,5 @@ export function useHomeController(): HomeControllerReturn {
     await playlist.archiveByTrackId(trackId)
   }
 
-  return { rows, isLoading, error, refresh, onSelect, onRemove }
+  return { rows, isLoading, error, hasMore, refresh, loadMore, onSelect, onRemove }
 }

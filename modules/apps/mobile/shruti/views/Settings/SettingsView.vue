@@ -2,16 +2,10 @@
   <AppPage :player-open="player.open">
     <!-- Appearance -->
     <IonListHeader>
-      <IonLabel>{{ $t('settings.groups.appearance') }}</IonLabel>
+      <IonLabel>{{ $t("settings.groups.appearance") }}</IonLabel>
     </IonListHeader>
-    <AppLanguageSettingsItem
-      v-model="appLanguage"
-      :items="languageItems"
-    />
-    <ServerSettingsItem
-      v-model="activeServerId"
-      :items="serverItems"
-    />
+    <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
+    <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
     <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
     <ShowNotesTabSettingsItem v-model="showNotesTab" />
     <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
@@ -19,18 +13,15 @@
 
     <!-- Sadhana -->
     <IonListHeader>
-      <IonLabel>{{ $t('settings.groups.sadhana') }}</IonLabel>
+      <IonLabel>{{ $t("settings.groups.sadhana") }}</IonLabel>
     </IonListHeader>
     <NotificationsEnabledSettingsItem v-model="notificationsEnabled" />
-    <DailyNotificationsTimeSettingsItem
-      v-if="notificationsEnabled"
-      v-model="notificationsTime"
-    />
+    <DailyNotificationsTimeSettingsItem v-if="notificationsEnabled" v-model="notificationsTime" />
 
     <!-- Debug (hidden until unlocked via 5 taps on the build info) -->
     <template v-if="debugUnlocked">
       <IonListHeader>
-        <IonLabel>{{ $t('settings.groups.danger') }}</IonLabel>
+        <IonLabel>{{ $t("settings.groups.danger") }}</IonLabel>
       </IonListHeader>
       <IonItem button :detail="false" lines="none" @click="onClearCache">
         <IonLabel color="danger">{{ $t("settings.danger.clearCache") }}</IonLabel>
@@ -41,14 +32,9 @@
     </template>
 
     <!-- Build info — tap 5× to unlock debug -->
-    <p
-      class="build-info"
-      @click="onVersionTap"
-    >
+    <p class="build-info" @click="onVersionTap">
       v{{ version }} ({{ buildId }})
-      <span class="build-info-db">
-        DB {{ contentDbFile ?? "—" }} · scheme {{ dbScheme }} · {{ activeServer.name }}
-      </span>
+      <span class="build-info-db"> DB {{ dbNumber ?? "—" }} · scheme {{ dbScheme }} </span>
     </p>
   </AppPage>
 </template>
@@ -74,8 +60,7 @@ const {
   version,
   buildId,
   dbScheme,
-  activeServer,
-  contentDbFile,
+  dbNumber,
   debugUnlocked,
   onVersionTap,
   appLanguage,
