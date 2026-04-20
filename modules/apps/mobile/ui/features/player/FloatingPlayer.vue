@@ -7,6 +7,7 @@
       :duration="duration"
       :position="position"
       :show-progress="showProgress"
+      :play-button-size="playButtonSize"
       :class="{
         player: true,
         floating: !sticked,
@@ -27,17 +28,22 @@ import PlayerControls from "./PlayerControls.vue"
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-defineProps<{
-  playing: boolean
-  title: string
-  author: string
-  hidden: boolean
-  duration: number
-  position: number
-  showProgress: boolean
-  sticked: boolean
-  pulsing: boolean
-}>()
+withDefaults(
+  defineProps<{
+    playing: boolean
+    title: string
+    author: string
+    hidden: boolean
+    duration: number
+    position: number
+    showProgress: boolean
+    sticked: boolean
+    pulsing: boolean
+    /** Forwarded to PlayerControls; default matches iOS tap-target sizing. */
+    playButtonSize?: number
+  }>(),
+  { playButtonSize: 44 }
+)
 
 const emit = defineEmits<{
   playClicked: []

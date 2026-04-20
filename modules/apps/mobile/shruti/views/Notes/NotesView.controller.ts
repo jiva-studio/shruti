@@ -1,5 +1,4 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
-import { Haptics, ImpactStyle } from "@capacitor/haptics"
 import { useI18n } from "vue-i18n"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import { useShruti } from "@shruti/shruti.js"
@@ -25,7 +24,7 @@ export interface NotesControllerReturn {
 export function useNotesController(): NotesControllerReturn {
   const { t } = useI18n()
   const store = useNotesStore()
-  const { shareService } = useShruti()
+  const { shareService, haptics } = useShruti()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -101,7 +100,7 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   async function onNoteClicked(noteId: string): Promise<void> {
-    await Haptics.impact({ style: ImpactStyle.Light })
+    await haptics.impact("light")
     selectedNoteId.value = noteId as NoteId
     isActionSheetOpen.value = true
   }
