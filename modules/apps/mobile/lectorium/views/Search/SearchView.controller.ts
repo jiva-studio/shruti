@@ -18,8 +18,8 @@ import { useDownloadStore, type DownloadState } from "@lectorium/stores/useDownl
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useSearchFiltersStore } from "@lectorium/stores/useSearchFiltersStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
-import type { UiTrackRow, UiTrackState } from "@ui/features/tracks.list/index.js"
-import type { SelectorDialogItem } from "@ui/features/selectors/index.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks.list/index.js"
+import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
 import type { FiltersModel } from "@ui/features/tracks.search.filters/index.js"
 
 export interface SearchControllerReturn {

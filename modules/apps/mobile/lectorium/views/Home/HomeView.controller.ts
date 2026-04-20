@@ -8,7 +8,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useDownloadStore, type DownloadState } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import type { UiTrackRow, UiTrackState } from "@ui/features/tracks.list/index.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks.list/index.js"
 
 export interface HomeControllerReturn {
   rows: ComputedRef<readonly UiTrackRow[]>

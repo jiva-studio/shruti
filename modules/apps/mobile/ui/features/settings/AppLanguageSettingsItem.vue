@@ -36,7 +36,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { IonItem, IonLabel } from '@ionic/vue'
-import { ListItemSelectorDialog } from '@ui/features/selectors/index.js'
+import { ListItemSelectorDialog } from '@ui/components/selectors/index.js'
 import { LanguageIcon } from '@ui/icons/index.js'
 
 /* -------------------------------------------------------------------------- */

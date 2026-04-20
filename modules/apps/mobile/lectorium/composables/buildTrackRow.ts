@@ -4,7 +4,7 @@ import type { Location } from "@lib/domain/location.js"
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
-import type { UiTrackRow, UiTrackState } from "@ui/features/tracks.list/index.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks.list/index.js"
 
 export interface BuildTrackRowDeps {
   readonly preferredLanguage: LanguageCode
