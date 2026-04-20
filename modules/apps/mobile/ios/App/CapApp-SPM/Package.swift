@@ -25,7 +25,7 @@ let package = Package(
         .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
         .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar"),
-        .package(name: "LectoriumAudioPlayer", path: "../../../../../libs/audioPlayer"),
+        .package(name: "LectoriumAudioPlayer", path: "../../../../../capacitor/audio-player"),
         .package(name: "CapacitorPluginSafeArea", path: "../../../node_modules/capacitor-plugin-safe-area")
     ],
     targets: [

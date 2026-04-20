@@ -11,7 +11,7 @@ The codebase follows **hexagonal / clean / DDD architecture**. Before making arc
 - `docs/architecture/startup-flow.md`
 - `docs/storage.md`
 
-The mobile app lives in `modules/apps/mobile/`. Shared libraries live in `modules/libs/`. The content-db-builder tool lives in `modules/tools/`. Nothing else.
+The mobile app lives in `modules/apps/mobile/`. Shared TypeScript libraries live in `modules/libs/`. In-house Capacitor plugins (native Android/iOS/web plugin packages) live in `modules/capacitor/`. The content-db-builder tool lives in `modules/tools/`. Nothing else.
 
 ## Conventions
 

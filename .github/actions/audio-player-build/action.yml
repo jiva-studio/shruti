@@ -8,7 +8,7 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: cd modules/libs/audioPlayer && npm ci
+      run: cd modules/capacitor/audio-player && npm ci
 
     - shell: bash
-      run: cd modules/libs/audioPlayer && npm run build
+      run: cd modules/capacitor/audio-player && npm run build

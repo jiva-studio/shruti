@@ -58,8 +58,9 @@ modules/
 ├── libs/
 │   ├── domain/                 # Entities, value objects, domain ports (zero deps)
 │   ├── application/            # Use cases (depends on @lib/domain only)
-│   ├── persistence/            # DB row type schemas (main + user)
-│   └── audioPlayer/            # Native Capacitor plugin
+│   └── persistence/            # DB row type schemas (main + user)
+├── capacitor/
+│   └── audio-player/           # In-house Capacitor plugin (native Android/iOS/web)
 └── tools/
     └── content-db-builder/     # Node.js CLI that builds the SQLite + exports transcripts to S3
 ```
