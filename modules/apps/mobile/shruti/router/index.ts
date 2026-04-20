@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from "@ionic/vue-router"
 import type { RouteRecordRaw } from "vue-router"
-import { useShruti } from "@shruti/shruti.js"
+import { isShrutiInitialized, useShruti } from "@shruti/shruti.js"
 
 const routes: RouteRecordRaw[] = [
   { path: "/", redirect: "/welcome" },
@@ -10,30 +10,37 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@shruti/views/Welcome/WelcomeView.vue"),
   },
   {
-    path: "/tabs/home",
-    name: "home",
-    component: () => import("@shruti/views/Home/HomeView.vue"),
-  },
-  {
-    path: "/tabs/search",
-    name: "search",
-    component: () => import("@shruti/views/Search/SearchView.vue"),
-  },
-  {
-    path: "/tabs/track/:trackId",
-    name: "track",
-    component: () => import("@shruti/views/Track/TrackView.vue"),
-    props: true,
-  },
-  {
-    path: "/tabs/notes",
-    name: "notes",
-    component: () => import("@shruti/views/Notes/NotesView.vue"),
-  },
-  {
-    path: "/tabs/settings",
-    name: "settings",
-    component: () => import("@shruti/views/Settings/SettingsView.vue"),
+    path: "/tabs/",
+    component: () => import("@shruti/views/TabsLayout.vue"),
+    children: [
+      { path: "", redirect: "/tabs/home" },
+      {
+        path: "home",
+        name: "home",
+        component: () => import("@shruti/views/Home/HomeView.vue"),
+      },
+      {
+        path: "search",
+        name: "search",
+        component: () => import("@shruti/views/Search/SearchView.vue"),
+      },
+      {
+        path: "notes",
+        name: "notes",
+        component: () => import("@shruti/views/Notes/NotesView.vue"),
+      },
+      {
+        path: "settings",
+        name: "settings",
+        component: () => import("@shruti/views/Settings/SettingsView.vue"),
+      },
+      {
+        path: "track/:trackId",
+        name: "track",
+        component: () => import("@shruti/views/Track/TrackView.vue"),
+        props: true,
+      },
+    ],
   },
 ]
 
@@ -46,8 +53,15 @@ const router = createRouter({
 // being open. If someone lands on /tabs/* before the Welcome view has
 // finished its initialize() cycle, bounce them to /welcome so the app
 // doesn't explode inside `repositories()`.
+//
+// `isShrutiInitialized()` is a second-line defence: the very first
+// navigation fires synchronously from `router.install()`, before
+// `app.mount()`. `main.ts` now calls `initShruti()` before
+// `app.use(router)` so this check is usually a no-op, but keeping it
+// makes the guard robust to future reordering.
 router.beforeEach((to, _from, next) => {
   if (to.path === "/welcome" || to.path === "/") return next()
+  if (!isShrutiInitialized()) return next()
   const app = useShruti()
   if (!app.databases.content || !app.databases.user) {
     return next("/welcome")

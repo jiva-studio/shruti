@@ -22,12 +22,14 @@ import "@ionic/vue/css/display.css"
 /* Ionic dark mode follows the system setting. */
 import "@ionic/vue/css/palettes/dark.system.css"
 
-/* Theme variables */
+/* Theme variables + utility classes */
 import "./theme/variables.css"
+import "./theme/misc.css"
 
 /* Composition root + infrastructure adapters */
 import App from "./App.vue"
 import router from "./router/index.js"
+import { i18n } from "./i18n/index.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
 import { SERVERS } from "@lib/domain/servers.js"
@@ -38,30 +40,40 @@ import { useDatabaseToFsFetcher } from "@infra/persistence.fetchers.fs/index.js"
 import { useWebRemoteFilesStorage } from "@infra/files.web/index.js"
 import { useCapacitorRemoteFilesStorage } from "@infra/files.capacitor/index.js"
 import { useCapacitorPreferences } from "@infra/preferences.capacitor/index.js"
+import { useCapacitorAudioPlayer } from "@infra/audio.capacitor/index.js"
+import { useWebAudioPlayer } from "@infra/audio.web/index.js"
+import { useCapacitorNotificationScheduler } from "@infra/notifications.capacitor/index.js"
 
-const app = createApp(App).use(createPinia()).use(IonicVue).use(router)
+// Init the composition root BEFORE the router is installed. router.install()
+// triggers an immediate navigation, which runs `beforeEach` synchronously —
+// and the guard calls `useShruti()`. If init is deferred to
+// `router.isReady().then(...)` the singleton is still null at that point and
+// guard explodes with "Shruti not initialized".
+const isNative = Capacitor.isNativePlatform()
+
+const config = { ...DEFAULT_APP_CONFIG }
+if (isNative) {
+  // Native persistence rewrites the user DB path to the sqlite plugin's
+  // conventional location (getFilesDir()/<dbName>), so strip the
+  // web-specific directory prefix here.
+  config.database = { ...config.database, userLocalPath: "user.db" }
+}
+
+initShruti({
+  appConfig: config,
+  persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
+  databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
+  filesStorage: isNative
+    ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
+    : useWebRemoteFilesStorage({ cacheName: "shruti" }),
+  preferences: useCapacitorPreferences(),
+  audioPlayer: isNative ? useCapacitorAudioPlayer() : useWebAudioPlayer(),
+  notifications: useCapacitorNotificationScheduler(),
+  initialServer: SERVERS[0],
+})
+
+const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
 
 router.isReady().then(() => {
-  const isNative = Capacitor.isNativePlatform()
-
-  const config = { ...DEFAULT_APP_CONFIG }
-  if (isNative) {
-    // Native persistence rewrites the user DB path to the sqlite plugin's
-    // conventional location (getFilesDir()/<dbName>), so strip the
-    // web-specific directory prefix here.
-    config.database = { ...config.database, userLocalPath: "user.db" }
-  }
-
-  initShruti({
-    appConfig: config,
-    persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
-    databaseFetcher: isNative ? useDatabaseToFsFetcher() : useDatabaseToIndexedDbFetcher(),
-    filesStorage: isNative
-      ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
-      : useWebRemoteFilesStorage({ cacheName: "shruti" }),
-    preferences: useCapacitorPreferences(),
-    initialServer: SERVERS[0],
-  })
-
   app.mount("#app")
 })

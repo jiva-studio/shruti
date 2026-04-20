@@ -164,25 +164,22 @@ export async function importFromCouch(
     trackTags: 0,
   }
 
-  // Prepared statements
-  const insAuthor = db.prepare("INSERT OR REPLACE INTO authors (id) VALUES (?)")
-  const insAuthorName = db.prepare(
-    "INSERT OR REPLACE INTO author_names (author_id, language, full_name) VALUES (?, ?, ?)"
+  // Prepared statements — flat dict tables have (id, language) composite PK,
+  // no stub parent to populate first.
+  const insAuthor = db.prepare(
+    "INSERT OR REPLACE INTO authors (id, language, full_name) VALUES (?, ?, ?)"
   )
-  const insLocation = db.prepare("INSERT OR REPLACE INTO locations (id) VALUES (?)")
-  const insLocationName = db.prepare(
-    "INSERT OR REPLACE INTO location_names (location_id, language, full_name) VALUES (?, ?, ?)"
+  const insLocation = db.prepare(
+    "INSERT OR REPLACE INTO locations (id, language, full_name) VALUES (?, ?, ?)"
   )
-  const insSource = db.prepare("INSERT OR REPLACE INTO sources (id) VALUES (?)")
-  const insSourceName = db.prepare(
-    "INSERT OR REPLACE INTO source_names (source_id, language, full_name, short_name) VALUES (?, ?, ?, ?)"
+  const insSource = db.prepare(
+    "INSERT OR REPLACE INTO sources (id, language, full_name, short_name) VALUES (?, ?, ?, ?)"
   )
   const insLanguage = db.prepare(
     "INSERT OR REPLACE INTO languages (code, full_name, icon) VALUES (?, ?, ?)"
   )
-  const insTag = db.prepare("INSERT OR REPLACE INTO tags (id) VALUES (?)")
-  const insTagName = db.prepare(
-    "INSERT OR REPLACE INTO tag_names (tag_id, language, full_name) VALUES (?, ?, ?)"
+  const insTag = db.prepare(
+    "INSERT OR REPLACE INTO tags (id, language, full_name) VALUES (?, ?, ?)"
   )
   const insTrack = db.prepare(
     `INSERT OR REPLACE INTO tracks
@@ -196,19 +193,20 @@ export async function importFromCouch(
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
   const insReference = db.prepare(
-    "INSERT OR REPLACE INTO track_references (track_id, ord, token) VALUES (?, ?, ?)"
+    "INSERT OR REPLACE INTO track_references (track_id, ref_idx, source_id, tokens) VALUES (?, ?, ?, ?)"
   )
   const insTrackTag = db.prepare(
     "INSERT OR REPLACE INTO track_tags (track_id, tag_id) VALUES (?, ?)"
   )
 
+  const knownSourceIds = new Set<string>()
+
   const tx = db.transaction(() => {
     // Authors
     for (const a of authors) {
       const id = stripTypePrefix(a._id)
-      insAuthor.run(id)
       for (const [lang, name] of Object.entries(a.fullName ?? {})) {
-        insAuthorName.run(id, lang, name)
+        insAuthor.run(id, lang, name)
       }
       stats.authors += 1
     }
@@ -216,9 +214,8 @@ export async function importFromCouch(
     // Locations
     for (const l of locations) {
       const id = stripTypePrefix(l._id)
-      insLocation.run(id)
       for (const [lang, name] of Object.entries(l.fullName ?? {})) {
-        insLocationName.run(id, lang, name)
+        insLocation.run(id, lang, name)
       }
       stats.locations += 1
     }
@@ -226,12 +223,12 @@ export async function importFromCouch(
     // Sources
     for (const s of sources) {
       const id = stripTypePrefix(s._id)
-      insSource.run(id)
+      knownSourceIds.add(id)
       const fullNames = s.fullName ?? {}
       const shortNames = s.shortName ?? {}
       const langs = new Set([...Object.keys(fullNames), ...Object.keys(shortNames)])
       for (const lang of langs) {
-        insSourceName.run(id, lang, fullNames[lang] ?? "", shortNames[lang] ?? "")
+        insSource.run(id, lang, fullNames[lang] ?? "", shortNames[lang] ?? "")
       }
       stats.sources += 1
     }
@@ -245,9 +242,8 @@ export async function importFromCouch(
     // Tags
     for (const t of tags) {
       const id = stripTypePrefix(t._id)
-      insTag.run(id)
       for (const [lang, name] of Object.entries(t.fullName ?? {})) {
-        insTagName.run(id, lang, name)
+        insTag.run(id, lang, name)
       }
       stats.tags += 1
     }
@@ -268,16 +264,25 @@ export async function importFromCouch(
       )
       stats.tracks += 1
 
-      // References
+      // References — one row per group. source_id stays separate so
+      // the UI can localise via sources; the numeric tokens are
+      // dot-joined ("10.5", "10.5.12") for trivial split-on-read.
       if (track.references) {
-        let ord = 0
-        for (const refGroup of track.references) {
-          for (const tok of refGroup) {
-            insReference.run(trackId, ord, String(tok))
-            ord += 1
-            stats.references += 1
+        track.references.forEach((refGroup, refIdx) => {
+          if (refGroup.length === 0) return
+          const [sourceRaw, ...nums] = refGroup.map(String)
+          const sourceId = sourceRaw.toLowerCase()
+          if (!knownSourceIds.has(sourceId)) {
+            console.warn(
+              `[import] track ${trackId} refers to unknown source '${sourceId}' ` +
+                `(refs=${JSON.stringify(refGroup)}) — storing anyway, but ` +
+                `localisation lookup will fall back to the raw id.`
+            )
           }
-        }
+          const tokens = nums.join(".")
+          insReference.run(trackId, refIdx, sourceId, tokens)
+          stats.references += 1
+        })
       }
 
       // Tags
@@ -324,5 +329,27 @@ export async function importFromCouch(
   })
 
   tx()
+
+  // Populate the unified FTS index after the main load. Reference rows
+  // are emitted in all language variants (raw id + short + full) so
+  // "Бхагавад 10.5" and "BG 10.5" both match the same tracks.
+  console.log("[import] populating tracks_search…")
+  db.exec(`
+    INSERT INTO tracks_search(content, track_id, kind)
+      SELECT title, track_id, 'title' FROM track_variants;
+
+    INSERT INTO tracks_search(content, track_id, kind)
+        SELECT r.source_id || ' ' || r.tokens, r.track_id, 'reference'
+        FROM track_references r
+      UNION ALL
+        SELECT s.short_name || ' ' || r.tokens, r.track_id, 'reference'
+        FROM track_references r JOIN sources s ON s.id = r.source_id
+        WHERE s.short_name <> ''
+      UNION ALL
+        SELECT s.full_name || ' ' || r.tokens, r.track_id, 'reference'
+        FROM track_references r JOIN sources s ON s.id = r.source_id
+        WHERE s.full_name <> '';
+  `)
+
   return stats
 }

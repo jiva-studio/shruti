@@ -1,16 +1,17 @@
 import type { Author } from "@lib/domain/author.js"
 import type { Language } from "@lib/domain/language.js"
 import type { Location } from "@lib/domain/location.js"
+import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Tag } from "@lib/domain/tag.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackVariant, TrackVariantKind } from "@lib/domain/trackVariant.js"
 import type {
-  AuthorNameRow,
+  AuthorRow,
   LanguageRow,
-  LocationNameRow,
-  SourceNameRow,
-  TagNameRow,
+  LocationRow,
+  SourceRow,
+  TagRow,
   TrackReferenceRow,
   TrackRow,
   TrackTagRow,
@@ -18,9 +19,11 @@ import type {
 } from "@lib/persistence/main"
 
 /**
- * Row-to-entity mappers for the content DB. These are the only functions
- * allowed to know about snake_case and NULL-vs-undefined boundaries
- * between SQL and the domain.
+ * Row-to-entity mappers for the content DB. Only functions allowed to
+ * know about snake_case and NULL-vs-undefined boundaries between SQL
+ * and the domain. The dict tables are flat — one row per locale — so
+ * the `rowToX(rows)` mappers take the full per-id set and fold them
+ * into a single entity with a `Map<lang, name>`.
  */
 
 function narrowVariantKind(raw: string | null): TrackVariantKind | null {
@@ -29,36 +32,53 @@ function narrowVariantKind(raw: string | null): TrackVariantKind | null {
   throw new Error(`Invalid track_variant kind: ${raw}`)
 }
 
-export function rowToAuthor(row: { id: string }, names: readonly AuthorNameRow[]): Author {
+export function rowToAuthor(rows: readonly AuthorRow[]): Author {
   const byLanguage = new Map<string, string>()
-  for (const n of names) if (n.author_id === row.id) byLanguage.set(n.language, n.full_name)
-  return { id: row.id, names: byLanguage }
+  for (const r of rows) byLanguage.set(r.language, r.full_name)
+  return { id: rows[0].id, names: byLanguage }
 }
 
-export function rowToLocation(row: { id: string }, names: readonly LocationNameRow[]): Location {
+export function rowToLocation(rows: readonly LocationRow[]): Location {
   const byLanguage = new Map<string, string>()
-  for (const n of names) if (n.location_id === row.id) byLanguage.set(n.language, n.full_name)
-  return { id: row.id, names: byLanguage }
+  for (const r of rows) byLanguage.set(r.language, r.full_name)
+  return { id: rows[0].id, names: byLanguage }
 }
 
-export function rowToSource(row: { id: string }, names: readonly SourceNameRow[]): Source {
+export function rowToSource(rows: readonly SourceRow[]): Source {
   const byLanguage = new Map<string, { fullName: string; shortName: string }>()
-  for (const n of names) {
-    if (n.source_id === row.id) {
-      byLanguage.set(n.language, { fullName: n.full_name, shortName: n.short_name })
-    }
+  for (const r of rows) {
+    byLanguage.set(r.language, { fullName: r.full_name, shortName: r.short_name })
   }
-  return { id: row.id, names: byLanguage }
+  return { id: rows[0].id, names: byLanguage }
 }
 
 export function rowToLanguage(row: LanguageRow): Language {
   return { code: row.code, fullName: row.full_name, icon: row.icon }
 }
 
-export function rowToTag(row: { id: string }, names: readonly TagNameRow[]): Tag {
+export function rowToTag(rows: readonly TagRow[]): Tag {
   const byLanguage = new Map<string, string>()
-  for (const n of names) if (n.tag_id === row.id) byLanguage.set(n.language, n.full_name)
-  return { id: row.id, names: byLanguage }
+  for (const r of rows) byLanguage.set(r.language, r.full_name)
+  return { id: rows[0].id, names: byLanguage }
+}
+
+/**
+ * Fold a list of dict rows (which may contain rows for many ids) into a
+ * map `id → entity`. Used by `listAll()` implementations.
+ */
+export function foldDictRows<R extends { id: string }, E>(
+  rows: readonly R[],
+  build: (rowsForId: readonly R[]) => E
+): Map<string, E> {
+  const byId = new Map<string, R[]>()
+  for (const r of rows) {
+    const bucket = byId.get(r.id)
+    if (bucket) bucket.push(r)
+    else byId.set(r.id, [r])
+  }
+  const result = new Map<string, E>()
+  for (const [id, bucket] of byId) result.set(id, build(bucket))
+  return result
 }
 
 export function rowToTrackVariant(row: TrackVariantRow): TrackVariant {
@@ -93,10 +113,13 @@ export interface TrackAssemblyParts {
 export function rowToTrack(parts: TrackAssemblyParts): Track {
   const { track } = parts
   const variants = parts.variants.filter((v) => v.track_id === track.id).map(rowToTrackVariant)
-  const tokens = parts.references
+  const references: Reference[] = parts.references
     .filter((r) => r.track_id === track.id)
-    .sort((a, b) => a.ord - b.ord)
-    .map((r) => r.token)
+    .sort((a, b) => a.ref_idx - b.ref_idx)
+    .map((r) => ({
+      sourceId: r.source_id,
+      tokens: r.tokens.length > 0 ? r.tokens.split(".") : [],
+    }))
   const tagIds = parts.tags.filter((t) => t.track_id === track.id).map((t) => t.tag_id)
   return {
     id: track.id,
@@ -106,7 +129,7 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
     hidden: track.hidden !== 0,
     sortReference: track.sort_reference,
     sortDate: track.sort_date,
-    references: tokens.length ? [tokens] : [],
+    references,
     tagIds,
     variants,
   }

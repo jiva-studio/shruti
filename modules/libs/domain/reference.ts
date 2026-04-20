@@ -1,8 +1,15 @@
+import type { SourceId } from "./core.js"
+
 /**
- * A scripture reference, e.g. "sb 1.8.40" → ["sb", "1", "8", "40"].
+ * A scripture reference: `{ sourceId: "bg", tokens: ["10", "5"] }`.
  *
- * Tokens are kept as strings so the first token (the source abbreviation)
- * and numeric tokens compose naturally. Parsing user queries is done by
- * `parseReferenceQuery` in @lib/application.
+ * `sourceId` is the abbreviated scripture code and matches a `Source`
+ * in the content DB, so UI composers can look up localised names via
+ * the `sources` dictionary. `tokens` is the numeric tail (chapter /
+ * verse / text), kept as an array so we can compare/range-detect
+ * without re-parsing.
  */
-export type Reference = readonly string[]
+export interface Reference {
+  readonly sourceId: SourceId
+  readonly tokens: readonly string[]
+}

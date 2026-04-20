@@ -1,22 +1,20 @@
 /**
- * UI mirror of the domain transcript types. @ui cannot import from
- * @lib/domain — the view controller converts domain blocks to these
- * shapes. Keep them structurally compatible with
- * `@lib/domain/transcript.ts`; if the domain type changes, update this
- * mirror + the builder at the same time.
+ * UI mirror types for the transcript view. The composition root
+ * (`buildTranscriptViewData`) maps `@lib/domain/transcript` shapes into
+ * these so the UI stays framework- and domain-agnostic.
  */
 
-export type UiTranscriptBlock =
-  | UiTranscriptParagraphBlock
+export interface UiTranscriptLanguage {
+  readonly code: string
+  readonly name: string
+  readonly icon?: string
+}
+
+export type UiTranscriptBlockRaw =
   | UiTranscriptSentenceBlock
+  | UiTranscriptParagraphBlock
   | UiTranscriptVerseTextBlock
   | UiTranscriptVerseTranslationBlock
-
-export interface UiTranscriptParagraphBlock {
-  readonly type: "paragraph"
-  readonly start: number
-  readonly end: number
-}
 
 export interface UiTranscriptSentenceBlock {
   readonly type: "sentence"
@@ -24,6 +22,14 @@ export interface UiTranscriptSentenceBlock {
   readonly end: number
   readonly text: string
   readonly speaker?: string
+  readonly speakerChanged?: boolean
+  readonly reference?: string
+}
+
+export interface UiTranscriptParagraphBlock {
+  readonly type: "paragraph"
+  readonly start: number
+  readonly end: number
 }
 
 export interface UiTranscriptVerseTextBlock {
@@ -31,6 +37,7 @@ export interface UiTranscriptVerseTextBlock {
   readonly start: number
   readonly end: number
   readonly text: readonly string[]
+  readonly reference?: string
 }
 
 export interface UiTranscriptVerseTranslationBlock {
@@ -39,3 +46,19 @@ export interface UiTranscriptVerseTranslationBlock {
   readonly end: number
   readonly text: string
 }
+
+export interface UiTranscriptBlockView {
+  readonly block: UiTranscriptBlockRaw
+  readonly language: string
+  /** Optional speaker emoji/icon rendered in the sentence gutter. */
+  readonly icon?: string
+  bookmarked: boolean
+  selected: boolean
+}
+
+export interface UiTranscriptBlocksGroup {
+  readonly blocks: UiTranscriptBlockView[]
+}
+
+/** @deprecated alias kept while existing consumers migrate to groups. */
+export type UiTranscriptBlock = UiTranscriptBlockRaw

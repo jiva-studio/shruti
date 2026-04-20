@@ -1,25 +1,72 @@
 <template>
+  <div
+    v-if="!isIOS"
+    class="search"
+  >
+    <IonInput
+      v-model="searchQuery"
+      fill="outline"
+      :placeholder="placeholder"
+      :clear-input="true"
+      @ion-focus="onFocus"
+      @ion-blur="onBlur"
+    />
+  </div>
   <IonSearchbar
-    :model-value="modelValue"
+    v-else
+    v-model="searchQuery"
+    show-cancel-button="focus"
     :placeholder="placeholder"
-    :debounce="300"
-    show-clear-button="focus"
-    @ion-input="onInput"
+    :cancel-button-text="$t('app.cancel')"
+    @input="onInput"
   />
 </template>
 
-<script setup lang="ts">
-import { IonSearchbar } from "@ionic/vue"
 
-interface Props {
-  modelValue: string
+<script setup lang="ts">
+import { IonInput, IonSearchbar, isPlatform } from '@ionic/vue'
+
+/* -------------------------------------------------------------------------- */
+/*                                  Interface                                 */
+/* -------------------------------------------------------------------------- */
+
+const searchQuery = defineModel<string>({ type: String, default: '' })
+
+defineProps<{
   placeholder?: string
+}>()
+
+const emit = defineEmits<{
+  focus: [value: boolean]
+}>()
+
+/* -------------------------------------------------------------------------- */
+/*                                    State                                   */
+/* -------------------------------------------------------------------------- */
+
+const isIOS = isPlatform('ios')
+
+/* -------------------------------------------------------------------------- */
+/*                                  Handlers                                  */
+/* -------------------------------------------------------------------------- */
+
+function onFocus() {
+  emit('focus', true)
 }
 
-withDefaults(defineProps<Props>(), { placeholder: "Search by title or reference" })
-const emit = defineEmits<{ "update:modelValue": [value: string] }>()
+function onBlur() {
+  emit('focus', false)
+}
 
-function onInput(event: CustomEvent<{ value?: string | null }>): void {
-  emit("update:modelValue", event.detail.value ?? "")
+function onInput(e: Event) {
+  const target = e.target as HTMLInputElement | null
+  if (target) searchQuery.value = target.value
 }
 </script>
+
+
+<style scoped>
+.search {
+  margin: 10px;
+}
+</style>

@@ -3,28 +3,29 @@
     <IonItem v-if="rows.length === 0" lines="none">
       <IonLabel color="medium">{{ emptyMessage }}</IonLabel>
     </IonItem>
-    <IonItem
+    <TrackListItem
       v-for="row in rows"
       :key="row.id"
-      button
-      :detail="true"
-      @click="$emit('select', row.id)"
+      :track-id="row.id"
+      :title="row.title"
+      :references="row.references"
+      :tags="row.tags"
+      :author="row.author"
+      :location="row.location"
+      :date="row.date"
+      :disabled="row.disabled"
+      @select="$emit('select', $event)"
     >
-      <IonLabel>
-        <h3>{{ row.title }}</h3>
-        <p>
-          <span>{{ row.authorName }}</span>
-          <span v-if="row.date"> · {{ row.date }}</span>
-          <span v-if="row.reference"> · {{ row.reference }}</span>
-        </p>
-      </IonLabel>
-      <IonNote v-if="row.durationMs" slot="end">{{ formatDuration(row.durationMs) }}</IonNote>
-    </IonItem>
+      <template #state>
+        <slot name="state" :track-id="row.id" :state="row.state" :progress-pct="row.progressPct" />
+      </template>
+    </TrackListItem>
   </IonList>
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonList, IonNote } from "@ionic/vue"
+import { IonItem, IonLabel, IonList } from "@ionic/vue"
+import TrackListItem from "./TrackListItem.vue"
 import type { UiTrackRow } from "./types.js"
 
 interface Props {
@@ -32,15 +33,6 @@ interface Props {
   emptyMessage?: string
 }
 
-withDefaults(defineProps<Props>(), { emptyMessage: "No tracks yet." })
+withDefaults(defineProps<Props>(), { emptyMessage: "" })
 defineEmits<{ select: [trackId: string] }>()
-
-function formatDuration(ms: number): string {
-  const totalSec = Math.round(ms / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-  return `${m}:${String(s).padStart(2, "0")}`
-}
 </script>

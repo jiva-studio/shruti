@@ -1,8 +1,10 @@
 import { ref, type Ref } from "vue"
 import type { CdnServer } from "@lib/domain/servers.js"
 import type {
+  IAudioPlayer,
   IDatabase,
   IDatabaseFetcher,
+  INotificationScheduler,
   IPersistence,
   IPreferences,
   IRemoteFilesStorage,
@@ -40,9 +42,18 @@ export interface Shruti {
   readonly filesStorage: IRemoteFilesStorage
   readonly storagePublicUrl: IStoragePublicUrl
   readonly preferences: IPreferences
+  readonly audioPlayer: IAudioPlayer
+  readonly notifications: INotificationScheduler
 
   /** Active CDN server; mutable via setActiveServer. */
   readonly activeServer: Ref<CdnServer>
+
+  /**
+   * Basename of the currently-open content DB (e.g.
+   * "shruti.20260419210656.db"), captured by `openContentDatabase`.
+   * Settings displays it; null until the Welcome flow runs.
+   */
+  readonly contentDbFile: Ref<string | null>
 
   /** Open database handles; filled by the Welcome view. */
   databases: {
@@ -70,6 +81,8 @@ export interface InitShrutiSeed {
   readonly databaseFetcher: IDatabaseFetcher
   readonly filesStorage: IRemoteFilesStorage
   readonly preferences: IPreferences
+  readonly audioPlayer: IAudioPlayer
+  readonly notifications: INotificationScheduler
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
 }
@@ -80,6 +93,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   if (instance) throw new Error("Shruti already initialized")
 
   const activeServer = ref<CdnServer>(seed.initialServer)
+  const contentDbFile = ref<string | null>(null)
   const databases: Shruti["databases"] = { content: null, user: null }
   let cachedRepos: AppRepositories | null = null
 
@@ -98,7 +112,10 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     filesStorage: seed.filesStorage,
     storagePublicUrl,
     preferences: seed.preferences,
+    audioPlayer: seed.audioPlayer,
+    notifications: seed.notifications,
     activeServer,
+    contentDbFile,
     databases,
 
     setActiveServer(server) {
@@ -109,6 +126,9 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
       if (databases.content) await databases.content.close()
       const db = await seed.persistence.open(path)
       databases.content = db
+      // Basename for display (Settings build-info line).
+      const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+      contentDbFile.value = idx >= 0 ? path.substring(idx + 1) : path
       return db
     },
 
@@ -151,6 +171,10 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
 export function useShruti(): Shruti {
   if (!instance) throw new Error("Shruti not initialized — call initShruti first")
   return instance
+}
+
+export function isShrutiInitialized(): boolean {
+  return instance !== null
 }
 
 /** Test-only hook: resets the singleton between test cases. */
