@@ -8,6 +8,7 @@ import type {
   IPersistence,
   IPreferences,
   IRemoteFilesStorage,
+  IShareService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
@@ -44,6 +45,7 @@ export interface Shruti {
   readonly preferences: IPreferences
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
+  readonly shareService: IShareService
 
   /** Active CDN server; mutable via setActiveServer. */
   readonly activeServer: Ref<CdnServer>
@@ -83,6 +85,7 @@ export interface InitShrutiSeed {
   readonly preferences: IPreferences
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
+  readonly shareService: IShareService
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
 }
@@ -114,6 +117,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     preferences: seed.preferences,
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
+    shareService: seed.shareService,
     activeServer,
     contentDbFile,
     databases,
