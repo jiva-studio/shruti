@@ -2,18 +2,14 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue
 import { useIonRouter } from "@ionic/vue"
 import { useDebounceFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
-import { listTracksByFilters } from "@lib/application/listTracksByFilters.js"
-import { searchTracks } from "@lib/application/searchTracks.js"
-import type { Author } from "@lib/domain/author.js"
-import type { Language } from "@lib/domain/language.js"
-import type { Location } from "@lib/domain/location.js"
+import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
 import type { Track } from "@lib/domain/track.js"
-import { DURATION_FILTERS, type DurationFilterId } from "@lib/domain/durationFilters.js"
+import { type DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
-import type { Source } from "@lib/domain/source.js"
 import { useShruti } from "@shruti/shruti.js"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
@@ -54,16 +50,11 @@ export function useSearchController(): SearchControllerReturn {
   const router = useIonRouter()
   const repos = app.repositories()
   const filtersStore = useSearchFiltersStore()
+  const dictionaries = useDictionariesStore()
   const { t } = useI18n()
 
   const query = ref<string>("")
   const rawTracks = ref<readonly Track[]>([])
-  const authorsById = ref<ReadonlyMap<string, Author>>(new Map())
-  const authorsSorted = ref<readonly Author[]>([])
-  const locationsById = ref<ReadonlyMap<string, Location>>(new Map())
-  const locationsSorted = ref<readonly Location[]>([])
-  const sourcesById = ref<ReadonlyMap<string, Source>>(new Map())
-  const languages = ref<readonly Language[]>([])
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   const offset = ref<number>(0)
@@ -80,47 +71,16 @@ export function useSearchController(): SearchControllerReturn {
       duration: filtersStore.duration[0],
       sort: filtersStore.sort,
     }
-    try {
-      const [authorList, languageList, locationList, sourceList] = await Promise.all([
-        repos.authors.listAll(),
-        repos.languages.listAll(),
-        repos.locations.listAll(),
-        repos.sources.listAll(),
-      ])
-      sourcesById.value = new Map(sourceList.map((s) => [s.id, s]))
-      authorsById.value = new Map(authorList.map((a) => [a.id, a]))
-      authorsSorted.value = [...authorList].sort((a, b) =>
-        (a.names.get(appLanguage.value) ?? a.id).localeCompare(
-          b.names.get(appLanguage.value) ?? b.id
-        )
-      )
-      locationsById.value = new Map(locationList.map((l) => [l.id, l]))
-      locationsSorted.value = [...locationList].sort((a, b) =>
-        (a.names.get(appLanguage.value) ?? a.id).localeCompare(
-          b.names.get(appLanguage.value) ?? b.id
-        )
-      )
-      languages.value = languageList
-    } catch (err) {
-      console.error("failed to load search dictionaries", err)
-    }
+    await dictionaries.ensureLoaded()
     await runQuery()
   })
 
   let searchToken = 0
 
   async function fetchPage(pageOffset: number): Promise<readonly Track[]> {
-    const text = query.value.trim()
-    if (text) {
-      // FTS matches across all languages — cross-locale by design.
-      const all = await searchTracks(
-        { query: text, limit: PAGE_SIZE, offset: pageOffset },
-        { tracks: repos.tracks }
-      )
-      return narrowTracks(all)
-    }
-    return listTracksByFilters(
+    return searchAndFilterTracks(
       {
+        query: query.value,
         authorIds: filters.value.authors,
         languageCodes: filters.value.languages,
         locationIds: filters.value.locations,
@@ -195,31 +155,6 @@ export function useSearchController(): SearchControllerReturn {
     )
   }
 
-  function narrowTracks(tracks: readonly Track[]): readonly Track[] {
-    const authorSet = new Set(filters.value.authors ?? [])
-    const languageSet = new Set(filters.value.languages ?? [])
-    const locationSet = new Set(filters.value.locations ?? [])
-    const durationBucket = filters.value.duration
-      ? DURATION_FILTERS.find((d) => d.id === filters.value.duration)
-      : null
-
-    return tracks.filter((t) => {
-      if (authorSet.size > 0 && (!t.authorId || !authorSet.has(t.authorId))) return false
-      if (locationSet.size > 0 && (!t.locationId || !locationSet.has(t.locationId))) return false
-      if (languageSet.size > 0 && !t.variants.some((v) => languageSet.has(v.language))) return false
-      if (durationBucket) {
-        const anyInRange = t.variants.some((v) => {
-          const d = v.audio?.duration
-          return (
-            d !== null && d !== undefined && d >= durationBucket.minMs && d < durationBucket.maxMs
-          )
-        })
-        if (!anyInRange) return false
-      }
-      return true
-    })
-  }
-
   // Text input is debounced so fast typing / backspace doesn't spam
   // SQL on every keystroke. Filter chips run immediately — they fire
   // once per user gesture, no flood to worry about.
@@ -261,9 +196,9 @@ export function useSearchController(): SearchControllerReturn {
     return rawTracks.value.map((track) =>
       buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
-        authorsById: authorsById.value,
-        locationsById: locationsById.value,
-        sourcesById: sourcesById.value,
+        authorsById: dictionaries.authorsById,
+        locationsById: dictionaries.locationsById,
+        sourcesById: dictionaries.sourcesById,
         state: toUiState(track.id, downloads.getState(track.id)),
       })
     )
@@ -278,18 +213,18 @@ export function useSearchController(): SearchControllerReturn {
   })
 
   const authorsItems = computed<SelectorDialogItem[]>(() =>
-    authorsSorted.value.map((a) => ({
+    dictionaries.authorsSorted.map((a) => ({
       id: a.id,
       title: a.names.get(appLanguage.value) ?? a.id,
     }))
   )
 
   const languagesItems = computed<SelectorDialogItem[]>(() =>
-    languages.value.map((l) => ({ id: l.code, title: l.fullName }))
+    dictionaries.languages.map((l) => ({ id: l.code, title: l.fullName }))
   )
 
   const locationsItems = computed<SelectorDialogItem[]>(() =>
-    locationsSorted.value.map((l) => ({
+    dictionaries.locationsSorted.map((l) => ({
       id: l.id,
       title: l.names.get(appLanguage.value) ?? l.id,
     }))

@@ -1,10 +1,7 @@
-import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
-import type { Author } from "@lib/domain/author.js"
-import type { Location } from "@lib/domain/location.js"
-import type { Source } from "@lib/domain/source.js"
-import { useShruti } from "@shruti/shruti.js"
+import { computed, onMounted, type ComputedRef } from "vue"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
@@ -24,40 +21,14 @@ export interface HomeControllerReturn {
 export function useHomeController(): HomeControllerReturn {
   const appLanguage = useAppLanguage()
 
-  const app = useShruti()
-  const repos = app.repositories()
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
   const downloads = useDownloadStore()
-
-  // Dictionaries are loaded once (authors / locations / sources are small
-  // and don't change during a session). Playlist items themselves come
-  // from the shared store so Search-driven adds reflect immediately.
-  const authorsById = ref<ReadonlyMap<string, Author>>(new Map())
-  const locationsById = ref<ReadonlyMap<string, Location>>(new Map())
-  const sourcesById = ref<ReadonlyMap<string, Source>>(new Map())
-
-  async function loadDictionaries(): Promise<void> {
-    const [authors, locations, sources] = await Promise.all([
-      repos.authors.listAll(),
-      repos.locations.listAll(),
-      repos.sources.listAll(),
-    ])
-    authorsById.value = new Map(authors.map((a) => [a.id, a]))
-    locationsById.value = new Map(locations.map((l) => [l.id, l]))
-    sourcesById.value = new Map(sources.map((s) => [s.id, s]))
-  }
+  const dictionaries = useDictionariesStore()
 
   onMounted(async () => {
-    await Promise.all([loadDictionaries(), playlist.ensureLoaded(), downloads.hydrate()])
-    // Kick off prefetch for every track already in the playlist so the
-    // download indicator reflects cache-hits from previous sessions.
-    for (const { track } of playlist.entries) {
-      const variant = track.variants.find((v) => v.audio)
-      if (!variant?.audio) continue
-      const url = app.storagePublicUrl.get(variant.audio.path)
-      downloads.prefetch(track.id, url)
-    }
+    await Promise.all([dictionaries.ensureLoaded(), playlist.ensureLoaded(), downloads.hydrate()])
+    playlist.prefetchAll()
   })
 
   function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
@@ -83,9 +54,9 @@ export function useHomeController(): HomeControllerReturn {
     return playlist.entries.map(({ track }) =>
       buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
-        authorsById: authorsById.value,
-        locationsById: locationsById.value,
-        sourcesById: sourcesById.value,
+        authorsById: dictionaries.authorsById,
+        locationsById: dictionaries.locationsById,
+        sourcesById: dictionaries.sourcesById,
         state: toUiState(track.id, downloads.getState(track.id)),
       })
     )
@@ -109,7 +80,7 @@ export function useHomeController(): HomeControllerReturn {
     const entry = playlist.entries.find((e) => e.track.id === trackId)
     if (!entry) return
     const author = entry.track.authorId
-      ? (authorsById.value.get(entry.track.authorId) ?? null)
+      ? (dictionaries.authorsById.get(entry.track.authorId) ?? null)
       : null
     await player.openTrack({
       track: entry.track,
