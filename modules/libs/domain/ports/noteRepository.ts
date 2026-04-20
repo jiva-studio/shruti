@@ -22,4 +22,5 @@ export interface INoteRepository {
   create(input: CreateNoteInput): Promise<Note>
   update(input: UpdateNoteInput): Promise<Note>
   delete(id: NoteId): Promise<void>
+  clearAll(): Promise<void>
 }

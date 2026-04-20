@@ -60,5 +60,10 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
       await db.execute("DELETE FROM media_items WHERE id = ?", [id])
       await db.save()
     },
+
+    async clearAll(): Promise<void> {
+      await db.execute("DELETE FROM media_items")
+      await db.save()
+    },
   }
 }
