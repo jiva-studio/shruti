@@ -19,6 +19,7 @@ export interface SettingsControllerReturn {
   readonly dbScheme: number
   activeServer: ComputedRef<CdnServer>
   contentDbFile: ComputedRef<string | null>
+  dbNumber: ComputedRef<string | null>
   /* Debug unlock */
   debugUnlocked: ComputedRef<boolean>
   onVersionTap: () => Promise<void>
@@ -48,6 +49,15 @@ export function useSettingsController(): SettingsControllerReturn {
   const dbScheme = __DB_SCHEME__
   const activeServer = computed(() => app.activeServer.value)
   const contentDbFile = computed(() => app.contentDbFile.value)
+  // Extract the timestamp from "lectorium.20260419213357.db". Falls back
+  // to the raw filename if the shape changes so the display still
+  // renders something readable.
+  const dbNumber = computed(() => {
+    const file = app.contentDbFile.value
+    if (!file) return null
+    const match = /\.(\d+)\.db$/.exec(file)
+    return match ? match[1] : file
+  })
   const debugUnlocked = computed(() => debug.unlocked)
 
   /* Config v-models */
@@ -134,6 +144,7 @@ export function useSettingsController(): SettingsControllerReturn {
     dbScheme,
     activeServer,
     contentDbFile,
+    dbNumber,
     debugUnlocked,
     onVersionTap,
     appLanguage,

@@ -7,6 +7,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
+import { useConfig } from "@lectorium/composables/useConfig.js"
 import type {
   UiTranscriptBlocksGroup,
   UiTranscriptLanguage,
@@ -45,7 +46,7 @@ export function useTranscriptDialogController(
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   const allowMultipleLanguages = ref<boolean>(false)
-  const highlightCurrentSentence = ref<boolean>(true)
+  const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
 
   let loadToken = 0
 
@@ -69,7 +70,7 @@ export function useTranscriptDialogController(
     const repos = app.repositories()
     const track = await repos.tracks.getById(trackId)
     const variant = track
-      ? track.variants.find((v) => v.language === preferredLanguage) ?? track.variants[0]
+      ? (track.variants.find((v) => v.language === preferredLanguage) ?? track.variants[0])
       : null
     title.value = variant?.title ?? ""
     if (track?.authorId) {
@@ -142,9 +143,10 @@ export function useTranscriptDialogController(
     void player.seek(Math.round(positionSeconds * 1000))
   }
 
-  async function onSelectionAction(
-    ev: { action: "copy" | "bookmark" | "share"; text: string }
-  ): Promise<void> {
+  async function onSelectionAction(ev: {
+    action: "copy" | "bookmark" | "share"
+    text: string
+  }): Promise<void> {
     const trackId = transcriptStore.trackId
     if (!trackId) return
 

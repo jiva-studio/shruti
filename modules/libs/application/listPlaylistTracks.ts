@@ -13,19 +13,39 @@ export interface ListPlaylistTracksDeps {
   readonly tracks: ITrackRepository
 }
 
+export interface ListActivePlaylistTracksInput {
+  /** Slice `listActive()` before hydrating tracks. Omit for the full list. */
+  readonly limit?: number
+  readonly offset?: number
+}
+
+export interface ActivePlaylistPage {
+  readonly entries: readonly PlaylistEntry[]
+  /** Total number of active playlist items before slicing (for pagination). */
+  readonly total: number
+}
+
 /**
  * Joins active playlist items with their domain tracks. Items whose track
  * has disappeared from the content DB (e.g. after a catalogue update) are
  * filtered out — they're not a programmer error, just a stale pointer.
+ *
+ * Track hydration is done in parallel (`Promise.all`) — previously this
+ * was a sequential loop, which dominated Home's time-to-first-paint on
+ * large playlists.
  */
 export async function listActivePlaylistTracks(
-  deps: ListPlaylistTracksDeps
-): Promise<readonly PlaylistEntry[]> {
+  deps: ListPlaylistTracksDeps,
+  input: ListActivePlaylistTracksInput = {}
+): Promise<ActivePlaylistPage> {
   const items = await deps.playlistItems.listActive()
+  const { limit, offset = 0 } = input
+  const page = limit === undefined ? items.slice(offset) : items.slice(offset, offset + limit)
+  const tracks = await Promise.all(page.map((item) => deps.tracks.getById(item.trackId)))
   const entries: PlaylistEntry[] = []
-  for (const item of items) {
-    const track = await deps.tracks.getById(item.trackId)
-    if (track) entries.push({ item, track })
+  for (let i = 0; i < page.length; i++) {
+    const track = tracks[i]
+    if (track) entries.push({ item: page[i], track })
   }
-  return entries
+  return { entries, total: items.length }
 }
