@@ -243,6 +243,17 @@ of thumb: **views never see raw exceptions from use cases**.
 `Result<T, E>` is defined in `modules/libs/domain/result.ts`. Prefer string
 literal unions for the `E` type so TypeScript can narrow on the tag.
 
+### `Result<T, E>` vs thrown — which use cases use which?
+
+| Category | Pattern | Examples |
+|---|---|---|
+| **Mutation** use cases (create / update / delete / archive / mark) | Return `Result<T, E>` with a string-literal error union — callers branch on recoverable domain errors like `not-found`, `already-archived`, `invalid-range`. | `addTrackToPlaylist`, `archivePlaylistItem`, `createNote`, `updateNote`, `deleteNote`, `markCompleted`, `updateProgress` |
+| **Query** use cases (list / search / load) | Return the result directly (`readonly T[]` or the loaded entity). Throw on infra failure (DB unopen, SQL error) — the composition-root wrapper catches it. `Result` is used only when there is a meaningful domain-level branch the UI needs to render differently. | `searchTracks`, `listTracksByFilters`, `searchNotes`, `listActivePlaylistTracks` return raw; `loadTranscript` returns `Result` because `no-transcript-available` vs `fetch-failed` need different UI treatments. |
+
+The practical rule: **if the caller can do something different for each error
+tag, use `Result`**. If every failure is just "something went wrong", throw and
+let the controller render a generic error.
+
 ## Decision Tree: Where Does New Code Go?
 
 ```
