@@ -204,12 +204,12 @@ lectorium/
 // Correct
 import { ref, computed } from "vue"
 import { type Track } from "@lib/domain/track.js"
-import { useTrackList } from "@ui/features/tracks.list/index.js"
+import { useTrackList } from "@ui/components/tracks.list/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 // Incorrect - will cause module resolution errors
 import { type Track } from "@lib/domain/track"
-import { useTrackList } from "@ui/features/tracks.list"
+import { useTrackList } from "@ui/components/tracks.list"
 ```
 
 **Type imports:** Use `type` keyword for type-only imports:
