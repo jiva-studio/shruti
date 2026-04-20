@@ -1,5 +1,6 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
 
 export interface UpdateProgressInput {
@@ -12,6 +13,7 @@ export type UpdateProgressError = "not-found" | "invalid-progress"
 
 export interface UpdateProgressDeps {
   readonly playlistItems: IPlaylistItemRepository
+  readonly unitOfWork: IUnitOfWork
 }
 
 /**
@@ -25,8 +27,10 @@ export async function updateProgress(
   if (!Number.isFinite(input.progressMs) || input.progressMs < 0) {
     return err("invalid-progress")
   }
-  const existing = await deps.playlistItems.getById(input.itemId)
-  if (!existing) return err("not-found")
-  await deps.playlistItems.updateProgress(input.itemId, input.progressMs)
-  return ok(undefined)
+  return deps.unitOfWork.run(async () => {
+    const existing = await deps.playlistItems.getById(input.itemId)
+    if (!existing) return err("not-found")
+    await deps.playlistItems.updateProgress(input.itemId, input.progressMs)
+    return ok(undefined)
+  })
 }

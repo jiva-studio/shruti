@@ -50,7 +50,11 @@ export const useNotesStore = defineStore("notes", () => {
   }
 
   async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
-    const result = await deleteNote({ id }, { notes: app.repositories().notes })
+    const repos = app.repositories()
+    const result = await deleteNote(
+      { id },
+      { notes: repos.notes, unitOfWork: repos.unitOfWork }
+    )
     if (result.ok) await refresh()
     return result
   }
@@ -58,7 +62,8 @@ export const useNotesStore = defineStore("notes", () => {
   async function update(
     input: { id: NoteId; text?: string; timeStart?: number; timeEnd?: number }
   ): Promise<Result<Note, UpdateNoteError>> {
-    const result = await updateNote(input, { notes: app.repositories().notes })
+    const repos = app.repositories()
+    const result = await updateNote(input, { notes: repos.notes, unitOfWork: repos.unitOfWork })
     if (result.ok) await refresh()
     return result
   }

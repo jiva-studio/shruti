@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { updateProgress } from "../updateProgress.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
+
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
 
 function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistItemRepository {
   return {
@@ -42,7 +45,7 @@ describe("updateProgress", () => {
     })
     const result = await updateProgress(
       { itemId: "pi-1" as PlaylistItemId, progressMs: 42_000 },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
     expect(updateProgressSpy).toHaveBeenCalledWith("pi-1", 42_000)
@@ -52,7 +55,7 @@ describe("updateProgress", () => {
     const repo = makeRepo({ getById: async () => null })
     const result = await updateProgress(
       { itemId: "pi-missing" as PlaylistItemId, progressMs: 1000 },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("not-found")
@@ -64,7 +67,7 @@ describe("updateProgress", () => {
     for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
       const result = await updateProgress(
         { itemId: "pi-1" as PlaylistItemId, progressMs: bad },
-        { playlistItems: repo }
+        { playlistItems: repo, unitOfWork: noopUnitOfWork }
       )
       expect(result.ok).toBe(false)
       if (!result.ok) expect(result.error).toBe("invalid-progress")

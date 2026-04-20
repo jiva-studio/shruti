@@ -1,5 +1,6 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
 
 export interface MarkCompletedInput {
@@ -10,6 +11,7 @@ export type MarkCompletedError = "not-found" | "already-completed"
 
 export interface MarkCompletedDeps {
   readonly playlistItems: IPlaylistItemRepository
+  readonly unitOfWork: IUnitOfWork
 }
 
 /**
@@ -21,9 +23,11 @@ export async function markCompleted(
   input: MarkCompletedInput,
   deps: MarkCompletedDeps
 ): Promise<Result<void, MarkCompletedError>> {
-  const existing = await deps.playlistItems.getById(input.itemId)
-  if (!existing) return err("not-found")
-  if (existing.completedAt !== null) return err("already-completed")
-  await deps.playlistItems.markCompleted(input.itemId)
-  return ok(undefined)
+  return deps.unitOfWork.run(async () => {
+    const existing = await deps.playlistItems.getById(input.itemId)
+    if (!existing) return err("not-found")
+    if (existing.completedAt !== null) return err("already-completed")
+    await deps.playlistItems.markCompleted(input.itemId)
+    return ok(undefined)
+  })
 }
