@@ -7,30 +7,18 @@
 
 export interface AuthorRow {
   readonly id: string
-}
-
-export interface AuthorNameRow {
-  readonly author_id: string
   readonly language: string
   readonly full_name: string
 }
 
 export interface LocationRow {
   readonly id: string
-}
-
-export interface LocationNameRow {
-  readonly location_id: string
   readonly language: string
   readonly full_name: string
 }
 
 export interface SourceRow {
   readonly id: string
-}
-
-export interface SourceNameRow {
-  readonly source_id: string
   readonly language: string
   readonly full_name: string
   readonly short_name: string
@@ -44,10 +32,6 @@ export interface LanguageRow {
 
 export interface TagRow {
   readonly id: string
-}
-
-export interface TagNameRow {
-  readonly tag_id: string
   readonly language: string
   readonly full_name: string
 }
@@ -78,8 +62,10 @@ export interface TrackVariantRow {
 
 export interface TrackReferenceRow {
   readonly track_id: string
-  readonly ord: number
-  readonly token: string
+  readonly ref_idx: number
+  readonly source_id: string
+  /** Dot-joined numeric tail, e.g. "10.5" or "10.5.12". */
+  readonly tokens: string
 }
 
 export interface TrackTagRow {

@@ -2,8 +2,9 @@
   <IonPage>
     <IonContent :fullscreen="true" class="ion-padding">
       <div class="welcome-container">
-        <!-- App name -->
+        <!-- Brand -->
         <div class="welcome-header">
+          <img src="/app-icon.png" alt="" class="welcome-logo" />
           <IonText color="primary">
             <h1>Lectorium</h1>
           </IonText>
@@ -71,9 +72,17 @@ const statusMessage = computed(() => STATUS_MESSAGES[welcome.viewState.value] ??
 .welcome-header {
   flex: 1;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
   padding-bottom: 20px;
+  gap: 16px;
+}
+
+.welcome-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
 }
 
 .welcome-header h1 {

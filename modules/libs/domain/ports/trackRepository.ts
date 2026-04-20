@@ -20,11 +20,12 @@ export interface TrackListQuery {
 }
 
 export interface TrackSearchQuery {
-  /** Free-text query; matched case-insensitively as substring against titles. */
+  /**
+   * Raw user query — a single string. The repo tokenises it via the
+   * unified `tracks_search` FTS index, so the same query handles
+   * titles ("Джентельмен") and references ("bg 10.5", "10.5").
+   */
   readonly text?: string
-  /** Reference tokens, e.g. ["sb", "1", "8", "40"]; matched exactly against track_references. */
-  readonly referenceTokens?: readonly string[]
-  readonly language?: LanguageCode
   readonly limit?: number
   readonly offset?: number
 }

@@ -1,11 +1,8 @@
-import type { LanguageCode } from "@lib/domain/core.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
-import { parseReferenceQuery } from "./parseReferenceQuery.js"
 
 export interface SearchTracksInput {
   readonly query: string
-  readonly preferredLanguage?: LanguageCode
   readonly limit?: number
   readonly offset?: number
 }
@@ -15,27 +12,24 @@ export interface SearchTracksDeps {
 }
 
 /**
- * Decides between reference-based and free-text search based on the query
- * shape. Reference queries ("sb 1.8.40") match `track_references.token`
- * exactly; everything else is a case-insensitive title substring match.
+ * Text search that covers both lecture titles and scripture references
+ * in one call. The repository feeds the query into the unified
+ * `tracks_search` FTS5 index, so there's no application-level branching
+ * between "this looks like a reference" and "this looks like free text"
+ * — the index already handles tokenisation for both.
+ *
+ * Language-of-variant is intentionally not a filter: a user typing a
+ * Russian phrase should find Russian-titled tracks even if the UI
+ * locale is English.
  */
 export async function searchTracks(
   input: SearchTracksInput,
   deps: SearchTracksDeps
 ): Promise<readonly Track[]> {
-  const tokens = parseReferenceQuery(input.query)
-  if (tokens) {
-    return deps.tracks.search({
-      referenceTokens: tokens,
-      limit: input.limit,
-      offset: input.offset,
-    })
-  }
   const trimmed = input.query.trim()
   if (!trimmed) return []
   return deps.tracks.search({
     text: trimmed,
-    language: input.preferredLanguage,
     limit: input.limit,
     offset: input.offset,
   })
