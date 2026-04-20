@@ -33,7 +33,7 @@
     "@capacitor/status-bar": "^8.0.2",
     "@ionic/vue": "^8.8.3",
     "@ionic/vue-router": "^8.8.3",
-    "@shruti/audio-player": "file:../../libs/audioPlayer",
+    "@shruti/audio-player": "file:../../capacitor/audio-player",
     "@vueuse/core": "^13.1.0",
     "capacitor-plugin-safe-area": "^5.0.0",
     "ionicons": "^7.0.0",
