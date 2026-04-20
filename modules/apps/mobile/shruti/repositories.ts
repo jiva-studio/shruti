@@ -1,6 +1,6 @@
 import type { IDatabase, IRemoteFilesStorage, IStoragePublicUrl } from "@ports/app/index.js"
-import { createHttpTranscriptRepository } from "@infra/repositories.http/index.js"
-import { createSqlAppRepositories, type SqlAppRepositories } from "@infra/repositories.sql/index.js"
+import { createHttpTranscriptRepository } from "@infra/repositories/http/index.js"
+import { createSqlAppRepositories, type SqlAppRepositories } from "@infra/repositories/sql/index.js"
 
 /**
  * Composition-root bundle of every domain-facing repository the app

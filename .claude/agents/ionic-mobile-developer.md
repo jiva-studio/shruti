@@ -58,7 +58,7 @@ The app implements hexagonal architecture: dependencies flow inward toward the d
 ```
 shruti/  →  @ui, @infra, @ports, @lib/application, @lib/domain
 @ui/*       →  (nothing external — only vue, @ionic/vue, own files)
-@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idb.kv
+@infra/*    →  @ports, @lib/domain, @lib/persistence, @infra/idbKv
 @lib/application  →  @lib/domain
 @lib/domain       →  (nothing)
 @ports/app        →  (nothing)
@@ -134,24 +134,24 @@ Interfaces for infrastructure — zero dependencies.
 
 ### Infrastructure Layer (`@infra/`)
 
-Driven adapters implementing ports via SQL, filesystem, platform SDKs. May import `@ports/app`, `@lib/domain`, `@lib/persistence/*`, `@infra/idb.kv`.
+Driven adapters implementing ports via SQL, filesystem, platform SDKs. May import `@ports/app`, `@lib/domain`, `@lib/persistence/*`, `@infra/idbKv`.
 
 | Subdirectory | Role |
 |---|---|
-| `repositories.sql/` | Domain repo implementations with `rowTo*` mappers |
-| `repositories.http/` | HTTP-backed repositories (transcripts) |
+| `repositories/sql/` | Domain repo implementations with `rowTo*` mappers |
+| `repositories/http/` | HTTP-backed repositories (transcripts) |
 | `repositories.preferences/` | Preferences-backed repositories |
-| `persistence.sqljs/` | `IPersistence` for web (sql.js + IDB) |
-| `persistence.capacitor/` | `IPersistence` for native (Capacitor SQLite) |
-| `persistence.fetchers.idb/` | `IDatabaseFetcher` for web (HTTP → IDB) |
-| `persistence.fetchers.fs/` | `IDatabaseFetcher` for native (FileTransfer → FS) |
-| `files.web/` | `IRemoteFilesStorage` for web (Cache API) |
-| `files.capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
-| `storage.public.url/` | `IStoragePublicUrl` (URL template resolver) |
-| `audio.capacitor/` | `IAudioPlayer` wrapping `@shruti/audio-player` plugin |
-| `audio.web/` | `IAudioPlayer` over `HTMLAudioElement` |
+| `persistence/sqljs/` | `IPersistence` for web (sql.js + IDB) |
+| `persistence/capacitor/` | `IPersistence` for native (Capacitor SQLite) |
+| `persistence/fetchers/idb/` | `IDatabaseFetcher` for web (HTTP → IDB) |
+| `persistence/fetchers/fs/` | `IDatabaseFetcher` for native (FileTransfer → FS) |
+| `files/web/` | `IRemoteFilesStorage` for web (Cache API) |
+| `files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
+| `storagePublicUrl/` | `IStoragePublicUrl` (URL template resolver) |
+| `audio/capacitor/` | `IAudioPlayer` wrapping `@shruti/audio-player` plugin |
+| `audio/web/` | `IAudioPlayer` over `HTMLAudioElement` |
 | `servers/` | `probeServers()` — CDN mirror detection |
-| `idb.kv/` | Low-level IDB KV store (Layer 1 primitive) |
+| `idbKv/` | Low-level IDB KV store (Layer 1 primitive) |
 
 ### UI Layer (`@ui/`)
 
@@ -161,7 +161,7 @@ Reusable, self-contained components and composables. Props + events only, no inf
 - `ui/components/` — Generic UI primitives (counter, layouts, resource state, list items)
 - `ui/composables/` — Generic composables (`useResource`)
 - `ui/features/` — Feature-specific UI widgets:
-  - `tracks.list/`, `tracks.search.input/`, `tracks.search.filters/`
+  - `tracks/list/`, `tracks/search/input/`, `tracks/search/filters/`
   - `playlist/`
   - `notes/`
   - `player/`
@@ -204,12 +204,12 @@ shruti/
 // Correct
 import { ref, computed } from "vue"
 import { type Track } from "@lib/domain/track.js"
-import { useTrackList } from "@ui/components/tracks.list/index.js"
+import { useTrackList } from "@ui/components/tracks/list/index.js"
 import { useShruti } from "@shruti/shruti.js"
 
 // Incorrect - will cause module resolution errors
 import { type Track } from "@lib/domain/track"
-import { useTrackList } from "@ui/components/tracks.list"
+import { useTrackList } from "@ui/components/tracks/list"
 ```
 
 **Type imports:** Use `type` keyword for type-only imports:

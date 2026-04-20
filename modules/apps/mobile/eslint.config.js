@@ -114,7 +114,7 @@ export default defineConfigWithVueTs(
     },
   },
 
-  // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idb.kv only.
+  // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idbKv only.
   // Sibling-infra imports are forbidden — siblings compose only through the
   // composition root. `@shruti/audio-player` is an npm package (Capacitor
   // plugin) that shares the `@shruti` scope with the composition root, so
@@ -137,9 +137,9 @@ export default defineConfigWithVueTs(
               message: "Infrastructure must not import application layer",
             },
             {
-              // Allow only @infra/idb.kv; every other sibling is forbidden.
+              // Allow only @infra/idbKv; every other sibling is forbidden.
               // The negated pattern must come after the broad one.
-              group: ["@infra/*", "!@infra/idb.kv"],
+              group: ["@infra/*", "!@infra/idbKv"],
               message: "Infra siblings must not import each other — wire via composition root",
             },
           ],

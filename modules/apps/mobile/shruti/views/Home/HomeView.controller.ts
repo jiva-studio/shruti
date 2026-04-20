@@ -5,7 +5,7 @@ import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
-import type { UiTrackRow, UiTrackState } from "@ui/components/tracks.list/index.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 
 export interface HomeControllerReturn {
   rows: ComputedRef<readonly UiTrackRow[]>

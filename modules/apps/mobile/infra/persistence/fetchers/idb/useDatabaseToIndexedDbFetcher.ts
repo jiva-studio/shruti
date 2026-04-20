@@ -1,5 +1,5 @@
 import type { IDatabaseFetcher, ProgressCallback } from "@ports/app/index.js"
-import { saveBlob, keyExists, deleteBlob } from "@infra/idb.kv/index.js"
+import { saveBlob, keyExists, deleteBlob } from "@infra/idbKv/index.js"
 import { downloadWithProgress } from "./streamDownloader.js"
 
 /**
