@@ -23,11 +23,6 @@
 
 <script setup lang="ts">
 import { IonContent, IonPage, IonSpinner } from '@ionic/vue'
-import { usePlayerStore } from '@shruti/stores/usePlayerStore.js'
-import { computed } from 'vue'
-
-const player = usePlayerStore()
-const playerOpen = computed(() => player.open)
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -35,6 +30,8 @@ const playerOpen = computed(() => player.open)
 
 defineProps<{
   loading?: boolean
+  /** Reserves a bottom spacer matching the mini-player height when true. */
+  playerOpen?: boolean
 }>()
 </script>
 

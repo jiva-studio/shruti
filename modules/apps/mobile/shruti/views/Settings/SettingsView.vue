@@ -1,5 +1,5 @@
 <template>
-  <AppPage>
+  <AppPage :player-open="player.open">
     <!-- Appearance -->
     <IonListHeader>
       <IonLabel>{{ $t('settings.groups.appearance') }}</IonLabel>
@@ -71,6 +71,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { useDebugStore } from "@shruti/stores/useDebugStore.js"
+import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import type { Language } from "@lib/domain/language.js"
 
 declare const __APP_VERSION__: string
@@ -78,6 +79,7 @@ declare const __BUILD_ID__: string
 declare const __DB_SCHEME__: number
 
 const app = useShruti()
+const player = usePlayerStore()
 const debug = useDebugStore()
 
 const version = __APP_VERSION__
