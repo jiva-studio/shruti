@@ -137,9 +137,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
   async function archive(
     itemId: PlaylistItemId
   ): Promise<Result<void, ArchivePlaylistItemError>> {
+    const repos = app.repositories()
     const result = await archivePlaylistItem(
       { itemId },
-      { playlistItems: app.repositories().playlistItems }
+      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
     )
     if (result.ok || result.error === "already-archived") await refresh()
     return result

@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { archivePlaylistItem } from "../archivePlaylistItem.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
+
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
 
 function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistItemRepository {
   return {
@@ -40,7 +43,7 @@ describe("archivePlaylistItem", () => {
     })
     const result = await archivePlaylistItem(
       { itemId: "pi-1" as PlaylistItemId },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
     expect(archive).toHaveBeenCalledWith("pi-1")
@@ -50,7 +53,7 @@ describe("archivePlaylistItem", () => {
     const repo = makeRepo({ getById: async () => null })
     const result = await archivePlaylistItem(
       { itemId: "pi-missing" as PlaylistItemId },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("not-found")
@@ -64,7 +67,7 @@ describe("archivePlaylistItem", () => {
     })
     const result = await archivePlaylistItem(
       { itemId: "pi-1" as PlaylistItemId },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("already-archived")

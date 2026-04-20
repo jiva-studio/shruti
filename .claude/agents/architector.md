@@ -98,7 +98,6 @@ modules/
 │       │       ├── storagePublicUrl.ts      # IStoragePublicUrl
 │       │       ├── preferences.ts           # IPreferences
 │       │       ├── schemeVersion.ts         # ISchemeVersionRepository
-│       │       ├── databaseTransfer.ts      # IDatabaseTransfer (port exists; no adapters yet)
 │       │       ├── audioPlayer.ts           # IAudioPlayer
 │       │       ├── mediaDownloader.ts       # IMediaDownloader
 │       │       ├── haptics.ts               # IHaptics
@@ -262,7 +261,7 @@ Is it a Vue view, a route, or app-level wiring?
 
 - **Composition Root:** `lectorium/lectorium.ts` — only file knowing all concrete adapters, exposes lazy `repositories()`.
 - **Controller Pattern:** `*.controller.ts` in views separates business logic from Vue templates.
-- **Unit of Work:** `IUnitOfWork.run()` wraps multi-step operations in a transaction. (Currently wired but unused — activate when a composite mutation flow lands.)
+- **Unit of Work:** `IUnitOfWork.run()` wraps multi-step operations in a transaction. Used by check-then-act mutation use cases (`archivePlaylistItem`, `markCompleted`, `updateProgress`, `deleteNote`, `updateNote`) so the read and write commit atomically.
 - **Result Type:** `Result<T, E>` forces explicit error handling instead of exceptions. Mutation use cases return `Result`; query use cases throw on infra error — see `docs/architecture/layers.md`.
 - **Row Mappers:** split by DB scope — `@infra/repositories.sql/contentRowMappers.ts` for content DB rows, `@infra/repositories.sql/rowMappers.ts` for user DB rows. Each repository imports only the mapper for its own scope.
 - **UI Mirror Types:** when `@ui/features/*` needs a type from `@lib/domain`, it declares a local mirror copy — `@ui` never imports `@lib/domain` directly.

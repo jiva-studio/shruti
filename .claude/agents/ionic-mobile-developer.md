@@ -130,7 +130,7 @@ Use cases — pure functions orchestrating domain logic + repository ports. Depe
 
 Interfaces for infrastructure — zero dependencies.
 
-- `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IDatabaseTransfer`, `IAudioPlayer`, `IMediaDownloader`, `INotificationScheduler`, `IShareService`
+- `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IHaptics`, `INotificationScheduler`, `IShareService`
 
 ### Infrastructure Layer (`@infra/`)
 
