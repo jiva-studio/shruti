@@ -1,18 +1,12 @@
 <template>
   <SearchFilterChipsList>
-    <TransitionGroup
-      name="chips"
-      tag="div"
-      class="chips-wrap"
-    >
-      <div
-        v-for="chip in sortedChips"
-        :key="chip.key"
-        class="chip-item"
-      >
+    <TransitionGroup name="chips" tag="div" class="chips-wrap">
+      <div v-for="chip in sortedChips" :key="chip.key" class="chip-item">
         <SearchFilterChipWithListItems
           v-if="chip.kind === 'multi'"
-          :model-value="(filters[chip.model] as readonly string[] | undefined) as string[] | undefined"
+          :model-value="
+            filters[chip.model] as readonly string[] | undefined as string[] | undefined
+          "
           :items="chip.items"
           :title="chip.title"
           @update:model-value="(next) => update(chip.model, next)"
@@ -24,7 +18,7 @@
 
         <SearchFilterChipWithListItem
           v-else-if="chip.kind === 'single'"
-          :model-value="(filters[chip.model] as string | undefined)"
+          :model-value="filters[chip.model] as string | undefined"
           :items="chip.items"
           :title="chip.title"
           @update:model-value="(next) => update(chip.model, next)"
@@ -39,16 +33,16 @@
 </template>
 
 <script lang="ts" setup>
-import { type Component, computed } from 'vue'
-import SearchFilterChipsList from './SearchFilterChipsList.vue'
-import SearchFilterChipWithListItems from './SearchFilterChipWithListItems.vue'
-import SearchFilterChipWithListItem from './SearchFilterChipWithListItem.vue'
-import IconLanguages from './icons/IconLanguages.vue'
-import IconAuthors from './icons/IconAuthors.vue'
-import IconLocations from './icons/IconLocations.vue'
-import IconClock from './icons/IconClock.vue'
-import IconSort from './icons/IconSort.vue'
-import type { SelectorDialogItem } from '@ui/components/selectors/index.js'
+import { type Component, computed } from "vue"
+import SearchFilterChipsList from "./SearchFilterChipsList.vue"
+import SearchFilterChipWithListItems from "./SearchFilterChipWithListItems.vue"
+import SearchFilterChipWithListItem from "./SearchFilterChipWithListItem.vue"
+import IconLanguages from "./icons/IconLanguages.vue"
+import IconAuthors from "./icons/IconAuthors.vue"
+import IconLocations from "./icons/IconLocations.vue"
+import IconClock from "./icons/IconClock.vue"
+import IconSort from "./icons/IconSort.vue"
+import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                   Models                                   */
@@ -62,12 +56,12 @@ export type FiltersModel = {
   sort?: string
 }
 
-type MultiChipKey = 'authors' | 'languages' | 'locations'
-type SingleChipKey = 'duration' | 'sort'
+type MultiChipKey = "authors" | "languages" | "locations"
+type SingleChipKey = "duration" | "sort"
 
 type MultiChipDef = {
   key: MultiChipKey
-  kind: 'multi'
+  kind: "multi"
   model: MultiChipKey
   title: string
   icon: Component
@@ -76,7 +70,7 @@ type MultiChipDef = {
 
 type SingleChipDef = {
   key: SingleChipKey
-  kind: 'single'
+  kind: "single"
   model: SingleChipKey
   title: string
   icon: Component
@@ -111,41 +105,41 @@ const filters = defineModel<FiltersModel>({ required: true })
 
 const chips = computed<readonly ChipDef[]>(() => [
   {
-    kind: 'multi',
-    key: 'languages',
-    model: 'languages',
+    kind: "multi",
+    key: "languages",
+    model: "languages",
     title: props.languagesTitle,
     icon: IconLanguages,
     items: props.languagesItems,
   },
   {
-    kind: 'multi',
-    key: 'authors',
-    model: 'authors',
+    kind: "multi",
+    key: "authors",
+    model: "authors",
     title: props.authorsTitle,
     icon: IconAuthors,
     items: props.authorsItems,
   },
   {
-    kind: 'multi',
-    key: 'locations',
-    model: 'locations',
+    kind: "multi",
+    key: "locations",
+    model: "locations",
     title: props.locationsTitle,
     icon: IconLocations,
     items: props.locationsItems,
   },
   {
-    kind: 'single',
-    key: 'duration',
-    model: 'duration',
+    kind: "single",
+    key: "duration",
+    model: "duration",
     title: props.durationTitle,
     icon: IconClock,
     items: props.durationItems,
   },
   {
-    kind: 'single',
-    key: 'sort',
-    model: 'sort',
+    kind: "single",
+    key: "sort",
+    model: "sort",
     title: props.sortTitle,
     icon: IconSort,
     items: props.sortItems,
@@ -178,7 +172,7 @@ function update(model: keyof FiltersModel, next: string[] | string | undefined) 
 function hasValue(v: FiltersModel, model: keyof FiltersModel) {
   const cur = v[model]
   if (Array.isArray(cur)) return cur.length > 0
-  return cur !== undefined && cur !== null && cur !== ''
+  return cur !== undefined && cur !== null && cur !== ""
 }
 </script>
 
@@ -186,6 +180,9 @@ function hasValue(v: FiltersModel, model: keyof FiltersModel) {
 .chips-wrap {
   display: flex;
   gap: 8px;
+  /* Matches SearchInput's 10px right margin so the last chip's right
+     edge lines up with the search field in an overflow-x: auto row. */
+  padding-inline-end: 10px;
 }
 
 .chip-item {

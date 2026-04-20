@@ -41,6 +41,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: modules/apps/mobile/package-lock.json
+      - uses: ./.github/actions/audio-player-build
       - run: cd modules/apps/mobile && npm ci
       - run: cd modules/apps/mobile && npm run lint
 
@@ -54,6 +55,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: modules/apps/mobile/package-lock.json
+      - uses: ./.github/actions/audio-player-build
       - run: cd modules/apps/mobile && npm ci
       - run: cd modules/apps/mobile && npm test
 
@@ -67,6 +69,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: modules/apps/mobile/package-lock.json
+      - uses: ./.github/actions/audio-player-build
       - run: cd modules/apps/mobile && npm ci
       - name: Build web bundle
         # Vite reads BUILD_ID via process.env and inlines it as __BUILD_ID__
