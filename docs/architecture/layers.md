@@ -76,7 +76,7 @@ the outside world, and platform-specific concerns live behind ports.
 | **Role** | Interfaces for technical infrastructure: database, persistence, file storage, URL resolution, audio, platform SDKs |
 | **May import** | Nothing — zero external dependencies |
 | **Must NOT import** | `@lib/domain`, `@infra`, `@ui`, anything |
-| **Contains** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IDatabaseTransfer`, `IAudioPlayer`, `IMediaDownloader`, `INotificationScheduler`, `IShareService` |
+| **Contains** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IHaptics`, `INotificationScheduler`, `IShareService` |
 
 ### `@infra/*` — Driven Adapters (Layer 2)
 

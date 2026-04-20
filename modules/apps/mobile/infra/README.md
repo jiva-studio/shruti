@@ -9,5 +9,3 @@ Populated per phase:
 - **Phase 5**: `repositories.http` (transcripts over HTTP from public S3).
 - **Phase 6**: `audio.capacitor`, `audio.web`, `notifications.capacitor`, `share.capacitor`, `haptics.capacitor`, `haptics.web`.
 - **Phase 7**: `mediaDownloader.capacitor`, `mediaDownloader.web`.
-
-Not yet implemented: `databaseTransfer.capacitor`, `databaseTransfer.web` — the port exists but has no adapters and no UI caller. Implementing correctly requires exposing raw DB bytes through `IPersistence`/`IDatabase` and a backup/restore UI surface.

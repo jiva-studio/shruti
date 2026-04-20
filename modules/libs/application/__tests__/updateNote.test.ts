@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { updateNote } from "../updateNote.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
+
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
 
 function makeRepo(overrides: Partial<INoteRepository> = {}): INoteRepository {
   return {
@@ -43,7 +46,7 @@ describe("updateNote", () => {
     })
     const result = await updateNote(
       { id: "n-1" as NoteId, text: "new text" },
-      { notes: repo }
+      { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.text).toBe("new text")
@@ -59,7 +62,7 @@ describe("updateNote", () => {
     const repo = makeRepo({ getById: async () => null })
     const result = await updateNote(
       { id: "missing" as NoteId, text: "x" },
-      { notes: repo }
+      { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("not-found")
@@ -70,7 +73,7 @@ describe("updateNote", () => {
     const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
     const result = await updateNote(
       { id: "n-1" as NoteId, text: "   " },
-      { notes: repo }
+      { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("empty-text")
@@ -82,7 +85,7 @@ describe("updateNote", () => {
     const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
     const result = await updateNote(
       { id: "n-1" as NoteId, timeStart: 10, timeEnd: 5 },
-      { notes: repo }
+      { notes: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("invalid-range")
