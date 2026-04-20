@@ -116,7 +116,9 @@ export default defineConfigWithVueTs(
 
   // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idb.kv only.
   // Sibling-infra imports are forbidden — siblings compose only through the
-  // composition root.
+  // composition root. `@shruti/audio-player` is an npm package (Capacitor
+  // plugin) that shares the `@shruti` scope with the composition root, so
+  // it is explicitly carved out from the `@shruti/*` ban.
   {
     files: ["infra/**/*.ts"],
     ignores: ["infra/**/__tests__/**"],
@@ -126,7 +128,10 @@ export default defineConfigWithVueTs(
         {
           patterns: [
             { group: ["@ui/*"], message: "Infrastructure must not import UI" },
-            { group: ["@shruti/*"], message: "Infrastructure must not import composition root" },
+            {
+              group: ["@shruti/*", "!@shruti/audio-player"],
+              message: "Infrastructure must not import composition root",
+            },
             {
               group: ["@lib/application/*"],
               message: "Infrastructure must not import application layer",
@@ -148,7 +153,7 @@ export default defineConfigWithVueTs(
     rules: { "no-restricted-imports": "off" },
   },
 
-  // UI: no imports from domain/application/ports/infra/composition root
+  // UI (base rule): no imports from domain/application/ports/infra/composition root
   {
     files: ["ui/**/*.{ts,vue}"],
     rules: {
@@ -164,6 +169,112 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@shruti/*"], message: "UI must not import composition root" },
+          ],
+        },
+      ],
+    },
+  },
+
+  // UI primitives: shared no-dep building blocks. Cannot import any other UI layer.
+  {
+    files: ["ui/primitives/**/*.{ts,vue}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "UI must not import technical ports" },
+            { group: ["@infra/*"], message: "UI must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "UI must not import domain — use mirror types",
+            },
+            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@shruti/*"], message: "UI must not import composition root" },
+            { group: ["@ui/components/*"], message: "Primitives must not import components" },
+            { group: ["@ui/features/*"], message: "Primitives must not import features" },
+            { group: ["@ui/icons/*"], message: "Primitives must not import icons" },
+          ],
+        },
+      ],
+    },
+  },
+
+  // UI icons: pure SVG sprites, zero deps. Cannot import any other UI layer.
+  {
+    files: ["ui/icons/**/*.{ts,vue}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "UI must not import technical ports" },
+            { group: ["@infra/*"], message: "UI must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "UI must not import domain — use mirror types",
+            },
+            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@shruti/*"], message: "UI must not import composition root" },
+            { group: ["@ui/primitives/*"], message: "Icons must not import primitives" },
+            { group: ["@ui/components/*"], message: "Icons must not import components" },
+            { group: ["@ui/features/*"], message: "Icons must not import features" },
+          ],
+        },
+      ],
+    },
+  },
+
+  // UI components: generic widgets. May import primitives, icons, or sibling
+  // components (same layer). Must not reach into features.
+  {
+    files: ["ui/components/**/*.{ts,vue}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "UI must not import technical ports" },
+            { group: ["@infra/*"], message: "UI must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "UI must not import domain — use mirror types",
+            },
+            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@shruti/*"], message: "UI must not import composition root" },
+            {
+              group: ["@ui/features/*"],
+              message: "Components must not import features — features depend on components, not the other way around",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // UI features: may import primitives, icons, and components. Cross-feature
+  // imports are forbidden — if two features need a shared widget, promote it
+  // to @ui/components/.
+  {
+    files: ["ui/features/**/*.{ts,vue}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["@ports/*"], message: "UI must not import technical ports" },
+            { group: ["@infra/*"], message: "UI must not import infrastructure" },
+            {
+              group: ["@lib/domain/*", "@lib/domain"],
+              message: "UI must not import domain — use mirror types",
+            },
+            { group: ["@lib/application/*"], message: "UI must not import application layer" },
+            { group: ["@shruti/*"], message: "UI must not import composition root" },
+            {
+              group: ["@ui/features/*"],
+              message:
+                "Cross-feature imports are forbidden — promote the shared widget to @ui/components/",
+            },
           ],
         },
       ],

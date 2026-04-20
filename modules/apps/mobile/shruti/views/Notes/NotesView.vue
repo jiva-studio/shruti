@@ -1,5 +1,5 @@
 <template>
-  <AppPage>
+  <AppPage :player-open="player.open">
     <!-- Search Query -->
     <SearchInput
       v-if="!isEmpty"
@@ -44,6 +44,7 @@ import { AppPage, PageSticker } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks.search.input/index.js"
 import { NotesList, type UiNoteRow } from "@ui/features/notes/index.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
+import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import type { NoteId } from "@lib/domain/core.js"
 
 /* -------------------------------------------------------------------------- */
@@ -52,6 +53,7 @@ import type { NoteId } from "@lib/domain/core.js"
 
 const { t } = useI18n()
 const store = useNotesStore()
+const player = usePlayerStore()
 
 const emptyImage = "/empty.png"
 
