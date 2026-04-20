@@ -20,6 +20,16 @@
           <p>{{ track.authorName.value }}</p>
         </IonText>
 
+        <IonButton
+          v-if="track.hasAudio.value"
+          expand="block"
+          class="ion-margin-vertical"
+          @click="track.onPlay"
+        >
+          <IonIcon slot="start" :icon="playCircle" />
+          {{ $t("app.ok") }}
+        </IonButton>
+
         <IonList v-if="track.availableLanguages.value.length">
           <IonItem>
             <IonLabel>Language</IonLabel>
@@ -34,18 +44,6 @@
             </IonSelect>
           </IonItem>
         </IonList>
-
-        <TranscriptView
-          v-if="track.transcriptBlocks.value.length"
-          :blocks="track.transcriptBlocks.value"
-          @seek="track.onSeek"
-        />
-        <IonText v-else-if="!track.isLoadingTranscript.value" color="medium">
-          <p>No transcript available for this track.</p>
-        </IonText>
-        <IonText v-else color="medium">
-          <p>Loading transcript…</p>
-        </IonText>
       </template>
 
       <IonText v-else color="medium">
@@ -58,9 +56,11 @@
 <script setup lang="ts">
 import {
   IonBackButton,
+  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
+  IonIcon,
   IonItem,
   IonLabel,
   IonList,
@@ -71,8 +71,8 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
+import { playCircle } from "ionicons/icons"
 import { useTrackController } from "./TrackView.controller.js"
-import { TranscriptView } from "@ui/features/transcript/index.js"
 
 interface Props {
   trackId: string

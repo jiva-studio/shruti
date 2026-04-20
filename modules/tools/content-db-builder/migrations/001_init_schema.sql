@@ -1,59 +1,50 @@
--- scheme: 20260419
+-- scheme: 20260420
 --
 -- Initial schema for the Shruti content database.
--- See ../../docs/db/scheme.20260419.md for the canonical reference.
+-- Nothing shipped publicly yet, so we edit 001 in place on every
+-- scheme change instead of stacking migrations.
 
 -- Dictionaries ----------------------------------------------------------------
+--
+-- Flat per-locale rows — no stub parent tables. Existence of a dict
+-- entry = existence of at least one (id, language) row. Keeps schema
+-- small without sacrificing queryability.
 
 CREATE TABLE authors (
-  id TEXT PRIMARY KEY
-);
-
-CREATE TABLE author_names (
-  author_id TEXT,
-  language  TEXT,
+  id        TEXT NOT NULL,
+  language  TEXT NOT NULL,
   full_name TEXT NOT NULL,
-  PRIMARY KEY (author_id, language)
+  PRIMARY KEY (id, language)
 );
 
 CREATE TABLE locations (
-  id TEXT PRIMARY KEY
-);
-
-CREATE TABLE location_names (
-  location_id TEXT,
-  language    TEXT,
-  full_name   TEXT NOT NULL,
-  PRIMARY KEY (location_id, language)
+  id        TEXT NOT NULL,
+  language  TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  PRIMARY KEY (id, language)
 );
 
 CREATE TABLE sources (
-  id TEXT PRIMARY KEY
-);
-
-CREATE TABLE source_names (
-  source_id  TEXT,
-  language   TEXT,
+  id         TEXT NOT NULL,
+  language   TEXT NOT NULL,
   full_name  TEXT NOT NULL,
   short_name TEXT NOT NULL,
-  PRIMARY KEY (source_id, language)
+  PRIMARY KEY (id, language)
 );
 
+CREATE TABLE tags (
+  id        TEXT NOT NULL,
+  language  TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  PRIMARY KEY (id, language)
+);
+
+-- `languages` is the registry of available languages itself, so its
+-- metadata isn't per-locale — code is the PK.
 CREATE TABLE languages (
   code      TEXT PRIMARY KEY,
   full_name TEXT NOT NULL,
   icon      TEXT
-);
-
-CREATE TABLE tags (
-  id TEXT PRIMARY KEY
-);
-
-CREATE TABLE tag_names (
-  tag_id    TEXT,
-  language  TEXT,
-  full_name TEXT NOT NULL,
-  PRIMARY KEY (tag_id, language)
 );
 
 -- Tracks ----------------------------------------------------------------------
@@ -90,17 +81,44 @@ CREATE TABLE track_variants (
 );
 
 CREATE INDEX idx_track_variants_language ON track_variants(language);
-CREATE INDEX idx_track_variants_title    ON track_variants(title COLLATE NOCASE);
 
+-- One row per reference group. `source_id` is kept separate so the UI
+-- can localise it via `sources`; `tokens` is the numeric suffix joined
+-- by dots ("10.5", "10.5.12") — buildTrackRow splits on '.' for
+-- display and range detection.
 CREATE TABLE track_references (
-  track_id TEXT,
-  ord      INTEGER,
-  token    TEXT NOT NULL,
-  PRIMARY KEY (track_id, ord)
+  track_id  TEXT NOT NULL,
+  ref_idx   INTEGER NOT NULL,
+  source_id TEXT NOT NULL,
+  tokens    TEXT NOT NULL,
+  PRIMARY KEY (track_id, ref_idx)
 );
+CREATE INDEX idx_track_references_source ON track_references(source_id);
 
 CREATE TABLE track_tags (
   track_id TEXT,
   tag_id   TEXT,
   PRIMARY KEY (track_id, tag_id)
+);
+
+-- Search ----------------------------------------------------------------------
+--
+-- Single unified FTS index covering both track titles and reference
+-- display strings. Populated by `importFromCouch` after the main load.
+-- For references we emit one row per (raw source_id, short_name,
+-- full_name) variant so users can search in any language.
+--
+-- We use FTS4 rather than FTS5 because the sql.js wasm on npm is
+-- compiled without FTS5. FTS4 covers everything we need: same MATCH
+-- syntax, same unicode61 tokenizer (with remove_diacritics=2), and
+-- `notindexed=` for metadata columns. Native `@capacitor-community/
+-- sqlite` supports both; sticking to FTS4 keeps the same SQL on all
+-- platforms.
+CREATE VIRTUAL TABLE tracks_search USING fts4(
+  content,
+  track_id,
+  kind,
+  notindexed="track_id",
+  notindexed="kind",
+  tokenize=unicode61 "remove_diacritics=2"
 );

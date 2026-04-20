@@ -19,22 +19,11 @@ function makeRepo(): {
 }
 
 describe("searchTracks", () => {
-  it("routes a reference-shaped query through referenceTokens", async () => {
+  it("forwards a trimmed query to the repo", async () => {
     const { repo, search } = makeRepo()
-    await searchTracks({ query: "sb 1.8.40" }, { tracks: repo })
+    await searchTracks({ query: "  джент  " }, { tracks: repo })
     expect(search).toHaveBeenCalledWith({
-      referenceTokens: ["sb", "1", "8", "40"],
-      limit: undefined,
-      offset: undefined,
-    })
-  })
-
-  it("routes a free-text query through text + language", async () => {
-    const { repo, search } = makeRepo()
-    await searchTracks({ query: "chapter on bhakti", preferredLanguage: "en" }, { tracks: repo })
-    expect(search).toHaveBeenCalledWith({
-      text: "chapter on bhakti",
-      language: "en",
+      text: "джент",
       limit: undefined,
       offset: undefined,
     })
@@ -47,11 +36,13 @@ describe("searchTracks", () => {
     expect(search).not.toHaveBeenCalled()
   })
 
-  it("forwards limit and offset on both branches", async () => {
+  it("forwards limit and offset", async () => {
     const { repo, search } = makeRepo()
-    await searchTracks({ query: "sb 1", limit: 25, offset: 50 }, { tracks: repo })
-    expect(search.mock.calls[0][0]).toMatchObject({ limit: 25, offset: 50 })
-    await searchTracks({ query: "nitai", limit: 10 }, { tracks: repo })
-    expect(search.mock.calls[1][0]).toMatchObject({ limit: 10 })
+    await searchTracks({ query: "sb 1.8.40", limit: 25, offset: 50 }, { tracks: repo })
+    expect(search).toHaveBeenCalledWith({
+      text: "sb 1.8.40",
+      limit: 25,
+      offset: 50,
+    })
   })
 })

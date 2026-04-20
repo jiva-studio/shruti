@@ -1,31 +1,45 @@
 <template>
-  <IonPage>
-    <IonHeader>
-      <IonToolbar>
-        <IonTitle>Search</IonTitle>
-      </IonToolbar>
-      <IonToolbar>
-        <SearchInput v-model="search.query.value" />
-      </IonToolbar>
-    </IonHeader>
+  <AppPage>
+    <!-- Search input text -->
+    <SearchInput
+      v-model="search.query.value"
+      :placeholder="$t('app.search')"
+    />
 
-    <IonContent :fullscreen="true">
-      <IonText v-if="search.error.value" color="danger" class="ion-padding">
-        <p>{{ search.error.value }}</p>
-      </IonText>
-      <TracksList
-        :rows="search.rows.value"
-        :empty-message="search.emptyMessage.value"
-        @select="search.onSelect"
-      />
-    </IonContent>
-  </IonPage>
+    <!-- Search filter bar with filter chips -->
+    <SearchFiltersBar
+      v-model="search.filters.value"
+      :authors-items="search.authorsItems.value"
+      :languages-items="search.languagesItems.value"
+      :locations-items="search.locationsItems.value"
+      :duration-items="search.durationItems.value"
+      :sort-items="search.sortItems.value"
+      :authors-title="search.authorsTitle.value"
+      :languages-title="search.languagesTitle.value"
+      :locations-title="search.locationsTitle.value"
+      :duration-title="search.durationTitle.value"
+      :sort-title="search.sortTitle.value"
+      :dates-title="search.datesTitle.value"
+    />
+
+    <!-- Results -->
+    <IonText v-if="search.error.value" color="danger" class="ion-padding">
+      <p>{{ search.error.value }}</p>
+    </IonText>
+    <TracksList
+      :rows="search.rows.value"
+      :empty-message="search.emptyMessage.value"
+      @select="search.onSelect"
+    />
+  </AppPage>
 </template>
 
 <script setup lang="ts">
-import { IonContent, IonHeader, IonPage, IonText, IonTitle, IonToolbar } from "@ionic/vue"
+import { IonText } from "@ionic/vue"
+import { AppPage } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/features/tracks.search.input/index.js"
 import { TracksList } from "@ui/features/tracks.list/index.js"
+import { SearchFiltersBar } from "@ui/features/tracks.search.filters/index.js"
 import { useSearchController } from "./SearchView.controller.js"
 
 const search = useSearchController()

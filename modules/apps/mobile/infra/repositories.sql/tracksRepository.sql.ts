@@ -14,6 +14,34 @@ import type {
 } from "@lib/persistence/main"
 import { rowToTrack } from "./contentRowMappers.js"
 
+/* -------------------------------------------------------------------------- */
+/*                          FTS query construction                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Turn an arbitrary user string into an FTS4 MATCH expression.
+ *
+ * The `unicode61` tokenizer splits on whitespace and punctuation, so
+ * "bg 10.5" becomes `{bg, 10, 5}`. We tokenise the user input the
+ * same way and then:
+ *   - single token → bare prefix `foo*` (FTS4 Cyrillic quirk: a single
+ *     quoted prefix like `"джент"*` returns nothing, but the bare
+ *     form works);
+ *   - multiple tokens → phrase prefix `"foo bar baz"*`. Phrase form
+ *     enforces adjacency, so `1.1` doesn't sprawl into every ref
+ *     starting with "1".
+ */
+function buildFtsQuery(raw: string): string {
+  const tokens = raw
+    .toLowerCase()
+    .split(/[\s.,;:!?()\-"'`[\]{}<>|/\\]+/)
+    .map((t) => t.replace(/[^a-zа-я0-9]/gi, ""))
+    .filter((t) => t.length > 0)
+  if (tokens.length === 0) return ""
+  if (tokens.length === 1) return `${tokens[0]}*`
+  return `"${tokens.join(" ")}"*`
+}
+
 async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promise<Track[]> {
   if (tracks.length === 0) return []
   const ids = tracks.map((t) => t.id)
@@ -25,7 +53,7 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
       ids
     ),
     contentDb.query<TrackReferenceRow>(
-      `SELECT * FROM track_references WHERE track_id IN (${placeholders})`,
+      `SELECT * FROM track_references WHERE track_id IN (${placeholders}) ORDER BY track_id, ref_idx`,
       ids
     ),
     contentDb.query<TrackTagRow>(
@@ -119,42 +147,22 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
     async search(query: TrackSearchQuery): Promise<readonly Track[]> {
       const limit = query.limit ?? 50
       const offset = query.offset ?? 0
-      const clauses: string[] = ["t.hidden = 0"]
-      const params: (string | number)[] = []
+      const text = query.text?.trim() ?? ""
+      if (text.length === 0) return []
 
-      if (query.text && query.text.trim().length > 0) {
-        clauses.push(
-          `t.id IN (
-             SELECT track_id FROM track_variants
-             WHERE title LIKE ? COLLATE NOCASE
-               ${query.language ? "AND language = ?" : ""}
-           )`
-        )
-        params.push(`%${query.text.trim()}%`)
-        if (query.language) params.push(query.language)
-      }
+      const fts = buildFtsQuery(text)
+      if (fts.length === 0) return []
 
-      if (query.referenceTokens?.length) {
-        // Match any track that has all the requested tokens as a
-        // contiguous prefix of its first-reference tokens.
-        const tokens = query.referenceTokens
-        clauses.push(
-          `t.id IN (
-             SELECT track_id FROM track_references
-             WHERE ord < ? AND token IN (${tokens.map(() => "?").join(", ")})
-             GROUP BY track_id
-             HAVING COUNT(DISTINCT token) >= ?
-           )`
-        )
-        params.push(tokens.length, ...tokens, tokens.length)
-      }
-
+      // Single path through the unified FTS index: hits against titles
+      // and all reference display variants are returned from one
+      // MATCH, deduplicated at the track level.
       const rows = await contentDb.query<TrackRow>(
-        `SELECT t.* FROM tracks t
-         WHERE ${clauses.join(" AND ")}
+        `SELECT DISTINCT t.* FROM tracks t
+         JOIN tracks_search s ON s.track_id = t.id
+         WHERE tracks_search MATCH ? AND t.hidden = 0
          ORDER BY t.sort_reference ASC
          LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        [fts, limit, offset]
       )
       return hydrate(contentDb, rows)
     },

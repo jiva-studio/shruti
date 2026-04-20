@@ -26,15 +26,31 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     preserveSymlinks: true,
-    alias: {
-      "@ports": path.resolve(__dirname, "./ports"),
-      "@infra": path.resolve(__dirname, "./infra"),
-      "@ui": path.resolve(__dirname, "./ui"),
-      "@shruti": path.resolve(__dirname, "./shruti"),
-      "@lib/domain": path.resolve(__dirname, "./submodules/domain"),
-      "@lib/application": path.resolve(__dirname, "./submodules/application"),
-      "@lib/persistence/main": path.resolve(__dirname, "./submodules/persistence-main"),
-      "@lib/persistence/user": path.resolve(__dirname, "./submodules/persistence-user"),
-    },
+    // `@shruti` is also the npm scope for our audio-player plugin
+    // (`@shruti/audio-player`). A bare string alias of `@shruti`
+    // would prefix-match that too and hijack the npm resolution, so we
+    // use a regex that explicitly excludes the npm subpath.
+    alias: [
+      { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
+      { find: "@infra", replacement: path.resolve(__dirname, "./infra") },
+      { find: "@ui", replacement: path.resolve(__dirname, "./ui") },
+      { find: "@lib/domain", replacement: path.resolve(__dirname, "./submodules/domain") },
+      {
+        find: "@lib/application",
+        replacement: path.resolve(__dirname, "./submodules/application"),
+      },
+      {
+        find: "@lib/persistence/main",
+        replacement: path.resolve(__dirname, "./submodules/persistence-main"),
+      },
+      {
+        find: "@lib/persistence/user",
+        replacement: path.resolve(__dirname, "./submodules/persistence-user"),
+      },
+      {
+        find: /^@shruti\/(?!audio-player)(.*)$/,
+        replacement: path.resolve(__dirname, "./shruti") + "/$1",
+      },
+    ],
   },
 })
