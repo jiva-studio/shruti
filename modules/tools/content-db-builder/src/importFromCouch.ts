@@ -106,14 +106,26 @@ function computeSortReference(references: Array<Array<string | number>> | undefi
 }
 
 /**
- * Paths in CouchDB are already the full bucket keys used by the legacy
- * S3 layout (e.g. `library/tracks/{id}/audio/original.mp3`). Store them
- * verbatim — mobile's IStoragePublicUrl substitutes them into the CDN
- * template directly. If we ever re-organise the bucket, rewrite here.
+ * Rewrites legacy CouchDB paths to the current S3 layout.
+ *
+ * CouchDB docs still reference the old Minio prefix `library/`
+ * (e.g. `library/tracks/{id}/audio/original.mp3`). The new
+ * `shruti-engine` bucket serves public content under the `public/`
+ * prefix, so every media key the mobile app resolves via
+ * `IStoragePublicUrl.get()` must start with `public/`.
+ *
+ * We rewrite `library/` → `public/` here, at the ingestion boundary,
+ * so DB rows always match the bucket keys. Paths that don't start with
+ * `library/` are left as-is — they're either already correct or
+ * unexpected, and we don't want to silently mangle them.
  */
 function normalizeBucketPath(path: string | undefined): string | null {
   if (!path) return null
-  return path.replace(/^\/+/, "")
+  const stripped = path.replace(/^\/+/, "")
+  if (stripped.startsWith("library/")) {
+    return "public/" + stripped.slice("library/".length)
+  }
+  return stripped
 }
 
 /* ---------- main import ---------------------------------------------------- */
