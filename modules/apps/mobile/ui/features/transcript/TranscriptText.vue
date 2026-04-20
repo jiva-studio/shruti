@@ -5,6 +5,7 @@
     dataset-field-end="data-time-end"
     @selecting="onSelecting"
     @selected="onSelected"
+    @pick-start="emit('pickStart')"
   >
     <p
       v-for="(section, idx) in blockGroups"
@@ -120,6 +121,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   seek: [position: number]
   textSelected: [event: TextSelectedEvent]
+  /** Propagates the long-press-on-selectable signal up to the controller. */
+  pickStart: []
 }>()
 
 

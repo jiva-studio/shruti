@@ -44,6 +44,8 @@ import { useCapacitorAudioPlayer } from "@infra/audio.capacitor/index.js"
 import { useWebAudioPlayer } from "@infra/audio.web/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications.capacitor/index.js"
 import { useCapacitorShareService } from "@infra/share.capacitor/index.js"
+import { useCapacitorHaptics } from "@infra/haptics.capacitor/index.js"
+import { useWebHaptics } from "@infra/haptics.web/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -51,6 +53,7 @@ import { useCapacitorShareService } from "@infra/share.capacitor/index.js"
 // `router.isReady().then(...)` the singleton is still null at that point and
 // guard explodes with "Lectorium not initialized".
 const isNative = Capacitor.isNativePlatform()
+const platform = Capacitor.getPlatform() as "ios" | "android" | "web"
 
 const config = { ...DEFAULT_APP_CONFIG }
 if (isNative) {
@@ -71,6 +74,8 @@ initLectorium({
   audioPlayer: isNative ? useCapacitorAudioPlayer() : useWebAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
+  haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),
+  platform,
   initialServer: SERVERS[0],
 })
 

@@ -11,6 +11,7 @@
       :sticked="transcriptStore.open"
       :hidden="!player.open"
       :pulsing="pulsing"
+      :play-button-size="playButtonSize"
       @play-clicked="onTogglePause"
       @click="onOpenTranscript"
     />
@@ -27,6 +28,7 @@
       :highlight-current-sentence="dialog.highlightCurrentSentence.value"
       @seek="dialog.onSeek"
       @selection-action="dialog.onSelectionAction"
+      @pick-start="dialog.onPickStart"
     />
   </IonApp>
 </template>
@@ -43,13 +45,17 @@ import { useTranscriptDialogController } from "@lectorium/composables/useTranscr
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { setLocale, SUPPORTED_LOCALES, type SupportedLocale } from "@lectorium/i18n/index.js"
+import { useLectorium } from "@lectorium/lectorium.js"
 
+const app = useLectorium()
 const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const tutorial = useTutorialStore()
 const dialog = useTranscriptDialogController()
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", false)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
+
+const playButtonSize = app.platform === "android" ? 48 : 44
 
 // App-wide UI locale sync. Mounted at the root so the whole tree
 // (tabs, views, modals) sees the persisted language the moment the

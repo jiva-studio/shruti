@@ -12,7 +12,6 @@
 <script setup lang="ts">
 import { ref, useTemplateRef } from 'vue'
 import { onLongPress } from '@vueuse/core'
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -26,6 +25,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   selected: [start: number, end: number, event: TouchEvent]
   selecting: [start: number, end: number]
+  /** Long-press landed on a selectable block — parent decides whether to fire haptics. */
+  pickStart: []
 }>()
 
 
@@ -115,7 +116,7 @@ function onLongPressed() {
   isInSelectionMode.value = true
   if (initialTimeStart.value !== -1) {
     emit('selecting', initialTimeStart.value, initialTimeEnd.value)
-    void Haptics.impact({ style: ImpactStyle.Light })
+    emit('pickStart')
   }
 }
 </script>

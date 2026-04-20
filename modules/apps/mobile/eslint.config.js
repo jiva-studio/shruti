@@ -169,6 +169,10 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
           ],
         },
       ],
@@ -191,6 +195,10 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
             { group: ["@ui/components/*"], message: "Primitives must not import components" },
             { group: ["@ui/features/*"], message: "Primitives must not import features" },
             { group: ["@ui/icons/*"], message: "Primitives must not import icons" },
@@ -216,6 +224,10 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
             { group: ["@ui/primitives/*"], message: "Icons must not import primitives" },
             { group: ["@ui/components/*"], message: "Icons must not import components" },
             { group: ["@ui/features/*"], message: "Icons must not import features" },
@@ -242,6 +254,10 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
             {
               group: ["@ui/features/*"],
               message: "Components must not import features — features depend on components, not the other way around",
@@ -270,6 +286,10 @@ export default defineConfigWithVueTs(
             },
             { group: ["@lib/application/*"], message: "UI must not import application layer" },
             { group: ["@lectorium/*"], message: "UI must not import composition root" },
+            {
+              group: ["@capacitor/*"],
+              message: "UI must not import Capacitor SDKs — use a @ports/app port instead",
+            },
             {
               group: ["@ui/features/*"],
               message:

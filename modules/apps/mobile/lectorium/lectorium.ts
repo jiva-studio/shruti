@@ -4,6 +4,7 @@ import type {
   IAudioPlayer,
   IDatabase,
   IDatabaseFetcher,
+  IHaptics,
   INotificationScheduler,
   IPersistence,
   IPreferences,
@@ -46,6 +47,9 @@ export interface Lectorium {
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
+  readonly haptics: IHaptics
+  /** Runtime platform, captured at bootstrap. Drives layout constants that can't be inferred from CSS. */
+  readonly platform: "ios" | "android" | "web"
 
   /** Active CDN server; mutable via setActiveServer. */
   readonly activeServer: Ref<CdnServer>
@@ -86,6 +90,8 @@ export interface InitLectoriumSeed {
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
+  readonly haptics: IHaptics
+  readonly platform: "ios" | "android" | "web"
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
 }
@@ -118,6 +124,8 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
     shareService: seed.shareService,
+    haptics: seed.haptics,
+    platform: seed.platform,
     activeServer,
     contentDbFile,
     databases,
