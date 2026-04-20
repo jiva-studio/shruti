@@ -22,7 +22,7 @@
 
 <script lang="ts" setup>
 import { computed, ref, toRefs } from 'vue'
-import { ListItemsSelectorDialog, type SelectorDialogItem } from '@ui/features/selectors/index.js'
+import { ListItemsSelectorDialog, type SelectorDialogItem } from '@ui/components/selectors/index.js'
 import SearchFilterChip from './SearchFilterChip.vue'
 
 /* -------------------------------------------------------------------------- */

@@ -37,8 +37,8 @@
 <script setup lang="ts">
 import { IonText } from "@ionic/vue"
 import { AppPage } from "@ui/primitives/index.js"
-import { SearchInput } from "@ui/features/tracks.search.input/index.js"
-import { TracksList } from "@ui/features/tracks.list/index.js"
+import { SearchInput } from "@ui/components/tracks.search.input/index.js"
+import { TracksList } from "@ui/components/tracks.list/index.js"
 import { SearchFiltersBar } from "@ui/features/tracks.search.filters/index.js"
 import { useSearchController } from "./SearchView.controller.js"
 

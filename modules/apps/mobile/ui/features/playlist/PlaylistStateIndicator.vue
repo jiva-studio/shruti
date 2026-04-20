@@ -28,8 +28,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconIndicator, RadialIndicator, type StateIcon } from '@ui/features/tracks.state/index.js'
-import type { UiTrackState } from '@ui/features/tracks.list/index.js'
+import { IconIndicator, RadialIndicator, type StateIcon } from '@ui/components/tracks.state/index.js'
+import type { UiTrackState } from '@ui/components/tracks.list/index.js'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

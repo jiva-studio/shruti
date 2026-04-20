@@ -34,7 +34,7 @@
 import { computed, ref } from "vue"
 import { IonItem, IonLabel } from "@ionic/vue"
 import { CloudIcon } from "@ui/icons/index.js"
-import { ListItemSelectorDialog } from "@ui/features/selectors/index.js"
+import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 
 interface Props {
   items: { id: string; title: string }[]

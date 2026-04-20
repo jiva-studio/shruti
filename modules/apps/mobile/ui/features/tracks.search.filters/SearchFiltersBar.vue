@@ -48,7 +48,7 @@ import IconAuthors from './icons/IconAuthors.vue'
 import IconLocations from './icons/IconLocations.vue'
 import IconClock from './icons/IconClock.vue'
 import IconSort from './icons/IconSort.vue'
-import type { SelectorDialogItem } from '@ui/features/selectors/index.js'
+import type { SelectorDialogItem } from '@ui/components/selectors/index.js'
 
 /* -------------------------------------------------------------------------- */
 /*                                   Models                                   */

@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { PageSticker, SectionHeader } from '@ui/primitives/index.js'
-import type { UiTrackRow } from '@ui/features/tracks.list/index.js'
+import type { UiTrackRow } from '@ui/components/tracks.list/index.js'
 import PlaylistItems from './PlaylistItems.vue'
 
 /* -------------------------------------------------------------------------- */
