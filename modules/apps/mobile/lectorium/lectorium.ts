@@ -15,6 +15,8 @@ import type {
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useStoragePublicUrl } from "@infra/storage.public.url/index.js"
+import { probeServers as probeServersImpl, type ServerProbeResult } from "@infra/servers/index.js"
+import { createSqlSchemeVersionRepository } from "@infra/repositories.sql/index.js"
 
 /**
  * App-wide config passed into `initLectorium`. Built from `DEFAULT_APP_CONFIG`
@@ -81,6 +83,19 @@ export interface Lectorium {
    * phases 2 and 3). Cached on first call.
    */
   repositories(): AppRepositories
+
+  /**
+   * Probe CDN servers for `configPath`; returns the first reachable one
+   * plus the parsed remote config. Wraps `@infra/servers/probeServers`
+   * so the Welcome view doesn't reach into infra directly.
+   */
+  probeServers(configPath: string, preferredServerId?: string): Promise<ServerProbeResult>
+
+  /**
+   * Read the scheme version recorded by the last `migrations` row of the
+   * open content DB. Throws if the content DB isn't open.
+   */
+  readContentSchemeVersion(): Promise<number>
 }
 
 export interface InitLectoriumSeed {
@@ -114,7 +129,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   // the resolver always sees the latest CDN template after
   // `setActiveServer` swaps it.
   const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(
-    () => activeServer.value.urlTemplate
+    () => activeServer.value
   )
 
   const self: Lectorium = {
@@ -177,6 +192,17 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
         storagePublicUrl,
       })
       return cachedRepos
+    },
+
+    probeServers(configPath, preferredServerId) {
+      return probeServersImpl(configPath, preferredServerId)
+    },
+
+    async readContentSchemeVersion() {
+      if (!databases.content) {
+        throw new Error("readContentSchemeVersion(): content DB is not open yet")
+      }
+      return createSqlSchemeVersionRepository(databases.content).read()
     },
   }
 

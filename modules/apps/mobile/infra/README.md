@@ -4,7 +4,10 @@ Each subdirectory implements one or more technical ports from `@ports/app` or do
 
 Populated per phase:
 
-- **Phase 3**: `persistence.sqljs`, `persistence.capacitor`, `persistence.fetchers.idb`, `persistence.fetchers.fs`, `files.web`, `files.capacitor`, `storage.public.url`, `preferences.capacitor`, `servers`, `idb.kv`, `databaseTransfer.capacitor`, `databaseTransfer.web`.
+- **Phase 3**: `persistence.sqljs`, `persistence.capacitor`, `persistence.fetchers.idb`, `persistence.fetchers.fs`, `files.web`, `files.capacitor`, `storage.public.url`, `preferences.capacitor`, `servers`, `idb.kv`.
 - **Phase 4**: `repositories.sql` (user DB repositories), `repositories.preferences`.
 - **Phase 5**: `repositories.http` (transcripts over HTTP from public S3).
-- **Phase 6**: `audio.capacitor`, `audio.web`, `notifications.capacitor`, `share.capacitor`.
+- **Phase 6**: `audio.capacitor`, `audio.web`, `notifications.capacitor`, `share.capacitor`, `haptics.capacitor`, `haptics.web`.
+- **Phase 7**: `mediaDownloader.capacitor`, `mediaDownloader.web`.
+
+Not yet implemented: `databaseTransfer.capacitor`, `databaseTransfer.web` — the port exists but has no adapters and no UI caller. Implementing correctly requires exposing raw DB bytes through `IPersistence`/`IDatabase` and a backup/restore UI surface.

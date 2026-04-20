@@ -2,8 +2,6 @@ import { computed, onMounted, ref, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { runUserMigrations } from "@lectorium/services/migrations/user/runMigrations.js"
-import { probeServers } from "@infra/servers/index.js"
-import { createSqlSchemeVersionRepository } from "@infra/repositories.sql/index.js"
 import {
   resolveContentDatabase as resolveContentDatabaseImpl,
   type ResolveContentDatabaseDeps,
@@ -92,7 +90,7 @@ export function useWelcomeController(
       getPublicUrl: (path) => lectorium.storagePublicUrl.get(path),
       filesStorage: lectorium.filesStorage,
       databaseFetcher: lectorium.databaseFetcher,
-      probeServers,
+      probeServers: lectorium.probeServers,
       onServerResolved: (result) => lectorium.setActiveServer(result.server),
       loadSavedPreferredServerId: async () => {
         const stored = await lectorium.preferences.get(PREFERRED_SERVER_KEY)
@@ -122,7 +120,7 @@ export function useWelcomeController(
     for (let attempt = 0; attempt < MAX_SCHEME_RETRIES; attempt++) {
       const dbPath = await resolveContentDatabaseImpl(buildLocatorDeps(), incompatibleDbPaths)
       await lectorium.openContentDatabase(dbPath)
-      const scheme = await createSqlSchemeVersionRepository(lectorium.databases.content!).read()
+      const scheme = await lectorium.readContentSchemeVersion()
 
       if (scheme === 0 || scheme === SUPPORTED_DB_SCHEME) return
 
@@ -175,7 +173,7 @@ export function useWelcomeController(
       getPublicUrl: base.getPublicUrl,
       filesStorage: base.filesStorage,
       databaseFetcher: base.databaseFetcher,
-      probeServers,
+      probeServers: lectorium.probeServers,
       onServerResolved: base.onServerResolved,
       loadSavedPreferredServerId: base.loadSavedPreferredServerId,
       persistPreferredServerIdIfChanged: async (resolvedId) => {

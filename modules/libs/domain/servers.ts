@@ -22,3 +22,13 @@ export const SERVERS: readonly CdnServer[] = [
     urlTemplate: "https://akds-lectorium.storage.yandexcloud.net/{path}",
   },
 ]
+
+/**
+ * Canonical `{path}` substitution. Use this anywhere a full URL has to be
+ * assembled from a server template — `IStoragePublicUrl.get()` and the
+ * startup probe both route through here so the rule "paths are already
+ * full bucket keys; the client only swaps templates" stays in one place.
+ */
+export function buildServerUrl(server: CdnServer, path: string): string {
+  return server.urlTemplate.replace("{path}", path)
+}

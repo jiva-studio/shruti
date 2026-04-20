@@ -67,18 +67,21 @@ modules/
 │   │
 │   ├── application/                         # Use cases (pure functions)
 │   │   ├── loadTranscript.ts                # Load transcript(s) for a track
-│   │   ├── searchTracks.ts                  # Search tracks by title / reference
+│   │   ├── searchTracks.ts                  # FTS: titles + references
 │   │   ├── listTracksByFilters.ts           # List tracks filtered by author/source/language/duration/tag
-│   │   ├── computeFilterCounts.ts           # Compute counts per filter option
-│   │   ├── parseReferenceQuery.ts           # Parse "sb 1.8.40" into tokens
+│   │   ├── searchAndFilterTracks.ts         # FTS + filter narrowing vs filter-only routing
+│   │   ├── searchNotes.ts                   # Substring match over recent notes
+│   │   ├── listPlaylistTracks.ts            # Join active playlist items with tracks
 │   │   ├── addTrackToPlaylist.ts            # Add track to user playlist
 │   │   ├── archivePlaylistItem.ts           # Archive playlist entry
 │   │   ├── markCompleted.ts                 # Mark track as completed
 │   │   ├── updateProgress.ts                # Save playback position
+│   │   ├── playTrack.ts                     # Variant pick + itemId + author-name command
 │   │   ├── createNote.ts                    # Create user note
 │   │   ├── updateNote.ts                    # Update user note
 │   │   ├── deleteNote.ts                    # Delete user note
-│   │   ├── playTrack.ts                     # Orchestrate player open + progress
+│   │   ├── downloadMedia.ts                 # Orchestrate MediaItem lifecycle + transfer
+│   │   ├── removeDownloadedMedia.ts         # Delete cached bytes + clear MediaItem
 │   │   ├── __tests__/                       # Use case tests
 │   │   └── index.ts
 │   │
@@ -95,9 +98,10 @@ modules/
 │       │       ├── storagePublicUrl.ts      # IStoragePublicUrl
 │       │       ├── preferences.ts           # IPreferences
 │       │       ├── schemeVersion.ts         # ISchemeVersionRepository
-│       │       ├── databaseTransfer.ts      # IDatabaseTransfer
+│       │       ├── databaseTransfer.ts      # IDatabaseTransfer (port exists; no adapters yet)
 │       │       ├── audioPlayer.ts           # IAudioPlayer
 │       │       ├── mediaDownloader.ts       # IMediaDownloader
+│       │       ├── haptics.ts               # IHaptics
 │       │       ├── notifications.ts         # INotificationScheduler
 │       │       ├── share.ts                 # IShareService
 │       │       └── index.ts
@@ -118,8 +122,10 @@ modules/
 │       │   ├── audio.web/                   # HTMLAudioElement (web)
 │       │   ├── notifications.capacitor/     # @capacitor/local-notifications
 │       │   ├── share.capacitor/             # @capacitor/share
-│       │   ├── databaseTransfer.capacitor/  # DB export/import (native)
-│       │   ├── databaseTransfer.web/        # DB export/import (web)
+│       │   ├── haptics.capacitor/           # @capacitor/haptics
+│       │   ├── haptics.web/                 # Pure no-op
+│       │   ├── mediaDownloader.capacitor/   # @capacitor/file-transfer + Filesystem.Cache
+│       │   ├── mediaDownloader.web/         # fetch + Cache API, streams for progress
 │       │   ├── servers/                     # CDN server probing
 │       │   └── idb.kv/                      # Layer 1 primitive — IDB KV store
 │       │
@@ -256,9 +262,9 @@ Is it a Vue view, a route, or app-level wiring?
 
 - **Composition Root:** `lectorium/lectorium.ts` — only file knowing all concrete adapters, exposes lazy `repositories()`.
 - **Controller Pattern:** `*.controller.ts` in views separates business logic from Vue templates.
-- **Unit of Work:** `IUnitOfWork.run()` wraps multi-step operations in a transaction.
-- **Result Type:** `Result<T, E>` forces explicit error handling instead of exceptions.
-- **Row Mappers:** single place in `@infra/repositories.sql/rowMappers.ts` that knows SQL row shapes and converts to domain entities.
+- **Unit of Work:** `IUnitOfWork.run()` wraps multi-step operations in a transaction. (Currently wired but unused — activate when a composite mutation flow lands.)
+- **Result Type:** `Result<T, E>` forces explicit error handling instead of exceptions. Mutation use cases return `Result`; query use cases throw on infra error — see `docs/architecture/layers.md`.
+- **Row Mappers:** split by DB scope — `@infra/repositories.sql/contentRowMappers.ts` for content DB rows, `@infra/repositories.sql/rowMappers.ts` for user DB rows. Each repository imports only the mapper for its own scope.
 - **UI Mirror Types:** when `@ui/features/*` needs a type from `@lib/domain`, it declares a local mirror copy — `@ui` never imports `@lib/domain` directly.
 - **Platform Adapters:** web vs native behind shared ports (sql.js/Cache API vs Capacitor SQLite/Filesystem).
 - **Single source of truth for paths:** SQLite rows store full paths from the bucket root (including the `public/` prefix). Client resolves URL via `IStoragePublicUrl.get(path)` without any concatenation.
