@@ -6,11 +6,11 @@ import { defineConfig } from "vite"
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
 const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8"))
 
-// `@shruti` is also the npm scope for our audio-player plugin
-// (`@shruti/audio-player`). Vite 8 uses Rolldown, which doesn't expand
-// `$1` back-references in regex alias replacements — so we resolve the
-// `@shruti/*` (excluding `@shruti/audio-player`) prefix via a tiny
-// plugin instead.
+// `@shruti` is also the npm scope for our in-house Capacitor plugins
+// (`@shruti/plugin-*`, e.g. `@shruti/plugin-audio-player`). Vite 8
+// uses Rolldown, which doesn't expand `$1` back-references in regex alias
+// replacements — so we resolve the `@shruti/*` (excluding the
+// `@shruti/plugin-*` family) prefix via a tiny plugin instead.
 const SHRUTI_ROOT = path.resolve(__dirname, "./shruti")
 const shrutiAlias = {
   name: "shruti-source-alias",
@@ -29,7 +29,7 @@ const shrutiAlias = {
     id: string,
     importer?: string
   ) {
-    if (!id.startsWith("@shruti/") || id.startsWith("@shruti/audio-player")) return null
+    if (!id.startsWith("@shruti/") || id.startsWith("@shruti/plugin-")) return null
     const rewritten = path.resolve(SHRUTI_ROOT, id.slice("@shruti/".length))
     const resolved = await this.resolve(rewritten, importer, { skipSelf: true })
     return resolved?.id ?? rewritten

@@ -1,6 +1,6 @@
 /**
  * Port over a platform audio-playback engine.
- * Implemented by @infra/audio/capacitor (wrapping @shruti/audio-player)
+ * Implemented by @infra/audio/capacitor (wrapping @shruti/plugin-audio-player)
  * and @infra/audio/web (wrapping HTMLAudioElement).
  */
 export interface AudioOpenParams {

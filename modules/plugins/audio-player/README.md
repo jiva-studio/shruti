@@ -1,10 +1,10 @@
-# @shruti/audio-player
+# @shruti/plugin-audio-player
 
 
 ## Install
 
 ```bash
-npm install @shruti/audio-player
+npm install @shruti/plugin-audio-player
 npx cap sync
 ```
 

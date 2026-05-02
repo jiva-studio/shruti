@@ -8,7 +8,7 @@ Top-level layout:
 - `modules/libs/domain/` — pure entities, value objects, domain services, repository ports.
 - `modules/libs/application/` — use cases that orchestrate domain logic and ports.
 - `modules/libs/persistence/` — TypeScript row types for the SQL databases.
-- `modules/capacitor/audio-player/` — native Capacitor plugin for audio playback.
+- `modules/plugins/audio-player/` — native Capacitor plugin for audio playback (npm package `@shruti/plugin-audio-player`).
 - `modules/tools/content-db-builder/` — Node.js tool that builds the prebuilt SQLite file and uploads content (transcripts, audio manifests) to S3.
 - `modules/tests/e2e/` — Playwright end-to-end tests.
 
