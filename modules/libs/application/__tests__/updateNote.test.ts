@@ -91,4 +91,34 @@ describe("updateNote", () => {
     if (!result.ok) expect(result.error).toBe("invalid-range")
     expect(updateSpy).not.toHaveBeenCalled()
   })
+
+  it("rejects partial timeStart that becomes greater than the existing timeEnd", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({
+      getById: async () => sample({ timeStart: 0, timeEnd: 100 }),
+      update: updateSpy,
+    })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, timeStart: 150 },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("invalid-range")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects partial timeEnd that becomes smaller than the existing timeStart", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({
+      getById: async () => sample({ timeStart: 50, timeEnd: 100 }),
+      update: updateSpy,
+    })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, timeEnd: 10 },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("invalid-range")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
 })

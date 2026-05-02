@@ -30,16 +30,15 @@ export async function updateNote(
   if (input.text !== undefined && input.text.trim().length === 0) {
     return err("empty-text")
   }
-  if (
-    input.timeStart !== undefined &&
-    input.timeEnd !== undefined &&
-    input.timeEnd < input.timeStart
-  ) {
-    return err("invalid-range")
-  }
   return deps.unitOfWork.run(async () => {
     const existing = await deps.notes.getById(input.id)
     if (!existing) return err("not-found")
+    // Validate the *merged* range, not just the input pair. A partial
+    // update like { timeStart: 150 } against an existing { 0, 100 }
+    // would otherwise persist start > end and break note rendering.
+    const mergedStart = input.timeStart ?? existing.timeStart
+    const mergedEnd = input.timeEnd ?? existing.timeEnd
+    if (mergedEnd < mergedStart) return err("invalid-range")
     const updated = await deps.notes.update({
       id: input.id,
       text: input.text,
