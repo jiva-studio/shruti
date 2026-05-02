@@ -57,7 +57,13 @@ export const useDownloadStore = defineStore("downloads", () => {
   async function hydrate(): Promise<void> {
     if (hydrated) return
     try {
-      const ready = await app.repositories().mediaItems.listReady()
+      const repo = app.repositories().mediaItems
+      // Recover rows the previous session left at "downloading" because
+      // the app was force-closed or crashed mid-transfer. Without this
+      // the Download button stays locked-out (downloadMedia rejects with
+      // already-in-progress) until the user wipes data.
+      await repo.failStaleDownloads()
+      const ready = await repo.listReady()
       const next = new Map<TrackId, DownloadState>()
       for (const item of ready) next.set(item.trackId, "completed")
       states.value = next

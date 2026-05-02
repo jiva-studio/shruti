@@ -65,5 +65,12 @@ export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepositor
       await db.execute("DELETE FROM media_items")
       await db.save()
     },
+
+    async failStaleDownloads(): Promise<void> {
+      await db.execute(
+        "UPDATE media_items SET state = 'failed', local_path = NULL WHERE state = 'downloading'"
+      )
+      await db.save()
+    },
   }
 }
