@@ -20,6 +20,11 @@ export const useDownloadStore = defineStore("downloads", () => {
   // Per-track download progress 0..100. Populated only while a download
   // is in flight; cleared on completed/failed/idle/remove.
   const progress = ref<Map<TrackId, number>>(new Map())
+  // Set when the most recent `hydrate()` couldn't read the user DB
+  // (schema drift, db locked, plugin error). Without this, the UI
+  // showed every track as "not downloaded" and the user had no signal
+  // why. The Welcome screen / Settings can render a banner from this.
+  const hydrationError = ref<string | null>(null)
   const inFlight = new Map<TrackId, Promise<string | null>>()
   let hydrated = false
 
@@ -68,8 +73,10 @@ export const useDownloadStore = defineStore("downloads", () => {
       for (const item of ready) next.set(item.trackId, "completed")
       states.value = next
       hydrated = true
+      hydrationError.value = null
     } catch (err) {
       console.error("[downloads] hydrate failed:", err)
+      hydrationError.value = err instanceof Error ? err.message : String(err)
     }
   }
 
@@ -147,6 +154,7 @@ export const useDownloadStore = defineStore("downloads", () => {
   return {
     states,
     progress,
+    hydrationError,
     getState,
     getProgress,
     hydrate,
