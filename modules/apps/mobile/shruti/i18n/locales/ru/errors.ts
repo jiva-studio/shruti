@@ -5,4 +5,5 @@ export default {
   downloadsCacheUnavailable:
     "Не удалось прочитать список загрузок. Скачанные файлы остались на диске.",
   trackNotFound: "Лекция не найдена.",
+  languageListUnavailable: "Не удалось загрузить список языков — показан сокращённый.",
 }

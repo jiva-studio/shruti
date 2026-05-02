@@ -2,6 +2,7 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue
 import { alertController, toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
+import { useToast } from "@shruti/services/useToast.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { useDebugStore } from "@shruti/stores/useDebugStore.js"
@@ -45,6 +46,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const app = useShruti()
   const debug = useDebugStore()
   const { t } = useI18n()
+  const toast = useToast()
 
   const version = __APP_VERSION__
   const buildId = __BUILD_ID__
@@ -96,11 +98,16 @@ export function useSettingsController(): SettingsControllerReturn {
     try {
       const langs: readonly Language[] = await app.repositories().languages.listAll()
       languageItems.value = langs.map((l) => ({ id: l.code, title: l.fullName }))
-    } catch {
+    } catch (err) {
+      // Falling back silently meant users in unsupported locales saw
+      // only en/ru and assumed the app didn't support their language.
+      // Tell them the list couldn't load.
+      console.error("[settings] languages.listAll failed:", err)
       languageItems.value = [
         { id: "en", title: "English" },
         { id: "ru", title: "Русский" },
       ]
+      void toast.error(t("errors.languageListUnavailable"))
     }
   })
 
