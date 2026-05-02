@@ -42,6 +42,12 @@ export default defineConfigWithVueTs(
       ],
       // Ionic uses DOM slot="…" attributes that the Vue rule misreads.
       "vue/no-deprecated-slot-attribute": "off",
+      // Vue 3 doesn't have filters at all — the rule false-positives on TS
+      // union types (`x as A | B`) inside attribute bindings.
+      "vue/no-deprecated-filter": "off",
+      // Allow these specific single-word names — they're internal UI primitives
+      // where the bare noun is the meaningful name.
+      "vue/multi-word-component-names": ["error", { ignores: ["Header", "Message", "Timestamp"] }],
     },
   },
 
@@ -260,7 +266,8 @@ export default defineConfigWithVueTs(
             },
             {
               group: ["@ui/features/*"],
-              message: "Components must not import features — features depend on components, not the other way around",
+              message:
+                "Components must not import features — features depend on components, not the other way around",
             },
           ],
         },

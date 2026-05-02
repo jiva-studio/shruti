@@ -56,7 +56,7 @@ export function createHttpTranscriptRepository(
         raw = (await response.json()) as RawTranscript
       } catch (parseErr) {
         const message = parseErr instanceof Error ? parseErr.message : String(parseErr)
-        throw new Error(`Transcript JSON is malformed at ${path}: ${message}`)
+        throw new Error(`Transcript JSON is malformed at ${path}: ${message}`, { cause: parseErr })
       }
       return {
         trackId,
