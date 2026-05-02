@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
 import { addTrackToPlaylist } from "../addTrackToPlaylist.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
+
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
 
 function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistItemRepository {
   return {
@@ -38,7 +41,7 @@ describe("addTrackToPlaylist", () => {
     const repo = makeRepo({ listActive: async () => [], add })
     const result = await addTrackToPlaylist(
       { trackId: "t-new" as TrackId },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.id).toBe("pi-new")
@@ -53,10 +56,36 @@ describe("addTrackToPlaylist", () => {
     })
     const result = await addTrackToPlaylist(
       { trackId: "t-dup" as TrackId },
-      { playlistItems: repo }
+      { playlistItems: repo, unitOfWork: noopUnitOfWork }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("already-in-playlist")
     expect(add).not.toHaveBeenCalled()
+  })
+
+  it("runs the listActive+add pair inside the unit-of-work for atomicity", async () => {
+    const order: string[] = []
+    const created = sample({ id: "pi-new" as PlaylistItemId, trackId: "t-new" as TrackId })
+    const add = vi.fn<IPlaylistItemRepository["add"]>().mockImplementation(async (id) => {
+      order.push(`add(${id})`)
+      return created
+    })
+    const repo = makeRepo({
+      listActive: async () => {
+        order.push("listActive")
+        return []
+      },
+      add,
+    })
+    const uow: IUnitOfWork = {
+      run: async (fn) => {
+        order.push("uow:start")
+        const r = await fn()
+        order.push("uow:end")
+        return r
+      },
+    }
+    await addTrackToPlaylist({ trackId: "t-new" as TrackId }, { playlistItems: repo, unitOfWork: uow })
+    expect(order).toEqual(["uow:start", "listActive", "add(t-new)", "uow:end"])
   })
 })
