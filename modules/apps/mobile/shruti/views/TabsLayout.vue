@@ -3,37 +3,24 @@
     <IonTabs>
       <IonRouterOutlet />
       <IonTabBar slot="bottom">
-        <IonTabButton
-          tab="tab1"
-          href="/tabs/home"
-        >
+        <IonTabButton tab="tab1" href="/tabs/home">
           <IconHome />
-          <IonLabel>{{ $t('app.home') }}</IonLabel>
+          <IonLabel>{{ $t("app.home") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton
-          v-if="showNotesTab"
-          tab="tab2"
-          href="/tabs/notes"
-        >
+        <IonTabButton v-if="showNotesTab" tab="tab2" href="/tabs/notes">
           <IconBookmark />
-          <IonLabel>{{ $t('app.notes') }}</IonLabel>
+          <IonLabel>{{ $t("app.notes") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton
-          tab="tab3"
-          href="/tabs/search"
-        >
+        <IonTabButton tab="tab3" href="/tabs/search">
           <IconSearch />
-          <IonLabel>{{ $t('app.search') }}</IonLabel>
+          <IonLabel>{{ $t("app.search") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton
-          tab="tab4"
-          href="/tabs/settings"
-        >
+        <IonTabButton tab="tab4" href="/tabs/settings">
           <IconSettings />
-          <IonLabel>{{ $t('app.settings') }}</IonLabel>
+          <IonLabel>{{ $t("app.settings") }}</IonLabel>
         </IonTabButton>
       </IonTabBar>
     </IonTabs>
@@ -41,11 +28,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from '@ionic/vue'
-import { IconHome, IconBookmark, IconSearch, IconSettings } from '@ui/icons/index.js'
-import { useConfig } from '@shruti/composables/useConfig.js'
+import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from "@ionic/vue"
+import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
+import { useConfig } from "@shruti/composables/useConfig.js"
 
-const showNotesTab = useConfig<boolean>('settings.notes.showTab', true)
+const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
 </script>
 
 <style scoped>
@@ -53,9 +40,9 @@ ion-tab-bar {
   --border: 0;
   --background: linear-gradient(
     to bottom,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0)   0%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), .8) 35%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1)  100%
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0) 0%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.8) 35%,
+    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1) 100%
   );
   padding-top: 50px;
 }

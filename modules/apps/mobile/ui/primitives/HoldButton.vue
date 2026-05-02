@@ -9,17 +9,9 @@
     @mouseleave="cancelHold"
     @touchend="cancelHold"
   >
-    <div
-      v-if="!confirmed"
-      class="circle-progress"
-    >
+    <div v-if="!confirmed" class="circle-progress">
       <svg viewBox="0 0 36 36">
-        <circle
-          class="bg"
-          cx="18"
-          cy="18"
-          r="14"
-        />
+        <circle class="bg" cx="18" cy="18" r="14" />
         <circle
           class="progress"
           cx="18"
@@ -36,8 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { IonButton } from '@ionic/vue'
+import { ref, computed } from "vue"
+import { IonButton } from "@ionic/vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -81,18 +73,18 @@ function startHold() {
   isHolding.value = true
   progress.value = 0
   startTime = Date.now()
-  emit('confirmStart')
+  emit("confirmStart")
 
   interval = setInterval(() => {
     const elapsed = Date.now() - startTime
     progress.value = Math.min((elapsed / holdTime) * 100, 100)
-    emit('confirming', elapsed, holdTime)
+    emit("confirming", elapsed, holdTime)
 
     if (elapsed >= holdTime) {
       if (interval) clearInterval(interval)
       isHolding.value = false
       confirmed.value = true
-      emit('confirm')
+      emit("confirm")
     }
   }, 16)
 }

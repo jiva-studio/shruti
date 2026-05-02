@@ -1,26 +1,18 @@
 <template>
   <div class="VerseTextBlock">
     <!-- Reference -->
-    <span
-      v-if="reference"
-      class="reference center"
-    >
+    <span v-if="reference" class="reference center">
       {{ reference }}
     </span>
 
     <!-- Verse Lines -->
     <div>
-      <div
-        v-for="line in lines"
-        :key="line"
-        class="lines center"
-      >
+      <div v-for="line in lines" :key="line" class="lines center">
         {{ line }}
       </div>
     </div>
   </div>
 </template>
-
 
 <script lang="ts" setup>
 /* -------------------------------------------------------------------------- */
@@ -33,14 +25,13 @@ defineProps<{
 }>()
 </script>
 
-
 <style scoped>
 .VerseTextBlock {
   margin: 20px 0px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: .25rem;
+  gap: 0.25rem;
 }
 
 .center {
@@ -52,12 +43,12 @@ defineProps<{
 }
 
 .reference {
-  opacity: .5;
+  opacity: 0.5;
   background-color: white;
   color: black;
   border-radius: 3px;
-  font-size: .75rem;
-  padding: .25rem;
+  font-size: 0.75rem;
+  padding: 0.25rem;
   white-space: nowrap;
 }
 </style>

@@ -1,9 +1,8 @@
 <template>
   <span class="VerseTranslationBlock">
-    {{ text + ' ' }}
+    {{ text + " " }}
   </span>
 </template>
-
 
 <script lang="ts" setup>
 /* -------------------------------------------------------------------------- */
@@ -14,7 +13,6 @@ defineProps<{
   text: string
 }>()
 </script>
-
 
 <style scoped>
 .VerseTranslationBlock {

@@ -12,15 +12,17 @@
   />
 </template>
 
-
 <script lang="ts" setup>
-import RadialProgress from 'vue3-radial-progress'
+import RadialProgress from "vue3-radial-progress"
 
-withDefaults(defineProps<{
-  value: number
-  color: string
-}>(), {
-  value: 0,
-  color: 'primary'
-})
+withDefaults(
+  defineProps<{
+    value: number
+    color: string
+  }>(),
+  {
+    value: 0,
+    color: "primary",
+  }
+)
 </script>

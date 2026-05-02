@@ -18,7 +18,17 @@ const shrutiAlias = {
   // Sources import e.g. "@shruti/router/index.js" but the file on disk is
   // index.ts. Re-call Vite's resolver after rewriting so extension fallback
   // kicks in (.ts/.tsx/.vue/index.*).
-  async resolveId(this: { resolve: (id: string, importer?: string, opts?: { skipSelf?: boolean }) => Promise<{ id: string } | null> }, id: string, importer?: string) {
+  async resolveId(
+    this: {
+      resolve: (
+        id: string,
+        importer?: string,
+        opts?: { skipSelf?: boolean }
+      ) => Promise<{ id: string } | null>
+    },
+    id: string,
+    importer?: string
+  ) {
     if (!id.startsWith("@shruti/") || id.startsWith("@shruti/audio-player")) return null
     const rewritten = path.resolve(SHRUTI_ROOT, id.slice("@shruti/".length))
     const resolved = await this.resolve(rewritten, importer, { skipSelf: true })

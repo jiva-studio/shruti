@@ -38,10 +38,7 @@ export const useNotesStore = defineStore("notes", () => {
   }
 
   async function applyFilter(): Promise<void> {
-    filtered.value = await searchNotes(
-      { query: query.value },
-      { notes: app.repositories().notes }
-    )
+    filtered.value = await searchNotes({ query: query.value }, { notes: app.repositories().notes })
   }
 
   async function setQuery(next: string): Promise<void> {
@@ -51,17 +48,17 @@ export const useNotesStore = defineStore("notes", () => {
 
   async function remove(id: NoteId): Promise<Result<void, DeleteNoteError>> {
     const repos = app.repositories()
-    const result = await deleteNote(
-      { id },
-      { notes: repos.notes, unitOfWork: repos.unitOfWork }
-    )
+    const result = await deleteNote({ id }, { notes: repos.notes, unitOfWork: repos.unitOfWork })
     if (result.ok) await refresh()
     return result
   }
 
-  async function update(
-    input: { id: NoteId; text?: string; timeStart?: number; timeEnd?: number }
-  ): Promise<Result<Note, UpdateNoteError>> {
+  async function update(input: {
+    id: NoteId
+    text?: string
+    timeStart?: number
+    timeEnd?: number
+  }): Promise<Result<Note, UpdateNoteError>> {
     const repos = app.repositories()
     const result = await updateNote(input, { notes: repos.notes, unitOfWork: repos.unitOfWork })
     if (result.ok) await refresh()

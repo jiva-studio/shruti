@@ -1,10 +1,7 @@
 <template>
   <span>
     <!-- Speaker Icon -->
-    <span
-      v-if="icon"
-      class="icon"
-    >
+    <span v-if="icon" class="icon">
       {{ icon }}
     </span>
 
@@ -14,27 +11,20 @@
         v-if="reference"
         class="reference floating"
         :class="{
-          'visible': referenceVisible,
-          'hidden': !referenceVisible,
+          visible: referenceVisible,
+          hidden: !referenceVisible,
         }"
       >
         {{ reference }}
       </span>
 
-      <br v-else-if="newLine">
-      <span
-        v-if="showDash"
-        class="no-stretch"
-      >–&nbsp;</span>
+      <br v-else-if="newLine" />
+      <span v-if="showDash" class="no-stretch">–&nbsp;</span>
 
-      <span
-        v-bind="$attrs"
-        v-html="text + ' '"
-      />
+      <span v-bind="$attrs" v-html="text + ' '" />
     </span>
   </span>
 </template>
-
 
 <script lang="ts" setup>
 /* -------------------------------------------------------------------------- */
@@ -51,11 +41,10 @@ defineProps<{
 }>()
 </script>
 
-
 <style scoped>
 .icon {
-  opacity: .8;
-  font-size: .8rem;
+  opacity: 0.8;
+  font-size: 0.8rem;
   text-align: right;
   position: relative;
   top: -2px;
@@ -64,18 +53,18 @@ defineProps<{
 
 .speaker {
   font-weight: bold;
-  margin-right: .25rem;
+  margin-right: 0.25rem;
 }
 
 .reference {
   background-color: var(--ion-color-warning);
   color: var(--ion-color-warning-contrast);
   border-radius: 3px;
-  font-size: .8rem;
-  padding: .25rem;
+  font-size: 0.8rem;
+  padding: 0.25rem;
   white-space: nowrap;
-  transition: all .2s ease-in-out;
-  box-shadow: 0px 0px 12px rgba(0, 0, 0, .25);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.25);
   font-style: normal;
   pointer-events: none;
 }

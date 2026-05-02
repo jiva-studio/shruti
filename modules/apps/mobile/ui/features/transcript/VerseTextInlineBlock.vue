@@ -4,8 +4,8 @@
       v-if="reference"
       class="reference floating"
       :class="{
-        'visible': referenceVisible,
-        'hidden': !referenceVisible,
+        visible: referenceVisible,
+        hidden: !referenceVisible,
       }"
     >
       {{ reference }}
@@ -13,7 +13,6 @@
     {{ text }}.
   </span>
 </template>
-
 
 <script lang="ts" setup>
 /* -------------------------------------------------------------------------- */
@@ -27,7 +26,6 @@ defineProps<{
 }>()
 </script>
 
-
 <style scoped>
 .text {
   font-style: italic;
@@ -37,11 +35,11 @@ defineProps<{
   background-color: var(--ion-color-warning);
   color: var(--ion-color-warning-contrast);
   border-radius: 3px;
-  font-size: .8rem;
-  padding: .25rem;
+  font-size: 0.8rem;
+  padding: 0.25rem;
   white-space: nowrap;
-  transition: all .2s ease-in-out;
-  box-shadow: 0px 0px 12px rgba(0, 0, 0, .25);
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.25);
   font-style: normal;
 }
 

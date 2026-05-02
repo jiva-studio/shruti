@@ -1,19 +1,11 @@
 <template>
-  <IonItem
-    button
-    :detail="true"
-    lines="none"
-    @click="open = true"
-  >
-    <div
-      slot="start"
-      class="settings-item-icon"
-    >
+  <IonItem button :detail="true" lines="none" @click="open = true">
+    <div slot="start" class="settings-item-icon">
       <CloudIcon />
     </div>
 
     <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t('settings.server.title') }}</h2>
+      <h2>{{ $t("settings.server.title") }}</h2>
       <p>{{ currentTitle }}</p>
     </IonLabel>
   </IonItem>
@@ -28,7 +20,6 @@
     @select="onSelect"
   />
 </template>
-
 
 <script setup lang="ts">
 import { computed, ref } from "vue"

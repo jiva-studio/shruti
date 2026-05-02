@@ -11,8 +11,8 @@
       v-for="(section, idx) in blockGroups"
       :key="idx"
       :class="{
-        'prompter': true,
-        'paragraph': isActiveGroup(section),
+        prompter: true,
+        paragraph: isActiveGroup(section),
       }"
     >
       <Timestamp
@@ -20,10 +20,7 @@
         :start="section.blocks[0]?.block.start"
         :duration="duration"
       />
-      <template
-        v-for="(block, blockIdx) in section.blocks"
-        :key="blockIdx"
-      >
+      <template v-for="(block, blockIdx) in section.blocks" :key="blockIdx">
         <SentenceBlock
           v-if="block.block.type === 'sentence'"
           :text="block.block.text"
@@ -91,13 +88,13 @@
 </template>
 
 <script setup lang="ts">
-import SentenceBlock from './SentenceBlock.vue'
-import VerseTextBlock from './VerseTextBlock.vue'
-import VerseTextInlineBlock from './VerseTextInlineBlock.vue'
-import VerseTranslationBlock from './VerseTranslationBlock.vue'
-import Timestamp from './Timestamp.vue'
-import TextSelector from './TextSelector.vue'
-import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from './types.js'
+import SentenceBlock from "./SentenceBlock.vue"
+import VerseTextBlock from "./VerseTextBlock.vue"
+import VerseTextInlineBlock from "./VerseTextInlineBlock.vue"
+import VerseTranslationBlock from "./VerseTranslationBlock.vue"
+import Timestamp from "./Timestamp.vue"
+import TextSelector from "./TextSelector.vue"
+import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from "./types.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -125,7 +122,6 @@ const emit = defineEmits<{
   pickStart: []
 }>()
 
-
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
@@ -139,16 +135,18 @@ function onSelecting(start: number, end: number) {
 }
 
 function onSelected(start: number, end: number, event: TouchEvent) {
-  const selectableBlocks = ['sentence', 'verse:translation']
+  const selectableBlocks = ["sentence", "verse:translation"]
   const selectedText = props.blockGroups
     .flatMap((g) => g.blocks)
     .filter((b) => b.block.start >= start && b.block.end <= end)
     .filter((b) => selectableBlocks.includes(b.block.type))
-    .map((b) => (b.block.type === 'sentence' || b.block.type === 'verse:translation' ? b.block.text : ''))
-    .join(' ')
+    .map((b) =>
+      b.block.type === "sentence" || b.block.type === "verse:translation" ? b.block.text : ""
+    )
+    .join(" ")
 
   if (selectedText) {
-    emit('textSelected', { text: selectedText, timeStart: start, timeEnd: end, event })
+    emit("textSelected", { text: selectedText, timeStart: start, timeEnd: end, event })
   }
 }
 
@@ -164,7 +162,6 @@ function isCurrent(b: UiTranscriptBlockView): boolean {
 }
 </script>
 
-
 <style scoped>
 .transcript-text {
   text-align: justify;
@@ -174,14 +171,14 @@ function isCurrent(b: UiTranscriptBlockView): boolean {
 }
 
 span {
-  transition: all .4s ease-in-out;
+  transition: all 0.4s ease-in-out;
 }
 
 .prompter {
   color: white;
   transition: all 0.4s;
   transform: scale(0.95);
-  opacity: .5;
+  opacity: 0.5;
   position: relative;
 }
 
@@ -193,15 +190,15 @@ span {
 
 .current {
   transition: all 0.4s;
-  color: #FF6B6B !important;
+  color: #ff6b6b !important;
 }
 
 .highlighted {
-  color: #C77DFF;
+  color: #c77dff;
 }
 
 .selected {
-  color: #FFFFFF !important;
-  background-color: #9D4EDD;
+  color: #ffffff !important;
+  background-color: #9d4edd;
 }
 </style>

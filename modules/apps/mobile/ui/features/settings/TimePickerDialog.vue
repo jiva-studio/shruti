@@ -8,52 +8,40 @@
   >
     <IonToolbar>
       <IonButtons slot="start">
-        <IonButton
-          shape="round"
-          size="small"
-          @click="onCancel"
-        >
+        <IonButton shape="round" size="small" @click="onCancel">
           {{ $t("app.cancel") }}
         </IonButton>
       </IonButtons>
       <IonButtons slot="end">
-        <IonButton
-          shape="round"
-          size="small"
-          @click="onSaveClicked"
-        >
+        <IonButton shape="round" size="small" @click="onSaveClicked">
           {{ $t("app.save") }}
         </IonButton>
       </IonButtons>
     </IonToolbar>
 
-    <TimePicker
-      :hours="hours ?? 9"
-      :minutes="minutes ?? 0"
-      @change="onChange"
-    />
+    <TimePicker :hours="hours ?? 9" :minutes="minutes ?? 0" @change="onChange" />
   </IonModal>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
-import { IonModal, IonButtons, IonButton, IonToolbar } from '@ionic/vue'
-import TimePicker from './TimePicker.vue'
+import { ref } from "vue"
+import { IonModal, IonButtons, IonButton, IonToolbar } from "@ionic/vue"
+import TimePicker from "./TimePicker.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
 defineProps<{
-  hours?: number,
-  minutes?: number,
+  hours?: number
+  minutes?: number
 }>()
 
 const emit = defineEmits<{
   select: [number, number]
 }>()
 
-const isOpen = defineModel<boolean>('open', { required: true, default: false })
+const isOpen = defineModel<boolean>("open", { required: true, default: false })
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
@@ -75,7 +63,7 @@ function onCancel() {
 
 function onSaveClicked() {
   isOpen.value = false
-  emit('select', ...value.value)
+  emit("select", ...value.value)
 }
 </script>
 

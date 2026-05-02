@@ -1,50 +1,25 @@
 <template>
   <div class="selection-actions">
-    <IonButton
-      color="dark"
-      size="small"
-      fill="clear"
-      @click="emit('action', 'copy')"
-    >
-      <IonIcon
-        slot="start"
-        :icon="copyOutline"
-      />
+    <IonButton color="dark" size="small" fill="clear" @click="emit('action', 'copy')">
+      <IonIcon slot="start" :icon="copyOutline" />
     </IonButton>
-    <IonButton
-      size="small"
-      color="dark"
-      fill="clear"
-      @click="emit('action', 'bookmark')"
-    >
-      <IonIcon
-        slot="start"
-        :icon="bookmarkOutline"
-      />
+    <IonButton size="small" color="dark" fill="clear" @click="emit('action', 'bookmark')">
+      <IonIcon slot="start" :icon="bookmarkOutline" />
     </IonButton>
-    <IonButton
-      size="small"
-      color="dark"
-      fill="clear"
-      @click="emit('action', 'share')"
-    >
-      <IonIcon
-        slot="start"
-        :icon="shareOutline"
-      />
+    <IonButton size="small" color="dark" fill="clear" @click="emit('action', 'share')">
+      <IonIcon slot="start" :icon="shareOutline" />
     </IonButton>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { IonButton, IonIcon } from '@ionic/vue'
-import { copyOutline, bookmarkOutline, shareOutline } from 'ionicons/icons'
+import { IonButton, IonIcon } from "@ionic/vue"
+import { copyOutline, bookmarkOutline, shareOutline } from "ionicons/icons"
 
 const emit = defineEmits<{
-  action: [action: 'copy' | 'bookmark' | 'share']
+  action: [action: "copy" | "bookmark" | "share"]
 }>()
 </script>
-
 
 <style lang="css" scoped>
 .selection-actions {
