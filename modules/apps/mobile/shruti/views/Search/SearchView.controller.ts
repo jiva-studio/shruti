@@ -1,5 +1,4 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useIonRouter } from "@ionic/vue"
 import { useDebounceFn } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
@@ -47,7 +46,6 @@ export function useSearchController(): SearchControllerReturn {
   const appLanguage = useAppLanguage()
 
   const app = useShruti()
-  const router = useIonRouter()
   const repos = app.repositories()
   const filtersStore = useSearchFiltersStore()
   const dictionaries = useDictionariesStore()
