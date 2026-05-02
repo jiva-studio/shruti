@@ -9,6 +9,7 @@ import enNotifications from "./locales/en/notifications.js"
 import enSearch from "./locales/en/search.js"
 import enSettings from "./locales/en/settings.js"
 import enShare from "./locales/en/share.js"
+import enTranscript from "./locales/en/transcript.js"
 
 import ruApp from "./locales/ru/app.js"
 import ruErrors from "./locales/ru/errors.js"
@@ -19,6 +20,7 @@ import ruNotifications from "./locales/ru/notifications.js"
 import ruSearch from "./locales/ru/search.js"
 import ruSettings from "./locales/ru/settings.js"
 import ruShare from "./locales/ru/share.js"
+import ruTranscript from "./locales/ru/transcript.js"
 
 export const SUPPORTED_LOCALES = ["en", "ru"] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
@@ -33,6 +35,7 @@ const en = {
   search: enSearch,
   settings: enSettings,
   share: enShare,
+  transcript: enTranscript,
 }
 
 const ru = {
@@ -45,6 +48,7 @@ const ru = {
   search: ruSearch,
   settings: ruSettings,
   share: ruShare,
+  transcript: ruTranscript,
 }
 
 function detectLocale(): SupportedLocale {

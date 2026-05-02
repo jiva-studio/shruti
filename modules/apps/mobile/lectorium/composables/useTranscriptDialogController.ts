@@ -24,6 +24,7 @@ export interface TranscriptDialogState {
   readonly duration: ComputedRef<number>
   readonly isLoading: Ref<boolean>
   readonly error: Ref<string | null>
+  readonly hasNoTranscripts: ComputedRef<boolean>
   readonly allowMultipleLanguages: Ref<boolean>
   readonly highlightCurrentSentence: Ref<boolean>
   onClose(): void
@@ -64,6 +65,13 @@ export function useTranscriptDialogController(
 
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
     availableLanguageCodes.value.map((code) => ({ code, name: code.toUpperCase() }))
+  )
+
+  // True only after hydration settles — i.e. we know the track has zero
+  // advertised transcripts, not "we haven't checked yet". Drives the
+  // dialog's empty-state copy.
+  const hasNoTranscripts = computed<boolean>(
+    () => !isLoading.value && !error.value && availableLanguageCodes.value.length === 0
   )
 
   async function hydrate(trackId: TrackId): Promise<void> {
@@ -184,6 +192,7 @@ export function useTranscriptDialogController(
     duration,
     isLoading,
     error,
+    hasNoTranscripts,
     allowMultipleLanguages,
     highlightCurrentSentence,
     onClose,

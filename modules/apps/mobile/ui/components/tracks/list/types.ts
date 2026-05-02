@@ -21,9 +21,23 @@ export interface UiTrackRow {
   readonly tags: readonly string[]
   /** Track state indicator (drives PlaylistStateIndicator / IconIndicator). */
   readonly state: UiTrackState
-  /** Playback progress 0..100, for RadialIndicator. */
+  /**
+   * 0..100 radial value. Its meaning depends on `state`:
+   * "downloading" → download %, "playing"/"queued" → playback %, otherwise unused.
+   */
   readonly progressPct: number
   readonly disabled: boolean
 }
 
-export type UiTrackState = "none" | "failed" | "added" | "completed" | "downloading" | "playing"
+// "added"   — in playlist or downloaded; one checkmark (icon mode).
+// "queued"  — in playlist, not currently active; radial with playback progress.
+// "playing" — track is actively playing; radial with playback progress.
+// "completed" — track listened to the end (PlaylistItem.completedAt != null); two checkmarks.
+export type UiTrackState =
+  | "none"
+  | "failed"
+  | "added"
+  | "queued"
+  | "completed"
+  | "downloading"
+  | "playing"

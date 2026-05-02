@@ -31,35 +31,37 @@ export function useHomeController(): HomeControllerReturn {
     playlist.prefetchAll()
   })
 
-  function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
+  function toUiState(
+    trackId: string,
+    downloadState: DownloadState,
+    completedAt: number | null
+  ): UiTrackState {
     if (player.trackId === trackId && player.playing) return "playing"
-    switch (downloadState) {
-      case "downloading":
-        return "downloading"
-      case "completed":
-        return "completed"
-      case "failed":
-        return "failed"
-      default:
-        return "added"
-    }
+    if (completedAt !== null) return "completed"
+    if (downloadState === "downloading") return "downloading"
+    if (downloadState === "failed") return "failed"
+    return "queued"
   }
 
   const rows = computed<readonly UiTrackRow[]>(() => {
     // Touch reactive state maps so the computed re-runs on download
     // progress and player transitions.
     void downloads.states
+    void downloads.progress
     void player.trackId
     void player.playing
-    return playlist.entries.map(({ track }) =>
-      buildTrackRow(track, {
+    return playlist.entries.map(({ item, track }) => {
+      const state = toUiState(track.id, downloads.getState(track.id), item.completedAt)
+      const progressPct = state === "downloading" ? downloads.getProgress(track.id) : 0
+      return buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
         authorsById: dictionaries.authorsById,
         locationsById: dictionaries.locationsById,
         sourcesById: dictionaries.sourcesById,
-        state: toUiState(track.id, downloads.getState(track.id)),
+        state,
+        progressPct,
       })
-    )
+    })
   })
 
   const isLoading = computed(() => playlist.isLoading)

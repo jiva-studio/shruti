@@ -17,6 +17,9 @@ export const useDownloadStore = defineStore("downloads", () => {
   const app = useLectorium()
 
   const states = ref<Map<TrackId, DownloadState>>(new Map())
+  // Per-track download progress 0..100. Populated only while a download
+  // is in flight; cleared on completed/failed/idle/remove.
+  const progress = ref<Map<TrackId, number>>(new Map())
   const inFlight = new Map<TrackId, Promise<string | null>>()
   let hydrated = false
 
@@ -24,10 +27,26 @@ export const useDownloadStore = defineStore("downloads", () => {
     const next = new Map(states.value)
     next.set(trackId, state)
     states.value = next
+    if (state !== "downloading") {
+      const p = new Map(progress.value)
+      if (p.delete(trackId)) progress.value = p
+    }
+  }
+
+  function setProgress(trackId: TrackId, pct: number): void {
+    const clamped = Math.max(0, Math.min(100, Math.round(pct)))
+    if (progress.value.get(trackId) === clamped) return
+    const next = new Map(progress.value)
+    next.set(trackId, clamped)
+    progress.value = next
   }
 
   function getState(trackId: TrackId): DownloadState {
     return states.value.get(trackId) ?? "idle"
+  }
+
+  function getProgress(trackId: TrackId): number {
+    return progress.value.get(trackId) ?? 0
   }
 
   /**
@@ -64,13 +83,18 @@ export const useDownloadStore = defineStore("downloads", () => {
           setState(trackId, "completed")
           return cached
         }
+        setProgress(trackId, 0)
         setState(trackId, "downloading")
         const result = await downloadMedia(
           { trackId, remoteUrl },
           {
             mediaItems: app.repositories().mediaItems,
-            transfer: (url) => app.mediaDownloader.download(url),
-          }
+            transfer: (url, onProgress) =>
+              app.mediaDownloader.download(url, (received, total) => {
+                onProgress?.(received, total)
+              }),
+          },
+          (pct) => setProgress(trackId, pct)
         )
         if (result.ok) {
           setState(trackId, "completed")
@@ -107,14 +131,18 @@ export const useDownloadStore = defineStore("downloads", () => {
         deleteLocal: (url) => app.mediaDownloader.delete(url),
       }
     )
-    const next = new Map(states.value)
-    next.delete(trackId)
-    states.value = next
+    const nextStates = new Map(states.value)
+    nextStates.delete(trackId)
+    states.value = nextStates
+    const nextProgress = new Map(progress.value)
+    if (nextProgress.delete(trackId)) progress.value = nextProgress
   }
 
   return {
     states,
+    progress,
     getState,
+    getProgress,
     hydrate,
     ensureDownloaded,
     prefetch,

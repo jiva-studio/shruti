@@ -29,7 +29,7 @@
       @select="search.onSelect"
     >
       <template #state="{ state, progressPct }">
-        <PlaylistStateIndicator :state="state" :playback-progress="progressPct" />
+        <PlaylistStateIndicator :state="state" :progress="progressPct" />
       </template>
     </TracksList>
     <IonInfiniteScroll :disabled="!search.hasMore.value" @ion-infinite="onInfinite">

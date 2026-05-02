@@ -14,8 +14,15 @@ export interface DownloadMediaInput {
  * download store) passes the adapter-backed transfer as a plain
  * function. Returning the local URL fulfils the use case's contract
  * to persist `localPath` on success.
+ *
+ * The optional `onProgress` is forwarded down to the platform downloader
+ * so the UI can render a real radial gauge. `total` may be ≤ 0 when the
+ * server omits Content-Length — callers must guard against that.
  */
-export type MediaTransferFn = (url: string) => Promise<string>
+export type MediaTransferFn = (
+  url: string,
+  onProgress?: (received: number, total: number) => void
+) => Promise<string>
 
 export interface DownloadMediaDeps {
   readonly mediaItems: IMediaItemRepository
@@ -29,10 +36,14 @@ export type DownloadMediaError = "already-in-progress" | "transfer-failed"
  * so the UI can recover the "ready" indicator after a relaunch. The
  * state machine is pending → downloading → ready / failed, serialised
  * through `IMediaItemRepository.upsert`.
+ *
+ * Optional `onProgress(pct)` reports the rounded percentage 0..100 only
+ * when the byte total is known.
  */
 export async function downloadMedia(
   input: DownloadMediaInput,
-  deps: DownloadMediaDeps
+  deps: DownloadMediaDeps,
+  onProgress?: (pct: number) => void
 ): Promise<Result<MediaItem, DownloadMediaError>> {
   const existing = await deps.mediaItems.getByTrack(input.trackId)
   if (existing?.state === "downloading") return err("already-in-progress")
@@ -43,7 +54,9 @@ export async function downloadMedia(
   await deps.mediaItems.upsert(input.trackId, "downloading", null)
 
   try {
-    const localUrl = await deps.transfer(input.remoteUrl)
+    const localUrl = await deps.transfer(input.remoteUrl, (received, total) => {
+      if (total > 0) onProgress?.(Math.round((received / total) * 100))
+    })
     const saved = await deps.mediaItems.upsert(input.trackId, "ready", localUrl)
     return ok(saved)
   } catch {

@@ -6,14 +6,14 @@
       slot="end"
       key="downloadProgress"
       color="primary"
-      :value="downloadProgress || 0"
+      :value="progress || 0"
     />
     <RadialIndicator
       v-else-if="mode === 'progress'"
       slot="end"
       key="playbackProgress"
       color="medium"
-      :value="playbackProgress || 0"
+      :value="progress || 0"
     />
   </Transition>
 </template>
@@ -33,10 +33,11 @@ import type { UiTrackState } from "@ui/components/tracks/list/index.js"
 
 const props = defineProps<{
   state: UiTrackState
-  /** 0..100 — drives the radial when the track is being downloaded. */
-  downloadProgress?: number
-  /** 0..100 — drives the radial during active playback. */
-  playbackProgress?: number
+  /**
+   * 0..100 radial value. Interpretation follows `state`:
+   * "downloading" → download %, "playing"/"queued" → playback %.
+   */
+  progress?: number
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -52,8 +53,9 @@ const icon = computed<StateIcon>(() => {
 
 const mode = computed<"downloading" | "icon" | "progress" | undefined>(() => {
   if (props.state === "downloading") return "downloading"
-  if (props.state === "failed" || props.state === "completed") return "icon"
-  if (props.state === "playing" || props.state === "added") return "progress"
+  if (props.state === "failed" || props.state === "completed" || props.state === "added")
+    return "icon"
+  if (props.state === "playing" || props.state === "queued") return "progress"
   return undefined
 })
 </script>

@@ -178,11 +178,13 @@ export function useSearchController(): SearchControllerReturn {
 
   function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
     if (downloadState === "downloading") return "downloading"
-    if (downloadState === "completed") return "completed"
     if (downloadState === "failed") return "failed"
-    // Surface "added" when the track is already in the user's playlist
-    // but no download has been triggered yet in this session.
-    return playlist.hasTrack(trackId) ? "added" : "none"
+    // In Search/library view, "downloaded locally" and "in playlist" both
+    // surface as a single check ("added"). Two-checks ("completed") is
+    // reserved for "listened to the end" — only meaningful on Home where
+    // the playlist item carries `completedAt`.
+    if (downloadState === "completed" || playlist.hasTrack(trackId)) return "added"
+    return "none"
   }
 
   // Rows recompute reactively when the UI language changes so the
@@ -190,16 +192,20 @@ export function useSearchController(): SearchControllerReturn {
   // flip the toggle in Settings — no re-query needed.
   const rows = computed<readonly UiTrackRow[]>(() => {
     void downloads.states
+    void downloads.progress
     void playlist.entries
-    return rawTracks.value.map((track) =>
-      buildTrackRow(track, {
+    return rawTracks.value.map((track) => {
+      const state = toUiState(track.id, downloads.getState(track.id))
+      const progressPct = state === "downloading" ? downloads.getProgress(track.id) : 0
+      return buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
         authorsById: dictionaries.authorsById,
         locationsById: dictionaries.locationsById,
         sourcesById: dictionaries.sourcesById,
-        state: toUiState(track.id, downloads.getState(track.id)),
+        state,
+        progressPct,
       })
-    )
+    })
   })
 
   const emptyMessage = computed(() => {
