@@ -121,16 +121,35 @@ export const usePlaylistStore = defineStore("playlist", () => {
     } catch (err) {
       console.error("[playlist] prefetch failed", err)
     }
+    void prefetchTranscripts(trackId)
   }
 
-  /** Prefetch audio for every currently-loaded entry. Fire-and-forget. */
+  // Pull every advertised transcript into the on-disk cache so the
+  // Transcript dialog renders instantly (and works offline) when the
+  // user opens it later. Errors are swallowed — a missing transcript
+  // is not fatal and the dialog has its own empty/error state.
+  async function prefetchTranscripts(trackId: TrackId): Promise<void> {
+    try {
+      const repos = app.repositories()
+      const languages = await repos.transcripts.availableLanguages(trackId)
+      for (const lang of languages) {
+        repos.transcripts.get(trackId, lang).catch(() => {})
+      }
+    } catch (err) {
+      console.error("[playlist] transcript prefetch failed", err)
+    }
+  }
+
+  /** Prefetch audio + transcripts for every currently-loaded entry. Fire-and-forget. */
   function prefetchAll(): void {
     const downloads = useDownloadStore()
     for (const { track } of entries.value) {
       const variant = track.variants.find((v) => v.audio)
-      if (!variant?.audio) continue
-      const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
-      downloads.prefetch(track.id, remoteUrl)
+      if (variant?.audio) {
+        const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
+        downloads.prefetch(track.id, remoteUrl)
+      }
+      void prefetchTranscripts(track.id)
     }
   }
 

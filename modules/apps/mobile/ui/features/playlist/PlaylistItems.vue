@@ -12,7 +12,7 @@
         @select="emit('click', row.id)"
       >
         <template #state>
-          <PlaylistStateIndicator :state="row.state" :playback-progress="row.progressPct" />
+          <PlaylistStateIndicator :state="row.state" :progress="row.progressPct" />
         </template>
       </TrackListItem>
     </WithDeleteAction>

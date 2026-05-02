@@ -18,8 +18,18 @@
         :allow-multiple="allowMultipleLanguages"
       />
 
-      <!-- Transcript Text -->
+      <!-- Loading / error / empty / content -->
+      <div v-if="isLoading" class="transcript-status">
+        <IonSpinner name="crescent" />
+      </div>
+      <p v-else-if="errorMessage" class="transcript-status transcript-error">
+        {{ errorMessage }}
+      </p>
+      <p v-else-if="hasNoTranscripts" class="transcript-status transcript-empty">
+        {{ $t("transcript.noneAvailable") }}
+      </p>
       <TranscriptText
+        v-else
         class="transcript-text"
         :block-groups="blockGroups"
         :position="position"
@@ -51,7 +61,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { IonContent, IonModal, IonPopover } from "@ionic/vue"
+import { IonContent, IonModal, IonPopover, IonSpinner } from "@ionic/vue"
 import LanguageSelector from "./LanguageSelector.vue"
 import SelectionActions from "./SelectionActions.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
@@ -75,6 +85,12 @@ defineProps<{
   duration: number
   allowMultipleLanguages: boolean
   highlightCurrentSentence: boolean
+  /** True while the transcript is being fetched. Shows a spinner. */
+  isLoading?: boolean
+  /** Non-null when the transcript fetch failed. Shows the error text. */
+  errorMessage?: string | null
+  /** True after hydration when the track has no advertised transcripts. */
+  hasNoTranscripts?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -157,5 +173,21 @@ ion-modal ion-toolbar {
   text-align: center;
   font-size: 14px;
   margin: 12px 0px;
+}
+
+.transcript-status {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  opacity: 0.8;
+  text-align: center;
+  padding: 32px 16px;
+  margin: 0;
+}
+
+.transcript-error {
+  color: #ff8585;
+  opacity: 1;
 }
 </style>

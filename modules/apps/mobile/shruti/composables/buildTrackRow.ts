@@ -15,6 +15,10 @@ export interface BuildTrackRowDeps {
   readonly tagNamesById?: ReadonlyMap<string, string>
   /** Optional per-track state override (playlist/downloader state). */
   readonly state?: UiTrackState
+  /**
+   * 0..100 radial value. Meaning depends on `state`: "downloading" → download %,
+   * "playing"/"queued" → playback %. Controller picks the right value per state.
+   */
   readonly progressPct?: number
 }
 
