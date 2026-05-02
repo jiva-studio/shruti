@@ -302,7 +302,9 @@ jobs:
         if: steps.check_ios.outputs.present == 'true'
         env:
           APPLE_CERTIFICATES: ${{ secrets.APPLE_CERTIFICATES }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Repo-level — matches the .p12 in shruti's APPLE_CERTIFICATES zip.
+          # Org-level APPLE_CERTIFICATE_PASSWORD is for a different cert bundle.
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
