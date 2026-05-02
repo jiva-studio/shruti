@@ -475,6 +475,18 @@ platform :ios do
         keychain_password: IOS_KEYCHAIN_PASSWORD,
       )
     end
+
+    # Allow codesign to use the imported private key without UI prompt.
+    # `import_certificate` only adds -T entries to the key's ACL — codesign
+    # still needs the partition list to permit access from non-bundled tools.
+    # Without this, signing on self-hosted macOS dies with errSecInternalComponent
+    # right after "Apple Distribution: ..." identity is selected.
+    sh(
+      "security set-key-partition-list " \
+        "-S apple-tool:,apple:,codesign: " \
+        "-s -k #{IOS_KEYCHAIN_PASSWORD.shellescape} #{ios_keychain_name.shellescape}",
+      log: false,
+    )
   end
 
   private_lane :install_ios_provisioning_profiles do
