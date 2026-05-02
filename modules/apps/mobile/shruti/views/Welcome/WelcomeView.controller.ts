@@ -77,8 +77,8 @@ export function useWelcomeController(
       getPublicUrl: (path) => shruti.storagePublicUrl.get(path),
       filesStorage: shruti.filesStorage,
       databaseFetcher: shruti.databaseFetcher,
-      probeServers: shruti.probeServers,
-      onServerResolved: (result) => shruti.setActiveServer(result.server),
+      serverProber: shruti.serverProber,
+      onServerResolved: (result) => shruti.setActiveServerById(result.serverId),
       loadSavedPreferredServerId: async () => {
         const stored = await shruti.preferences.get(PREFERRED_SERVER_KEY)
         return stored ?? undefined
@@ -125,7 +125,7 @@ export function useWelcomeController(
       getPublicUrl: base.getPublicUrl,
       filesStorage: base.filesStorage,
       databaseFetcher: base.databaseFetcher,
-      probeServers: shruti.probeServers,
+      serverProber: shruti.serverProber,
       onServerResolved: base.onServerResolved,
       loadSavedPreferredServerId: base.loadSavedPreferredServerId,
       persistPreferredServerIdIfChanged: async (resolvedId) => {

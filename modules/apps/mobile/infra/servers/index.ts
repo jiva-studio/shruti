@@ -1,1 +1,1 @@
-export { probeServers, type ServerProbeResult } from "./probeServers.js"
+export { useHttpServerProber } from "./useHttpServerProber.js"
