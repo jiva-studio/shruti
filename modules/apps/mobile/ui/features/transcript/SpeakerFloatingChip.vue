@@ -1,20 +1,12 @@
 <template>
-  <div
-    class="speaker-floating-chip"
-    :class="{
-      hidden: !curSpeaker,
-    }"
-  >
+  <FloatingChip :position-top="positionTop" :visible="!!curSpeaker">
     {{ curSpeaker }}:
-  </div>
+  </FloatingChip>
 </template>
 
 <script setup lang="ts">
 import { inject, onUnmounted, ref, type Ref } from "vue"
-
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
+import { FloatingChip } from "@ui/primitives/index.js"
 
 const scrollTop: Ref<number> | undefined = inject("scrollTop")
 const positionTop = ref("0px")
@@ -22,7 +14,7 @@ const curSpeaker = ref("")
 const lastSpeaker = ref("")
 let lastEl: HTMLElement | null
 
-const intervalId = setInterval(async () => {
+const intervalId = setInterval(() => {
   const currentEl: HTMLElement | null = document.querySelector(".current")
   if (currentEl) {
     const speaker = currentEl.getAttribute("data-speaker")
@@ -45,27 +37,5 @@ const intervalId = setInterval(async () => {
   }
 }, 500)
 
-/* -------------------------------------------------------------------------- */
-/*                                    Hooks                                   */
-/* -------------------------------------------------------------------------- */
-
 onUnmounted(() => clearInterval(intervalId))
 </script>
-
-<style scoped>
-.speaker-floating-chip {
-  position: absolute;
-  top: v-bind(positionTop);
-  left: 10px;
-  font-size: 0.75rem;
-  padding: 0.25rem;
-  border-radius: 5px;
-  background-color: var(--ion-color-warning);
-  transition: all 100ms ease-in-out;
-  transform: translateY(-100%);
-}
-
-.hidden {
-  opacity: 0;
-}
-</style>

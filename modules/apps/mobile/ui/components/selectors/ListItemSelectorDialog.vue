@@ -1,7 +1,7 @@
 <template>
   <SelectorDialog :title="title" :open="open" @select="onSelect" @close="onClose">
     <IonList lines="none" class="ion-no-margin ion-no-padding">
-      <IonRadioGroup v-model="value" :allow-empty-selection="allowEmpty">
+      <IonRadioGroup v-model="selected" :allow-empty-selection="allowEmpty">
         <IonItem v-for="item in items" :key="item.id">
           <IonRadio :value="item.id">
             {{ item.title }}
@@ -13,13 +13,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { toRefs } from "vue"
 import { IonList, IonRadioGroup, IonRadio, IonItem } from "@ionic/vue"
 import SelectorDialog from "./SelectorDialog.vue"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
+import { useSingleSelectorDialogState } from "./composables/useSelectorDialogState.js"
 
 export type ItemId = string | undefined
 export type Item = {
@@ -46,32 +43,14 @@ const emit = defineEmits<{
   select: [items: ItemId]
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
-
-const value = ref<ItemId>(props.value)
-
-/* -------------------------------------------------------------------------- */
-/*                                    Hooks                                   */
-/* -------------------------------------------------------------------------- */
-
-watch(
-  () => props.value,
-  (newValue) => {
-    value.value = newValue
-  }
-)
-
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
+const { value: valueProp } = toRefs(props)
+const { value: selected } = useSingleSelectorDialogState({ value: valueProp })
 
 function onClose() {
   emit("close")
 }
 
 function onSelect() {
-  emit("select", value.value)
+  emit("select", selected.value)
 }
 </script>

@@ -41,7 +41,6 @@ import { useWebRemoteFilesStorage } from "@infra/files/web/index.js"
 import { useCapacitorRemoteFilesStorage } from "@infra/files/capacitor/index.js"
 import { useCapacitorPreferences } from "@infra/preferences/capacitor/index.js"
 import { useCapacitorAudioPlayer } from "@infra/audio/capacitor/index.js"
-import { useWebAudioPlayer } from "@infra/audio/web/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications/capacitor/index.js"
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
@@ -73,7 +72,8 @@ initShruti({
     ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
     : useWebRemoteFilesStorage({ cacheName: "shruti" }),
   preferences: useCapacitorPreferences(),
-  audioPlayer: isNative ? useCapacitorAudioPlayer() : useWebAudioPlayer(),
+  // Capacitor plugin selects native vs its own web fallback automatically.
+  audioPlayer: useCapacitorAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
   haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),

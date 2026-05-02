@@ -11,7 +11,7 @@
     :header="emptyHeader"
     :message="emptyMessage"
     :image="emptyImage"
-    navigation-path="search"
+    to="search"
   />
 </template>
 

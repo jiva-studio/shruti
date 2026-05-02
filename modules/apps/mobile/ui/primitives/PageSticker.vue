@@ -1,50 +1,29 @@
 <template>
-  <div class="PageSticker center" :class="{ visible: visible }" @click="goTonavigationPath">
-    <img :src="image" class="image" @load="onLoad" />
+  <div class="PageSticker center" @click="onClick">
+    <LazyImage :src="image" class="sticker-image" />
     <b class="header">{{ header }}</b>
     {{ message }}
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
 import { useRouter } from "vue-router"
-
-/* -------------------------------------------------------------------------- */
-/*                                Dependencies                                */
-/* -------------------------------------------------------------------------- */
+import LazyImage from "./LazyImage.vue"
 
 const router = useRouter()
 
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
 const props = defineProps<{
-  navigationPath?: string
+  /** Vue Router target route name. When set, click navigates via `router.replace`. */
+  to?: string
   image: string
   header: string
   message: string
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
-
-const visible = ref(false)
-
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
-
-function goTonavigationPath() {
-  if (props.navigationPath) {
-    router.replace({ name: props.navigationPath })
+function onClick() {
+  if (props.to) {
+    router.replace({ name: props.to })
   }
-}
-
-function onLoad() {
-  visible.value = true
 }
 </script>
 
@@ -57,12 +36,6 @@ function onLoad() {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  transition: all 0.15s ease-in-out;
-  opacity: 0;
-}
-
-.visible {
-  opacity: 1;
 }
 
 .header {
@@ -77,7 +50,7 @@ function onLoad() {
   transform: translate(-50%, -50%);
 }
 
-.image {
+.sticker-image {
   max-width: 75%;
 }
 </style>

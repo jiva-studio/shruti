@@ -1,5 +1,5 @@
 <template>
-  <AppPage :player-open="player.open">
+  <AppPage :reserve-player-space="player.open">
     <!-- Search Query -->
     <SearchInput
       v-if="!isEmpty"
@@ -17,7 +17,7 @@
       :header="$t('notes.notesAreEmpty')"
       :message="$t('notes.addMoreNotes')"
       :image="emptyImage"
-      navigation-path="search"
+      to="search"
     />
 
     <!-- Action Sheet for note actions -->

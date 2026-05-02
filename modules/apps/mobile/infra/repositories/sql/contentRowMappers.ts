@@ -90,7 +90,8 @@ export function rowToTrackVariant(row: TrackVariantRow): TrackVariant {
       ? {
           path: row.audio_path,
           filesize: row.audio_filesize,
-          duration: row.audio_duration,
+          // DB stores duration in seconds; domain expects milliseconds.
+          duration: row.audio_duration != null ? Math.round(row.audio_duration * 1000) : null,
           kind: narrowVariantKind(row.audio_kind) ?? "original",
         }
       : null,

@@ -6,6 +6,7 @@ import type { Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                    Types                                   */
@@ -38,6 +39,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const app = useShruti()
   const repos = app.repositories()
   const player = usePlayerStore()
+  const playlist = usePlaylistStore()
   const { t } = useI18n()
 
   const track = ref<Track | null>(null)
@@ -89,10 +91,16 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   async function onPlay(): Promise<void> {
     if (!track.value) return
     const lang = selectedLanguage.value ?? appLanguage.value
+    // If the track is queued in the playlist, resume from saved progress.
+    // Otherwise (ad-hoc play from the Track screen) play without
+    // persistence — there's no playlist item to write to.
+    const entry = playlist.getEntryByTrackId(track.value.id)
     await player.openTrack({
       track: track.value,
       preferredLanguage: lang,
       author: author.value,
+      itemId: entry?.item.id,
+      resumeFromMs: entry?.item.progress,
     })
   }
 

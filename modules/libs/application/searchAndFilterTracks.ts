@@ -1,17 +1,20 @@
-import type { AuthorId, LanguageCode, LocationId } from "@lib/domain/core.js"
-import { DURATION_FILTERS, type DurationFilterId } from "@lib/domain/durationFilters.js"
+import type { AuthorId, LanguageCode, LocationId, TagId } from "@lib/domain/core.js"
+import {
+  DURATION_FILTERS,
+  durationFilterBounds,
+  type DurationFilterId,
+} from "@lib/domain/durationFilters.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import type { Track } from "@lib/domain/track.js"
-import { listTracksByFilters } from "./listTracksByFilters.js"
-import { searchTracks } from "./searchTracks.js"
 
 export interface SearchAndFilterTracksInput {
-  /** Raw user query. Empty / whitespace-only routes to listTracksByFilters. */
+  /** Raw user query. Empty / whitespace-only routes to the filter-only path. */
   readonly query?: string
   readonly authorIds?: readonly AuthorId[]
   readonly languageCodes?: readonly LanguageCode[]
   readonly locationIds?: readonly LocationId[]
+  readonly tagIds?: readonly TagId[]
   readonly durationFilter?: DurationFilterId
   readonly sortBy?: SortMethod
   readonly limit?: number
@@ -50,10 +53,14 @@ function narrowByFilters(
 
 /**
  * Unified entry point for the Search view's result query. When the user
- * typed text, we route through FTS (searchTracks) and narrow the result
- * by filter selections client-side — FTS is cross-language and cross-
- * filter by design. With no text, the same filters go through
- * listTracksByFilters which pushes them down to SQL.
+ * typed text, we route through FTS (`tracks.search`) and narrow the
+ * result by filter selections client-side — FTS is cross-language and
+ * cross-filter by design. With no text, the filters go through
+ * `tracks.list`, which pushes them down to SQL.
+ *
+ * Language-of-variant is intentionally not a filter on the FTS path: a
+ * user typing a Russian phrase should find Russian-titled tracks even if
+ * the UI locale is English.
  *
  * Keeps the branching rule in one testable place instead of the view
  * controller.
@@ -64,22 +71,25 @@ export async function searchAndFilterTracks(
 ): Promise<readonly Track[]> {
   const text = input.query?.trim() ?? ""
   if (text) {
-    const all = await searchTracks(
-      { query: text, limit: input.limit, offset: input.offset },
-      { tracks: deps.tracks }
-    )
-    return narrowByFilters(all, input)
-  }
-  return listTracksByFilters(
-    {
-      authorIds: input.authorIds,
-      languageCodes: input.languageCodes,
-      locationIds: input.locationIds,
-      durationFilter: input.durationFilter,
-      sortBy: input.sortBy,
+    const all = await deps.tracks.search({
+      text,
       limit: input.limit,
       offset: input.offset,
+    })
+    return narrowByFilters(all, input)
+  }
+  const duration = input.durationFilter ? durationFilterBounds(input.durationFilter) : undefined
+  return deps.tracks.list({
+    filters: {
+      authorIds: input.authorIds,
+      locationIds: input.locationIds,
+      languageCodes: input.languageCodes,
+      tagIds: input.tagIds,
+      durationMinMs: duration?.minMs,
+      durationMaxMs: duration?.maxMs,
     },
-    { tracks: deps.tracks }
-  )
+    sortBy: input.sortBy,
+    limit: input.limit,
+    offset: input.offset,
+  })
 }

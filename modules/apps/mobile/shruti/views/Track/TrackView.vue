@@ -30,20 +30,11 @@
           {{ $t("app.ok") }}
         </IonButton>
 
-        <IonList v-if="track.availableLanguages.value.length">
-          <IonItem>
-            <IonLabel>Language</IonLabel>
-            <IonSelect
-              :value="track.selectedLanguage.value"
-              interface="popover"
-              @ion-change="onLanguageChange"
-            >
-              <IonSelectOption v-for="l in track.availableLanguages.value" :key="l" :value="l">
-                {{ l }}
-              </IonSelectOption>
-            </IonSelect>
-          </IonItem>
-        </IonList>
+        <TrackLanguageSelector
+          :languages="track.availableLanguages.value"
+          :value="track.selectedLanguage.value"
+          @update:value="track.onLanguageChange"
+        />
       </template>
 
       <IonText v-else color="medium">
@@ -61,27 +52,20 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
   IonPage,
-  IonSelect,
-  IonSelectOption,
   IonText,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
 import { playCircle } from "ionicons/icons"
+import { TrackLanguageSelector } from "@ui/features/tracks/index.js"
 import { useTrackController } from "./TrackView.controller.js"
 
 interface Props {
+  /** Track ID, sourced from the route's `:trackId` param. */
   trackId: string
 }
 const props = defineProps<Props>()
 
 const track = useTrackController({ trackId: props.trackId })
-
-function onLanguageChange(event: CustomEvent<{ value: string }>): void {
-  track.onLanguageChange(event.detail.value)
-}
 </script>

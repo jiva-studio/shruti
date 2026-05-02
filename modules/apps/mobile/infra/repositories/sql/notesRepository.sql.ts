@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
@@ -8,9 +7,10 @@ import type {
   UpdateNoteInput,
 } from "@lib/domain/ports/noteRepository.js"
 import type { NoteRow } from "@lib/persistence/user"
+import { createIdGenerator } from "./idGenerator.js"
 import { rowToNote } from "./rowMappers.js"
 
-const newNoteId = (): string => `note_${nanoid(12)}`
+const newNoteId = createIdGenerator("note")
 
 export function createSqlNoteRepository(db: IDatabase): INoteRepository {
   return {

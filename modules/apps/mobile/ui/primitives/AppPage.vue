@@ -1,29 +1,28 @@
 <template>
   <IonPage>
-    <div class="header" />
+    <SafeAreaHeaderGradient />
 
     <IonContent :fullscreen="true">
-      <IonSpinner v-show="loading" class="spinner" name="dots" />
-      <div v-show="!loading">
+      <slot v-if="loading" name="loading">
+        <IonSpinner class="spinner" name="dots" />
+      </slot>
+      <div v-else>
         <slot />
       </div>
 
-      <div v-if="playerOpen" class="placeholder" />
+      <div v-if="reservePlayerSpace" class="placeholder" />
     </IonContent>
   </IonPage>
 </template>
 
 <script setup lang="ts">
 import { IonContent, IonPage, IonSpinner } from "@ionic/vue"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
+import SafeAreaHeaderGradient from "./SafeAreaHeaderGradient.vue"
 
 defineProps<{
   loading?: boolean
   /** Reserves a bottom spacer matching the mini-player height when true. */
-  playerOpen?: boolean
+  reservePlayerSpace?: boolean
 }>()
 </script>
 
@@ -35,21 +34,6 @@ ion-content {
 .placeholder {
   width: 100%;
   height: 35px;
-}
-
-.header {
-  position: fixed;
-  left: 0px;
-  right: 0px;
-  top: 0px;
-  height: var(--ion-safe-area-top);
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1) 0%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.8) 35%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0) 100%
-  );
-  z-index: 1;
 }
 
 .spinner {
