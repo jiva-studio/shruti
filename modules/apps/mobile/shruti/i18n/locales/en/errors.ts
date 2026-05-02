@@ -4,4 +4,5 @@ export default {
   downloadsCacheUnavailable:
     "Couldn't read your downloads index. Cached files are still on disk.",
   trackNotFound: "Track not found.",
+  languageListUnavailable: "Couldn't load languages — showing a short list.",
 }
