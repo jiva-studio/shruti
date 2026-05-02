@@ -1,0 +1,69 @@
+name: preview-cleanup
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+    paths:
+      - modules/apps/mobile/**
+      - modules/plugins/**
+      - modules/libs/**
+      - modules/tests/e2e/**
+      - .github/workflows/apps-mobile.yml
+      - .github/workflows/preview-cleanup.yml
+
+jobs:
+  cleanup:
+    name: web / preview
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - name: delete cf preview deployments
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.number }}
+          PROJECT: lectorium-preview
+        # Only run when Cloudflare credentials are configured; otherwise
+        # log and exit 0 so PR closure isn't blocked before CF is wired up.
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        run: |
+          set -euo pipefail
+          BRANCH="pr-${PR_NUMBER}"
+          API="https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/${PROJECT}"
+
+          echo "Fetching preview deployments for branch ${BRANCH}..."
+          ids=$(curl -sS -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            "${API}/deployments?env=preview&per_page=100" \
+            | jq -r --arg branch "${BRANCH}" \
+              '.result[] | select(.deployment_trigger.metadata.branch == $branch) | .id')
+
+          if [ -z "${ids}" ]; then
+            echo "No preview deployments found for branch ${BRANCH}. Nothing to clean up."
+            exit 0
+          fi
+
+          count=$(echo "${ids}" | wc -l)
+          echo "Found ${count} deployment(s) to delete."
+
+          failed=0
+          while IFS= read -r id; do
+            [ -z "${id}" ] && continue
+            echo "Deleting deployment ${id}..."
+            resp=$(curl -sS -X DELETE \
+              -H "Authorization: Bearer ${CF_API_TOKEN}" \
+              "${API}/deployments/${id}?force=true")
+            success=$(echo "${resp}" | jq -r '.success')
+            if [ "${success}" != "true" ]; then
+              echo "  ⚠️  Failed to delete ${id}: $(echo "${resp}" | jq -c '.errors')"
+              failed=$((failed + 1))
+            else
+              echo "  ✓ Deleted"
+            fi
+          done <<< "${ids}"
+
+          if [ "${failed}" -gt 0 ]; then
+            echo "${failed} deployment(s) failed to delete."
+            exit 1
+          fi
+
+          echo "All preview deployments for ${BRANCH} deleted."

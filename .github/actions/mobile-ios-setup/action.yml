@@ -20,7 +20,7 @@ runs:
       with:
         xcode-version: ${{ inputs.xcode-version }}
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v5
       with:
         node-version: 24
         cache: npm
@@ -33,9 +33,9 @@ runs:
         working-directory: modules/apps/mobile
 
     - shell: bash
-      run: cd modules/apps/mobile && npm ci
+      run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
 
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v5
       with:
         name: mobile-web-dist
         path: modules/apps/mobile/dist
