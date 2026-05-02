@@ -161,18 +161,34 @@ export function useSearchController(): SearchControllerReturn {
     void debouncedRun()
   })
 
+  // Persist + re-query on every filter change. Persistence ran fire-and-
+  // forget before, so a storage-quota / plugin error meant the user saw
+  // results filtered "as if" their choice had stuck — but the choice
+  // silently reverted on next launch. Now any one persist failure
+  // surfaces a single toast (we only want to bug the user once per
+  // gesture, not five times) and the query still runs against the
+  // in-memory selection.
   watch(
     filters,
     (next) => {
-      void filtersStore.setAuthors(next.authors ?? [])
-      void filtersStore.setLanguages(next.languages ?? [])
-      void filtersStore.setLocations(next.locations ?? [])
-      void filtersStore.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
-      void filtersStore.setSort(next.sort as "byReference" | "byDate" | undefined)
+      void persistFilters(next)
       void runQuery()
     },
     { deep: true }
   )
+
+  async function persistFilters(next: FiltersModel): Promise<void> {
+    const writes = await Promise.allSettled([
+      filtersStore.setAuthors(next.authors ?? []),
+      filtersStore.setLanguages(next.languages ?? []),
+      filtersStore.setLocations(next.locations ?? []),
+      filtersStore.setDuration(next.duration ? [next.duration as DurationFilterId] : []),
+      filtersStore.setSort(next.sort as "byReference" | "byDate" | undefined),
+    ])
+    if (writes.some((w) => w.status === "rejected")) {
+      await toast.error(t("errors.filtersNotSaved"))
+    }
+  }
 
   const downloads = useDownloadStore()
 
