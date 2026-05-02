@@ -33,7 +33,7 @@ export interface MigrateMediaOptions {
   /** When true, also copy `library/tracks/{old}/artifacts/**` to
    *  `artifacts/tracks/{new}/...`. Default true (user wants them). */
   includeArtifacts?: boolean
-  /** Concurrent file copies. Defaults to 4. */
+  /** Concurrent file copies. Defaults to 16. */
   concurrency?: number
 }
 
@@ -189,21 +189,21 @@ async function copyOne(
   source: { client: S3Client; bucket: string },
   dests: DestState[]
 ): Promise<{ skipped: number; uploaded: number; bytesCopied: number }> {
-  // 1. For each destination, decide whether we need to upload.
-  const need: DestState[] = []
-  for (const d of dests) {
-    const present = await objectExistsWithSize(d.client, d.bucket, job.destKey, job.size)
-    if (!present) need.push(d)
-  }
+  // 1. HEAD all destinations in parallel; collect those that need upload.
+  const headResults = await Promise.all(
+    dests.map((d) => objectExistsWithSize(d.client, d.bucket, job.destKey, job.size))
+  )
+  const need = dests.filter((_, i) => !headResults[i])
   if (need.length === 0) {
     return { skipped: dests.length, uploaded: 0, bytesCopied: 0 }
   }
 
-  // 2. GET once from Wasabi, buffer in memory, PUT to each target that
-  // needs it. Buffering avoids re-downloading the same object twice
-  // (one per target) at the cost of holding the whole file in RAM.
-  // Audio files we expect are 10–60 MB — comfortably inside one
-  // worker's memory budget.
+  // 2. GET once from Wasabi, buffer in memory, then fan-out PUTs to all
+  // destinations that need it in parallel. Buffering avoids
+  // re-downloading per target (one Wasabi read serves both AWS and
+  // Yandex). Parallel PUTs roughly halve write latency when both
+  // targets need the same file. Audio files are 10–60 MB so per-worker
+  // memory stays bounded.
   const get = await source.client.send(
     new GetObjectCommand({ Bucket: source.bucket, Key: job.sourceKey })
   )
@@ -215,16 +215,18 @@ async function copyOne(
   const body = await streamToBuffer(get.Body)
   const contentType = get.ContentType ?? contentTypeFor(job.sourceKey)
 
-  for (const d of need) {
-    await d.client.send(
-      new PutObjectCommand({
-        Bucket: d.bucket,
-        Key: job.destKey,
-        Body: body,
-        ContentType: contentType,
-      })
+  await Promise.all(
+    need.map((d) =>
+      d.client.send(
+        new PutObjectCommand({
+          Bucket: d.bucket,
+          Key: job.destKey,
+          Body: body,
+          ContentType: contentType,
+        })
+      )
     )
-  }
+  )
 
   return {
     skipped: dests.length - need.length,
@@ -245,7 +247,7 @@ async function copyOne(
  */
 export async function migrateMedia(opts: MigrateMediaOptions): Promise<void> {
   const includeArtifacts = opts.includeArtifacts ?? true
-  const concurrency = opts.concurrency ?? 4
+  const concurrency = opts.concurrency ?? 16
 
   const sourceClient = makeWasabiClient(opts.source)
   const dests: DestState[] = opts.destinations.map((t) => ({
