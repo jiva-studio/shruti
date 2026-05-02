@@ -117,7 +117,7 @@ modules/
 │       │   ├── files/capacitor/             # Filesystem storage (native)
 │       │   ├── storagePublicUrl/          # URL template resolver
 │       │   ├── preferences/capacitor/       # Capacitor preferences
-│       │   ├── audio/capacitor/             # @shruti/audio-player wrapper (native)
+│       │   ├── audio/capacitor/             # @shruti/plugin-audio-player wrapper (native)
 │       │   ├── audio/web/                   # HTMLAudioElement (web)
 │       │   ├── notifications/capacitor/     # @capacitor/local-notifications
 │       │   ├── share/capacitor/             # @capacitor/share

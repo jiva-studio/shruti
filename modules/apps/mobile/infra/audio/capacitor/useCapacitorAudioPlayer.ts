@@ -1,4 +1,4 @@
-import { AudioPlayer, type Status } from "@shruti/audio-player"
+import { AudioPlayer, type Status } from "@shruti/plugin-audio-player"
 import type {
   AudioOpenParams,
   AudioProgressListener,
@@ -6,7 +6,7 @@ import type {
 } from "@ports/app/audioPlayer.js"
 
 /**
- * Adapter over the @shruti/audio-player Capacitor plugin (native +
+ * Adapter over the @shruti/plugin-audio-player Capacitor plugin (native +
  * web fallback).
  *
  * The plugin's surface (Android/iOS/web fallback) speaks **seconds** for

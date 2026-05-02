@@ -1,5 +1,5 @@
 {
-  "name": "@shruti/audio-player",
+  "name": "@shruti/plugin-audio-player",
   "version": "0.0.1",
   "description": "s",
   "main": "dist/plugin.cjs.js",
