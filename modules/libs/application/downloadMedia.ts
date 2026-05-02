@@ -29,7 +29,10 @@ export interface DownloadMediaDeps {
   readonly transfer: MediaTransferFn
 }
 
-export type DownloadMediaError = "already-in-progress" | "transfer-failed"
+export type DownloadMediaError =
+  | "already-in-progress"
+  | "transfer-failed"
+  | "persist-failed"
 
 /**
  * Download a track's media and persist the lifecycle in the user DB
@@ -53,14 +56,30 @@ export async function downloadMedia(
 
   await deps.mediaItems.upsert(input.trackId, "downloading", null)
 
+  let localUrl: string
   try {
-    const localUrl = await deps.transfer(input.remoteUrl, (received, total) => {
+    localUrl = await deps.transfer(input.remoteUrl, (received, total) => {
       if (total > 0) onProgress?.(Math.round((received / total) * 100))
     })
+  } catch {
+    // Best-effort mark "failed"; if the upsert itself rejects we don't
+    // want a second exception masking the original transfer failure.
+    try {
+      await deps.mediaItems.upsert(input.trackId, "failed", null)
+    } catch {
+      /* swallow — surfacing the transfer error matters more */
+    }
+    return err("transfer-failed")
+  }
+
+  // Bytes are on disk. The DB write is a separate failure mode (locked,
+  // disk full, schema drift) and must not be conflated with a transfer
+  // failure — Retry has different semantics for the two: a persist
+  // retry should not re-download megabytes that are already cached.
+  try {
     const saved = await deps.mediaItems.upsert(input.trackId, "ready", localUrl)
     return ok(saved)
   } catch {
-    await deps.mediaItems.upsert(input.trackId, "failed", null)
-    return err("transfer-failed")
+    return err("persist-failed")
   }
 }

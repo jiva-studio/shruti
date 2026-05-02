@@ -108,4 +108,59 @@ describe("downloadMedia", () => {
     if (!result.ok) expect(result.error).toBe("transfer-failed")
     expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "failed", null)
   })
+
+  it("returns persist-failed when post-transfer upsert throws", async () => {
+    const upsert = vi
+      .fn<IMediaItemRepository["upsert"]>()
+      .mockImplementationOnce(async (trackId, state, localPath) => ({
+        id: "mi-1" as MediaItemId,
+        trackId: trackId as TrackId,
+        state,
+        localPath,
+        createdAt: 1000,
+      }))
+      .mockImplementationOnce(async () => {
+        throw new Error("disk full")
+      })
+    const repo = makeRepo({ upsert })
+    const result = await downloadMedia(
+      { trackId: "t-1" as TrackId, remoteUrl: "https://cdn/file.mp3" },
+      { mediaItems: repo, transfer: async () => "blob:local/1" }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("persist-failed")
+    // First upsert sets "downloading"; the failing one is the "ready" write.
+    // Crucially, no third "failed" upsert — bytes are on disk and we don't
+    // want to lie about that on retry.
+    expect(upsert).toHaveBeenCalledTimes(2)
+    expect(upsert).toHaveBeenNthCalledWith(1, "t-1", "downloading", null)
+    expect(upsert).toHaveBeenNthCalledWith(2, "t-1", "ready", "blob:local/1")
+  })
+
+  it("still returns transfer-failed when the failed-marker upsert also throws", async () => {
+    const upsert = vi
+      .fn<IMediaItemRepository["upsert"]>()
+      .mockImplementationOnce(async (trackId, state, localPath) => ({
+        id: "mi-1" as MediaItemId,
+        trackId: trackId as TrackId,
+        state,
+        localPath,
+        createdAt: 1000,
+      }))
+      .mockImplementationOnce(async () => {
+        throw new Error("db locked")
+      })
+    const repo = makeRepo({ upsert })
+    const result = await downloadMedia(
+      { trackId: "t-1" as TrackId, remoteUrl: "https://cdn/file.mp3" },
+      {
+        mediaItems: repo,
+        transfer: async () => {
+          throw new Error("network")
+        },
+      }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("transfer-failed")
+  })
 })
