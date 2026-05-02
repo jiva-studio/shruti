@@ -122,9 +122,9 @@ export default defineConfigWithVueTs(
 
   // Infra: may import @ports, @lib/domain, @lib/persistence, @infra/idbKv only.
   // Sibling-infra imports are forbidden — siblings compose only through the
-  // composition root. `@lectorium/audio-player` is an npm package (Capacitor
-  // plugin) that shares the `@lectorium` scope with the composition root, so
-  // it is explicitly carved out from the `@lectorium/*` ban.
+  // composition root. In-house Capacitor plugins from `modules/plugins/` are
+  // published under the same `@lectorium` npm scope as the composition root,
+  // distinguished by the `plugin-` prefix; those are carved out from the ban.
   {
     files: ["infra/**/*.ts"],
     ignores: ["infra/**/__tests__/**"],
@@ -135,7 +135,7 @@ export default defineConfigWithVueTs(
           patterns: [
             { group: ["@ui/*"], message: "Infrastructure must not import UI" },
             {
-              group: ["@lectorium/*", "!@lectorium/audio-player"],
+              group: ["@lectorium/*", "!@lectorium/plugin-*"],
               message: "Infrastructure must not import composition root",
             },
             {

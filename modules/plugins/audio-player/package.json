@@ -1,5 +1,5 @@
 {
-  "name": "@lectorium/audio-player",
+  "name": "@lectorium/plugin-audio-player",
   "version": "0.0.1",
   "description": "s",
   "main": "dist/plugin.cjs.js",

@@ -1,10 +1,10 @@
-# @lectorium/audio-player
+# @lectorium/plugin-audio-player
 
 
 ## Install
 
 ```bash
-npm install @lectorium/audio-player
+npm install @lectorium/plugin-audio-player
 npx cap sync
 ```
 

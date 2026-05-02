@@ -76,7 +76,7 @@ the outside world, and platform-specific concerns live behind ports.
 | **Role** | Interfaces for technical infrastructure: database, persistence, file storage, URL resolution, audio, platform SDKs |
 | **May import** | Nothing — zero external dependencies |
 | **Must NOT import** | `@lib/domain`, `@infra`, `@ui`, anything |
-| **Contains** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IHaptics`, `INotificationScheduler`, `IShareService` |
+| **Contains** | `IDatabase`, `IPersistence`, `IDatabaseFetcher`, `IRemoteFilesStorage`, `IStoragePublicUrl`, `IPreferences`, `ISchemeVersionRepository`, `IAudioPlayer`, `IMediaDownloader`, `IHaptics`, `INotificationScheduler`, `IShareService`, `IServerProber` |
 
 ### `@infra/*` — Driven Adapters (Layer 2)
 
@@ -98,7 +98,7 @@ the outside world, and platform-specific concerns live behind ports.
 | `infra/files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
 | `infra/storagePublicUrl/` | `IStoragePublicUrl` (URL template resolver) |
 | `infra/preferences/capacitor/` | `IPreferences` for native (`@capacitor/preferences`) |
-| `infra/audio/capacitor/` | `IAudioPlayer` wrapping `@lectorium/audio-player` plugin |
+| `infra/audio/capacitor/` | `IAudioPlayer` wrapping `@lectorium/plugin-audio-player` plugin |
 | `infra/audio/web/` | `IAudioPlayer` over `HTMLAudioElement` |
 | `infra/notifications/capacitor/` | `INotificationScheduler` (local notifications) |
 | `infra/servers/` | CDN server probing (`probeServers`) |

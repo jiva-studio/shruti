@@ -1,6 +1,6 @@
 name: Audio-player build
 description: >
-  Install deps and build @lectorium/audio-player so its dist/ (types +
+  Install deps and build @lectorium/plugin-audio-player so its dist/ (types +
   bundles) exists before the mobile app's npm ci wires it in via file:.
   The lib's dist/ is gitignored, so CI must rebuild it on every run.
 
@@ -8,7 +8,7 @@ runs:
   using: composite
   steps:
     - shell: bash
-      run: cd modules/capacitor/audio-player && npm ci
+      run: cd modules/plugins/audio-player && npm ci
 
     - shell: bash
-      run: cd modules/capacitor/audio-player && npm run build
+      run: cd modules/plugins/audio-player && npm run build

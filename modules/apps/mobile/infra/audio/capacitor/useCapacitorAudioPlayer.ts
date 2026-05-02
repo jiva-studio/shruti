@@ -1,4 +1,4 @@
-import { AudioPlayer, type Status } from "@lectorium/audio-player"
+import { AudioPlayer, type Status } from "@lectorium/plugin-audio-player"
 import type {
   AudioOpenParams,
   AudioProgressListener,
@@ -6,7 +6,7 @@ import type {
 } from "@ports/app/audioPlayer.js"
 
 /**
- * Adapter over the @lectorium/audio-player Capacitor plugin (native +
+ * Adapter over the @lectorium/plugin-audio-player Capacitor plugin (native +
  * web fallback).
  *
  * The plugin's surface (Android/iOS/web fallback) speaks **seconds** for

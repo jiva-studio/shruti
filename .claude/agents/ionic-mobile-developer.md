@@ -148,9 +148,9 @@ Driven adapters implementing ports via SQL, filesystem, platform SDKs. May impor
 | `files/web/` | `IRemoteFilesStorage` for web (Cache API) |
 | `files/capacitor/` | `IRemoteFilesStorage` for native (Filesystem) |
 | `storagePublicUrl/` | `IStoragePublicUrl` (URL template resolver) |
-| `audio/capacitor/` | `IAudioPlayer` wrapping `@lectorium/audio-player` plugin |
+| `audio/capacitor/` | `IAudioPlayer` wrapping `@lectorium/plugin-audio-player` plugin |
 | `audio/web/` | `IAudioPlayer` over `HTMLAudioElement` |
-| `servers/` | `probeServers()` — CDN mirror detection |
+| `servers/` | `useHttpServerProber()` — `IServerProber` adapter for CDN mirror detection |
 | `idbKv/` | Low-level IDB KV store (Layer 1 primitive) |
 
 ### UI Layer (`@ui/`)
