@@ -66,8 +66,7 @@
   },
   "capacitor": {
     "ios": {
-      "src": "ios",
-      "name": "LectoriumAudioPlayer"
+      "src": "ios"
     },
     "android": {
       "src": "android"

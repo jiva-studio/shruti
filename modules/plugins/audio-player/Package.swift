@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "LectoriumAudioPlayer",
+    name: "LectoriumPluginAudioPlayer",
     platforms: [.iOS(.v14)],
     products: [
         .library(
-            name: "LectoriumAudioPlayer",
+            name: "LectoriumPluginAudioPlayer",
             targets: ["AudioPlayerPlugin"])
     ],
     dependencies: [
