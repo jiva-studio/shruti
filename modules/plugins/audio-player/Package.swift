@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "ShrutiAudioPlayer",
+    name: "ShrutiPluginAudioPlayer",
     platforms: [.iOS(.v14)],
     products: [
         .library(
-            name: "ShrutiAudioPlayer",
+            name: "ShrutiPluginAudioPlayer",
             targets: ["AudioPlayerPlugin"])
     ],
     dependencies: [
