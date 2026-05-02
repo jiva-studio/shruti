@@ -1,4 +1,5 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
+import { useI18n } from "vue-i18n"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
@@ -37,6 +38,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const app = useLectorium()
   const repos = app.repositories()
   const player = usePlayerStore()
+  const { t } = useI18n()
 
   const track = ref<Track | null>(null)
   const author = ref<Author | null>(null)
@@ -65,7 +67,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     error.value = null
     track.value = await repos.tracks.getById(trackId)
     if (!track.value) {
-      error.value = "Track not found."
+      error.value = t("errors.trackNotFound")
       return
     }
     if (track.value.authorId) {
