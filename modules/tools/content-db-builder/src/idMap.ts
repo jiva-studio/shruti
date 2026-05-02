@@ -1,6 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { nanoid } from "nanoid"
+import { customAlphabet } from "nanoid"
+
+// Alphanumeric only (no `-` / `_`). Default `nanoid` alphabet is
+// URL-safe-Base64 which contains both. The dashes were ugly in S3
+// keys and occasionally awkward when the id starts with `-` (some CLI
+// tools mistake it for a flag). 62^12 ≈ 3.2 × 10²¹ — same order of
+// entropy as default nanoid(12), so collision risk is unchanged.
+const idChars = customAlphabet(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+  12
+)
 
 /**
  * Persistent map: oldCouchId → new prefixed id, per entity type.
@@ -68,7 +78,7 @@ export class IdMap {
     const bucket = this.data[kind]
     const existing = bucket[oldId]
     if (existing) return existing
-    const fresh = `${PREFIXES[kind]}_${nanoid(12)}`
+    const fresh = `${PREFIXES[kind]}_${idChars()}`
     bucket[oldId] = fresh
     this.dirty = true
     return fresh
