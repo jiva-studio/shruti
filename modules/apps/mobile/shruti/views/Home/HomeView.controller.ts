@@ -1,6 +1,8 @@
 import { computed, onMounted, type ComputedRef } from "vue"
+import { useI18n } from "vue-i18n"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useToast } from "@shruti/services/useToast.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -25,9 +27,17 @@ export function useHomeController(): HomeControllerReturn {
   const playlist = usePlaylistStore()
   const downloads = useDownloadStore()
   const dictionaries = useDictionariesStore()
+  const toast = useToast()
+  const { t } = useI18n()
 
   onMounted(async () => {
     await Promise.all([dictionaries.ensureLoaded(), playlist.ensureLoaded(), downloads.hydrate()])
+    // If hydrate couldn't read the media-items table, every track shows
+    // "not downloaded" — surface a one-shot toast so the user knows
+    // their cache wasn't lost, the index just couldn't be read.
+    if (downloads.hydrationError) {
+      void toast.error(t("errors.downloadsCacheUnavailable"))
+    }
     playlist.prefetchAll()
   })
 
