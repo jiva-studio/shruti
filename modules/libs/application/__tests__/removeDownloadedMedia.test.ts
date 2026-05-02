@@ -14,6 +14,7 @@ function makeRepo(overrides: Partial<IMediaItemRepository> = {}): IMediaItemRepo
     deleteByTrack: async () => {},
     deleteById: async () => {},
     clearAll: async () => {},
+    failStaleDownloads: async () => {},
     ...overrides,
   }
 }
