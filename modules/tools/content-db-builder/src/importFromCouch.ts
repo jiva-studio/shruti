@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3"
 import { connectCouch, listAllDocs, type CouchDbConfig } from "./couchdb.js"
+import type { IdMap } from "./idMap.js"
 
 /* ---------- CouchDB document shapes ---------------------------------------- */
 
@@ -82,6 +83,17 @@ function stripTypePrefix(id: string): string {
   return colonIdx >= 0 ? id.substring(colonIdx + 2) : id
 }
 
+/**
+ * Canonical bucket paths for each track variant — derived from the
+ * **new** track id, not from whatever path Couch stored. Files in
+ * Wasabi still live at `library/tracks/{oldId}/...`; the migrator copies
+ * them under these new keys.
+ */
+const audioKeyForTrack = (newTrackId: string): string =>
+  `public/tracks/${newTrackId}/audio/original.mp3`
+const transcriptKeyForTrack = (newTrackId: string, lang: string): string =>
+  `public/tracks/${newTrackId}/transcripts/${lang}.json`
+
 function toIsoDate(date: [number, number, number] | null | undefined): string | null {
   if (!date || date.length !== 3) return null
   const [y, m, d] = date
@@ -105,29 +117,6 @@ function computeSortReference(references: Array<Array<string | number>> | undefi
     .join("_")
 }
 
-/**
- * Rewrites legacy CouchDB paths to the current S3 layout.
- *
- * CouchDB docs still reference the old Minio prefix `library/`
- * (e.g. `library/tracks/{id}/audio/original.mp3`). The new
- * `akds-lectorium` bucket serves public content under the `public/`
- * prefix, so every media key the mobile app resolves via
- * `IStoragePublicUrl.get()` must start with `public/`.
- *
- * We rewrite `library/` → `public/` here, at the ingestion boundary,
- * so DB rows always match the bucket keys. Paths that don't start with
- * `library/` are left as-is — they're either already correct or
- * unexpected, and we don't want to silently mangle them.
- */
-function normalizeBucketPath(path: string | undefined): string | null {
-  if (!path) return null
-  const stripped = path.replace(/^\/+/, "")
-  if (stripped.startsWith("library/")) {
-    return "public/" + stripped.slice("library/".length)
-  }
-  return stripped
-}
-
 /* ---------- main import ---------------------------------------------------- */
 
 export interface ImportStats {
@@ -142,10 +131,30 @@ export interface ImportStats {
   trackTags: number
 }
 
+export interface ImportResult {
+  stats: ImportStats
+  /** oldCouchTrackId → new prefixed track id, for the tracks that were
+   *  actually imported (filter-aware). The media migrator uses this to
+   *  walk Wasabi and route each object to its new key. */
+  trackIdMap: Map<string, string>
+}
+
+export interface ImportOptions {
+  /** If set, only tracks whose CouchDB `author` field matches this slug
+   *  (after `stripTypePrefix`, lower-cased) are imported. Dictionary
+   *  rows are inserted unchanged — they're tiny and let us localise
+   *  references for any author. */
+  filterAuthor?: string
+  /** Persistent id map. Mints stable random prefixed ids on first
+   *  encounter; reuses them on every subsequent run. */
+  idMap: IdMap
+}
+
 export async function importFromCouch(
   db: Database.Database,
-  couchCfg: CouchDbConfig
-): Promise<ImportStats> {
+  couchCfg: CouchDbConfig,
+  opts: ImportOptions
+): Promise<ImportResult> {
   const cx = connectCouch(couchCfg)
   const dictionary = cx.use<CouchDictionaryDoc>("dictionary")
   const tracks = cx.use<CouchTrack>("tracks")
@@ -162,7 +171,15 @@ export async function importFromCouch(
 
   console.log("[import] reading tracks…")
   const trackDocs = await listAllDocs<CouchTrack>(tracks)
-  const realTracks = trackDocs.filter((t) => t.type === "track")
+  const allTracks = trackDocs.filter((t) => t.type === "track")
+  const realTracks = opts.filterAuthor
+    ? allTracks.filter((t) => (t.author ?? "").toLowerCase() === opts.filterAuthor!.toLowerCase())
+    : allTracks
+  if (opts.filterAuthor) {
+    console.log(
+      `[import] filterAuthor=${opts.filterAuthor}: keeping ${realTracks.length}/${allTracks.length} tracks`
+    )
+  }
 
   const stats: ImportStats = {
     authors: 0,
@@ -211,12 +228,21 @@ export async function importFromCouch(
     "INSERT OR REPLACE INTO track_tags (track_id, tag_id) VALUES (?, ?)"
   )
 
-  const knownSourceIds = new Set<string>()
+  // Persistent id map (loaded from disk) — built up while inserting
+  // dictionaries so we can rewire FKs when inserting tracks. Keys are
+  // the *stripped* couch slug (e.g. "acbsp"), not the raw
+  // `author::acbsp`. `getOrCreate` mints a fresh prefixed nanoid on
+  // first encounter and reuses it for every subsequent run.
+  const idMap = opts.idMap
+  // Tracks that we actually inserted — returned to the caller for the
+  // media-migration step. oldCouchTrackId → newTrackId.
+  const importedTrackIds = new Map<string, string>()
 
   const tx = db.transaction(() => {
     // Authors
     for (const a of authors) {
-      const id = stripTypePrefix(a._id)
+      const oldId = stripTypePrefix(a._id)
+      const id = idMap.getOrCreate("authors", oldId)
       for (const [lang, name] of Object.entries(a.fullName ?? {})) {
         insAuthor.run(id, lang, name)
       }
@@ -225,7 +251,8 @@ export async function importFromCouch(
 
     // Locations
     for (const l of locations) {
-      const id = stripTypePrefix(l._id)
+      const oldId = stripTypePrefix(l._id)
+      const id = idMap.getOrCreate("locations", oldId)
       for (const [lang, name] of Object.entries(l.fullName ?? {})) {
         insLocation.run(id, lang, name)
       }
@@ -234,8 +261,8 @@ export async function importFromCouch(
 
     // Sources
     for (const s of sources) {
-      const id = stripTypePrefix(s._id)
-      knownSourceIds.add(id)
+      const oldId = stripTypePrefix(s._id)
+      const id = idMap.getOrCreate("sources", oldId)
       const fullNames = s.fullName ?? {}
       const shortNames = s.shortName ?? {}
       const langs = new Set([...Object.keys(fullNames), ...Object.keys(shortNames)])
@@ -253,7 +280,8 @@ export async function importFromCouch(
 
     // Tags
     for (const t of tags) {
-      const id = stripTypePrefix(t._id)
+      const oldId = stripTypePrefix(t._id)
+      const id = idMap.getOrCreate("tags", oldId)
       for (const [lang, name] of Object.entries(t.fullName ?? {})) {
         insTag.run(id, lang, name)
       }
@@ -262,13 +290,29 @@ export async function importFromCouch(
 
     // Tracks
     for (const track of realTracks) {
-      const trackId = track._id
+      const trackId = idMap.getOrCreate("tracks", track._id)
+      importedTrackIds.set(track._id, trackId)
+      const oldAuthorId = track.author ?? null
+      const oldLocationId = track.location ?? null
+      const authorId = oldAuthorId ? idMap.get("authors", oldAuthorId) ?? null : null
+      const locationId = oldLocationId ? idMap.get("locations", oldLocationId) ?? null : null
+      if (oldAuthorId && !authorId) {
+        console.warn(
+          `[import] track ${track._id} references unknown author '${oldAuthorId}' — storing as NULL`
+        )
+      }
+      if (oldLocationId && !locationId) {
+        console.warn(
+          `[import] track ${track._id} references unknown location '${oldLocationId}' — storing as NULL`
+        )
+      }
+
       const sortRef = track.sort_reference ?? computeSortReference(track.references)
       const sortDate = track.sort_date ?? computeSortDate(track.date)
       insTrack.run(
         trackId,
-        track.author ?? null,
-        track.location ?? null,
+        authorId,
+        locationId,
         toIsoDate(track.date),
         track.hidden ? 1 : 0,
         sortRef,
@@ -283,13 +327,14 @@ export async function importFromCouch(
         track.references.forEach((refGroup, refIdx) => {
           if (refGroup.length === 0) return
           const [sourceRaw, ...nums] = refGroup.map(String)
-          const sourceId = sourceRaw.toLowerCase()
-          if (!knownSourceIds.has(sourceId)) {
+          const oldSourceId = sourceRaw.toLowerCase()
+          const sourceId = idMap.get("sources", oldSourceId)
+          if (!sourceId) {
             console.warn(
-              `[import] track ${trackId} refers to unknown source '${sourceId}' ` +
-                `(refs=${JSON.stringify(refGroup)}) — storing anyway, but ` +
-                `localisation lookup will fall back to the raw id.`
+              `[import] track ${track._id} refers to unknown source '${oldSourceId}' ` +
+                `(refs=${JSON.stringify(refGroup)}) — skipping reference.`
             )
+            return
           }
           const tokens = nums.join(".")
           insReference.run(trackId, refIdx, sourceId, tokens)
@@ -298,8 +343,16 @@ export async function importFromCouch(
       }
 
       // Tags
-      for (const tagId of track.tags ?? []) {
-        insTrackTag.run(trackId, stripTypePrefix(tagId))
+      for (const rawTagId of track.tags ?? []) {
+        const oldTagId = stripTypePrefix(rawTagId)
+        const tagId = idMap.get("tags", oldTagId)
+        if (!tagId) {
+          console.warn(
+            `[import] track ${track._id} references unknown tag '${oldTagId}' — skipping.`
+          )
+          continue
+        }
+        insTrackTag.run(trackId, tagId)
         stats.trackTags += 1
       }
 
@@ -310,7 +363,10 @@ export async function importFromCouch(
       for (const lang of track.languages ?? []) languageKeys.add(lang.language)
 
       const audioOriginal = track.audio?.original
-      const audioOriginalPath = normalizeBucketPath(audioOriginal?.path)
+      // Canonical key derived from the new track id. Wasabi still
+      // serves the file under `library/tracks/{oldId}/audio/...`; the
+      // media migrator copies it to this key.
+      const audioOriginalPath = audioOriginal ? audioKeyForTrack(trackId) : null
 
       for (const lang of languageKeys) {
         const title =
@@ -322,7 +378,13 @@ export async function importFromCouch(
         const langMeta = (track.languages ?? []).filter((l) => l.language === lang)
         const audioMeta = langMeta.find((l) => l.source === "track")
         const transcriptMeta = langMeta.find((l) => l.source === "transcript")
-        const transcriptPath = normalizeBucketPath(track.transcripts?.[lang]?.path)
+        // If Couch knows about a transcript for this lang (either via
+        // `transcripts[lang]` or via languages[].source === "transcript"),
+        // emit the canonical new-id path. The migrator fills the actual
+        // file in.
+        const hasTranscript =
+          Boolean(track.transcripts?.[lang]) || Boolean(transcriptMeta)
+        const transcriptPath = hasTranscript ? transcriptKeyForTrack(trackId, lang) : null
 
         insVariant.run(
           trackId,
@@ -363,5 +425,72 @@ export async function importFromCouch(
         WHERE s.full_name <> '';
   `)
 
-  return stats
+  // Sanity-check: every FK on tracks/track_references/track_tags must
+  // resolve against the dictionary tables we just rewrote. Anything
+  // dangling here means the id remap dropped a reference and the row
+  // would render with a missing label in the app.
+  console.log("[import] verifying foreign keys against new ids…")
+  const orphans = {
+    tracksAuthor: (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM tracks t
+         WHERE t.author_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM authors a WHERE a.id = t.author_id)`
+      )
+      .get() as { n: number }).n,
+    tracksLocation: (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM tracks t
+         WHERE t.location_id IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM locations l WHERE l.id = t.location_id)`
+      )
+      .get() as { n: number }).n,
+    refsSource: (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM track_references r
+         WHERE NOT EXISTS (SELECT 1 FROM sources s WHERE s.id = r.source_id)`
+      )
+      .get() as { n: number }).n,
+    trackTagsTag: (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM track_tags tt
+         WHERE NOT EXISTS (SELECT 1 FROM tags g WHERE g.id = tt.tag_id)`
+      )
+      .get() as { n: number }).n,
+    variantsTrack: (db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM track_variants v
+         WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = v.track_id)`
+      )
+      .get() as { n: number }).n,
+  }
+
+  const orphanTotal =
+    orphans.tracksAuthor +
+    orphans.tracksLocation +
+    orphans.refsSource +
+    orphans.trackTagsTag +
+    orphans.variantsTrack
+  console.log(
+    `[import] id-remap check: ` +
+      `tracks.author_id orphans=${orphans.tracksAuthor}, ` +
+      `tracks.location_id orphans=${orphans.tracksLocation}, ` +
+      `track_references.source_id orphans=${orphans.refsSource}, ` +
+      `track_tags.tag_id orphans=${orphans.trackTagsTag}, ` +
+      `track_variants.track_id orphans=${orphans.variantsTrack}`
+  )
+  if (orphanTotal > 0) {
+    throw new Error(
+      `[import] id remap left ${orphanTotal} dangling reference(s). ` +
+        `Aborting build — the dictionaries on Couch are inconsistent with the tracks.`
+    )
+  }
+
+  // Persist the id map AFTER the FK check so we never save a partially
+  // valid mapping. Subsequent runs reuse these ids verbatim, which is
+  // what makes media migration idempotent (same key in destination →
+  // skipped).
+  idMap.save()
+
+  return { stats, trackIdMap: importedTrackIds }
 }
