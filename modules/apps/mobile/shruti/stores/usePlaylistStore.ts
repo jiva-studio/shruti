@@ -99,7 +99,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
 
   async function add(trackId: TrackId): Promise<Result<PlaylistItem, AddTrackToPlaylistError>> {
     const repos = app.repositories()
-    const result = await addTrackToPlaylist({ trackId }, { playlistItems: repos.playlistItems })
+    const result = await addTrackToPlaylist(
+      { trackId },
+      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
+    )
     if (result.ok) {
       await refresh()
       void prefetchAudio(trackId)
