@@ -56,7 +56,9 @@ export const usePlayerStore = defineStore("player", () => {
     })
   }
 
-  async function openTrack(args: OpenArgs): Promise<Result<void, PlayTrackError>> {
+  async function openTrack(
+    args: OpenArgs
+  ): Promise<Result<void, PlayTrackError | "engine-failed">> {
     const plan = await playTrack({
       track: args.track,
       preferredLanguage: args.preferredLanguage,
@@ -74,6 +76,23 @@ export const usePlayerStore = defineStore("player", () => {
     const url = localUrl ?? remoteUrl
 
     subscribeOnce()
+    // Engine first; reactive state lands only on success. If `open` or
+    // `play` rejects, callers see `engine-failed` and the floating
+    // player keeps showing whatever was previously open (or stays
+    // closed) instead of a phantom title for a track that never
+    // started.
+    try {
+      await app.audioPlayer.open({
+        itemId: cmd.itemId,
+        url,
+        title: cmd.title,
+        author: cmd.authorName,
+      })
+      await app.audioPlayer.play()
+    } catch {
+      return { ok: false, error: "engine-failed" }
+    }
+
     trackId.value = cmd.trackId
     title.value = cmd.title
     authorName.value = cmd.authorName
@@ -81,14 +100,6 @@ export const usePlayerStore = defineStore("player", () => {
     itemId.value = cmd.itemId
     positionMs.value = 0
     durationMs.value = cmd.audio.duration ?? 0
-
-    await app.audioPlayer.open({
-      itemId: cmd.itemId,
-      url,
-      title: cmd.title,
-      author: cmd.authorName,
-    })
-    await app.audioPlayer.play()
 
     // Legacy behaviour: when the user has opted in, the transcript
     // surfaces automatically on every new track — no extra tap required.
