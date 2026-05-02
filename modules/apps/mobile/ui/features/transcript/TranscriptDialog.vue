@@ -146,7 +146,11 @@ ion-modal ion-toolbar {
 }
 
 .transcript-text {
-  /* Floating player covers 56px */
+  /* Floating player covers 56px. Horizontal gutter so the active
+     paragraph (scaled to 1.01 via transform) and justified-text edges
+     don't get clipped against the screen sides — IonContent here has
+     no default content padding. */
+  padding-inline: 16px;
   padding-bottom: 56px;
 }
 
