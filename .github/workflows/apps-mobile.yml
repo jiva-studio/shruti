@@ -1,26 +1,30 @@
-name: Apps / Mobile
+name: app
 
 on:
   push:
     branches: [main]
     paths:
       - modules/apps/mobile/**
+      - modules/plugins/**
       - modules/libs/**
       - modules/tests/e2e/**
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml
+      - .github/actions/audio-player-build/**
       - .github/actions/mobile-android-setup/**
       - .github/actions/mobile-ios-setup/**
   pull_request:
     branches: [main]
     paths:
       - modules/apps/mobile/**
+      - modules/plugins/**
       - modules/libs/**
       - modules/tests/e2e/**
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml
+      - .github/actions/audio-player-build/**
       - .github/actions/mobile-android-setup/**
       - .github/actions/mobile-ios-setup/**
   workflow_dispatch:
@@ -32,125 +36,116 @@ concurrency:
 jobs:
   # -------------------------------------------------------------------------- #
   lint:
-    name: Lint
-    runs-on: ubuntu-latest
+    name: lint
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/audio-player-build
-      - run: cd modules/apps/mobile && npm ci
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
       - run: cd modules/apps/mobile && npm run lint
 
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: test / unit
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/audio-player-build
-      - run: cd modules/apps/mobile && npm ci
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
       - run: cd modules/apps/mobile && npm test
 
   build-web:
-    name: Build Web Bundle
-    runs-on: ubuntu-latest
+    name: build
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/audio-player-build
-      - run: cd modules/apps/mobile && npm ci
-      - name: Build web bundle
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - name: build web bundle
         # Vite reads BUILD_ID via process.env and inlines it as __BUILD_ID__
         # (shown in Settings → About). Version comes from package.json.
         env:
           BUILD_ID: ${{ github.run_number }}
         run: cd modules/apps/mobile && npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: mobile-web-dist
           path: modules/apps/mobile/dist
           retention-days: 3
 
-  # Playwright suite runs only if the e2e package has been committed.
-  # We can't use `hashFiles(...)` at job-level `if:` — GitHub rejects
-  # the whole workflow with a 0-second no-op run because `hashFiles`
-  # requires GITHUB_WORKSPACE (which doesn't exist before checkout).
-  # Instead we always start the job, do a cheap filesystem probe in
-  # the first step, and skip every later step when the suite isn't
-  # present. Deploy jobs below don't depend on e2e, so a missing
-  # suite doesn't block releases — a failing suite still fails CI.
+  # The e2e suite isn't committed yet. Probe at runtime so the job no-ops
+  # cleanly until `modules/tests/e2e/` lands; deploy jobs don't depend on
+  # this one, so absence doesn't block releases (a failing suite still does).
   e2e:
-    name: E2E Tests
+    name: test / e2e
     needs: [build-web]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
-      - name: Detect e2e suite
+      - uses: actions/checkout@v5
+      - name: detect e2e suite
         id: check_e2e
         run: |
           if [ -f modules/tests/e2e/package-lock.json ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::modules/tests/e2e/ is not present yet — skipping Playwright."
+            echo "::notice::modules/tests/e2e/ not present yet — skipping Playwright."
           fi
       - if: steps.check_e2e.outputs.present == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: modules/tests/e2e/package-lock.json
       - if: steps.check_e2e.outputs.present == 'true'
-        name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('modules/tests/e2e/package-lock.json') }}
-      - if: steps.check_e2e.outputs.present == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: mobile-web-dist
           path: modules/apps/mobile/dist
       - if: steps.check_e2e.outputs.present == 'true'
-        run: cd modules/tests/e2e && npm ci
-      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
-        run: cd modules/tests/e2e && npx playwright install --with-deps chromium
-      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: cd modules/tests/e2e && npx playwright install-deps chromium
+        run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
+      # `playwright install` is a no-op when the requested browser is already
+      # in $HOME/Library/Caches/ms-playwright, which persists on the
+      # self-hosted runner across ephemeral cycles.
       - if: steps.check_e2e.outputs.present == 'true'
-        name: Run Playwright against built bundle
+        run: cd modules/tests/e2e && npx playwright install chromium
+      # Self-hosted runners share localhost — a fixed port collides between
+      # parallel jobs and with stale dev-server processes from prior runs.
+      # Pick a random ephemeral port; playwright.config.ts reads E2E_PORT.
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: pick e2e port
+        run: echo "E2E_PORT=$((20000 + RANDOM % 40000))" >> "$GITHUB_ENV"
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: run playwright
         env:
           E2E_USE_BUNDLE: "1"
         run: cd modules/tests/e2e && npx playwright test
       - if: always() && steps.check_e2e.outputs.present == 'true'
-        name: Upload Playwright HTML report
-        uses: actions/upload-artifact@v4
+        name: upload playwright report
+        uses: actions/upload-artifact@v5
         with:
           name: e2e-playwright-report
           path: modules/tests/e2e/playwright-report/
           retention-days: 30
 
   # -------------------------------------------------------------------------- #
-  # Cloudflare Pages: PR preview and production web deploy
+  # Cloudflare Pages: PR preview and production web deploy.
+  # Both jobs no-op when CF secrets are absent so CI passes on repos that
+  # haven't wired up the shruti-preview Pages project yet.
   # -------------------------------------------------------------------------- #
   deploy-preview:
-    name: Deploy PR Preview
+    name: web / pr
     needs: [lint, test, build-web]
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    # Dependabot PR contexts get an empty `secrets` map, so wrangler would fail
+    # with "CLOUDFLARE_API_TOKEN must be set". Skip preview for those PRs.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, macos, mac-host]
     permissions:
       contents: read
       pull-requests: write
@@ -159,17 +154,22 @@ jobs:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: true
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: mobile-web-dist
           path: dist
       - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=shruti-preview --branch=pr-${{ github.event.number }}
-      - uses: marocchino/sticky-pull-request-comment@v2
+      - if: steps.deploy.outputs.deployment-url != ''
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: preview
           message: |
@@ -179,10 +179,10 @@ jobs:
             - **Commit:** `${{ github.event.pull_request.head.sha }}`
 
   deploy-production:
-    name: Deploy Production (Web)
+    name: web / main
     needs: [lint, test, build-web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, mac-host]
     permissions:
       contents: read
       deployments: write
@@ -190,56 +190,63 @@ jobs:
       group: production-main
       cancel-in-progress: false
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: mobile-web-dist
           path: dist
       - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=shruti-preview --branch=main
-      - run: |
+      - if: steps.deploy.outputs.deployment-url != ''
+        run: |
           echo "Production: https://shruti-preview.pages.dev"
           echo "This build: ${{ steps.deploy.outputs.deployment-url }}"
 
   # -------------------------------------------------------------------------- #
-  # Android — single build job produces debug APK + signed release AAB
-  # deploy-android is a thin uploader (no java/sdk/gradle setup)
+  # Android — single build job produces debug APK + signed release AAB.
   # -------------------------------------------------------------------------- #
   build-android:
-    name: Android — Build (debug + signed release)
+    name: android / build
     needs: [build-web]
-    runs-on: ubuntu-latest
+    # Dependabot PR contexts get no secrets, so the signing keystore is empty
+    # and fastlane fails with "KEYSTORE_BASE64 env var is required".
+    if: github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ./.github/actions/mobile-android-setup
-      - name: Build debug APK + signed release AAB
+      - name: build apk + aab
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_FILE }}
-          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.SHRUTI_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SHRUTI_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SHRUTI_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SHRUTI_KEY_PASSWORD }}
         run: cd modules/apps/mobile && bundle exec fastlane android build_all
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: app-debug
           path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: app-release-aab
           path: modules/apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 14
 
   deploy-android:
-    name: Android — Deploy to Google Play (internal)
+    name: android / deploy
     needs: [lint, test, build-web, build-android]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Need full history + tags so release notes can diff against the
           # previous mobile-v* tag (otherwise we fall back to last 30 commits).
@@ -249,26 +256,37 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: true
           working-directory: modules/apps/mobile
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: app-release-aab
           path: /tmp/aab
-      - name: Upload AAB to Google Play
+      - name: upload aab to play
         env:
+          # Org-level service-account JSON at akdasa-studios/ (visibility: all).
+          # One service account uploads to every akdasa-studios Play app as long
+          # as it's been granted Release Manager on each in Play Console.
           GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+          # Used by ReleaseNotes to call Bedrock (Claude) for marketing-style
+          # "What's new" text. Org-level secrets at akdasa-studios/.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: cd modules/apps/mobile && bundle exec fastlane android upload aab:/tmp/aab/app-release.aab
 
   # -------------------------------------------------------------------------- #
-  # iOS — build signed IPA on macos-14, upload to TestFlight on main.
-  # Skipped entirely until ios/ folder exists (needs `npx cap add ios` on a Mac).
+  # iOS — build signed IPA, upload to TestFlight on main.
+  # The ios/ folder may not yet exist (needs `npx cap add ios` on a Mac) — in
+  # that case the build step is skipped via the check_ios guard below.
   # -------------------------------------------------------------------------- #
   build-ios:
-    name: iOS — Build (signed release IPA)
+    name: ios / build
     needs: [build-web]
+    # Same reason as build-android — dependabot PRs get empty secrets, so the
+    # APPLE_CERTIFICATES zip is empty and unzip fails.
+    if: github.actor != 'dependabot[bot]'
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-      - name: Check iOS project present
+      - uses: actions/checkout@v5
+      - name: check ios project
         id: check_ios
         shell: bash
         run: |
@@ -280,27 +298,26 @@ jobs:
           fi
       - if: steps.check_ios.outputs.present == 'true'
         uses: ./.github/actions/mobile-ios-setup
-      - name: Build signed release IPA
+      - name: build ipa
         if: steps.check_ios.outputs.present == 'true'
         env:
-          # Certificate bundle + match password — repo-level secrets.
-          APPLE_CERTIFICATES: ${{ secrets.APPLE_CERTIFICATES }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          # Apple Store + ASC API — org-level secrets (akdasa-studios).
+          # Repo-level cert bundle; org-level match decryption password.
+          APPLE_CERTIFICATES: ${{ secrets.SHRUTI_APPLE_CERTIFICATES }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
         run: cd modules/apps/mobile && bundle exec fastlane ios build
       - if: steps.check_ios.outputs.present == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: app-release-ipa
           path: modules/apps/mobile/ios/App/build/App.ipa
           retention-days: 14
 
   deploy-ios:
-    name: iOS — Deploy to TestFlight
+    name: ios / deploy
     needs: [lint, test, build-web, build-ios]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     # Upload-only job — no Xcode compilation needed. Using macos-15 because
@@ -308,14 +325,12 @@ jobs:
     # App Store Connect EC .p8 key with "invalid curve name".
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
-          # Need full history + tags so release notes can diff against the
-          # previous mobile-v* tag (otherwise we fall back to last 30 commits).
           fetch-depth: 0
-      - name: Check artifact exists
+      - name: check ipa artifact
         id: check_ipa
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         continue-on-error: true
         with:
           name: app-release-ipa
@@ -326,14 +341,17 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: true
           working-directory: modules/apps/mobile
-      - name: Upload IPA to TestFlight
+      - name: upload ipa to testflight
         if: steps.check_ipa.outcome == 'success'
         env:
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          # Org-level secrets at akdasa-studios/ (visibility: all) — shared with grammoria.
           BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
           BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
           BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
           BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: cd modules/apps/mobile && bundle exec fastlane ios upload ipa:/tmp/ipa/App.ipa
