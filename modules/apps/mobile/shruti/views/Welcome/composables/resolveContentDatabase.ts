@@ -1,6 +1,10 @@
-import type { IDatabaseFetcher, IRemoteFilesStorage } from "@ports/app/index.js"
+import type {
+  IDatabaseFetcher,
+  IRemoteFilesStorage,
+  IServerProber,
+  ServerProbeResult,
+} from "@ports/app/index.js"
 import type { RemoteAppConfig } from "@lib/domain/config.js"
-import type { ServerProbeResult } from "@infra/servers/index.js"
 import {
   buildDatabaseStoragePath,
   buildDatabaseUrl,
@@ -25,7 +29,7 @@ import {
 export interface ResolveContentDatabaseDeps extends DatabaseLocatorDeps {
   databaseFetcher: IDatabaseFetcher
   filesStorage: IRemoteFilesStorage
-  probeServers(configPath: string, preferredId?: string): Promise<ServerProbeResult>
+  serverProber: IServerProber
   onServerResolved(result: ServerProbeResult): void
   loadSavedPreferredServerId(): Promise<string | undefined>
   setViewState(
@@ -49,7 +53,7 @@ async function fetchDatabaseFromCdn(deps: ResolveContentDatabaseDeps): Promise<s
   // Probe servers
   deps.setViewState("server:probing")
   const preferredId = await deps.loadSavedPreferredServerId()
-  const probeResult = await deps.probeServers(deps.config.publicRemoteConfigPath, preferredId)
+  const probeResult = await deps.serverProber.probe(deps.config.publicRemoteConfigPath, preferredId)
   deps.onServerResolved(probeResult)
 
   // Resolve latest compatible version from config

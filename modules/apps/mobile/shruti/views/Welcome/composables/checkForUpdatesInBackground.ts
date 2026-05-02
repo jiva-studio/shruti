@@ -1,6 +1,5 @@
-import type { IDatabaseFetcher } from "@ports/app/index.js"
+import type { IDatabaseFetcher, IServerProber, ServerProbeResult } from "@ports/app/index.js"
 import type { RemoteAppConfig } from "@lib/domain/config.js"
-import type { ServerProbeResult } from "@infra/servers/index.js"
 import {
   buildDatabaseStoragePath,
   buildDatabaseUrl,
@@ -20,7 +19,7 @@ import {
  */
 export interface CheckForUpdatesDeps extends DatabaseLocatorDeps {
   databaseFetcher: IDatabaseFetcher
-  probeServers(configPath: string, preferredId?: string): Promise<ServerProbeResult>
+  serverProber: IServerProber
   onServerResolved(result: ServerProbeResult): void
   loadSavedPreferredServerId(): Promise<string | undefined>
   persistPreferredServerIdIfChanged(resolvedId: string): void
@@ -29,7 +28,10 @@ export interface CheckForUpdatesDeps extends DatabaseLocatorDeps {
 export async function checkForUpdatesInBackground(deps: CheckForUpdatesDeps): Promise<void> {
   try {
     const preferredId = await deps.loadSavedPreferredServerId()
-    const probeResult = await deps.probeServers(deps.config.publicRemoteConfigPath, preferredId)
+    const probeResult = await deps.serverProber.probe(
+      deps.config.publicRemoteConfigPath,
+      preferredId
+    )
     deps.onServerResolved(probeResult)
 
     const config = probeResult.config as RemoteAppConfig
@@ -43,7 +45,7 @@ export async function checkForUpdatesInBackground(deps: CheckForUpdatesDeps): Pr
     const databaseUrl = buildDatabaseUrl(deps, latestVersion)
     await deps.databaseFetcher.download(databaseUrl, databaseStoragePath)
 
-    deps.persistPreferredServerIdIfChanged(probeResult.server.id)
+    deps.persistPreferredServerIdIfChanged(probeResult.serverId)
   } catch {
     // Offline or CDN error — silently ignore
   }
