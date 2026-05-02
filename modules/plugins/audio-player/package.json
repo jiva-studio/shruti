@@ -66,8 +66,7 @@
   },
   "capacitor": {
     "ios": {
-      "src": "ios",
-      "name": "ShrutiAudioPlayer"
+      "src": "ios"
     },
     "android": {
       "src": "android"
