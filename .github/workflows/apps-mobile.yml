@@ -283,7 +283,7 @@ jobs:
     # Same reason as build-android — dependabot PRs get empty secrets, so the
     # APPLE_CERTIFICATES zip is empty and unzip fails.
     if: github.actor != 'dependabot[bot]'
-    runs-on: macos-26
+    runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
       - name: check ios project
@@ -320,10 +320,7 @@ jobs:
     name: ios / deploy
     needs: [lint, test, build-web, build-ios]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # Upload-only job — no Xcode compilation needed. Using macos-15 because
-    # Ruby 3.3's bundled OpenSSL on macos-26 (arm64) fails to parse the
-    # App Store Connect EC .p8 key with "invalid curve name".
-    runs-on: macos-15
+    runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
         with:
