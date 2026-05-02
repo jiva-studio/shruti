@@ -47,6 +47,7 @@ import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useCapacitorMediaDownloader } from "@infra/mediaDownloader/capacitor/index.js"
 import { useWebMediaDownloader } from "@infra/mediaDownloader/web/index.js"
+import { useHttpServerProber } from "@infra/servers/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -82,6 +83,7 @@ initLectorium({
     : useWebMediaDownloader({ cacheName: "lectorium" }),
   platform,
   initialServer: SERVERS[0],
+  serverProber: useHttpServerProber(),
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)

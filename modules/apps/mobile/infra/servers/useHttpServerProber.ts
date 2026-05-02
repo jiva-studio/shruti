@@ -1,43 +1,35 @@
 import { buildServerUrl, SERVERS, type CdnServer } from "@lib/domain/servers.js"
-
-export interface ServerProbeResult {
-  server: CdnServer
-  config: unknown
-}
+import type { IServerProber, ServerProbeResult } from "@ports/app/index.js"
 
 /**
- * Tries each CDN server sequentially, attempting to fetch `configPath`.
- * Returns the first server that responds with valid JSON, plus the parsed
- * response (which is the remote config — reused by the Welcome flow so
- * the successful probe doubles as the config download).
- *
- * @param configPath  Relative path to the remote config, e.g. "public/config.json"
- * @param preferredServerId  Id of the server to try first (from user prefs)
- * @param timeoutMs  Per-server fetch timeout (default 8 000 ms)
+ * HTTP-backed `IServerProber`. Tries each CDN server sequentially,
+ * returning the first that responds with valid JSON for `configPath`,
+ * plus the parsed body (which is the remote config — reused by the
+ * Welcome flow so the successful probe doubles as the config download).
  */
-export async function probeServers(
-  configPath: string,
-  preferredServerId?: string,
-  timeoutMs = 8000
-): Promise<ServerProbeResult> {
-  const ordered = buildOrderedList(preferredServerId)
+export function useHttpServerProber(timeoutMs = 8000): IServerProber {
+  return {
+    async probe(configPath, preferredServerId) {
+      const ordered = buildOrderedList(preferredServerId)
 
-  for (const server of ordered) {
-    const url = buildServerUrl(server, configPath)
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeoutMs)
-      const response = await fetch(url, { signal: controller.signal })
-      clearTimeout(timer)
-      if (!response.ok) continue
-      const config: unknown = await response.json()
-      return { server, config }
-    } catch {
-      continue
-    }
+      for (const server of ordered) {
+        const url = buildServerUrl(server, configPath)
+        try {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), timeoutMs)
+          const response = await fetch(url, { signal: controller.signal })
+          clearTimeout(timer)
+          if (!response.ok) continue
+          const config: unknown = await response.json()
+          return { serverId: server.id, config } satisfies ServerProbeResult
+        } catch {
+          continue
+        }
+      }
+
+      throw new Error("All CDN servers are unreachable")
+    },
   }
-
-  throw new Error("All CDN servers are unreachable")
 }
 
 function buildOrderedList(preferredServerId?: string): CdnServer[] {

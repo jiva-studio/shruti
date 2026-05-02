@@ -1,5 +1,5 @@
 import { ref, type Ref } from "vue"
-import type { CdnServer } from "@lib/domain/servers.js"
+import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
 import type {
   IAudioPlayer,
   IDatabase,
@@ -10,12 +10,12 @@ import type {
   IPersistence,
   IPreferences,
   IRemoteFilesStorage,
+  IServerProber,
   IShareService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
-import { probeServers as probeServersImpl, type ServerProbeResult } from "@infra/servers/index.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 
 /**
@@ -52,6 +52,7 @@ export interface Lectorium {
   readonly shareService: IShareService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
+  readonly serverProber: IServerProber
   /** Runtime platform, captured at bootstrap. Drives layout constants that can't be inferred from CSS. */
   readonly platform: "ios" | "android" | "web"
 
@@ -72,6 +73,12 @@ export interface Lectorium {
   }
 
   setActiveServer(server: CdnServer): void
+  /**
+   * Resolve `serverId` against the in-domain SERVERS registry and
+   * activate it. Used by the Welcome flow after `IServerProber.probe`
+   * returns the chosen server's id.
+   */
+  setActiveServerById(serverId: string): void
 
   openContentDatabase(path: string): Promise<IDatabase>
   closeContentDatabase(): Promise<void>
@@ -83,13 +90,6 @@ export interface Lectorium {
    * phases 2 and 3). Cached on first call.
    */
   repositories(): AppRepositories
-
-  /**
-   * Probe CDN servers for `configPath`; returns the first reachable one
-   * plus the parsed remote config. Wraps `@infra/servers/probeServers`
-   * so the Welcome view doesn't reach into infra directly.
-   */
-  probeServers(configPath: string, preferredServerId?: string): Promise<ServerProbeResult>
 
   /**
    * Read the scheme version recorded by the last `migrations` row of the
@@ -109,6 +109,7 @@ export interface InitLectoriumSeed {
   readonly shareService: IShareService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
+  readonly serverProber: IServerProber
   readonly platform: "ios" | "android" | "web"
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
@@ -142,12 +143,19 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     shareService: seed.shareService,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
+    serverProber: seed.serverProber,
     platform: seed.platform,
     activeServer,
     contentDbFile,
     databases,
 
     setActiveServer(server) {
+      activeServer.value = server
+    },
+
+    setActiveServerById(serverId) {
+      const server = SERVERS.find((s) => s.id === serverId)
+      if (!server) throw new Error(`Unknown server id: ${serverId}`)
       activeServer.value = server
     },
 
@@ -190,10 +198,6 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
         storagePublicUrl,
       })
       return cachedRepos
-    },
-
-    probeServers(configPath, preferredServerId) {
-      return probeServersImpl(configPath, preferredServerId)
     },
 
     async readContentSchemeVersion() {

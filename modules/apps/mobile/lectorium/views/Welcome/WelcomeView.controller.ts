@@ -77,8 +77,8 @@ export function useWelcomeController(
       getPublicUrl: (path) => lectorium.storagePublicUrl.get(path),
       filesStorage: lectorium.filesStorage,
       databaseFetcher: lectorium.databaseFetcher,
-      probeServers: lectorium.probeServers,
-      onServerResolved: (result) => lectorium.setActiveServer(result.server),
+      serverProber: lectorium.serverProber,
+      onServerResolved: (result) => lectorium.setActiveServerById(result.serverId),
       loadSavedPreferredServerId: async () => {
         const stored = await lectorium.preferences.get(PREFERRED_SERVER_KEY)
         return stored ?? undefined
@@ -125,7 +125,7 @@ export function useWelcomeController(
       getPublicUrl: base.getPublicUrl,
       filesStorage: base.filesStorage,
       databaseFetcher: base.databaseFetcher,
-      probeServers: lectorium.probeServers,
+      serverProber: lectorium.serverProber,
       onServerResolved: base.onServerResolved,
       loadSavedPreferredServerId: base.loadSavedPreferredServerId,
       persistPreferredServerIdIfChanged: async (resolvedId) => {
