@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { toastController } from "@ionic/vue"
+import { alertController, toastController } from "@ionic/vue"
+import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
@@ -43,6 +44,7 @@ export interface SettingsControllerReturn {
 export function useSettingsController(): SettingsControllerReturn {
   const app = useShruti()
   const debug = useDebugStore()
+  const { t } = useI18n()
 
   const version = __APP_VERSION__
   const buildId = __BUILD_ID__
@@ -131,6 +133,20 @@ export function useSettingsController(): SettingsControllerReturn {
   }
 
   async function onClearUserData(): Promise<void> {
+    // Behind a 5-tap debug unlock today, but the action is irreversible
+    // (notes, playlist, downloads, filters all gone) so a confirm
+    // dialog is the bare minimum.
+    const alert = await alertController.create({
+      header: t("settings.danger.confirmClearUserData.header"),
+      message: t("settings.danger.confirmClearUserData.message"),
+      buttons: [
+        { text: t("settings.danger.confirmClearUserData.cancel"), role: "cancel" },
+        { text: t("settings.danger.confirmClearUserData.confirm"), role: "destructive" },
+      ],
+    })
+    await alert.present()
+    const { role } = await alert.onDidDismiss()
+    if (role !== "destructive") return
     const repos = app.repositories()
     await repos.notes.clearAll()
     await repos.playlistItems.clearAll()

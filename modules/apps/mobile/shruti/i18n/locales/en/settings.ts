@@ -66,6 +66,13 @@ export default {
   danger: {
     clearCache: "Clear transcript cache",
     clearUserData: "Clear all user data",
+    confirmClearUserData: {
+      header: "Clear all user data?",
+      message:
+        "Notes, playlist, downloaded tracks and search filters will be permanently deleted. This cannot be undone.",
+      cancel: "Cancel",
+      confirm: "Delete everything",
+    },
   },
 
   appVersion: "App version",
