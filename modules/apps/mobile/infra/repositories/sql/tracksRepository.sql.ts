@@ -119,16 +119,17 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
         // Duration comes from any variant that has audio. Pick the max of
         // the per-variant durations — every variant of the same track
         // points at the same original recording for now.
+        // DB column is seconds; the filter bound arrives in ms.
         clauses.push(
           `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) >= ?`
         )
-        params.push(filters.durationMinMs)
+        params.push(filters.durationMinMs / 1000)
       }
       if (filters.durationMaxMs !== undefined) {
         clauses.push(
           `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) < ?`
         )
-        params.push(filters.durationMaxMs)
+        params.push(filters.durationMaxMs / 1000)
       }
 
       const limit = query.limit ?? 50

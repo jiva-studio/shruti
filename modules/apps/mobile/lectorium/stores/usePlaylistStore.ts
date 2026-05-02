@@ -9,6 +9,8 @@ import {
   type ArchivePlaylistItemError,
 } from "@lib/application/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
+import { markCompleted as markCompletedUseCase } from "@lib/application/markCompleted.js"
+import { updateProgress as updateProgressUseCase } from "@lib/application/updateProgress.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { Track } from "@lib/domain/track.js"
@@ -178,6 +180,49 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return activeTrackIds.value.has(trackId)
   }
 
+  /** First entry whose track matches the given id, or `undefined`. */
+  function getEntryByTrackId(trackId: TrackId): PlaylistEntry | undefined {
+    return entries.value.find((e) => e.item.trackId === trackId)
+  }
+
+  /**
+   * Persist playback position for an item and patch the in-memory entry
+   * so the UI reflects the new progress without a full refresh. Errors
+   * are swallowed — losing one tick is better than spamming the user.
+   */
+  async function setProgress(itemId: PlaylistItemId, progressMs: number): Promise<void> {
+    const repos = app.repositories()
+    const result = await updateProgressUseCase(
+      { itemId, progressMs },
+      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
+    )
+    if (!result.ok) return
+    patchEntry(itemId, (item) => ({ ...item, progress: progressMs }))
+  }
+
+  /**
+   * Mark a playlist entry as finished. Idempotent — already-completed
+   * items are silently ignored. Patches the in-memory entry on success.
+   */
+  async function markCompleted(itemId: PlaylistItemId): Promise<void> {
+    const repos = app.repositories()
+    const result = await markCompletedUseCase(
+      { itemId },
+      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
+    )
+    if (!result.ok && result.error !== "already-completed") return
+    patchEntry(itemId, (item) => ({ ...item, completedAt: Date.now() }))
+  }
+
+  function patchEntry(itemId: PlaylistItemId, patch: (item: PlaylistItem) => PlaylistItem): void {
+    const idx = entries.value.findIndex((e) => e.item.id === itemId)
+    if (idx === -1) return
+    const current = entries.value[idx]
+    const next = [...entries.value]
+    next[idx] = { ...current, item: patch(current.item) }
+    entries.value = next
+  }
+
   return {
     entries,
     total,
@@ -191,6 +236,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
     archive,
     archiveByTrackId,
     hasTrack,
+    getEntryByTrackId,
+    setProgress,
+    markCompleted,
     prefetchAll,
   }
 })

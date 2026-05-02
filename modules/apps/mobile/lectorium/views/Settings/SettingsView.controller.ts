@@ -1,18 +1,13 @@
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { alertController, toastController } from "@ionic/vue"
-import { useI18n } from "vue-i18n"
+import { computed, watch, type ComputedRef, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useToast } from "@lectorium/services/useToast.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { useDebugStore } from "@lectorium/stores/useDebugStore.js"
-import type { Language } from "@lib/domain/language.js"
 import type { CdnServer } from "@lib/domain/servers.js"
+import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
+import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
+import { useDangerActions } from "./composables/useDangerActions.js"
 
-export interface SelectorItem {
-  id: string
-  title: string
-}
+export type { SelectorItem }
 
 export interface SettingsControllerReturn {
   /* Build info */
@@ -22,9 +17,6 @@ export interface SettingsControllerReturn {
   activeServer: ComputedRef<CdnServer>
   contentDbFile: ComputedRef<string | null>
   dbNumber: ComputedRef<string | null>
-  /* Debug unlock */
-  debugUnlocked: ComputedRef<boolean>
-  onVersionTap: () => Promise<void>
   /* Config v-models (backed by IPreferences via useConfig) */
   appLanguage: Ref<string>
   showPlayerProgress: Ref<boolean>
@@ -44,9 +36,6 @@ export interface SettingsControllerReturn {
 
 export function useSettingsController(): SettingsControllerReturn {
   const app = useLectorium()
-  const debug = useDebugStore()
-  const { t } = useI18n()
-  const toast = useToast()
 
   const version = __APP_VERSION__
   const buildId = __BUILD_ID__
@@ -62,7 +51,6 @@ export function useSettingsController(): SettingsControllerReturn {
     const match = /\.(\d+)\.db$/.exec(file)
     return match ? match[1] : file
   })
-  const debugUnlocked = computed(() => debug.unlocked)
 
   /* Config v-models */
   const appLanguage = useConfig<string>("settings.appLanguage", "en")
@@ -79,37 +67,13 @@ export function useSettingsController(): SettingsControllerReturn {
     [9, 0]
   )
 
-  /* Active CDN */
-  const activeServerId = ref<string>(app.activeServer.value.id)
-  const serverItems: SelectorItem[] = app.appConfig.servers.map((s) => ({
-    id: s.id,
-    title: s.name,
-  }))
-
-  watch(activeServerId, (next) => {
-    const server = app.appConfig.servers.find((s) => s.id === next)
-    if (server) app.setActiveServer(server)
+  const { activeServerId, serverItems } = useActiveServerBinding({
+    servers: app.appConfig.servers,
+    initial: app.activeServer.value,
+    setActiveServer: (server) => app.setActiveServer(server),
   })
 
-  /* Language chooser source list */
-  const languageItems = ref<SelectorItem[]>([])
-
-  onMounted(async () => {
-    try {
-      const langs: readonly Language[] = await app.repositories().languages.listAll()
-      languageItems.value = langs.map((l) => ({ id: l.code, title: l.fullName }))
-    } catch (err) {
-      // Falling back silently meant users in unsupported locales saw
-      // only en/ru and assumed the app didn't support their language.
-      // Tell them the list couldn't load.
-      console.error("[settings] languages.listAll failed:", err)
-      languageItems.value = [
-        { id: "en", title: "English" },
-        { id: "ru", title: "Русский" },
-      ]
-      void toast.error(t("errors.languageListUnavailable"))
-    }
-  })
+  const { items: languageItems } = useAppLanguageList(app.repositories().languages)
 
   /* Notifications scheduler */
   watch(
@@ -121,45 +85,7 @@ export function useSettingsController(): SettingsControllerReturn {
     { immediate: true }
   )
 
-  /* Debug unlock */
-  async function onVersionTap(): Promise<void> {
-    if (debug.registerUnlockTap()) {
-      const toast = await toastController.create({
-        message: "Debug mode enabled",
-        duration: 1500,
-        position: "top",
-        color: "success",
-      })
-      await toast.present()
-    }
-  }
-
-  /* Danger handlers */
-  async function onClearCache(): Promise<void> {
-    await app.filesStorage.clearAll()
-  }
-
-  async function onClearUserData(): Promise<void> {
-    // Behind a 5-tap debug unlock today, but the action is irreversible
-    // (notes, playlist, downloads, filters all gone) so a confirm
-    // dialog is the bare minimum.
-    const alert = await alertController.create({
-      header: t("settings.danger.confirmClearUserData.header"),
-      message: t("settings.danger.confirmClearUserData.message"),
-      buttons: [
-        { text: t("settings.danger.confirmClearUserData.cancel"), role: "cancel" },
-        { text: t("settings.danger.confirmClearUserData.confirm"), role: "destructive" },
-      ],
-    })
-    await alert.present()
-    const { role } = await alert.onDidDismiss()
-    if (role !== "destructive") return
-    const repos = app.repositories()
-    await repos.notes.clearAll()
-    await repos.playlistItems.clearAll()
-    await repos.mediaItems.clearAll()
-    await app.preferences.remove("search.filters.v2")
-  }
+  const { onClearCache, onClearUserData } = useDangerActions(app)
 
   return {
     version,
@@ -168,8 +94,6 @@ export function useSettingsController(): SettingsControllerReturn {
     activeServer,
     contentDbFile,
     dbNumber,
-    debugUnlocked,
-    onVersionTap,
     appLanguage,
     showPlayerProgress,
     showNotesTab,

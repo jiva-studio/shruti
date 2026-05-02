@@ -54,6 +54,7 @@ export interface TrackVariantRow {
   readonly title: string
   readonly audio_path: string | null
   readonly audio_filesize: number | null
+  /** Audio duration in **seconds**. */
   readonly audio_duration: number | null
   readonly audio_kind: string | null
   readonly transcript_path: string | null

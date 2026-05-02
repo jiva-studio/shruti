@@ -20,16 +20,9 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import {
-  IconIndicator,
-  RadialIndicator,
-  type StateIcon,
-} from "@ui/components/tracks/state/index.js"
-import type { UiTrackState } from "@ui/components/tracks/list/index.js"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
+import IconIndicator, { type StateIcon } from "./IconIndicator.vue"
+import RadialIndicator from "./RadialIndicator.vue"
+import type { UiTrackState } from "./types.js"
 
 const props = defineProps<{
   state: UiTrackState
@@ -39,10 +32,6 @@ const props = defineProps<{
    */
   progress?: number
 }>()
-
-/* -------------------------------------------------------------------------- */
-/*                                  Derived                                   */
-/* -------------------------------------------------------------------------- */
 
 const icon = computed<StateIcon>(() => {
   if (props.state === "failed") return "failed"

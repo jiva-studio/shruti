@@ -1,58 +1,46 @@
 <template>
-  <AppPage :player-open="player.open">
-    <!-- Appearance -->
-    <IonListHeader>
-      <IonLabel>{{ $t("settings.groups.appearance") }}</IonLabel>
-    </IonListHeader>
-    <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
-    <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
-    <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
-    <ShowNotesTabSettingsItem v-model="showNotesTab" />
-    <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
-    <OpenTranscriptAutomaticallySettingsItem v-model="openTranscriptAutomatically" />
+  <AppPage :reserve-player-space="player.open">
+    <SettingsAppearanceGroup
+      v-model:app-language="appLanguage"
+      v-model:active-server-id="activeServerId"
+      v-model:show-player-progress="showPlayerProgress"
+      v-model:show-notes-tab="showNotesTab"
+      v-model:highlight-current-sentence="highlightCurrentSentence"
+      v-model:open-transcript-automatically="openTranscriptAutomatically"
+      :language-items="languageItems"
+      :server-items="serverItems"
+    />
 
-    <!-- Sadhana -->
-    <IonListHeader>
-      <IonLabel>{{ $t("settings.groups.sadhana") }}</IonLabel>
-    </IonListHeader>
-    <NotificationsEnabledSettingsItem v-model="notificationsEnabled" />
-    <DailyNotificationsTimeSettingsItem v-if="notificationsEnabled" v-model="notificationsTime" />
+    <SettingsSadhanaGroup
+      v-model:notifications-enabled="notificationsEnabled"
+      v-model:notifications-time="notificationsTime"
+    />
 
-    <!-- Debug (hidden until unlocked via 5 taps on the build info) -->
-    <template v-if="debugUnlocked">
-      <IonListHeader>
-        <IonLabel>{{ $t("settings.groups.danger") }}</IonLabel>
-      </IonListHeader>
-      <IonItem button :detail="false" lines="none" @click="onClearCache">
-        <IonLabel color="danger">{{ $t("settings.danger.clearCache") }}</IonLabel>
-      </IonItem>
-      <IonItem button :detail="false" lines="none" @click="onClearUserData">
-        <IonLabel color="danger">{{ $t("settings.danger.clearUserData") }}</IonLabel>
-      </IonItem>
-    </template>
+    <SettingsDangerGroup
+      v-if="debugUnlocked"
+      @clear-cache="onClearCache"
+      @clear-user-data="onClearUserData"
+    />
 
-    <!-- Build info — tap 5× to unlock debug -->
-    <p class="build-info" @click="onVersionTap">
-      v{{ version }} ({{ buildId }})
-      <span class="build-info-db"> DB {{ dbNumber ?? "—" }} · scheme {{ dbScheme }} </span>
-    </p>
+    <BuildInfo
+      :version="version"
+      :build-id="buildId"
+      :db-number="dbNumber"
+      :db-scheme="dbScheme"
+      @tap="debugTrigger.onTap"
+    />
   </AppPage>
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonListHeader } from "@ionic/vue"
-import { AppPage } from "@ui/primitives/index.js"
+import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
-  AppLanguageSettingsItem,
-  DailyNotificationsTimeSettingsItem,
-  HighlightCurrentSentenceSettingsItem,
-  NotificationsEnabledSettingsItem,
-  OpenTranscriptAutomaticallySettingsItem,
-  ServerSettingsItem,
-  ShowNotesTabSettingsItem,
-  ShowPlayerProgressSettingsItem,
+  SettingsAppearanceGroup,
+  SettingsDangerGroup,
+  SettingsSadhanaGroup,
 } from "@ui/features/settings/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()
@@ -61,8 +49,6 @@ const {
   buildId,
   dbScheme,
   dbNumber,
-  debugUnlocked,
-  onVersionTap,
   appLanguage,
   showPlayerProgress,
   showNotesTab,
@@ -76,28 +62,7 @@ const {
   onClearCache,
   onClearUserData,
 } = useSettingsController()
+
+const debugTrigger = useDebugUnlockTrigger()
+const debugUnlocked = debugTrigger.unlocked
 </script>
-
-<style scoped>
-.build-info {
-  font-size: 0.75em;
-  color: var(--ion-color-medium);
-  text-align: center;
-  margin-top: 24px;
-  padding: 12px 16px calc(96px + env(safe-area-inset-bottom, 0px));
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: opacity 120ms ease;
-}
-
-.build-info:active {
-  opacity: 0.5;
-}
-
-.build-info-db {
-  display: block;
-  margin-top: 2px;
-  opacity: 0.75;
-}
-</style>

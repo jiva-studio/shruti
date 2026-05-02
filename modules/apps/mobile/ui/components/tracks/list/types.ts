@@ -1,3 +1,5 @@
+import type { UiTrackState } from "../state/types.js"
+
 /**
  * UI mirror of a "track row" — the subset of Track + dictionary lookups
  * that the list renders. Controllers flatten the domain `Track` +
@@ -19,7 +21,7 @@ export interface UiTrackRow {
   readonly references: readonly string[]
   /** Tag display names used when no reference is present. */
   readonly tags: readonly string[]
-  /** Track state indicator (drives PlaylistStateIndicator / IconIndicator). */
+  /** Track state indicator (drives TrackStateIndicator / IconIndicator). */
   readonly state: UiTrackState
   /**
    * 0..100 radial value. Its meaning depends on `state`:
@@ -29,15 +31,4 @@ export interface UiTrackRow {
   readonly disabled: boolean
 }
 
-// "added"   — in playlist or downloaded; one checkmark (icon mode).
-// "queued"  — in playlist, not currently active; radial with playback progress.
-// "playing" — track is actively playing; radial with playback progress.
-// "completed" — track listened to the end (PlaylistItem.completedAt != null); two checkmarks.
-export type UiTrackState =
-  | "none"
-  | "failed"
-  | "added"
-  | "queued"
-  | "completed"
-  | "downloading"
-  | "playing"
+export type { UiTrackState }

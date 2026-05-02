@@ -2,7 +2,6 @@
   <IonPage>
     <IonContent :fullscreen="true" class="ion-padding">
       <div class="welcome-container">
-        <!-- Brand -->
         <div class="welcome-header">
           <img src="/app-icon.png" alt="" class="welcome-logo" />
           <IonText color="primary">
@@ -10,7 +9,6 @@
           </IonText>
         </div>
 
-        <!-- Status: loading or error message -->
         <div class="welcome-status">
           <LoadingState
             v-if="!welcome.isError.value"
@@ -26,7 +24,6 @@
           </IonText>
         </div>
 
-        <!-- Retry button (only on error), pinned to bottom -->
         <div class="welcome-footer">
           <IonButton
             v-if="welcome.isError.value"
@@ -34,7 +31,7 @@
             fill="solid"
             @click="welcome.onRetry"
           >
-            Retry
+            {{ $t("welcome.retry") }}
           </IonButton>
         </div>
       </div>
@@ -43,22 +40,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
 import { IonPage, IonContent, IonText, IonButton } from "@ionic/vue"
 import { useWelcomeController } from "./WelcomeView.controller.js"
+import { useStatusMessage } from "./composables/useStatusMessage.js"
 import LoadingState from "./components/LoadingState.vue"
 
 const welcome = useWelcomeController()
-
-const STATUS_MESSAGES: Record<string, string> = {
-  "server:probing": "Connecting to server…",
-  "config:downloading": "Downloading configuration…",
-  "database:check": "Checking database…",
-  "database:downloading": "Downloading database…",
-  "database:migrations": "Preparing database…",
-}
-
-const statusMessage = computed(() => STATUS_MESSAGES[welcome.viewState.value] ?? "Starting…")
+const statusMessage = useStatusMessage(welcome.viewState)
 </script>
 
 <style scoped>

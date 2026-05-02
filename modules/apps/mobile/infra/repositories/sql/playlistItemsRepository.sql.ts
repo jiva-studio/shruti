@@ -1,12 +1,12 @@
-import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
 import type { PlaylistItemRow } from "@lib/persistence/user"
+import { createIdGenerator } from "./idGenerator.js"
 import { rowToPlaylistItem } from "./rowMappers.js"
 
-const newPlaylistItemId = (): string => `playlist_${nanoid(12)}`
+const newPlaylistItemId = createIdGenerator("playlist")
 
 export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRepository {
   return {

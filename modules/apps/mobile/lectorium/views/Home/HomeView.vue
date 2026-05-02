@@ -1,5 +1,5 @@
 <template>
-  <AppPage :loading="isLoading && rows.length === 0" :player-open="player.open">
+  <AppPage :loading="isLoading && rows.length === 0" :reserve-player-space="player.open">
     <IonText v-if="error" color="danger" class="ion-padding">
       <p>{{ error }}</p>
     </IonText>

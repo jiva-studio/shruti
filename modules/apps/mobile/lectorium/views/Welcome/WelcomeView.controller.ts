@@ -2,14 +2,12 @@ import { computed, onMounted, ref, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { runUserMigrations } from "@lectorium/services/migrations/user/runMigrations.js"
-import {
-  resolveContentDatabase as resolveContentDatabaseImpl,
-  type ResolveContentDatabaseDeps,
-} from "./composables/resolveContentDatabase.js"
+import { type ResolveContentDatabaseDeps } from "./composables/resolveContentDatabase.js"
 import {
   checkForUpdatesInBackground as checkForUpdatesInBackgroundImpl,
   type CheckForUpdatesDeps,
 } from "./composables/checkForUpdatesInBackground.js"
+import { useDbSchemeRetry } from "./composables/useDbSchemeRetry.js"
 
 const crossfadeAnimation: AnimationBuilder = (_, opts) => {
   const enter = createAnimation().addElement(opts.enteringEl).fromTo("opacity", 0, 1).duration(300)
@@ -64,20 +62,9 @@ export function useWelcomeController(
   const ionRouter = useIonRouter()
   const lectorium = useLectorium()
 
-  /* -------------------------------------------------------------------------- */
-  /*                                    State                                   */
-  /* -------------------------------------------------------------------------- */
-
   const viewState = ref<WelcomeViewState>("server:probing")
   const error = ref<string | null>(null)
   const progress = ref<number>(0)
-
-  /* -------------------------------------------------------------------------- */
-  /*                     Phase 1: Resolve Content Database                      */
-  /* -------------------------------------------------------------------------- */
-
-  const incompatibleDbPaths = new Set<string>()
-  const MAX_SCHEME_RETRIES = 3
 
   function buildLocatorDeps(): ResolveContentDatabaseDeps {
     return {
@@ -105,49 +92,18 @@ export function useWelcomeController(
     }
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*       Phase 1 + 2 combined: resolve → open → validate, with retry cap     */
-  /* -------------------------------------------------------------------------- */
-
-  /**
-   * Counter-based retry (vs. `Set.size > max`): even if the CDN keeps
-   * advertising the same incompatible version, we still break out
-   * after MAX_SCHEME_RETRIES attempts instead of looping forever.
-   */
-  async function resolveAndValidate(): Promise<void> {
-    const observedSchemes: number[] = []
-
-    for (let attempt = 0; attempt < MAX_SCHEME_RETRIES; attempt++) {
-      const dbPath = await resolveContentDatabaseImpl(buildLocatorDeps(), incompatibleDbPaths)
-      await lectorium.openContentDatabase(dbPath)
-      const scheme = await lectorium.readContentSchemeVersion()
-
-      if (scheme === 0 || scheme === SUPPORTED_DB_SCHEME) return
-
-      // Scheme mismatch: close, mark, drop local copy, invalidate cached
-      // config so the next iteration re-probes for a fresh manifest.
-      observedSchemes.push(scheme)
-      await lectorium.closeContentDatabase()
-      incompatibleDbPaths.add(dbPath)
-      await lectorium.databaseFetcher.delete(dbPath).catch(() => undefined)
-      await lectorium.filesStorage
-        .delete(lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath))
-        .catch(() => undefined)
-    }
-
-    const observed = observedSchemes.join(", ") || "none"
-    throw new Error(
-      `Content database scheme validation failed after ${MAX_SCHEME_RETRIES} attempts. ` +
-        `Expected ${SUPPORTED_DB_SCHEME}, got: ${observed}. ` +
-        `The CDN likely hasn't published a compatible DB yet — run ` +
-        `content-db-builder, upload a new lectorium.{version}.db with matching ` +
-        `scheme, or bump modules/db-scheme.json to match what's available.`
-    )
-  }
-
-  /* -------------------------------------------------------------------------- */
-  /*                        Phase 3: Bootstrap Application                      */
-  /* -------------------------------------------------------------------------- */
+  const { resolveAndValidate } = useDbSchemeRetry({
+    buildLocatorDeps,
+    supportedScheme: SUPPORTED_DB_SCHEME,
+    openContentDatabase: (path) => lectorium.openContentDatabase(path),
+    closeContentDatabase: () => lectorium.closeContentDatabase(),
+    readContentSchemeVersion: () => lectorium.readContentSchemeVersion(),
+    deleteLocalDb: (path) => lectorium.databaseFetcher.delete(path),
+    invalidateRemoteConfigCache: () =>
+      lectorium.filesStorage.delete(
+        lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath)
+      ),
+  })
 
   async function bootstrapApp(): Promise<void> {
     viewState.value = "database:migrations"
@@ -160,10 +116,6 @@ export function useWelcomeController(
       ionRouter.replace(navigateToRoute, crossfadeAnimation)
     }
   }
-
-  /* -------------------------------------------------------------------------- */
-  /*                      Background Database Update Check                      */
-  /* -------------------------------------------------------------------------- */
 
   function buildUpdatesDeps(): CheckForUpdatesDeps {
     const base = buildLocatorDeps()
@@ -185,10 +137,6 @@ export function useWelcomeController(
     }
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                            Initialization Flow                             */
-  /* -------------------------------------------------------------------------- */
-
   async function initialize(): Promise<void> {
     try {
       error.value = null
@@ -207,23 +155,11 @@ export function useWelcomeController(
     }
   }
 
-  /* -------------------------------------------------------------------------- */
-  /*                                  UI State                                  */
-  /* -------------------------------------------------------------------------- */
-
   const isError = computed(() => viewState.value === "error")
-
-  /* -------------------------------------------------------------------------- */
-  /*                                 Lifecycle                                  */
-  /* -------------------------------------------------------------------------- */
 
   onMounted(() => {
     initialize()
   })
-
-  /* -------------------------------------------------------------------------- */
-  /*                                   Return                                   */
-  /* -------------------------------------------------------------------------- */
 
   return {
     viewState,

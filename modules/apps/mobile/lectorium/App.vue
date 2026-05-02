@@ -25,7 +25,7 @@
       :position="dialog.position.value"
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
-      :highlight-current-sentence="dialog.highlightCurrentSentence.value"
+      :should-highlight-current-sentence="dialog.highlightCurrentSentence.value"
       :is-loading="dialog.isLoading.value"
       :error-message="dialog.error.value"
       :has-no-transcripts="dialog.hasNoTranscripts.value"
@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog } from "@ui/features/transcript/index.js"
@@ -84,8 +84,25 @@ const activeLanguagesModel = computed<string[]>({
   },
 })
 
+// Persist whatever position the audio engine has when the user
+// backgrounds, refreshes, or closes the tab. The throttled tick can be
+// up to 5 s stale; this best-effort flush narrows the window.
+function flushPlayerProgress(): void {
+  player.flushProgressNow()
+}
+function onVisibilityChange(): void {
+  if (document.hidden) flushPlayerProgress()
+}
+
 onMounted(() => {
   void tutorial.load()
+  document.addEventListener("visibilitychange", onVisibilityChange)
+  window.addEventListener("pagehide", flushPlayerProgress)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener("visibilitychange", onVisibilityChange)
+  window.removeEventListener("pagehide", flushPlayerProgress)
 })
 
 const pulsing = ref<boolean>(false)

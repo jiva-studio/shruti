@@ -1,12 +1,14 @@
 import { computed, onMounted, type ComputedRef } from "vue"
 import { useI18n } from "vue-i18n"
 import { buildTrackRow } from "@lectorium/composables/buildTrackRow.js"
+import { maxAudioDurationMs } from "@lectorium/composables/trackDuration.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import { useDownloadStore, type DownloadState } from "@lectorium/stores/useDownloadStore.js"
+import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 
 export interface HomeControllerReturn {
@@ -20,6 +22,19 @@ export interface HomeControllerReturn {
   onRemove: (trackId: string) => Promise<void>
 }
 
+/**
+ * Home shows the user's listening journey, not download status.
+ *
+ * State for each row collapses to one of three:
+ *  - "playing"   — active player track (radial with playback %)
+ *  - "completed" — listened to the end (double check)
+ *  - "queued"    — everything else (radial with saved progress, or empty
+ *                   ring when the user hasn't started the track yet)
+ *
+ * Download/added/failed indicators belong on the Library/Search list,
+ * not here. Keep the mapping local so this rule lives next to the view
+ * that enforces it.
+ */
 export function useHomeController(): HomeControllerReturn {
   const appLanguage = useAppLanguage()
 
@@ -32,37 +47,39 @@ export function useHomeController(): HomeControllerReturn {
 
   onMounted(async () => {
     await Promise.all([dictionaries.ensureLoaded(), playlist.ensureLoaded(), downloads.hydrate()])
-    // If hydrate couldn't read the media-items table, every track shows
-    // "not downloaded" — surface a one-shot toast so the user knows
-    // their cache wasn't lost, the index just couldn't be read.
     if (downloads.hydrationError) {
       void toast.error(t("errors.downloadsCacheUnavailable"))
     }
     playlist.prefetchAll()
   })
 
-  function toUiState(
-    trackId: string,
-    downloadState: DownloadState,
-    completedAt: number | null
-  ): UiTrackState {
-    if (player.trackId === trackId && player.playing) return "playing"
+  function rowState(trackId: string, completedAt: number | null): UiTrackState {
+    if (player.trackId === trackId) return "playing"
     if (completedAt !== null) return "completed"
-    if (downloadState === "downloading") return "downloading"
-    if (downloadState === "failed") return "failed"
     return "queued"
   }
 
+  function rowProgressPct(track: Track, state: UiTrackState, savedProgress: number | null): number {
+    if (state === "playing") {
+      if (player.durationMs <= 0) return 0
+      return Math.min(100, Math.max(0, (player.positionMs / player.durationMs) * 100))
+    }
+    if (state === "queued") {
+      const duration = maxAudioDurationMs(track)
+      const progress = savedProgress ?? 0
+      if (duration <= 0) return 0
+      return Math.min(100, Math.max(0, (progress / duration) * 100))
+    }
+    return 0
+  }
+
   const rows = computed<readonly UiTrackRow[]>(() => {
-    // Touch reactive state maps so the computed re-runs on download
-    // progress and player transitions.
-    void downloads.states
-    void downloads.progress
     void player.trackId
-    void player.playing
+    void player.positionMs
+    void player.durationMs
     return playlist.entries.map(({ item, track }) => {
-      const state = toUiState(track.id, downloads.getState(track.id), item.completedAt)
-      const progressPct = state === "downloading" ? downloads.getProgress(track.id) : 0
+      const state = rowState(track.id, item.completedAt)
+      const progressPct = rowProgressPct(track, state, item.progress)
       return buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
         authorsById: dictionaries.authorsById,
@@ -98,6 +115,8 @@ export function useHomeController(): HomeControllerReturn {
       track: entry.track,
       preferredLanguage: appLanguage.value,
       author,
+      itemId: entry.item.id,
+      resumeFromMs: entry.item.progress,
     })
   }
 
