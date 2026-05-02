@@ -134,9 +134,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     }
   }
 
-  async function archive(
-    itemId: PlaylistItemId
-  ): Promise<Result<void, ArchivePlaylistItemError>> {
+  async function archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>> {
     const repos = app.repositories()
     const result = await archivePlaylistItem(
       { itemId },

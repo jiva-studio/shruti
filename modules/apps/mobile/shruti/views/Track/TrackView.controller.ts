@@ -47,8 +47,7 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const title = computed(() => {
     if (!track.value) return ""
     const lang = selectedLanguage.value ?? appLanguage.value
-    const variant =
-      track.value.variants.find((v) => v.language === lang) ?? track.value.variants[0]
+    const variant = track.value.variants.find((v) => v.language === lang) ?? track.value.variants[0]
     return variant?.title ?? track.value.id
   })
 

@@ -19,11 +19,13 @@
   />
 </template>
 
-
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
-import { ListItemSelectorDialog, type ListItemSelectorItem } from '@ui/components/selectors/index.js'
-import SearchFilterChip from './SearchFilterChip.vue'
+import { computed, ref } from "vue"
+import {
+  ListItemSelectorDialog,
+  type ListItemSelectorItem,
+} from "@ui/components/selectors/index.js"
+import SearchFilterChip from "./SearchFilterChip.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -34,7 +36,7 @@ defineProps<{
   items: ListItemSelectorItem[]
 }>()
 
-const modelValue = defineModel<string|undefined>({ required: true, default: undefined })
+const modelValue = defineModel<string | undefined>({ required: true, default: undefined })
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */

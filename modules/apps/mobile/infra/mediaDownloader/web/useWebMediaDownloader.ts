@@ -14,18 +14,12 @@ function urlToCacheKey(url: string): string {
  * header (some CDNs), the total is reported as `-1` and the caller is
  * expected to render indeterminate progress.
  */
-export function useWebMediaDownloader({
-  cacheName,
-}: {
-  cacheName: string
-}): IMediaDownloader {
+export function useWebMediaDownloader({ cacheName }: { cacheName: string }): IMediaDownloader {
   return {
     async download(url: string, onProgress?: ProgressCallback): Promise<string> {
       const response = await fetch(url)
       if (!response.ok) {
-        throw new Error(
-          `Media download failed: ${response.status} ${response.statusText} (${url})`
-        )
+        throw new Error(`Media download failed: ${response.status} ${response.statusText} (${url})`)
       }
       const total = Number(response.headers.get("Content-Length") ?? -1)
 

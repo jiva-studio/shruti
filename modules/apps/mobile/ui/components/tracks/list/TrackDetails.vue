@@ -4,9 +4,8 @@
   </p>
 </template>
 
-
 <script setup lang="ts">
-import { computed, toRefs } from 'vue'
+import { computed, toRefs } from "vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -25,10 +24,6 @@ const props = defineProps<{
 const { author, location, date } = toRefs(props)
 
 const sections = computed(() => {
-  return [
-    author.value,
-    location.value,
-    date.value
-  ].filter(Boolean).join(' • ')
+  return [author.value, location.value, date.value].filter(Boolean).join(" • ")
 })
 </script>

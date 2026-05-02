@@ -1,3 +1,3 @@
 export default {
-  loadingAudioExcerpt: 'Loading audio fragment, please wait...',
+  loadingAudioExcerpt: "Loading audio fragment, please wait...",
 }

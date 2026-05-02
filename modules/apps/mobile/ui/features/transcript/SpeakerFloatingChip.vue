@@ -2,32 +2,30 @@
   <div
     class="speaker-floating-chip"
     :class="{
-      'hidden': !curSpeaker
+      hidden: !curSpeaker,
     }"
   >
     {{ curSpeaker }}:
   </div>
 </template>
 
-
 <script setup lang="ts">
-import { inject, onUnmounted, ref, type Ref } from 'vue'
+import { inject, onUnmounted, ref, type Ref } from "vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const scrollTop: Ref<number> | undefined = inject('scrollTop')
-const positionTop = ref('0px')
-const curSpeaker  = ref('')
-const lastSpeaker = ref('')
+const scrollTop: Ref<number> | undefined = inject("scrollTop")
+const positionTop = ref("0px")
+const curSpeaker = ref("")
+const lastSpeaker = ref("")
 let lastEl: HTMLElement | null
 
-
 const intervalId = setInterval(async () => {
-  const currentEl: HTMLElement | null = document.querySelector('.current')
+  const currentEl: HTMLElement | null = document.querySelector(".current")
   if (currentEl) {
-    const speaker = currentEl.getAttribute('data-speaker')
+    const speaker = currentEl.getAttribute("data-speaker")
     // Filter out collapsed rects (e.g. <br> elements in Safari return
     // zero-width rects alongside the real text rect).
     const top = Math.min(
@@ -36,14 +34,14 @@ const intervalId = setInterval(async () => {
         .map((x) => x.top)
     )
 
-    curSpeaker.value = speaker || ''
+    curSpeaker.value = speaker || ""
     if (curSpeaker.value !== lastSpeaker.value || currentEl === lastEl) {
       positionTop.value = `${top + (scrollTop?.value || 0)}px`
     }
-    lastSpeaker.value = speaker || ''
+    lastSpeaker.value = speaker || ""
     lastEl = currentEl
   } else {
-    curSpeaker.value = ''
+    curSpeaker.value = ""
   }
 }, 500)
 
@@ -54,14 +52,13 @@ const intervalId = setInterval(async () => {
 onUnmounted(() => clearInterval(intervalId))
 </script>
 
-
 <style scoped>
 .speaker-floating-chip {
   position: absolute;
   top: v-bind(positionTop);
   left: 10px;
-  font-size: .75rem;
-  padding: .25rem;
+  font-size: 0.75rem;
+  padding: 0.25rem;
   border-radius: 5px;
   background-color: var(--ion-color-warning);
   transition: all 100ms ease-in-out;

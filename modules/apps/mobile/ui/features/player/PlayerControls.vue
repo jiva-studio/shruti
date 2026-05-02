@@ -9,7 +9,7 @@
       </IonLabel>
     </div>
 
-    <div style="position: relative; overflow: visible;">
+    <div style="position: relative; overflow: visible">
       <IonButton
         class="play"
         shape="round"
@@ -17,15 +17,9 @@
         :disabled="position === duration && duration > 0"
         @click.stop="emit('play')"
       >
-        <IonIcon
-          slot="icon-only"
-          :icon="playButtonIcon"
-        />
+        <IonIcon slot="icon-only" :icon="playButtonIcon" />
       </IonButton>
-      <div
-        v-if="showProgress"
-        class="progress"
-      >
+      <div v-if="showProgress" class="progress">
         <RadialProgress
           :stroke-width="4"
           :inner-stroke-width="4"
@@ -43,10 +37,10 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonLabel } from '@ionic/vue'
-import { play, pause, checkmarkDone } from 'ionicons/icons'
-import { computed, toRefs } from 'vue'
-import RadialProgress from 'vue3-radial-progress'
+import { IonButton, IonIcon, IonLabel } from "@ionic/vue"
+import { play, pause, checkmarkDone } from "ionicons/icons"
+import { computed, toRefs } from "vue"
+import RadialProgress from "vue3-radial-progress"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -89,7 +83,7 @@ const playButtonIcon = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: .5rem;
+  padding: 0.5rem;
   padding-left: 1rem;
 }
 
@@ -98,16 +92,16 @@ const playButtonIcon = computed(() => {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  font-size: .9rem;
+  font-size: 0.9rem;
   overflow: hidden;
-  gap: .15rem;
+  gap: 0.15rem;
 }
 
 .author {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  opacity: .8;
+  opacity: 0.8;
 }
 
 .title {

@@ -31,24 +31,18 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
 
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
   const authorName =
-    author?.names.get(deps.preferredLanguage) ??
-    author?.names.values().next().value ??
-    ""
+    author?.names.get(deps.preferredLanguage) ?? author?.names.values().next().value ?? ""
 
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
   const locationName =
-    location?.names.get(deps.preferredLanguage) ??
-    location?.names.values().next().value ??
-    ""
+    location?.names.get(deps.preferredLanguage) ?? location?.names.values().next().value ?? ""
 
   const references = track.references.map((ref) =>
     formatReference(ref, deps.sourcesById, deps.preferredLanguage)
   )
   const tagDisplay =
     deps.tagNamesById && track.tagIds.length > 0
-      ? track.tagIds
-          .map((id) => deps.tagNamesById?.get(id))
-          .filter((v): v is string => Boolean(v))
+      ? track.tagIds.map((id) => deps.tagNamesById?.get(id)).filter((v): v is string => Boolean(v))
       : []
 
   return {

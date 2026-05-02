@@ -1,22 +1,14 @@
 <template>
-  <IonItem
-    button
-    detail
-    lines="none"
-    @click="open = true"
-  >
+  <IonItem button detail lines="none" @click="open = true">
     <!-- Item Icon -->
-    <div
-      slot="start"
-      class="settings-item-icon"
-    >
+    <div slot="start" class="settings-item-icon">
       <LanguageIcon />
     </div>
 
     <!-- Text -->
     <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t('settings.appLanguage.title') }}</h2>
-      <p>{{ $t('settings.appLanguage.description') }}</p>
+      <h2>{{ $t("settings.appLanguage.title") }}</h2>
+      <p>{{ $t("settings.appLanguage.description") }}</p>
     </IonLabel>
   </IonItem>
 
@@ -32,22 +24,21 @@
   />
 </template>
 
-
 <script setup lang="ts">
-import { ref } from 'vue'
-import { IonItem, IonLabel } from '@ionic/vue'
-import { ListItemSelectorDialog } from '@ui/components/selectors/index.js'
-import { LanguageIcon } from '@ui/icons/index.js'
+import { ref } from "vue"
+import { IonItem, IonLabel } from "@ionic/vue"
+import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
+import { LanguageIcon } from "@ui/icons/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
 defineProps<{
-  items: { id: string, title: string }[]
+  items: { id: string; title: string }[]
 }>()
 
-const value = defineModel<string>({ required: true, default: 'en' })
+const value = defineModel<string>({ required: true, default: "en" })
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */

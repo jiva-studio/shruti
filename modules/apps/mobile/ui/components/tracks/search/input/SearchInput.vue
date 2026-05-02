@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="!isIOS"
-    class="search"
-  >
+  <div v-if="!isIOS" class="search">
     <IonInput
       v-model="searchQuery"
       fill="outline"
@@ -22,15 +19,14 @@
   />
 </template>
 
-
 <script setup lang="ts">
-import { IonInput, IonSearchbar, isPlatform } from '@ionic/vue'
+import { IonInput, IonSearchbar, isPlatform } from "@ionic/vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-const searchQuery = defineModel<string>({ type: String, default: '' })
+const searchQuery = defineModel<string>({ type: String, default: "" })
 
 defineProps<{
   placeholder?: string
@@ -44,18 +40,18 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const isIOS = isPlatform('ios')
+const isIOS = isPlatform("ios")
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
 /* -------------------------------------------------------------------------- */
 
 function onFocus() {
-  emit('focus', true)
+  emit("focus", true)
 }
 
 function onBlur() {
-  emit('focus', false)
+  emit("focus", false)
 }
 
 function onInput(e: Event) {
@@ -63,7 +59,6 @@ function onInput(e: Event) {
   if (target) searchQuery.value = target.value
 }
 </script>
-
 
 <style scoped>
 .search {

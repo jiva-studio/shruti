@@ -1,3 +1,3 @@
 export default {
-  youMightLike: 'You Might Like',
+  youMightLike: "You Might Like",
 }

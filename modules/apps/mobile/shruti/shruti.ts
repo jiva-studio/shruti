@@ -128,9 +128,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   // `{path}`-substitution function. We feed it a getter closure so
   // the resolver always sees the latest CDN template after
   // `setActiveServer` swaps it.
-  const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(
-    () => activeServer.value
-  )
+  const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(() => activeServer.value)
 
   const self: Shruti = {
     appConfig: seed.appConfig,

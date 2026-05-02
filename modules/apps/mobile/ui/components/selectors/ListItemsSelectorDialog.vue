@@ -5,24 +5,14 @@
     @select="onSelectDialogButtonClicked"
     @close="onCloseDialogButtonClicked"
   >
-    <SearchInput
-      v-if="items.length > 10"
-      v-model="query"
-      placeholder="Search"
-    />
-    <IonList
-      lines="none"
-      class="ion-no-margin ion-no-padding"
-    >
-      <IonItem
-        v-for="item in filteredItems"
-        :key="item.id"
-      >
+    <SearchInput v-if="items.length > 10" v-model="query" placeholder="Search" />
+    <IonList lines="none" class="ion-no-margin ion-no-padding">
+      <IonItem v-for="item in filteredItems" :key="item.id">
         <IonCheckbox
           label-placement="end"
           justify="start"
           :checked="selectedItemIds.includes(item.id)"
-          @ion-change="e => onCheckboxClicked(item.id, e.detail.checked)"
+          @ion-change="(e) => onCheckboxClicked(item.id, e.detail.checked)"
         >
           {{ item.title }}
         </IonCheckbox>
@@ -31,12 +21,11 @@
   </SelectorDialog>
 </template>
 
-
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from 'vue'
-import { IonList, IonCheckbox, IonItem } from '@ionic/vue'
-import { SearchInput } from '@ui/components/tracks/search/input/index.js'
-import SelectorDialog from './SelectorDialog.vue'
+import { computed, ref, toRefs, watch } from "vue"
+import { IonList, IonCheckbox, IonItem } from "@ionic/vue"
+import { SearchInput } from "@ui/components/tracks/search/input/index.js"
+import SelectorDialog from "./SelectorDialog.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -49,30 +38,28 @@ export type Item = {
 }
 
 const props = defineProps<{
-  title: string,
-  open: boolean,
-  items: Item[],
+  title: string
+  open: boolean
+  items: Item[]
   selected?: ItemId[]
 }>()
 
 const emit = defineEmits<{
-  close: [],
+  close: []
   select: [items: ItemId[]]
 }>()
-
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const query = ref('')
+const query = ref("")
 const selectedItemIds = ref<ItemId[]>(props.selected || [])
 const { selected } = toRefs(props)
 
 const filteredItems = computed(() =>
-  props.items.filter((item) =>
-    compareStrings(item.title, query.value) ||
-    selectedItemIds.value.includes(item.id),
+  props.items.filter(
+    (item) => compareStrings(item.title, query.value) || selectedItemIds.value.includes(item.id)
   )
 )
 
@@ -80,7 +67,7 @@ const filteredItems = computed(() =>
 /*                                    Hooks                                   */
 /* -------------------------------------------------------------------------- */
 
-watch(selected, (v) => selectedItemIds.value = v || [])
+watch(selected, (v) => (selectedItemIds.value = v || []))
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -95,11 +82,11 @@ function onCheckboxClicked(id: ItemId, value: boolean) {
 }
 
 function onCloseDialogButtonClicked() {
-  emit('close')
+  emit("close")
 }
 
 function onSelectDialogButtonClicked() {
-  emit('select', selectedItemIds.value)
+  emit("select", selectedItemIds.value)
 }
 
 /* -------------------------------------------------------------------------- */

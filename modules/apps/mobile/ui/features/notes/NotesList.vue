@@ -12,10 +12,9 @@
   />
 </template>
 
-
 <script lang="ts" setup>
-import NotesListItem from './NotesListItem.vue'
-import type { UiNoteRow } from './types.js'
+import NotesListItem from "./NotesListItem.vue"
+import type { UiNoteRow } from "./types.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

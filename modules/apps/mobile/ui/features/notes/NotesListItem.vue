@@ -1,22 +1,12 @@
 <template>
-  <IonItem
-    lines="none"
-    class="note"
-    button
-    :detail="false"
-    @click="$emit('click', noteId)"
-  >
-    <HighlightText
-      :text="text"
-      :lang="language"
-    />
+  <IonItem lines="none" class="note" button :detail="false" @click="$emit('click', noteId)">
+    <HighlightText :text="text" :lang="language" />
   </IonItem>
 </template>
 
-
 <script lang="ts" setup>
-import { IonItem } from '@ionic/vue'
-import { HighlightText } from '@ui/primitives/index.js'
+import { IonItem } from "@ionic/vue"
+import { HighlightText } from "@ui/primitives/index.js"
 
 defineProps<{
   noteId: string
@@ -29,7 +19,6 @@ defineProps<{
 
 defineEmits<{ click: [noteId: string] }>()
 </script>
-
 
 <style scoped>
 .note {
