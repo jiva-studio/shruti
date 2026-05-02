@@ -15,7 +15,11 @@ export interface ToastOptions {
 
 const DEFAULT_DURATION = 1800
 
-async function present(message: string, color: "primary" | "danger", opts?: ToastOptions): Promise<void> {
+async function present(
+  message: string,
+  color: "primary" | "danger",
+  opts?: ToastOptions
+): Promise<void> {
   const toast = await toastController.create({
     message,
     duration: opts?.durationMs ?? DEFAULT_DURATION,

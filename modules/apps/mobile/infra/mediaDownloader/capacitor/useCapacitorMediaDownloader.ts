@@ -32,11 +32,7 @@ async function ensureDirectoryExists(path: string): Promise<void> {
  * Progress reporting is wired from FileTransfer's `progress` event when the
  * caller supplies `onProgress`.
  */
-export function useCapacitorMediaDownloader({
-  cacheDir,
-}: {
-  cacheDir: string
-}): IMediaDownloader {
+export function useCapacitorMediaDownloader({ cacheDir }: { cacheDir: string }): IMediaDownloader {
   return {
     async download(url: string, onProgress?: ProgressCallback): Promise<string> {
       const localPath = urlToLocalPath(url, cacheDir)

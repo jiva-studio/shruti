@@ -1,8 +1,5 @@
 <template>
-  <SectionHeader
-    v-if="rows.length > 0"
-    :title="upNextTitle"
-  />
+  <SectionHeader v-if="rows.length > 0" :title="upNextTitle" />
   <PlaylistItems
     v-if="rows.length > 0"
     :rows="rows"
@@ -19,9 +16,9 @@
 </template>
 
 <script setup lang="ts">
-import { PageSticker, SectionHeader } from '@ui/primitives/index.js'
-import type { UiTrackRow } from '@ui/components/tracks/list/index.js'
-import PlaylistItems from './PlaylistItems.vue'
+import { PageSticker, SectionHeader } from "@ui/primitives/index.js"
+import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
+import PlaylistItems from "./PlaylistItems.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

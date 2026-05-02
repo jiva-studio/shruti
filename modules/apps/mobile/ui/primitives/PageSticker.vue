@@ -1,22 +1,14 @@
 <template>
-  <div
-    class="PageSticker center"
-    :class="{ visible: visible }"
-    @click="goTonavigationPath"
-  >
-    <img
-      :src="image"
-      class="image"
-      @load="onLoad"
-    >
+  <div class="PageSticker center" :class="{ visible: visible }" @click="goTonavigationPath">
+    <img :src="image" class="image" @load="onLoad" />
     <b class="header">{{ header }}</b>
     {{ message }}
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from "vue"
+import { useRouter } from "vue-router"
 
 /* -------------------------------------------------------------------------- */
 /*                                Dependencies                                */
@@ -56,13 +48,12 @@ function onLoad() {
 }
 </script>
 
-
 <style scoped>
 .PageSticker {
   max-width: 80%;
   width: 80%;
   display: flex;
-  gap: .75rem;
+  gap: 0.75rem;
   flex-direction: column;
   align-items: center;
   text-align: center;

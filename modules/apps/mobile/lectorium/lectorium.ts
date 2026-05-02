@@ -128,9 +128,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   // `{path}`-substitution function. We feed it a getter closure so
   // the resolver always sees the latest CDN template after
   // `setActiveServer` swaps it.
-  const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(
-    () => activeServer.value
-  )
+  const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(() => activeServer.value)
 
   const self: Lectorium = {
     appConfig: seed.appConfig,

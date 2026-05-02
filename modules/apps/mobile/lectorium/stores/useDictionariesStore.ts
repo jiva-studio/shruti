@@ -55,17 +55,17 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     }
   }
 
-  const authorsById = computed<ReadonlyMap<AuthorId, Author>>(() =>
-    new Map(authors.value.map((a) => [a.id, a]))
+  const authorsById = computed<ReadonlyMap<AuthorId, Author>>(
+    () => new Map(authors.value.map((a) => [a.id, a]))
   )
-  const locationsById = computed<ReadonlyMap<LocationId, Location>>(() =>
-    new Map(locations.value.map((l) => [l.id, l]))
+  const locationsById = computed<ReadonlyMap<LocationId, Location>>(
+    () => new Map(locations.value.map((l) => [l.id, l]))
   )
-  const sourcesById = computed<ReadonlyMap<SourceId, Source>>(() =>
-    new Map(sources.value.map((s) => [s.id, s]))
+  const sourcesById = computed<ReadonlyMap<SourceId, Source>>(
+    () => new Map(sources.value.map((s) => [s.id, s]))
   )
-  const languagesByCode = computed<ReadonlyMap<LanguageCode, Language>>(() =>
-    new Map(languages.value.map((l) => [l.code, l]))
+  const languagesByCode = computed<ReadonlyMap<LanguageCode, Language>>(
+    () => new Map(languages.value.map((l) => [l.code, l]))
   )
 
   const authorsSorted = computed<readonly Author[]>(() => {

@@ -19,11 +19,10 @@
   />
 </template>
 
-
 <script lang="ts" setup>
-import { computed, ref, toRefs } from 'vue'
-import { ListItemsSelectorDialog, type SelectorDialogItem } from '@ui/components/selectors/index.js'
-import SearchFilterChip from './SearchFilterChip.vue'
+import { computed, ref, toRefs } from "vue"
+import { ListItemsSelectorDialog, type SelectorDialogItem } from "@ui/components/selectors/index.js"
+import SearchFilterChip from "./SearchFilterChip.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -34,16 +33,16 @@ const props = defineProps<{
   items: SelectorDialogItem[]
 }>()
 
-const modelValue = defineModel<string[]|undefined>({ required: true, default: undefined })
+const modelValue = defineModel<string[] | undefined>({ required: true, default: undefined })
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
 const isDialogOpen = ref(false)
-const isApplied = computed(() => modelValue.value ? modelValue.value.length > 0 : false)
+const isApplied = computed(() => (modelValue.value ? modelValue.value.length > 0 : false))
 const { items } = toRefs(props)
-void items
+void items.value
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */

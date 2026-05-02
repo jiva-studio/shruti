@@ -1,21 +1,11 @@
 <template>
-  <IonModal
-    :is-open="open"
-    class="transcript-dialog"
-    @did-dismiss="open = false"
-  >
+  <IonModal :is-open="open" class="transcript-dialog" @did-dismiss="open = false">
     <IonContent>
       <div class="card">
-        <h1
-          v-if="title"
-          class="title"
-        >
+        <h1 v-if="title" class="title">
           {{ title }}
         </h1>
-        <p
-          v-if="author"
-          class="author"
-        >
+        <p v-if="author" class="author">
           {{ author }}
         </p>
       </div>
@@ -59,25 +49,22 @@
   </IonModal>
 </template>
 
-
 <script setup lang="ts">
-import { ref } from 'vue'
-import { IonContent, IonModal, IonPopover } from '@ionic/vue'
-import LanguageSelector from './LanguageSelector.vue'
-import SelectionActions from './SelectionActions.vue'
-import SpeakerFloatingChip from './SpeakerFloatingChip.vue'
-import TranscriptText, { type TextSelectedEvent } from './TranscriptText.vue'
-import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from './types.js'
+import { ref } from "vue"
+import { IonContent, IonModal, IonPopover } from "@ionic/vue"
+import LanguageSelector from "./LanguageSelector.vue"
+import SelectionActions from "./SelectionActions.vue"
+import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
+import TranscriptText, { type TextSelectedEvent } from "./TranscriptText.vue"
+import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from "./types.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-export type SelectionActionEvent = Pick<
-  TextSelectedEvent,
-  'timeStart' | 'timeEnd' | 'text'
-> & { action: 'copy' | 'bookmark' | 'share' }
-
+export type SelectionActionEvent = Pick<TextSelectedEvent, "timeStart" | "timeEnd" | "text"> & {
+  action: "copy" | "bookmark" | "share"
+}
 
 defineProps<{
   blockGroups: readonly UiTranscriptBlocksGroup[]
@@ -98,13 +85,13 @@ const emit = defineEmits<{
   pickStart: []
 }>()
 
-const open = defineModel<boolean>('open', { default: false, required: true })
-const activeLanguages = defineModel<string[]>('activeLanguages', {
+const open = defineModel<boolean>("open", { default: false, required: true })
+const activeLanguages = defineModel<string[]>("activeLanguages", {
   default: [] as string[],
   required: true,
 })
 const lastTextSelectedEvent = ref<TextSelectedEvent>()
-const lastTextSelectionAction = ref<string>('')
+const lastTextSelectionAction = ref<string>("")
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -115,35 +102,31 @@ const isSelectionActionsOpen = ref(false)
 async function onTextSelected(event: TextSelectedEvent) {
   lastTextSelectedEvent.value = event
   isSelectionActionsOpen.value = true
-  lastTextSelectionAction.value = ''
+  lastTextSelectionAction.value = ""
 }
 
-function onTextSelectionActionClicked(action: 'copy' | 'bookmark' | 'share') {
+function onTextSelectionActionClicked(action: "copy" | "bookmark" | "share") {
   isSelectionActionsOpen.value = false
   if (!lastTextSelectedEvent.value) return
   lastTextSelectionAction.value = action
-  emit('selectionAction', { ...lastTextSelectedEvent.value, action })
+  emit("selectionAction", { ...lastTextSelectedEvent.value, action })
 }
 
 function onTextSelectionActionDismissed() {
   isSelectionActionsOpen.value = false
-  if (
-    lastTextSelectedEvent.value &&
-    !lastTextSelectionAction.value
-  ) {
-    emit('selectionDismissed')
+  if (lastTextSelectedEvent.value && !lastTextSelectionAction.value) {
+    emit("selectionDismissed")
   }
 }
 </script>
 
-
 <style scoped>
 ion-modal ion-content {
-  --background: #1D263B;
+  --background: #1d263b;
 }
 
 ion-modal ion-toolbar {
-  --background: #1D263B;
+  --background: #1d263b;
 }
 
 .transcript-text {
@@ -175,5 +158,4 @@ ion-modal ion-toolbar {
   font-size: 14px;
   margin: 12px 0px;
 }
-
 </style>

@@ -8,18 +8,13 @@ import { foldDictRows, rowToSource } from "./contentRowMappers.js"
 export function createSqlSourceRepository(contentDb: IDatabase): ISourceRepository {
   return {
     async getById(id: SourceId): Promise<Source | null> {
-      const rows = await contentDb.query<SourceRow>(
-        "SELECT * FROM sources WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<SourceRow>("SELECT * FROM sources WHERE id = ?", [id])
       if (rows.length === 0) return null
       return rowToSource(rows)
     },
 
     async listAll(): Promise<readonly Source[]> {
-      const rows = await contentDb.query<SourceRow>(
-        "SELECT * FROM sources ORDER BY id ASC"
-      )
+      const rows = await contentDb.query<SourceRow>("SELECT * FROM sources ORDER BY id ASC")
       const byId = foldDictRows(rows, rowToSource)
       return [...byId.values()]
     },

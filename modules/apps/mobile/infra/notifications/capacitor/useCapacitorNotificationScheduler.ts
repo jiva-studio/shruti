@@ -1,8 +1,5 @@
 import { LocalNotifications } from "@capacitor/local-notifications"
-import type {
-  INotificationScheduler,
-  ScheduledNotification,
-} from "@ports/app/notifications.js"
+import type { INotificationScheduler, ScheduledNotification } from "@ports/app/notifications.js"
 
 /**
  * Thin adapter over `@capacitor/local-notifications`. Works on web too —

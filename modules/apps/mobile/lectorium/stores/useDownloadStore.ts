@@ -53,10 +53,7 @@ export const useDownloadStore = defineStore("downloads", () => {
    * (blob: on web, file:// on native). Concurrent calls for the same
    * track share one in-flight download. Returns `null` on failure.
    */
-  async function ensureDownloaded(
-    trackId: TrackId,
-    remoteUrl: string
-  ): Promise<string | null> {
+  async function ensureDownloaded(trackId: TrackId, remoteUrl: string): Promise<string | null> {
     const existing = inFlight.get(trackId)
     if (existing) return existing
 

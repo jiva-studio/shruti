@@ -8,18 +8,13 @@ import { foldDictRows, rowToLocation } from "./contentRowMappers.js"
 export function createSqlLocationRepository(contentDb: IDatabase): ILocationRepository {
   return {
     async getById(id: LocationId): Promise<Location | null> {
-      const rows = await contentDb.query<LocationRow>(
-        "SELECT * FROM locations WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<LocationRow>("SELECT * FROM locations WHERE id = ?", [id])
       if (rows.length === 0) return null
       return rowToLocation(rows)
     },
 
     async listAll(): Promise<readonly Location[]> {
-      const rows = await contentDb.query<LocationRow>(
-        "SELECT * FROM locations ORDER BY id ASC"
-      )
+      const rows = await contentDb.query<LocationRow>("SELECT * FROM locations ORDER BY id ASC")
       const byId = foldDictRows(rows, rowToLocation)
       return [...byId.values()]
     },

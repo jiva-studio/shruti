@@ -7,33 +7,19 @@
     :detail="false"
     @click="$emit('select', trackId)"
   >
-    <slot
-      name="state"
-      :track-id="trackId"
-    />
+    <slot name="state" :track-id="trackId" />
 
     <IonLabel class="ion-text-nowrap">
-      <TrackHeader
-        class="info"
-        :title="title"
-        :references="references"
-        :tags="tags"
-      />
-      <TrackDetails
-        class="details"
-        :author="author"
-        :location="location"
-        :date="date"
-      />
+      <TrackHeader class="info" :title="title" :references="references" :tags="tags" />
+      <TrackDetails class="details" :author="author" :location="location" :date="date" />
     </IonLabel>
   </IonItem>
 </template>
 
-
 <script setup lang="ts">
-import { IonItem, IonLabel } from '@ionic/vue'
-import TrackDetails from './TrackDetails.vue'
-import TrackHeader from './TrackHeader.vue'
+import { IonItem, IonLabel } from "@ionic/vue"
+import TrackDetails from "./TrackDetails.vue"
+import TrackHeader from "./TrackHeader.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

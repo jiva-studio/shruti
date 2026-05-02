@@ -1,3 +1,3 @@
 export default {
-  youMightLike: 'Вам может понравиться',
+  youMightLike: "Вам может понравиться",
 }

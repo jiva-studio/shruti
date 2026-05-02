@@ -18,7 +18,17 @@ const lectoriumAlias = {
   // Sources import e.g. "@lectorium/router/index.js" but the file on disk is
   // index.ts. Re-call Vite's resolver after rewriting so extension fallback
   // kicks in (.ts/.tsx/.vue/index.*).
-  async resolveId(this: { resolve: (id: string, importer?: string, opts?: { skipSelf?: boolean }) => Promise<{ id: string } | null> }, id: string, importer?: string) {
+  async resolveId(
+    this: {
+      resolve: (
+        id: string,
+        importer?: string,
+        opts?: { skipSelf?: boolean }
+      ) => Promise<{ id: string } | null>
+    },
+    id: string,
+    importer?: string
+  ) {
     if (!id.startsWith("@lectorium/") || id.startsWith("@lectorium/audio-player")) return null
     const rewritten = path.resolve(LECTORIUM_ROOT, id.slice("@lectorium/".length))
     const resolved = await this.resolve(rewritten, importer, { skipSelf: true })

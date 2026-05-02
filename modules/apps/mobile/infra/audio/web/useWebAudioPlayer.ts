@@ -21,9 +21,7 @@ export function useWebAudioPlayer(): IAudioPlayer {
   function emit(): void {
     if (!currentItemId) return
     const durationMs = Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0
-    const positionMs = Number.isFinite(audio.currentTime)
-      ? Math.round(audio.currentTime * 1000)
-      : 0
+    const positionMs = Number.isFinite(audio.currentTime) ? Math.round(audio.currentTime * 1000) : 0
     for (const fn of listeners) {
       fn({
         itemId: currentItemId,

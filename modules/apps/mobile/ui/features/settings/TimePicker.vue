@@ -10,16 +10,16 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue'
-import { IonDatetime } from '@ionic/vue'
+import { ref } from "vue"
+import { IonDatetime } from "@ionic/vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
 const props = defineProps<{
-  hours: number,
-  minutes: number,
+  hours: number
+  minutes: number
 }>()
 
 const emit = defineEmits<{
@@ -47,8 +47,8 @@ function onChange(e: Event) {
   if (value === null || value === undefined) return
   const raw = Array.isArray(value) ? value[0] : value
   if (!raw) return
-  const time = raw.split('T')[1] ?? ''
-  const [h, m] = time.split(':')
-  emit('change', parseInt(h), parseInt(m))
+  const time = raw.split("T")[1] ?? ""
+  const [h, m] = time.split(":")
+  emit("change", parseInt(h), parseInt(m))
 }
 </script>

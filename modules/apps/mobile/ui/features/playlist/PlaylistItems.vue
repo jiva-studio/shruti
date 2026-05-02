@@ -1,11 +1,6 @@
 <template>
-  <template
-    v-for="row in rows"
-    :key="row.id"
-  >
-    <WithDeleteAction
-      @delete="emit('delete', row.id)"
-    >
+  <template v-for="row in rows" :key="row.id">
+    <WithDeleteAction @delete="emit('delete', row.id)">
       <TrackListItem
         :track-id="row.id"
         :title="row.title"
@@ -17,21 +12,17 @@
         @select="emit('click', row.id)"
       >
         <template #state>
-          <PlaylistStateIndicator
-            :state="row.state"
-            :playback-progress="row.progressPct"
-          />
+          <PlaylistStateIndicator :state="row.state" :playback-progress="row.progressPct" />
         </template>
       </TrackListItem>
     </WithDeleteAction>
   </template>
 </template>
 
-
 <script setup lang="ts">
-import { WithDeleteAction } from '@ui/primitives/index.js'
-import { TrackListItem, type UiTrackRow } from '@ui/components/tracks/list/index.js'
-import PlaylistStateIndicator from './PlaylistStateIndicator.vue'
+import { WithDeleteAction } from "@ui/primitives/index.js"
+import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
+import PlaylistStateIndicator from "./PlaylistStateIndicator.vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

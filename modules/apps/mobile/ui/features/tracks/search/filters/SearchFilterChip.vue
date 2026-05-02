@@ -3,16 +3,13 @@
     :color="color"
     class="chip"
     :class="{
-      'on': applied,
-      'off': !applied,
+      on: applied,
+      off: !applied,
     }"
     size="small"
     @click="emit('click')"
   >
-    <div
-      v-if="showIcon"
-      class="icon"
-    >
+    <div v-if="showIcon" class="icon">
       <slot name="icon" />
     </div>
 
@@ -27,9 +24,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { closeCircle, addCircle } from 'ionicons/icons'
+import { computed } from "vue"
+import { IonIcon } from "@ionic/vue"
+import { closeCircle, addCircle } from "ionicons/icons"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -54,8 +51,8 @@ const emit = defineEmits<{
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const icon  = computed(() => applied ? closeCircle : addCircle)
-const color = computed(() => applied ? 'primary' : 'medium')
+const icon = computed(() => (applied ? closeCircle : addCircle))
+const color = computed(() => (applied ? "primary" : "medium"))
 </script>
 
 <style scoped>
@@ -63,7 +60,7 @@ const color = computed(() => applied ? 'primary' : 'medium')
   padding: 6px 10px;
   display: flex;
   align-items: center;
-  font-size: .95rem;
+  font-size: 0.95rem;
   vertical-align: middle;
   box-sizing: border-box;
 }
@@ -83,14 +80,14 @@ const color = computed(() => applied ? 'primary' : 'medium')
 }
 
 .md .chip.on {
-  border: 1px solid rgba(var(--ion-color-primary-rgb), .1);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.1);
 }
 
 .chip.off {
   background-color: #fafafa;
   border: 1px dashed rgba(0, 0, 0, 0.12);
   filter: grayscale(1);
-  color: rgba(0,0,0,.5);
+  color: rgba(0, 0, 0, 0.5);
 }
 
 .ios .chip.off {
@@ -99,7 +96,7 @@ const color = computed(() => applied ? 'primary' : 'medium')
 
 .chip .action {
   margin-left: 8px;
-  opacity: .5;
+  opacity: 0.5;
 }
 
 .icon {

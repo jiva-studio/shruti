@@ -6,7 +6,6 @@
   </div>
 </template>
 
-
 <script setup lang="ts">
 defineProps<{
   start: number
@@ -23,28 +22,25 @@ function formatTime(ms: number) {
   const hours = Math.floor(ms / 3600)
 
   if (hours === 0) {
-    return [
-      minutes.toString().padStart(2, '0'),
-      seconds.toString().padStart(2, '0')
-    ].join(':')
+    return [minutes.toString().padStart(2, "0"), seconds.toString().padStart(2, "0")].join(":")
   } else {
     return [
       hours.toString(),
-      minutes.toString().padStart(2, '0'),
-      seconds.toString().padStart(2, '0')
-    ].join(':')
+      minutes.toString().padStart(2, "0"),
+      seconds.toString().padStart(2, "0"),
+    ].join(":")
   }
 }
 </script>
 
 <style scoped>
 .timestamp {
-  font-size: .6rem;
+  font-size: 0.6rem;
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
-  opacity: .5;
+  opacity: 0.5;
   letter-spacing: 0.03em;
-  gap: .4rem;
+  gap: 0.4rem;
 }
 </style>

@@ -8,10 +8,7 @@ import { foldDictRows, rowToAuthor } from "./contentRowMappers.js"
 export function createSqlAuthorRepository(contentDb: IDatabase): IAuthorRepository {
   return {
     async getById(id: AuthorId): Promise<Author | null> {
-      const rows = await contentDb.query<AuthorRow>(
-        "SELECT * FROM authors WHERE id = ?",
-        [id]
-      )
+      const rows = await contentDb.query<AuthorRow>("SELECT * FROM authors WHERE id = ?", [id])
       if (rows.length === 0) return null
       return rowToAuthor(rows)
     },

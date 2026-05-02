@@ -1,17 +1,12 @@
 <template>
-  <IonModal
-    :is-open="open"
-    @did-dismiss="onClose"
-  >
+  <IonModal :is-open="open" @did-dismiss="onClose">
     <Header>
       <IonToolbar>
         <IonTitle>{{ title }}</IonTitle>
 
         <IonButtons slot="end">
-          <IonButton
-            @click="onSelect"
-          >
-            {{ $t('app.apply') }}
+          <IonButton @click="onSelect">
+            {{ $t("app.apply") }}
           </IonButton>
         </IonButtons>
       </IonToolbar>
@@ -23,10 +18,9 @@
   </IonModal>
 </template>
 
-
 <script setup lang="ts">
-import { IonModal, IonContent, IonToolbar, IonButtons, IonButton, IonTitle } from '@ionic/vue'
-import { Header } from '@ui/primitives/index.js'
+import { IonModal, IonContent, IonToolbar, IonButtons, IonButton, IonTitle } from "@ionic/vue"
+import { Header } from "@ui/primitives/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -38,7 +32,7 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  close: [],
+  close: []
   select: []
 }>()
 
@@ -47,11 +41,11 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 function onSelect() {
-  emit('select')
-  emit('close')
+  emit("select")
+  emit("close")
 }
 
 function onClose() {
-  emit('close')
+  emit("close")
 }
 </script>

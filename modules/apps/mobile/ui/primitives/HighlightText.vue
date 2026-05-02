@@ -6,10 +6,12 @@
 
 <script lang="ts" setup>
 defineProps<{
-  text: string,
+  text: string
 }>()
 </script>
 
 <style scoped>
-mark { background: yellow; }
+mark {
+  background: yellow;
+}
 </style>

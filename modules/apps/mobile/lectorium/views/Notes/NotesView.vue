@@ -9,11 +9,7 @@
     />
 
     <!-- Notes -->
-    <NotesList
-      v-if="!isEmpty"
-      :notes="rows"
-      @click="onNoteClicked"
-    />
+    <NotesList v-if="!isEmpty" :notes="rows" @click="onNoteClicked" />
 
     <!-- No notes -->
     <PageSticker
@@ -33,7 +29,6 @@
     />
   </AppPage>
 </template>
-
 
 <script setup lang="ts">
 import { IonActionSheet } from "@ionic/vue"

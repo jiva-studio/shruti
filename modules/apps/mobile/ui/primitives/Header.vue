@@ -1,7 +1,7 @@
 <template>
   <IonHeader
     :class="{
-      'ion-no-border': isAndroid
+      'ion-no-border': isAndroid,
     }"
   >
     <slot />
@@ -9,11 +9,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonHeader, isPlatform } from '@ionic/vue'
+import { IonHeader, isPlatform } from "@ionic/vue"
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
-const isAndroid = isPlatform('android')
+const isAndroid = isPlatform("android")
 </script>
