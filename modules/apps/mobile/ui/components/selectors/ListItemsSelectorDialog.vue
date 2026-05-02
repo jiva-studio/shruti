@@ -1,18 +1,17 @@
 <template>
-  <SelectorDialog
-    :title="title"
-    :open="open"
-    @select="onSelectDialogButtonClicked"
-    @close="onCloseDialogButtonClicked"
-  >
-    <SearchInput v-if="items.length > 10" v-model="query" placeholder="Search" />
+  <SelectorDialog :title="title" :open="open" @select="onSelect" @close="onClose">
+    <SearchInput
+      v-if="items.length > SEARCH_VISIBILITY_THRESHOLD"
+      v-model="searchQuery"
+      placeholder="Search"
+    />
     <IonList lines="none" class="ion-no-margin ion-no-padding">
       <IonItem v-for="item in filteredItems" :key="item.id">
         <IonCheckbox
           label-placement="end"
           justify="start"
           :checked="selectedItemIds.includes(item.id)"
-          @ion-change="(e) => onCheckboxClicked(item.id, e.detail.checked)"
+          @ion-change="(e) => toggle(item.id, e.detail.checked)"
         >
           {{ item.title }}
         </IonCheckbox>
@@ -22,14 +21,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRefs, watch } from "vue"
+import { toRefs } from "vue"
 import { IonList, IonCheckbox, IonItem } from "@ionic/vue"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import SelectorDialog from "./SelectorDialog.vue"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
+import { useMultiSelectorDialogState } from "./composables/useSelectorDialogState.js"
+import { SEARCH_VISIBILITY_THRESHOLD } from "./utils.js"
 
 export type ItemId = string
 export type Item = {
@@ -49,51 +46,17 @@ const emit = defineEmits<{
   select: [items: ItemId[]]
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
+const { items, selected } = toRefs(props)
+const { searchQuery, selectedItemIds, filteredItems, toggle } = useMultiSelectorDialogState({
+  items,
+  selected,
+})
 
-const query = ref("")
-const selectedItemIds = ref<ItemId[]>(props.selected || [])
-const { selected } = toRefs(props)
-
-const filteredItems = computed(() =>
-  props.items.filter(
-    (item) => compareStrings(item.title, query.value) || selectedItemIds.value.includes(item.id)
-  )
-)
-
-/* -------------------------------------------------------------------------- */
-/*                                    Hooks                                   */
-/* -------------------------------------------------------------------------- */
-
-watch(selected, (v) => (selectedItemIds.value = v || []))
-
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
-
-function onCheckboxClicked(id: ItemId, value: boolean) {
-  if (value) {
-    selectedItemIds.value.push(id)
-  } else {
-    selectedItemIds.value = selectedItemIds.value.filter((itemId) => itemId !== id)
-  }
-}
-
-function onCloseDialogButtonClicked() {
+function onClose() {
   emit("close")
 }
 
-function onSelectDialogButtonClicked() {
+function onSelect() {
   emit("select", selectedItemIds.value)
-}
-
-/* -------------------------------------------------------------------------- */
-/*                                   Helpers                                  */
-/* -------------------------------------------------------------------------- */
-
-function compareStrings(a: string, b: string) {
-  return a.toLocaleLowerCase().includes(b.toLocaleLowerCase())
 }
 </script>

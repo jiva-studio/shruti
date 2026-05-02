@@ -1,30 +1,22 @@
 <template>
-  <div v-if="!isIOS" class="search">
-    <IonInput
-      v-model="searchQuery"
-      fill="outline"
-      :placeholder="placeholder"
-      :clear-input="true"
-      @ion-focus="onFocus"
-      @ion-blur="onBlur"
-    />
-  </div>
-  <IonSearchbar
+  <SearchInputIOS
+    v-if="isIOS"
+    v-model="searchQuery"
+    :placeholder="placeholder"
+    @focus-change="(v) => emit('focusChange', v)"
+  />
+  <SearchInputAndroid
     v-else
     v-model="searchQuery"
-    show-cancel-button="focus"
     :placeholder="placeholder"
-    :cancel-button-text="$t('app.cancel')"
-    @input="onInput"
+    @focus-change="(v) => emit('focusChange', v)"
   />
 </template>
 
 <script setup lang="ts">
-import { IonInput, IonSearchbar, isPlatform } from "@ionic/vue"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
+import { isPlatform } from "@ionic/vue"
+import SearchInputAndroid from "./SearchInputAndroid.vue"
+import SearchInputIOS from "./SearchInputIOS.vue"
 
 const searchQuery = defineModel<string>({ type: String, default: "" })
 
@@ -33,35 +25,8 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  focus: [value: boolean]
+  focusChange: [focused: boolean]
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
-
 const isIOS = isPlatform("ios")
-
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
-
-function onFocus() {
-  emit("focus", true)
-}
-
-function onBlur() {
-  emit("focus", false)
-}
-
-function onInput(e: Event) {
-  const target = e.target as HTMLInputElement | null
-  if (target) searchQuery.value = target.value
-}
 </script>
-
-<style scoped>
-.search {
-  margin: 10px;
-}
-</style>

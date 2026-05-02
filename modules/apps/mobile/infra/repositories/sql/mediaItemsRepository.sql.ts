@@ -1,12 +1,12 @@
-import { nanoid } from "nanoid"
 import type { IDatabase } from "@ports/app/index.js"
 import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { MediaItemRow } from "@lib/persistence/user"
+import { createIdGenerator } from "./idGenerator.js"
 import { rowToMediaItem } from "./rowMappers.js"
 
-const newMediaItemId = (): string => `media_${nanoid(12)}`
+const newMediaItemId = createIdGenerator("media")
 
 export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepository {
   return {

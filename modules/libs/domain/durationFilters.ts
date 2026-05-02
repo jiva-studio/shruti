@@ -1,7 +1,4 @@
-/**
- * UI constant: fixed buckets used by the duration filter chip. Not stored
- * in the DB — duration filtering is `WHERE audio_duration BETWEEN ? AND ?`.
- */
+/** Fixed buckets used by the duration filter chip. Bounds in ms. */
 export const DURATION_FILTERS = [
   { id: "short", minMs: 0, maxMs: 30 * 60 * 1000 },
   { id: "medium", minMs: 30 * 60 * 1000, maxMs: 60 * 60 * 1000 },

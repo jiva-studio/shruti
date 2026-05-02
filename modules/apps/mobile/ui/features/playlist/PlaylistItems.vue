@@ -12,7 +12,7 @@
         @select="emit('click', row.id)"
       >
         <template #state>
-          <PlaylistStateIndicator :state="row.state" :progress="row.progressPct" />
+          <TrackStateIndicator :state="row.state" :progress="row.progressPct" />
         </template>
       </TrackListItem>
     </WithDeleteAction>
@@ -22,7 +22,7 @@
 <script setup lang="ts">
 import { WithDeleteAction } from "@ui/primitives/index.js"
 import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
-import PlaylistStateIndicator from "./PlaylistStateIndicator.vue"
+import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */

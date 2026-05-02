@@ -8,111 +8,48 @@
     @pick-start="emit('pickStart')"
   >
     <p
-      v-for="(section, idx) in blockGroups"
-      :key="idx"
-      :class="{
-        prompter: true,
-        paragraph: isActiveGroup(section),
-      }"
+      v-for="(group, groupIdx) in groups"
+      :key="groupIdx"
+      :class="{ prompter: true, paragraph: isActiveGroup(group) }"
     >
       <Timestamp
-        v-if="section.blocks[0]?.block.start && section.blocks[0].block.type !== 'verse:text'"
-        :start="section.blocks[0]?.block.start"
+        v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
+        :start="group.blocks[0]?.block.start"
         :duration="duration"
       />
-      <template v-for="(block, blockIdx) in section.blocks" :key="blockIdx">
-        <SentenceBlock
-          v-if="block.block.type === 'sentence'"
-          :text="block.block.text"
-          :icon="showSpeakerIcons ? block.icon : undefined"
-          :reference="block.block.reference"
-          :show-dash="block.block.speakerChanged"
-          :new-line="block.block.speakerChanged && blockIdx !== 0"
-          :reference-visible="block.block.start <= position + 1 && block.block.end >= position - 1"
-          :lang="block.language"
-          :class="{
-            current: highlightCurrentSentence && isCurrent(block),
-            highlighted: block.bookmarked,
-            selected: block.selected,
-          }"
-          :data-time-start="block.block.start"
-          :data-time-end="block.block.end"
-          :data-speaker="block.block.type === 'sentence' ? block.block.speaker : undefined"
-          @click="emit('seek', block.block.start + 0.01)"
-        />
-
-        <VerseTextBlock
-          v-if="block.block.type === 'verse:text' && block.block.text.length > 1"
-          :lines="block.block.text"
-          :reference="block.block.reference"
-          :class="{
-            current: highlightCurrentSentence && isCurrent(block),
-            highlighted: block.bookmarked,
-            selected: block.selected,
-          }"
-          :data-time-start="block.block.start"
-          :data-time-end="block.block.end"
-          @click="emit('seek', block.block.start + 0.01)"
-        />
-
-        <VerseTextInlineBlock
-          v-if="block.block.type === 'verse:text' && block.block.text.length <= 1"
-          :text="block.block.text[0] ?? ''"
-          :reference="block.block.reference"
-          :reference-visible="block.block.start <= position + 1 && block.block.end >= position - 1"
-          :class="{
-            current: highlightCurrentSentence && isCurrent(block),
-            highlighted: block.bookmarked,
-            selected: block.selected,
-          }"
-          :data-time-start="block.block.start"
-          :data-time-end="block.block.end"
-          @click="emit('seek', block.block.start + 0.01)"
-        />
-
-        <VerseTranslationBlock
-          v-if="block.block.type === 'verse:translation'"
-          :text="block.block.text"
-          :class="{
-            current: highlightCurrentSentence && isCurrent(block),
-            highlighted: block.bookmarked,
-            selected: block.selected,
-          }"
-          :data-time-start="block.block.start"
-          :data-time-end="block.block.end"
-          @click="emit('seek', block.block.start + 0.01)"
-        />
-      </template>
+      <TranscriptBlockRenderer
+        v-for="(block, blockIdx) in group.blocks"
+        :key="blockIdx"
+        :block="block"
+        :position="position"
+        :display-speaker-icon="displaySpeakerIcons"
+        :should-highlight-current="shouldHighlightCurrentSentence"
+        :is-first-in-group="blockIdx === 0"
+        @seek="(pos) => emit('seek', pos)"
+      />
     </p>
   </TextSelector>
 </template>
 
 <script setup lang="ts">
-import SentenceBlock from "./SentenceBlock.vue"
-import VerseTextBlock from "./VerseTextBlock.vue"
-import VerseTextInlineBlock from "./VerseTextInlineBlock.vue"
-import VerseTranslationBlock from "./VerseTranslationBlock.vue"
+import { toRefs } from "vue"
 import Timestamp from "./Timestamp.vue"
 import TextSelector from "./TextSelector.vue"
-import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from "./types.js"
+import TranscriptBlockRenderer from "./TranscriptBlockRenderer.vue"
+import type { UiTranscriptBlocksGroup } from "./types.js"
+import {
+  useTranscriptSelection,
+  type TextSelectedPayload,
+} from "./composables/useTranscriptSelection.js"
 
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
-export type TextSelectedEvent = {
-  text: string
-  timeStart: number
-  timeEnd: number
-  event: TouchEvent
-}
+export type TextSelectedEvent = TextSelectedPayload
 
 const props = defineProps<{
-  showSpeakerIcons: boolean
-  blockGroups: readonly UiTranscriptBlocksGroup[]
+  displaySpeakerIcons: boolean
+  groups: readonly UiTranscriptBlocksGroup[]
   position: number
   duration: number
-  highlightCurrentSentence: boolean
+  shouldHighlightCurrentSentence: boolean
 }>()
 
 const emit = defineEmits<{
@@ -122,43 +59,19 @@ const emit = defineEmits<{
   pickStart: []
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                  Handlers                                  */
-/* -------------------------------------------------------------------------- */
+const { groups, position } = toRefs(props)
+const { applySelectionRange, buildSelectedPayload, isActiveGroup } = useTranscriptSelection({
+  groups,
+  position,
+})
 
-function onSelecting(start: number, end: number) {
-  for (const group of props.blockGroups) {
-    for (const b of group.blocks) {
-      b.selected = b.block.start >= start && b.block.end <= end
-    }
-  }
+function onSelecting(start: number, end: number): void {
+  applySelectionRange(start, end)
 }
 
-function onSelected(start: number, end: number, event: TouchEvent) {
-  const selectableBlocks = ["sentence", "verse:translation"]
-  const selectedText = props.blockGroups
-    .flatMap((g) => g.blocks)
-    .filter((b) => b.block.start >= start && b.block.end <= end)
-    .filter((b) => selectableBlocks.includes(b.block.type))
-    .map((b) =>
-      b.block.type === "sentence" || b.block.type === "verse:translation" ? b.block.text : ""
-    )
-    .join(" ")
-
-  if (selectedText) {
-    emit("textSelected", { text: selectedText, timeStart: start, timeEnd: end, event })
-  }
-}
-
-function isActiveGroup(group: UiTranscriptBlocksGroup): boolean {
-  const first = group.blocks[0]?.block
-  const last = group.blocks[group.blocks.length - 1]?.block
-  if (!first || !last) return false
-  return first.start <= props.position && last.end >= props.position
-}
-
-function isCurrent(b: UiTranscriptBlockView): boolean {
-  return b.block.start <= props.position && b.block.end >= props.position
+function onSelected(start: number, end: number, event: TouchEvent): void {
+  const payload = buildSelectedPayload(start, end, event)
+  if (payload) emit("textSelected", payload)
 }
 </script>
 
@@ -186,19 +99,5 @@ span {
   word-wrap: break-word;
   transform: scale(1.01);
   opacity: 1;
-}
-
-.current {
-  transition: all 0.4s;
-  color: #ff6b6b !important;
-}
-
-.highlighted {
-  color: #c77dff;
-}
-
-.selected {
-  color: #ffffff !important;
-  background-color: #9d4edd;
 }
 </style>

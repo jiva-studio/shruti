@@ -6,7 +6,15 @@ import type {
 } from "@ports/app/audioPlayer.js"
 
 /**
- * Native adapter over the @shruti/audio-player Capacitor plugin.
+ * Adapter over the @shruti/audio-player Capacitor plugin (native +
+ * web fallback).
+ *
+ * The plugin's surface (Android/iOS/web fallback) speaks **seconds** for
+ * positions and durations — same convention as HTMLMediaElement. Our
+ * `IAudioPlayer` contract speaks **milliseconds**. This adapter is the
+ * single boundary where the conversion happens, so the rest of the app
+ * stays in one consistent unit.
+ *
  * onProgressChanged in the plugin is a fire-and-forget subscription —
  * there is no off() on the returned id, so we multiplex listeners in
  * this adapter and register the plugin callback only once.
@@ -23,8 +31,8 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
         fn({
           itemId: status.itemId,
           playing: status.playing,
-          position: status.position,
-          duration: status.duration,
+          position: Math.round(status.position * 1000),
+          duration: Math.round(status.duration * 1000),
         })
       }
     })
@@ -47,7 +55,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       await AudioPlayer.togglePause()
     },
     async seek(positionMs: number): Promise<void> {
-      await AudioPlayer.seek({ position: positionMs })
+      await AudioPlayer.seek({ position: positionMs / 1000 })
     },
     async stop(): Promise<void> {
       await AudioPlayer.stop()

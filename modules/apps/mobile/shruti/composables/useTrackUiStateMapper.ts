@@ -1,0 +1,100 @@
+import { computed, type ComputedRef } from "vue"
+import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
+import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
+import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import type { Track } from "@lib/domain/track.js"
+import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
+
+export interface UseTrackUiStateMapperReturn {
+  /** Convert a single domain `Track` into the UI row used by lists. */
+  toUiRow: (track: Track) => UiTrackRow
+  /** Map a list of domain tracks reactively. Recomputes when downloads,
+   *  playlist membership, current playback, or the UI language change. */
+  mapRows: (tracks: () => readonly Track[]) => ComputedRef<readonly UiTrackRow[]>
+  /** Translate raw `DownloadState` + playlist state to the list state. */
+  toUiState: (trackId: string, downloadState: DownloadState) => UiTrackState
+}
+
+/**
+ * Pure mapping layer between the domain `Track` shape and the
+ * presentation `UiTrackRow`. Owns the dictionary lookups, download-state
+ * interpretation, and the "where is this track in the user's listening
+ * journey?" derivation that all track-list views share.
+ *
+ * State precedence (highest first):
+ *  - "downloading" / "failed"  — active download flips to a download
+ *    indicator regardless of playlist state.
+ *  - "playing"                 — this is the currently-open player track.
+ *  - "completed"               — playlist item carries `completedAt`.
+ *  - "queued"                  — in playlist with saved progress > 0.
+ *  - "added"                   — in playlist or downloaded, never played.
+ *  - "none"                    — not in playlist, no local copy.
+ */
+export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
+  const appLanguage = useAppLanguage()
+  const dictionaries = useDictionariesStore()
+  const downloads = useDownloadStore()
+  const playlist = usePlaylistStore()
+  const player = usePlayerStore()
+
+  function toUiState(trackId: string, downloadState: DownloadState): UiTrackState {
+    if (downloadState === "downloading") return "downloading"
+    if (downloadState === "failed") return "failed"
+
+    if (player.trackId === trackId) return "playing"
+
+    const entry = playlist.getEntryByTrackId(trackId)
+    if (entry?.item.completedAt != null) return "completed"
+    if (entry && (entry.item.progress ?? 0) > 0) return "queued"
+
+    if (downloadState === "completed" || playlist.hasTrack(trackId)) return "added"
+    return "none"
+  }
+
+  function progressPctFor(track: Track, state: UiTrackState): number {
+    if (state === "downloading") return downloads.getProgress(track.id)
+    if (state === "playing") {
+      if (player.durationMs <= 0) return 0
+      return Math.min(100, Math.max(0, (player.positionMs / player.durationMs) * 100))
+    }
+    if (state === "queued") {
+      const duration = maxAudioDurationMs(track)
+      const progress = playlist.getEntryByTrackId(track.id)?.item.progress ?? 0
+      if (duration <= 0) return 0
+      return Math.min(100, Math.max(0, (progress / duration) * 100))
+    }
+    return 0
+  }
+
+  function toUiRow(track: Track): UiTrackRow {
+    const state = toUiState(track.id, downloads.getState(track.id))
+    const progressPct = progressPctFor(track, state)
+    return buildTrackRow(track, {
+      preferredLanguage: appLanguage.value,
+      authorsById: dictionaries.authorsById,
+      locationsById: dictionaries.locationsById,
+      sourcesById: dictionaries.sourcesById,
+      state,
+      progressPct,
+    })
+  }
+
+  function mapRows(tracks: () => readonly Track[]): ComputedRef<readonly UiTrackRow[]> {
+    return computed(() => {
+      // Touch reactive sources so `computed` re-runs on changes.
+      void downloads.states
+      void downloads.progress
+      void playlist.entries
+      void player.trackId
+      void player.positionMs
+      void player.durationMs
+      return tracks().map(toUiRow)
+    })
+  }
+
+  return { toUiRow, mapRows, toUiState }
+}
