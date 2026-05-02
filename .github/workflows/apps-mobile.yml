@@ -224,10 +224,10 @@ jobs:
       - uses: ./.github/actions/mobile-android-setup
       - name: build apk + aab
         env:
-          KEYSTORE_BASE64: ${{ secrets.SHRUTI_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.SHRUTI_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.SHRUTI_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.SHRUTI_KEY_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_FILE }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }}
         run: cd modules/apps/mobile && bundle exec fastlane android build_all
       - uses: actions/upload-artifact@v5
         with:
@@ -301,8 +301,7 @@ jobs:
       - name: build ipa
         if: steps.check_ios.outputs.present == 'true'
         env:
-          # Repo-level cert bundle; org-level match decryption password.
-          APPLE_CERTIFICATES: ${{ secrets.SHRUTI_APPLE_CERTIFICATES }}
+          APPLE_CERTIFICATES: ${{ secrets.APPLE_CERTIFICATES }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
