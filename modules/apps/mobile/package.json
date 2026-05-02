@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit",
+    "assets:generate": "npx --yes @capacitor/assets generate"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.1.0",
@@ -46,7 +47,6 @@
     "vue3-radial-progress": "^1.1.1"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
     "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-legacy": "^7.2.1",
     "@vitejs/plugin-vue": "^6.0.1",
