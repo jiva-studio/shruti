@@ -116,8 +116,14 @@ export const usePlayerStore = defineStore("player", () => {
 
   async function seek(ms: number): Promise<void> {
     if (!open.value) return
-    positionMs.value = ms
-    await app.audioPlayer.seek(ms)
+    // Clamp to a sane range before either the UI or the native plugin
+    // sees it. NaN/Infinity from a misbehaving slider would otherwise
+    // poison RadialProgress and the transcript scrub indicator.
+    const safe = Number.isFinite(ms) ? ms : 0
+    const upper = durationMs.value > 0 ? durationMs.value : safe
+    const clamped = Math.max(0, Math.min(upper, safe))
+    positionMs.value = clamped
+    await app.audioPlayer.seek(clamped)
   }
 
   async function stop(): Promise<void> {
