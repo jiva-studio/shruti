@@ -222,6 +222,20 @@ export const useDownloadStore = defineStore("downloads", () => {
     if (nextProgress.delete(trackId)) progress.value = nextProgress
   }
 
+  /**
+   * Wipe in-memory download state and force a re-hydrate on next access.
+   * Used by the "Clear user data" flow in Settings — after the user DB
+   * has been emptied, the cached `Map<TrackId, "completed">` would still
+   * paint Home/Search rows as offline-ready until the next launch.
+   */
+  function reset(): void {
+    states.value = new Map()
+    progress.value = new Map()
+    hydrationError.value = null
+    inFlight.clear()
+    hydrated = false
+  }
+
   return {
     states,
     progress,
@@ -232,5 +246,6 @@ export const useDownloadStore = defineStore("downloads", () => {
     ensureDownloaded,
     prefetch,
     remove,
+    reset,
   }
 })

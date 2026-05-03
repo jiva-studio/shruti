@@ -64,8 +64,14 @@ export default {
   },
 
   danger: {
-    clearCache: "Clear transcript cache",
-    clearUserData: "Clear all user data",
+    clearCache: {
+      title: "Clear cache",
+      description: "Removes downloaded transcripts",
+    },
+    clearUserData: {
+      title: "Clear user data",
+      description: "Deletes all tracks, playlists, notes and bookmarks",
+    },
     confirmClearUserData: {
       header: "Clear all user data?",
       message:
