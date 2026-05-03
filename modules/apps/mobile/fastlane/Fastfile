@@ -425,10 +425,17 @@ platform :ios do
   IOS_KEYCHAIN_PASSWORD = "shruti-ephemeral"
 
   private_lane :setup_ios_keychain do
+    # NOT default_keychain: true — all 5 self-hosted runners share the same
+    # macOS user (akd) and therefore one ~/Library/Keychains. Setting default
+    # makes parallel iOS jobs clobber each other's keychain in the user's
+    # default search list, and xcodebuild then fails to find the cert with
+    # `No "iOS Distribution" signing certificate matching team ID "***" with
+    # a private key was found`. Defaults (`add_to_search_list: true`) append
+    # each job's keychain to the user's search list — xcodebuild scans the
+    # full list and finds the cert in whichever keychain holds it.
     create_keychain(
       name: ios_keychain_name,
       password: IOS_KEYCHAIN_PASSWORD,
-      default_keychain: true,
       unlock: true,
       timeout: 3600,
       lock_when_sleeps: false,
