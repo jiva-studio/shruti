@@ -1,6 +1,5 @@
 export { default as AppPage } from "./AppPage.vue"
 export { default as BuildInfo } from "./BuildInfo.vue"
-export { default as CircleProgress } from "./CircleProgress.vue"
 export { default as FloatingChip } from "./FloatingChip.vue"
 export { default as Header } from "./Header.vue"
 export { default as HighlightText } from "./HighlightText.vue"
