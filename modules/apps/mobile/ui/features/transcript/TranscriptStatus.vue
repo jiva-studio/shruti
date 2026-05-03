@@ -1,6 +1,7 @@
 <template>
-  <div v-if="state === 'loading'" class="transcript-status">
+  <div v-if="state === 'loading'" class="transcript-status transcript-loading">
     <IonSpinner name="crescent" />
+    <p v-if="loadingMessage" class="transcript-loading-label">{{ loadingMessage }}</p>
   </div>
   <p v-else-if="state === 'error'" class="transcript-status transcript-error">
     {{ errorMessage }}
@@ -20,6 +21,8 @@ defineProps<{
   errorMessage?: string | null
   /** Required when `state === 'empty'`. */
   emptyMessage?: string
+  /** Shown below the spinner when `state === 'loading'`. */
+  loadingMessage?: string
 }>()
 </script>
 
@@ -33,6 +36,23 @@ defineProps<{
   text-align: center;
   padding: 32px 16px;
   margin: 0;
+}
+
+.transcript-loading {
+  /* Reserve enough vertical space inside the modal so the spinner +
+     label land in the optical centre of the visible viewport, not
+     pinned just under the header. IonContent is a scrolling container
+     and doesn't expose a `flex: 1` slot for children, so we fall back
+     to a viewport-relative min-height that accounts for the close
+     button, header, and (optional) language selector above us. */
+  flex-direction: column;
+  gap: 12px;
+  min-height: 70vh;
+}
+
+.transcript-loading-label {
+  margin: 0;
+  font-size: 14px;
 }
 
 .transcript-error {
