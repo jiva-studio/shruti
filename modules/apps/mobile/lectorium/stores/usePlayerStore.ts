@@ -40,7 +40,7 @@ const COMPLETION_THRESHOLD_MS = 2000
  */
 export const usePlayerStore = defineStore("player", () => {
   const app = useLectorium()
-  const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", false)
+  const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", true)
 
   const trackId = ref<TrackId | null>(null)
   const title = ref<string>("")

@@ -17,5 +17,5 @@
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
 import { IconPlay } from "@ui/icons/index.js"
 
-const value = defineModel<boolean>({ required: true, default: false })
+const value = defineModel<boolean>({ required: true, default: true })
 </script>

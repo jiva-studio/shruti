@@ -20,5 +20,5 @@
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
 import { AnnotationIcon } from "@ui/icons/index.js"
 
-const value = defineModel<boolean>({ required: true, default: false })
+const value = defineModel<boolean>({ required: true, default: true })
 </script>
