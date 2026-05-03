@@ -19,7 +19,7 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
 
     async listActive(): Promise<readonly PlaylistItem[]> {
       const rows = await db.query<PlaylistItemRow>(
-        "SELECT * FROM playlist_items WHERE archived_at IS NULL ORDER BY added_at DESC"
+        "SELECT * FROM playlist_items WHERE archived_at IS NULL ORDER BY added_at ASC"
       )
       return rows.map(rowToPlaylistItem)
     },
