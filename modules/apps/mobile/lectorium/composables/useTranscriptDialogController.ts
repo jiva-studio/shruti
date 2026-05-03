@@ -1,4 +1,4 @@
-import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
+import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
 import type { LanguageCode } from "@lib/domain/core.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -41,7 +41,7 @@ export interface TranscriptDialogState {
 }
 
 export function useTranscriptDialogController(
-  preferredLanguage: LanguageCode = "en"
+  preferredLanguage: MaybeRefOrGetter<LanguageCode> = "en"
 ): TranscriptDialogState {
   const app = useLectorium()
   const transcriptStore = useTranscriptStore()
