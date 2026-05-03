@@ -1,7 +1,9 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { downloadMedia } from "@lib/application/downloadMedia.js"
+import { downloadTranscripts } from "@lib/application/downloadTranscripts.js"
 import { removeDownloadedMedia } from "@lib/application/removeDownloadedMedia.js"
+import { removeDownloadedTranscripts } from "@lib/application/removeDownloadedTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 
@@ -81,9 +83,54 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Eagerly cache every advertised transcript for the track so the
+   * Transcript dialog can render offline. Fire-and-forget — transcript
+   * JSON is kilobytes; the audio download (megabytes) is the user-visible
+   * "save for offline" milestone, so we don't block its completion on the
+   * transcript leg. Failures are logged at warn-level (not swallowed) so
+   * they show up when QA inspects the device console.
+   */
+  function downloadTranscriptsForTrack(trackId: TrackId): void {
+    void (async () => {
+      try {
+        const repos = app.repositories()
+        const result = await downloadTranscripts(
+          { trackId },
+          {
+            transcripts: repos.transcripts,
+            // `transcripts.get(...)` already routes through the
+            // `IRemoteFilesStorage.get(url)` cache, so a successful
+            // call leaves the JSON pinned on disk. We don't need a
+            // dedicated repo method for "prefetch".
+            transfer: async (id, language) => {
+              await repos.transcripts.get(id, language)
+            },
+          }
+        )
+        if (!result.ok) {
+          console.warn(`[downloads] transcript list failed for ${trackId}: ${result.error}`)
+          return
+        }
+        if (result.value.failed.length > 0) {
+          console.warn(
+            `[downloads] transcript download partial for ${trackId}; failed langs: ${result.value.failed.join(", ")}`
+          )
+        }
+      } catch (err) {
+        console.warn(`[downloads] transcript download crashed for ${trackId}:`, err)
+      }
+    })()
+  }
+
+  /**
    * Ensure the track's audio is cached locally. Returns the local URL
    * (blob: on web, file:// on native). Concurrent calls for the same
    * track share one in-flight download. Returns `null` on failure.
+   *
+   * On audio-success the transcript JSON for every advertised language
+   * is also fetched in the background. The audio result isn't gated on
+   * the transcript leg — opening a downloaded track for playback must
+   * not wait on a 50KB JSON file behind a kilobyte-counter spinner.
    */
   async function ensureDownloaded(trackId: TrackId, remoteUrl: string): Promise<string | null> {
     const existing = inFlight.get(trackId)
@@ -94,6 +141,10 @@ export const useDownloadStore = defineStore("downloads", () => {
         const cached = await app.mediaDownloader.resolveLocalUrl(remoteUrl)
         if (cached) {
           setState(trackId, "completed")
+          // Even when audio is already on disk, make sure transcripts
+          // are too — the user might have saved offline before the
+          // transcript-prefetch feature shipped, so this self-heals.
+          downloadTranscriptsForTrack(trackId)
           return cached
         }
         setProgress(trackId, 0)
@@ -111,6 +162,7 @@ export const useDownloadStore = defineStore("downloads", () => {
         )
         if (result.ok) {
           setState(trackId, "completed")
+          downloadTranscriptsForTrack(trackId)
           return result.value.localPath
         }
         setState(trackId, "failed")
@@ -137,11 +189,30 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
+    const repos = app.repositories()
     await removeDownloadedMedia(
       { trackId, remoteUrl },
       {
-        mediaItems: app.repositories().mediaItems,
+        mediaItems: repos.mediaItems,
         deleteLocal: (url) => app.mediaDownloader.delete(url),
+      }
+    )
+    // Drop transcript JSON files alongside the audio. We resolve the
+    // bucket path from the content DB, build the same URL the HTTP
+    // transcript repo uses (`storagePublicUrl.get(path)`), and ask the
+    // shared `IRemoteFilesStorage` to evict it. Failures are tolerated
+    // per-language inside the use case — orphan cache entries are
+    // harmless and a Settings → Clear cache sweep will reclaim them.
+    await removeDownloadedTranscripts(
+      { trackId },
+      {
+        transcripts: repos.transcripts,
+        deleteLocal: async (id, language) => {
+          const path = await repos.tracks.getTranscriptPath(id, language)
+          if (!path) return
+          const url = app.storagePublicUrl.get(path)
+          await app.filesStorage.delete(url)
+        },
       }
     )
     const nextStates = new Map(states.value)
