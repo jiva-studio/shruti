@@ -64,6 +64,7 @@ const emit = defineEmits<{
   left: 16px;
   right: 16px;
   border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(var(--ion-color-primary-rgb), 0.35);
 }
 
 .stick {
