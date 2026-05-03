@@ -109,6 +109,13 @@
   --lectorium-immersive-background: #1a130d;
   --lectorium-immersive-text: #c0b8a8;
 
+  /* Maximum width of the centred content column on wide screens
+   * (>=768px). Applied to AppPage's slot wrapper, the tab bar's button
+   * row, and the floating mini-player so they all share the same
+   * reading-width. Below the breakpoint the layout stays full-bleed.
+   * Single tuning point — change here to retune all three places. */
+  --lectorium-content-max-width: 720px;
+
   /* Warm step colors — Ionic falls back to neutral grays (#666 etc.) for
    * secondary text / dividers if these aren't set, which leaks cool gray
    * into the warm cream theme. Keep the gradient warm. */
