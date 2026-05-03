@@ -121,8 +121,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const track = await repos.tracks.getById(trackId)
       const variant = track?.variants.find((v) => v.audio) ?? null
       if (!variant?.audio) return
-      const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
-      useDownloadStore().prefetch(trackId, remoteUrl)
+      useDownloadStore().prefetch(trackId, variant.audio.path)
     } catch (err) {
       console.error("[playlist] prefetch failed", err)
     }
@@ -151,8 +150,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     for (const { track } of entries.value) {
       const variant = track.variants.find((v) => v.audio)
       if (variant?.audio) {
-        const remoteUrl = app.storagePublicUrl.get(variant.audio.path)
-        downloads.prefetch(track.id, remoteUrl)
+        downloads.prefetch(track.id, variant.audio.path)
       }
       void prefetchTranscripts(track.id)
     }
