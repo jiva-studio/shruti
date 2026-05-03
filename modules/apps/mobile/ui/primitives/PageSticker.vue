@@ -53,4 +53,10 @@ function onClick() {
 .sticker-image {
   max-width: 75%;
 }
+
+@media (prefers-color-scheme: dark) {
+  .sticker-image {
+    filter: grayscale(1) brightness(0.7) opacity(0.8);
+  }
+}
 </style>
