@@ -13,12 +13,12 @@ export interface CdnServer {
 export const SERVERS: readonly CdnServer[] = [
   {
     id: "global",
-    name: "AWS (Global)",
+    name: "Global",
     urlTemplate: "https://akds-lectorium.s3.us-east-1.amazonaws.com/{path}",
   },
   {
     id: "russia",
-    name: "Yandex (RU)",
+    name: "Russia",
     urlTemplate: "https://akds-lectorium.storage.yandexcloud.net/{path}",
   },
 ]
