@@ -36,7 +36,12 @@ export interface TranscriptDialogState {
   readonly mirrorsActivePlayer: ComputedRef<boolean>
   onClose(): void
   onSeek(positionSeconds: number): void
-  onSelectionAction(action: { action: "copy" | "bookmark" | "share"; text: string }): Promise<void>
+  onSelectionAction(action: {
+    action: "copy" | "bookmark" | "share"
+    text: string
+    timeStart: number
+    timeEnd: number
+  }): Promise<void>
   onPickStart(): void
 }
 
@@ -66,7 +71,6 @@ export function useTranscriptDialogController(
 
   const selectionActions = useTranscriptSelectionActions({
     getTrackId: () => transcriptStore.trackId,
-    getPositionSeconds: () => player.positionMs / 1000,
     getNotes: () => app.repositories().notes,
     shareService: app.shareService,
     onError: (message) => {

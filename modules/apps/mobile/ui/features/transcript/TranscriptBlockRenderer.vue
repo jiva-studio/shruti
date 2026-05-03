@@ -96,7 +96,11 @@ const stateClasses = computed(() => ({
 }
 
 .selected {
-  color: var(--ion-color-primary-contrast) !important;
-  background-color: var(--ion-color-primary);
+  /* Subtle theme-tinted highlight: enough to draw the eye to the picked
+     sentence without overpowering the prompter or fighting the .current
+     accent on the active block. */
+  background-color: rgba(var(--ion-color-primary-rgb), 0.24);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.24);
 }
 </style>

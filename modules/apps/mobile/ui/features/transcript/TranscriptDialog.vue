@@ -28,6 +28,7 @@
       />
       <TranscriptText
         v-if="statusState === null"
+        ref="transcriptText"
         class="transcript-text"
         :groups="blockGroups"
         :position="position"
@@ -54,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonIcon, IonModal } from "@ionic/vue"
 import { closeOutline } from "ionicons/icons"
 import LanguageSelector from "./LanguageSelector.vue"
@@ -117,6 +118,7 @@ const statusState = computed<"loading" | "error" | "empty" | null>(() => {
 })
 
 const lastTextSelectedEvent = ref<TextSelectedEvent>()
+const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcriptText")
 
 function onTextSelected(event: TextSelectedEvent): void {
   lastTextSelectedEvent.value = event
@@ -130,10 +132,12 @@ function onSelectionAction(payload: {
 }): void {
   emit("selectionAction", payload)
   lastTextSelectedEvent.value = undefined
+  transcriptText.value?.clearSelection()
 }
 
 function onSelectionDismissed(): void {
   lastTextSelectedEvent.value = undefined
+  transcriptText.value?.clearSelection()
   emit("selectionDismissed")
 }
 </script>
