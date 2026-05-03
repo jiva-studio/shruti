@@ -1,10 +1,7 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
-import {
-  useTrackActionSheet,
-  type UseTrackActionSheetReturn,
-} from "@lectorium/composables/useTrackActionSheet.js"
+import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
@@ -25,7 +22,6 @@ export interface SearchControllerReturn {
   /** Tap on a track row → open the per-track ActionSheet. */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
-  actionSheet: UseTrackActionSheetReturn
 }
 
 export function useSearchController(): SearchControllerReturn {
@@ -82,6 +78,5 @@ export function useSearchController(): SearchControllerReturn {
     filterChips,
     onSelect,
     loadMore,
-    actionSheet,
   }
 }
