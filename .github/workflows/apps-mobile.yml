@@ -35,6 +35,45 @@ concurrency:
 
 jobs:
   # -------------------------------------------------------------------------- #
+  # Path-based gate for native builds. PRs that only touch web code don't need
+  # to spend ~15 min running Gradle + Xcode on mac-host. Outputs are consumed
+  # by build-android / build-ios via `needs:`. On push/dispatch this job is
+  # skipped (the gate-using jobs ignore the outputs in that case anyway).
+  # -------------------------------------------------------------------------- #
+  detect-changes:
+    name: detect changes
+    runs-on: [self-hosted, macos, mac-host]
+    if: github.event_name == 'pull_request'
+    outputs:
+      ios: ${{ steps.filter.outputs.ios }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          # `package.json` / `package-lock.json` and capacitor.config.ts are
+          # in *both* buckets: a Capacitor plugin bump (or any @capacitor/* /
+          # cordova-* version change) requires re-linking native projects on
+          # both sides. fastlane/** and the workflow file too — a broken
+          # pipeline change shouldn't silently skip the thing it broke.
+          filters: |
+            shared: &shared
+              - 'modules/apps/mobile/package.json'
+              - 'modules/apps/mobile/package-lock.json'
+              - 'modules/apps/mobile/capacitor.config.ts'
+              - 'modules/apps/mobile/fastlane/**'
+              - '.github/workflows/apps-mobile.yml'
+            ios:
+              - *shared
+              - 'modules/apps/mobile/ios/**'
+              - '.github/actions/mobile-ios-setup/**'
+            android:
+              - *shared
+              - 'modules/apps/mobile/android/**'
+              - '.github/actions/mobile-android-setup/**'
+
+  # -------------------------------------------------------------------------- #
   lint:
     name: lint
     runs-on: [self-hosted, macos, mac-host]
@@ -214,10 +253,20 @@ jobs:
   # -------------------------------------------------------------------------- #
   build-android:
     name: android / build
-    needs: [build-web]
+    needs: [build-web, detect-changes]
     # Dependabot PR contexts get no secrets, so the signing keystore is empty
     # and fastlane fails with "KEYSTORE_BASE64 env var is required".
-    if: github.actor != 'dependabot[bot]'
+    # On PRs, also skip if the diff doesn't touch anything that affects the
+    # Android binary (see detect-changes for the path set).
+    # `!cancelled() && needs.build-web.result == 'success'` is needed because
+    # `detect-changes` is *skipped* on push/dispatch, and a skipped need
+    # otherwise propagates as a skip to the downstream job.
+    if: >-
+      !cancelled() &&
+      needs.build-web.result == 'success' &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.android == 'true')
     runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
@@ -281,10 +330,18 @@ jobs:
   # -------------------------------------------------------------------------- #
   build-ios:
     name: ios / build
-    needs: [build-web]
+    needs: [build-web, detect-changes]
     # Same reason as build-android — dependabot PRs get empty secrets, so the
-    # APPLE_CERTIFICATES zip is empty and unzip fails.
-    if: github.actor != 'dependabot[bot]'
+    # APPLE_CERTIFICATES zip is empty and unzip fails. Also skip on PRs whose
+    # diff doesn't affect the iOS binary (see detect-changes). The
+    # !cancelled / needs.build-web.result guard works around the skipped
+    # detect-changes on push/dispatch propagating as a skip downstream.
+    if: >-
+      !cancelled() &&
+      needs.build-web.result == 'success' &&
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       needs.detect-changes.outputs.ios == 'true')
     runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
