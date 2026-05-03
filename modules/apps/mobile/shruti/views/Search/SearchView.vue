@@ -90,4 +90,15 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 .search-content-spacer {
   height: calc(env(safe-area-inset-top) + 116px);
 }
+
+/* IonList ships with a default --padding-top that leaves visible empty
+   space above the first row. The search page already reserves vertical
+   room via .search-content-spacer + the fixed header's gradient fade,
+   so the list's own top padding is redundant and creates a gap big
+   enough to fit an extra item. Scope the override to this page so other
+   IonList consumers keep Ionic's default rhythm. */
+:deep(ion-list) {
+  --padding-top: 0;
+  padding-top: 0;
+}
 </style>
