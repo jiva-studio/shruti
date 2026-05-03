@@ -1,4 +1,3 @@
-import { Capacitor } from "@capacitor/core"
 import { FileTransfer } from "@capacitor/file-transfer"
 import { Filesystem, Directory } from "@capacitor/filesystem"
 import type { IMediaDownloader, ProgressCallback } from "@ports/app/index.js"
@@ -57,7 +56,10 @@ export function useCapacitorMediaDownloader({ cacheDir }: { cacheDir: string }):
         await progressListener?.remove()
       }
 
-      return Capacitor.convertFileSrc(localUri)
+      // Raw file:// URI: ExoPlayer (and other native consumers) read it
+      // directly. convertFileSrc() would yield http://localhost/_capacitor_file_/...
+      // which only the WebView's request interceptor can resolve.
+      return localUri
     },
 
     async delete(url: string): Promise<void> {
@@ -74,7 +76,7 @@ export function useCapacitorMediaDownloader({ cacheDir }: { cacheDir: string }):
       try {
         await Filesystem.stat({ path: localPath, directory: Directory.Cache })
         const { uri } = await Filesystem.getUri({ path: localPath, directory: Directory.Cache })
-        return Capacitor.convertFileSrc(uri)
+        return uri
       } catch {
         return null
       }
