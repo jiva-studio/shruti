@@ -27,11 +27,18 @@
     <IonInfiniteScroll :disabled="!search.hasMore.value" @ion-infinite="onInfinite">
       <IonInfiniteScrollContent />
     </IonInfiniteScroll>
+
+    <IonActionSheet
+      :is-open="search.actionSheet.isOpen.value"
+      :buttons="search.actionSheet.buttons.value"
+      @did-dismiss="search.actionSheet.dismiss"
+    />
   </AppPage>
 </template>
 
 <script setup lang="ts">
 import {
+  IonActionSheet,
   IonText,
   IonInfiniteScroll,
   IonInfiniteScrollContent,

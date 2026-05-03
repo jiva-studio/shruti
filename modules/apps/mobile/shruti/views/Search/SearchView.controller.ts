@@ -2,8 +2,12 @@ import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
-import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
+import {
+  useTrackActionSheet,
+  type UseTrackActionSheetReturn,
+} from "@shruti/composables/useTrackActionSheet.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
+import type { TrackId } from "@lib/domain/core.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import type { FiltersModel, SearchFilterChipDef } from "@ui/features/tracks/search/filters/index.js"
 import { useSearchQuery } from "./composables/useSearchQuery.js"
@@ -19,8 +23,10 @@ export interface SearchControllerReturn {
   filters: Ref<FiltersModel>
   hasMore: Ref<boolean>
   filterChips: ComputedRef<readonly SearchFilterChipDef[]>
+  /** Tap on a track row → open the per-track ActionSheet. */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
+  actionSheet: UseTrackActionSheetReturn
 }
 
 export function useSearchController(): SearchControllerReturn {
@@ -33,7 +39,7 @@ export function useSearchController(): SearchControllerReturn {
   const { filters, hasActiveFilter, ready: filtersReady } = useSearchFiltersBinding()
   const { chips: filterChips } = useSearchFilterChips()
   const { mapRows } = useTrackUiStateMapper()
-  const { addToPlaylist } = useAddToPlaylist()
+  const actionSheet = useTrackActionSheet()
 
   const { rawTracks, isLoading, error, hasMore, runQuery, loadMore } = useSearchQuery({
     query,
@@ -67,6 +73,10 @@ export function useSearchController(): SearchControllerReturn {
     return ""
   })
 
+  async function onSelect(trackId: string): Promise<void> {
+    await actionSheet.present(trackId as TrackId)
+  }
+
   return {
     query,
     rows,
@@ -76,7 +86,8 @@ export function useSearchController(): SearchControllerReturn {
     filters,
     hasMore,
     filterChips,
-    onSelect: addToPlaylist,
+    onSelect,
     loadMore,
+    actionSheet,
   }
 }
