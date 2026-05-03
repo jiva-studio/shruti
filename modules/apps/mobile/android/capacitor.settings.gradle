@@ -14,9 +14,6 @@ project(':capacitor-clipboard').projectDir = new File('../node_modules/@capacito
 include ':capacitor-device'
 project(':capacitor-device').projectDir = new File('../node_modules/@capacitor/device/android')
 
-include ':capacitor-file-transfer'
-project(':capacitor-file-transfer').projectDir = new File('../node_modules/@capacitor/file-transfer/android')
-
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../node_modules/@capacitor/filesystem/android')
 
@@ -40,6 +37,9 @@ project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacit
 
 include ':shruti-plugin-audio-player'
 project(':shruti-plugin-audio-player').projectDir = new File('../../../plugins/audio-player/android')
+
+include ':shruti-plugin-media-downloader'
+project(':shruti-plugin-media-downloader').projectDir = new File('../../../plugins/media-downloader/android')
 
 include ':capacitor-plugin-safe-area'
 project(':capacitor-plugin-safe-area').projectDir = new File('../node_modules/capacitor-plugin-safe-area/android')

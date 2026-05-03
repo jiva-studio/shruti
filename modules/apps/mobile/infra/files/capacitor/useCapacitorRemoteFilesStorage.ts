@@ -1,89 +1,95 @@
-import { Capacitor } from "@capacitor/core"
-import { FileTransfer } from "@capacitor/file-transfer"
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
 import { Filesystem, Directory } from "@capacitor/filesystem"
+import { MediaDownloader, type DownloadDestination } from "@shruti/plugin-media-downloader"
 import type { IRemoteFilesStorage } from "@ports/app/index.js"
 
-async function ensureDirectoryExists(path: string): Promise<void> {
-  const dirPath = path.substring(0, path.lastIndexOf("/"))
-  if (!dirPath) return
-  try {
-    await Filesystem.mkdir({
-      path: dirPath,
-      directory: Directory.Cache,
-      recursive: true,
-    })
-  } catch {
-    // Directory already exists, ignore
-  }
-}
-
-function urlToLocalPath(url: string, cacheDir: string): string {
-  const urlObj = new URL(url)
-  const pathname = urlObj.pathname.replace(/^\//, "")
-  return `${cacheDir}/${pathname}`
-}
-
+/**
+ * `IRemoteFilesStorage` over the `@shruti/plugin-media-downloader`
+ * plugin. Used for the "fetch on first access, then cache" flow that
+ * powers transcripts and any other small remote assets the app needs to
+ * read with `<img src>` / `fetch()` from the WebView.
+ *
+ * Two consumers — this and `useMediaDownloaderAdapter` (used for track
+ * audio) — share the same `Directory.Cache + <cacheDir>/<URL.pathname>`
+ * convention. That's what makes a file written by either side readable
+ * by the other (e.g. you save a track for offline → audio is cached;
+ * later we plan to also cache the track's transcript through here).
+ *
+ * `clearAll()` keeps using `Filesystem.rmdir` because the plugin's API
+ * is intentionally per-file (`deleteFile(url)`); blowing the whole cache
+ * is a filesystem operation, not a downloader concern.
+ */
 export function useCapacitorRemoteFilesStorage({
   cacheDir,
 }: {
   cacheDir: string
 }): IRemoteFilesStorage {
+  function destinationFor(url: string): DownloadDestination {
+    const path = new URL(url).pathname.replace(/^\//, "")
+    const lastSlash = path.lastIndexOf("/")
+    const subdir = lastSlash >= 0 ? `${cacheDir}/${path.substring(0, lastSlash)}` : cacheDir
+    const filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path
+    return { directory: "cache", subdir, filename }
+  }
+
+  function idFor(url: string): string {
+    return new URL(url).pathname
+  }
+
+  /** Wait for completion of one download identified by `id`. */
+  function awaitCompletion(id: string): Promise<string> {
+    const handles: PluginListenerHandle[] = []
+    return new Promise<string>((resolve, reject) => {
+      MediaDownloader.addListener("completed", (e) => {
+        if (e.id !== id) return
+        resolve(e.localUrl)
+      }).then((h) => handles.push(h))
+      MediaDownloader.addListener("failed", (e) => {
+        if (e.id !== id) return
+        reject(new Error(e.error || "Download failed"))
+      }).then((h) => handles.push(h))
+    }).finally(() => {
+      for (const h of handles) void h.remove()
+    })
+  }
+
   return {
     async get(url: string): Promise<string> {
-      const localPath = urlToLocalPath(url, cacheDir)
+      const cached = await MediaDownloader.resolveLocalUrl({ url })
+      if (cached.localUrl) return Capacitor.convertFileSrc(cached.localUrl)
 
-      // Check if cached
-      try {
-        const { uri } = await Filesystem.getUri({
-          path: localPath,
-          directory: Directory.Cache,
-        })
-        await Filesystem.stat({ path: localPath, directory: Directory.Cache })
-        return Capacitor.convertFileSrc(uri)
-      } catch {
-        // Not cached, download
-      }
-
-      // Download and cache
-      await ensureDirectoryExists(localPath)
-
-      const { uri: localUri } = await Filesystem.getUri({
-        path: localPath,
-        directory: Directory.Cache,
-      })
-
-      await FileTransfer.downloadFile({
+      const id = idFor(url)
+      const completion = awaitCompletion(id)
+      await MediaDownloader.download({
+        id,
         url,
-        path: localUri,
+        destination: destinationFor(url),
+        // Transcripts and small assets don't need a foreground notification —
+        // the file usually arrives in well under a second. Audio downloads
+        // turn this on through the IMediaDownloader adapter.
+        showNotification: false,
       })
-
-      return Capacitor.convertFileSrc(localUri)
+      const localUrl = await completion
+      return Capacitor.convertFileSrc(localUrl)
     },
 
     async has(url: string): Promise<boolean> {
-      const localPath = urlToLocalPath(url, cacheDir)
-      try {
-        await Filesystem.stat({ path: localPath, directory: Directory.Cache })
-        return true
-      } catch {
-        return false
-      }
+      const { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
+      return localUrl !== null
     },
 
     async delete(url: string): Promise<void> {
-      const localPath = urlToLocalPath(url, cacheDir)
-      try {
-        await Filesystem.deleteFile({ path: localPath, directory: Directory.Cache })
-      } catch {
-        // File doesn't exist, ignore
-      }
+      await MediaDownloader.deleteFile({ url })
     },
 
     async clearAll(): Promise<void> {
+      // Per-file deletion via the plugin would require an enumeration API
+      // we don't expose; rmdir directly is simpler and matches what we did
+      // before the migration.
       try {
         await Filesystem.rmdir({ path: cacheDir, directory: Directory.Cache, recursive: true })
       } catch {
-        // Directory doesn't exist or already cleared
+        // Directory doesn't exist or already cleared.
       }
     },
   }

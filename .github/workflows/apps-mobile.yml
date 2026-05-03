@@ -11,7 +11,8 @@ on:
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml
-      - .github/actions/audio-player-build/**
+      - .github/actions/build-audio-player/**
+      - .github/actions/build-media-downloader/**
       - .github/actions/mobile-android-setup/**
       - .github/actions/mobile-ios-setup/**
   pull_request:
@@ -24,7 +25,8 @@ on:
       - modules/db-scheme.json
       - modules/db-sync.sh
       - .github/workflows/apps-mobile.yml
-      - .github/actions/audio-player-build/**
+      - .github/actions/build-audio-player/**
+      - .github/actions/build-media-downloader/**
       - .github/actions/mobile-android-setup/**
       - .github/actions/mobile-ios-setup/**
   workflow_dispatch:
@@ -82,7 +84,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - uses: ./.github/actions/audio-player-build
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
       - run: cd modules/apps/mobile && npm run lint
 
@@ -94,7 +97,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - uses: ./.github/actions/audio-player-build
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
       - run: cd modules/apps/mobile && npm test
 
@@ -106,7 +110,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-      - uses: ./.github/actions/audio-player-build
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
       - name: build web bundle
         # Vite reads BUILD_ID via process.env and inlines it as __BUILD_ID__
@@ -366,6 +371,13 @@ jobs:
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          # `xcodebuild -showBuildSettings` evaluates the SPM graph; with our
+          # 18+ packages the default 3 s timeout (with ×2 backoff up to 4
+          # tries → 45 s total) blew past on the runner. 60 s base, 6 tries
+          # gives us ~7.5 min of headroom which has been ample on other
+          # similarly-sized projects. See fastlane-action docs.
+          FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "60"
+          FASTLANE_XCODEBUILD_SETTINGS_RETRIES: "6"
         run: cd modules/apps/mobile && bundle exec fastlane ios build
       - if: steps.check_ios.outputs.present == 'true'
         uses: actions/upload-artifact@v5
