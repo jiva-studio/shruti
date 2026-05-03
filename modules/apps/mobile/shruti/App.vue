@@ -58,7 +58,12 @@ const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const overlays = useOverlaysStore()
 const tutorial = useTutorialStore()
-const dialog = useTranscriptDialogController()
+// Resolve the UI language ref first so the transcript dialog controller
+// can localize the track title + author name reactively (issue #367).
+// Switching language while the dialog is open re-derives the header from
+// the cached entities — no extra repo calls.
+const appLanguage = useAppLanguage()
+const dialog = useTranscriptDialogController(appLanguage)
 // Hide the FloatingPlayer when:
 //  - the player has nothing to show (default),
 //  - an ActionSheet is up — keeps the bottom buttons reachable,
@@ -80,7 +85,6 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 // (tabs, views, modals) sees the persisted language the moment the
 // preferences adapter resolves it — not only after the user visits
 // the Settings screen.
-const appLanguage = useAppLanguage()
 watch(
   appLanguage,
   (next) => {
