@@ -84,8 +84,18 @@ export function useTranscriptDialogController(
   )
 
   const blockGroups = computed(() => buildTranscriptViewData(loader.transcript.value))
-  const position = computed(() => Math.max(0, player.positionMs / 1000))
-  const duration = computed(() => Math.max(0, player.durationMs / 1000))
+  // Preview mode (Search → Open transcript with no track playing, or a
+  // *different* track playing): the global player has no relevance to
+  // the open transcript. Surfacing its position/duration would either
+  // drift random paragraph timestamps (no track playing → durationMs=0)
+  // or pull progress from an unrelated track. Pin to 0 so paragraphs
+  // render their own static `startTime` and no progress UI shows.
+  const position = computed(() =>
+    mirrorsActivePlayer.value ? Math.max(0, player.positionMs / 1000) : 0
+  )
+  const duration = computed(() =>
+    mirrorsActivePlayer.value ? Math.max(0, player.durationMs / 1000) : 0
+  )
 
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
     hydration.availableLanguages.value.map((code) => ({ code, name: code.toUpperCase() }))
