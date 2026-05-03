@@ -56,7 +56,7 @@ const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const tutorial = useTutorialStore()
 const dialog = useTranscriptDialogController()
-const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", false)
+const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 
 const playButtonSize = app.platform === "android" ? 48 : 44
