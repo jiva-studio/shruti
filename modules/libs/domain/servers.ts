@@ -13,12 +13,12 @@ export interface CdnServer {
 export const SERVERS: readonly CdnServer[] = [
   {
     id: "global",
-    name: "AWS (Global)",
+    name: "Global",
     urlTemplate: "https://cdn-s3.shruti.local/{path}",
   },
   {
     id: "russia",
-    name: "Yandex (RU)",
+    name: "Russia",
     urlTemplate: "https://cdn-ru.shruti.local/{path}",
   },
 ]
