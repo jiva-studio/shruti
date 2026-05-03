@@ -9,12 +9,5 @@ const config: CapacitorConfig = {
     cleartext: true,
     androidScheme: "http",
   },
-  plugins: {
-    SplashScreen: {
-      launchAutoHide: false,
-      androidScaleType: "CENTER_INSIDE",
-      backgroundColor: "#ffffff",
-    },
-  },
 }
 export default config
