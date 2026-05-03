@@ -1,5 +1,4 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import {
@@ -33,10 +32,9 @@ export function useSearchController(): SearchControllerReturn {
   const app = useLectorium()
   const repos = app.repositories()
   const dictionaries = useDictionariesStore()
-  const { t } = useI18n()
 
   const query = ref<string>("")
-  const { filters, hasActiveFilter, ready: filtersReady } = useSearchFiltersBinding()
+  const { filters, ready: filtersReady } = useSearchFiltersBinding()
   const { chips: filterChips } = useSearchFilterChips()
   const { mapRows } = useTrackUiStateMapper()
   const actionSheet = useTrackActionSheet()
@@ -45,7 +43,6 @@ export function useSearchController(): SearchControllerReturn {
     query,
     filters,
     tracks: repos.tracks,
-    hasActiveFilter,
   })
 
   onMounted(async () => {
@@ -65,13 +62,10 @@ export function useSearchController(): SearchControllerReturn {
 
   const rows = mapRows(() => rawTracks.value)
 
-  const emptyMessage = computed(() => {
-    if (isLoading.value) return ""
-    if (!query.value.trim() && !hasActiveFilter()) {
-      return t("search.specifySearchCriteria")
-    }
-    return ""
-  })
+  // Empty query + no filters now lists the full catalog (paginated), so
+  // there's no "specify search criteria" prompt on the fresh state. The
+  // computed remains for future no-results / error messaging.
+  const emptyMessage = computed(() => "")
 
   async function onSelect(trackId: string): Promise<void> {
     await actionSheet.present(trackId as TrackId)
