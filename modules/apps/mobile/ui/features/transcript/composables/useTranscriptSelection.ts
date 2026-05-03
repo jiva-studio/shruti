@@ -19,6 +19,8 @@ export interface TextSelectedPayload {
 export interface UseTranscriptSelectionReturn {
   /** Mark blocks within `[start..end]` as selected; clears the rest. */
   applySelectionRange: (start: number, end: number) => void
+  /** Clear the `selected` flag on every block. */
+  clearSelection: () => void
   /** Build a `{ text, timeStart, timeEnd }` payload for emission. */
   buildSelectedPayload: (
     start: number,
@@ -44,6 +46,14 @@ export function useTranscriptSelection(
     for (const group of options.groups.value) {
       for (const block of group.blocks) {
         block.selected = block.block.start >= start && block.block.end <= end
+      }
+    }
+  }
+
+  function clearSelection(): void {
+    for (const group of options.groups.value) {
+      for (const block of group.blocks) {
+        if (block.selected) block.selected = false
       }
     }
   }
@@ -81,5 +91,5 @@ export function useTranscriptSelection(
     return first.start <= pos && last.end >= pos
   }
 
-  return { applySelectionRange, buildSelectedPayload, isCurrent, isActiveGroup }
+  return { applySelectionRange, clearSelection, buildSelectedPayload, isCurrent, isActiveGroup }
 }
