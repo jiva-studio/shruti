@@ -1,11 +1,5 @@
 <template>
-  <IonModal
-    :is-open="isOpen"
-    :initial-breakpoint="1"
-    :breakpoints="[0, 1]"
-    :handle="true"
-    @did-dismiss="onCancel"
-  >
+  <IonModal :is-open="isOpen" @did-dismiss="onCancel">
     <IonToolbar>
       <IonButtons slot="start">
         <IonButton shape="round" size="small" @click="onCancel">
