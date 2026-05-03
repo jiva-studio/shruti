@@ -13,8 +13,6 @@ export interface UseSearchQueryOptions {
   query: Ref<string>
   filters: Ref<FiltersModel>
   tracks: ITrackRepository
-  /** Returns true when at least one filter is set. */
-  hasActiveFilter: () => boolean
 }
 
 export interface UseSearchQueryReturn {
@@ -34,6 +32,11 @@ export interface UseSearchQueryReturn {
  * The text-input watcher debounces keystrokes (200 ms) so fast typing
  * doesn't spam SQL. Filter mutations should call `runQuery()` directly —
  * they fire once per gesture and don't need debouncing.
+ *
+ * Empty query + no filters falls through to `tracks.list()` (the
+ * `searchAndFilterTracks` use case handles the branching) so the initial
+ * Search view shows the full catalog (paginated) rather than an empty
+ * list.
  */
 export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryReturn {
   const rawTracks = ref<readonly Track[]>([])
@@ -62,17 +65,9 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
   async function runQuery(): Promise<void> {
     const token = ++searchToken
     error.value = null
-    const text = options.query.value.trim()
-    const hasFilter = options.hasActiveFilter()
 
     offset.value = 0
     hasMore.value = false
-
-    if (!text && !hasFilter) {
-      rawTracks.value = []
-      isLoading.value = false
-      return
-    }
 
     isLoading.value = true
     try {
