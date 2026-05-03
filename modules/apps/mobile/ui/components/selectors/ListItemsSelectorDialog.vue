@@ -3,7 +3,7 @@
     <SearchInput
       v-if="items.length > SEARCH_VISIBILITY_THRESHOLD"
       v-model="searchQuery"
-      placeholder="Search"
+      :placeholder="$t('app.search')"
     />
     <IonList lines="none" class="ion-no-margin ion-no-padding">
       <IonItem v-for="item in filteredItems" :key="item.id">
