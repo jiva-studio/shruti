@@ -24,7 +24,10 @@ const emit = defineEmits<{
   color: var(--ion-color-medium);
   text-align: center;
   margin-top: 24px;
-  padding: 12px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+  /* Bottom space below the version label is reserved by AppPage's
+   * `reserve-player-space` flag (mini-player height) plus the system
+   * safe-area inset. Don't duplicate it here. */
+  padding: 12px 16px;
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
