@@ -10,7 +10,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Copy bundled databases from the app bundle into Documents/
         // before Capacitor initializes, so the SQLite plugin finds them.
         BundledDatabaseHelper.copyBundledDatabases()
+        applySplashBackground()
         return true
+    }
+
+    private func applySplashBackground() {
+        // Match the native shell to the Ionic theme so the safe-area gap
+        // and the brief moment before the first CSS paint do not flash
+        // white. The asset catalog "SplashBackground" colour set carries
+        // both light and dark variants, so the system picks the right one.
+        let bg = UIColor(named: "SplashBackground")
+        DispatchQueue.main.async {
+            self.window?.backgroundColor = bg
+            guard let rootVC = self.window?.rootViewController as? CAPBridgeViewController else { return }
+            rootVC.loadViewIfNeeded()
+            rootVC.view.backgroundColor = bg
+            if let webView = rootVC.webView {
+                webView.backgroundColor = bg
+                webView.isOpaque = false
+            }
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="splash_background">#FF1A130D</color>
+  <color name="webview_background">#FF1A130D</color>
+</resources>
