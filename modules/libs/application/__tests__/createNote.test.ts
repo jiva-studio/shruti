@@ -85,4 +85,22 @@ describe("createNote", () => {
     expect(inv.ok).toBe(false)
     if (!inv.ok) expect(inv.error).toBe("invalid-timestamps")
   })
+
+  it("rejects NaN / Infinity timestamps", async () => {
+    const repo = makeRepo()
+    for (const [start, end] of [
+      [Number.NaN, 5],
+      [0, Number.NaN],
+      [Number.POSITIVE_INFINITY, 5],
+      [0, Number.POSITIVE_INFINITY],
+      [Number.NEGATIVE_INFINITY, 5],
+    ] as const) {
+      const r = await createNote(
+        { trackId: "t-1" as TrackId, text: "ok", timeStart: start, timeEnd: end },
+        { notes: repo }
+      )
+      expect(r.ok).toBe(false)
+      if (!r.ok) expect(r.error).toBe("invalid-timestamps")
+    }
+  })
 })
