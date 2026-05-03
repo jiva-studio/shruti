@@ -1,6 +1,16 @@
 <template>
   <IonModal :is-open="open" class="transcript-dialog" @did-dismiss="open = false">
     <IonContent>
+      <IonButton
+        class="close-button"
+        fill="clear"
+        size="small"
+        :aria-label="$t('app.close')"
+        @click="emit('close')"
+      >
+        <IonIcon slot="icon-only" :icon="closeOutline" />
+      </IonButton>
+
       <TranscriptDialogHeader :title="title" :author="author" />
 
       <LanguageSelector
@@ -44,7 +54,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { IonContent, IonModal } from "@ionic/vue"
+import { IonButton, IonContent, IonIcon, IonModal } from "@ionic/vue"
+import { closeOutline } from "ionicons/icons"
 import LanguageSelector from "./LanguageSelector.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
@@ -87,6 +98,8 @@ const emit = defineEmits<{
   selectionDismissed: []
   /** Long-press on a selectable block — controller fires platform haptics. */
   pickStart: []
+  /** User tapped the explicit close button (top-right corner). */
+  close: []
 }>()
 
 const open = defineModel<boolean>("open", { default: false, required: true })
@@ -148,6 +161,24 @@ ion-modal ion-toolbar {
 }
 
 .transcript-dialog {
-  z-index: 9000 !important;
+  /* Below FloatingPlayer (z-index: 999) so the legacy "tap player to
+     close transcript" UX still works in player-mode. Below Ionic
+     action-sheet/alert/loading/toast (~1001) so those still win when
+     stacked over the dialog. */
+  z-index: 500 !important;
+}
+
+.close-button {
+  /* Pinned over the immersive content. The tap target sits inside the
+     safe-area inset so it stays clear of the notch / status bar on
+     both iOS and Android. */
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 4px);
+  right: 4px;
+  z-index: 1;
+  --color: var(--shruti-immersive-text);
+  --padding-start: 8px;
+  --padding-end: 8px;
+  margin: 0;
 }
 </style>

@@ -1,24 +1,28 @@
 <template>
-  <Teleport to="body">
-    <PlayerControls
-      :playing="playing"
-      :title="title"
-      :author="author"
-      :duration="duration"
-      :position="position"
-      :show-progress="showProgress"
-      :play-button-size="playButtonSize"
-      :class="{
-        player: true,
-        floating: !sticked,
-        stick: sticked,
-        hidden: hidden,
-        pulsing: pulsing,
-      }"
-      @play="emit('playClicked')"
-      @click="emit('click')"
-    />
-  </Teleport>
+  <!-- No Teleport: the parent (App.vue) renders us directly inside
+       <IonApp>, which is the same DOM container Ionic mounts its
+       overlays into (action-sheet, alert, modal, toast, popover —
+       see @ionic/core .../overlays.js: getAppRoot returns ion-app).
+       Sitting in the same container means Ionic's :host z-index: 1001
+       actually competes with our z-index — see .player below. -->
+  <PlayerControls
+    :playing="playing"
+    :title="title"
+    :author="author"
+    :duration="duration"
+    :position="position"
+    :show-progress="showProgress"
+    :play-button-size="playButtonSize"
+    :class="{
+      player: true,
+      floating: !sticked,
+      stick: sticked,
+      hidden: hidden,
+      pulsing: pulsing,
+    }"
+    @play="emit('playClicked')"
+    @click="emit('click')"
+  />
 </template>
 
 <script setup lang="ts">
@@ -53,7 +57,10 @@ const emit = defineEmits<{
 
 <style scoped>
 .player {
-  z-index: 10000;
+  /* Below Ionic overlays (action-sheet/alert/loading/toast/popover all
+     use z-index ~1001 via :host). We're in the same DOM container
+     (ion-app) as those overlays, so this comparison actually works. */
+  z-index: 999;
   position: fixed;
   transition: all 0.5s ease-in-out;
 }
