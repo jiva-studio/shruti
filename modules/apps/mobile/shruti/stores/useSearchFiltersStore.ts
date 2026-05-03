@@ -99,6 +99,22 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     await persist()
   }
 
+  /**
+   * Drop in-memory state without writing to preferences. Used by the
+   * Settings "Clear user data" flow, which has already wiped the
+   * persisted snapshot via `app.preferences.remove(...)`. Calling
+   * `clearAll()` there would re-create the key with an empty payload —
+   * harmless but pointless write.
+   */
+  function reset(): void {
+    authorIds.value = []
+    languageCodes.value = []
+    locationIds.value = []
+    duration.value = []
+    sort.value = undefined
+    loaded.value = false
+  }
+
   return {
     authorIds,
     languageCodes,
@@ -113,5 +129,6 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     setDuration,
     setSort,
     clearAll,
+    reset,
   }
 })
