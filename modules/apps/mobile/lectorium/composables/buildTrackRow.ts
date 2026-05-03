@@ -20,6 +20,12 @@ export interface BuildTrackRowDeps {
    * "playing"/"queued" → playback %. Controller picks the right value per state.
    */
   readonly progressPct?: number
+  /**
+   * Render the row as visibly disabled and non-interactive. Controllers
+   * set this while a track is mid-load (e.g. `player.openTrack` in
+   * flight) so a second tap on the same row doesn't queue another open.
+   */
+  readonly disabled?: boolean
 }
 
 /**
@@ -57,6 +63,6 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
     tags: tagDisplay,
     state: deps.state ?? "none",
     progressPct: deps.progressPct ?? 0,
-    disabled: false,
+    disabled: deps.disabled ?? false,
   }
 }
