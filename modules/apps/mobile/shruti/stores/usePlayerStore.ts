@@ -144,12 +144,15 @@ export const usePlayerStore = defineStore("player", () => {
     // could otherwise mark stale data on the new id.
     itemId.value = null
 
-    const remoteUrl = app.storagePublicUrl.get(cmd.audio.path)
     // Play from the local cache when available; `ensureDownloaded`
-    // downloads-on-demand if the file isn't there yet, and returns
-    // null on error so we gracefully fall back to streaming.
-    const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, remoteUrl)
-    const url = localUrl ?? remoteUrl
+    // downloads-on-demand if the file isn't there yet — including
+    // runtime CDN fallback if the active server is degraded — and
+    // returns null on total failure so we gracefully fall back to
+    // streaming. The streaming URL is built AFTER the download
+    // attempt so a runtime CDN promotion inside `ensureDownloaded`
+    // is reflected in the stream-fallback URL too.
+    const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
+    const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
 
     subscribeOnce()
     // Engine first; reactive state lands only on success. If `open` or

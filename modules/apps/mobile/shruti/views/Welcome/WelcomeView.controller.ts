@@ -8,6 +8,7 @@ import {
   type CheckForUpdatesDeps,
 } from "./composables/checkForUpdatesInBackground.js"
 import { useDbSchemeRetry } from "./composables/useDbSchemeRetry.js"
+import { PREFERRED_SERVER_KEY } from "@shruti/services/preferredServer.js"
 
 const crossfadeAnimation: AnimationBuilder = (_, opts) => {
   const enter = createAnimation().addElement(opts.enteringEl).fromTo("opacity", 0, 1).duration(300)
@@ -21,8 +22,6 @@ const crossfadeAnimation: AnimationBuilder = (_, opts) => {
  */
 declare const __DB_SCHEME__: number
 const SUPPORTED_DB_SCHEME = __DB_SCHEME__
-
-const PREFERRED_SERVER_KEY = "preferredServerId"
 
 /* -------------------------------------------------------------------------- */
 /*                                    Types                                   */
