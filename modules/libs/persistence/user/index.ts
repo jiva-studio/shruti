@@ -17,9 +17,16 @@ export interface PlaylistItemRow {
   readonly id: string
   readonly track_id: string
   readonly added_at: number
-  readonly completed_at: number | null
   readonly archived_at: number | null
-  readonly progress: number | null
+}
+
+export interface ListeningSessionRow {
+  readonly id: string
+  readonly item_id: string
+  readonly started_at: number
+  readonly ended_at: number
+  readonly from_position: number
+  readonly to_position: number
 }
 
 export interface MediaItemRow {

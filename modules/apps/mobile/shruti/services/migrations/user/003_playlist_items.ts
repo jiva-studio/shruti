@@ -1,9 +1,9 @@
 import type { Migration } from "./types.js"
 
 /**
- * User's playlist — tracks queued for listening. `completed_at` /
- * `archived_at` are NULL on an active item; `progress` is the last
- * known playback position in milliseconds.
+ * User's playlist — tracks queued for listening. `archived_at` is NULL
+ * on an active item. Per-item progress and completion are derived from
+ * the `listening_sessions` journal (see migration 005).
  */
 export const migration_003_playlist_items: Migration = {
   name: "003_playlist_items",
@@ -13,9 +13,7 @@ export const migration_003_playlist_items: Migration = {
         id           TEXT PRIMARY KEY,
         track_id     TEXT NOT NULL,
         added_at     INTEGER NOT NULL,
-        completed_at INTEGER,
-        archived_at  INTEGER,
-        progress     INTEGER
+        archived_at  INTEGER
       )
     `)
     await db.execute(

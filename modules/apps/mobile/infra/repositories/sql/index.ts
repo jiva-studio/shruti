@@ -1,6 +1,7 @@
 import type { IDatabase } from "@ports/app/index.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 import { createSqlUnitOfWork } from "./unitOfWork.sql.js"
 import { createSqlTrackRepository } from "./tracksRepository.sql.js"
@@ -13,6 +14,7 @@ import { createSqlTagRepository } from "./tagsRepository.sql.js"
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
 export { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+export { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
 export { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
 export { createSqlUnitOfWork } from "./unitOfWork.sql.js"
 export { createSqlTrackRepository } from "./tracksRepository.sql.js"
@@ -31,6 +33,7 @@ export interface SqlAppRepositories {
   readonly tags: ReturnType<typeof createSqlTagRepository>
   readonly notes: ReturnType<typeof createSqlNoteRepository>
   readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
+  readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
   readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
 }
@@ -56,6 +59,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     tags: createSqlTagRepository(deps.contentDb),
     notes: createSqlNoteRepository(deps.userDb),
     playlistItems: createSqlPlaylistItemRepository(deps.userDb),
+    listeningSessions: createSqlListeningSessionRepository(deps.userDb),
     mediaItems: createSqlMediaItemRepository(deps.userDb),
     unitOfWork: createSqlUnitOfWork(deps.userDb),
   }

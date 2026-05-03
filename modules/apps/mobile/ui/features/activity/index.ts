@@ -1,0 +1,5 @@
+export { default as ActivityHeatmap } from "./ActivityHeatmap.vue"
+export { default as ActivitySection } from "./ActivitySection.vue"
+export { default as CompletedBadge } from "./CompletedBadge.vue"
+export { default as StreakBadge } from "./StreakBadge.vue"
+export type { ActivityHeatmapDay, ActivityHeatmapProps } from "./ActivityHeatmap.types.js"

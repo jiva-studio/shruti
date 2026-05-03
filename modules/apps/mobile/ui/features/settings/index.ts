@@ -1,6 +1,7 @@
 export { default as HighlightCurrentSentenceSettingsItem } from "./HighlightCurrentSentenceSettingsItem.vue"
 export { default as OpenTranscriptAutomaticallySettingsItem } from "./OpenTranscriptAutomaticallySettingsItem.vue"
 export { default as ShowPlayerProgressSettingsItem } from "./ShowPlayerProgressSettingsItem.vue"
+export { default as ShowActivityTrackerSettingsItem } from "./ShowActivityTrackerSettingsItem.vue"
 export { default as ShowNotesTabSettingsItem } from "./ShowNotesTabSettingsItem.vue"
 export { default as NotificationsEnabledSettingsItem } from "./NotificationsEnabledSettingsItem.vue"
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"

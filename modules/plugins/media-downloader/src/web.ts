@@ -15,13 +15,11 @@ import type {
  * Web implementation. fetch() with streaming body to report progress, and
  * Cache API to persist files across reloads.
  *
- * Cache name: the `subdir` of the destination, defaulting to "shruti".
- * That keeps the file readable by `useWebRemoteFilesStorage` which reads
- * the same cache by `URL.pathname`.
+ * Cache name: "shruti", matching `useWebRemoteFilesStorage`. Cache key:
+ * `URL.pathname`. `destination.subdir` is ignored on web — it's a
+ * native-only filesystem layout hint.
  *
  * No real background: closing the tab cancels the in-flight download.
- * Already-cached files survive reloads. This is fine for parity / local
- * development; mobile gets actual background via the native modules.
  */
 export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlugin {
   private tasks = new Map<string, DownloadTask>();
@@ -33,7 +31,7 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
     const existing = this.tasks.get(options.id);
     if (existing && existing.state === 'running') return existing;
 
-    const cacheName = options.destination.subdir ?? 'shruti';
+    const cacheName = this.cacheNameFor(options.url);
     const cacheKey = this.cacheKey(options.url);
 
     const initial: DownloadTask = {
@@ -177,13 +175,10 @@ export class MediaDownloaderWeb extends WebPlugin implements MediaDownloaderPlug
 
   // ── Internals ─────────────────────────────────────────────────────────
 
-  /** Cache key matches `useWebRemoteFilesStorage` — pure URL pathname. */
   private cacheKey(url: string): string {
     return new URL(url).pathname;
   }
 
-  /** Default cache name. The plugin currently uses one cache; if a future
-   *  caller passes a different subdir, callers must keep it consistent. */
   private cacheNameFor(_url: string): string {
     return 'shruti';
   }

@@ -100,7 +100,6 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
       preferredLanguage: lang,
       author: author.value,
       itemId: entry?.item.id,
-      resumeFromMs: entry?.item.progress,
     })
   }
 

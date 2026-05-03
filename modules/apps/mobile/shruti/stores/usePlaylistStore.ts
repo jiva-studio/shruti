@@ -9,14 +9,13 @@ import {
   type ArchivePlaylistItemError,
 } from "@lib/application/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
-import { markCompleted as markCompletedUseCase } from "@lib/application/markCompleted.js"
-import { updateProgress as updateProgressUseCase } from "@lib/application/updateProgress.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Result } from "@lib/domain/result.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
+import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
 
 export interface PlaylistEntry {
   readonly item: PlaylistItem
@@ -32,9 +31,10 @@ const PAGE_SIZE = 50
  * `add()` — the store owns the `addTrackToPlaylist` use-case + refresh,
  * so the Home list updates immediately without the views coordinating.
  *
- * Paginated: `refresh()` loads the first PAGE_SIZE entries and reports
- * the total. `loadMore()` appends the next page. `hasMore` drives the
- * Home view's IonInfiniteScroll.
+ * Per-item progress and completion are kept in side-maps populated from
+ * `listening_sessions` on `refresh()` / `loadMore()`. The player calls
+ * `patchProgress` on each session finalize so the playlist UI reflects
+ * the latest position without a full refresh.
  */
 export const usePlaylistStore = defineStore("playlist", () => {
   const app = useShruti()
@@ -45,11 +45,44 @@ export const usePlaylistStore = defineStore("playlist", () => {
   // rows have been paged into `entries` yet. Backs hasTrack() so Search
   // shows the "added" indicator even for tracks past the first page.
   const activeTrackIds = ref<ReadonlySet<string>>(new Set())
+  /** Position in milliseconds for each loaded item, derived from sessions. */
+  const progressMap = ref<ReadonlyMap<PlaylistItemId, number>>(new Map())
+  /** `ended_at` in unix ms when the item was first finished, or null. */
+  const completedAtMap = ref<ReadonlyMap<PlaylistItemId, number | null>>(new Map())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
 
   const hasMore = computed(() => entries.value.length < total.value)
+
+  async function loadDerivedFor(pageEntries: readonly PlaylistEntry[]): Promise<{
+    progress: Map<PlaylistItemId, number>
+    completed: Map<PlaylistItemId, number | null>
+  }> {
+    const repos = app.repositories()
+    const itemIds = pageEntries.map((e) => e.item.id)
+    if (itemIds.length === 0) {
+      return { progress: new Map(), completed: new Map() }
+    }
+    const durationsSec = new Map<PlaylistItemId, number>()
+    for (const e of pageEntries) {
+      const ms = maxAudioDurationMs(e.track)
+      if (ms > 0) durationsSec.set(e.item.id, Math.floor(ms / 1000))
+    }
+    const [progressEntries, completedEntries] = await Promise.all([
+      repos.listeningSessions.getProgressForItems(itemIds),
+      repos.listeningSessions.getCompletedAtForItems(itemIds, durationsSec),
+    ])
+    const progress = new Map<PlaylistItemId, number>()
+    for (const [id, entry] of progressEntries) {
+      progress.set(id, entry.position * 1000)
+    }
+    const completed = new Map<PlaylistItemId, number | null>()
+    for (const [id, sec] of completedEntries) {
+      completed.set(id, sec === null ? null : sec * 1000)
+    }
+    return { progress, completed }
+  }
 
   async function refresh(): Promise<void> {
     isLoading.value = true
@@ -65,12 +98,17 @@ export const usePlaylistStore = defineStore("playlist", () => {
       // hasTrack() needs the full active list, not just the first page.
       const allItems = await repos.playlistItems.listActive()
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
+      const derived = await loadDerivedFor(page.entries)
+      progressMap.value = derived.progress
+      completedAtMap.value = derived.completed
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
       entries.value = []
       total.value = 0
       activeTrackIds.value = new Set()
+      progressMap.value = new Map()
+      completedAtMap.value = new Map()
     } finally {
       isLoading.value = false
     }
@@ -86,6 +124,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
       )
       entries.value = [...entries.value, ...page.entries]
       total.value = page.total
+      const derived = await loadDerivedFor(page.entries)
+      const nextProgress = new Map(progressMap.value)
+      for (const [k, v] of derived.progress) nextProgress.set(k, v)
+      progressMap.value = nextProgress
+      const nextCompleted = new Map(completedAtMap.value)
+      for (const [k, v] of derived.completed) nextCompleted.set(k, v)
+      completedAtMap.value = nextCompleted
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
     }
@@ -184,41 +229,35 @@ export const usePlaylistStore = defineStore("playlist", () => {
   }
 
   /**
-   * Persist playback position for an item and patch the in-memory entry
-   * so the UI reflects the new progress without a full refresh. Errors
-   * are swallowed — losing one tick is better than spamming the user.
+   * Patch the in-memory progress (and completion, if reached) for an
+   * item. Called by the player on each session finalize. Pure UI sync —
+   * no DB write here, since the DB is already up-to-date through the
+   * tracker.
    */
-  async function setProgress(itemId: PlaylistItemId, progressMs: number): Promise<void> {
-    const repos = app.repositories()
-    const result = await updateProgressUseCase(
-      { itemId, progressMs },
-      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
-    )
-    if (!result.ok) return
-    patchEntry(itemId, (item) => ({ ...item, progress: progressMs }))
+  function patchProgress(itemId: PlaylistItemId, progressMs: number): void {
+    const next = new Map(progressMap.value)
+    next.set(itemId, progressMs)
+    progressMap.value = next
+
+    const entry = entries.value.find((e) => e.item.id === itemId)
+    if (entry) {
+      const durationMs = maxAudioDurationMs(entry.track)
+      if (durationMs > 0 && progressMs >= durationMs - 2000) {
+        if (completedAtMap.value.get(itemId) == null) {
+          const nextCompleted = new Map(completedAtMap.value)
+          nextCompleted.set(itemId, Date.now())
+          completedAtMap.value = nextCompleted
+        }
+      }
+    }
   }
 
-  /**
-   * Mark a playlist entry as finished. Idempotent — already-completed
-   * items are silently ignored. Patches the in-memory entry on success.
-   */
-  async function markCompleted(itemId: PlaylistItemId): Promise<void> {
-    const repos = app.repositories()
-    const result = await markCompletedUseCase(
-      { itemId },
-      { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
-    )
-    if (!result.ok && result.error !== "already-completed") return
-    patchEntry(itemId, (item) => ({ ...item, completedAt: Date.now() }))
+  function getProgressMs(itemId: PlaylistItemId): number {
+    return progressMap.value.get(itemId) ?? 0
   }
 
-  function patchEntry(itemId: PlaylistItemId, patch: (item: PlaylistItem) => PlaylistItem): void {
-    const idx = entries.value.findIndex((e) => e.item.id === itemId)
-    if (idx === -1) return
-    const current = entries.value[idx]
-    const next = [...entries.value]
-    next[idx] = { ...current, item: patch(current.item) }
-    entries.value = next
+  function getCompletedAt(itemId: PlaylistItemId): number | null {
+    return completedAtMap.value.get(itemId) ?? null
   }
 
   return {
@@ -227,6 +266,8 @@ export const usePlaylistStore = defineStore("playlist", () => {
     hasMore,
     isLoading,
     error,
+    progressMap,
+    completedAtMap,
     refresh,
     loadMore,
     ensureLoaded,
@@ -235,8 +276,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
     archiveByTrackId,
     hasTrack,
     getEntryByTrackId,
-    setProgress,
-    markCompleted,
+    getProgressMs,
+    getCompletedAt,
+    patchProgress,
     prefetchAll,
   }
 })

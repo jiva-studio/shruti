@@ -1,13 +1,16 @@
-import { computed, onMounted, type ComputedRef } from "vue"
+import { computed, onMounted, toRef, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
 import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
+import { useActivityHeatmap } from "@shruti/composables/useActivityHeatmap.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useReloadOnPlayback } from "@shruti/composables/useReloadOnPlayback.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import type { HeatmapDay } from "@lib/application/buildHeatmapDays.js"
 import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 
@@ -16,6 +19,13 @@ export interface HomeControllerReturn {
   isLoading: ComputedRef<boolean>
   error: ComputedRef<string | null>
   hasMore: ComputedRef<boolean>
+  queueCount: ComputedRef<number>
+  queueTotalSeconds: ComputedRef<number>
+  heatmapDays: Ref<readonly HeatmapDay[]>
+  currentStreak: Ref<number>
+  completedCount: Ref<number>
+  totalListenedSeconds: Ref<number>
+  reloadHeatmap: () => Promise<void>
   refresh: () => Promise<void>
   loadMore: () => Promise<void>
   onSelect: (trackId: string) => Promise<void>
@@ -44,14 +54,29 @@ export function useHomeController(): HomeControllerReturn {
   const dictionaries = useDictionariesStore()
   const toast = useToast()
   const { t } = useI18n()
+  const heatmap = useActivityHeatmap()
 
   onMounted(async () => {
-    await Promise.all([dictionaries.ensureLoaded(), playlist.ensureLoaded(), downloads.hydrate()])
+    await Promise.all([
+      dictionaries.ensureLoaded(),
+      playlist.ensureLoaded(),
+      downloads.hydrate(),
+      heatmap.reload(),
+    ])
     if (downloads.hydrationError) {
       void toast.error(t("errors.downloadsCacheUnavailable"))
     }
     playlist.prefetchAll()
   })
+
+  // Refresh the heatmap whenever playback ends — covers pause, track-end,
+  // and stop. The seconds spent listening land in the cell for "today",
+  // so the user sees their progress without having to leave and re-enter
+  // the screen. While playback is in progress, also poll every minute so
+  // the user sees today's cell tick up in near-real-time during long
+  // listens — session writes happen every 15s, but a UI reload that
+  // often would be wasteful.
+  useReloadOnPlayback(toRef(player, "playing"), heatmap.reload)
 
   function rowState(trackId: string, completedAt: number | null): UiTrackState {
     const dl = downloads.getState(trackId)
@@ -66,7 +91,7 @@ export function useHomeController(): HomeControllerReturn {
     track: Track,
     trackId: string,
     state: UiTrackState,
-    savedProgress: number | null
+    savedProgressMs: number
   ): number {
     if (state === "downloading") return downloads.getProgress(trackId)
     if (state === "playing") {
@@ -75,9 +100,8 @@ export function useHomeController(): HomeControllerReturn {
     }
     if (state === "queued") {
       const duration = maxAudioDurationMs(track)
-      const progress = savedProgress ?? 0
       if (duration <= 0) return 0
-      return Math.min(100, Math.max(0, (progress / duration) * 100))
+      return Math.min(100, Math.max(0, (savedProgressMs / duration) * 100))
     }
     return 0
   }
@@ -89,8 +113,11 @@ export function useHomeController(): HomeControllerReturn {
     void downloads.states
     void downloads.progress
     return playlist.entries.map(({ item, track }) => {
-      const state = rowState(track.id, item.completedAt)
-      const progressPct = rowProgressPct(track, track.id, state, item.progress)
+      const completedAt = playlist.getCompletedAt(item.id)
+      const state = rowState(track.id, completedAt)
+      const savedProgressMs =
+        player.itemId === item.id ? player.positionMs : playlist.getProgressMs(item.id)
+      const progressPct = rowProgressPct(track, track.id, state, savedProgressMs)
       // Dim + non-interactive while a download is in flight for this row
       // — the radial download indicator is showing, the row is "busy".
       const disabled = state === "downloading"
@@ -109,6 +136,30 @@ export function useHomeController(): HomeControllerReturn {
   const isLoading = computed(() => playlist.isLoading)
   const error = computed(() => playlist.error)
   const hasMore = computed(() => playlist.hasMore)
+
+  // Queue summary for the "Up Next" header badges — counts only
+  // lectures the user hasn't finished yet, and sums their REMAINING
+  // duration. Already-completed entries can linger in the list for a
+  // while; they shouldn't inflate the "still to listen" count.
+  const queueCount = computed(() => {
+    let count = 0
+    for (const { item } of playlist.entries) {
+      if (playlist.getCompletedAt(item.id) === null) count++
+    }
+    return count
+  })
+  const queueTotalSeconds = computed(() => {
+    let total = 0
+    for (const { item, track } of playlist.entries) {
+      if (playlist.getCompletedAt(item.id) !== null) continue
+      const durMs = maxAudioDurationMs(track)
+      if (durMs <= 0) continue
+      const progressMs = playlist.getProgressMs(item.id)
+      const remainingMs = Math.max(0, durMs - progressMs)
+      total += Math.floor(remainingMs / 1000)
+    }
+    return total
+  })
 
   async function refresh(): Promise<void> {
     await playlist.refresh()
@@ -129,7 +180,6 @@ export function useHomeController(): HomeControllerReturn {
       preferredLanguage: appLanguage.value,
       author,
       itemId: entry.item.id,
-      resumeFromMs: entry.item.progress,
     })
   }
 
@@ -137,5 +187,21 @@ export function useHomeController(): HomeControllerReturn {
     await playlist.archiveByTrackId(trackId)
   }
 
-  return { rows, isLoading, error, hasMore, refresh, loadMore, onSelect, onRemove }
+  return {
+    rows,
+    isLoading,
+    error,
+    hasMore,
+    queueCount,
+    queueTotalSeconds,
+    heatmapDays: heatmap.days,
+    currentStreak: heatmap.currentStreak,
+    completedCount: heatmap.completedCount,
+    totalListenedSeconds: heatmap.totalListenedSeconds,
+    reloadHeatmap: heatmap.reload,
+    refresh,
+    loadMore,
+    onSelect,
+    onRemove,
+  }
 }
