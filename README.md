@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="docs/assets/logo.png" height="184px"/>
+    <img src="assets/logo.png" height="184px"/>
 </p>
 
 <p align="center"><i>
@@ -8,13 +8,13 @@ Shruti is your personal lecture companion — listen to your lectures, read accu
 
 <p align="center">
   <a href="#">
-    <img src="docs/assets/splash.png"/>
+    <img src="assets/splash.png"/>
   </a>
   <a href="#">
-    <img src="docs/assets/download-app-store.png" height="50">
+    <img src="assets/download-app-store.png" height="50">
   </a>
   <a href="#">
-    <img src="docs/assets/download-google-play.png" height="50">
+    <img src="assets/download-google-play.png" height="50">
   </a>
 </p>
 
@@ -41,13 +41,7 @@ Got questions? Shruti lets you ask and get answers straight from the lecture con
 
 Shruti is a **mobile-only app** that reads all its content directly from a public S3 bucket — there is no backend service. The app ships a prebuilt SQLite database inside the APK/IPA and pulls fresher versions from the CDN in the background; transcripts and audio are public JSON/mp3 files served over HTTPS.
 
-The codebase follows **hexagonal / clean / DDD** architecture. Start with:
-
-- [`docs/architecture/README.md`](docs/architecture/README.md) — layering index.
-- [`docs/architecture/layers.md`](docs/architecture/layers.md) — authoritative layer rules and dependency graph.
-- [`docs/architecture/startup-flow.md`](docs/architecture/startup-flow.md) — app bootstrap sequence.
-- [`docs/storage.md`](docs/storage.md) — S3 bucket layout and CDN mirrors.
-- [`docs/db/`](docs/db) — versioned content DB schemes.
+The codebase follows **hexagonal / clean / DDD** architecture. Internal documentation (architecture layers, startup flow, storage layout, DB schemas) is maintained outside this repository.
 
 # Repository layout
 
@@ -67,6 +61,5 @@ modules/
 
 # Get involved
 
-1. Read the architecture docs above before adding features.
-2. Build the mobile app: `cd modules/apps/mobile && npm install && npm run build`.
-3. Run tests: `npm test` (in the mobile package).
+1. Build the mobile app: `cd modules/apps/mobile && npm install && npm run build`.
+2. Run tests: `npm test` (in the mobile package).
