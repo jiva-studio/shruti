@@ -23,17 +23,17 @@ export interface HomeControllerReturn {
 }
 
 /**
- * Home shows the user's listening journey, not download status.
+ * Home shows the user's listening journey, NOT download status.
  *
- * State for each row collapses to one of three:
- *  - "playing"   — active player track (radial with playback %)
- *  - "completed" — listened to the end (double check)
- *  - "queued"    — everything else (radial with saved progress, or empty
- *                   ring when the user hasn't started the track yet)
- *
- * Download/added/failed indicators belong on the Library/Search list,
- * not here. Keep the mapping local so this rule lives next to the view
- * that enforces it.
+ * Per-row state precedence (highest first):
+ *  - "downloading" — active download (radial with download %).
+ *  - "failed"      — download failed (warning icon).
+ *  - "playing"     — currently-active player track (radial with playback %).
+ *  - "completed"   — listened to the end (double check).
+ *  - "queued"      — everything else, including a fully-downloaded track
+ *                    that hasn't been played yet — empty/in-progress radial,
+ *                    NOT the "added" checkmark. The checkmark belongs on
+ *                    the Library / Search list, not Home.
  */
 export function useHomeController(): HomeControllerReturn {
   const appLanguage = useAppLanguage()
@@ -54,12 +54,21 @@ export function useHomeController(): HomeControllerReturn {
   })
 
   function rowState(trackId: string, completedAt: number | null): UiTrackState {
+    const dl = downloads.getState(trackId)
+    if (dl === "downloading") return "downloading"
+    if (dl === "failed") return "failed"
     if (player.trackId === trackId) return "playing"
     if (completedAt !== null) return "completed"
     return "queued"
   }
 
-  function rowProgressPct(track: Track, state: UiTrackState, savedProgress: number | null): number {
+  function rowProgressPct(
+    track: Track,
+    trackId: string,
+    state: UiTrackState,
+    savedProgress: number | null
+  ): number {
+    if (state === "downloading") return downloads.getProgress(trackId)
     if (state === "playing") {
       if (player.durationMs <= 0) return 0
       return Math.min(100, Math.max(0, (player.positionMs / player.durationMs) * 100))
@@ -77,9 +86,14 @@ export function useHomeController(): HomeControllerReturn {
     void player.trackId
     void player.positionMs
     void player.durationMs
+    void downloads.states
+    void downloads.progress
     return playlist.entries.map(({ item, track }) => {
       const state = rowState(track.id, item.completedAt)
-      const progressPct = rowProgressPct(track, state, item.progress)
+      const progressPct = rowProgressPct(track, track.id, state, item.progress)
+      // Dim + non-interactive while a download is in flight for this row
+      // — the radial download indicator is showing, the row is "busy".
+      const disabled = state === "downloading"
       return buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
         authorsById: dictionaries.authorsById,
@@ -87,6 +101,7 @@ export function useHomeController(): HomeControllerReturn {
         sourcesById: dictionaries.sourcesById,
         state,
         progressPct,
+        disabled,
       })
     })
   })
@@ -103,8 +118,6 @@ export function useHomeController(): HomeControllerReturn {
     await playlist.loadMore()
   }
 
-  // Tap on a playlist item → start playback immediately. Matches legacy
-  // behaviour: no detour into a track-detail page, no extra tap.
   async function onSelect(trackId: string): Promise<void> {
     const entry = playlist.entries.find((e) => e.track.id === trackId)
     if (!entry) return
