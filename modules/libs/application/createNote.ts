@@ -30,7 +30,12 @@ export async function createNote(
   const text = input.text.trim()
   if (!text) return err("empty-text")
   if (text.length > MAX_NOTE_LENGTH) return err("text-too-long")
-  if (input.timeStart < 0 || input.timeEnd < input.timeStart) {
+  if (
+    !Number.isFinite(input.timeStart) ||
+    !Number.isFinite(input.timeEnd) ||
+    input.timeStart < 0 ||
+    input.timeEnd < input.timeStart
+  ) {
     return err("invalid-timestamps")
   }
   const note = await deps.notes.create({
