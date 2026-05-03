@@ -27,6 +27,12 @@ export interface TranscriptDialogState {
   readonly hasNoTranscripts: ComputedRef<boolean>
   readonly allowMultipleLanguages: Ref<boolean>
   readonly highlightCurrentSentence: Ref<boolean>
+  /**
+   * True when the dialog mirrors the track currently loaded in the
+   * player. Drives both seek and the prompter scaling effect — both
+   * only make sense when there's a live `position`.
+   */
+  readonly mirrorsActivePlayer: ComputedRef<boolean>
   onClose(): void
   onSeek(positionSeconds: number): void
   onSelectionAction(action: { action: "copy" | "bookmark" | "share"; text: string }): Promise<void>
@@ -73,6 +79,10 @@ export function useTranscriptDialogController(
     },
   }) as Ref<boolean>
 
+  const mirrorsActivePlayer = computed<boolean>(
+    () => transcriptStore.trackId !== null && transcriptStore.trackId === player.trackId
+  )
+
   const blockGroups = computed(() => buildTranscriptViewData(loader.transcript.value))
   const position = computed(() => Math.max(0, player.positionMs / 1000))
   const duration = computed(() => Math.max(0, player.durationMs / 1000))
@@ -115,6 +125,9 @@ export function useTranscriptDialogController(
   }
 
   function onSeek(positionSeconds: number): void {
+    // Preview mode (transcript open without that track in the player):
+    // seeking would jump the user's actual playback to a random place.
+    if (!mirrorsActivePlayer.value) return
     void player.seek(Math.round(positionSeconds * 1000))
   }
 
@@ -136,6 +149,7 @@ export function useTranscriptDialogController(
     hasNoTranscripts,
     allowMultipleLanguages,
     highlightCurrentSentence,
+    mirrorsActivePlayer,
     onClose,
     onSeek,
     onSelectionAction: (event) => selectionActions.perform(event),

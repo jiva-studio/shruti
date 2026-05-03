@@ -9,6 +9,7 @@ export default {
   apply: "Apply",
   select: "Select",
   cancel: "Cancel",
+  close: "Close",
   delete: "Delete",
   deleted: "Deleted",
   soon: "Soon",

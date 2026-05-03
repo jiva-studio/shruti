@@ -22,7 +22,10 @@
         :position="position"
         :duration="duration"
         :display-speaker-icons="allowMultipleLanguages"
-        :should-highlight-current-sentence="shouldHighlightCurrentSentence"
+        :should-highlight-current-sentence="
+          enableActiveProminence !== false && shouldHighlightCurrentSentence
+        "
+        :enable-active-prominence="enableActiveProminence !== false"
         @seek="(pos) => emit('seek', pos)"
         @text-selected="onTextSelected"
         @pick-start="emit('pickStart')"
@@ -69,6 +72,13 @@ const props = defineProps<{
   errorMessage?: string | null
   /** True after hydration when the track has no advertised transcripts. */
   hasNoTranscripts?: boolean
+  /**
+   * When false, the active-paragraph prompter effect (scale-up of the
+   * current group, scale-down + fade of the rest) is suppressed. Use
+   * for preview-style opens where the dialog isn't tied to live
+   * playback and `position` stays at 0.
+   */
+  enableActiveProminence?: boolean
 }>()
 
 const emit = defineEmits<{
