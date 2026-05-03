@@ -1,0 +1,14 @@
+name: Media-downloader build
+description: >
+  Install deps and build @lectorium/plugin-media-downloader so its dist/ (types +
+  bundles) exists before the mobile app's npm ci wires it in via file:.
+  The lib's dist/ is gitignored, so CI must rebuild it on every run.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: cd modules/plugins/media-downloader && npm ci
+
+    - shell: bash
+      run: cd modules/plugins/media-downloader && npm run build
