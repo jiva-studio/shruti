@@ -22,13 +22,13 @@
   --ion-color-secondary-shade: #516b62;
   --ion-color-secondary-tint: #6c877d;
 
-  /* Tertiary — warm slate */
-  --ion-color-tertiary: #8a7a6b;
-  --ion-color-tertiary-rgb: 138, 122, 107;
+  /* Tertiary — coffee (richer brown, was a too-desaturated warm slate) */
+  --ion-color-tertiary: #6f4e37;
+  --ion-color-tertiary-rgb: 111, 78, 55;
   --ion-color-tertiary-contrast: #faf5ea;
   --ion-color-tertiary-contrast-rgb: 255, 255, 255;
-  --ion-color-tertiary-shade: #796b5e;
-  --ion-color-tertiary-tint: #96877a;
+  --ion-color-tertiary-shade: #624530;
+  --ion-color-tertiary-tint: #7d604b;
 
   /* Success — saturated leaf green */
   --ion-color-success: #5b9358;
@@ -62,13 +62,13 @@
   --ion-color-light-shade: #d3cabb;
   --ion-color-light-tint: #f2e9d9;
 
-  /* Medium — warm gray for icons/captions */
-  --ion-color-medium: #8c7b6b;
-  --ion-color-medium-rgb: 140, 123, 107;
+  /* Medium — milky-coffee for icons/captions (warmer than the previous warm gray) */
+  --ion-color-medium: #806752;
+  --ion-color-medium-rgb: 128, 103, 82;
   --ion-color-medium-contrast: #faf5ea;
   --ion-color-medium-contrast-rgb: 255, 255, 255;
-  --ion-color-medium-shade: #7b6c5e;
-  --ion-color-medium-tint: #98887a;
+  --ion-color-medium-shade: #715b48;
+  --ion-color-medium-tint: #8d7663;
 
   /* Dark — primary text */
   --ion-color-dark: #3d2b1f;
@@ -97,7 +97,7 @@
   --ion-toolbar-color: #3d2b1f;
 
   --ion-tab-bar-background: rgba(250, 245, 234, 0.85);
-  --ion-tab-bar-color: #8c7b6b;
+  --ion-tab-bar-color: #5d4530;
   --ion-tab-bar-color-selected: #cc7a3d;
 
   --ion-card-background: #faf5ea;
@@ -164,12 +164,12 @@
     --ion-color-secondary-shade: #708e81;
     --ion-color-secondary-tint: #8caa9e;
 
-    --ion-color-tertiary: #b09a87;
-    --ion-color-tertiary-rgb: 176, 154, 135;
+    --ion-color-tertiary: #b08967;
+    --ion-color-tertiary-rgb: 176, 137, 103;
     --ion-color-tertiary-contrast: #3d2b1f;
     --ion-color-tertiary-contrast-rgb: 26, 19, 13;
-    --ion-color-tertiary-shade: #9b8877;
-    --ion-color-tertiary-tint: #b8a493;
+    --ion-color-tertiary-shade: #9b795b;
+    --ion-color-tertiary-tint: #b89576;
 
     --ion-color-success: #7cb578;
     --ion-color-success-rgb: 124, 181, 120;
@@ -201,12 +201,12 @@
     --ion-color-light-shade: #211911;
     --ion-color-light-tint: #3b3128;
 
-    --ion-color-medium: #a89684;
-    --ion-color-medium-rgb: 168, 150, 132;
+    --ion-color-medium: #a88c70;
+    --ion-color-medium-rgb: 168, 140, 112;
     --ion-color-medium-contrast: #3d2b1f;
     --ion-color-medium-contrast-rgb: 26, 19, 13;
-    --ion-color-medium-shade: #948474;
-    --ion-color-medium-tint: #b1a190;
+    --ion-color-medium-shade: #947b63;
+    --ion-color-medium-tint: #b1987e;
 
     /* "dark" semantic flipped to cream — components using it as text. */
     --ion-color-dark: #f0e5d2;
@@ -230,7 +230,7 @@
     --ion-toolbar-color: #c0b8a8;
 
     --ion-tab-bar-background: rgba(26, 19, 13, 0.85);
-    --ion-tab-bar-color: #a89684;
+    --ion-tab-bar-color: #8e7460;
     --ion-tab-bar-color-selected: #f0a55c;
 
     --ion-card-background: #261c13;
