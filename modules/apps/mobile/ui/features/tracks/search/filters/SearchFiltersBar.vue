@@ -98,9 +98,17 @@ function hasValue(model: FiltersModel, key: keyof FiltersModel): boolean {
 .chips-wrap {
   display: flex;
   gap: 8px;
-  /* Matches SearchInput's 10px right margin so the last chip's right
-     edge lines up with the search field in an overflow-x: auto row. */
-  padding-inline-end: 10px;
+}
+
+/* Trailing space after the last chip in the horizontal scroll row.
+   Padding on the scroll container and `margin-inline-end` on the last
+   flex item both fail at scroll-end in mobile WebKit (neither contributes
+   to the scrollable width). A `::after` pseudo-element is a real generated
+   flex item and reliably reserves space at the end of the row. */
+.chips-wrap::after {
+  content: "";
+  flex: 0 0 4px;
+  align-self: stretch;
 }
 
 .chip-item {
