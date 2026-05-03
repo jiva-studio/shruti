@@ -1,10 +1,10 @@
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { Location } from "@lib/domain/location.js"
-import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
+import { groupReferences } from "./groupReferences.js"
 
 export interface BuildTrackRowDeps {
   readonly preferredLanguage: LanguageCode
@@ -41,9 +41,7 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
   const locationName =
     location?.names.get(deps.preferredLanguage) ?? location?.names.values().next().value ?? ""
 
-  const references = track.references.map((ref) =>
-    formatReference(ref, deps.sourcesById, deps.preferredLanguage)
-  )
+  const references = groupReferences(track.references, deps.sourcesById, deps.preferredLanguage)
   const tagDisplay =
     deps.tagNamesById && track.tagIds.length > 0
       ? track.tagIds.map((id) => deps.tagNamesById?.get(id)).filter((v): v is string => Boolean(v))
@@ -61,23 +59,4 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
     progressPct: deps.progressPct ?? 0,
     disabled: false,
   }
-}
-
-/**
- * Renders a Reference as "{localised-short} {tokens}" — e.g. "БГ 10.5",
- * "BG 10.5". Falls back to the raw `sourceId` when no localised entry
- * exists (unknown source, empty dict, etc.).
- */
-function formatReference(
-  ref: Reference,
-  sourcesById: ReadonlyMap<string, Source> | undefined,
-  lang: LanguageCode
-): string {
-  const source = sourcesById?.get(ref.sourceId)
-  const localised =
-    source?.names.get(lang)?.shortName ??
-    source?.names.values().next().value?.shortName ??
-    ref.sourceId
-  const tokens = ref.tokens.join(".")
-  return tokens.length > 0 ? `${localised} ${tokens}` : localised
 }
