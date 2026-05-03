@@ -24,6 +24,7 @@
         :state="statusState"
         :error-message="errorMessage"
         :empty-message="$t('transcript.noneAvailable')"
+        :loading-message="$t('transcript.loading')"
       />
       <TranscriptText
         v-if="statusState === null"
