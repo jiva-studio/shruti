@@ -45,8 +45,7 @@ import { useCapacitorNotificationScheduler } from "@infra/notifications/capacito
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
-import { useCapacitorMediaDownloader } from "@infra/mediaDownloader/capacitor/index.js"
-import { useWebMediaDownloader } from "@infra/mediaDownloader/web/index.js"
+import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
@@ -78,9 +77,11 @@ initShruti({
   notifications: useCapacitorNotificationScheduler(),
   shareService: useCapacitorShareService(),
   haptics: isNative ? useCapacitorHaptics() : useWebHaptics(),
-  mediaDownloader: isNative
-    ? useCapacitorMediaDownloader({ cacheDir: "shruti" })
-    : useWebMediaDownloader({ cacheName: "shruti" }),
+  // Single Capacitor plugin (`MediaDownloader`) selects native or web at
+  // runtime. On Android downloads continue under WorkManager when the app
+  // is backgrounded/killed; on iOS via URLSession.background. Web stays a
+  // foreground-only Cache API implementation, the same as before.
+  mediaDownloader: useMediaDownloaderAdapter({ cacheDir: "shruti" }),
   platform,
   initialServer: SERVERS[0],
   serverProber: useHttpServerProber(),
