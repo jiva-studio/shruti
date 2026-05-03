@@ -94,4 +94,16 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   --padding-top: 0;
   padding-top: 0;
 }
+
+/* Mirror the page-content constraint on the fixed header so the search
+   input + filter chips stay aligned with the centred content column on
+   wide screens. The gradient narrows along with the wrapper, but the
+   page surface beneath it is the same theme background so the fade has
+   no visible edge. */
+@media (min-width: 768px) {
+  .search-fixed-top {
+    max-width: var(--shruti-content-max-width);
+    margin-inline: auto;
+  }
+}
 </style>
