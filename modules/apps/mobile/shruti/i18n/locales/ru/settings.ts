@@ -64,8 +64,14 @@ export default {
   },
 
   danger: {
-    clearCache: "Очистить кеш транскриптов",
-    clearUserData: "Очистить все пользовательские данные",
+    clearCache: {
+      title: "Очистить кеш",
+      description: "Удаляет загруженные транскрипты",
+    },
+    clearUserData: {
+      title: "Очистить данные",
+      description: "Удаляет все треки, плейлисты, заметки и закладки",
+    },
     confirmClearUserData: {
       header: "Очистить все данные?",
       message:
