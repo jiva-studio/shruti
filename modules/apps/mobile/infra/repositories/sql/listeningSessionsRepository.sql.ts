@@ -1,0 +1,155 @@
+import type { IDatabase } from "@ports/app/index.js"
+import type { PlaylistItemId } from "@lib/domain/core.js"
+import type {
+  DailyListeningTotal,
+  ListeningSession,
+  ListeningSessionId,
+  TrackPositionSec,
+} from "@lib/domain/listeningSession.js"
+import type {
+  IListeningSessionRepository,
+  ProgressEntry,
+} from "@lib/domain/ports/listeningSessionRepository.js"
+import type { ListeningSessionRow } from "@lib/persistence/user"
+import { createIdGenerator } from "./idGenerator.js"
+import { rowToListeningSession } from "./rowMappers.js"
+
+const newSessionId = createIdGenerator("ls")
+
+function nowSec(): number {
+  return Math.floor(Date.now() / 1000)
+}
+
+export function createSqlListeningSessionRepository(db: IDatabase): IListeningSessionRepository {
+  async function lastToPositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null> {
+    const rows = await db.query<{ to_position: number }>(
+      "SELECT to_position FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
+      [itemId]
+    )
+    return rows[0]?.to_position ?? null
+  }
+
+  async function insert(
+    itemId: PlaylistItemId,
+    fromPosition: TrackPositionSec,
+    toPosition: TrackPositionSec
+  ): Promise<ListeningSessionId> {
+    const id = newSessionId()
+    const t = nowSec()
+    await db.execute(
+      `INSERT INTO listening_sessions
+         (id, item_id, started_at, ended_at, from_position, to_position)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, itemId, t, t, fromPosition, toPosition]
+    )
+    await db.save()
+    return id
+  }
+
+  return {
+    async start({ itemId, position }) {
+      const lastTo = await lastToPositionForItem(itemId)
+      const fromPosition = lastTo ?? position
+      return insert(itemId, fromPosition, position)
+    },
+
+    async forceStart({ itemId, position }) {
+      return insert(itemId, position, position)
+    },
+
+    async tick(id, { position }) {
+      await db.execute("UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+        nowSec(),
+        position,
+        id,
+      ])
+      await db.save()
+    },
+
+    async finish(id, { position }) {
+      await db.execute("UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+        nowSec(),
+        position,
+        id,
+      ])
+      await db.save()
+    },
+
+    async getLastSessionForItem(itemId): Promise<ListeningSession | null> {
+      const rows = await db.query<ListeningSessionRow>(
+        "SELECT * FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
+        [itemId]
+      )
+      return rows[0] ? rowToListeningSession(rows[0]) : null
+    },
+
+    async getProgressForItems(itemIds) {
+      const result = new Map<PlaylistItemId, ProgressEntry>()
+      if (itemIds.length === 0) return result
+      const placeholders = itemIds.map(() => "?").join(",")
+      const rows = await db.query<{ item_id: string; to_position: number; ended_at: number }>(
+        `SELECT outer_ls.item_id AS item_id,
+                outer_ls.to_position AS to_position,
+                outer_ls.ended_at AS ended_at
+           FROM listening_sessions outer_ls
+          WHERE outer_ls.item_id IN (${placeholders})
+            AND outer_ls.ended_at = (
+              SELECT MAX(inner_ls.ended_at)
+                FROM listening_sessions inner_ls
+               WHERE inner_ls.item_id = outer_ls.item_id
+            )`,
+        [...itemIds]
+      )
+      for (const row of rows) {
+        result.set(row.item_id, { position: row.to_position, updatedAtSec: row.ended_at })
+      }
+      return result
+    },
+
+    async getCompletedAtForItems(itemIds, durations) {
+      const result = new Map<PlaylistItemId, number | null>()
+      for (const id of itemIds) result.set(id, null)
+      if (itemIds.length === 0) return result
+      // For each (itemId, threshold = duration - 2), find the earliest
+      // session.ended_at where to_position >= threshold. We iterate per
+      // item to keep the SQL simple — itemIds is bounded by playlist
+      // page size, so it's cheap.
+      for (const itemId of itemIds) {
+        const dur = durations.get(itemId)
+        if (typeof dur !== "number" || dur <= 0) continue
+        const threshold = Math.max(0, dur - 2)
+        const rows = await db.query<{ ended_at: number }>(
+          `SELECT ended_at FROM listening_sessions
+            WHERE item_id = ? AND to_position >= ?
+            ORDER BY ended_at ASC
+            LIMIT 1`,
+          [itemId, threshold]
+        )
+        if (rows[0]) result.set(itemId, rows[0].ended_at)
+      }
+      return result
+    },
+
+    async getTotalListenedSeconds(): Promise<number> {
+      const rows = await db.query<{ total: number | null }>(
+        "SELECT SUM(to_position - from_position) AS total FROM listening_sessions"
+      )
+      return Number(rows[0]?.total ?? 0)
+    },
+
+    async getDailyTotals(fromMs, toMs): Promise<readonly DailyListeningTotal[]> {
+      const fromSec = Math.floor(fromMs / 1000)
+      const toSec = Math.floor(toMs / 1000)
+      const rows = await db.query<{ date: string; listened_seconds: number }>(
+        `SELECT date(ended_at, 'unixepoch', 'localtime') AS date,
+                SUM(to_position - from_position) AS listened_seconds
+           FROM listening_sessions
+          WHERE ended_at >= ? AND ended_at < ?
+          GROUP BY date
+          ORDER BY date`,
+        [fromSec, toSec]
+      )
+      return rows.map((r) => ({ date: r.date, listenedSeconds: Number(r.listened_seconds) }))
+    },
+  }
+}

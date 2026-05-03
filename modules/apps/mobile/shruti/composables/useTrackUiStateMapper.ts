@@ -52,8 +52,10 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (player.trackId === trackId) return "playing"
 
     const entry = playlist.getEntryByTrackId(trackId)
-    if (entry?.item.completedAt != null) return "completed"
-    if (entry && (entry.item.progress ?? 0) > 0) return "queued"
+    if (entry) {
+      if (playlist.getCompletedAt(entry.item.id) != null) return "completed"
+      if (playlist.getProgressMs(entry.item.id) > 0) return "queued"
+    }
 
     if (playlist.hasTrack(trackId)) return "added"
     return "none"
@@ -67,7 +69,8 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     }
     if (state === "queued") {
       const duration = maxAudioDurationMs(track)
-      const progress = playlist.getEntryByTrackId(track.id)?.item.progress ?? 0
+      const entry = playlist.getEntryByTrackId(track.id)
+      const progress = entry ? playlist.getProgressMs(entry.item.id) : 0
       if (duration <= 0) return 0
       return Math.min(100, Math.max(0, (progress / duration) * 100))
     }
@@ -93,6 +96,8 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       void downloads.states
       void downloads.progress
       void playlist.entries
+      void playlist.progressMap
+      void playlist.completedAtMap
       void player.trackId
       void player.positionMs
       void player.durationMs

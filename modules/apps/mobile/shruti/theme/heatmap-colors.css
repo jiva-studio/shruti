@@ -1,0 +1,28 @@
+/* Activity heatmap palette. Saffron-tinted to match the shruti brand
+ * (--ion-color-primary #cc7a3d). Light mode keeps cells warm and bright;
+ * dark mode shifts to a muted graphite empty + the same saffron ramp.
+ *
+ * `--heatmap-empty` is intentionally distinct from `--heatmap-listened-1`
+ * so a "no activity" day reads visually different from a "barely any"
+ * day, even at small cell sizes.
+ */
+
+:root {
+  --heatmap-empty:        #f0e6d5;
+
+  --heatmap-listened-1:   #f4caa6;
+  --heatmap-listened-2:   #e09a64;
+  --heatmap-listened-3:   #cc7a3d;
+  --heatmap-listened-4:   #8f5226;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --heatmap-empty:      #2a2622;
+
+    --heatmap-listened-1: #5a3a22;
+    --heatmap-listened-2: #8b572d;
+    --heatmap-listened-3: #cc7a3d;
+    --heatmap-listened-4: #e8a06a;
+  }
+}

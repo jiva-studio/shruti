@@ -47,7 +47,7 @@ export async function createInMemoryTestDatabase(): Promise<IDatabase> {
 /**
  * Applies the minimal user-DB schema the repositories tests need.
  * Kept inline here so infra tests don't reach up into `@shruti/*`.
- * Mirrors `shruti/services/migrations/user/{000,001,002,003,004}_*.ts` —
+ * Mirrors `shruti/services/migrations/user/{000,001,002,003,004,005}_*.ts` —
  * if a migration changes schema-visible shape, update this too.
  */
 export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
@@ -80,10 +80,26 @@ export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {
        id           TEXT PRIMARY KEY,
        track_id     TEXT NOT NULL,
        added_at     INTEGER NOT NULL,
-       completed_at INTEGER,
-       archived_at  INTEGER,
-       progress     INTEGER
+       archived_at  INTEGER
      )`
+  )
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS listening_sessions (
+       id            TEXT PRIMARY KEY,
+       item_id       TEXT NOT NULL,
+       started_at    INTEGER NOT NULL,
+       ended_at      INTEGER NOT NULL,
+       from_position INTEGER NOT NULL,
+       to_position   INTEGER NOT NULL
+     )`
+  )
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_listening_sessions_item
+       ON listening_sessions(item_id, ended_at DESC)`
+  )
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_listening_sessions_ended
+       ON listening_sessions(ended_at)`
   )
   await db.execute(
     `CREATE TABLE IF NOT EXISTS media_items (

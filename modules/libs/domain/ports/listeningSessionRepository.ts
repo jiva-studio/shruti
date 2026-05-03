@@ -1,0 +1,68 @@
+import type { PlaylistItemId } from "../core.js"
+import type {
+  DailyListeningTotal,
+  ListeningSession,
+  ListeningSessionId,
+  TrackPositionSec,
+} from "../listeningSession.js"
+
+export interface ProgressEntry {
+  readonly position: TrackPositionSec
+  readonly updatedAtSec: number
+}
+
+export interface IListeningSessionRepository {
+  /**
+   * Open a new session that *continues* the item's listening history.
+   * `from_position` is the previous session's `to_position` if any —
+   * this is what makes background playback measurable on the next
+   * resume tick. Returns the new session id.
+   */
+  start(args: { itemId: PlaylistItemId; position: TrackPositionSec }): Promise<ListeningSessionId>
+
+  /**
+   * Open a new session with `from_position = position`, ignoring the
+   * previous session. Used when the player explicitly seeks — a seek
+   * is a discontinuity, not continued listening.
+   */
+  forceStart(args: {
+    itemId: PlaylistItemId
+    position: TrackPositionSec
+  }): Promise<ListeningSessionId>
+
+  /** Update `ended_at = now` and `to_position = position` of an open session. */
+  tick(id: ListeningSessionId, args: { position: TrackPositionSec }): Promise<void>
+
+  /** Same as tick — semantically "the last update before closing". */
+  finish(id: ListeningSessionId, args: { position: TrackPositionSec }): Promise<void>
+
+  /** Most recent session for an item, by `ended_at`. Used to derive resume position. */
+  getLastSessionForItem(itemId: PlaylistItemId): Promise<ListeningSession | null>
+
+  /**
+   * Batch resolve `to_position` of the latest session for each item id.
+   * Used by the playlist to render progress rings without N+1 queries.
+   */
+  getProgressForItems(itemIds: readonly PlaylistItemId[]): Promise<Map<PlaylistItemId, ProgressEntry>>
+
+  /**
+   * For each item id, return `ended_at` (unix seconds) of the *first*
+   * session whose `to_position >= duration - 2` (i.e. the moment the
+   * track was first considered finished). null means not yet finished.
+   * `durations` is keyed by item id and expresses seconds.
+   */
+  getCompletedAtForItems(
+    itemIds: readonly PlaylistItemId[],
+    durations: ReadonlyMap<PlaylistItemId, number>
+  ): Promise<Map<PlaylistItemId, number | null>>
+
+  /**
+   * Sum `to_position - from_position` per local-timezone date, restricted
+   * to sessions whose `ended_at` falls in `[fromMs, toMs)`. Input is
+   * milliseconds for ergonomic interop with `Date.now()`.
+   */
+  getDailyTotals(fromMs: number, toMs: number): Promise<readonly DailyListeningTotal[]>
+
+  /** Sum `to_position - from_position` across every session, in seconds. */
+  getTotalListenedSeconds(): Promise<number>
+}

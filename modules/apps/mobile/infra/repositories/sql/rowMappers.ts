@@ -1,7 +1,13 @@
+import type { ListeningSession } from "@lib/domain/listeningSession.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { Note } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import type { MediaItemRow, NoteRow, PlaylistItemRow } from "@lib/persistence/user"
+import type {
+  ListeningSessionRow,
+  MediaItemRow,
+  NoteRow,
+  PlaylistItemRow,
+} from "@lib/persistence/user"
 
 /**
  * The one and only place that knows the SQL row shapes for the user DB
@@ -25,9 +31,18 @@ export function rowToPlaylistItem(row: PlaylistItemRow): PlaylistItem {
     id: row.id,
     trackId: row.track_id,
     addedAt: row.added_at,
-    completedAt: row.completed_at,
     archivedAt: row.archived_at,
-    progress: row.progress,
+  }
+}
+
+export function rowToListeningSession(row: ListeningSessionRow): ListeningSession {
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    fromPosition: row.from_position,
+    toPosition: row.to_position,
   }
 }
 

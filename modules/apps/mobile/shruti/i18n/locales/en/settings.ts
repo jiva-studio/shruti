@@ -30,6 +30,12 @@ export default {
       description: "Show notes tab at the bottom",
     },
   },
+  activityTracker: {
+    show: {
+      title: "Activity tracker",
+      description: "Show listening heatmap on the home screen",
+    },
+  },
   transcript: {
     highlightCurrentSentence: {
       title: "Highlight sentence",

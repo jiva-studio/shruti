@@ -30,6 +30,12 @@ export default {
       description: "Показывать вкладку заметок внизу",
     },
   },
+  activityTracker: {
+    show: {
+      title: "Трекер активности",
+      description: "Показывать хитмап прослушивания на главной",
+    },
+  },
   transcript: {
     highlightCurrentSentence: {
       title: "Выделение предложения",

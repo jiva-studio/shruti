@@ -21,6 +21,7 @@ export interface SettingsControllerReturn {
   appLanguage: Ref<string>
   showPlayerProgress: Ref<boolean>
   showNotesTab: Ref<boolean>
+  showActivityTracker: Ref<boolean>
   highlightCurrentSentence: Ref<boolean>
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
@@ -61,6 +62,7 @@ export function useSettingsController(): SettingsControllerReturn {
   )
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
   const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
+  const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
   const notificationsTime = useConfig<[number, number] | undefined>(
     "settings.notificationsTime",
@@ -97,6 +99,7 @@ export function useSettingsController(): SettingsControllerReturn {
     appLanguage,
     showPlayerProgress,
     showNotesTab,
+    showActivityTracker,
     highlightCurrentSentence,
     openTranscriptAutomatically,
     notificationsEnabled,

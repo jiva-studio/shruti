@@ -19,4 +19,11 @@ export default {
   share: "Share",
   copy: "Copy",
   save: "Save",
+  duration: {
+    days: "{n}d",
+    hours: "{n}h",
+    minutes: "{n}m",
+    daysAndHours: "{d}d {h}h",
+    hoursAndMinutes: "{h}h {m}m",
+  },
 }

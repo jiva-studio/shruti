@@ -14,8 +14,6 @@ function makePlaylistRepo(items: readonly PlaylistItem[]): IPlaylistItemReposito
     add: async () => {
       throw new Error("add not stubbed")
     },
-    updateProgress: async () => {},
-    markCompleted: async () => {},
     archive: async () => {},
     remove: async () => {},
     clearAll: async () => {},
@@ -36,9 +34,7 @@ const mkItem = (id: string, trackId: string): PlaylistItem => ({
   id: id as PlaylistItemId,
   trackId: trackId as TrackId,
   addedAt: 1000,
-  completedAt: null,
   archivedAt: null,
-  progress: null,
 })
 
 const mkTrack = (id: string): Track => ({

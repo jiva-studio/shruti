@@ -35,8 +35,8 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
       const id = newPlaylistItemId()
       const now = Date.now()
       await db.execute(
-        `INSERT INTO playlist_items (id, track_id, added_at, completed_at, archived_at, progress)
-         VALUES (?, ?, ?, NULL, NULL, NULL)`,
+        `INSERT INTO playlist_items (id, track_id, added_at, archived_at)
+         VALUES (?, ?, ?, NULL)`,
         [id, trackId, now]
       )
       await db.save()
@@ -44,20 +44,8 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
         id,
         trackId,
         addedAt: now,
-        completedAt: null,
         archivedAt: null,
-        progress: null,
       }
-    },
-
-    async updateProgress(id: PlaylistItemId, progressMs: number): Promise<void> {
-      await db.execute("UPDATE playlist_items SET progress = ? WHERE id = ?", [progressMs, id])
-      await db.save()
-    },
-
-    async markCompleted(id: PlaylistItemId): Promise<void> {
-      await db.execute("UPDATE playlist_items SET completed_at = ? WHERE id = ?", [Date.now(), id])
-      await db.save()
     },
 
     async archive(id: PlaylistItemId): Promise<void> {

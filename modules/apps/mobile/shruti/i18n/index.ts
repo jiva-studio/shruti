@@ -1,5 +1,6 @@
 import { createI18n } from "vue-i18n"
 
+import enActivity from "./locales/en/activity.js"
 import enApp from "./locales/en/app.js"
 import enErrors from "./locales/en/errors.js"
 import enHome from "./locales/en/home.js"
@@ -12,6 +13,7 @@ import enShare from "./locales/en/share.js"
 import enTranscript from "./locales/en/transcript.js"
 import enWelcome from "./locales/en/welcome.js"
 
+import ruActivity from "./locales/ru/activity.js"
 import ruApp from "./locales/ru/app.js"
 import ruErrors from "./locales/ru/errors.js"
 import ruHome from "./locales/ru/home.js"
@@ -28,6 +30,7 @@ export const SUPPORTED_LOCALES = ["en", "ru"] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 const en = {
+  activity: enActivity,
   app: enApp,
   errors: enErrors,
   home: enHome,
@@ -42,6 +45,7 @@ const en = {
 }
 
 const ru = {
+  activity: ruActivity,
   app: ruApp,
   errors: ruErrors,
   home: ruHome,
