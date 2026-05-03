@@ -8,3 +8,14 @@
   padding: 6px 6px;
   border-radius: 5px;
 }
+
+/* Toggle OFF-state knob — Ionic defaults to harsh #fff which clashes
+ * with the warm cream / espresso palette. step-50 was too close to the
+ * page background (~2% delta — effectively invisible against the
+ * settings list); step-200 gives clear contrast in both modes (warm
+ * cream darker than the cream background in light, warm dark lighter
+ * than the espresso background in dark). The checked-state knob keeps
+ * Ionic's default (primary saffron). */
+ion-toggle {
+  --handle-background: var(--ion-color-step-200);
+}
