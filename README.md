@@ -37,10 +37,36 @@ Got questions? Shruti lets you ask and get answers straight from the lecture con
 
 
 
+# Architecture
+
+Shruti is a **mobile-only app** that reads all its content directly from a public S3 bucket — there is no backend service. The app ships a prebuilt SQLite database inside the APK/IPA and pulls fresher versions from the CDN in the background; transcripts and audio are public JSON/mp3 files served over HTTPS.
+
+The codebase follows **hexagonal / clean / DDD** architecture. Start with:
+
+- [`docs/architecture/README.md`](docs/architecture/README.md) — layering index.
+- [`docs/architecture/layers.md`](docs/architecture/layers.md) — authoritative layer rules and dependency graph.
+- [`docs/architecture/startup-flow.md`](docs/architecture/startup-flow.md) — app bootstrap sequence.
+- [`docs/storage.md`](docs/storage.md) — S3 bucket layout and CDN mirrors.
+- [`docs/db/`](docs/db) — versioned content DB schemes.
+
+# Repository layout
+
+```
+modules/
+├── apps/
+│   └── mobile/                 # Ionic + Capacitor 8 + Vue 3 mobile app
+├── libs/
+│   ├── domain/                 # Entities, value objects, domain ports (zero deps)
+│   ├── application/            # Use cases (depends on @lib/domain only)
+│   └── persistence/            # DB row type schemas (main + user)
+├── capacitor/
+│   └── audio-player/           # In-house Capacitor plugin (native Android/iOS/web)
+└── tools/
+    └── content-db-builder/     # Node.js CLI that builds the SQLite + exports transcripts to S3
+```
+
 # Get involved
 
-If you'd like to help develop the project, here's a list of links to get you started:
-
-1. [Development Environment](<docs/development environment.md>) – Configure your development environment to get started.
-2. [Good First Issues](https://github.com/jiva-studio/shruti/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) – a list of simple issues any developer could start from.
-3. [Roadmap](https://github.com/orgs/jiva-studio/projects/14/views/2) - list of tasks we are working on.
+1. Read the architecture docs above before adding features.
+2. Build the mobile app: `cd modules/apps/mobile && npm install && npm run build`.
+3. Run tests: `npm test` (in the mobile package).

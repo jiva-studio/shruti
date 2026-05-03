@@ -1,0 +1,43 @@
+name: Mobile Android setup
+description: >
+  Node + Java + Android SDK + Ruby + bundler + npm deps + web artifact.
+  Shared setup for any job that runs Fastlane / gradle in the mobile Android project.
+
+  No actions/cache here — the self-hosted runner persists tool installs
+  (RUNNER_TOOL_CACHE: Node, JDK; ANDROID_SDK_ROOT) and the user's HOME
+  (~/.npm, ~/.gradle/caches, bundler) across ephemeral cycles, which gives
+  warm-cache behavior without the GitHub upload/download round trip.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: zulu
+        java-version: 21
+
+    - uses: android-actions/setup-android@v3
+      with:
+        # Pin only what AAB build needs (per modules/apps/mobile/android/variables.gradle:
+        # compileSdk=36, AGP 8.13.2 → build-tools 36). Skipping the action's
+        # default `tools` (legacy SDK tools) and not requesting `emulator` /
+        # `system-images;*` cuts ~500 MB off setup time on each cold runner.
+        packages: platform-tools platforms;android-36 build-tools;36.0.0
+
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: "3.3"
+        bundler-cache: true
+        working-directory: modules/apps/mobile
+
+    - shell: bash
+      run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+
+    - uses: actions/download-artifact@v5
+      with:
+        name: mobile-web-dist
+        path: modules/apps/mobile/dist

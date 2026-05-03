@@ -1,0 +1,252 @@
+/* Shruti — Saffron & Coffee.
+ * Vibrant burnt-saffron primary on warm cream / espresso backgrounds.
+ * Light values in :root; dark overrides under @media (prefers-color-scheme: dark).
+ * Ionic component-level dark adjustments come from
+ * @ionic/vue/css/palettes/dark.system.css (imported in main.ts).
+ */
+
+:root {
+  /* Brand — warm saffron, dialed back from neon */
+  --ion-color-primary: #cc7a3d;
+  --ion-color-primary-rgb: 204, 122, 61;
+  --ion-color-primary-contrast: #faf5ea;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #b36b36;
+  --ion-color-primary-tint: #d18750;
+
+  /* Secondary — muted moss (cool counterweight to the warm primary) */
+  --ion-color-secondary: #5c7a6f;
+  --ion-color-secondary-rgb: 92, 122, 111;
+  --ion-color-secondary-contrast: #faf5ea;
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: #516b62;
+  --ion-color-secondary-tint: #6c877d;
+
+  /* Tertiary — warm slate */
+  --ion-color-tertiary: #8a7a6b;
+  --ion-color-tertiary-rgb: 138, 122, 107;
+  --ion-color-tertiary-contrast: #faf5ea;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #796b5e;
+  --ion-color-tertiary-tint: #96877a;
+
+  /* Success — saturated leaf green */
+  --ion-color-success: #5b9358;
+  --ion-color-success-rgb: 91, 147, 88;
+  --ion-color-success-contrast: #faf5ea;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #50814d;
+  --ion-color-success-tint: #6b9f69;
+
+  /* Warning — golden honey */
+  --ion-color-warning: #e8a82c;
+  --ion-color-warning-rgb: 232, 168, 44;
+  --ion-color-warning-contrast: #2e1f15;
+  --ion-color-warning-contrast-rgb: 46, 31, 21;
+  --ion-color-warning-shade: #cc9427;
+  --ion-color-warning-tint: #eab142;
+
+  /* Danger — saturated crimson */
+  --ion-color-danger: #b83838;
+  --ion-color-danger-rgb: 184, 56, 56;
+  --ion-color-danger-contrast: #faf5ea;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #a23131;
+  --ion-color-danger-tint: #be4c4c;
+
+  /* Light — subtle warm surface (used by .settings-item-icon, .chip.off) */
+  --ion-color-light: #f0e6d5;
+  --ion-color-light-rgb: 240, 230, 213;
+  --ion-color-light-contrast: #3d2b1f;
+  --ion-color-light-contrast-rgb: 61, 43, 31;
+  --ion-color-light-shade: #d3cabb;
+  --ion-color-light-tint: #f2e9d9;
+
+  /* Medium — warm gray for icons/captions */
+  --ion-color-medium: #8c7b6b;
+  --ion-color-medium-rgb: 140, 123, 107;
+  --ion-color-medium-contrast: #faf5ea;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: #7b6c5e;
+  --ion-color-medium-tint: #98887a;
+
+  /* Dark — primary text */
+  --ion-color-dark: #3d2b1f;
+  --ion-color-dark-rgb: 61, 43, 31;
+  --ion-color-dark-contrast: #faf5ea;
+  --ion-color-dark-contrast-rgb: 255, 255, 255;
+  --ion-color-dark-shade: #36261c;
+  --ion-color-dark-tint: #514035;
+
+  /* Page chrome */
+  --ion-background-color: #faf5ea;
+  --ion-background-color-rgb: 250, 245, 234;
+
+  --ion-text-color: #3d2b1f;
+  --ion-text-color-rgb: 61, 43, 31;
+
+  --ion-border-color: #e8ddc8;
+
+  --ion-toolbar-background: #faf5ea;
+  --ion-toolbar-color: #3d2b1f;
+
+  --ion-tab-bar-background: rgba(250, 245, 234, 0.85);
+  --ion-tab-bar-color: #8c7b6b;
+  --ion-tab-bar-color-selected: #cc7a3d;
+
+  --ion-card-background: #faf5ea;
+  --ion-card-color: #3d2b1f;
+
+  /* Immersive (always-dark) surface — used by the transcript modal which
+   * stays dark regardless of system theme. Defined once at :root so it is
+   * available in both themes via a single palette token. */
+  --shruti-immersive-background: #1a130d;
+  --shruti-immersive-text: #c0b8a8;
+
+  /* Warm step colors — Ionic falls back to neutral grays (#666 etc.) for
+   * secondary text / dividers if these aren't set, which leaks cool gray
+   * into the warm cream theme. Keep the gradient warm. */
+  --ion-color-step-50: #f3ede0;
+  --ion-color-step-100: #ece5d6;
+  --ion-color-step-150: #e5ddcc;
+  --ion-color-step-200: #ddd4c0;
+  --ion-color-step-250: #d3c8b0;
+  --ion-color-step-300: #c2b59a;
+  --ion-color-step-350: #b09c7d;
+  --ion-color-step-400: #9c8767;
+  --ion-color-step-450: #8a7457;
+  --ion-color-step-500: #7a6449;
+  --ion-color-step-550: #6c563d;
+  --ion-color-step-600: #9c8767;
+  --ion-color-step-650: #564228;
+  --ion-color-step-700: #4d3a23;
+  --ion-color-step-750: #46341e;
+  --ion-color-step-800: #3f2e1a;
+  --ion-color-step-850: #3a2916;
+  --ion-color-step-900: #352513;
+  --ion-color-step-950: #2f1f0e;
+}
+
+/* --ion-item-background needs :root.ios / :root.md specificity to beat
+ * Ionic's per-platform defaults. */
+:root.ios,
+:root.md {
+  --ion-item-background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Brand — saffron lightened for dark backgrounds */
+    --ion-color-primary: #f0a55c;
+    --ion-color-primary-rgb: 240, 165, 92;
+    --ion-color-primary-contrast: #3d2b1f;
+    --ion-color-primary-contrast-rgb: 26, 19, 13;
+    --ion-color-primary-shade: #d49150;
+    --ion-color-primary-tint: #f2ae6c;
+
+    --ion-color-secondary: #7fa193;
+    --ion-color-secondary-rgb: 127, 161, 147;
+    --ion-color-secondary-contrast: #3d2b1f;
+    --ion-color-secondary-contrast-rgb: 26, 19, 13;
+    --ion-color-secondary-shade: #708e81;
+    --ion-color-secondary-tint: #8caa9e;
+
+    --ion-color-tertiary: #b09a87;
+    --ion-color-tertiary-rgb: 176, 154, 135;
+    --ion-color-tertiary-contrast: #3d2b1f;
+    --ion-color-tertiary-contrast-rgb: 26, 19, 13;
+    --ion-color-tertiary-shade: #9b8877;
+    --ion-color-tertiary-tint: #b8a493;
+
+    --ion-color-success: #7cb578;
+    --ion-color-success-rgb: 124, 181, 120;
+    --ion-color-success-contrast: #3d2b1f;
+    --ion-color-success-contrast-rgb: 26, 19, 13;
+    --ion-color-success-shade: #6d9f6a;
+    --ion-color-success-tint: #89bc86;
+
+    --ion-color-warning: #f0bd5c;
+    --ion-color-warning-rgb: 240, 189, 92;
+    --ion-color-warning-contrast: #3d2b1f;
+    --ion-color-warning-contrast-rgb: 26, 19, 13;
+    --ion-color-warning-shade: #d3a651;
+    --ion-color-warning-tint: #f2c46c;
+
+    --ion-color-danger: #d87878;
+    --ion-color-danger-rgb: 216, 120, 120;
+    --ion-color-danger-contrast: #3d2b1f;
+    --ion-color-danger-contrast-rgb: 26, 19, 13;
+    --ion-color-danger-shade: #be6a6a;
+    --ion-color-danger-tint: #dc8686;
+
+    /* Subtle surface flipped to a warm dark tone — keeps icon backgrounds
+     * and off-chips readable without bright patches. */
+    --ion-color-light: #261c13;
+    --ion-color-light-rgb: 38, 28, 19;
+    --ion-color-light-contrast: #f0e5d2;
+    --ion-color-light-contrast-rgb: 240, 229, 210;
+    --ion-color-light-shade: #211911;
+    --ion-color-light-tint: #3b3128;
+
+    --ion-color-medium: #a89684;
+    --ion-color-medium-rgb: 168, 150, 132;
+    --ion-color-medium-contrast: #3d2b1f;
+    --ion-color-medium-contrast-rgb: 26, 19, 13;
+    --ion-color-medium-shade: #948474;
+    --ion-color-medium-tint: #b1a190;
+
+    /* "dark" semantic flipped to cream — components using it as text. */
+    --ion-color-dark: #f0e5d2;
+    --ion-color-dark-rgb: 240, 229, 210;
+    --ion-color-dark-contrast: #3d2b1f;
+    --ion-color-dark-contrast-rgb: 26, 19, 13;
+    --ion-color-dark-shade: #d3c9b9;
+    --ion-color-dark-tint: #f2e8d7;
+
+    --ion-background-color: #1a130d;
+    --ion-background-color-rgb: 26, 19, 13;
+
+    --ion-text-color: #c0b8a8;
+    --ion-text-color-rgb: 192, 184, 168;
+
+    --ion-border-color: #2e2218;
+
+    --ion-toolbar-background: #1f1611;
+    --ion-toolbar-color: #c0b8a8;
+
+    --ion-tab-bar-background: rgba(26, 19, 13, 0.85);
+    --ion-tab-bar-color: #a89684;
+    --ion-tab-bar-color-selected: #f0a55c;
+
+    --ion-card-background: #261c13;
+    --ion-card-color: #c0b8a8;
+
+    /* Warm step colors — replace Ionic's cool grayscale steps so secondary
+     * text, dividers, captions, etc. stay in the warm espresso family
+     * instead of leaking cool gray into the dark theme. */
+    --ion-color-step-50: #221811;
+    --ion-color-step-100: #29201a;
+    --ion-color-step-150: #322822;
+    --ion-color-step-200: #3b302b;
+    --ion-color-step-250: #463a34;
+    --ion-color-step-300: #57473e;
+    --ion-color-step-350: #6b574c;
+    --ion-color-step-400: #816c5f;
+    --ion-color-step-450: #927d6f;
+    --ion-color-step-500: #a48f7f;
+    --ion-color-step-550: #b3a191;
+    --ion-color-step-600: #c0b09f;
+    --ion-color-step-650: #ccbfb0;
+    --ion-color-step-700: #d6cdc0;
+    --ion-color-step-750: #dfd9cf;
+    --ion-color-step-800: #e7e2d8;
+    --ion-color-step-850: #ede9e0;
+    --ion-color-step-900: #f1eee5;
+    --ion-color-step-950: #faf7f1;
+  }
+
+  :root.ios,
+  :root.md {
+    --ion-item-background: transparent;
+  }
+}
