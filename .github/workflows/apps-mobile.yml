@@ -1,354 +1,353 @@
-name: Apps / Mobile
+name: app
 
 on:
   push:
+    branches: [main]
     paths:
-      - "modules/apps/mobile/**"
-      - "modules/libs/audioPlayer/**"
-      - ".github/workflows/apps-mobile.yml"
+      - modules/apps/mobile/**
+      - modules/plugins/**
+      - modules/libs/**
+      - modules/tests/e2e/**
+      - modules/db-scheme.json
+      - modules/db-sync.sh
+      - .github/workflows/apps-mobile.yml
+      - .github/actions/audio-player-build/**
+      - .github/actions/mobile-android-setup/**
+      - .github/actions/mobile-ios-setup/**
+  pull_request:
+    branches: [main]
+    paths:
+      - modules/apps/mobile/**
+      - modules/plugins/**
+      - modules/libs/**
+      - modules/tests/e2e/**
+      - modules/db-scheme.json
+      - modules/db-sync.sh
+      - .github/workflows/apps-mobile.yml
+      - .github/actions/audio-player-build/**
+      - .github/actions/mobile-android-setup/**
+      - .github/actions/mobile-ios-setup/**
+  workflow_dispatch:
 
 concurrency:
-  group: mobile-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  actions: write
-
-env:
-  REGISTRY: ghcr.io
-  ORGANIZATION: akdasa-studios
+  group: apps-mobile-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # ---------------------------------------------------------------------------- #
-  #                               Build Ionic Bundle                             #
-  # ---------------------------------------------------------------------------- #
-
-  build-ionic:
-    name: Build Ionic App
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.release_version.outputs.version }}
-      build_number: ${{ steps.release_version.outputs.build_number }}
-
+  # -------------------------------------------------------------------------- #
+  lint:
+    name: lint
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      # ------------------------------- Get Meta Info ------------------------------ #
-      - name: Get Version from package.json
-        id: release_version
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=$(jq -r '.version' modules/apps/mobile/package.json)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "build_number=$(( GITHUB_RUN_NUMBER + 600 ))" >> "$GITHUB_OUTPUT"
-
-      # -------------------------- Install Dev Environment ------------------------- #
-
-      - name: 🧰 Install Node.js
-        id: node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: |
-            modules/apps/mobile/package-lock.json
-            modules/libs/audioPlayer/package-lock.json
+          node-version: 24
+      - uses: ./.github/actions/audio-player-build
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - run: cd modules/apps/mobile && npm run lint
 
-      # ------------------------------- Configuration ------------------------------ #
-
-      - name: ✏️ Write env.ts
-        run: |
-          cat << EOF > ./modules/apps/mobile/src/env.ts
-          export const ENVIRONMENT = {
-            release:             "${{ steps.release_version.outputs.version }}",
-            dist:                "${{ steps.release_version.outputs.build_number  }}",
-            sentryDsn:           "${{ secrets.SENTRY_DSN }}",
-            revenueCatGoogleKey: "${{ secrets.GOOGLE_REVENUE_CAT_KEY }}",
-            revenueCatAppleKey:  "${{ secrets.APPLE_REVENUE_CAT_KEY }}",
-            amplitudeKey:        "${{ secrets.AMPLITUDE_KEY }}",
-            readonlyAuthToken:   "${{ secrets.READONLY_AUTH_TOKEN }}",
-            apiUrl:              "${{ vars.API_URL      || 'http://localhost:8101/' }}",
-            databaseUrl:         "${{ vars.DATABASE_URL || 'http://localhost:5984/' }}",
-            bucketName:          "${{ vars.BUCKET_NAME  || 'shruti-dev' }}",
-            iOSClientId:         "${{ vars.OATUH_GOOGLE_IOS_CLIENT_ID }}",
-            googleWebClientId:   "${{ vars.OATUH_GOOGLE_WEB_CLIENT_ID }}",
-          }
-          EOF
-
-      # ----------------------------------- Build ---------------------------------- #
-
-      - name: 👷 Build Audio Player Plugin
-        working-directory: modules/libs/audioPlayer
-        run: |
-          npm ci --no-audit --no-fund --prefer-offline
-          npm run build
-
-      - name: 👷 Build Ionic App
-        working-directory: modules/apps/mobile
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          BUILD_NUMBER: ${{ steps.release_version.outputs.build_number }}
-        run: |
-          npm ci --no-audit --no-fund --prefer-offline
-          npm run build
-
-      # --------------------------------- Artifacts -------------------------------- #
-
-      - name: ⬇️ Download Database from S3
-        working-directory: /tmp
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.BUCKET_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.BUCKET_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ vars.BUCKET_REGION_NAME }}
-          BUCKET_ENDPOINT_URL: ${{ vars.BUCKET_ENDPOINT_URL }}
-          BUCKET_NAME: ${{ vars.BUCKET_NAME }}
-        run: |
-          set -euo pipefail
-          mkdir -p ./databases/
-          files=(
-            "artifacts/bundled-data/tracks.db"
-            "artifacts/bundled-data/tracks.db-mrview-901296fddda39433e93ca2223f2f0cd6"
-            "artifacts/bundled-data/tracks.db-mrview-3b9f49811f1b73b6da3d10c5dc9876fb"
-            "artifacts/bundled-data/index.db"
-            "artifacts/bundled-data/dictionary.db"
-          )
-          for file in "${files[@]}"; do
-            aws --endpoint-url "$BUCKET_ENDPOINT_URL" \
-              s3 cp "s3://$BUCKET_NAME/$file" \
-              "./databases/$(basename "$file")"
-          done
-
-      - name: ⬆️ Upload Ionic bundle
-        uses: actions/upload-artifact@v4
+  test:
+    name: test / unit
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          name: apps-mobile-ionic
+          node-version: 24
+      - uses: ./.github/actions/audio-player-build
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - run: cd modules/apps/mobile && npm test
+
+  build-web:
+    name: build
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: ./.github/actions/audio-player-build
+      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+      - name: build web bundle
+        # Vite reads BUILD_ID via process.env and inlines it as __BUILD_ID__
+        # (shown in Settings → About). Version comes from package.json.
+        env:
+          BUILD_ID: ${{ github.run_number }}
+        run: cd modules/apps/mobile && npm run build
+      - uses: actions/upload-artifact@v5
+        with:
+          name: mobile-web-dist
           path: modules/apps/mobile/dist
-          if-no-files-found: error
-          retention-days: 5
+          retention-days: 3
 
-      - name: ⬆️ Upload Databases bundle
-        uses: actions/upload-artifact@v4
+  # The e2e suite isn't committed yet. Probe at runtime so the job no-ops
+  # cleanly until `modules/tests/e2e/` lands; deploy jobs don't depend on
+  # this one, so absence doesn't block releases (a failing suite still does).
+  e2e:
+    name: test / e2e
+    needs: [build-web]
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+      - name: detect e2e suite
+        id: check_e2e
+        run: |
+          if [ -f modules/tests/e2e/package-lock.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::modules/tests/e2e/ not present yet — skipping Playwright."
+          fi
+      - if: steps.check_e2e.outputs.present == 'true'
+        uses: actions/setup-node@v5
         with:
-          name: apps-mobile-databases
-          path: /tmp/databases
-          if-no-files-found: error
-          retention-days: 5
+          node-version: 24
+      - if: steps.check_e2e.outputs.present == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          name: mobile-web-dist
+          path: modules/apps/mobile/dist
+      - if: steps.check_e2e.outputs.present == 'true'
+        run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
+      # `playwright install` is a no-op when the requested browser is already
+      # in $HOME/Library/Caches/ms-playwright, which persists on the
+      # self-hosted runner across ephemeral cycles.
+      - if: steps.check_e2e.outputs.present == 'true'
+        run: cd modules/tests/e2e && npx playwright install chromium
+      # Self-hosted runners share localhost — a fixed port collides between
+      # parallel jobs and with stale dev-server processes from prior runs.
+      # Pick a random ephemeral port; playwright.config.ts reads E2E_PORT.
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: pick e2e port
+        run: echo "E2E_PORT=$((20000 + RANDOM % 40000))" >> "$GITHUB_ENV"
+      - if: steps.check_e2e.outputs.present == 'true'
+        name: run playwright
+        env:
+          E2E_USE_BUNDLE: "1"
+        run: cd modules/tests/e2e && npx playwright test
+      - if: always() && steps.check_e2e.outputs.present == 'true'
+        name: upload playwright report
+        uses: actions/upload-artifact@v5
+        with:
+          name: e2e-playwright-report
+          path: modules/tests/e2e/playwright-report/
+          retention-days: 30
 
-  # ---------------------------------------------------------------------------- #
-  #                               Build Android App                              #
-  # ---------------------------------------------------------------------------- #
+  # -------------------------------------------------------------------------- #
+  # Cloudflare Pages: PR preview and production web deploy.
+  # Both jobs no-op when CF secrets are absent so CI passes on repos that
+  # haven't wired up the shruti-preview Pages project yet.
+  # -------------------------------------------------------------------------- #
+  deploy-preview:
+    name: web / pr
+    needs: [lint, test, build-web]
+    # Dependabot PR contexts get an empty `secrets` map, so wrangler would fail
+    # with "CLOUDFLARE_API_TOKEN must be set". Skip preview for those PRs.
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, macos, mac-host]
+    permissions:
+      contents: read
+      pull-requests: write
+      deployments: write
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: mobile-web-dist
+          path: dist
+      - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=shruti-preview --branch=pr-${{ github.event.number }}
+      - if: steps.deploy.outputs.deployment-url != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview
+          message: |
+            ### 🚀 Preview deploy ready
+            - **Stable alias (follows this PR):** https://pr-${{ github.event.number }}.shruti-preview.pages.dev
+            - **This exact build:** ${{ steps.deploy.outputs.deployment-url }}
+            - **Commit:** `${{ github.event.pull_request.head.sha }}`
 
+  deploy-production:
+    name: web / main
+    needs: [lint, test, build-web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macos, mac-host]
+    permissions:
+      contents: read
+      deployments: write
+    concurrency:
+      group: production-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: mobile-web-dist
+          path: dist
+      - id: deploy
+        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=shruti-preview --branch=main
+      - if: steps.deploy.outputs.deployment-url != ''
+        run: |
+          echo "Production: https://shruti-preview.pages.dev"
+          echo "This build: ${{ steps.deploy.outputs.deployment-url }}"
+
+  # -------------------------------------------------------------------------- #
+  # Android — single build job produces debug APK + signed release AAB.
+  # -------------------------------------------------------------------------- #
   build-android:
-    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '#deploy')
-    name: Build Android App
-    runs-on: ubuntu-latest
-    needs: [build-ionic]
-    defaults:
-      run:
-        working-directory: modules/apps/mobile
-
+    name: android / build
+    needs: [build-web]
+    # Dependabot PR contexts get no secrets, so the signing keystore is empty
+    # and fastlane fails with "KEYSTORE_BASE64 env var is required".
+    if: github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      # -------------------------- Install Dev Environment ------------------------- #
-
-      - name: 🧰 Install Node.js
-        id: node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: |
-            modules/apps/mobile/package-lock.json
-            modules/libs/audioPlayer/package-lock.json
-
-      - name: 📦 Install Node Dependencies
-        run: npm ci --no-audit --no-fund --prefer-offline
-
-      - name: 💾 Install Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: 🤖 Install Android SDK
-        uses: android-actions/setup-android@v2
-
-      - name: 📝 Accept Android SDK licenses
-        shell: bash
-        run: yes "" | sdkmanager --licenses || true
-
-      - name: 📦 Install Gem Dependencies
-        working-directory: modules/apps/mobile/android
-        shell: bash
-        run: |
-          sudo gem install bundler
-          sudo bundle install
-
-      # ------------------------------- Configuration ------------------------------ #
-
-      - name: 📜 Install Android Certificates
-        shell: bash
-        working-directory: data/keys/apk
-        run: echo "${{ secrets.ANDROID_KEYSTORE_FILE }}" | base64 -d > mobile.jks
-
-      - name: ⬇️ Download Ionic bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: apps-mobile-ionic
-          path: modules/apps/mobile/dist
-
-      - name: ⬇️ Download Databases bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: apps-mobile-databases
-          path: modules/apps/mobile/android/app/src/main/assets/databases
-
-      - name: 🧮 Update Version
-        shell: bash
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/mobile-android-setup
+      - name: build apk + aab
         env:
-          VERSION: ${{ needs.build-ionic.outputs.version }}
-          BUILD_ID: ${{ needs.build-ionic.outputs.build_number }}
-        run: npx trapeze run configuration.yml -y --android
+          KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEY_PASSWORD }}
+        run: cd modules/apps/mobile && bundle exec fastlane android build_all
+      - uses: actions/upload-artifact@v5
+        with:
+          name: app-debug
+          path: modules/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+      - uses: actions/upload-artifact@v5
+        with:
+          name: app-release-aab
+          path: modules/apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
 
-      - name: ⬇️ Sync Capacitor
-        run: npx cap sync android
-
-      # ----------------------------------- Build ---------------------------------- #
-
-      - name: 👷 Build Android AAB
-        working-directory: modules/apps/mobile
+  deploy-android:
+    name: android / deploy
+    needs: [lint, test, build-web, build-android]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Need full history + tags so release notes can diff against the
+          # previous mobile-v* tag (otherwise we fall back to last 30 commits).
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: modules/apps/mobile
+      - uses: actions/download-artifact@v5
+        with:
+          name: app-release-aab
+          path: /tmp/aab
+      - name: upload aab to play
         env:
-          APPSFLYER_KEY: ${{ secrets.APPSFLYER_KEY }}
+          # Org-level service-account JSON at akdasa-studios/ (visibility: all).
+          # One service account uploads to every akdasa-studios Play app as long
+          # as it's been granted Release Manager on each in Play Console.
           GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
-        run: |
-          npx cap build android \
-          --keystorepath ../../../../data/keys/apk/mobile.jks \
-          --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
-          --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
-          --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
-          --androidreleasetype AAB
-          (cd ./android && bundle exec fastlane deploy)
+          # Used by ReleaseNotes to call Bedrock (Claude) for marketing-style
+          # "What's new" text. Org-level secrets at akdasa-studios/.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: cd modules/apps/mobile && bundle exec fastlane android upload aab:/tmp/aab/app-release.aab
 
-      - name: 👷 Build Android APK
-        working-directory: modules/apps/mobile
-        env:
-          APPSFLYER_KEY: ${{ secrets.APPSFLYER_KEY }}
-          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
-        run: |
-          npx cap build android \
-          --keystorepath ../../../../data/keys/apk/mobile.jks \
-          --keystorepass ${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
-          --keystorealias ${{ secrets.ANDROID_KEYSTORE_ALIAS }} \
-          --keystorealiaspass ${{ secrets.ANDROID_KEYSTORE_ALIAS_PASSWORD }} \
-          --androidreleasetype APK
-
-      # --------------------------------- Artifacts -------------------------------- #
-
-      - name: ⬆️ Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: apps-mobile-android
-          path: modules/apps/mobile/android/app/build/outputs/
-          if-no-files-found: error
-          retention-days: 5
-
-  # ---------------------------------------------------------------------------- #
-  #                                Build & Deploy iOS                            #
-  # ---------------------------------------------------------------------------- #
-
+  # -------------------------------------------------------------------------- #
+  # iOS — build signed IPA, upload to TestFlight on main.
+  # The ios/ folder may not yet exist (needs `npx cap add ios` on a Mac) — in
+  # that case the build step is skipped via the check_ios guard below.
+  # -------------------------------------------------------------------------- #
   build-ios:
-    if: github.ref == 'refs/heads/main' || contains(github.event.head_commit.message, '#deploy')
-    name: Build iOS App
-    runs-on: macos-15
-    needs: [build-ionic]
-    defaults:
-      run:
-        working-directory: modules/apps/mobile
-
+    name: ios / build
+    needs: [build-web]
+    # Same reason as build-android — dependabot PRs get empty secrets, so the
+    # APPLE_CERTIFICATES zip is empty and unzip fails.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: [self-hosted, macos, mac-host]
     steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-
-      # -------------------------- Build Env Dependencies -------------------------- #
-
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.4.0'
-
-      - name: 🧰 Install Node.js
-        id: node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: |
-            modules/apps/mobile/package-lock.json
-            modules/libs/audioPlayer/package-lock.json
-
-      - name: 📦 Install Node Dependencies
-        run: npm ci --no-audit --no-fund --prefer-offline
-
-      - name: 📦 Install Gem Dependencies
-        working-directory: modules/apps/mobile/ios/App
+      - uses: actions/checkout@v5
+      - name: check ios project
+        id: check_ios
         shell: bash
         run: |
-          sudo gem install bundler
-          sudo bundle install
-
-      # ----------------------------- App Dependencies ----------------------------- #
-
-      - name: ⬇️ Download Ionic bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: apps-mobile-ionic
-          path: modules/apps/mobile/dist
-
-      - name: ⬇️ Download Databases bundle
-        uses: actions/download-artifact@v4
-        with:
-          name: apps-mobile-databases
-          path: modules/apps/mobile/ios/App/App/databases
-
-      - name: ⬇️ Sync Capacitor
-        run: npx cap sync ios
-
-      - name: 📜 Install iOS Certificates
-        shell: bash
-        working-directory: modules/apps/mobile/ios/App/fastlane
-        run: |
-          echo ${{ secrets.APPLE_CERTIFICATES }} | base64 -d > output.zip && unzip output.zip
-
-      # --------------------------------- Build App -------------------------------- #
-
-      - name: 👷 Build iOS App
-        working-directory: modules/apps/mobile/ios/App
+          if [ -d "modules/apps/mobile/ios/App" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::modules/apps/mobile/ios/ not present yet — run 'npx cap add ios' on a Mac and commit the project. Skipping iOS build."
+          fi
+      - if: steps.check_ios.outputs.present == 'true'
+        uses: ./.github/actions/mobile-ios-setup
+      - name: build ipa
+        if: steps.check_ios.outputs.present == 'true'
         env:
-          VERSION: ${{ needs.build-ionic.outputs.version }}
-          BUILD_NUMBER: ${{ needs.build-ionic.outputs.build_number }}
-          BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
-          BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
-          BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
-          BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+          APPLE_CERTIFICATES: ${{ secrets.SHRUTI_APPLE_CERTIFICATES }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
           APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
           APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
           APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
-        run: |
-          bundle exec fastlane staging
-
-      # --------------------------------- Artifacts -------------------------------- #
-
-      - name: ⬆️ Upload Artifact
-        uses: actions/upload-artifact@v4
+        run: cd modules/apps/mobile && bundle exec fastlane ios build
+      - if: steps.check_ios.outputs.present == 'true'
+        uses: actions/upload-artifact@v5
         with:
-          name: apps-mobile-ios
-          path: |
-            modules/apps/mobile/ios/App/build/*.ipa
-            modules/apps/mobile/ios/App/App.ipa
-          if-no-files-found: error
-          retention-days: 5
+          name: app-release-ipa
+          path: modules/apps/mobile/ios/App/build/App.ipa
+          retention-days: 14
+
+  deploy-ios:
+    name: ios / deploy
+    needs: [lint, test, build-web, build-ios]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check ipa artifact
+        id: check_ipa
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: app-release-ipa
+          path: /tmp/ipa
+      - if: steps.check_ipa.outcome == 'success'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: modules/apps/mobile
+      - name: upload ipa to testflight
+        if: steps.check_ipa.outcome == 'success'
+        env:
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+          # Org-level secrets at akdasa-studios/ (visibility: all) — shared with grammoria.
+          BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
+          BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
+          BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
+          BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: cd modules/apps/mobile && bundle exec fastlane ios upload ipa:/tmp/ipa/App.ipa

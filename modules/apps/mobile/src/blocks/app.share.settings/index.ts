@@ -1,1 +1,0 @@
-export { default as ShareAudioExcerptSettingsItem } from './components/ShareAudioExcerptSettingsItem.vue'

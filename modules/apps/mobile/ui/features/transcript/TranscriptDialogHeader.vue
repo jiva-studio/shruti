@@ -1,0 +1,40 @@
+<template>
+  <div class="card">
+    <h1 v-if="title" class="title">
+      {{ title }}
+    </h1>
+    <p v-if="author" class="author">
+      {{ author }}
+    </p>
+  </div>
+</template>
+
+<script setup lang="ts">
+defineProps<{
+  title: string
+  author: string
+}>()
+</script>
+
+<style scoped>
+.card {
+  padding: 2px;
+}
+
+.title {
+  color: var(--ion-text-color);
+  text-align: center;
+  font-size: 1.4rem;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  line-height: 1.1;
+}
+
+.author {
+  opacity: 0.8;
+  color: var(--ion-text-color);
+  text-align: center;
+  font-size: 14px;
+  margin: 12px 0px;
+}
+</style>
