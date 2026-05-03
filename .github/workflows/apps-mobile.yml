@@ -254,8 +254,10 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-          bundler-cache: true
+          bundler-cache: false
           working-directory: modules/apps/mobile
+      - shell: bash
+        run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
       - uses: actions/download-artifact@v5
         with:
           name: app-release-aab
@@ -335,8 +337,11 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-          bundler-cache: true
+          bundler-cache: false
           working-directory: modules/apps/mobile
+      - if: steps.check_ipa.outcome == 'success'
+        shell: bash
+        run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
       - name: upload ipa to testflight
         if: steps.check_ipa.outcome == 'success'
         env:

@@ -4,11 +4,12 @@ description: >
   for any job that runs Fastlane / xcodebuild in the mobile iOS project.
   The project is SPM-based — no CocoaPods.
 
-  No actions/cache for SwiftPM here — the self-hosted mac-host runner
-  persists ~/Library/Developer/Xcode (DerivedData, SourcePackages) and
-  ~/Library/Caches/org.swift.swiftpm across ephemeral cycles, which gives
-  warm-cache behaviour without paying the GitHub upload/download cost
-  (which was hanging 15+ min on the post-step).
+  No GitHub Actions caching anywhere in this action — the self-hosted
+  mac-host runner persists ~/Library/Developer/Xcode (DerivedData,
+  SourcePackages), ~/Library/Caches/org.swift.swiftpm, ~/.npm and the
+  Ruby bundle across ephemeral cycles. GHA cache upload was hanging
+  15+ min post-step at ~0.6 MB/s for ~1.8 GiB, with no payoff on a
+  warm runner.
 
 # Xcode version pin. Capacitor 8 requires Xcode 26+ (ionic-team/capacitor#8290).
 # Apple advances the App Store minimum ~yearly; check
@@ -29,14 +30,15 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version: 24
-        cache: npm
-        cache-dependency-path: modules/apps/mobile/package-lock.json
 
     - uses: ruby/setup-ruby@v1
       with:
         ruby-version: "3.3"
-        bundler-cache: true
+        bundler-cache: false
         working-directory: modules/apps/mobile
+
+    - shell: bash
+      run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
 
     - shell: bash
       run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
