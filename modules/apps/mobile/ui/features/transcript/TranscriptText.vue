@@ -1,6 +1,6 @@
 <template>
   <TextSelector
-    class="transcript-text"
+    :class="['transcript-text', { static: enableActiveProminence === false }]"
     dataset-field-start="data-time-start"
     dataset-field-end="data-time-end"
     @selecting="onSelecting"
@@ -50,6 +50,8 @@ const props = defineProps<{
   position: number
   duration: number
   shouldHighlightCurrentSentence: boolean
+  /** See TranscriptDialog — false suppresses the prompter scaling. */
+  enableActiveProminence?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -99,5 +101,12 @@ span {
   word-wrap: break-word;
   transform: scale(1.01);
   opacity: 1;
+}
+
+.transcript-text.static .prompter,
+.transcript-text.static .paragraph {
+  transform: none;
+  opacity: 1;
+  transition: none;
 }
 </style>

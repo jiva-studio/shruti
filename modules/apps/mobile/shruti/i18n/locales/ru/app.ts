@@ -9,6 +9,7 @@ export default {
   apply: "Применить",
   select: "Выбрать",
   cancel: "Отмена",
+  close: "Закрыть",
   delete: "Удалить",
   deleted: "Удалено",
   soon: "Скоро",

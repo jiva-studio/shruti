@@ -1,8 +1,11 @@
 export default {
   search: "Поиск | Поиск в {count} треке | Поиск в {count} треках",
-  alreadyInPlaylist: "Этот трек уже в плейлисте.",
   specifySearchCriteria:
     "Пожалуйста, введите поисковый запрос или выберите фильтры, чтобы найти больше.",
+  actions: {
+    addToPlaylist: "Добавить в плейлист",
+    openTranscript: "Открыть транскрипт",
+  },
   filters: {
     sort: "Порядок",
     authors: "Авторы",
@@ -17,9 +20,5 @@ export default {
     durationExtraLong: "Более 60 минут",
     sortByDate: "По дате",
     sortByReference: "По шлоке",
-  },
-  notifications: {
-    newTrackAddedToPlaylist:
-      "Трек добавлен в плейлист. Прослушать его можно на вкладке Главная после загрузки.",
   },
 }

@@ -26,6 +26,7 @@
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
       :should-highlight-current-sentence="dialog.highlightCurrentSentence.value"
+      :enable-active-prominence="dialog.mirrorsActivePlayer.value"
       :is-loading="dialog.isLoading.value"
       :error-message="dialog.error.value"
       :has-no-transcripts="dialog.hasNoTranscripts.value"
