@@ -1,0 +1,529 @@
+fastlane_version "2.228.0"
+
+require "base64"
+require "fileutils"
+require "json"
+require "tmpdir"
+require_relative "lib/release_notes"
+
+# Project root = modules/apps/mobile (parent of fastlane/)
+MOBILE_ROOT = File.expand_path("..", __dir__)
+
+# Marketing version — single source of truth lives in package.json.
+def mobile_version
+  @mobile_version ||= JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("version")
+end
+
+# Store build number — always $GITHUB_RUN_NUMBER in CI, empty locally.
+# Store-upload lanes enforce presence via require_ci_build_id!.
+def ci_build_id
+  ENV["GITHUB_RUN_NUMBER"].to_s.strip
+end
+
+# ---------------------------------------------------------------------------- #
+# Shared setup (runs before every lane on both platforms)
+# ---------------------------------------------------------------------------- #
+
+before_all do |lane|
+  # Upload-only and screenshot lanes don't build anything — skip web/cap/db
+  # setup entirely. (deploy-* runners have neither node nor native SDKs.)
+  next if lane == :upload
+  next if lane == :screenshots
+
+  platform_flag = lane_context[SharedValues::PLATFORM_NAME].to_s
+  next if platform_flag.empty?
+
+  # Web bundle — provided as artifact in CI, built locally on demand.
+  unless File.exist?(File.join(MOBILE_ROOT, "dist", "index.html"))
+    sh("cd #{MOBILE_ROOT.shellescape} && npm ci && npm run build")
+  end
+
+  # Sync Capacitor — copies web bundle into native project.
+  sh("cd #{MOBILE_ROOT.shellescape} && npx cap sync #{platform_flag}")
+
+  # Bundle production DB into native app assets. Must run after sync,
+  # which may clean the assets directory. The shared db-sync script
+  # (modules/db-sync.sh) reads the supported scheme from the single
+  # source of truth (modules/db-scheme.json) and distributes the latest
+  # compatible DB to the per-platform path.
+  if %w[android ios].include?(platform_flag)
+    # MOBILE_ROOT = modules/apps/mobile → ../../.. is the repo root.
+    repo_root = File.expand_path("../../..", MOBILE_ROOT)
+    sh("bash #{File.join(repo_root, 'modules/db-sync.sh').shellescape} #{platform_flag}")
+  end
+end
+
+# ---------------------------------------------------------------------------- #
+platform :android do
+  desc "Debug APK (unsigned)"
+  lane :build_debug do
+    gradle(
+      project_dir: File.join(MOBILE_ROOT, "android"),
+      task: "assembleDebug",
+      properties: version_properties,
+    )
+  end
+
+  desc "Signed release APK"
+  lane :build_release do
+    setup_keystore
+    gradle(
+      project_dir: File.join(MOBILE_ROOT, "android"),
+      task: "assembleRelease",
+      properties: version_properties.merge(signing_properties),
+    )
+  end
+
+  desc "Signed release AAB + upload to Google Play internal"
+  lane :deploy do
+    require_ci_build_id!
+    setup_keystore
+    gradle(
+      project_dir: File.join(MOBILE_ROOT, "android"),
+      task: "bundleRelease",
+      properties: version_properties.merge(signing_properties),
+    )
+    upload_to_play_store(**play_store_upload_params)
+  end
+
+  desc "Debug APK + signed release AAB in one gradle invocation"
+  lane :build_all do
+    setup_keystore
+    gradle(
+      project_dir: File.join(MOBILE_ROOT, "android"),
+      tasks: ["assembleDebug", "bundleRelease"],
+      properties: version_properties.merge(signing_properties),
+    )
+  end
+
+  desc "Upload existing signed AAB to Google Play internal (no rebuild)"
+  lane :upload do |options|
+    require_ci_build_id!
+    aab = options[:aab] || File.join(MOBILE_ROOT, "android/app/build/outputs/bundle/release/app-release.aab")
+    UI.user_error!("AAB not found at #{aab}") unless File.exist?(aab)
+    upload_to_play_store(**play_store_upload_params(aab: aab))
+  end
+
+  desc "Regenerate fixtures, capture screenshots via Playwright, upload to Google Play"
+  lane :screenshots do |options|
+    screenshots_tool = File.expand_path("../../tools/screenshots", MOBILE_ROOT)
+    metadata_root = File.join(__dir__, "metadata/android")
+
+    locales = (options[:locales] || "en,ru").split(",").map(&:strip)
+    locale_map = { "en" => "en-US", "ru" => "ru-RU" }.select { |k, _| locales.include?(k) }
+    device_map = {
+      "phone" => "phoneScreenshots",
+      "tablet7" => "sevenInchScreenshots",
+      "tablet10" => "tenInchScreenshots",
+    }
+    # Playwright project filter, e.g. "--project=android-en --project=tablet7-en"
+    project_flags = locales.flat_map { |l|
+      ["--project=android-#{l}", "--project=tablet7-#{l}", "--project=tablet10-#{l}"]
+    }.join(" ")
+
+    # 1. Regenerate deterministic user fixtures (selected locales × both modes).
+    unless options[:skip_generate]
+      sh("cd #{screenshots_tool.shellescape} && npm install --no-audit --no-fund")
+      locales.each do |loc|
+        ["default", "recall"].each do |mode|
+          sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc} --mode=#{mode}")
+        end
+      end
+    end
+
+    # 2. Capture screenshots via Playwright (filtered by --project flags).
+    unless options[:skip_capture]
+      sh("cd #{screenshots_tool.shellescape} && npx playwright test specs/capture.spec.ts #{project_flags}")
+    end
+
+    # 3. Wrap raw PNGs into marketing frames (title + device silhouette).
+    unless options[:skip_frame]
+      sh("cd #{screenshots_tool.shellescape} && npx playwright test specs/frame.spec.ts #{project_flags}")
+    end
+
+    # 4. Lay out framed PNGs where `supply` expects them.
+    #   out/framed/phone-<loc>/*.png    → images/phoneScreenshots/
+    #   out/framed/tablet7-<loc>/*.png → images/sevenInchScreenshots/
+    locale_map.each do |src_lang, play_locale|
+      device_map.each do |device, play_dir|
+        src = File.join(screenshots_tool, "out/framed/#{device}-#{src_lang}")
+        next unless Dir.exist?(src)
+        dst = File.join(metadata_root, play_locale, "images/#{play_dir}")
+        FileUtils.mkdir_p(dst)
+        FileUtils.rm_f(Dir.glob(File.join(dst, "*.png")))
+        Dir.glob(File.join(src, "*.png")).each do |png|
+          FileUtils.cp(png, dst)
+        end
+        UI.message("Staged #{Dir.glob(File.join(dst, '*.png')).size} screenshots → #{dst}")
+      end
+    end
+
+    # Supply scans every locale under metadata/android/ and tries to upload
+    # images found there. Wipe screenshot dirs for locales not in this run so
+    # stale PNGs (or locales without a Play Console listing yet) don't block
+    # the upload with "no title for language X" errors.
+    selected_play_locales = locale_map.values
+    Dir.glob(File.join(metadata_root, "*")).each do |loc_dir|
+      next unless File.directory?(loc_dir)
+      next if selected_play_locales.include?(File.basename(loc_dir))
+      device_map.each_value do |play_dir|
+        stale = File.join(loc_dir, "images", play_dir)
+        FileUtils.rm_rf(stale) if Dir.exist?(stale)
+      end
+    end
+
+    # 5. Upload only screenshots to Play (skip everything else).
+    next if options[:skip_upload]
+    play_params = {
+      track: "internal",
+      json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: false,
+      # Commit the edit, but do NOT auto-submit for review. User submits via
+      # Play Console UI after visually confirming the staged set.
+      changes_not_sent_for_review: true,
+      validate_only: options[:dry_run] ? true : false,
+    }
+    # When the internal track has multiple releases, supply errors out unless
+    # we say which one to attach the screenshots to. Use GITHUB_RUN_NUMBER,
+    # which matches the versionCode CI just produced.
+    play_params[:version_code] = ci_build_id.to_i unless ci_build_id.empty?
+    upload_to_play_store(**play_params)
+  end
+
+  # ---- private ----
+
+  private_lane :setup_keystore do
+    UI.user_error!("KEYSTORE_BASE64 env var is required") if ENV["KEYSTORE_BASE64"].to_s.empty?
+    path = File.join(MOBILE_ROOT, "android/app/keystore/release.jks")
+    FileUtils.mkdir_p(File.dirname(path))
+    File.binwrite(path, Base64.decode64(ENV["KEYSTORE_BASE64"]))
+    ENV["KEYSTORE_PATH"] = path
+    UI.message("Keystore decoded (#{File.size(path)} bytes)")
+  end
+
+  def version_properties
+    props = { "versionName" => mobile_version }
+    props["versionCode"] = ci_build_id unless ci_build_id.empty?
+    props
+  end
+
+  def signing_properties
+    {
+      "android.injected.signing.store.file"     => ENV["KEYSTORE_PATH"],
+      "android.injected.signing.store.password" => ENV["KEYSTORE_PASSWORD"].to_s.strip,
+      "android.injected.signing.key.alias"      => ENV["KEY_ALIAS"].to_s.strip,
+      "android.injected.signing.key.password"   => ENV["KEY_PASSWORD"].to_s.strip,
+    }
+  end
+
+  PLAY_LOCALES = %w[en-US ru-RU].freeze
+  # Absolute path: fastlane chdirs into actions with a different CWD than the
+  # lane body, so a `__dir__`-based relative path resolves differently for
+  # `write_play_changelog_files!` (writes from fastlane/) and for `supply`
+  # (reads from MOBILE_ROOT after fastlane's `Dir.chdir("..")`).
+  PLAY_METADATA_PATH = File.join(MOBILE_ROOT, "fastlane/metadata/android")
+
+  def play_store_upload_params(aab: nil)
+    # `supply` doesn't accept inline release notes — it reads them from
+    # metadata/android/<locale>/changelogs/<version_code>.txt. Generate
+    # per-locale notes via ReleaseNotes (LLM-curated, with raw fallback)
+    # and stage the files before upload.
+    write_play_changelog_files!
+    {
+      track: "internal",
+      aab: aab || File.join(MOBILE_ROOT, "android/app/build/outputs/bundle/release/app-release.aab"),
+      json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+      release_status: "draft", # Required while the app itself is in draft in Play Console
+      # Play Console "release name" — supply calls this version_name. Without
+      # it, supply keeps whatever name the existing draft on the track already
+      # has, so the label stays stuck at an old value even as new AABs land.
+      version_name: mobile_version,
+      metadata_path: PLAY_METADATA_PATH,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+    }
+  end
+
+  def write_play_changelog_files!
+    build_id = ci_build_id
+    return if build_id.empty?
+    notes = ReleaseNotes.generate(locales: PLAY_LOCALES)
+    PLAY_LOCALES.each do |locale|
+      dir = File.join(PLAY_METADATA_PATH, locale, "changelogs")
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, "#{build_id}.txt"), notes.fetch(locale))
+    end
+  end
+end
+
+# ---------------------------------------------------------------------------- #
+platform :ios do
+  IOS_PROJECT_DIR = File.join(MOBILE_ROOT, "ios/App")
+  IOS_WORKSPACE = File.join(IOS_PROJECT_DIR, "App.xcworkspace")
+  IOS_XCODEPROJ = File.join(IOS_PROJECT_DIR, "App.xcodeproj")
+  IOS_BUNDLE_ID = "studio.jiva.shruti"
+  IOS_SCHEME = "App"
+  IOS_PROVISIONING_PROFILE_NAME = "Lectorium Distribution"
+  IOS_IPA_PATH = File.join(MOBILE_ROOT, "ios/App/build/App.ipa")
+
+  desc "Build a signed App Store IPA"
+  lane :build do
+    setup_ios_keychain
+    import_ios_certificates
+    install_ios_provisioning_profiles
+
+    update_code_signing_settings(
+      path: IOS_XCODEPROJ,
+      use_automatic_signing: false,
+      team_id: ENV.fetch("APPLE_STORE_TEAM_ID"),
+      bundle_identifier: IOS_BUNDLE_ID,
+      code_sign_identity: "Apple Distribution",
+      profile_name: IOS_PROVISIONING_PROFILE_NAME,
+      targets: ["App"],
+      build_configurations: ["Release"],
+    )
+
+    increment_version_number(version_number: mobile_version, xcodeproj: IOS_XCODEPROJ)
+    unless ci_build_id.empty?
+      increment_build_number(build_number: ci_build_id, xcodeproj: IOS_XCODEPROJ)
+    end
+
+    build_app(
+      project: IOS_XCODEPROJ,
+      scheme: IOS_SCHEME,
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: File.join(IOS_PROJECT_DIR, "build"),
+      output_name: "App",
+      clean: true,
+      export_options: {
+        signingStyle: "manual",
+        teamID: ENV.fetch("APPLE_STORE_TEAM_ID"),
+        provisioningProfiles: {
+          IOS_BUNDLE_ID => IOS_PROVISIONING_PROFILE_NAME,
+        },
+      },
+    )
+  end
+
+  desc "Upload existing IPA to TestFlight (no rebuild)"
+  lane :upload do |options|
+    require_ci_build_id!
+    ipa = options[:ipa] || IOS_IPA_PATH
+    UI.user_error!("IPA not found at #{ipa}") unless File.exist?(ipa)
+
+    setup_app_store_connect_api_key
+
+    pilot(
+      ipa: ipa,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      changelog: ReleaseNotes.generate(locales: %w[en-US]).fetch("en-US"),
+      beta_app_review_info: {
+        contact_email: ENV["BETA_FEEDBACK_EMAIL"].to_s,
+        contact_first_name: ENV["BETA_CONTACT_FIRST_NAME"].to_s,
+        contact_last_name: ENV["BETA_CONTACT_LAST_NAME"].to_s,
+        contact_phone: ENV["BETA_CONTACT_PHONE_NUMBER"].to_s,
+        notes: "Automated TestFlight build",
+      },
+    )
+  end
+
+  desc "Regenerate fixtures, capture iOS screenshots via Playwright, upload to App Store Connect"
+  lane :screenshots do |options|
+    screenshots_tool = File.expand_path("../../tools/screenshots", MOBILE_ROOT)
+    # Outside fastlane/metadata/ on purpose: deliver scans metadata_path for
+    # locale subdirs and chokes on a non-locale 'ios' folder. Keep iOS
+    # screenshots in their own tree.
+    metadata_root = File.join(__dir__, "ios-screenshots")
+
+    locales = (options[:locales] || "en,ru").split(",").map(&:strip)
+    locale_map = { "en" => "en-US", "ru" => "ru-RU" }.select { |k, _| locales.include?(k) }
+    devices = %w[iphone67 ipad13]
+    project_flags = locales.flat_map { |l|
+      devices.map { |d| "--project=#{d}-#{l}" }
+    }.join(" ")
+
+    unless options[:skip_generate]
+      sh("cd #{screenshots_tool.shellescape} && npm install --no-audit --no-fund")
+      locales.each do |loc|
+        ["default", "recall"].each do |mode|
+          sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc} --mode=#{mode}")
+        end
+      end
+    end
+
+    unless options[:skip_capture]
+      sh("cd #{screenshots_tool.shellescape} && npx playwright test specs/capture.spec.ts #{project_flags}")
+    end
+
+    unless options[:skip_frame]
+      sh("cd #{screenshots_tool.shellescape} && npx playwright test specs/frame.spec.ts #{project_flags}")
+    end
+
+    # Stage framed screenshots directly under fastlane/ios-screenshots/<locale>/.
+    # Deliver only scans the locale folder itself (no subdirs), and detects the
+    # device from pixel dimensions — so a flat per-locale layout works.
+    # Prefix filenames with the device id to avoid name collisions between
+    # iphone67/01_home.png and ipad13/01_home.png.
+    locale_map.each do |src_lang, app_store_locale|
+      dst = File.join(metadata_root, app_store_locale)
+      FileUtils.mkdir_p(dst)
+      FileUtils.rm_f(Dir.glob(File.join(dst, "*.png")))
+      devices.each do |device|
+        src = File.join(screenshots_tool, "out/framed/#{device}-#{src_lang}")
+        next unless Dir.exist?(src)
+        Dir.glob(File.join(src, "*.png")).each do |png|
+          FileUtils.cp(png, File.join(dst, "#{device}-#{File.basename(png)}"))
+        end
+      end
+      UI.message("Staged #{Dir.glob(File.join(dst, '*.png')).size} iOS screenshots → #{dst}")
+    end
+
+    # Strip screenshots for locales not included in this run so deliver
+    # doesn't try to upload stale PNGs for locales without a listing.
+    selected_locales = locale_map.values
+    Dir.glob(File.join(metadata_root, "*")).each do |loc_dir|
+      next unless File.directory?(loc_dir)
+      next if selected_locales.include?(File.basename(loc_dir))
+      FileUtils.rm_f(Dir.glob(File.join(loc_dir, "*.png")))
+    end
+
+    next if options[:skip_upload]
+
+    setup_app_store_connect_api_key
+
+    deliver(
+      app_identifier: IOS_BUNDLE_ID,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      screenshots_path: File.expand_path(metadata_root),
+      overwrite_screenshots: true,
+      force: true,
+      run_precheck_before_submit: false,
+      submit_for_review: false,
+      # Don't auto-publish: user reviews staged set in App Store Connect before submitting.
+      automatic_release: false,
+    )
+  end
+
+  # ---- private ----
+
+  # Unique per-CI-run keychain to avoid collisions across retries or matrix jobs.
+  def ios_keychain_name
+    @ios_keychain_name ||= "lectorium-build-#{ENV.fetch('GITHUB_RUN_ID', Process.pid)}.keychain"
+  end
+
+  IOS_KEYCHAIN_PASSWORD = "lectorium-ephemeral"
+
+  private_lane :setup_ios_keychain do
+    create_keychain(
+      name: ios_keychain_name,
+      password: IOS_KEYCHAIN_PASSWORD,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600,
+      lock_when_sleeps: false,
+    )
+  end
+
+  private_lane :import_ios_certificates do
+    bundle_b64 = ENV.fetch("APPLE_CERTIFICATES")
+    cert_pass = ENV.fetch("APPLE_CERTIFICATE_PASSWORD")
+    work_dir = File.expand_path(File.join(MOBILE_ROOT, "fastlane/.apple-certs"))
+    FileUtils.rm_rf(work_dir)
+    FileUtils.mkdir_p(work_dir)
+
+    zip_path = File.join(work_dir, "output.zip")
+    File.binwrite(zip_path, Base64.decode64(bundle_b64))
+    sh("unzip -o #{zip_path.shellescape} -d #{work_dir.shellescape}")
+
+    Dir.glob(File.join(work_dir, "**/*.p12")).each do |p12|
+      import_certificate(
+        certificate_path: p12,
+        keychain_name: ios_keychain_name,
+        keychain_password: IOS_KEYCHAIN_PASSWORD,
+        certificate_password: cert_pass,
+      )
+    end
+    Dir.glob(File.join(work_dir, "**/*.cer")).each do |cer|
+      import_certificate(
+        certificate_path: cer,
+        keychain_name: ios_keychain_name,
+        keychain_password: IOS_KEYCHAIN_PASSWORD,
+      )
+    end
+
+    # Allow codesign to use the imported private key without UI prompt.
+    # `import_certificate` only adds -T entries to the key's ACL — codesign
+    # still needs the partition list to permit access from non-bundled tools.
+    # Without this, signing on self-hosted macOS dies with errSecInternalComponent
+    # right after "Apple Distribution: ..." identity is selected.
+    sh(
+      "security set-key-partition-list " \
+        "-S apple-tool:,apple:,codesign: " \
+        "-s -k #{IOS_KEYCHAIN_PASSWORD.shellescape} #{ios_keychain_name.shellescape}",
+      log: false,
+    )
+  end
+
+  private_lane :install_ios_provisioning_profiles do
+    work_dir = File.expand_path(File.join(MOBILE_ROOT, "fastlane/.apple-certs"))
+    profiles = Dir.glob(File.join(work_dir, "**/*.mobileprovision"))
+    UI.user_error!("No .mobileprovision found in APPLE_CERTIFICATES bundle") if profiles.empty?
+    profiles.each { |p| install_provisioning_profile(path: p) }
+  end
+
+  private_lane :setup_app_store_connect_api_key do
+    # Write the .p8 to a temp file and pass its path — passing the PEM via
+    # key_content triggers "invalid curve name" in Ruby OpenSSL on arm64
+    # macOS runners (fastlane/fastlane#21507).
+    key_id = ENV.fetch("APPLE_STORE_CONNECT_API_KEY_ID")
+    key_dir = File.join(Dir.tmpdir, "lectorium-asc-key-#{Process.pid}")
+    FileUtils.mkdir_p(key_dir)
+    key_path = File.join(key_dir, "AuthKey_#{key_id}.p8")
+    File.write(key_path, Base64.decode64(ENV.fetch("APPLE_STORE_CONNECT_API_KEY")))
+    app_store_connect_api_key(
+      key_id: key_id,
+      issuer_id: ENV.fetch("APPLE_STORE_CONNECT_API_KEY_ISSUER"),
+      key_filepath: key_path,
+      duration: 1200,
+      in_house: false,
+    )
+  end
+
+  # Build number must come from CI ($GITHUB_RUN_NUMBER). Allowing a local upload
+  # risks a versionCode collision in Play / build number clash on TestFlight.
+  def require_ci_build_id!
+    build_id = ci_build_id
+    UI.user_error!("GITHUB_RUN_NUMBER env var is required (numeric) — store uploads must originate from CI") if build_id.empty?
+    UI.user_error!("GITHUB_RUN_NUMBER must be numeric, got: #{build_id.inspect}") unless build_id.match?(/\A\d+\z/)
+  end
+
+  after_all do |lane|
+    cleanup_ios_keychain if %i[build upload screenshots].include?(lane)
+  end
+
+  error do |lane, _|
+    cleanup_ios_keychain if %i[build upload screenshots].include?(lane)
+  end
+
+  def cleanup_ios_keychain
+    return unless @ios_keychain_name
+    begin
+      delete_keychain(name: @ios_keychain_name)
+    rescue => e
+      UI.important("Keychain cleanup failed (non-fatal): #{e.message}")
+    end
+    work_dir = File.expand_path(File.join(MOBILE_ROOT, "fastlane/.apple-certs"))
+    FileUtils.rm_rf(work_dir)
+  end
+end

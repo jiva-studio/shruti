@@ -1,0 +1,62 @@
+import type { IDatabase } from "@ports/app/index.js"
+import { createSqlNoteRepository } from "./notesRepository.sql.js"
+import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+import { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
+import { createSqlUnitOfWork } from "./unitOfWork.sql.js"
+import { createSqlTrackRepository } from "./tracksRepository.sql.js"
+import { createSqlAuthorRepository } from "./authorsRepository.sql.js"
+import { createSqlLocationRepository } from "./locationsRepository.sql.js"
+import { createSqlSourceRepository } from "./sourcesRepository.sql.js"
+import { createSqlLanguageRepository } from "./languagesRepository.sql.js"
+import { createSqlTagRepository } from "./tagsRepository.sql.js"
+
+export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
+export { createSqlNoteRepository } from "./notesRepository.sql.js"
+export { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
+export { createSqlMediaItemRepository } from "./mediaItemsRepository.sql.js"
+export { createSqlUnitOfWork } from "./unitOfWork.sql.js"
+export { createSqlTrackRepository } from "./tracksRepository.sql.js"
+export { createSqlAuthorRepository } from "./authorsRepository.sql.js"
+export { createSqlLocationRepository } from "./locationsRepository.sql.js"
+export { createSqlSourceRepository } from "./sourcesRepository.sql.js"
+export { createSqlLanguageRepository } from "./languagesRepository.sql.js"
+export { createSqlTagRepository } from "./tagsRepository.sql.js"
+
+export interface SqlAppRepositories {
+  readonly tracks: ReturnType<typeof createSqlTrackRepository>
+  readonly authors: ReturnType<typeof createSqlAuthorRepository>
+  readonly locations: ReturnType<typeof createSqlLocationRepository>
+  readonly sources: ReturnType<typeof createSqlSourceRepository>
+  readonly languages: ReturnType<typeof createSqlLanguageRepository>
+  readonly tags: ReturnType<typeof createSqlTagRepository>
+  readonly notes: ReturnType<typeof createSqlNoteRepository>
+  readonly playlistItems: ReturnType<typeof createSqlPlaylistItemRepository>
+  readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
+  readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
+}
+
+export interface CreateSqlAppRepositoriesDeps {
+  readonly contentDb: IDatabase
+  readonly userDb: IDatabase
+}
+
+/**
+ * Bundles every SQL-backed domain repository on top of the two open
+ * databases. Scoped to *SQL* adapters only — HTTP-backed repos (like
+ * transcripts) are wired in the composition root (`lectorium/`),
+ * because a sibling-infra import would violate the layer rules.
+ */
+export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): SqlAppRepositories {
+  return {
+    tracks: createSqlTrackRepository(deps.contentDb),
+    authors: createSqlAuthorRepository(deps.contentDb),
+    locations: createSqlLocationRepository(deps.contentDb),
+    sources: createSqlSourceRepository(deps.contentDb),
+    languages: createSqlLanguageRepository(deps.contentDb),
+    tags: createSqlTagRepository(deps.contentDb),
+    notes: createSqlNoteRepository(deps.userDb),
+    playlistItems: createSqlPlaylistItemRepository(deps.userDb),
+    mediaItems: createSqlMediaItemRepository(deps.userDb),
+    unitOfWork: createSqlUnitOfWork(deps.userDb),
+  }
+}

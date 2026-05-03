@@ -3,7 +3,7 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "strict": true,
     "jsx": "preserve",
     "resolveJsonModule": true,
@@ -12,19 +12,41 @@
     "lib": ["ESNext", "DOM"],
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": false,
+    "types": ["vite/client"],
     "paths": {
-      "@blocks/*":             ["./src/blocks/*"],
-      "@lectorium/mobile/*":   ["./src/*"],
-      "@lectorium/dal":        ["./submodules/dal"],
-      "@lectorium/protocol/*": ["./submodules/protocol/*"],
+      "@ports/*":              ["./ports/*"],
+      "@infra/*":              ["./infra/*"],
+      "@ui/*":                 ["./ui/*"],
+      "@lectorium/*":          ["./lectorium/*"],
+      "@lib/domain":           ["./submodules/domain/index.ts"],
+      "@lib/domain/*":         ["./submodules/domain/*"],
+      "@lib/application":      ["./submodules/application/index.ts"],
+      "@lib/application/*":    ["./submodules/application/*"],
+      "@lib/persistence/main": ["./submodules/persistence-main/index.ts"],
+      "@lib/persistence/user": ["./submodules/persistence-user/index.ts"]
     }
   },
   "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue",
-    "submodules/**/*"
+    "ports/**/*.ts",
+    "infra/**/*.ts",
+    "ui/**/*.ts",
+    "ui/**/*.vue",
+    "lectorium/**/*.ts",
+    "lectorium/**/*.vue",
+    "submodules/domain/**/*.ts",
+    "submodules/application/**/*.ts",
+    "submodules/persistence-main/**/*.ts",
+    "submodules/persistence-user/**/*.ts",
+    "vite-env.d.ts"
   ],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "exclude": [
+    "node_modules",
+    "submodules/dal",
+    "submodules/protocol",
+    "src",
+    "dist",
+    "android",
+    "ios"
+  ]
 }

@@ -1,74 +1,79 @@
-import { sentryVitePlugin } from '@sentry/vite-plugin'
-import legacy from '@vitejs/plugin-legacy'
-import vue from '@vitejs/plugin-vue'
-import path from 'path'
-import { defineConfig } from 'vite'
-import { readFileSync } from 'node:fs'
+import vue from "@vitejs/plugin-vue"
+import path from "node:path"
+import { readFileSync } from "node:fs"
+import { defineConfig } from "vite"
 
-const { version } = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
-)
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
+const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8"))
+
+// `@lectorium` is also the npm scope for our in-house Capacitor plugins
+// (`@lectorium/plugin-*`, e.g. `@lectorium/plugin-audio-player`). Vite 8
+// uses Rolldown, which doesn't expand `$1` back-references in regex alias
+// replacements — so we resolve the `@lectorium/*` (excluding the
+// `@lectorium/plugin-*` family) prefix via a tiny plugin instead.
+const LECTORIUM_ROOT = path.resolve(__dirname, "./lectorium")
+const lectoriumAlias = {
+  name: "lectorium-source-alias",
+  enforce: "pre" as const,
+  // Sources import e.g. "@lectorium/router/index.js" but the file on disk is
+  // index.ts. Re-call Vite's resolver after rewriting so extension fallback
+  // kicks in (.ts/.tsx/.vue/index.*).
+  async resolveId(
+    this: {
+      resolve: (
+        id: string,
+        importer?: string,
+        opts?: { skipSelf?: boolean }
+      ) => Promise<{ id: string } | null>
+    },
+    id: string,
+    importer?: string
+  ) {
+    if (!id.startsWith("@lectorium/") || id.startsWith("@lectorium/plugin-")) return null
+    const rewritten = path.resolve(LECTORIUM_ROOT, id.slice("@lectorium/".length))
+    const resolved = await this.resolve(rewritten, importer, { skipSelf: true })
+    return resolved?.id ?? rewritten
+  },
+}
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __BUILD_ID__: JSON.stringify(process.env.BUILD_ID ?? "dev"),
+    __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
+  },
   build: {
     minify: true,
-    rollupOptions: {
-      treeshake: true,
-      // output: {
-      //   manualChunks(id) {
-      //     // group big families first
-      //     if (id.includes('@ionic/vue')) return 'vendor-ionic-vue'
-      //     if (id.includes('@ionic/core')) return 'vendor-ionic-core'
-      //     if (id.includes('@stencil/core')) return 'vendor-stencil'
-
-      //     // fallback: one chunk per top-level package
-      //     if (id.includes('node_modules')) {
-      //       const m = id.split('node_modules/')[1].split('/')
-      //       const pkg = m[0].startsWith('@') ? m[0].slice(1, m[0].length) : m[0]
-      //       return `vendor-${pkg}`
-      //     }
-
-      //     // app
-      //     if (id.includes('modules/apps/mobile')) { 
-      //       if (id.includes('src/pages')) {
-      //         const file = path.basename(id)
-      //         const dot = file.indexOf('.')
-      //         const base = dot === -1 ? file : file.slice(0, dot)
-      //         const name = base.toLowerCase().replace('page', '')
-      //         return `lectorium-page-${name}`
-      //       }
-      //       // return 'lectorium' 
-      //     }
-      //   }
-      // },
-    },
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: { treeshake: true },
   },
   server: {
-    host: '0.0.0.0',
-    port: 8102,
-    allowedHosts: ['mobile.lectorium.dev'],
+    host: "0.0.0.0",
+    port: 11001,
+    strictPort: true,
+    allowedHosts: ["mobile.lectorium.dev"],
   },
-  plugins: [
-    vue(),
-    legacy(),
-    (version && process.env.BUILD_NUMBER) && sentryVitePlugin({
-      org: 'akdasa-studios',
-      project: 'lectorium',
-      release: {
-        name: version || 'unknown',
-        dist: process.env.BUILD_NUMBER || 'unknown',
-      }
-    })
-  ],
+  plugins: [lectoriumAlias, vue()],
   resolve: {
     preserveSymlinks: true,
-    alias: {
-      '@lectorium/mobile':   path.resolve(__dirname, './src'),
-      '@blocks':             path.resolve(__dirname, './src/blocks'),
-
-      '@lectorium/dal':      path.resolve(__dirname, './submodules/dal'),
-      '@lectorium/protocol': path.resolve(__dirname, './submodules/protocol'),
-    },
+    alias: [
+      { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
+      { find: "@infra", replacement: path.resolve(__dirname, "./infra") },
+      { find: "@ui", replacement: path.resolve(__dirname, "./ui") },
+      { find: "@lib/domain", replacement: path.resolve(__dirname, "./submodules/domain") },
+      {
+        find: "@lib/application",
+        replacement: path.resolve(__dirname, "./submodules/application"),
+      },
+      {
+        find: "@lib/persistence/main",
+        replacement: path.resolve(__dirname, "./submodules/persistence-main"),
+      },
+      {
+        find: "@lib/persistence/user",
+        replacement: path.resolve(__dirname, "./submodules/persistence-user"),
+      },
+    ],
   },
 })

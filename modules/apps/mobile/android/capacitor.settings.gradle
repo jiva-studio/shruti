@@ -2,6 +2,9 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
 
+include ':capacitor-community-sqlite'
+project(':capacitor-community-sqlite').projectDir = new File('../node_modules/@capacitor-community/sqlite/android')
+
 include ':capacitor-app'
 project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/android')
 
@@ -10,6 +13,9 @@ project(':capacitor-clipboard').projectDir = new File('../node_modules/@capacito
 
 include ':capacitor-device'
 project(':capacitor-device').projectDir = new File('../node_modules/@capacitor/device/android')
+
+include ':capacitor-file-transfer'
+project(':capacitor-file-transfer').projectDir = new File('../node_modules/@capacitor/file-transfer/android')
 
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../node_modules/@capacitor/filesystem/android')
@@ -23,6 +29,9 @@ project(':capacitor-keyboard').projectDir = new File('../node_modules/@capacitor
 include ':capacitor-local-notifications'
 project(':capacitor-local-notifications').projectDir = new File('../node_modules/@capacitor/local-notifications/android')
 
+include ':capacitor-preferences'
+project(':capacitor-preferences').projectDir = new File('../node_modules/@capacitor/preferences/android')
+
 include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/share/android')
 
@@ -32,20 +41,8 @@ project(':capacitor-splash-screen').projectDir = new File('../node_modules/@capa
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
 
-include ':capgo-capacitor-social-login'
-project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/@capgo/capacitor-social-login/android')
-
 include ':lectorium-audio-player'
-project(':lectorium-audio-player').projectDir = new File('../../../libs/audioPlayer/android')
-
-include ':revenuecat-purchases-capacitor'
-project(':revenuecat-purchases-capacitor').projectDir = new File('../node_modules/@revenuecat/purchases-capacitor/android')
-
-include ':sentry-capacitor'
-project(':sentry-capacitor').projectDir = new File('../node_modules/@sentry/capacitor/android')
-
-include ':squareetlabs-capacitor-navigation-bar'
-project(':squareetlabs-capacitor-navigation-bar').projectDir = new File('../node_modules/@squareetlabs/capacitor-navigation-bar/android')
+project(':lectorium-audio-player').projectDir = new File('../../../capacitor/audio-player/android')
 
 include ':capacitor-plugin-safe-area'
 project(':capacitor-plugin-safe-area').projectDir = new File('../node_modules/capacitor-plugin-safe-area/android')
