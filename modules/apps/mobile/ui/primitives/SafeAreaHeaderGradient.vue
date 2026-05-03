@@ -11,9 +11,9 @@
   height: var(--ion-safe-area-top);
   background: linear-gradient(
     to bottom,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 1) 0%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.8) 35%,
-    rgba(var(--ion-background-color-rgb, 255, 255, 255), 0) 100%
+    rgba(var(--lectorium-fade-bg-rgb), 1) 0%,
+    rgba(var(--lectorium-fade-bg-rgb), 0.8) 35%,
+    rgba(var(--lectorium-fade-bg-rgb), 0) 100%
   );
   z-index: 1;
   pointer-events: none;

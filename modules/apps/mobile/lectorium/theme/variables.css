@@ -82,6 +82,12 @@
   --ion-background-color: #faf5ea;
   --ion-background-color-rgb: 250, 245, 234;
 
+  /* Wrapper var for fade-to-background gradients (TabsLayout, SearchView,
+   * SafeAreaHeaderGradient). Mirrors --ion-background-color-rgb but is
+   * defined explicitly per theme block so it survives shadow-DOM scoping
+   * inside Ionic web components (e.g. ion-tab-bar). */
+  --lectorium-fade-bg-rgb: 250, 245, 234;
+
   --ion-text-color: #3d2b1f;
   --ion-text-color-rgb: 61, 43, 31;
 
@@ -205,6 +211,8 @@
 
     --ion-background-color: #1a130d;
     --ion-background-color-rgb: 26, 19, 13;
+
+    --lectorium-fade-bg-rgb: 26, 19, 13;
 
     --ion-text-color: #c0b8a8;
     --ion-text-color-rgb: 192, 184, 168;
