@@ -31,8 +31,11 @@ runs:
     - uses: ruby/setup-ruby@v1
       with:
         ruby-version: "3.3"
-        bundler-cache: true
+        bundler-cache: false
         working-directory: modules/apps/mobile
+
+    - shell: bash
+      run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
 
     - shell: bash
       run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
