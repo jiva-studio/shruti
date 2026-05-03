@@ -33,7 +33,12 @@ ion-content {
 
 .placeholder {
   width: 100%;
-  height: 35px;
+  /* Matches the floating mini-player's visible height (see
+   * FloatingPlayer.vue `.floating { height: 58px }`) plus the
+   * system safe-area inset, so when content is fully scrolled the
+   * last item (e.g. the Settings version label) lands just above
+   * the player rather than under it. */
+  height: calc(58px + env(safe-area-inset-bottom, 0px));
 }
 
 .spinner {
