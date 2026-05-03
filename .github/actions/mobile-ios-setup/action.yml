@@ -1,8 +1,14 @@
 name: Mobile iOS setup
 description: >
-  Xcode + Node + Ruby + bundler + npm deps + web artifact + Swift Package
-  Manager cache. Shared setup for any job that runs Fastlane / xcodebuild
-  in the mobile iOS project. The project is SPM-based — no CocoaPods.
+  Xcode + Node + Ruby + bundler + npm deps + web artifact. Shared setup
+  for any job that runs Fastlane / xcodebuild in the mobile iOS project.
+  The project is SPM-based — no CocoaPods.
+
+  No actions/cache for SwiftPM here — the self-hosted mac-host runner
+  persists ~/Library/Developer/Xcode (DerivedData, SourcePackages) and
+  ~/Library/Caches/org.swift.swiftpm across ephemeral cycles, which gives
+  warm-cache behaviour without paying the GitHub upload/download cost
+  (which was hanging 15+ min on the post-step).
 
 # Xcode version pin. Capacitor 8 requires Xcode 26+ (ionic-team/capacitor#8290).
 # Apple advances the App Store minimum ~yearly; check
@@ -39,15 +45,3 @@ runs:
       with:
         name: mobile-web-dist
         path: modules/apps/mobile/dist
-
-    # Cache SwiftPM resolved dependencies so incremental CI builds skip
-    # re-downloading Capacitor's swift-pm packages on every run. The key
-    # rolls when CapApp-SPM/Package.swift changes (new plugin / Capacitor
-    # bump), matching our cache-busting needs.
-    - uses: actions/cache@v4
-      with:
-        path: |
-          ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
-          ~/Library/Caches/org.swift.swiftpm
-        key: ${{ runner.os }}-spm-${{ hashFiles('modules/apps/mobile/ios/App/CapApp-SPM/Package.swift') }}
-        restore-keys: ${{ runner.os }}-spm-
