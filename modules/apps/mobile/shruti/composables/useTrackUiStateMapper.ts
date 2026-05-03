@@ -31,8 +31,12 @@ export interface UseTrackUiStateMapperReturn {
  *  - "playing"                 — this is the currently-open player track.
  *  - "completed"               — playlist item carries `completedAt`.
  *  - "queued"                  — in playlist with saved progress > 0.
- *  - "added"                   — in playlist or downloaded, never played.
- *  - "none"                    — not in playlist, no local copy.
+ *  - "added"                   — in the active playlist, never played.
+ *  - "none"                    — not in playlist.
+ *
+ * The on-disk download cache deliberately does NOT contribute to "added":
+ * removing a track from the playlist leaves the cached audio on disk, but
+ * the row should fall back to "none" (issue #378).
  */
 export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   const appLanguage = useAppLanguage()
@@ -51,7 +55,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (entry?.item.completedAt != null) return "completed"
     if (entry && (entry.item.progress ?? 0) > 0) return "queued"
 
-    if (downloadState === "completed" || playlist.hasTrack(trackId)) return "added"
+    if (playlist.hasTrack(trackId)) return "added"
     return "none"
   }
 
