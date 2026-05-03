@@ -63,10 +63,11 @@ const emit = defineEmits<{
 }>()
 
 const { groups, position } = toRefs(props)
-const { applySelectionRange, buildSelectedPayload, isActiveGroup } = useTranscriptSelection({
-  groups,
-  position,
-})
+const { applySelectionRange, clearSelection, buildSelectedPayload, isActiveGroup } =
+  useTranscriptSelection({
+    groups,
+    position,
+  })
 
 function onSelecting(start: number, end: number): void {
   applySelectionRange(start, end)
@@ -75,7 +76,15 @@ function onSelecting(start: number, end: number): void {
 function onSelected(start: number, end: number, event: TouchEvent): void {
   const payload = buildSelectedPayload(start, end, event)
   if (payload) emit("textSelected", payload)
+  // Empty selection (e.g. dragged across an unselectable verse block) —
+  // wipe the highlight immediately, no popover will fire to clear it.
+  else clearSelection()
 }
+
+// Expose the imperative clear handle so the parent dialog can wipe the
+// per-block `selected` flags after the popover dismisses or an action
+// completes — without it the highlight stays stuck on the page.
+defineExpose({ clearSelection })
 </script>
 
 <style scoped>

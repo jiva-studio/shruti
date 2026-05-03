@@ -7,13 +7,15 @@ export type SelectionActionKind = "copy" | "bookmark" | "share"
 export interface SelectionActionEvent {
   action: SelectionActionKind
   text: string
+  /** Start of the selected text range, in seconds. */
+  timeStart: number
+  /** End of the selected text range, in seconds. */
+  timeEnd: number
 }
 
 export interface UseTranscriptSelectionActionsOptions {
   /** Read at the moment the action fires; `null`/`undefined` is a no-op. */
   getTrackId: () => TrackId | null | undefined
-  /** Position (in seconds) used as the timecode for bookmark notes. */
-  getPositionSeconds: () => number
   /** Resolved on each call so the composable can be constructed before
    *  the user DB is open. */
   getNotes: () => INoteRepository
@@ -48,9 +50,12 @@ export function useTranscriptSelectionActions(
       return
     }
     if (event.action === "bookmark") {
-      const seconds = Math.max(0, Math.round(options.getPositionSeconds()))
+      // Anchor the bookmark to the selected sentence range, not the
+      // current playback head — the user picked a specific span of text.
+      const timeStart = Math.max(0, Math.round(event.timeStart))
+      const timeEnd = Math.max(timeStart, Math.round(event.timeEnd))
       const result = await createNote(
-        { trackId, text: event.text, timeStart: seconds, timeEnd: seconds },
+        { trackId, text: event.text, timeStart, timeEnd },
         { notes: options.getNotes() }
       )
       if (!result.ok) options.onError?.(`Could not save note: ${result.error}`)
