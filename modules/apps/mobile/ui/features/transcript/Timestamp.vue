@@ -1,16 +1,34 @@
 <template>
   <div class="timestamp">
     <div>{{ formatTime(start) }}</div>
-    <div>•</div>
-    <div>{{ formatTime(duration - start) }}</div>
+    <template v-if="showRemainingResolved">
+      <div>•</div>
+      <div>{{ formatTime(duration - start) }}</div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-defineProps<{
-  start: number
-  duration: number
-}>()
+import { computed } from "vue"
+
+const props = withDefaults(
+  defineProps<{
+    start: number
+    duration: number
+    /**
+     * When false (preview mode — transcript not tied to live playback),
+     * the remaining-time half is suppressed and only the paragraph's
+     * static `start` is shown. See useTranscriptDialogController for
+     * the gating rationale.
+     */
+    showRemaining?: boolean
+  }>(),
+  { showRemaining: true }
+)
+
+// Defence-in-depth: also suppress remaining-time when duration is 0,
+// so a stale caller can't render "MM:SS • -MM:SS".
+const showRemainingResolved = computed(() => props.showRemaining && props.duration > 0)
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */

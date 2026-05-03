@@ -16,6 +16,7 @@
         v-if="group.blocks[0]?.block.start && group.blocks[0].block.type !== 'verse:text'"
         :start="group.blocks[0]?.block.start"
         :duration="duration"
+        :show-remaining="enableActiveProminence !== false"
       />
       <TranscriptBlockRenderer
         v-for="(block, blockIdx) in group.blocks"
