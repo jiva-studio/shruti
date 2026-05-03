@@ -96,6 +96,30 @@ const emit = defineEmits<{
   pointer-events: none;
 }
 
+/* On tablets/desktops the floating mini-player switches to a capped,
+ * centred width so it sits aligned with the page content column. The
+ * width is the shared --shruti-content-max-width minus the 16px+16px
+ * lateral inset the floating variant uses on phones. We override the
+ * phone-mode `left: 16px; right: 16px` to `0`, then set an explicit
+ * `width` and `margin-inline: auto` — the CSS spec only distributes
+ * absolute auto-margins when all of left, right, and width are
+ * non-auto. Centring this way avoids `transform: translateX(-50%)`,
+ * which would conflict with the `.pulsing` keyframe's scale transform. */
+@media (min-width: 768px) {
+  .floating {
+    left: 0;
+    right: 0;
+    width: calc(var(--shruti-content-max-width) - 32px);
+    margin-inline: auto;
+  }
+  .stick {
+    left: 0;
+    right: 0;
+    width: var(--shruti-content-max-width);
+    margin-inline: auto;
+  }
+}
+
 .pulsing {
   animation: inviteClick 3s ease-in-out infinite;
 }
