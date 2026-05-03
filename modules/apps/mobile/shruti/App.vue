@@ -8,8 +8,8 @@
       :duration="player.durationMs"
       :position="player.positionMs"
       :show-progress="showPlayerProgress"
-      :sticked="transcriptStore.open"
-      :hidden="!player.open"
+      :sticked="transcriptStore.open && dialog.mirrorsActivePlayer.value"
+      :hidden="floatingPlayerHidden"
       :pulsing="pulsing"
       :play-button-size="playButtonSize"
       @play-clicked="onTogglePause"
@@ -33,6 +33,7 @@
       @seek="dialog.onSeek"
       @selection-action="dialog.onSelectionAction"
       @pick-start="dialog.onPickStart"
+      @close="dialog.onClose"
     />
   </IonApp>
 </template>
@@ -42,6 +43,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog } from "@ui/features/transcript/index.js"
+import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useTutorialStore } from "@shruti/stores/useTutorialStore.js"
@@ -54,8 +56,21 @@ import { useShruti } from "@shruti/shruti.js"
 const app = useShruti()
 const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
+const overlays = useOverlaysStore()
 const tutorial = useTutorialStore()
 const dialog = useTranscriptDialogController()
+// Hide the FloatingPlayer when:
+//  - the player has nothing to show (default),
+//  - an ActionSheet is up — keeps the bottom buttons reachable,
+//  - the transcript dialog is open in preview mode (Search → Open
+//    transcript) — the player belongs to a different track and
+//    shouldn't react to taps on the preview surface.
+const floatingPlayerHidden = computed<boolean>(() => {
+  if (!player.open) return true
+  if (overlays.actionSheetOpen) return true
+  if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
+  return false
+})
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 
@@ -125,8 +140,10 @@ async function onTogglePause(): Promise<void> {
 }
 
 // Legacy UX: tapping the floating player opens the transcript; tapping
-// it again closes the transcript without stopping playback. No separate
-// close button lives inside the dialog.
+// it again closes the transcript without stopping playback. The dialog
+// also exposes its own close button (top-right) so iOS users (no
+// hardware Back) and preview-mode users (player hidden) always have a
+// visible exit.
 function onOpenTranscript(): void {
   if (transcriptStore.open) transcriptStore.close()
   else if (player.trackId) transcriptStore.show(player.trackId)

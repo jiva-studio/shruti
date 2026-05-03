@@ -1,85 +1,69 @@
-import { computed, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
-import type { ActionSheetButton } from "@ionic/vue"
+import { actionSheetController } from "@ionic/vue"
 import type { TrackId } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useAddToPlaylist } from "./useAddToPlaylist.js"
 
 export interface UseTrackActionSheetReturn {
-  isOpen: Ref<boolean>
-  buttons: ComputedRef<readonly ActionSheetButton[]>
   present: (trackId: TrackId) => Promise<void>
-  dismiss: () => void
 }
 
 /**
- * Drives the per-track ActionSheet on the Search list. Owns its own
- * open/close state and asynchronously checks transcript availability
- * so the "Open transcript" button can dim itself when the track has
- * none. Add-to-playlist stays a one-tap action behind the sheet.
+ * Per-track ActionSheet on the Search list. Uses the imperative
+ * `actionSheetController` so SearchView stays free of sheet boilerplate
+ * (no `isOpen` ref, no `<IonActionSheet>` block, no buttons computed).
+ *
+ * Transcript availability is resolved once before presenting so the
+ * "Open transcript" button renders in its final disabled/enabled state
+ * — Ionic's controller doesn't let us mutate buttons after the fact.
  */
 export function useTrackActionSheet(): UseTrackActionSheetReturn {
   const { t } = useI18n()
   const app = useShruti()
   const transcriptStore = useTranscriptStore()
+  const overlays = useOverlaysStore()
   const { addToPlaylist } = useAddToPlaylist()
 
-  const isOpen = ref<boolean>(false)
-  const selectedTrackId = ref<TrackId | null>(null)
-  // null = "haven't checked yet"; flips to a boolean once
-  // availableLanguages resolves. The button is enabled by default and
-  // only dims after we've confirmed there are zero transcripts.
-  const transcriptsAvailable = ref<boolean | null>(null)
-
-  const buttons = computed<readonly ActionSheetButton[]>(() => {
-    const trackId = selectedTrackId.value
-    if (!trackId) return []
-    return [
-      {
-        text: t("search.actions.addToPlaylist"),
-        handler: () => {
-          void addToPlaylist(trackId)
-        },
-      },
-      {
-        text: t("search.actions.openTranscript"),
-        disabled: transcriptsAvailable.value === false,
-        handler: () => {
-          transcriptStore.show(trackId)
-        },
-      },
-      {
-        text: t("app.close"),
-        role: "cancel",
-      },
-    ]
-  })
-
   async function present(trackId: TrackId): Promise<void> {
-    selectedTrackId.value = trackId
-    transcriptsAvailable.value = null
-    isOpen.value = true
     void app.haptics.impact("light")
+    let hasTranscripts: boolean
     try {
       const langs = await app.repositories().transcripts.availableLanguages(trackId)
-      // Race-protect: stale callback for a previous trackId is ignored.
-      if (selectedTrackId.value === trackId) {
-        transcriptsAvailable.value = langs.length > 0
-      }
+      hasTranscripts = langs.length > 0
     } catch {
-      // Leave the button enabled — the dialog has its own error UI.
-      if (selectedTrackId.value === trackId) {
-        transcriptsAvailable.value = true
-      }
+      // On error leave the button enabled — the dialog has its own error UI.
+      hasTranscripts = true
     }
+
+    const sheet = await actionSheetController.create({
+      buttons: [
+        {
+          text: t("search.actions.addToPlaylist"),
+          handler: () => {
+            void addToPlaylist(trackId)
+          },
+        },
+        {
+          text: t("search.actions.openTranscript"),
+          disabled: !hasTranscripts,
+          handler: () => {
+            transcriptStore.show(trackId)
+          },
+        },
+        {
+          text: t("app.close"),
+          role: "cancel",
+        },
+      ],
+    })
+    overlays.actionSheetOpen = true
+    void sheet.onDidDismiss().then(() => {
+      overlays.actionSheetOpen = false
+    })
+    await sheet.present()
   }
 
-  function dismiss(): void {
-    isOpen.value = false
-    selectedTrackId.value = null
-    transcriptsAvailable.value = null
-  }
-
-  return { isOpen, buttons, present, dismiss }
+  return { present }
 }
