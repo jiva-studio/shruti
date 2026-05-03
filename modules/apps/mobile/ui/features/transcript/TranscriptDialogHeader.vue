@@ -19,6 +19,8 @@ defineProps<{
 <style scoped>
 .card {
   padding: 2px;
+  padding-inline: 16px;
+  padding-top: max(env(safe-area-inset-top), 16px);
 }
 
 .title {
