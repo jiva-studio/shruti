@@ -8,14 +8,14 @@
           <IonLabel>{{ $t("app.home") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton v-if="showNotesTab" tab="tab2" href="/tabs/notes">
-          <IconBookmark />
-          <IonLabel>{{ $t("app.notes") }}</IonLabel>
-        </IonTabButton>
-
         <IonTabButton tab="tab3" href="/tabs/search">
           <IconSearch />
           <IonLabel>{{ $t("app.search") }}</IonLabel>
+        </IonTabButton>
+
+        <IonTabButton v-if="showNotesTab" tab="tab2" href="/tabs/notes">
+          <IconBookmark />
+          <IonLabel>{{ $t("app.notes") }}</IonLabel>
         </IonTabButton>
 
         <IonTabButton tab="tab4" href="/tabs/settings">
