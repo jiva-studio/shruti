@@ -24,6 +24,7 @@ import "@ionic/vue/css/palettes/dark.system.css"
 
 /* Theme variables + utility classes */
 import "./theme/variables.css"
+import "./theme/heatmap-colors.css"
 import "./theme/misc.css"
 
 /* Composition root + infrastructure adapters */

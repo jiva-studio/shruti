@@ -19,4 +19,11 @@ export default {
   share: "Поделиться",
   copy: "Копировать",
   save: "Сохранить",
+  duration: {
+    days: "{n}д",
+    hours: "{n}ч",
+    minutes: "{n}м",
+    daysAndHours: "{d}д {h}ч",
+    hoursAndMinutes: "{h}ч {m}м",
+  },
 }

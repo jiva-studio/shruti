@@ -12,6 +12,7 @@
     />
 
     <SettingsSadhanaGroup
+      v-model:show-activity-tracker="showActivityTracker"
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
     />
@@ -52,6 +53,7 @@ const {
   appLanguage,
   showPlayerProgress,
   showNotesTab,
+  showActivityTracker,
   highlightCurrentSentence,
   openTranscriptAutomatically,
   notificationsEnabled,

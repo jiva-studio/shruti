@@ -15,8 +15,6 @@ function makeRepo(overrides: Partial<IPlaylistItemRepository> = {}): IPlaylistIt
     add: async () => {
       throw new Error("add not stubbed")
     },
-    updateProgress: async () => {},
-    markCompleted: async () => {},
     archive: async () => {},
     remove: async () => {},
     clearAll: async () => {},
@@ -28,9 +26,7 @@ const sample = (over: Partial<PlaylistItem> = {}): PlaylistItem => ({
   id: "pi-1" as PlaylistItemId,
   trackId: "t-1" as TrackId,
   addedAt: 1000,
-  completedAt: null,
   archivedAt: null,
-  progress: null,
   ...over,
 })
 

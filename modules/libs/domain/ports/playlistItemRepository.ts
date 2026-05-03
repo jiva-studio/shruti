@@ -6,8 +6,6 @@ export interface IPlaylistItemRepository {
   listActive(): Promise<readonly PlaylistItem[]>
   listArchived(): Promise<readonly PlaylistItem[]>
   add(trackId: TrackId): Promise<PlaylistItem>
-  updateProgress(id: PlaylistItemId, progressMs: number): Promise<void>
-  markCompleted(id: PlaylistItemId): Promise<void>
   archive(id: PlaylistItemId): Promise<void>
   remove(id: PlaylistItemId): Promise<void>
   clearAll(): Promise<void>

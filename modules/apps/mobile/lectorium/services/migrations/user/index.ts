@@ -4,6 +4,7 @@ import { migration_001_config_table } from "./001_config_table.js"
 import { migration_002_notes } from "./002_notes.js"
 import { migration_003_playlist_items } from "./003_playlist_items.js"
 import { migration_004_media_items } from "./004_media_items.js"
+import { migration_005_listening_sessions } from "./005_listening_sessions.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -15,4 +16,5 @@ export const userMigrations: readonly Migration[] = [
   migration_002_notes,
   migration_003_playlist_items,
   migration_004_media_items,
+  migration_005_listening_sessions,
 ]
