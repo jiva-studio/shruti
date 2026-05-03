@@ -71,14 +71,14 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   padding-top: env(safe-area-inset-top);
   /* Extra space below the chips where the gradient fades over the
      scrolling track rows so there's no hard edge. */
-  padding-bottom: 40px;
+  padding-bottom: 20px;
   /* Wrapper itself is non-interactive so taps in the fade region hit
      the tracks below; only the search + chips capture taps. */
   pointer-events: none;
   background: linear-gradient(
     to bottom,
     rgba(var(--lectorium-fade-bg-rgb), 1) 0%,
-    rgba(var(--lectorium-fade-bg-rgb), 1) calc(100% - 40px),
+    rgba(var(--lectorium-fade-bg-rgb), 1) calc(100% - 20px),
     rgba(var(--lectorium-fade-bg-rgb), 0) 100%
   );
 }
