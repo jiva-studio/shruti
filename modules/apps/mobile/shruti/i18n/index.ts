@@ -7,6 +7,7 @@ import enHome from "./locales/en/home.js"
 import enLibrary from "./locales/en/library.js"
 import enNotes from "./locales/en/notes.js"
 import enNotifications from "./locales/en/notifications.js"
+import enPlayer from "./locales/en/player.js"
 import enSearch from "./locales/en/search.js"
 import enSettings from "./locales/en/settings.js"
 import enShare from "./locales/en/share.js"
@@ -20,6 +21,7 @@ import ruHome from "./locales/ru/home.js"
 import ruLibrary from "./locales/ru/library.js"
 import ruNotes from "./locales/ru/notes.js"
 import ruNotifications from "./locales/ru/notifications.js"
+import ruPlayer from "./locales/ru/player.js"
 import ruSearch from "./locales/ru/search.js"
 import ruSettings from "./locales/ru/settings.js"
 import ruShare from "./locales/ru/share.js"
@@ -37,6 +39,7 @@ const en = {
   library: enLibrary,
   notes: enNotes,
   notifications: enNotifications,
+  player: enPlayer,
   search: enSearch,
   settings: enSettings,
   share: enShare,
@@ -52,6 +55,7 @@ const ru = {
   library: ruLibrary,
   notes: ruNotes,
   notifications: ruNotifications,
+  player: ruPlayer,
   search: ruSearch,
   settings: ruSettings,
   share: ruShare,

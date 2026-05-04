@@ -1,5 +1,5 @@
 <template>
-  <div class="player">
+  <div class="player-controls">
     <div class="info">
       <IonLabel class="title">
         {{ title }}
@@ -8,36 +8,25 @@
         {{ author }}
       </IonLabel>
     </div>
-    <!-- Reserved slot under which the FloatingPlayer's shared Play
-         button sits when this page is the active one. The slot keeps
-         the title/author flex from spilling under Play. -->
-    <div class="play-slot" :style="{ width: playButtonSize + 'px' }" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { IonLabel } from "@ionic/vue"
 
-withDefaults(
-  defineProps<{
-    author: string
-    title: string
-    /** Width (px) reserved on the right for the shared Play overlay. */
-    playButtonSize?: number
-  }>(),
-  { playButtonSize: 44 }
-)
+defineProps<{
+  author: string
+  title: string
+}>()
 </script>
 
 <style scoped>
-.player {
-  background-color: var(--ion-color-primary-tint);
-  color: var(--ion-color-primary-contrast);
+.player-controls {
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0.5rem;
-  padding-left: 1rem;
+  width: 100%;
+  padding-left: 4px;
 }
 
 .info {
@@ -63,10 +52,5 @@ withDefaults(
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.play-slot {
-  flex-shrink: 0;
-  height: 100%;
 }
 </style>
