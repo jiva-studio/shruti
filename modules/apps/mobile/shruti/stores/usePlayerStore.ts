@@ -1,7 +1,6 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
 import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
-import { getProgressForItem } from "@lib/application/getProgressForItem.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
@@ -11,7 +10,8 @@ import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
-import { useListeningSessionTracker } from "@shruti/composables/useListeningSessionTracker.js"
+import { usePlayerResumePosition } from "./player/usePlayerResumePosition.js"
+import { usePlayerSession } from "./player/usePlayerSession.js"
 
 interface OpenArgs {
   readonly track: Track
@@ -27,26 +27,20 @@ interface OpenArgs {
   readonly resumeFromMs?: number | null
 }
 
-/** Treat playback within this window of the end as "complete". */
-const COMPLETION_THRESHOLD_MS = 2000
-
 /**
  * Ambient player state. A singleton because there's only ever one audio
  * engine at a time. Views call `open(track)`; the floating player reads
  * `title/author/positionMs/durationMs/playing` reactively.
  *
- * Listening time is journaled in `listening_sessions` via
- * `useListeningSessionTracker`. The tracker opens a session on play,
- * ticks while playing, closes on pause/seek/track-change/visibility-hide.
- * The store's progress/completion state for the playlist UI is then
- * derived from those rows, not from a column on `playlist_items`.
+ * Listening time is journaled in `listening_sessions` via the
+ * `usePlayerSession` composable (which wraps `useListeningSessionTracker`
+ * and binds it to the player's reactive state). Resume position is
+ * resolved by `usePlayerResumePosition`. The store keeps the reactive
+ * shape and the `openTrack/togglePause/seek/stop` orchestration.
  */
 export const usePlayerStore = defineStore("player", () => {
   const app = useShruti()
   const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", true)
-  const tracker = useListeningSessionTracker({
-    getRepo: () => app.repositories().listeningSessions,
-  })
 
   const trackId = ref<TrackId | null>(null)
   const title = ref<string>("")
@@ -86,48 +80,13 @@ export const usePlayerStore = defineStore("player", () => {
     void usePlaylistStore().patchProgress(id, ms)
   }
 
-  /**
-   * Drive the session lifecycle from native progress events. The native
-   * plugin emits ~once per second; the tracker throttles writes so we
-   * persist at most every 15 s while playing.
-   */
-  function maybePersistProgress(position: number, duration: number): void {
-    const id = itemId.value
-    if (!id) return
-
-    const reachedEnd = duration > 0 && position >= duration - COMPLETION_THRESHOLD_MS
-
-    if (reachedEnd) {
-      if (tracker.hasActiveSession()) {
-        void tracker
-          .finish({ positionMs: duration })
-          .then(() => patchPlaylistProgress(id, duration))
-      } else {
-        patchPlaylistProgress(id, duration)
-      }
-      return
-    }
-
-    if (playing.value) {
-      if (!tracker.hasActiveSession() || tracker.activeItemId() !== id) {
-        void tracker.start({ itemId: id, positionMs: position })
-      } else {
-        void tracker.tick({ positionMs: position })
-      }
-    } else if (tracker.hasActiveSession()) {
-      void tracker.finish({ positionMs: position }).then(() => patchPlaylistProgress(id, position))
-    }
-  }
-
-  /** Best-effort flush before backgrounding/closing. */
-  function flushProgressNow(): void {
-    const id = itemId.value
-    if (!id) return
-    if (tracker.hasActiveSession()) {
-      const pos = positionMs.value
-      void tracker.flushOnHide({ positionMs: pos }).then(() => patchPlaylistProgress(id, pos))
-    }
-  }
+  const session = usePlayerSession({
+    itemIdRef: itemId,
+    playingRef: playing,
+    positionMsRef: positionMs,
+    patchPlaylistProgress,
+  })
+  const resumePosition = usePlayerResumePosition()
 
   let subscribed = false
   function subscribeOnce(): void {
@@ -139,7 +98,7 @@ export const usePlayerStore = defineStore("player", () => {
       playing.value = status.playing
       positionMs.value = status.position
       if (status.duration > 0) durationMs.value = status.duration
-      maybePersistProgress(status.position, status.duration)
+      session.applyStatus(status.position, status.duration)
     })
   }
 
@@ -177,17 +136,6 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = Math.min(upper, positionMs.value + SKIP_DELTA_MS)
   }
 
-  async function resolveResumePositionMs(args: OpenArgs): Promise<number> {
-    if (args.resumeFromMs !== undefined) {
-      return Math.max(0, args.resumeFromMs ?? 0)
-    }
-    if (!args.itemId) return 0
-    const sec = await getProgressForItem(args.itemId, {
-      listeningSessions: app.repositories().listeningSessions,
-    })
-    return sec === null ? 0 : sec * 1000
-  }
-
   async function openTrack(
     args: OpenArgs
   ): Promise<Result<void, PlayTrackError | "engine-failed">> {
@@ -222,10 +170,8 @@ export const usePlayerStore = defineStore("player", () => {
     // patch the playlist's progress map BEFORE we touch the engine, so a
     // fast back-tap to the old row sees the latest position.
     const prevItemId = itemId.value
-    if (prevItemId && tracker.hasActiveSession()) {
-      const prevPos = positionMs.value
-      await tracker.finish({ positionMs: prevPos })
-      patchPlaylistProgress(prevItemId, prevPos)
+    if (prevItemId) {
+      await session.finishCurrent(prevItemId, positionMs.value)
     }
 
     // Disarm the progress guard while we swap audio. Any emit between
@@ -233,9 +179,11 @@ export const usePlayerStore = defineStore("player", () => {
     // could otherwise mark stale data on the new id.
     itemId.value = null
 
-    const rawResumeMs = await resolveResumePositionMs(args)
     const duration = cmd.audio.duration ?? 0
-    const resumeMs = pickResumeMs(rawResumeMs, duration)
+    const resumeMs = await resumePosition.resolve(
+      { itemId: args.itemId, resumeFromMs: args.resumeFromMs },
+      duration
+    )
 
     const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
     const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
@@ -278,9 +226,9 @@ export const usePlayerStore = defineStore("player", () => {
   async function togglePause(): Promise<void> {
     if (!open.value) return
     await app.audioPlayer.togglePause()
-    // The engine emits playing=false → maybePersistProgress will close
-    // the session on the next tick. Patch the playlist immediately so
-    // the UI doesn't have to wait for a render-cycle round-trip.
+    // The engine emits playing=false → session.applyStatus closes the
+    // session on the next tick. Patch the playlist immediately so the
+    // UI doesn't have to wait for a render-cycle round-trip.
     if (itemId.value) patchPlaylistProgress(itemId.value, positionMs.value)
   }
 
@@ -293,13 +241,12 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = clamped
     await app.audioPlayer.seek(clamped)
     if (itemId.value) {
-      await tracker.seek({
+      await session.recordSeek({
         itemId: itemId.value,
         positionBeforeMs: before,
         positionAfterMs: clamped,
         willKeepPlaying: playing.value,
       })
-      patchPlaylistProgress(itemId.value, clamped)
     }
   }
 
@@ -307,11 +254,11 @@ export const usePlayerStore = defineStore("player", () => {
     if (!open.value) return
     const id = itemId.value
     if (id) {
-      const pos = positionMs.value
-      if (tracker.hasActiveSession()) {
-        await tracker.finish({ positionMs: pos })
-      }
-      patchPlaylistProgress(id, pos)
+      // finishCurrent closes the open session if any AND patches the
+      // playlist unconditionally — matches the prior stop() semantics
+      // where the playlist always saw the final position even if no
+      // session had been opened (paused-then-stopped).
+      await session.finishCurrent(id, positionMs.value)
     }
     await app.audioPlayer.stop()
     trackId.value = null
@@ -319,6 +266,10 @@ export const usePlayerStore = defineStore("player", () => {
     playing.value = false
     positionMs.value = 0
     durationMs.value = 0
+  }
+
+  function flushProgressNow(): void {
+    session.flushOnHide()
   }
 
   return {
@@ -348,10 +299,4 @@ function clamp01(x: number): number {
   if (x < 0) return 0
   if (x > 1) return 1
   return x
-}
-
-function pickResumeMs(resumeFromMs: number | null | undefined, durationMs: number): number {
-  if (resumeFromMs == null || !Number.isFinite(resumeFromMs) || resumeFromMs <= 0) return 0
-  if (durationMs > 0 && resumeFromMs >= durationMs - COMPLETION_THRESHOLD_MS) return 0
-  return resumeFromMs
 }

@@ -1,13 +1,14 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { downloadMedia } from "@lib/application/downloadMedia.js"
-import { downloadTranscripts } from "@lib/application/downloadTranscripts.js"
 import { removeDownloadedMedia } from "@lib/application/removeDownloadedMedia.js"
 import { removeDownloadedTranscripts } from "@lib/application/removeDownloadedTranscripts.js"
 import type { TrackId } from "@lib/domain/core.js"
-import { buildServerUrl, SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { buildServerUrl } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { promotePreferredServer } from "@shruti/services/preferredServer.js"
+import { useServerFallback } from "./downloads/useServerFallback.js"
+import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
 
 export type DownloadState = "idle" | "downloading" | "completed" | "failed"
 
@@ -16,9 +17,16 @@ export type DownloadState = "idle" | "downloading" | "completed" | "failed"
  * (`IMediaItemRepository`) — this store hydrates once from `listReady()`
  * so the "downloaded" indicator survives app relaunches, and in-flight
  * signals are tracked in memory for the duration of a session.
+ *
+ * CDN rotation (`useServerFallback`) and transcript prefetch
+ * (`useTranscriptPrefetch`) are split into composables under
+ * `stores/downloads/`. The store keeps the reactive state maps and the
+ * `ensureDownloaded` orchestration.
  */
 export const useDownloadStore = defineStore("downloads", () => {
   const app = useShruti()
+  const fallback = useServerFallback()
+  const transcriptPrefetch = useTranscriptPrefetch()
 
   const states = ref<Map<TrackId, DownloadState>>(new Map())
   // Per-track download progress 0..100. Populated only while a download
@@ -59,18 +67,6 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
-   * Build the runtime fallback candidate list: the currently-active
-   * CDN first (so the happy path hits it on the first attempt), then
-   * every other registered server in `SERVERS` order. Read fresh on
-   * every download — `activeServer` is a `Ref` and may have been
-   * promoted by a previous fallback in this session.
-   */
-  function candidateServers(): CdnServer[] {
-    const active = app.activeServer.value
-    return [active, ...SERVERS.filter((s) => s.id !== active.id)]
-  }
-
-  /**
    * Rebuild the reactive state map from the user DB. Called once on
    * first use; idempotent so Home / Search / Settings can all request
    * it defensively without re-hitting SQLite.
@@ -94,88 +90,6 @@ export const useDownloadStore = defineStore("downloads", () => {
       console.error("[downloads] hydrate failed:", err)
       hydrationError.value = err instanceof Error ? err.message : String(err)
     }
-  }
-
-  /**
-   * Iterate every candidate server in priority order, promoting each
-   * to active **before** invoking `attempt`. Resolves with the first
-   * server that doesn't throw. Used for opaque transfer paths whose
-   * URL-construction is buried inside a repository (transcripts) and
-   * therefore reads `activeServer.value` themselves — promoting the
-   * server up-front is the only way to redirect them to the candidate.
-   *
-   * If a non-active candidate succeeds, the promotion is also persisted
-   * to `IPreferences` so the next session starts from the working CDN.
-   * If every candidate fails, the active server is left set to whichever
-   * was tried last; the next call will rotate again. Returns `null` on
-   * total failure — callers warn-log rather than surface a `failed` UI
-   * state, since the transcript leg is opportunistic and the audio leg
-   * (the only user-visible commitment) handles its own failure mode.
-   */
-  async function tryServers<T>(attempt: () => Promise<T>): Promise<T | null> {
-    let lastError: unknown = null
-    for (const server of candidateServers()) {
-      // Awaited so the persist happens before `attempt()` runs:
-      // guarantees the in-flight request observes the new active
-      // server when it builds its URL via `storagePublicUrl`.
-      await promotePreferredServer(app, server)
-      try {
-        return await attempt()
-      } catch (err) {
-        lastError = err
-      }
-    }
-    if (lastError !== null) {
-      console.warn("[downloads] all CDNs failed:", lastError)
-    }
-    return null
-  }
-
-  /**
-   * Eagerly cache every advertised transcript for the track so the
-   * Transcript dialog can render offline. Fire-and-forget — transcript
-   * JSON is kilobytes; the audio download (megabytes) is the user-visible
-   * "save for offline" milestone, so we don't block its completion on the
-   * transcript leg. Failures are logged at warn-level (not swallowed) so
-   * they show up when QA inspects the device console.
-   */
-  function downloadTranscriptsForTrack(trackId: TrackId): void {
-    void (async () => {
-      try {
-        const repos = app.repositories()
-        const result = await downloadTranscripts(
-          { trackId },
-          {
-            transcripts: repos.transcripts,
-            // Per-language fetch routes through the same runtime CDN
-            // fallback as audio: a transcript download that fails on
-            // the active CDN promotes a working alternative for the
-            // rest of the session. `repos.transcripts.get()` reads
-            // `storagePublicUrl` (which closes over `activeServer`)
-            // freshly per call, so `tryServers` promotes each candidate
-            // before invoking the repo and the repo's URL construction
-            // tracks the rotation.
-            transfer: async (id, language) => {
-              const outcome = await tryServers(() => repos.transcripts.get(id, language))
-              if (outcome === null) {
-                throw new Error(`transcript fetch failed on every CDN: ${id} / ${language}`)
-              }
-            },
-          }
-        )
-        if (!result.ok) {
-          console.warn(`[downloads] transcript list failed for ${trackId}: ${result.error}`)
-          return
-        }
-        if (result.value.failed.length > 0) {
-          console.warn(
-            `[downloads] transcript download partial for ${trackId}; failed langs: ${result.value.failed.join(", ")}`
-          )
-        }
-      } catch (err) {
-        console.warn(`[downloads] transcript download crashed for ${trackId}:`, err)
-      }
-    })()
   }
 
   /**
@@ -209,13 +123,13 @@ export const useDownloadStore = defineStore("downloads", () => {
           // Even when audio is already on disk, make sure transcripts
           // are too — the user might have saved offline before the
           // transcript-prefetch feature shipped, so this self-heals.
-          downloadTranscriptsForTrack(trackId)
+          transcriptPrefetch.prefetchForTrack(trackId)
           return cached
         }
         setProgress(trackId, 0)
         setState(trackId, "downloading")
         const result = await downloadMedia(
-          { trackId, path, candidates: candidateServers() },
+          { trackId, path, candidates: fallback.candidates() },
           {
             mediaItems: app.repositories().mediaItems,
             transfer: (url, onProgress) =>
@@ -232,7 +146,7 @@ export const useDownloadStore = defineStore("downloads", () => {
           // transcript prefetch (kicked off below) starts from the
           // updated active server, not the failed one.
           await promotePreferredServer(app, result.value.server)
-          downloadTranscriptsForTrack(trackId)
+          transcriptPrefetch.prefetchForTrack(trackId)
           return result.value.mediaItem.localPath
         }
         setState(trackId, "failed")
