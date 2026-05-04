@@ -8,12 +8,7 @@
       <!-- pointerdown only on the puck itself: pointerdown elsewhere
            inside the player must bubble up so the carousel can claim
            the swipe and switch pages. -->
-      <div
-        class="puck"
-        :class="{ engaged }"
-        :style="{ left: puckLeftPct + '%' }"
-        @pointerdown="onPointerDown"
-      />
+      <div class="puck" :style="{ left: puckLeftPct + '%' }" @pointerdown="onPointerDown" />
     </div>
     <span class="label right">{{ rightLabel }}</span>
   </div>
@@ -41,16 +36,20 @@ const props = withDefaults(
   {
     leftLabel: "L",
     rightLabel: "R",
-    deadzone: 0.08,
+    // Wider centre detent: makes "drop near centre" snap reliably.
+    // The visual rail-gap is ~16% of full track width; the snap zone
+    // is ±15% of value-space (≈ ±15% on each side of the centre).
+    deadzone: 0.15,
   }
 )
 
 const emit = defineEmits<{
   "update:modelValue": [value: number]
-  /** Emitted when the puck visibly crosses the deadzone boundary
-   *  (engages or disengages the mix). The parent uses this for
-   *  haptic feedback. */
-  "boundary-cross": [direction: "engage" | "disengage"]
+  /** Emitted whenever the puck does something a finger should *feel*:
+   *  crossing the deadzone boundary either way, or visibly snapping
+   *  back to centre on release. Parent maps this to a single light
+   *  haptic — no direction info is needed. */
+  tick: []
 }>()
 
 /* -------------------------------------------------------------------------- */
@@ -71,8 +70,6 @@ watch(
     if (!dragging.value) livePosition.value = next
   }
 )
-
-const engaged = computed(() => Math.abs(livePosition.value) > props.deadzone)
 
 // Map slider value [-1,+1] linearly to puck centre [0,100]%.
 const puckLeftPct = computed(() => ((livePosition.value + 1) / 2) * 100)
@@ -118,6 +115,13 @@ function onPointerUp(e: PointerEvent): void {
   // point exact zero matters: usePlayerStore derives `enabled` from
   // `mixPosition !== 0`.
   if (Math.abs(livePosition.value) < props.deadzone) {
+    // Visible snap-back tick when the puck visibly jumps to centre
+    // from a non-zero position AND the engagement didn't already trip
+    // (which already emitted its own tick on the way back into the
+    // detent). Tiny absolute threshold filters out micro-drift / `-0`.
+    const visiblyDisplaced = Math.abs(livePosition.value) > 1e-3
+    if (visiblyDisplaced && !lastEngaged) emit("tick")
+    livePosition.value = 0
     commit(0)
   } else {
     commit(livePosition.value)
@@ -146,7 +150,7 @@ function commit(value: number): void {
   if (v !== props.modelValue) emit("update:modelValue", v)
   const nowEngaged = Math.abs(v) > props.deadzone
   if (nowEngaged !== lastEngaged) {
-    emit("boundary-cross", nowEngaged ? "engage" : "disengage")
+    emit("tick")
     lastEngaged = nowEngaged
   }
 }
@@ -154,6 +158,7 @@ function commit(value: number): void {
 
 <style scoped>
 .mix-control {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -162,6 +167,10 @@ function commit(value: number): void {
   padding: 0 12px;
   user-select: none;
   touch-action: pan-y;
+}
+
+.mix-control * {
+  box-sizing: border-box;
 }
 
 .label {
@@ -198,18 +207,18 @@ function commit(value: number): void {
 .puck {
   position: absolute;
   top: 50%;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--ion-color-primary-contrast, #fff);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  /* Same warm off-white + dark hairline border as the speed slider's
+     pill puck — makes the two sliders feel like one family. */
+  background: #f4e7d2;
+  background: color-mix(in srgb, white 88%, var(--ion-color-primary) 12%);
+  border: 1.5px solid color-mix(in srgb, var(--ion-color-primary-shade) 35%, transparent);
   transform: translate(-50%, -50%);
-  transition:
-    box-shadow 0.15s ease,
-    background 0.15s ease;
-  /* Visually 18 px, but a 36 px tap target via an invisible expansion so
-     a sloppy finger still grabs the puck instead of falling through to
-     the carousel swipe gesture. */
+  transition: border-color 0.15s ease;
+  /* Visual size 20 px, but 38 px tap target via an invisible expansion
+     so a sloppy finger still grabs the puck. */
   cursor: grab;
   touch-action: none;
 }
@@ -219,12 +228,5 @@ function commit(value: number): void {
   position: absolute;
   inset: -9px;
   border-radius: 50%;
-}
-
-.puck.engaged {
-  background: var(--ion-color-primary-shade, #2a73c2);
-  box-shadow:
-    0 0 0 3px rgba(255, 255, 255, 0.55),
-    0 1px 6px rgba(0, 0, 0, 0.45);
 }
 </style>
