@@ -76,22 +76,22 @@ final class StereoMixTap {
             process: tapProcess
         )
 
-        var unmanagedTap: Unmanaged<MTAudioProcessingTap>?
+        var tap: MTAudioProcessingTap?
         let status = MTAudioProcessingTapCreate(
             kCFAllocatorDefault,
             &callbacks,
             kMTAudioProcessingTapCreationFlag_PreEffects,
-            &unmanagedTap
+            &tap
         )
-        guard status == noErr, let unmanagedTap = unmanagedTap else {
+        guard status == noErr, let tap else {
             return nil
         }
 
-        // takeRetainedValue() consumes the +1 from MTAudioProcessingTapCreate.
+        // The Xcode 26 SDK imports MTAudioProcessingTapCreate as audited, so
+        // the +1 from Create is owned by Swift directly — no Unmanaged dance.
         // AVMutableAudioMixInputParameters.audioTapProcessor retains its own
         // reference, so the tap survives as long as the AVPlayerItem holding
         // this audioMix lives — and is released when the item is replaced.
-        let tap = unmanagedTap.takeRetainedValue()
         let inputParams = AVMutableAudioMixInputParameters(track: audioTrack)
         inputParams.audioTapProcessor = tap
 
