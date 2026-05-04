@@ -303,6 +303,11 @@ platform :ios do
       output_directory: File.join(IOS_PROJECT_DIR, "build"),
       output_name: "App",
       clean: true,
+      # Pipe raw xcodebuild output straight to stdout. xcpretty (the gym
+      # default) hides codesign / link errors — when the archive fails on
+      # CI we need the full text in the GitHub Actions log to diagnose
+      # without ssh-ing into the self-hosted runner.
+      xcodebuild_formatter: "",
       export_options: {
         signingStyle: "manual",
         teamID: ENV.fetch("APPLE_STORE_TEAM_ID"),
@@ -440,6 +445,10 @@ platform :ios do
       timeout: 3600,
       lock_when_sleeps: false,
     )
+
+    # Diagnostic only — print the user search list so we can see what
+    # other keychains live alongside ours on this runner.
+    sh("security list-keychains -d user", log: false)
   end
 
   private_lane :import_ios_certificates do
@@ -474,19 +483,59 @@ platform :ios do
     # still needs the partition list to permit access from non-bundled tools.
     # Without this, signing on self-hosted macOS dies with errSecInternalComponent
     # right after "Apple Distribution: ..." identity is selected.
+    #
+    # log: true on purpose — silent failures here are exactly what we just
+    # spent two CI runs chasing.
     sh(
       "security set-key-partition-list " \
         "-S apple-tool:,apple:,codesign: " \
         "-s -k #{IOS_KEYCHAIN_PASSWORD.shellescape} #{ios_keychain_name.shellescape}",
-      log: false,
     )
+
+    # Print the codesigning identities visible in our keychain so the CI log
+    # makes it obvious whether the import landed and whether duplicates exist
+    # in the user's other keychains.
+    sh("security find-identity -v -p codesigning #{ios_keychain_name.shellescape}", log: false)
+    sh("security find-identity -v -p codesigning", log: false)
   end
 
   private_lane :install_ios_provisioning_profiles do
     work_dir = File.expand_path(File.join(MOBILE_ROOT, "fastlane/.apple-certs"))
     profiles = Dir.glob(File.join(work_dir, "**/*.mobileprovision"))
     UI.user_error!("No .mobileprovision found in APPLE_CERTIFICATES bundle") if profiles.empty?
-    profiles.each { |p| install_provisioning_profile(path: p) }
+
+    # We used to call fastlane's `install_provisioning_profile` action here,
+    # but on Xcode 26.4 / macOS 26 self-hosted runners it started crashing
+    # with "Error parsing provisioning profile" because its parse path
+    # shells out to `security cms -D -i <file>` and the latter now returns
+    # empty stdout (strict CMS verification regression in newer macOS, see
+    # runs 25320394676 / 25321043983). Decode the CMS envelope ourselves
+    # via openssl with `-noverify` so the install isn't gated on having
+    # the WWDR intermediate trusted in the runner's user keychain — the
+    # profile only needs to be readable by Xcode at sign time.
+    require "plist"
+    dest_dir = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
+    FileUtils.mkdir_p(dest_dir)
+
+    profiles.each do |profile|
+      plist_xml = `openssl cms -verify -noverify -inform DER -in #{profile.shellescape} 2>/dev/null`
+      if plist_xml.empty?
+        # Diagnostic dump if openssl also can't decode — surface stderr
+        # so we know whether the file is corrupt or the envelope changed.
+        sh("ls -la #{profile.shellescape}", log: false)
+        sh("file #{profile.shellescape}", log: false)
+        sh("openssl cms -verify -noverify -inform DER -in #{profile.shellescape} 2>&1 | head -20 || true", log: false)
+        UI.user_error!("openssl cms returned empty for #{profile}")
+      end
+
+      parsed = Plist.parse_xml(plist_xml)
+      uuid = parsed && parsed["UUID"]
+      UI.user_error!("Could not extract UUID from #{profile}") if uuid.nil? || uuid.empty?
+
+      dest = File.join(dest_dir, "#{uuid}.mobileprovision")
+      FileUtils.cp(profile, dest)
+      UI.message("Installed provisioning profile #{uuid} → #{dest}")
+    end
   end
 
   private_lane :setup_app_store_connect_api_key do
