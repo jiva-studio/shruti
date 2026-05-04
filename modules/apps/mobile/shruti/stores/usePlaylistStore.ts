@@ -14,8 +14,9 @@ import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Result } from "@lib/domain/result.js"
 import { useShruti } from "@shruti/shruti.js"
-import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
+import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
+import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
 
 export interface PlaylistEntry {
   readonly item: PlaylistItem
@@ -31,13 +32,14 @@ const PAGE_SIZE = 50
  * `add()` — the store owns the `addTrackToPlaylist` use-case + refresh,
  * so the Home list updates immediately without the views coordinating.
  *
- * Per-item progress and completion are kept in side-maps populated from
- * `listening_sessions` on `refresh()` / `loadMore()`. The player calls
- * `patchProgress` on each session finalize so the playlist UI reflects
- * the latest position without a full refresh.
+ * Per-item progress / completion (loaded from `listening_sessions`) and
+ * audio + transcript prefetch are delegated to two composables under
+ * `stores/playlist/` to keep this store focused on queue state.
  */
 export const usePlaylistStore = defineStore("playlist", () => {
   const app = useShruti()
+  const derived = usePlaylistDerivedData()
+  const prefetch = usePlaylistPrefetch()
 
   const entries = ref<readonly PlaylistEntry[]>([])
   const total = ref<number>(0)
@@ -45,44 +47,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
   // rows have been paged into `entries` yet. Backs hasTrack() so Search
   // shows the "added" indicator even for tracks past the first page.
   const activeTrackIds = ref<ReadonlySet<string>>(new Set())
-  /** Position in milliseconds for each loaded item, derived from sessions. */
   const progressMap = ref<ReadonlyMap<PlaylistItemId, number>>(new Map())
-  /** `ended_at` in unix ms when the item was first finished, or null. */
   const completedAtMap = ref<ReadonlyMap<PlaylistItemId, number | null>>(new Map())
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
 
   const hasMore = computed(() => entries.value.length < total.value)
-
-  async function loadDerivedFor(pageEntries: readonly PlaylistEntry[]): Promise<{
-    progress: Map<PlaylistItemId, number>
-    completed: Map<PlaylistItemId, number | null>
-  }> {
-    const repos = app.repositories()
-    const itemIds = pageEntries.map((e) => e.item.id)
-    if (itemIds.length === 0) {
-      return { progress: new Map(), completed: new Map() }
-    }
-    const durationsSec = new Map<PlaylistItemId, number>()
-    for (const e of pageEntries) {
-      const ms = maxAudioDurationMs(e.track)
-      if (ms > 0) durationsSec.set(e.item.id, Math.floor(ms / 1000))
-    }
-    const [progressEntries, completedEntries] = await Promise.all([
-      repos.listeningSessions.getProgressForItems(itemIds),
-      repos.listeningSessions.getCompletedAtForItems(itemIds, durationsSec),
-    ])
-    const progress = new Map<PlaylistItemId, number>()
-    for (const [id, entry] of progressEntries) {
-      progress.set(id, entry.position * 1000)
-    }
-    const completed = new Map<PlaylistItemId, number | null>()
-    for (const [id, sec] of completedEntries) {
-      completed.set(id, sec === null ? null : sec * 1000)
-    }
-    return { progress, completed }
-  }
 
   async function refresh(): Promise<void> {
     isLoading.value = true
@@ -98,9 +69,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
       // hasTrack() needs the full active list, not just the first page.
       const allItems = await repos.playlistItems.listActive()
       activeTrackIds.value = new Set(allItems.map((i) => i.trackId))
-      const derived = await loadDerivedFor(page.entries)
-      progressMap.value = derived.progress
-      completedAtMap.value = derived.completed
+      const next = await derived.loadFor(page.entries)
+      progressMap.value = next.progress
+      completedAtMap.value = next.completed
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
@@ -124,13 +95,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
       )
       entries.value = [...entries.value, ...page.entries]
       total.value = page.total
-      const derived = await loadDerivedFor(page.entries)
-      const nextProgress = new Map(progressMap.value)
-      for (const [k, v] of derived.progress) nextProgress.set(k, v)
-      progressMap.value = nextProgress
-      const nextCompleted = new Map(completedAtMap.value)
-      for (const [k, v] of derived.completed) nextCompleted.set(k, v)
-      completedAtMap.value = nextCompleted
+      const next = await derived.loadFor(page.entries)
+      const merged = derived.mergeInto(
+        { progress: progressMap.value, completed: completedAtMap.value },
+        next
+      )
+      progressMap.value = merged.progress
+      completedAtMap.value = merged.completed
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
     }
@@ -152,53 +123,9 @@ export const usePlaylistStore = defineStore("playlist", () => {
     )
     if (result.ok) {
       await refresh()
-      void prefetchAudio(trackId)
+      void prefetch.prefetchTrack(trackId)
     }
     return result
-  }
-
-  // Fire-and-forget audio prefetch. The download indicator on the Home
-  // row drives itself off the download store — the user sees progress
-  // without the playlist view blocking on the network round-trip.
-  async function prefetchAudio(trackId: TrackId): Promise<void> {
-    try {
-      const repos = app.repositories()
-      const track = await repos.tracks.getById(trackId)
-      const variant = track?.variants.find((v) => v.audio) ?? null
-      if (!variant?.audio) return
-      useDownloadStore().prefetch(trackId, variant.audio.path)
-    } catch (err) {
-      console.error("[playlist] prefetch failed", err)
-    }
-    void prefetchTranscripts(trackId)
-  }
-
-  // Pull every advertised transcript into the on-disk cache so the
-  // Transcript dialog renders instantly (and works offline) when the
-  // user opens it later. Errors are swallowed — a missing transcript
-  // is not fatal and the dialog has its own empty/error state.
-  async function prefetchTranscripts(trackId: TrackId): Promise<void> {
-    try {
-      const repos = app.repositories()
-      const languages = await repos.transcripts.availableLanguages(trackId)
-      for (const lang of languages) {
-        repos.transcripts.get(trackId, lang).catch(() => {})
-      }
-    } catch (err) {
-      console.error("[playlist] transcript prefetch failed", err)
-    }
-  }
-
-  /** Prefetch audio + transcripts for every currently-loaded entry. Fire-and-forget. */
-  function prefetchAll(): void {
-    const downloads = useDownloadStore()
-    for (const { track } of entries.value) {
-      const variant = track.variants.find((v) => v.audio)
-      if (variant?.audio) {
-        downloads.prefetch(track.id, variant.audio.path)
-      }
-      void prefetchTranscripts(track.id)
-    }
   }
 
   async function archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>> {
@@ -258,6 +185,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
 
   function getCompletedAt(itemId: PlaylistItemId): number | null {
     return completedAtMap.value.get(itemId) ?? null
+  }
+
+  function prefetchAll(): void {
+    prefetch.prefetchAll(entries.value)
   }
 
   return {
