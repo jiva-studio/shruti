@@ -1,61 +1,48 @@
 <template>
   <div class="speed-skip-panel">
-    <!-- Reserved slot under which the FloatingPlayer's shared Play
-         button sits when this page is the active one. The slot
-         exists in the layout so the row hugs the right edge of the
-         viewport instead of sliding under Play. -->
-    <div class="play-slot" :style="{ width: playSlotWidth + 'px' }" />
-
-    <button
-      class="skip"
-      type="button"
-      aria-label="Skip back 15 seconds"
-      @click.stop="emit('skipBack')"
-    >
-      <IonIcon :icon="playSkipBackOutline" />
-    </button>
-
     <SpeedSlider
       class="slider"
       :model-value="modelValue"
       :presets="presets"
       @update:model-value="(v: number) => emit('update:modelValue', v)"
-      @snap="(v: number) => emit('snap', v)"
+      @snap="emit('snap')"
     />
 
     <button
-      class="skip"
+      class="skip ion-activatable"
+      type="button"
+      aria-label="Skip back 15 seconds"
+      @click.stop="emit('skipBack')"
+    >
+      <IonIcon class="skip-icon" :icon="arrowUndoOutline" />
+      <IonRippleEffect />
+    </button>
+
+    <button
+      class="skip ion-activatable"
       type="button"
       aria-label="Skip forward 15 seconds"
       @click.stop="emit('skipForward')"
     >
-      <IonIcon :icon="playSkipForwardOutline" />
+      <IonIcon class="skip-icon" :icon="arrowRedoOutline" />
+      <IonRippleEffect />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue"
-import { playSkipBackOutline, playSkipForwardOutline } from "ionicons/icons"
+import { IonIcon, IonRippleEffect } from "@ionic/vue"
+import { arrowUndoOutline, arrowRedoOutline } from "ionicons/icons"
 import SpeedSlider from "./SpeedSlider.vue"
 
-withDefaults(
-  defineProps<{
-    modelValue: number
-    presets?: readonly number[]
-    /** Width of the Play-button slot reserved on the left. Should
-     *  match FloatingPlayer's playButtonSize so the slot lines up
-     *  with where the shared overlay drops the button. */
-    playSlotWidth?: number
-  }>(),
-  {
-    playSlotWidth: 44,
-  }
-)
+defineProps<{
+  modelValue: number
+  presets?: readonly number[]
+}>()
 
 const emit = defineEmits<{
   "update:modelValue": [value: number]
-  snap: [value: number]
+  snap: []
   skipBack: []
   skipForward: []
 }>()
@@ -63,17 +50,21 @@ const emit = defineEmits<{
 
 <style scoped>
 .speed-skip-panel {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   width: 100%;
   height: 100%;
-  padding: 0 8px 0 8px;
+  /* Slider on the left grows; the two skip buttons sit at the right
+     edge, hugging the static Play overlay. Right padding is tight so
+     skip-forward is visually adjacent to Play. */
+  padding-left: 8px;
+  padding-right: 0;
   gap: 4px;
 }
 
-.play-slot {
-  flex-shrink: 0;
-  height: 100%;
+.speed-skip-panel * {
+  box-sizing: border-box;
 }
 
 .slider {
@@ -83,24 +74,27 @@ const emit = defineEmits<{
 
 .skip {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  position: relative;
+  overflow: hidden;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   border: none;
-  background: transparent;
+  /* Same circular-chip feel as the Play button, just one shade
+     darker than the player's tinted background, and a touch smaller
+     so Play stays the visual focus. Tap feedback comes from the
+     ion-ripple-effect inside, not a background swap. */
+  background: var(--ion-color-primary, #c8723f);
   color: var(--ion-color-primary-contrast, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 1.4rem;
   padding: 0;
-  /* Eat just the click; carousel needs pointerdown to bubble so a
-     drag started here can still page-swipe (a tap stays under the
-     8 px lock threshold and doesn't trigger the swipe). */
 }
 
-.skip:active {
-  background: rgba(255, 255, 255, 0.18);
+.skip-icon {
+  width: 14px;
+  height: 14px;
 }
 </style>

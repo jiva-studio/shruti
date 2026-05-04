@@ -16,8 +16,8 @@
       :play-button-size="playButtonSize"
       @play-clicked="onTogglePause"
       @click="onOpenTranscript"
-      @mix-boundary-cross="onMixBoundaryCross"
-      @speed-snap="onSpeedSnap"
+      @mix-tick="onSliderTick"
+      @speed-tick="onSliderTick"
       @skip-back="onSkipBack"
       @skip-forward="onSkipForward"
     />
@@ -159,13 +159,10 @@ function onOpenTranscript(): void {
   else if (player.trackId) transcriptStore.show(player.trackId)
 }
 
-function onMixBoundaryCross(): void {
-  // Light haptic when the user pulls the puck out of the centre detent
-  // or releases it back inside.
-  void app.haptics.impact("light")
-}
-
-function onSpeedSnap(): void {
+function onSliderTick(): void {
+  // Single haptic channel for both sliders — fires whenever the puck
+  // does something a finger should feel (detent crossings, preset
+  // boundaries, snap-back to centre).
   void app.haptics.impact("light")
 }
 
