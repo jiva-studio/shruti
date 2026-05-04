@@ -69,10 +69,12 @@ jobs:
             ios:
               - *shared
               - 'modules/apps/mobile/ios/**'
+              - 'modules/plugins/**/ios/**'
               - '.github/actions/mobile-ios-setup/**'
             android:
               - *shared
               - 'modules/apps/mobile/android/**'
+              - 'modules/plugins/**/android/**'
               - '.github/actions/mobile-android-setup/**'
 
   # -------------------------------------------------------------------------- #
@@ -379,6 +381,20 @@ jobs:
           FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "60"
           FASTLANE_XCODEBUILD_SETTINGS_RETRIES: "6"
         run: cd modules/apps/mobile && bundle exec fastlane ios build
+      - name: dump gym log on failure
+        if: failure() && steps.check_ios.outputs.present == 'true'
+        shell: bash
+        run: |
+          # Fastlane's gym writes the full unfiltered xcodebuild output here,
+          # including codesign and linker errors xcpretty would hide.
+          log="$HOME/Library/Logs/gym/App-App.log"
+          if [ -f "$log" ]; then
+            echo "::group::~/Library/Logs/gym/App-App.log"
+            cat "$log"
+            echo "::endgroup::"
+          else
+            echo "::warning::gym log not found at $log"
+          fi
       - if: steps.check_ios.outputs.present == 'true'
         uses: actions/upload-artifact@v5
         with:
