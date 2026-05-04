@@ -13,8 +13,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "togglePause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "seek", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "seekBy", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setMix", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
-        
+
     ]
     
     private var player: AVPlayer?
@@ -22,6 +25,16 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var progressObserver: Any?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
     private var currentTrackId: String = ""
+    /// One tap instance, reused across opens. Owns the heap-allocated
+    /// mix-state context that the per-item MTAudioProcessingTap
+    /// callbacks dereference, so a setMix() call hits whatever item
+    /// is currently in flight.
+    private let stereoMixTap = StereoMixTap()
+    /// AVPlayer.rate has dual meaning: `0` = paused, anything > 0 means
+    /// actively playing at that speed. We can't write `player.rate =
+    /// newRate` while paused — it'd resume playback. Store the user's
+    /// chosen speed here and apply it whenever we transition into play.
+    private var targetPlaybackRate: Float = 1.0
     
     override public func load() {
         // Setup audio session for background playback
@@ -158,8 +171,21 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         // Clear any existing player
         removeProgressObserver()
         
-        // Create a new player item and player
-        playerItem = AVPlayerItem(url: url)
+        // Create a new player item and player. Attach the stereo-mix
+        // audioMix; AVPlayerItem owns the underlying MTAudioProcessingTap
+        // and releases it when the item itself goes away on the next open().
+        // makeAudioMix() returns nil for HLS / non-PCM sources — in that
+        // case we silently fall back to passthrough playback.
+        let asset = AVURLAsset(url: url)
+        playerItem = AVPlayerItem(asset: asset)
+        if let audioMix = stereoMixTap.makeAudioMix(for: asset) {
+            playerItem?.audioMix = audioMix
+        }
+        // Time-domain pitch algorithm preserves voice quality at non-1×
+        // playback rates. Default `.lowQualityZeroLatency` produces
+        // audible artefacts on speech at 2×. `.timeDomain` is a fine
+        // middle ground; `.spectral` would be even better but heavier.
+        playerItem?.audioTimePitchAlgorithm = .timeDomain
         player = AVPlayer(playerItem: playerItem)
         
         // Add status observation
@@ -242,16 +268,23 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     
     @objc func play(_ call: CAPPluginCall? = nil) {
         player?.play()
+        // `player.play()` sets rate to 1; immediately apply the user's
+        // chosen target rate. Skipped if pitch alg / item not ready —
+        // the rate will be re-applied on the next play() / state change.
+        if let p = player, p.rate != 0 {
+            p.rate = targetPlaybackRate
+        }
         updatePlaybackInfo()
         call?.resolve()
     }
-    
+
     @objc func togglePause(_ call: CAPPluginCall? = nil) {
         if let player = player {
             if player.rate != 0 {
                 player.pause()
             } else {
                 player.play()
+                player.rate = targetPlaybackRate
             }
             updatePlaybackInfo()
         }
@@ -280,6 +313,59 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         player?.seek(to: .zero)
         currentTrackId = ""
         updatePlaybackInfo()
+        call.resolve()
+    }
+
+    /// Relative seek by `delta` seconds, clamped to [0, duration].
+    @objc func seekBy(_ call: CAPPluginCall) {
+        guard let delta = call.getDouble("delta") else {
+            call.reject("Argument 'delta' is required")
+            return
+        }
+        guard let player = player, let item = player.currentItem else {
+            call.resolve()
+            return
+        }
+        let current = player.currentTime().seconds
+        let durationSec = item.duration.isIndefinite ? Double.greatestFiniteMagnitude : item.duration.seconds
+        let next = max(0, min(durationSec, current + delta))
+        let newTime = CMTime(seconds: next, preferredTimescale: 1000)
+        player.seek(to: newTime) { [weak self] finished in
+            if finished {
+                self?.updatePlaybackInfo()
+                call.resolve()
+            } else {
+                call.reject("Seek operation failed")
+            }
+        }
+    }
+
+    /// Set playback rate. Cached in `targetPlaybackRate` so a
+    /// `setPlaybackRate(2)` during pause doesn't accidentally resume
+    /// playback — AVPlayer.rate=0 means paused; anything else means
+    /// playing at that speed.
+    @objc func setPlaybackRate(_ call: CAPPluginCall) {
+        var rate = Float(call.getDouble("rate") ?? 1.0)
+        if !rate.isFinite { rate = 1.0 }
+        if rate < 0.5 { rate = 0.5 }
+        if rate > 2.0 { rate = 2.0 }
+        targetPlaybackRate = rate
+        if let player = player, player.rate != 0 {
+            // Already playing — apply immediately. While paused we just
+            // store the target; play() / togglePause() picks it up.
+            player.rate = rate
+        }
+        call.resolve()
+    }
+
+    /// Forward the slider state to the MTAudioProcessingTap context.
+    /// One context is shared by every tap created via stereoMixTap, so
+    /// this call takes effect on whatever AVPlayerItem is in flight
+    /// without rebuilding the player.
+    @objc func setMix(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? false
+        let ratio = Float(call.getDouble("ratio") ?? 0.5)
+        stereoMixTap.setMix(enabled: enabled, ratio: ratio)
         call.resolve()
     }
     

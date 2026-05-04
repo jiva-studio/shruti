@@ -16,9 +16,15 @@ import android.os.Looper;
 
 import androidx.core.app.NotificationCompat;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackParameters;
+import androidx.media3.common.audio.AudioProcessor;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import com.getcapacitor.PluginCall;
 
+import studio.jiva.shruti.audioplayer.audioprocessor.StereoMixAudioProcessor;
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionActions;
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionCallback;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaSessionMediaStateNotifier;
@@ -35,13 +41,33 @@ public final class AudioPlayerService extends Service {
     private MediaSessionMediaStateNotifier mediaSessionNotifier;
     private NotificationManager notificationManager;
     private BroadcastReceiver skipActionReceiver;
+    private final StereoMixAudioProcessor stereoMixProcessor = new StereoMixAudioProcessor();
 
     @Override
     public void onCreate() {
         super.onCreate();
         Context context = getApplicationContext();
 
-        exoPlayer = new ExoPlayer.Builder(context)
+        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(context) {
+            @Override
+            protected AudioSink buildAudioSink(
+                    Context context,
+                    boolean enableFloatOutput,
+                    boolean enableAudioTrackPlaybackParams) {
+                // Same defaults as DefaultRenderersFactory.buildAudioSink, plus
+                // our stereo→mono blender. Audio offload is implicitly off
+                // because supplying a non-default processor chain forces the
+                // sink to a software path; that's what we want — offload
+                // would route around our processor entirely.
+                return new DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(new AudioProcessor[]{stereoMixProcessor})
+                        .build();
+            }
+        };
+
+        exoPlayer = new ExoPlayer.Builder(context, renderersFactory)
                 .build();
         mediaStateNotificationService = new MediaStateNotificationService(exoPlayer);
 
@@ -220,6 +246,26 @@ public final class AudioPlayerService extends Service {
 
     public void setOnProgressChangeCall(PluginCall call) {
         mediaStateNotificationService.addNotifier(new PluginCallMediaStateNotifier(call));
+    }
+
+    /** Forward the slider state to the AudioProcessor sitting in the
+     *  ExoPlayer audio pipeline. Volatile fields make this safe to call
+     *  from the Capacitor bridge thread while the audio render thread
+     *  reads them. */
+    public void setMix(boolean enabled, float ratio) {
+        stereoMixProcessor.setMix(enabled, ratio);
+    }
+
+    /** Set playback rate; pitch is preserved (default `pitch=1f` in
+     *  PlaybackParameters), so a 2× lecture still sounds like a human.
+     *  Posted on the main looper to match the rest of the ExoPlayer
+     *  control surface. */
+    public void setPlaybackRate(float rate) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (exoPlayer != null) {
+                exoPlayer.setPlaybackParameters(new PlaybackParameters(rate));
+            }
+        });
     }
 
     private Notification createNotification() {

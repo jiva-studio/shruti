@@ -8,72 +8,25 @@
         {{ author }}
       </IonLabel>
     </div>
-
-    <div style="position: relative; overflow: visible">
-      <IonButton
-        class="play"
-        shape="round"
-        color="primary"
-        :disabled="position === duration && duration > 0"
-        @click.stop="emit('play')"
-      >
-        <IonIcon slot="icon-only" :icon="playButtonIcon" />
-      </IonButton>
-      <div v-if="showProgress" class="progress">
-        <RadialProgress
-          :stroke-width="4"
-          :inner-stroke-width="4"
-          :diameter="playButtonSize"
-          :completed-steps="position"
-          :total-steps="duration"
-          :animate-speed="750"
-          start-color="rgba(255, 255, 255, .65)"
-          stop-color="rgba(255, 255, 255, .65)"
-          inner-stroke-color="rgba(255, 255, 255, 0)"
-        />
-      </div>
-    </div>
+    <!-- Reserved slot under which the FloatingPlayer's shared Play
+         button sits when this page is the active one. The slot keeps
+         the title/author flex from spilling under Play. -->
+    <div class="play-slot" :style="{ width: playButtonSize + 'px' }" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonLabel } from "@ionic/vue"
-import { play, pause, checkmarkDone } from "ionicons/icons"
-import { computed, toRefs } from "vue"
-import RadialProgress from "vue3-radial-progress"
+import { IonLabel } from "@ionic/vue"
 
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
-const props = withDefaults(
+withDefaults(
   defineProps<{
-    playing: boolean
     author: string
     title: string
-    duration: number
-    position: number
-    showProgress: boolean
-    /** Diameter in px of the circular play button (and the radial-progress overlay). */
+    /** Width (px) reserved on the right for the shared Play overlay. */
     playButtonSize?: number
   }>(),
   { playButtonSize: 44 }
 )
-
-const emit = defineEmits<{
-  play: []
-}>()
-
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
-
-const { playing, position, duration, playButtonSize } = toRefs(props)
-
-const playButtonIcon = computed(() => {
-  if (duration.value > 0 && position.value >= duration.value) return checkmarkDone
-  return playing.value ? pause : play
-})
 </script>
 
 <style scoped>
@@ -82,13 +35,14 @@ const playButtonIcon = computed(() => {
   color: var(--ion-color-primary-contrast);
   display: flex;
   align-items: center;
-  justify-content: center;
+  height: 100%;
   padding: 0.5rem;
   padding-left: 1rem;
 }
 
 .info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -111,16 +65,8 @@ const playButtonIcon = computed(() => {
   text-overflow: ellipsis;
 }
 
-.play {
-  --box-shadow: none;
-}
-
-.progress {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  overflow: visible;
-  pointer-events: none;
+.play-slot {
+  flex-shrink: 0;
+  height: 100%;
 }
 </style>

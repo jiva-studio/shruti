@@ -1,5 +1,6 @@
 import { AudioPlayer, type Status } from "@shruti/plugin-audio-player"
 import type {
+  AudioMixParams,
   AudioOpenParams,
   AudioProgressListener,
   IAudioPlayer,
@@ -60,9 +61,32 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
     async stop(): Promise<void> {
       await AudioPlayer.stop()
     },
+    async seekBy(deltaMs: number): Promise<void> {
+      const safe = Number.isFinite(deltaMs) ? deltaMs : 0
+      // Plugin surface speaks seconds (same as `seek`). The IAudioPlayer
+      // contract is in milliseconds; this is the boundary that converts.
+      await AudioPlayer.seekBy({ delta: safe / 1000 })
+    },
+    async setMix(params: AudioMixParams): Promise<void> {
+      const ratio = clamp01(params.ratio)
+      await AudioPlayer.setMix({ enabled: params.enabled, ratio })
+    },
+    async setPlaybackRate(rate: number): Promise<void> {
+      let safe = Number.isFinite(rate) ? rate : 1
+      if (safe < 0.5) safe = 0.5
+      if (safe > 2) safe = 2
+      await AudioPlayer.setPlaybackRate({ rate: safe })
+    },
     onProgress(listener): () => void {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
   }
+}
+
+function clamp01(x: number): number {
+  if (!Number.isFinite(x)) return 0
+  if (x < 0) return 0
+  if (x > 1) return 1
+  return x
 }

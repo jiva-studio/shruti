@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
 import { getProgressForItem } from "@lib/application/getProgressForItem.js"
 import type { Author } from "@lib/domain/author.js"
@@ -56,6 +56,29 @@ export const usePlayerStore = defineStore("player", () => {
   const positionMs = ref<number>(0)
   const durationMs = ref<number>(0)
   const itemId = ref<PlaylistItemId | null>(null)
+
+  /**
+   * Stereo-mix slider position. Persisted globally so the user's choice
+   * survives app restarts and follows them across tracks.
+   *
+   *   −1 — both ears hear the original (left channel) only
+   *    0 — mix OFF: native stereo (different content per ear)
+   *   +1 — both ears hear the translation (right channel) only
+   *
+   * Anything strictly off-zero engages the mono-mix processor.
+   */
+  const mixPosition = useConfig<number>("settings.audio.mixPosition", 0)
+  const mixEnabled = computed(() => mixPosition.value !== 0)
+  const mixRatio = computed(() => clamp01((mixPosition.value + 1) / 2))
+
+  /**
+   * Playback speed (1.0 = normal). Engines preserve pitch. Persisted
+   * globally so the user's speed choice survives app restarts and
+   * follows them across tracks.
+   */
+  const playbackSpeed = useConfig<number>("settings.audio.playbackSpeed", 1.0)
+
+  const SKIP_DELTA_MS = 15000
 
   const open = computed(() => trackId.value !== null)
 
@@ -118,6 +141,40 @@ export const usePlayerStore = defineStore("player", () => {
       if (status.duration > 0) durationMs.value = status.duration
       maybePersistProgress(status.position, status.duration)
     })
+  }
+
+  /** Push the current slider state to the engine. Called on every
+   *  slider change and right after `audioPlayer.open()`, since a fresh
+   *  MediaItem / AVPlayerItem loses the processor / tap binding. */
+  function applyMix(): void {
+    void app.audioPlayer.setMix({
+      enabled: mixEnabled.value,
+      ratio: mixRatio.value,
+    })
+  }
+  watch(mixPosition, applyMix)
+
+  /** Push playback speed to the engine. Same re-apply contract as the
+   *  mix: native MediaItems / AVPlayerItems lose the rate setting on
+   *  every open(), and on iOS pause→play also drops it. */
+  function applyPlaybackSpeed(): void {
+    void app.audioPlayer.setPlaybackRate(playbackSpeed.value)
+  }
+  watch(playbackSpeed, applyPlaybackSpeed)
+
+  async function skipBack(): Promise<void> {
+    if (!open.value) return
+    await app.audioPlayer.seekBy(-SKIP_DELTA_MS)
+    // Optimistic local update so the progress bar moves before the next
+    // native tick lands; the tracker will correct on the next emit.
+    positionMs.value = Math.max(0, positionMs.value - SKIP_DELTA_MS)
+  }
+
+  async function skipForward(): Promise<void> {
+    if (!open.value) return
+    await app.audioPlayer.seekBy(SKIP_DELTA_MS)
+    const upper = durationMs.value > 0 ? durationMs.value : positionMs.value + SKIP_DELTA_MS
+    positionMs.value = Math.min(upper, positionMs.value + SKIP_DELTA_MS)
   }
 
   async function resolveResumePositionMs(args: OpenArgs): Promise<number> {
@@ -191,6 +248,11 @@ export const usePlayerStore = defineStore("player", () => {
         title: cmd.title,
         author: cmd.authorName,
       })
+      // Re-apply the user's mix and speed settings before play() — a
+      // fresh native MediaItem / AVPlayerItem loses both the processor
+      // binding and the playback rate.
+      applyMix()
+      applyPlaybackSpeed()
       if (resumeMs > 0) {
         await app.audioPlayer.seek(resumeMs)
       }
@@ -268,14 +330,25 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs,
     durationMs,
     itemId,
+    mixPosition,
+    playbackSpeed,
     open,
     openTrack,
     togglePause,
     seek,
+    skipBack,
+    skipForward,
     stop,
     flushProgressNow,
   }
 })
+
+function clamp01(x: number): number {
+  if (!Number.isFinite(x)) return 0
+  if (x < 0) return 0
+  if (x > 1) return 1
+  return x
+}
 
 function pickResumeMs(resumeFromMs: number | null | undefined, durationMs: number): number {
   if (resumeFromMs == null || !Number.isFinite(resumeFromMs) || resumeFromMs <= 0) return 0
