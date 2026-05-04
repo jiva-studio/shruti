@@ -2,6 +2,8 @@
   <IonApp>
     <IonRouterOutlet />
     <FloatingPlayer
+      v-model:mix-position="player.mixPosition"
+      v-model:playback-speed="player.playbackSpeed"
       :playing="player.playing"
       :title="player.title"
       :author="player.authorName"
@@ -14,6 +16,10 @@
       :play-button-size="playButtonSize"
       @play-clicked="onTogglePause"
       @click="onOpenTranscript"
+      @mix-boundary-cross="onMixBoundaryCross"
+      @speed-snap="onSpeedSnap"
+      @skip-back="onSkipBack"
+      @skip-forward="onSkipForward"
     />
     <TranscriptDialog
       v-model:open="dialog.isOpen.value"
@@ -151,5 +157,23 @@ async function onTogglePause(): Promise<void> {
 function onOpenTranscript(): void {
   if (transcriptStore.open) transcriptStore.close()
   else if (player.trackId) transcriptStore.show(player.trackId)
+}
+
+function onMixBoundaryCross(): void {
+  // Light haptic when the user pulls the puck out of the centre detent
+  // or releases it back inside.
+  void app.haptics.impact("light")
+}
+
+function onSpeedSnap(): void {
+  void app.haptics.impact("light")
+}
+
+async function onSkipBack(): Promise<void> {
+  await player.skipBack()
+}
+
+async function onSkipForward(): Promise<void> {
+  await player.skipForward()
 }
 </script>
