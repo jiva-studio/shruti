@@ -44,6 +44,11 @@ export interface TrackRow {
   readonly location_id: string | null
   readonly date: string | null
   readonly hidden: number
+  /**
+   * Legacy column. Per-locale sort keys live on `track_variants.sort_reference`
+   * — see comment there. Kept here so older readers don't choke on the column;
+   * new writers leave it empty.
+   */
   readonly sort_reference: string
   readonly sort_date: string
 }
@@ -54,11 +59,19 @@ export interface TrackVariantRow {
   readonly title: string
   readonly audio_path: string | null
   readonly audio_filesize: number | null
-  /** Audio duration in **seconds**. */
+  /** Audio duration in **milliseconds**. */
   readonly audio_duration: number | null
   readonly audio_kind: string | null
   readonly transcript_path: string | null
   readonly transcript_kind: string | null
+  /**
+   * Per-locale sort key for "by reference" mode. Format:
+   *   "<localized-source-short>_<numeric-tail>"   e.g. "БГ_000001_000015" / "BG_000001_000015"
+   * The leading prefix is the source's `short_name` IN THIS variant's
+   * language, so an `ORDER BY sort_reference` on the variants of a given
+   * locale matches the user's alphabet (Б < Ш for Russian, B < S for English).
+   */
+  readonly sort_reference: string
 }
 
 export interface TrackReferenceRow {

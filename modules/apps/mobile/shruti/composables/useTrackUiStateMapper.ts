@@ -85,6 +85,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       authorsById: dictionaries.authorsById,
       locationsById: dictionaries.locationsById,
       sourcesById: dictionaries.sourcesById,
+      tagNamesById: dictionaries.tagNamesById,
       state,
       progressPct,
     })

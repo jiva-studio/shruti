@@ -1,0 +1,559 @@
+# Vaishnava terminology glossary — canonical forms for the review pipeline.
+#
+# Each entry has:
+#   canonical:    map of ISO-639 lang → canonical form
+#   category:     book | name | place | concept | mantra | role
+#   hint:         optional one-liner shown to the LLM when this term is matched
+#
+# The fuzzy-matcher (internal/infra/glossary) builds char-trigram indices from
+# the canonical forms and matches them against whisper-mangled chunk text. We
+# never list "variants" here — different declensions, hyphenations, и whisper
+# noise are caught by the trigram overlap, not by enumeration.
+
+# ────────────── BOOKS ──────────────
+- canonical: { ru: "Бхагавад-гита",          en: "Bhagavad-gītā" }
+  category: book
+  hint: 'always with "д"/"d", hyphenated; IAST has macron over ī'
+
+- canonical: { ru: "Шримад-Бхагаватам",      en: "Śrīmad-Bhāgavatam" }
+  category: book
+  hint: 'hyphenated; IAST: Śrīmad-Bhāgavatam with macron'
+
+- canonical: { ru: "Чайтанья-чаритамрита",    en: "Caitanya-caritāmṛta" }
+  category: book
+  hint: 'hyphenated trio; ри (not ри/р) in -амрита'
+
+- canonical: { ru: "Веданта-сутра",          en: "Vedānta-sūtra" }
+  category: book
+
+- canonical: { ru: "Шри Ишопанишад",          en: "Śrī Īśopaniṣad" }
+  category: book
+  hint: 'IAST: Śrī Īśopaniṣad — capital Ī, ṣ with dot below'
+
+- canonical: { ru: "Бхакти-расамрита-синдху", en: "Bhakti-rasāmṛta-sindhu" }
+  category: book
+
+- canonical: { ru: "Упадешамрита",            en: "Upadeśāmṛta" }
+  category: book
+  hint: 'aka "Nectar of Instruction"'
+
+- canonical: { ru: "Хари-бхакти-виласа",      en: "Hari-bhakti-vilāsa" }
+  category: book
+
+- canonical: { ru: "Брахма-самхита",          en: "Brahma-saṁhitā" }
+  category: book
+
+- canonical: { ru: "Падма-пурана",            en: "Padma Purāṇa" }
+  category: book
+
+- canonical: { ru: "Гарга-самхита",           en: "Garga-saṁhitā" }
+  category: book
+
+- canonical: { ru: "Махабхарата",             en: "Mahābhārata" }
+  category: book
+
+- canonical: { ru: "Рамаяна",                 en: "Rāmāyaṇa" }
+  category: book
+
+- canonical: { ru: "Ману-самхита",            en: "Manu-saṁhitā" }
+  category: book
+
+- canonical: { ru: "Веды",                    en: "Vedas" }
+  category: book
+
+- canonical: { ru: "Упанишады",               en: "Upaniṣads" }
+  category: book
+
+# ────────────── NAMES OF KRISHNA & AVATARS ──────────────
+- canonical: { ru: "Кришна",                  en: "Kṛṣṇa" }
+  category: name
+  hint: 'IAST: Kṛṣṇa with ṛ (vocalic r) and ṣ (s with dot)'
+
+- canonical: { ru: "Говинда",                 en: "Govinda" }
+  category: name
+
+- canonical: { ru: "Гопала",                  en: "Gopāla" }
+  category: name
+
+- canonical: { ru: "Мадхусудана",             en: "Madhusūdana" }
+  category: name
+
+- canonical: { ru: "Хришикеша",               en: "Hṛṣīkeśa" }
+  category: name
+  hint: 'master of the senses; one ш (not Хриши Кеша)'
+
+- canonical: { ru: "Джанардана",              en: "Janārdana" }
+  category: name
+
+- canonical: { ru: "Кешава",                  en: "Keśava" }
+  category: name
+
+- canonical: { ru: "Мукунда",                 en: "Mukunda" }
+  category: name
+
+- canonical: { ru: "Нараяна",                 en: "Nārāyaṇa" }
+  category: name
+
+- canonical: { ru: "Васудева",                en: "Vāsudeva" }
+  category: name
+
+- canonical: { ru: "Вишну",                   en: "Viṣṇu" }
+  category: name
+
+- canonical: { ru: "Маха-Вишну",              en: "Mahā-Viṣṇu" }
+  category: name
+
+- canonical: { ru: "Рама",                    en: "Rāma" }
+  category: name
+
+- canonical: { ru: "Чайтанья Махапрабху",     en: "Caitanya Mahāprabhu" }
+  category: name
+  hint: 'full title; also "Шри Чайтанья Махапрабху"'
+
+- canonical: { ru: "Нитьянанда",              en: "Nityānanda" }
+  category: name
+
+- canonical: { ru: "Адвайта Ачарья",          en: "Advaita Ācārya" }
+  category: name
+
+- canonical: { ru: "Гауранга",                en: "Gaurāṅga" }
+  category: name
+
+- canonical: { ru: "Гададхара",               en: "Gadādhara" }
+  category: name
+
+- canonical: { ru: "Шриваса",                 en: "Śrīvāsa" }
+  category: name
+
+- canonical: { ru: "Адхокшаджа",              en: "Adhokṣaja" }
+  category: name
+  hint: 'beyond senses; not "Хокшиджа"'
+
+# ────────────── DEVOTEES, ACHARYAS, FAMILY ──────────────
+- canonical: { ru: "Шрила Прабхупада",        en: "Śrīla Prabhupāda" }
+  category: name
+
+- canonical: { ru: "А. Ч. Бхактиведанта Свами Прабхупада", en: "A. C. Bhaktivedanta Swami Prabhupāda" }
+  category: name
+  hint: 'full title with initials and Свами; whisper often runs together'
+
+- canonical: { ru: "Бхактисиддханта Сарасвати", en: "Bhaktisiddhānta Sarasvatī" }
+  category: name
+
+- canonical: { ru: "Бхактивинода Тхакур",      en: "Bhaktivinoda Ṭhākura" }
+  category: name
+
+- canonical: { ru: "Вьясадева",                en: "Vyāsadeva" }
+  category: name
+
+- canonical: { ru: "Нарада Муни",              en: "Nārada Muni" }
+  category: name
+
+- canonical: { ru: "Шукадева Госвами",         en: "Śukadeva Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Сута Госвами",             en: "Sūta Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Рупа Госвами",             en: "Rūpa Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Санатана Госвами",         en: "Sanātana Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Джива Госвами",            en: "Jīva Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Рагхунатха Даса Госвами",  en: "Raghunātha Dāsa Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Гопала Бхатта Госвами",    en: "Gopāla Bhaṭṭa Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Рагхунатха Бхатта Госвами", en: "Raghunātha Bhaṭṭa Gosvāmī" }
+  category: name
+
+- canonical: { ru: "Шесть Госвами Вриндавана", en: "Six Gosvāmīs of Vṛndāvana" }
+  category: name
+
+- canonical: { ru: "Мадхвачарья",              en: "Madhvācārya" }
+  category: name
+
+- canonical: { ru: "Рамануджачарья",           en: "Rāmānujācārya" }
+  category: name
+
+- canonical: { ru: "Шанкарачарья",             en: "Śaṅkarācārya" }
+  category: name
+
+- canonical: { ru: "Арджуна",                  en: "Arjuna" }
+  category: name
+
+- canonical: { ru: "Бхишма",                   en: "Bhīṣma" }
+  category: name
+
+- canonical: { ru: "Хануман",                  en: "Hanumān" }
+  category: name
+
+- canonical: { ru: "Прахлада",                 en: "Prahlāda" }
+  category: name
+
+- canonical: { ru: "Дхрува",                   en: "Dhruva" }
+  category: name
+
+- canonical: { ru: "Юдхиштхира",               en: "Yudhiṣṭhira" }
+  category: name
+
+- canonical: { ru: "Бхима",                    en: "Bhīma" }
+  category: name
+
+- canonical: { ru: "Драупади",                 en: "Draupadī" }
+  category: name
+
+- canonical: { ru: "Кунти",                    en: "Kuntī" }
+  category: name
+
+- canonical: { ru: "Деваки",                   en: "Devakī" }
+  category: name
+
+- canonical: { ru: "Яшода",                    en: "Yaśodā" }
+  category: name
+
+- canonical: { ru: "Нанда Махараджа",          en: "Nanda Mahārāja" }
+  category: name
+
+- canonical: { ru: "Радхарани",                en: "Rādhārāṇī" }
+  category: name
+
+- canonical: { ru: "Радха",                    en: "Rādhā" }
+  category: name
+
+- canonical: { ru: "Лакшми",                   en: "Lakṣmī" }
+  category: name
+
+- canonical: { ru: "Сита",                     en: "Sītā" }
+  category: name
+
+- canonical: { ru: "Брахма",                   en: "Brahmā" }
+  category: name
+
+- canonical: { ru: "Шива",                     en: "Śiva" }
+  category: name
+
+- canonical: { ru: "Индра",                    en: "Indra" }
+  category: name
+
+# ────────────── PLACES ──────────────
+- canonical: { ru: "Вриндаван",                en: "Vṛndāvana" }
+  category: place
+
+- canonical: { ru: "Маяпур",                   en: "Māyāpur" }
+  category: place
+  # 6-letter toponym — trigram overlap collapses on single-char whisper
+  # mis-hears (Майяпур / Майапур / Майпур all score 0.500 vs canonical
+  # «Маяпур», below default threshold 0.55). Aliases widen the index
+  # without changing the rendered canonical form.
+  aliases:
+    ru: ["Майяпур", "Майапур", "Майпур"]
+
+- canonical: { ru: "Навадвипа",                en: "Navadvīpa" }
+  category: place
+
+- canonical: { ru: "Джаганнатха-Пури",         en: "Jagannātha Purī" }
+  category: place
+
+- canonical: { ru: "Дварака",                  en: "Dvārakā" }
+  category: place
+
+- canonical: { ru: "Матхура",                  en: "Mathurā" }
+  category: place
+
+- canonical: { ru: "Айодхья",                  en: "Ayodhyā" }
+  category: place
+
+- canonical: { ru: "Хастинапура",              en: "Hastināpura" }
+  category: place
+
+- canonical: { ru: "Курукшетра",               en: "Kurukṣetra" }
+  category: place
+
+- canonical: { ru: "Гокула",                   en: "Gokula" }
+  category: place
+
+- canonical: { ru: "Говардхана",               en: "Govardhana" }
+  category: place
+
+- canonical: { ru: "Кайласа",                  en: "Kailāsa" }
+  category: place
+
+- canonical: { ru: "Вайкунтха",                en: "Vaikuṇṭha" }
+  category: place
+
+- canonical: { ru: "Голока",                   en: "Goloka" }
+  category: place
+
+- canonical: { ru: "Каши",                     en: "Kāśī" }
+  category: place
+
+# ────────────── CONCEPTS ──────────────
+- canonical: { ru: "бхакти",                   en: "bhakti" }
+  category: concept
+
+- canonical: { ru: "карма",                    en: "karma" }
+  category: concept
+
+- canonical: { ru: "джнана",                   en: "jñāna" }
+  category: concept
+  hint: 'IAST has tilde-N and ā'
+
+- canonical: { ru: "йога",                     en: "linux-client" }
+  category: concept
+
+- canonical: { ru: "дхарма",                   en: "dharma" }
+  category: concept
+
+- canonical: { ru: "мокша",                    en: "mokṣa" }
+  category: concept
+
+- canonical: { ru: "самсара",                  en: "saṁsāra" }
+  category: concept
+
+- canonical: { ru: "майя",                     en: "māyā" }
+  category: concept
+
+- canonical: { ru: "атма",                     en: "ātmā" }
+  category: concept
+
+- canonical: { ru: "Параматма",                en: "Paramātmā" }
+  category: concept
+
+- canonical: { ru: "Брахман",                  en: "Brahman" }
+  category: concept
+
+- canonical: { ru: "Парабрахман",              en: "Parabrahman" }
+  category: concept
+
+- canonical: { ru: "Бхагаван",                 en: "Bhagavān" }
+  category: concept
+
+- canonical: { ru: "Ишвара",                   en: "Īśvara" }
+  category: concept
+
+- canonical: { ru: "джива",                    en: "jīva" }
+  category: concept
+
+- canonical: { ru: "пракрити",                 en: "prakṛti" }
+  category: concept
+
+- canonical: { ru: "пуруша",                   en: "puruṣa" }
+  category: concept
+
+- canonical: { ru: "гуна",                     en: "guṇa" }
+  category: concept
+
+- canonical: { ru: "саттва",                   en: "sattva" }
+  category: concept
+
+- canonical: { ru: "раджас",                   en: "rajas" }
+  category: concept
+
+- canonical: { ru: "тамас",                    en: "tamas" }
+  category: concept
+
+- canonical: { ru: "бхакти-йога",              en: "bhakti-linux-client" }
+  category: concept
+
+- canonical: { ru: "карма-йога",               en: "karma-linux-client" }
+  category: concept
+
+- canonical: { ru: "джнана-йога",              en: "jñāna-linux-client" }
+  category: concept
+
+- canonical: { ru: "дхьяна-йога",              en: "dhyāna-linux-client" }
+  category: concept
+
+- canonical: { ru: "аханкара",                 en: "ahaṅkāra" }
+  category: concept
+
+- canonical: { ru: "буддхи",                   en: "buddhi" }
+  category: concept
+
+- canonical: { ru: "манас",                    en: "manas" }
+  category: concept
+
+- canonical: { ru: "сач-чид-ананда",           en: "sac-cid-ānanda" }
+  category: concept
+
+- canonical: { ru: "сад-гуру",                 en: "sad-guru" }
+  category: concept
+
+- canonical: { ru: "према",                    en: "premā" }
+  category: concept
+
+- canonical: { ru: "Кришна-према",             en: "Kṛṣṇa-premā" }
+  category: concept
+
+- canonical: { ru: "раса",                     en: "rasa" }
+  category: concept
+
+- canonical: { ru: "лила",                     en: "līlā" }
+  category: concept
+
+- canonical: { ru: "аватара",                  en: "avatāra" }
+  category: concept
+
+- canonical: { ru: "ягья",                     en: "yajña" }
+  category: concept
+
+- canonical: { ru: "тапасья",                  en: "tapasya" }
+  category: concept
+
+- canonical: { ru: "санкиртана",               en: "saṅkīrtana" }
+  category: concept
+
+- canonical: { ru: "киртан",                   en: "kīrtana" }
+  category: concept
+
+- canonical: { ru: "джапа",                    en: "japa" }
+  category: concept
+
+- canonical: { ru: "мантра",                   en: "mantra" }
+  category: concept
+
+- canonical: { ru: "виграха",                  en: "vigraha" }
+  category: concept
+  hint: 'form / deity (in Russian: личность / форма)'
+
+- canonical: { ru: "мурти",                    en: "mūrti" }
+  category: concept
+
+- canonical: { ru: "айшварья",                 en: "aiśvarya" }
+  category: concept
+
+- canonical: { ru: "мадхурья",                 en: "mādhurya" }
+  category: concept
+
+- canonical: { ru: "ватсалья",                 en: "vātsalya" }
+  category: concept
+
+- canonical: { ru: "сакхья",                   en: "sākhya" }
+  category: concept
+
+- canonical: { ru: "дасья",                    en: "dāsya" }
+  category: concept
+
+- canonical: { ru: "шанта",                    en: "śānta" }
+  category: concept
+
+- canonical: { ru: "ачинтья-бхеда-абхеда-таттва", en: "acintya-bheda-abheda-tattva" }
+  category: concept
+  hint: 'inconceivable simultaneous oneness and difference'
+
+- canonical: { ru: "ниргуна",                  en: "nirguṇa" }
+  category: concept
+
+- canonical: { ru: "сагуна",                   en: "saguṇa" }
+  category: concept
+
+- canonical: { ru: "нирвишеша",                en: "nirviśeṣa" }
+  category: concept
+
+- canonical: { ru: "савишеша",                 en: "saviśeṣa" }
+  category: concept
+
+- canonical: { ru: "сварупа",                  en: "svarūpa" }
+  category: concept
+
+- canonical: { ru: "вайрагья",                 en: "vairāgya" }
+  category: concept
+
+- canonical: { ru: "садхана-бхакти",           en: "sādhana-bhakti" }
+  category: concept
+
+- canonical: { ru: "бхава",                    en: "bhāva" }
+  category: concept
+
+- canonical: { ru: "сева",                     en: "sevā" }
+  category: concept
+
+- canonical: { ru: "даршан",                   en: "darśana" }
+  category: concept
+
+- canonical: { ru: "прасадам",                 en: "prasāda" }
+  category: concept
+
+- canonical: { ru: "экадаши",                  en: "ekādaśī" }
+  category: concept
+
+- canonical: { ru: "санскара",                 en: "saṁskāra" }
+  category: concept
+
+- canonical: { ru: "ашрам",                    en: "āśrama" }
+  category: concept
+
+- canonical: { ru: "варна",                    en: "varṇa" }
+  category: concept
+
+- canonical: { ru: "варнашрама-дхарма",        en: "varṇāśrama-dharma" }
+  category: concept
+
+# ────────────── ROLES / LIFESTYLE ──────────────
+- canonical: { ru: "ачарья",                   en: "ācārya" }
+  category: role
+
+- canonical: { ru: "гуру",                     en: "guru" }
+  category: role
+
+- canonical: { ru: "шишья",                    en: "śiṣya" }
+  category: role
+
+- canonical: { ru: "садху",                    en: "sādhu" }
+  category: role
+
+- canonical: { ru: "бхакта",                   en: "bhakta" }
+  category: role
+
+- canonical: { ru: "вайшнав",                  en: "vaiṣṇava" }
+  category: role
+
+- canonical: { ru: "брахмачари",               en: "brahmacārī" }
+  category: role
+
+- canonical: { ru: "грихастха",                en: "gṛhastha" }
+  category: role
+
+- canonical: { ru: "ванапрастха",              en: "vānaprastha" }
+  category: role
+
+- canonical: { ru: "санньяси",                 en: "sannyāsī" }
+  category: role
+
+- canonical: { ru: "брахман",                  en: "brāhmaṇa" }
+  category: role
+
+- canonical: { ru: "кшатрий",                  en: "kṣatriya" }
+  category: role
+
+- canonical: { ru: "вайшья",                   en: "vaiśya" }
+  category: role
+
+- canonical: { ru: "шудра",                    en: "śūdra" }
+  category: role
+
+# ────────────── MANTRAS ──────────────
+- canonical: { ru: "Харе Кришна",              en: "Hare Kṛṣṇa" }
+  category: mantra
+
+- canonical: { ru: "Харе Рама",                en: "Hare Rāma" }
+  category: mantra
+
+- canonical: { ru: "ом",                       en: "oṁ" }
+  category: mantra
+
+- canonical: { ru: "Гаятри",                   en: "Gāyatrī" }
+  category: mantra
+
+- canonical: { ru: "Маха-мантра",              en: "Mahā-mantra" }
+  category: mantra
+
+- canonical: { ru: "биджа",                    en: "bīja" }
+  category: mantra

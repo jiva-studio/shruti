@@ -1,0 +1,131 @@
+package fstranscript
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/transcript"
+	transcriptport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/transcript"
+)
+
+type Store struct {
+	OutDir string
+}
+
+func New(outDir string) *Store { return &Store{OutDir: outDir} }
+
+func (s *Store) rawPath(id track.Id, lang string) string {
+	// Provider-agnostic filename: today the bytes come from Parakeet,
+	// yesterday Whisper, tomorrow whatever. The on-disk shape is what
+	// matters, not the engine that produced it.
+	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, "raw.json")
+}
+
+func (s *Store) reviewSessionPath(id track.Id, lang string) string {
+	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, "review.json")
+}
+
+func (s *Store) reviewChunkPath(id track.Id, lang string, chunkIndex int) string {
+	return filepath.Join(s.OutDir, "artifacts", "tracks", string(id), "transcripts", lang, fmt.Sprintf("chunk_%04d.json", chunkIndex))
+}
+
+func (s *Store) PublicTranscriptPath(id track.Id, lang string) string {
+	return filepath.Join(s.OutDir, "public", "tracks", string(id), "transcripts", lang+".json")
+}
+
+// PublicTranscriptKey returns the rsync-bound key (no leading /).
+func (s *Store) PublicTranscriptKey(id track.Id, lang string) string {
+	return fmt.Sprintf("public/tracks/%s/transcripts/%s.json", string(id), lang)
+}
+
+func (s *Store) WriteRaw(ctx context.Context, id track.Id, lang string, raw transcript.Raw) error {
+	body, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWrite(s.rawPath(id, lang), body)
+}
+
+func (s *Store) ReadRaw(ctx context.Context, id track.Id, lang string) (transcript.Raw, error) {
+	body, err := os.ReadFile(s.rawPath(id, lang))
+	if err != nil {
+		return transcript.Raw{}, err
+	}
+	var raw transcript.Raw
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return transcript.Raw{}, err
+	}
+	return raw, nil
+}
+
+func (s *Store) WriteReviewSession(ctx context.Context, id track.Id, lang string, sessionJSON []byte) error {
+	return atomicWrite(s.reviewSessionPath(id, lang), sessionJSON)
+}
+
+func (s *Store) ReadReviewSession(ctx context.Context, id track.Id, lang string) ([]byte, error) {
+	return os.ReadFile(s.reviewSessionPath(id, lang))
+}
+
+func (s *Store) WriteReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int, chunkJSON []byte) error {
+	return atomicWrite(s.reviewChunkPath(id, lang, chunkIndex), chunkJSON)
+}
+
+func (s *Store) ReadReviewChunk(ctx context.Context, id track.Id, lang string, chunkIndex int) ([]byte, error) {
+	return os.ReadFile(s.reviewChunkPath(id, lang, chunkIndex))
+}
+
+func (s *Store) WriteReviewed(ctx context.Context, t transcript.Reviewed) error {
+	id, err := track.NewId(t.TrackId)
+	if err != nil {
+		return err
+	}
+	body, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return err
+	}
+	return atomicWrite(s.PublicTranscriptPath(id, t.Language), body)
+}
+
+func (s *Store) ReadReviewed(ctx context.Context, id track.Id, lang string) (transcript.Reviewed, error) {
+	body, err := os.ReadFile(s.PublicTranscriptPath(id, lang))
+	if err != nil {
+		return transcript.Reviewed{}, err
+	}
+	var r transcript.Reviewed
+	if err := json.Unmarshal(body, &r); err != nil {
+		return transcript.Reviewed{}, err
+	}
+	return r, nil
+}
+
+func atomicWrite(path string, body []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}()
+	if _, err := io.Copy(tmp, bytes.NewReader(body)); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+var _ transcriptport.Store = (*Store)(nil)

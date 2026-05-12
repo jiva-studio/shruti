@@ -1,4 +1,5 @@
 import type { IDatabase, IRemoteFilesStorage, IStoragePublicUrl } from "@ports/app/index.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 import { createHttpTranscriptRepository } from "@infra/repositories/http/index.js"
 import { createSqlAppRepositories, type SqlAppRepositories } from "@infra/repositories/sql/index.js"
 
@@ -17,12 +18,20 @@ export interface CreateAppRepositoriesDeps {
   readonly userDb: IDatabase
   readonly filesStorage: IRemoteFilesStorage
   readonly storagePublicUrl: IStoragePublicUrl
+  /**
+   * Read at SQL-build time inside repositories that need the active UI
+   * language (currently only the tracks repo, for by-reference sort).
+   * Wired from `useAppLanguage` at app bootstrap so a runtime locale
+   * switch reflects on the next query without re-creating repos.
+   */
+  readonly getActiveLanguage: () => LanguageCode
 }
 
 export function createAppRepositories(deps: CreateAppRepositoriesDeps): AppRepositories {
   const sql = createSqlAppRepositories({
     contentDb: deps.contentDb,
     userDb: deps.userDb,
+    getActiveLanguage: deps.getActiveLanguage,
   })
   return {
     ...sql,

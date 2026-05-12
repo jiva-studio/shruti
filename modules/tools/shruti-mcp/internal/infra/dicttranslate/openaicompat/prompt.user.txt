@@ -1,0 +1,5 @@
+KIND: __KIND__
+LANG: __LANG__
+QUERY: __QUERY__
+
+Output the JSON object now. No prose, no code fences.

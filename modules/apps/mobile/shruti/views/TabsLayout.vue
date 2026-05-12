@@ -3,22 +3,22 @@
     <IonTabs>
       <IonRouterOutlet />
       <IonTabBar slot="bottom">
-        <IonTabButton tab="tab1" href="/tabs/home">
+        <IonTabButton tab="home" href="/tabs/home">
           <IconHome />
           <IonLabel>{{ $t("app.home") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton tab="tab3" href="/tabs/search">
+        <IonTabButton tab="search" href="/tabs/search">
           <IconSearch />
           <IonLabel>{{ $t("app.search") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton v-if="showNotesTab" tab="tab2" href="/tabs/notes">
+        <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
           <IconBookmark />
           <IonLabel>{{ $t("app.notes") }}</IonLabel>
         </IonTabButton>
 
-        <IonTabButton tab="tab4" href="/tabs/settings">
+        <IonTabButton tab="settings" href="/tabs/settings">
           <IconSettings />
           <IonLabel>{{ $t("app.settings") }}</IonLabel>
         </IonTabButton>

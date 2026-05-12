@@ -1,0 +1,12 @@
+-- The dict_resolution_cache used to memoize LLM-resolver decisions
+-- (raw string → matched_id) inside the lake registry, separate from the
+-- catalog. That created a second source of truth for dict ids: any
+-- manual catalog edit (rename, merge, delete) left stale ids in the
+-- cache, which would then resurrect themselves at the next metadata
+-- extract or force-commit (silent FK violations or duplicate-creation).
+--
+-- Resolution now goes name → id through catalog directly at commit
+-- time, with a trigram-prefilter on the catalog dict for the LLM's
+-- candidate list. The lake holds no dict ids anywhere — payload_json
+-- carries canonical names, and there's no second cache.
+DROP TABLE IF EXISTS dict_resolution_cache;

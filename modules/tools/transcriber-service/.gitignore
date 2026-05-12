@@ -1,0 +1,5 @@
+bin/
+fluidbatchd/.build/
+fluidbatchd/Package.resolved
+*.swp
+.DS_Store
