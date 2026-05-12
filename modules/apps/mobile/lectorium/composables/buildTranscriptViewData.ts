@@ -61,6 +61,18 @@ export function buildTranscriptViewData(
       continue
     }
 
+    // Threshold check BEFORE the push: if adding this sentence would
+    // push the paragraph past `paragraphChars`, start a fresh paragraph
+    // now. Sentences stay atomic; the cut lands between them.
+    if (
+      block.type === "sentence" &&
+      opts.paragraphChars > 0 &&
+      current.length > 0 &&
+      charsAccum + block.text.length > opts.paragraphChars
+    ) {
+      flush()
+    }
+
     const raw: UiTranscriptBlockRaw =
       block.type === "sentence"
         ? {
@@ -109,9 +121,6 @@ export function buildTranscriptViewData(
     if (block.type === "sentence") {
       lastSpeaker = block.speaker
       charsAccum += block.text.length
-      if (opts.paragraphChars > 0 && charsAccum >= opts.paragraphChars) {
-        flush()
-      }
     }
   }
 
