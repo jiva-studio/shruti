@@ -4,44 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 )
 
-// applyLocalMigrations runs schema tweaks against current.db on every
-// catalog open. ALTER TABLE failures from "column already exists" / "no such
-// column" are swallowed so subsequent runs are no-ops; anything else
-// surfaces.
-//
-// Wire-schema state after this runs:
-//
-//   - track_variants has `sort_reference TEXT NOT NULL DEFAULT ''` (per-
-//     locale by-reference sort key, leading prefix is the localized source
-//     short_name)
-//   - track_variants does NOT have the legacy `tag_id` column (tags live
-//     in the canonical `track_tags` join table)
-//   - 11 fixed kind-tag rows seeded so resolver/auto-create find them
+// applyLocalMigrations seeds the canonical kind-tag rows and rebuilds the
+// FTS combined-row index when missing. Schema is otherwise expected to
+// already match `SupportedDBScheme` — the publisher owns schema; the
+// client only opens.
 func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := seedKindTags(ctx, db); err != nil {
 		return fmt.Errorf("seed kind tags: %w", err)
-	}
-	stmts := []string{
-		`ALTER TABLE track_variants ADD COLUMN sort_reference TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE track_variants DROP COLUMN tag_id`,
-		`CREATE INDEX IF NOT EXISTS idx_track_variants_sort_reference
-		 ON track_variants(language, sort_reference)`,
-	}
-	for _, s := range stmts {
-		if _, err := db.ExecContext(ctx, s); err != nil {
-			msg := err.Error()
-			// SQLite errors when the change has already been applied:
-			//   "duplicate column name"  — ALTER ADD COLUMN no-op
-			//   "no such column"         — ALTER DROP COLUMN no-op
-			if strings.Contains(msg, "duplicate column name") ||
-				strings.Contains(msg, "no such column") {
-				continue
-			}
-			return fmt.Errorf("local migration: %s: %w", s, err)
-		}
 	}
 	if err := backfillCombinedFtsRows(ctx, db); err != nil {
 		return fmt.Errorf("backfill combined fts: %w", err)

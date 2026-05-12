@@ -18,7 +18,8 @@ export default {
     durationMedium: "15-30 минут",
     durationLong: "30-60 минут",
     durationExtraLong: "Более 60 минут",
-    sortByDate: "По дате",
+    sortByDateDesc: "По дате (новые сверху)",
+    sortByDateAsc: "По дате (старые сверху)",
     sortByReference: "По шлоке",
   },
 }

@@ -14,8 +14,6 @@ export interface Track {
   readonly locationId: LocationId | null
   readonly date: IsoDate
   readonly hidden: boolean
-  readonly sortReference: string
-  readonly sortDate: string
   readonly references: readonly Reference[]
   readonly tagIds: readonly TagId[]
   readonly variants: readonly TrackVariant[]

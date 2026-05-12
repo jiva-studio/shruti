@@ -128,8 +128,6 @@ export function rowToTrack(parts: TrackAssemblyParts): Track {
     locationId: track.location_id,
     date: track.date,
     hidden: track.hidden !== 0,
-    sortReference: track.sort_reference,
-    sortDate: track.sort_date,
     references,
     tagIds,
     variants,

@@ -11,43 +11,25 @@ func TestBuildSortReference(t *testing.T) {
 		name         string
 		refs         []catalog.TrackReference
 		primaryShort string
-		want         string
+		want         *string
 	}{
-		{"empty refs", nil, "", "zzzzzz"},
-		{"empty refs ignores prefix", nil, "BG", "zzzzzz"},
-		{"single 10.5 BG ru", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5"}}, "БГ", "БГ_000010_000005"},
-		{"single 10.5 BG en", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5"}}, "BG", "BG_000010_000005"},
-		{"deep 10.5.12", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5.12"}}, "BG", "BG_000010_000005_000012"},
-		{"long token kept", []catalog.TrackReference{{SourceID: "source_SB", Tokens: "1234567"}}, "SB", "SB_1234567"},
+		{"empty refs returns nil", nil, "", nil},
+		{"empty refs ignores prefix", nil, "BG", nil},
+		{"single 10.5 BG ru", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5"}}, "БГ", strPtr("БГ_000010_000005")},
+		{"single 10.5 BG en", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5"}}, "BG", strPtr("BG_000010_000005")},
+		{"deep 10.5.12", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "10.5.12"}}, "BG", strPtr("BG_000010_000005_000012")},
+		{"long token kept", []catalog.TrackReference{{SourceID: "source_SB", Tokens: "1234567"}}, "SB", strPtr("SB_1234567")},
 		{"only first ref counts", []catalog.TrackReference{
 			{SourceID: "source_BG", Tokens: "10.5"},
 			{SourceID: "source_SB", Tokens: "1.1"},
-		}, "BG", "BG_000010_000005"},
-		{"empty tokens still gets prefix", []catalog.TrackReference{{SourceID: "source_BG", Tokens: ""}}, "BG", "BG"},
-		{"empty prefix falls back to numeric tail", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "1.1"}}, "", "000001_000001"},
+		}, "BG", strPtr("BG_000010_000005")},
+		{"empty tokens still gets prefix", []catalog.TrackReference{{SourceID: "source_BG", Tokens: ""}}, "BG", strPtr("BG")},
+		{"empty prefix falls back to numeric tail", []catalog.TrackReference{{SourceID: "source_BG", Tokens: "1.1"}}, "", strPtr("000001_000001")},
 	}
 	for _, c := range cases {
 		got := buildSortReference(c.refs, c.primaryShort)
-		if got != c.want {
-			t.Errorf("%s: got %q want %q", c.name, got, c.want)
-		}
-	}
-}
-
-func TestBuildSortDate(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"", "00000000"},
-		{"1974-10-20", "19741020"},
-		{"2026-05-04", "20260504"},
-		{"garbage", "00000000"},
-		{"1974/10/20", "00000000"},
-	}
-	for _, c := range cases {
-		got := buildSortDate(c.in)
-		if got != c.want {
-			t.Errorf("%q: got %q want %q", c.in, got, c.want)
+		if !strPtrEq(got, c.want) {
+			t.Errorf("%s: got %s want %s", c.name, fmtStrPtr(got), fmtStrPtr(c.want))
 		}
 	}
 }
@@ -68,7 +50,11 @@ func TestSortReferenceLexicographic(t *testing.T) {
 	}
 	keys := make([]string, len(in))
 	for i, r := range in {
-		keys[i] = buildSortReference([]catalog.TrackReference{r.ref}, r.primaryShort)
+		got := buildSortReference([]catalog.TrackReference{r.ref}, r.primaryShort)
+		if got == nil {
+			t.Fatalf("position %d: unexpected nil", i)
+		}
+		keys[i] = *got
 	}
 	for i := 0; i < len(keys); i++ {
 		for j := i + 1; j < len(keys); j++ {
@@ -89,4 +75,20 @@ func TestSortReferenceLexicographic(t *testing.T) {
 			t.Errorf("position %d: got %q want %q", i, keys[i], want[i])
 		}
 	}
+}
+
+func strPtr(s string) *string { return &s }
+
+func strPtrEq(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func fmtStrPtr(p *string) string {
+	if p == nil {
+		return "<nil>"
+	}
+	return `"` + *p + `"`
 }

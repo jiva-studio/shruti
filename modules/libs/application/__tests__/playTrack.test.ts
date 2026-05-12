@@ -21,8 +21,6 @@ const mkTrack = (variants: readonly TrackVariant[]): Track => ({
   locationId: null,
   date: "2020-01-01",
   hidden: false,
-  sortReference: "",
-  sortDate: "2020-01-01",
   references: [],
   tagIds: [],
   variants,

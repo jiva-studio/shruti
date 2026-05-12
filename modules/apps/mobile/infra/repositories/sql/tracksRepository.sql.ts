@@ -142,26 +142,52 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
 
 /**
  * Build the ORDER BY clause and the params it consumes (in slot order).
- * `byReference` looks up the per-locale `sort_reference` from track_variants
- * for the active UI language, so the chip prefix the user sees ("БГ"/"BG")
- * is what the row is bucketed by.
+ * Sorts use `NULLS LAST` so tracks with no shloka (no per-locale
+ * `track_variants.sort_reference`) or no date land at the end regardless
+ * of direction.
+ *
+ * `byReference` looks up the per-locale `sort_reference` from
+ * `track_variants` for the active UI language, so the chip prefix the
+ * user sees ("БГ"/"BG") is what the row is bucketed by. Cross tiebreak
+ * by date DESC; tracks without a reference fall to the tail and within
+ * that tail sort by date DESC for free.
+ *
+ * `byDateDesc` / `byDateAsc` sort directly on `tracks.date` — the stored
+ * "YYYY-MM-DD" string compares chronologically under SQLite's BINARY
+ * collation, so no separate sort cache is needed. Cross tiebreak by
+ * reference ASC.
  */
 function sortOrderClause(
   sortBy: TrackListQuery["sortBy"],
   language: LanguageCode
 ): { clause: string; params: QueryValue[] } {
+  const refSubq = `(
+    SELECT v.sort_reference FROM track_variants v
+    WHERE v.track_id = t.id AND v.language = ?
+  )`
   switch (sortBy) {
     case "byReference":
       return {
-        clause: `ORDER BY (
-          SELECT v.sort_reference FROM track_variants v
-          WHERE v.track_id = t.id AND v.language = ?
-        ) ASC, t.id ASC`,
+        clause: `ORDER BY ${refSubq} ASC NULLS LAST,
+                          t.date DESC NULLS LAST,
+                          t.id ASC`,
         params: [language],
       }
-    case "byDate":
+    case "byDateAsc":
+      return {
+        clause: `ORDER BY t.date ASC NULLS LAST,
+                          ${refSubq} ASC NULLS LAST,
+                          t.id ASC`,
+        params: [language],
+      }
+    case "byDateDesc":
     default:
-      return { clause: "ORDER BY t.sort_date DESC", params: [] }
+      return {
+        clause: `ORDER BY t.date DESC NULLS LAST,
+                          ${refSubq} ASC NULLS LAST,
+                          t.id ASC`,
+        params: [language],
+      }
   }
 }
 
@@ -338,7 +364,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // — three ints per (phrase × column). We compute a one-term
       // BM25-without-saturation score in JS:
       //     score = Σ hits_in_row × log((N+1) / max(1, rows_with_term))
-      // and sort DESC, breaking ties by `t.sort_date DESC, t.id ASC`.
+      // and sort DESC, breaking ties by `t.date DESC, t.id ASC`.
       // Hidden tracks count toward the corpus stats — fine at 5600
       // rows, IDF stays sensible.
       type Row = TrackRow & { __minfo: Uint8Array | null }
@@ -359,8 +385,8 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       }))
       scored.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
-        const ad = a.row.sort_date ?? ""
-        const bd = b.row.sort_date ?? ""
+        const ad = a.row.date ?? ""
+        const bd = b.row.date ?? ""
         if (ad !== bd) return bd < ad ? -1 : 1
         return a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0
       })
