@@ -9,6 +9,7 @@ export interface PersistedFilters {
   authorIds: readonly string[]
   languageCodes: readonly string[]
   locationIds: readonly string[]
+  sourceIds: readonly string[]
   duration: readonly DurationFilterId[]
   sort: "byReference" | "byDate" | undefined
 }
@@ -17,6 +18,7 @@ const EMPTY: PersistedFilters = {
   authorIds: [],
   languageCodes: [],
   locationIds: [],
+  sourceIds: [],
   duration: [],
   sort: undefined,
 }
@@ -32,6 +34,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const authorIds = ref<readonly string[]>([])
   const languageCodes = ref<readonly string[]>([])
   const locationIds = ref<readonly string[]>([])
+  const sourceIds = ref<readonly string[]>([])
   const duration = ref<readonly DurationFilterId[]>([])
   const sort = ref<PersistedFilters["sort"]>(undefined)
   const loaded = ref<boolean>(false)
@@ -45,6 +48,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
         authorIds.value = parsed.authorIds ?? EMPTY.authorIds
         languageCodes.value = parsed.languageCodes ?? EMPTY.languageCodes
         locationIds.value = parsed.locationIds ?? EMPTY.locationIds
+        sourceIds.value = parsed.sourceIds ?? EMPTY.sourceIds
         duration.value = parsed.duration ?? EMPTY.duration
         sort.value = parsed.sort ?? EMPTY.sort
       } catch {
@@ -59,6 +63,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       authorIds: authorIds.value,
       languageCodes: languageCodes.value,
       locationIds: locationIds.value,
+      sourceIds: sourceIds.value,
       duration: duration.value,
       sort: sort.value,
     }
@@ -80,6 +85,11 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     await persist()
   }
 
+  async function setSources(ids: readonly string[]): Promise<void> {
+    sourceIds.value = ids
+    await persist()
+  }
+
   async function setDuration(ids: readonly DurationFilterId[]): Promise<void> {
     duration.value = ids
     await persist()
@@ -94,6 +104,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     authorIds.value = []
     languageCodes.value = []
     locationIds.value = []
+    sourceIds.value = []
     duration.value = []
     sort.value = undefined
     await persist()
@@ -110,6 +121,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     authorIds.value = []
     languageCodes.value = []
     locationIds.value = []
+    sourceIds.value = []
     duration.value = []
     sort.value = undefined
     loaded.value = false
@@ -119,6 +131,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     authorIds,
     languageCodes,
     locationIds,
+    sourceIds,
     duration,
     sort,
     loaded,
@@ -126,6 +139,7 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     setAuthors,
     setLanguages,
     setLocations,
+    setSources,
     setDuration,
     setSort,
     clearAll,

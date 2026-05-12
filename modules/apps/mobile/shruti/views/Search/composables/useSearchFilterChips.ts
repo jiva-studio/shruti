@@ -7,6 +7,7 @@ import type { SearchFilterChipDef } from "@ui/features/tracks/search/filters/ind
 import IconAuthors from "@ui/features/tracks/search/filters/icons/IconAuthors.vue"
 import IconLanguages from "@ui/features/tracks/search/filters/icons/IconLanguages.vue"
 import IconLocations from "@ui/features/tracks/search/filters/icons/IconLocations.vue"
+import IconSources from "@ui/features/tracks/search/filters/icons/IconSources.vue"
 import IconClock from "@ui/features/tracks/search/filters/icons/IconClock.vue"
 import IconSort from "@ui/features/tracks/search/filters/icons/IconSort.vue"
 
@@ -45,6 +46,16 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
     }))
   )
 
+  const sourcesItems = computed<SelectorDialogItem[]>(() =>
+    dictionaries.sourcesSorted.map((s) => {
+      const localized = s.names.get(appLanguage.value)
+      return {
+        id: s.id,
+        title: localized?.fullName ?? localized?.shortName ?? s.id,
+      }
+    })
+  )
+
   const durationItems = computed<SelectorDialogItem[]>(() => [
     { id: "short", title: t("search.filters.durationShort") },
     { id: "medium", title: t("search.filters.durationMedium") },
@@ -80,6 +91,14 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
       title: t("search.filters.locations"),
       icon: IconLocations,
       items: locationsItems.value,
+    },
+    {
+      kind: "multi",
+      key: "sources",
+      model: "sources",
+      title: t("search.filters.sources"),
+      icon: IconSources,
+      items: sourcesItems.value,
     },
     {
       kind: "single",

@@ -1,4 +1,4 @@
-import type { AuthorId, LanguageCode, LocationId, TagId } from "@lib/domain/core.js"
+import type { AuthorId, LanguageCode, LocationId, SourceId, TagId } from "@lib/domain/core.js"
 import {
   DURATION_FILTERS,
   durationFilterBounds,
@@ -14,6 +14,7 @@ export interface SearchAndFilterTracksInput {
   readonly authorIds?: readonly AuthorId[]
   readonly languageCodes?: readonly LanguageCode[]
   readonly locationIds?: readonly LocationId[]
+  readonly sourceIds?: readonly SourceId[]
   readonly tagIds?: readonly TagId[]
   readonly durationFilter?: DurationFilterId
   readonly sortBy?: SortMethod
@@ -32,6 +33,7 @@ function narrowByFilters(
   const authorSet = new Set(input.authorIds ?? [])
   const languageSet = new Set(input.languageCodes ?? [])
   const locationSet = new Set(input.locationIds ?? [])
+  const sourceSet = new Set(input.sourceIds ?? [])
   const durationBucket = input.durationFilter
     ? DURATION_FILTERS.find((d) => d.id === input.durationFilter)
     : null
@@ -40,6 +42,7 @@ function narrowByFilters(
     if (authorSet.size > 0 && (!t.authorId || !authorSet.has(t.authorId))) return false
     if (locationSet.size > 0 && (!t.locationId || !locationSet.has(t.locationId))) return false
     if (languageSet.size > 0 && !t.variants.some((v) => languageSet.has(v.language))) return false
+    if (sourceSet.size > 0 && !t.references.some((r) => sourceSet.has(r.sourceId))) return false
     if (durationBucket) {
       const anyInRange = t.variants.some((v) => {
         const d = v.audio?.duration
@@ -84,6 +87,7 @@ export async function searchAndFilterTracks(
       authorIds: input.authorIds,
       locationIds: input.locationIds,
       languageCodes: input.languageCodes,
+      sourceIds: input.sourceIds,
       tagIds: input.tagIds,
       durationMinMs: duration?.minMs,
       durationMaxMs: duration?.maxMs,
