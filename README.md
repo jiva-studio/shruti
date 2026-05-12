@@ -56,7 +56,7 @@ modules/
 ├── capacitor/
 │   └── audio-player/           # In-house Capacitor plugin (native Android/iOS/web)
 └── tools/
-    └── content-db-builder/     # Node.js CLI that builds the SQLite + exports transcripts to S3
+    └── shruti-mcp/          # Go MCP service that owns the catalog SQLite and publishes it to S3
 ```
 
 # Get involved
