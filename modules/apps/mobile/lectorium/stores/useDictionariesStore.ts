@@ -101,6 +101,18 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     )
   })
 
+  /** Sources sorted by the localised full name in the active UI language.
+   *  Falls back to short name, then the bare id, so missing translations
+   *  still sort deterministically alongside their localised siblings. */
+  const sourcesSorted = computed<readonly Source[]>(() => {
+    const lang = appLanguage.value
+    const nameFor = (s: Source): string => {
+      const localized = s.names.get(lang)
+      return localized?.fullName ?? localized?.shortName ?? s.id
+    }
+    return [...sources.value].sort((a, b) => nameFor(a).localeCompare(nameFor(b)))
+  })
+
   return {
     authors,
     locations,
@@ -115,6 +127,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     languagesByCode,
     authorsSorted,
     locationsSorted,
+    sourcesSorted,
     isLoading,
     error,
     ensureLoaded,

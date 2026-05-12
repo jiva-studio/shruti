@@ -42,11 +42,12 @@ export type FiltersModel = {
   authors?: string[]
   languages?: string[]
   locations?: string[]
+  sources?: string[]
   duration?: string
   sort?: string
 }
 
-type MultiChipKey = "authors" | "languages" | "locations"
+type MultiChipKey = "authors" | "languages" | "locations" | "sources"
 type SingleChipKey = "duration" | "sort"
 
 interface MultiChipDef {

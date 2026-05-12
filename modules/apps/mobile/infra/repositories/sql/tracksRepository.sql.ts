@@ -141,6 +141,14 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
         )
         params.push(...filters.languageCodes)
       }
+      if (filters.sourceIds?.length) {
+        clauses.push(
+          `t.id IN (SELECT track_id FROM track_references WHERE source_id IN (${filters.sourceIds
+            .map(() => "?")
+            .join(", ")}))`
+        )
+        params.push(...filters.sourceIds)
+      }
       if (filters.durationMinMs !== undefined) {
         // Duration comes from any variant that has audio. Pick the max of
         // the per-variant durations — every variant of the same track

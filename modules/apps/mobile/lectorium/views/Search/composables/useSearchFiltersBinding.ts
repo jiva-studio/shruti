@@ -27,6 +27,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       authors: [...store.authorIds],
       languages: [...store.languageCodes],
       locations: [...store.locationIds],
+      sources: [...store.sourceIds],
       duration: store.duration[0],
       sort: store.sort,
     }
@@ -42,6 +43,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       void store.setAuthors(next.authors ?? [])
       void store.setLanguages(next.languages ?? [])
       void store.setLocations(next.locations ?? [])
+      void store.setSources(next.sources ?? [])
       void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
       void store.setSort(next.sort as "byReference" | "byDate" | undefined)
     },
@@ -54,6 +56,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       (f.authors?.length ?? 0) > 0 ||
       (f.languages?.length ?? 0) > 0 ||
       (f.locations?.length ?? 0) > 0 ||
+      (f.sources?.length ?? 0) > 0 ||
       (f.duration !== undefined && f.duration !== "") ||
       (f.sort !== undefined && f.sort !== "")
     )
