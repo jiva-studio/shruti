@@ -33,6 +33,15 @@ import { rowToTrack } from "./contentRowMappers.js"
  * `lectorium-mcp/internal/infra/catalog/sqlite/write.go`
  * (rebuildTrackSearchRows).
  *
+ * **Reference patterns** like `2.13` or `1.1.2` (multi-component
+ * dotted numbers) are auto-promoted to FTS phrase matches: `2.13` →
+ * `"2 13"`, `1.1.2` → `"1 1 2"`. Without this, FTS4 would tokenise
+ * `2.13` into `{2, 13}` and prefix-AND `2* 13*` would match any
+ * reference starting with 2 plus any reference starting with 13
+ * (so `bg 2.13` would surface BG 13.21, BG 4.24, etc. before BG 2.13).
+ * A single all-digit token (a bare year like `1974`) stays a prefix
+ * — only dotted patterns get the phrase treatment.
+ *
  * **Phrase queries** in double quotes are passed through to FTS as a
  * phrase match (`"life after death"` requires the tokens adjacent and
  * in order). Single-Cyrillic-token phrases stay bare-prefix to dodge
@@ -43,23 +52,41 @@ import { rowToTrack } from "./contentRowMappers.js"
  * positive match, which would surprise users. Reach for client-side
  * filtering if exclusion is needed.
  */
-function buildFtsQuery(raw: string): string {
+export function buildFtsQuery(raw: string): string {
   const pieces = splitQueryPieces(raw)
   if (pieces.length === 0) return ""
   const out: string[] = []
   for (const piece of pieces) {
+    if (piece.phrase) {
+      // User-quoted phrase: tokenise (split on punctuation, lower-case)
+      // and emit as an FTS phrase. Single-token phrases stay bare
+      // prefix to dodge the FTS4 Cyrillic quirk.
+      const inner = sanitizeTokens(piece.text)
+      if (inner.length === 0) continue
+      out.push(inner.length === 1 ? `${inner[0]}*` : `"${inner.join(" ")}"`)
+      continue
+    }
+    // Bare word. If it's a multi-component reference (`2.13`,
+    // `1.1.2`), promote to a phrase so FTS enforces adjacency on the
+    // numeric components. Otherwise tokenise and emit prefixes as
+    // before.
+    if (REFERENCE_PATTERN.test(piece.text)) {
+      const parts = piece.text.split(".")
+      out.push(`"${parts.join(" ")}"`)
+      continue
+    }
     const inner = sanitizeTokens(piece.text)
     if (inner.length === 0) continue
-    if (piece.phrase) {
-      // Multi-token phrase → quoted FTS expression for adjacency.
-      // Single token → bare prefix (FTS4 Cyrillic quirk).
-      out.push(inner.length === 1 ? `${inner[0]}*` : `"${inner.join(" ")}"`)
-    } else {
-      for (const t of inner) out.push(`${t}*`)
-    }
+    for (const t of inner) out.push(`${t}*`)
   }
   return out.join(" ")
 }
+
+/**
+ * Matches a multi-component numeric reference like `2.13` or `1.1.2`.
+ * A bare year (`1974`) does NOT match — only dotted patterns.
+ */
+const REFERENCE_PATTERN = /^\d+(?:\.\d+)+$/
 
 interface QueryPiece {
   phrase: boolean
@@ -136,6 +163,68 @@ function sortOrderClause(
     default:
       return { clause: "ORDER BY t.sort_date DESC", params: [] }
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       FTS relevance scoring helpers                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Decode FTS4 `matchinfo(s, 'pcx')` blob and compute a relevance
+ * score for a single matched row.
+ *
+ * The blob is a sequence of little-endian 32-bit unsigned ints:
+ *   [p, c,
+ *    (hits_in_row, hits_in_corpus, rows_with_term)  for each phrase × column]
+ *
+ * Score formula (one-term BM25 without saturation; cheap and good
+ * enough at low-thousands corpus scale):
+ *
+ *   score = Σ over (phrase, column):
+ *             hits_in_row × log((N + 1) / max(1, rows_with_term))
+ *
+ * Notindexed columns return 0 hits across the board, so they
+ * contribute nothing to the score even though they show up in the
+ * blob — no need to filter them out explicitly.
+ *
+ * If the blob is missing/malformed (defensive — shouldn't happen in
+ * practice), returns 0 so the row still surfaces, just unranked.
+ */
+function scoreMatchinfo(blob: Uint8Array | null | undefined, totalDocs: number): number {
+  if (!blob || blob.byteLength < 8) return 0
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength)
+  const u32 = (i: number): number => view.getUint32(i * 4, true)
+  const p = u32(0)
+  const c = u32(1)
+  if (p === 0 || c === 0) return 0
+  const expected = 2 + p * c * 3
+  if (blob.byteLength < expected * 4) return 0
+
+  const idfCap = Math.log((totalDocs + 1) / 1) // upper bound on IDF
+  let score = 0
+  for (let phrase = 0; phrase < p; phrase++) {
+    for (let col = 0; col < c; col++) {
+      const base = 2 + (phrase * c + col) * 3
+      const hitsInRow = u32(base)
+      const rowsWithTerm = u32(base + 2)
+      if (hitsInRow === 0) continue
+      const idf = rowsWithTerm > 0 ? Math.log((totalDocs + 1) / rowsWithTerm) : idfCap
+      score += hitsInRow * idf
+    }
+  }
+  return score
+}
+
+/**
+ * Number of `combined` search rows = number of indexed tracks. Used
+ * as the corpus size N in the IDF term. Cached per query (cheap
+ * count, runs once).
+ */
+async function getCombinedRowCount(contentDb: IDatabase): Promise<number> {
+  const rows = await contentDb.query<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM tracks_search WHERE kind = 'combined'`
+  )
+  return rows[0]?.n ?? 0
 }
 
 export interface CreateSqlTrackRepositoryDeps {
@@ -243,19 +332,47 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // kind makes implicit-AND across tokens AND across kinds work in
       // one MATCH — e.g. `"BG 1974 2.12"` succeeds because all three
       // tokens appear in the same combined row.
-      const lang = getActiveLanguage()
-      const rows = await contentDb.query<TrackRow>(
-        `SELECT t.* FROM tracks t
-         JOIN tracks_search s ON s.track_id = t.id AND s.kind = 'combined'
-         WHERE tracks_search MATCH ? AND t.hidden = 0
-         ORDER BY (
-           SELECT v.sort_reference FROM track_variants v
-           WHERE v.track_id = t.id AND v.language = ?
-         ) ASC, t.id ASC
-         LIMIT ? OFFSET ?`,
-        [fts, lang, limit, offset]
+      //
+      // Relevance: FTS4 `matchinfo(s, 'pcx')` returns a BLOB of 32-bit
+      // LE ints — `[p, c, hits_in_row, hits_in_corpus, rows_with_term, …]`
+      // — three ints per (phrase × column). We compute a one-term
+      // BM25-without-saturation score in JS:
+      //     score = Σ hits_in_row × log((N+1) / max(1, rows_with_term))
+      // and sort DESC, breaking ties by `t.sort_date DESC, t.id ASC`.
+      // Hidden tracks count toward the corpus stats — fine at 5600
+      // rows, IDF stays sensible.
+      type Row = TrackRow & { __minfo: Uint8Array | null }
+      const rawRows = await contentDb.query<Row>(
+        `SELECT t.*, matchinfo(tracks_search, 'pcx') AS __minfo
+         FROM tracks t
+         JOIN tracks_search ON tracks_search.track_id = t.id
+                            AND tracks_search.kind = 'combined'
+         WHERE tracks_search MATCH ? AND t.hidden = 0`,
+        [fts]
       )
-      return hydrate(contentDb, rows)
+      if (rawRows.length === 0) return []
+
+      const totalDocs = await getCombinedRowCount(contentDb)
+      const scored = rawRows.map((row) => ({
+        row,
+        score: scoreMatchinfo(row.__minfo, totalDocs),
+      }))
+      scored.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        const ad = a.row.sort_date ?? ""
+        const bd = b.row.sort_date ?? ""
+        if (ad !== bd) return bd < ad ? -1 : 1
+        return a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0
+      })
+
+      const paged = scored.slice(offset, offset + limit).map(({ row }) => {
+        // Strip the bookkeeping column before hydration so downstream
+        // mappers see a clean TrackRow.
+        const clean = { ...row } as Partial<Row>
+        delete clean.__minfo
+        return clean as TrackRow
+      })
+      return hydrate(contentDb, paged)
     },
 
     async getTranscriptPath(trackId: TrackId, language: LanguageCode): Promise<string | null> {
