@@ -1,20 +1,18 @@
-// Package publish copies the local out/ tree into S3, bumps the catalog
-// version, and merges public/config.json.
+// Package publish ships the freshly-built catalog DB to S3 and flips
+// public/config.json so clients see the new version. Asset files under
+// out/public/ and out/artifacts/ are NOT uploaded — they live in S3
+// independently (audio is pushed by the pipeline, images by the content
+// builder). Publish is just: new versioned .db + config pointer flip.
 package publish
 
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,51 +30,26 @@ type UseCase struct {
 type Options struct {
 	DryRun bool
 
-	// ForceFull disables incremental skipping: every file is re-uploaded even
-	// if the S3 object exists with matching size. Use after content
-	// migrations (e.g. re-encoded MP3 with same byte count, edited title)
-	// where the size-equality heuristic isn't enough.
-	ForceFull bool
-
-	// VerifyChecksum upgrades the size-only skip heuristic to a content
-	// hash check: when the remote ETag matches the local file's MD5, skip;
-	// otherwise re-upload. Multipart-uploaded objects (ETag has '-N'
-	// suffix) can't be verified this way and are always re-uploaded under
-	// this flag. Costs an extra disk read per skipped file, so off by
-	// default — turn on when a known content drift makes size alone
-	// untrustworthy (e.g. re-encoded mp3 happened to land on the same byte
-	// count after a tag edit).
-	VerifyChecksum bool
-
-	// OnProgress, if set, is called after each step (upload or skip) across
-	// all targets. The runner pushes these into Run.Progress; the daemon
-	// log also emits a heartbeat line every ~10 files.
+	// OnProgress, if set, is called after each step (DB upload, then config
+	// flip per target). FilesTotal is 1 (db) + N (targets) for the config
+	// flips.
 	OnProgress func(p ProgressTick)
 }
 
 // ProgressTick is the snapshot delivered to OnProgress after each step.
-// FilesDone counts every step (uploaded + skipped) so a progress bar shows
-// "I/N processed". The Uploaded vs Skipped split lets the caller render
-// "skipped" cleanly when the incremental run finds nothing to push.
 type ProgressTick struct {
 	FilesDone     int
 	FilesTotal    int
-	FilesUploaded int
-	FilesSkipped  int
 	BytesUploaded int64
-	BytesSkipped  int64
 }
 
 type Result struct {
-	Version      int64    `json:"version"`
-	Scheme       int      `json:"scheme"`
-	Files        int      `json:"files_uploaded"`
-	FilesSkipped int      `json:"files_skipped"`
-	BytesTotal   int64    `json:"bytes_uploaded"`
-	BytesSkipped int64    `json:"bytes_skipped"`
-	Targets      []string `json:"targets"`
-	DryRun       bool     `json:"dry_run,omitempty"`
-	Plan         []string `json:"plan,omitempty"`
+	Version    int64    `json:"version"`
+	Scheme     int      `json:"scheme"`
+	BytesTotal int64    `json:"bytes_uploaded"`
+	Targets    []string `json:"targets"`
+	DryRun     bool     `json:"dry_run,omitempty"`
+	Plan       []string `json:"plan,omitempty"`
 }
 
 type configManifest struct {
@@ -114,72 +87,26 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 	}
 
-	// 2. Copy current.db → public/db/lectorium.{cur}.db (atomic).
 	currentDB := filepath.Join(uc.OutDir, "artifacts", "catalog", "current.db")
 	if _, err := os.Stat(currentDB); err != nil {
 		return Result{}, fmt.Errorf("current.db missing — refresh first: %w", err)
 	}
-	publishedDB := filepath.Join(uc.OutDir, "public", "db", fmt.Sprintf("lectorium.%d.db", cur))
-	if err := copyFile(currentDB, publishedDB); err != nil {
-		return Result{}, err
-	}
+	dbKey := fmt.Sprintf("public/db/lectorium.%d.db", cur)
 
-	// 3. Walk out/ — collect every file under public/ and artifacts/, skipping
-	// runtime-only artefacts (SQLite WAL companions, ad-hoc backups) that
-	// would otherwise leak local state into S3.
-	var files []string
-	for _, sub := range []string{"public", "artifacts"} {
-		root := filepath.Join(uc.OutDir, sub)
-		if _, err := os.Stat(root); err != nil {
-			continue
-		}
-		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if shouldSkip(uc.OutDir, p) {
-				return nil
-			}
-			files = append(files, p)
-			return nil
-		})
-		if err != nil {
-			return Result{}, fmt.Errorf("walk %s: %w", root, err)
-		}
-	}
-	sort.Strings(files)
-
-	plan := make([]string, 0, len(files)+1)
-	for _, f := range files {
-		key := keyFor(uc.OutDir, f)
-		plan = append(plan, key)
-	}
-	plan = append(plan, "public/config.json")
-
+	plan := []string{dbKey, "public/config.json"}
 	if opts.DryRun {
 		return Result{
 			Version: cur,
 			Scheme:  uc.SupportedScheme,
 			Targets: targetNames(uc.Targets),
-			Files:   len(files),
 			DryRun:  true,
 			Plan:    plan,
 		}, nil
 	}
 
-	// 4. PUT every file to every target. Incremental by default: if the
-	// remote object exists with a matching size we skip it (pipeline outputs
-	// are deterministic per (track_id, stage) so size-equality is a strong
-	// proxy for content-equality). ForceFull bypasses the skip.
-	var uploadedBytes int64
-	var skippedFiles int
-	var skippedBytes int64
-	uploadedFiles := 0
-	totalSteps := len(files) * len(uc.Targets)
+	totalSteps := 1 + len(uc.Targets) // 1 DB upload (broadcast to every target) + 1 config flip per target
 	stepsDone := 0
+	var uploadedBytes int64
 	emit := func() {
 		if opts.OnProgress == nil {
 			return
@@ -187,73 +114,30 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		opts.OnProgress(ProgressTick{
 			FilesDone:     stepsDone,
 			FilesTotal:    totalSteps,
-			FilesUploaded: uploadedFiles,
-			FilesSkipped:  skippedFiles,
 			BytesUploaded: uploadedBytes,
-			BytesSkipped:  skippedBytes,
 		})
 	}
-	// Phase 4a: upload every file to every target. config.json is held
-	// back so a partial failure on one target leaves the whole publish
-	// rewindable — old config.json on every target still points at the
-	// previous version and clients keep using it.
-	for _, target := range uc.Targets {
-		for _, f := range files {
-			key := keyFor(uc.OutDir, f)
-			localSize, err := fileSize(f)
-			if err != nil {
-				return Result{}, err
-			}
-			if !opts.ForceFull {
-				remoteSize, remoteETag, exists, err := target.Head(ctx, key)
-				if err != nil {
-					return Result{}, fmt.Errorf("head %s: %w", key, err)
-				}
-				if exists && remoteSize == localSize {
-					skip := true
-					if opts.VerifyChecksum {
-						// Hyphen → multipart upload, no plain MD5 in ETag
-						// → can't verify, re-upload to be safe.
-						if remoteETag == "" || strings.Contains(remoteETag, "-") {
-							skip = false
-						} else {
-							localMD5, herr := fileMD5Hex(f)
-							if herr != nil {
-								return Result{}, fmt.Errorf("md5 %s: %w", f, herr)
-							}
-							skip = localMD5 == remoteETag
-						}
-					}
-					if skip {
-						skippedFiles++
-						skippedBytes += localSize
-						stepsDone++
-						emit()
-						continue
-					}
-				}
-			}
-			body, sz, err := readFileSized(f)
-			if err != nil {
-				return Result{}, err
-			}
-			ct := contentTypeFor(f)
-			if err := target.Put(ctx, key, ct, bytes.NewReader(body), sz); err != nil {
-				return Result{}, fmt.Errorf("put %s: %w", key, err)
-			}
-			uploadedBytes += sz
-			uploadedFiles++
-			stepsDone++
-			emit()
-		}
-	}
 
-	// Phase 4b: now that every target has the new file payload, flip
-	// config.json on each target. If a Put here fails on target N, every
-	// target ≤ N has the new version live; targets > N still serve the
-	// previous version. That's the best we can do without a cross-target
-	// transaction — but at least no client ever sees a config that
-	// references files that aren't there yet.
+	// 2. Upload the new versioned DB to every target. Held back from config
+	// flip so a partial failure here leaves the previous version still live
+	// on every target.
+	dbBody, dbSize, err := readFileSized(currentDB)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, target := range uc.Targets {
+		if err := target.Put(ctx, dbKey, "application/x-sqlite3", bytes.NewReader(dbBody), dbSize); err != nil {
+			return Result{}, fmt.Errorf("put %s (%s): %w", dbKey, target.Name(), err)
+		}
+		uploadedBytes += dbSize
+	}
+	stepsDone++
+	emit()
+
+	// 3. Flip config.json on each target. If a Put here fails on target N,
+	// every target ≤ N has the new version live; targets > N still serve
+	// the previous version. Best we can do without a cross-target txn —
+	// but no client ever sees a config pointing at a missing .db.
 	for _, target := range uc.Targets {
 		var cfg configManifest
 		if _, err := target.GetJSON(ctx, "public/config.json", &cfg); err != nil {
@@ -279,73 +163,24 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)
 		}
+		uploadedBytes += int64(len(body))
+		stepsDone++
+		emit()
 	}
 
-	// 6. Update meta.json: published_version + reset modified=false.
-	// Only after every target accepted the config.json flip — otherwise
-	// the local "we published version X" record could lie about what
-	// the remote actually serves.
+	// 4. Update meta.json: published_version + reset modified=false. Only
+	// after every target accepted the config.json flip — otherwise the
+	// local record could lie about what the remote serves.
 	if err := updateMetaPublished(uc.OutDir, cur); err != nil {
 		return Result{}, err
 	}
 
 	return Result{
-		Version:      cur,
-		Scheme:       uc.SupportedScheme,
-		Files:        uploadedFiles,
-		FilesSkipped: skippedFiles,
-		BytesTotal:   uploadedBytes,
-		BytesSkipped: skippedBytes,
-		Targets:      targetNames(uc.Targets),
+		Version:    cur,
+		Scheme:     uc.SupportedScheme,
+		BytesTotal: uploadedBytes,
+		Targets:    targetNames(uc.Targets),
 	}, nil
-}
-
-func keyFor(outDir, full string) string {
-	rel, _ := filepath.Rel(outDir, full)
-	return filepath.ToSlash(rel)
-}
-
-// shouldSkip returns true for files that exist on disk but must NOT be
-// published to S3:
-//   - SQLite WAL companion files (-shm/-wal) — live runtime state, not a
-//     consistent snapshot. SQLite checkpoints them into the main .db on
-//     normal close; if we ever ship them, downstream readers see a half-
-//     applied transaction.
-//   - Per-process *.bak-<timestamp> files — local backups created by
-//     upgrade/migration code paths, irrelevant to consumers.
-func shouldSkip(outDir, full string) bool {
-	rel, err := filepath.Rel(outDir, full)
-	if err != nil {
-		return false
-	}
-	rel = filepath.ToSlash(rel)
-	base := filepath.Base(rel)
-	if strings.HasSuffix(base, ".db-shm") || strings.HasSuffix(base, ".db-wal") {
-		return true
-	}
-	if strings.Contains(base, ".bak-") {
-		return true
-	}
-	return false
-}
-
-func contentTypeFor(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".db":
-		return "application/x-sqlite3"
-	case ".json":
-		return "application/json"
-	case ".mp3":
-		return "audio/mpeg"
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".svg":
-		return "image/svg+xml"
-	}
-	return "application/octet-stream"
 }
 
 func readFileSized(path string) ([]byte, int64, error) {
@@ -354,58 +189,6 @@ func readFileSized(path string) ([]byte, int64, error) {
 		return nil, 0, err
 	}
 	return body, int64(len(body)), nil
-}
-
-func fileSize(path string) (int64, error) {
-	st, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return st.Size(), nil
-}
-
-// fileMD5Hex returns the lowercase hex MD5 of the file at path. Used by
-// VerifyChecksum mode to compare against an S3 single-part ETag.
-func fileMD5Hex(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := md5.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	tmp, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		tmp.Close()
-		_ = os.Remove(tmp.Name())
-	}()
-	if _, err := io.Copy(tmp, in); err != nil {
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), dst)
 }
 
 func versionFromString(s string) (int64, error) {
