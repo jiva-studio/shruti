@@ -27,6 +27,7 @@ export interface TrackSearchQuery {
    * titles ("Джентельмен") and references ("bg 10.5", "10.5").
    */
   readonly text?: string
+  readonly sortBy?: SortMethod
   readonly limit?: number
   readonly offset?: number
 }

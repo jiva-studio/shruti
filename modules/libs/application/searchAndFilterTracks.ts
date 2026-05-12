@@ -76,6 +76,7 @@ export async function searchAndFilterTracks(
   if (text) {
     const all = await deps.tracks.search({
       text,
+      sortBy: input.sortBy,
       limit: input.limit,
       offset: input.offset,
     })

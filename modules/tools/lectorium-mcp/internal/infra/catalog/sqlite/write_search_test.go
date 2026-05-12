@@ -137,13 +137,12 @@ func setupFtsSchema(t *testing.T, db *sql.DB) {
 	stmts := []string{
 		`CREATE TABLE tracks (
 			id TEXT PRIMARY KEY, author_id TEXT, location_id TEXT,
-			date TEXT, hidden INTEGER DEFAULT 0,
-			sort_reference TEXT NOT NULL DEFAULT '', sort_date TEXT NOT NULL DEFAULT '')`,
+			date TEXT, hidden INTEGER DEFAULT 0)`,
 		`CREATE TABLE track_variants (
 			track_id TEXT, language TEXT, title TEXT,
 			audio_path TEXT, audio_filesize INTEGER, audio_duration INTEGER,
 			audio_kind TEXT, transcript_path TEXT, transcript_kind TEXT,
-			sort_reference TEXT NOT NULL DEFAULT '',
+			sort_reference TEXT,
 			PRIMARY KEY (track_id, language))`,
 		`CREATE TABLE track_references (
 			track_id TEXT, ref_idx INTEGER, source_id TEXT, tokens TEXT,

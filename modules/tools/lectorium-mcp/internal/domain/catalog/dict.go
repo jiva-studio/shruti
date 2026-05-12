@@ -53,9 +53,8 @@ type TrackRow struct {
 	Id         string
 	AuthorID   string
 	LocationID string
-	Date       string // YYYY-MM-DD
+	Date       string // YYYY-MM-DD; empty = unknown
 	Hidden     bool
-	SortDate   string
 	// TagIDs lists kind-tag ids (tag_morning_walk, tag_conversation, …) that
 	// classify this track. Wire-mapped to the canonical track_tags join table.
 	// Track-level (not per-variant): "morning walk" stays a morning walk
@@ -69,7 +68,9 @@ type TrackRow struct {
 // localized source short_name as its leading prefix so a `ORDER BY
 // sort_reference` honors the user's alphabet ("БГ_…" < "ШБ_…" for Russian,
 // "BG_…" < "SB_…" for English). The numeric tail uses zero-padded chapter/
-// verse tokens for stable lexical ordering inside a source.
+// verse tokens for stable lexical ordering inside a source. nil = no
+// scriptural reference (Morning Walks, Conversations) — sorted last via
+// SQL `NULLS LAST` regardless of locale.
 type VariantRow struct {
 	TrackID        string
 	Language       string
@@ -80,5 +81,5 @@ type VariantRow struct {
 	AudioKind      string
 	TranscriptPath string
 	TranscriptKind string
-	SortReference  string
+	SortReference  *string
 }

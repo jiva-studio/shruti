@@ -17,7 +17,8 @@ export default {
     durationMedium: "15-30 minutes",
     durationLong: "30-60 minutes",
     durationExtraLong: "60+ minutes",
-    sortByDate: "By date",
+    sortByDateDesc: "Date (newest first)",
+    sortByDateAsc: "Date (oldest first)",
     sortByReference: "By reference",
   },
 }

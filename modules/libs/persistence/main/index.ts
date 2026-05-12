@@ -44,13 +44,6 @@ export interface TrackRow {
   readonly location_id: string | null
   readonly date: string | null
   readonly hidden: number
-  /**
-   * Legacy column. Per-locale sort keys live on `track_variants.sort_reference`
-   * — see comment there. Kept here so older readers don't choke on the column;
-   * new writers leave it empty.
-   */
-  readonly sort_reference: string
-  readonly sort_date: string
 }
 
 export interface TrackVariantRow {
@@ -70,8 +63,10 @@ export interface TrackVariantRow {
    * The leading prefix is the source's `short_name` IN THIS variant's
    * language, so an `ORDER BY sort_reference` on the variants of a given
    * locale matches the user's alphabet (Б < Ш for Russian, B < S for English).
+   * NULL when the track has no scriptural reference (Morning Walks,
+   * Conversations) — consumer sorts those last via `NULLS LAST`.
    */
-  readonly sort_reference: string
+  readonly sort_reference: string | null
 }
 
 export interface TrackReferenceRow {

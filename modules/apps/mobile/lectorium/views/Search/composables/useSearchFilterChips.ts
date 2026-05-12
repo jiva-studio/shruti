@@ -63,7 +63,8 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
   ])
 
   const sortItems = computed<SelectorDialogItem[]>(() => [
-    { id: "byDate", title: t("search.filters.sortByDate") },
+    { id: "byDateDesc", title: t("search.filters.sortByDateDesc") },
+    { id: "byDateAsc", title: t("search.filters.sortByDateAsc") },
     { id: "byReference", title: t("search.filters.sortByReference") },
   ])
 
