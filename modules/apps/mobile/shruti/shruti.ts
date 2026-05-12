@@ -15,6 +15,7 @@ import type {
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 
@@ -191,11 +192,13 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
       if (!databases.user) {
         throw new Error("repositories(): user DB is not open yet")
       }
+      const appLanguage = useAppLanguage()
       cachedRepos = createAppRepositories({
         contentDb: databases.content,
         userDb: databases.user,
         filesStorage: seed.filesStorage,
         storagePublicUrl,
+        getActiveLanguage: () => appLanguage.value,
       })
       return cachedRepos
     },

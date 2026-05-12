@@ -430,6 +430,17 @@ platform :ios do
   IOS_KEYCHAIN_PASSWORD = "shruti-ephemeral"
 
   private_lane :setup_ios_keychain do
+    # Sweep orphaned keychains from previously crashed runs. They share the
+    # macOS user `akd` with us, sit in the search list (because past runs
+    # used `add_to_search_list: true`), and hold copies of the same Apple
+    # Distribution identity. codesign then has multiple candidates for the
+    # same SHA1, picks one whose ACL/partition-list isn't ours, and the
+    # SecurityAgent prompt for that keychain hangs the headless runner —
+    # exact symptom seen on run 25316413229: SQLCipher.framework signed in
+    # 37 minutes (silent UI prompt timing out), Cordova.framework then
+    # failed instantly with errSecInternalComponent.
+    sweep_orphan_ios_keychains
+
     # NOT default_keychain: true — all 5 self-hosted runners share the same
     # macOS user (akd) and therefore one ~/Library/Keychains. Setting default
     # makes parallel iOS jobs clobber each other's keychain in the user's
@@ -448,6 +459,42 @@ platform :ios do
 
     # Diagnostic only — print the user search list so we can see what
     # other keychains live alongside ours on this runner.
+    sh("security list-keychains -d user", log: false)
+  end
+
+  # Remove leftover shruti-build-<runId>.keychain[-db] files (and their
+  # search-list entries) for runs other than the current one. Fastlane's
+  # `cleanup_keychain` only cleans the current run's keychain, so an aborted
+  # job leaks one each time.
+  def sweep_orphan_ios_keychains
+    current = ios_keychain_name
+    keychains_dir = File.expand_path("~/Library/Keychains")
+    pattern = File.join(keychains_dir, "shruti-build-*.keychain*")
+
+    orphans = Dir.glob(pattern).reject do |p|
+      File.basename(p).start_with?(current)
+    end
+
+    if orphans.empty?
+      UI.message("No orphan shruti-build-*.keychain files found")
+    else
+      UI.important("Sweeping #{orphans.size} orphan keychain file(s):")
+      orphans.each { |p| UI.important("  #{File.basename(p)}") }
+    end
+
+    # Walk unique keychain names (strip -db suffix) and unlist+delete each.
+    # `security delete-keychain` removes the file *and* the search-list entry.
+    orphan_names = orphans.map { |p| p.sub(/-db\z/, "") }.uniq
+    orphan_names.each do |kc|
+      sh("security delete-keychain #{kc.shellescape} || true", log: false)
+    end
+
+    # And nuke any stray files that delete-keychain skipped (e.g., when the
+    # keychain was never registered and only the file remains).
+    orphans.each { |p| FileUtils.rm_f(p) }
+
+    # Print the resulting search list so we can verify the runner is clean
+    # before the build starts. Strictly diagnostic — cheap and safe.
     sh("security list-keychains -d user", log: false)
   end
 

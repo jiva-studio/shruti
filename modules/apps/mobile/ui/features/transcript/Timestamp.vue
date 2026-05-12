@@ -35,9 +35,10 @@ const showRemainingResolved = computed(() => props.showRemaining && props.durati
 /* -------------------------------------------------------------------------- */
 
 function formatTime(ms: number) {
-  const seconds = Math.floor(ms % 60)
-  const minutes = Math.floor((ms / 60) % 60)
-  const hours = Math.floor(ms / 3600)
+  const totalSeconds = Math.floor(ms / 1000)
+  const seconds = totalSeconds % 60
+  const minutes = Math.floor(totalSeconds / 60) % 60
+  const hours = Math.floor(totalSeconds / 3600)
 
   if (hours === 0) {
     return [minutes.toString().padStart(2, "0"), seconds.toString().padStart(2, "0")].join(":")
