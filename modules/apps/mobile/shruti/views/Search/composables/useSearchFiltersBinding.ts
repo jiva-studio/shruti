@@ -1,6 +1,7 @@
 import { onMounted, ref, watch, type Ref } from "vue"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
+import type { SortMethod } from "@lib/domain/sortMethods.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 
 export interface UseSearchFiltersBindingReturn {
@@ -45,7 +46,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       void store.setLocations(next.locations ?? [])
       void store.setSources(next.sources ?? [])
       void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
-      void store.setSort(next.sort as "byReference" | "byDate" | undefined)
+      void store.setSort(next.sort as SortMethod | undefined)
     },
     { deep: true }
   )

@@ -25,9 +25,7 @@ async function applyContentSchemaForTests(db: IDatabase): Promise<void> {
     author_id       TEXT,
     location_id     TEXT,
     date            TEXT,
-    hidden          INTEGER NOT NULL DEFAULT 0,
-    sort_reference  TEXT NOT NULL,
-    sort_date       TEXT NOT NULL
+    hidden          INTEGER NOT NULL DEFAULT 0
   )`)
   await db.execute(`CREATE TABLE track_variants (
     track_id         TEXT NOT NULL,
@@ -39,7 +37,7 @@ async function applyContentSchemaForTests(db: IDatabase): Promise<void> {
     audio_kind       TEXT,
     transcript_path  TEXT,
     transcript_kind  TEXT,
-    sort_reference   TEXT NOT NULL DEFAULT '',
+    sort_reference   TEXT,
     PRIMARY KEY (track_id, language)
   )`)
   await db.execute(`CREATE TABLE track_references (
@@ -103,7 +101,13 @@ interface FixtureTrack {
   references: FixtureRefGroup[]
   locationId?: string | null
   tagIds?: string[]
-  sortReference?: string
+  /**
+   * Per-locale override of the sort_reference written to track_variants.
+   * Map locale → sort key. When omitted, every variant inherits the
+   * default `${sourceId}_${tokens}` shape from the first reference (or
+   * NULL when the track has no references).
+   */
+  sortReference?: Record<string, string | null>
   hidden?: boolean
 }
 
@@ -141,14 +145,17 @@ async function seedFixture(
     }
   }
   for (const t of tracks) {
-    const sortRef = t.sortReference ?? (t.references[0] ? sortRefFromGroup(t.references[0]) : "zzz")
-    const sortDate = t.date ? t.date.replace(/-/g, "") : "00000000"
+    const defaultSortRef: string | null = t.references[0]
+      ? sortRefFromGroup(t.references[0])
+      : null
     await db.execute(
-      `INSERT INTO tracks (id, author_id, location_id, date, hidden, sort_reference, sort_date)
-       VALUES (?, NULL, ?, ?, ?, ?, ?)`,
-      [t.id, t.locationId ?? null, t.date, t.hidden ? 1 : 0, sortRef, sortDate]
+      `INSERT INTO tracks (id, author_id, location_id, date, hidden)
+       VALUES (?, NULL, ?, ?, ?)`,
+      [t.id, t.locationId ?? null, t.date, t.hidden ? 1 : 0]
     )
     for (const [lang, title] of Object.entries(t.titles)) {
+      const sortRef =
+        t.sortReference && lang in t.sortReference ? t.sortReference[lang] : defaultSortRef
       await db.execute(
         `INSERT INTO track_variants (track_id, language, title, sort_reference) VALUES (?, ?, ?, ?)`,
         [t.id, lang, title, sortRef]
@@ -562,5 +569,167 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
   it("returns an empty string for whitespace-only input", () => {
     expect(buildFtsQuery("   ")).toBe("")
     expect(buildFtsQuery("")).toBe("")
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/*                                   sort                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sort tests use a separate fixture set so locale-aware reference keys
+ * (Cyrillic prefix for ru, Latin for en) can be expressed explicitly. The
+ * key promise tested here is "tracks without a date / reference always
+ * land at the end, regardless of direction or UI language".
+ */
+const SORT_SOURCES: FixtureSource[] = [
+  { id: "src_bg", en: { full: "Bhagavad-gita", short: "BG" } },
+  { id: "src_sb", en: { full: "Srimad Bhagavatam", short: "SB" } },
+]
+
+const SORT_TRACKS: FixtureTrack[] = [
+  {
+    id: "bg-6-32",
+    date: "1966-09-14",
+    titles: { en: "BG 6.32", ru: "БГ 6.32" },
+    references: [{ sourceId: "src_bg", tokens: "6.32" }],
+    sortReference: {
+      en: "BG_000006_000032",
+      ru: "БГ_000006_000032",
+    },
+  },
+  {
+    id: "sb-2-1-7",
+    date: "1974-06-15",
+    titles: { en: "SB 2.1.7", ru: "ШБ 2.1.7" },
+    references: [{ sourceId: "src_sb", tokens: "2.1.7" }],
+    sortReference: {
+      en: "SB_000002_000001_000007",
+      ru: "ШБ_000002_000001_000007",
+    },
+  },
+  {
+    id: "sb-6-1-63",
+    date: "1975-08-31",
+    titles: { en: "SB 6.1.63", ru: "ШБ 6.1.63" },
+    references: [{ sourceId: "src_sb", tokens: "6.1.63" }],
+    sortReference: {
+      en: "SB_000006_000001_000063",
+      ru: "ШБ_000006_000001_000063",
+    },
+  },
+  {
+    id: "morning-walk-1976",
+    date: "1976-02-21",
+    titles: { en: "Morning Walk 1976", ru: "Утренняя прогулка 1976" },
+    references: [],
+    sortReference: { en: null, ru: null },
+  },
+  {
+    id: "morning-walk-1973",
+    date: "1973-05-15",
+    titles: { en: "Morning Walk 1973", ru: "Утренняя прогулка 1973" },
+    references: [],
+    sortReference: { en: null, ru: null },
+  },
+  {
+    id: "no-date",
+    date: null,
+    titles: { en: "Undated lecture", ru: "Лекция без даты" },
+    references: [{ sourceId: "src_bg", tokens: "1.1" }],
+    sortReference: {
+      en: "BG_000001_000001",
+      ru: "БГ_000001_000001",
+    },
+  },
+]
+
+describe("tracksRepository.sql — list sort order", () => {
+  let db: IDatabase
+  let language: LanguageCode
+
+  const lang = (): LanguageCode => language
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(db, SORT_SOURCES, SORT_TRACKS)
+    language = "en" as LanguageCode
+  })
+
+  it("byReference in EN locale: no-shloka tracks last, sorted by date DESC within tail", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
+    const results = await repo.list({ sortBy: "byReference" })
+    expect(results.map((t) => t.id)).toEqual([
+      "no-date", // BG_000001_000001
+      "bg-6-32", // BG_000006_000032
+      "sb-2-1-7", // SB_000002_000001_000007
+      "sb-6-1-63", // SB_000006_000001_000063
+      // Morning Walks (no shloka) — NULL last, ordered by date DESC inside the tail.
+      "morning-walk-1976",
+      "morning-walk-1973",
+    ])
+  })
+
+  it("byReference in RU locale: Cyrillic prefixes order correctly, no-shloka still last", async () => {
+    language = "ru" as LanguageCode
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
+    const results = await repo.list({ sortBy: "byReference" })
+    // Cyrillic alphabet: Б < Ш. NULL pushed last by NULLS LAST regardless
+    // of the byte-order of any sentinel (this is exactly the bug fix).
+    expect(results.map((t) => t.id)).toEqual([
+      "no-date", // БГ_000001_000001
+      "bg-6-32", // БГ_000006_000032
+      "sb-2-1-7", // ШБ_000002_000001_000007
+      "sb-6-1-63", // ШБ_000006_000001_000063
+      "morning-walk-1976",
+      "morning-walk-1973",
+    ])
+  })
+
+  it("byDateDesc: newest first, tracks without date at the very end", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
+    const results = await repo.list({ sortBy: "byDateDesc" })
+    expect(results.map((t) => t.id)).toEqual([
+      "morning-walk-1976", // 1976-02-21
+      "sb-6-1-63", // 1975-08-31
+      "sb-2-1-7", // 1974-06-15
+      "morning-walk-1973", // 1973-05-15
+      "bg-6-32", // 1966-09-14
+      "no-date", // NULL → tail
+    ])
+  })
+
+  it("byDateAsc: oldest first, tracks without date STILL at the very end", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
+    const results = await repo.list({ sortBy: "byDateAsc" })
+    expect(results.map((t) => t.id)).toEqual([
+      "bg-6-32", // 1966-09-14
+      "morning-walk-1973", // 1973-05-15
+      "sb-2-1-7", // 1974-06-15
+      "sb-6-1-63", // 1975-08-31
+      "morning-walk-1976", // 1976-02-21
+      "no-date", // NULL → tail (bug-fix expectation: not at top)
+    ])
+  })
+
+  it("byReference tiebreaker: identical sort_reference resolves by date DESC", async () => {
+    // Two tracks sharing the same sort_reference but different dates —
+    // the more recent one wins the tiebreak.
+    await db.execute(`DELETE FROM track_variants WHERE track_id = 'morning-walk-1976'`)
+    await db.execute(`DELETE FROM tracks WHERE id = 'morning-walk-1976'`)
+    await seedFixture(db, [], [
+      {
+        id: "bg-6-32-older",
+        date: "1960-01-01",
+        titles: { en: "Older" },
+        references: [{ sourceId: "src_bg", tokens: "6.32" }],
+        sortReference: { en: "BG_000006_000032" },
+      },
+    ])
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
+    const results = await repo.list({ sortBy: "byReference" })
+    const bg = results.filter((t) => t.id.startsWith("bg-6-32"))
+    expect(bg.map((t) => t.id)).toEqual(["bg-6-32", "bg-6-32-older"])
   })
 })

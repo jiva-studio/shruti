@@ -144,8 +144,11 @@ func buildTitle(srcShort string, refs []catalog.TrackReference, location, title 
 	return strings.Join(parts, " — ")
 }
 
-func buildComment(sortRef, date string) string {
-	parts := []string{sortRef}
+func buildComment(sortRef *string, date string) string {
+	parts := []string{}
+	if sortRef != nil && *sortRef != "" {
+		parts = append(parts, *sortRef)
+	}
 	if date != "" {
 		parts = append(parts, date)
 	}

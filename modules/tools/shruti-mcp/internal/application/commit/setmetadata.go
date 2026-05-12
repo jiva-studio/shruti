@@ -87,7 +87,6 @@ func (uc SetTrackMetadataUseCase) Run(ctx context.Context, in SetTrackMetadataIn
 	}
 	if in.Date != nil {
 		t.Date = *in.Date
-		t.SortDate = buildSortDate(*in.Date)
 	}
 	if in.Title != nil {
 		v.Title = strings.TrimSpace(*in.Title)

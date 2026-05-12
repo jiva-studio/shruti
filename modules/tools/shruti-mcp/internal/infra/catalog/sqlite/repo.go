@@ -259,11 +259,11 @@ func (r *Repo) UsageCount(ctx context.Context, kind catalog.Kind, id string) (in
 func (r *Repo) GetTrack(ctx context.Context, id string) (catalog.TrackRow, bool, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, COALESCE(author_id,''), COALESCE(location_id,''), COALESCE(date,''),
-		       hidden, sort_date
+		       hidden
 		FROM tracks WHERE id = ?`, id)
 	var t catalog.TrackRow
 	var hidden int
-	if err := row.Scan(&t.Id, &t.AuthorID, &t.LocationID, &t.Date, &hidden, &t.SortDate); err != nil {
+	if err := row.Scan(&t.Id, &t.AuthorID, &t.LocationID, &t.Date, &hidden); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.TrackRow{}, false, nil
 		}
@@ -279,7 +279,7 @@ func (r *Repo) GetVariant(ctx context.Context, trackID, language string) (catalo
 		       COALESCE(audio_path,''), COALESCE(audio_filesize,0),
 		       COALESCE(audio_duration,0), COALESCE(audio_kind,''),
 		       COALESCE(transcript_path,''), COALESCE(transcript_kind,''),
-		       COALESCE(sort_reference,'')
+		       sort_reference
 		FROM track_variants WHERE track_id = ? AND language = ?`, trackID, language)
 	var v catalog.VariantRow
 	if err := row.Scan(&v.TrackID, &v.Language, &v.Title, &v.AudioPath, &v.AudioFilesize,

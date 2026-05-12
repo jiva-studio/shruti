@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
+import type { SortMethod } from "@lib/domain/sortMethods.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const STORAGE_KEY = "search.filters.v2"
@@ -11,7 +12,7 @@ export interface PersistedFilters {
   locationIds: readonly string[]
   sourceIds: readonly string[]
   duration: readonly DurationFilterId[]
-  sort: "byReference" | "byDate" | undefined
+  sort: SortMethod | undefined
 }
 
 const EMPTY: PersistedFilters = {

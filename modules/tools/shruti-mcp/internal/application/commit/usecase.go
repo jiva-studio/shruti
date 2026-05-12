@@ -221,10 +221,12 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		return res, nil // NB: not an error from Go's perspective; result has details
 	}
 
-	// 6. Build sort keys. sort_reference is per-language (lives on the variant)
-	// because the chip prefix renders in the user's locale; sort_date is
-	// language-agnostic. Look up the primary source's short_name in the
-	// committing language to seed the reference prefix.
+	// 6. Build sort key for the variant. sort_reference is per-language
+	// (lives on the variant) because the chip prefix renders in the user's
+	// locale. Look up the primary source's short_name in the committing
+	// language to seed the reference prefix. The mobile sort by date orders
+	// directly on tracks.date (YYYY-MM-DD lexicographic == chronological)
+	// so no separate sort_date is stored.
 	primaryShort := ""
 	if len(resolvedRefs) > 0 {
 		entry, ok, _ := uc.Catalog.GetDict(ctx, domaincatalog.KindSource, resolvedRefs[0].SourceID)
@@ -236,7 +238,6 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		}
 	}
 	sortRef := buildSortReference(resolvedRefs, primaryShort)
-	sortDate := buildSortDate(meta.Date)
 
 	// 7. Save into catalog.
 	var tagIDs []string
@@ -249,7 +250,6 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 		LocationID: locationID,
 		Date:       meta.Date,
 		Hidden:     false,
-		SortDate:   sortDate,
 		TagIDs:     tagIDs,
 	}
 	variantRow := domaincatalog.VariantRow{
@@ -332,14 +332,16 @@ func matchedDictID(resolves []extractmeta.Resolve, kind, query string) string {
 // Leading prefix is the localized source short_name (so "БГ_…" < "ШБ_…" in
 // Cyrillic and "BG_…" < "SB_…" in Latin sort the same alphabetic order the
 // user sees in chips). Numeric tail uses 6-char zero padding for stable
-// lexical compare across chapter/verse magnitudes.
+// lexical compare across chapter/verse magnitudes. Returns nil when the
+// track has no scriptural references — the consumer sorts NULL last
+// regardless of locale via SQL `NULLS LAST`.
 //
 //   refs[0].Tokens = "3.25.12", primaryShort = "ШБ" → "ШБ_000003_000025_000012"
 //   refs[0].Tokens = "",        primaryShort = "BG" → "BG"
-//   no refs                                          → "zzzzzz"
-func buildSortReference(refs []domaincatalog.TrackReference, primaryShort string) string {
+//   no refs                                          → nil
+func buildSortReference(refs []domaincatalog.TrackReference, primaryShort string) *string {
 	if len(refs) == 0 {
-		return "zzzzzz"
+		return nil
 	}
 	parts := []string{}
 	if primaryShort != "" {
@@ -352,18 +354,8 @@ func buildSortReference(refs []domaincatalog.TrackReference, primaryShort string
 			parts = append(parts, tok)
 		}
 	}
-	return strings.Join(parts, "_")
-}
-
-// buildSortDate mirrors importFromCouch.ts:computeSortDate:
-//
-//   - no/invalid date → "00000000"
-//   - "YYYY-MM-DD"    → "YYYYMMDD"
-func buildSortDate(date string) string {
-	if len(date) == 10 && date[4] == '-' && date[7] == '-' {
-		return date[0:4] + date[5:7] + date[8:10]
-	}
-	return "00000000"
+	s := strings.Join(parts, "_")
+	return &s
 }
 
 func zeroPad6(s string) string {

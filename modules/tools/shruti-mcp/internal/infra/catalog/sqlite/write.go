@@ -36,20 +36,15 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 	if t.Hidden {
 		hidden = 1
 	}
-	// tracks.sort_reference is a wire-schema legacy column; we no longer
-	// populate it (the per-locale sort key lives on track_variants). Pass
-	// '' so the NOT NULL constraint stays happy on the legacy column for
-	// existing readers; new writers ignore it. tracks.sort_date stays.
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tracks (id, author_id, location_id, date, hidden, sort_reference, sort_date)
-		VALUES (?, ?, ?, ?, ?, '', ?)
+		INSERT INTO tracks (id, author_id, location_id, date, hidden)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			author_id      = excluded.author_id,
 			location_id    = excluded.location_id,
 			date           = excluded.date,
-			hidden         = excluded.hidden,
-			sort_date      = excluded.sort_date`,
-		t.Id, t.AuthorID, t.LocationID, t.Date, hidden, t.SortDate)
+			hidden         = excluded.hidden`,
+		t.Id, t.AuthorID, t.LocationID, t.Date, hidden)
 	if err != nil {
 		return fmt.Errorf("upsert tracks: %w", err)
 	}

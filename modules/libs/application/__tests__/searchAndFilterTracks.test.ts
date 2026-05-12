@@ -9,8 +9,6 @@ const mkTrack = (over: Partial<Track> & Pick<Track, "id">): Track => ({
   locationId: null,
   date: "2020-01-01",
   hidden: false,
-  sortReference: "",
-  sortDate: "2020-01-01",
   references: [],
   tagIds: [],
   variants: [],
@@ -92,7 +90,7 @@ describe("searchAndFilterTracks", () => {
       {
         authorIds: ["a1" as AuthorId],
         tagIds: ["t1" as TagId],
-        sortBy: "byDate",
+        sortBy: "byDateDesc",
       },
       { tracks: repo }
     )
@@ -106,7 +104,7 @@ describe("searchAndFilterTracks", () => {
         durationMinMs: undefined,
         durationMaxMs: undefined,
       },
-      sortBy: "byDate",
+      sortBy: "byDateDesc",
       limit: undefined,
       offset: undefined,
     })
