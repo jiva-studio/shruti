@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
 import type { LanguageCode } from "@lib/domain/core.js"
-import { createSqlTrackRepository } from "../tracksRepository.sql.js"
+import { buildFtsQuery, createSqlTrackRepository } from "../tracksRepository.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
@@ -220,6 +220,22 @@ async function seedFixture(
   )
 }
 
+/**
+ * Wipe every table the fixture seeds, so a test can re-seed an
+ * alternative corpus. Run each DELETE separately — `db.run` in sql.js
+ * only consumes the first statement.
+ */
+async function clearAllFixtureTables(db: IDatabase): Promise<void> {
+  await db.execute(`DELETE FROM tracks_search`)
+  await db.execute(`DELETE FROM track_tags`)
+  await db.execute(`DELETE FROM track_references`)
+  await db.execute(`DELETE FROM track_variants`)
+  await db.execute(`DELETE FROM tracks`)
+  await db.execute(`DELETE FROM tags`)
+  await db.execute(`DELETE FROM locations`)
+  await db.execute(`DELETE FROM sources`)
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                  fixtures                                  */
 /* -------------------------------------------------------------------------- */
@@ -386,6 +402,97 @@ describe("tracksRepository.sql — search", () => {
     expect(await repo.search({ text: "   " })).toEqual([])
   })
 
+  it("ranks exact reference matches above prefix-only matches", async () => {
+    // Reproduces the bug behind #407: searching for "bg 2.13" used to
+    // surface BG 13.21, BG 4.24, BG 9.13 ahead of BG 2.13 because
+    // FTS tokenised the query as `2* 13*` and the sort key ignored
+    // match quality. With phrase-promotion + matchinfo-based ranking,
+    // BG 2.13 must come first.
+    await clearAllFixtureTables(db)
+    await seedFixture(
+      db,
+      [{ id: "bg", en: { full: "Bhagavad-gita", short: "BG" } }],
+      [
+        {
+          id: "t-bg-2-13",
+          date: "1974-11-01",
+          titles: { en: "BG 2.13" },
+          references: [{ sourceId: "bg", tokens: "2.13" }],
+        },
+        {
+          id: "t-bg-13-21",
+          date: "1974-10-20",
+          titles: { en: "BG 13.21" },
+          references: [{ sourceId: "bg", tokens: "13.21" }],
+        },
+        {
+          id: "t-bg-4-24",
+          date: "1974-04-13",
+          titles: { en: "BG 4.24" },
+          references: [{ sourceId: "bg", tokens: "4.24" }],
+        },
+        {
+          id: "t-bg-13-1",
+          date: "1975-06-01",
+          titles: { en: "BG 13.1" },
+          references: [{ sourceId: "bg", tokens: "13.1" }],
+        },
+      ]
+    )
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text: "bg 2.13" })
+    const ids = results.map((t) => t.id)
+    expect(ids[0]).toBe("t-bg-2-13")
+  })
+
+  it("ranks BG 13.1 above BG 13.21 / BG 13.20 for query `bg 13.1`", async () => {
+    await clearAllFixtureTables(db)
+    await seedFixture(
+      db,
+      [{ id: "bg", en: { full: "Bhagavad-gita", short: "BG" } }],
+      [
+        {
+          id: "t-bg-13-1",
+          date: "1974-05-05",
+          titles: { en: "BG 13.1" },
+          references: [{ sourceId: "bg", tokens: "13.1" }],
+        },
+        {
+          id: "t-bg-13-1-2",
+          date: "1974-06-06",
+          titles: { en: "BG 13.1-2" },
+          references: [{ sourceId: "bg", tokens: "13.1-2" }],
+        },
+        {
+          id: "t-bg-13-21",
+          date: "1975-01-01",
+          titles: { en: "BG 13.21" },
+          references: [{ sourceId: "bg", tokens: "13.21" }],
+        },
+        {
+          id: "t-bg-13-20",
+          date: "1975-02-02",
+          titles: { en: "BG 13.20" },
+          references: [{ sourceId: "bg", tokens: "13.20" }],
+        },
+      ]
+    )
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({ text: "bg 13.1" })
+    const ids = results.map((t) => t.id)
+    // BG 13.1 (and BG 13.1-2 — the `13.1-2` reference contains the
+    // adjacent `13 1` token pair) must come ahead of BG 13.21 / 13.20.
+    const idx131 = ids.indexOf("t-bg-13-1")
+    const idx1321 = ids.indexOf("t-bg-13-21")
+    const idx1320 = ids.indexOf("t-bg-13-20")
+    expect(idx131).toBeGreaterThanOrEqual(0)
+    if (idx1321 !== -1) expect(idx131).toBeLessThan(idx1321)
+    if (idx1320 !== -1) expect(idx131).toBeLessThan(idx1320)
+    const idx1312 = ids.indexOf("t-bg-13-1-2")
+    if (idx1312 !== -1 && idx1321 !== -1) expect(idx1312).toBeLessThan(idx1321)
+    if (idx1312 !== -1 && idx1320 !== -1) expect(idx1312).toBeLessThan(idx1320)
+  })
+
   it("does not return duplicate rows when a track has multiple references", async () => {
     // Sanity: the new query path scopes to kind='combined', so each
     // track contributes exactly one search row even if it has many refs.
@@ -418,5 +525,42 @@ describe("tracksRepository.sql — search", () => {
     const ids = results.map((t) => t.id)
     const unique = Array.from(new Set(ids))
     expect(ids).toEqual(unique)
+  })
+})
+
+describe("tracksRepository.sql — buildFtsQuery", () => {
+  it("promotes a multi-component reference to a phrase, leaves the word prefix", () => {
+    expect(buildFtsQuery("bg 2.13")).toBe(`bg* "2 13"`)
+  })
+
+  it("handles a bare multi-component reference", () => {
+    expect(buildFtsQuery("1.1.2")).toBe(`"1 1 2"`)
+  })
+
+  it("leaves a bare year as a prefix, not a phrase", () => {
+    expect(buildFtsQuery("1974")).toBe("1974*")
+  })
+
+  it("mixes prefix, phrase, and bare year", () => {
+    expect(buildFtsQuery("BG 1974 2.13")).toBe(`bg* 1974* "2 13"`)
+  })
+
+  it("handles a Cyrillic reference query (Russian source prefix + dotted ref)", () => {
+    expect(buildFtsQuery("шб 1.1.2 1974")).toBe(`шб* "1 1 2" 1974*`)
+  })
+
+  it("preserves the existing single-token Cyrillic prefix quirk", () => {
+    // Quoted single Cyrillic token stays bare prefix — see the FTS4
+    // quirk note in buildFtsQuery.
+    expect(buildFtsQuery(`"Джент"`)).toBe(`джент*`)
+  })
+
+  it("preserves quoted phrase semantics without double-quoting", () => {
+    expect(buildFtsQuery(`"life after death"`)).toBe(`"life after death"`)
+  })
+
+  it("returns an empty string for whitespace-only input", () => {
+    expect(buildFtsQuery("   ")).toBe("")
+    expect(buildFtsQuery("")).toBe("")
   })
 })
