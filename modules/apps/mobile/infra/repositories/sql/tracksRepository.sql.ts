@@ -1,4 +1,4 @@
-import type { IDatabase } from "@ports/app/index.js"
+import type { IDatabase, QueryValue } from "@ports/app/index.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type {
   ITrackRepository,
@@ -65,17 +65,43 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
   return tracks.map((track) => rowToTrack({ track, variants, references, tags }))
 }
 
-function sortOrderClause(sortBy: TrackListQuery["sortBy"]): string {
+/**
+ * Build the ORDER BY clause and the params it consumes (in slot order).
+ * `byReference` looks up the per-locale `sort_reference` from track_variants
+ * for the active UI language, so the chip prefix the user sees ("БГ"/"BG")
+ * is what the row is bucketed by.
+ */
+function sortOrderClause(
+  sortBy: TrackListQuery["sortBy"],
+  language: LanguageCode
+): { clause: string; params: QueryValue[] } {
   switch (sortBy) {
     case "byReference":
-      return "ORDER BY t.sort_reference ASC"
+      return {
+        clause: `ORDER BY (
+          SELECT v.sort_reference FROM track_variants v
+          WHERE v.track_id = t.id AND v.language = ?
+        ) ASC, t.id ASC`,
+        params: [language],
+      }
     case "byDate":
     default:
-      return "ORDER BY t.sort_date DESC"
+      return { clause: "ORDER BY t.sort_date DESC", params: [] }
   }
 }
 
-export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository {
+export interface CreateSqlTrackRepositoryDeps {
+  readonly contentDb: IDatabase
+  /**
+   * Active UI language for locale-aware sort. Reads on demand inside SQL
+   * builders so a language switch reflects on the next query without
+   * recreating the repo.
+   */
+  readonly getActiveLanguage: () => LanguageCode
+}
+
+export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): ITrackRepository {
+  const { contentDb, getActiveLanguage } = deps
   return {
     async getById(id: TrackId): Promise<Track | null> {
       const rows = await contentDb.query<TrackRow>(
@@ -89,7 +115,7 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
     async list(query: TrackListQuery): Promise<readonly Track[]> {
       const filters = query.filters ?? {}
       const clauses: string[] = ["t.hidden = 0"]
-      const params: (string | number)[] = []
+      const params: QueryValue[] = []
 
       if (filters.authorIds?.length) {
         clauses.push(`t.author_id IN (${filters.authorIds.map(() => "?").join(", ")})`)
@@ -119,28 +145,29 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
         // Duration comes from any variant that has audio. Pick the max of
         // the per-variant durations — every variant of the same track
         // points at the same original recording for now.
-        // DB column is seconds; the filter bound arrives in ms.
+        // DB column and the filter bound are both in milliseconds.
         clauses.push(
           `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) >= ?`
         )
-        params.push(filters.durationMinMs / 1000)
+        params.push(filters.durationMinMs)
       }
       if (filters.durationMaxMs !== undefined) {
         clauses.push(
           `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) < ?`
         )
-        params.push(filters.durationMaxMs / 1000)
+        params.push(filters.durationMaxMs)
       }
 
       const limit = query.limit ?? 50
       const offset = query.offset ?? 0
+      const sort = sortOrderClause(query.sortBy, getActiveLanguage())
 
       const rows = await contentDb.query<TrackRow>(
         `SELECT t.* FROM tracks t
          WHERE ${clauses.join(" AND ")}
-         ${sortOrderClause(query.sortBy)}
+         ${sort.clause}
          LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        [...params, ...sort.params, limit, offset]
       )
       return hydrate(contentDb, rows)
     },
@@ -157,13 +184,17 @@ export function createSqlTrackRepository(contentDb: IDatabase): ITrackRepository
       // Single path through the unified FTS index: hits against titles
       // and all reference display variants are returned from one
       // MATCH, deduplicated at the track level.
+      const lang = getActiveLanguage()
       const rows = await contentDb.query<TrackRow>(
         `SELECT DISTINCT t.* FROM tracks t
          JOIN tracks_search s ON s.track_id = t.id
          WHERE tracks_search MATCH ? AND t.hidden = 0
-         ORDER BY t.sort_reference ASC
+         ORDER BY (
+           SELECT v.sort_reference FROM track_variants v
+           WHERE v.track_id = t.id AND v.language = ?
+         ) ASC, t.id ASC
          LIMIT ? OFFSET ?`,
-        [fts, limit, offset]
+        [fts, lang, limit, offset]
       )
       return hydrate(contentDb, rows)
     },

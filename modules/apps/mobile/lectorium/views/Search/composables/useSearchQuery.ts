@@ -6,6 +6,7 @@ import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 
 const PAGE_SIZE = 50
 

@@ -83,6 +83,7 @@ export function useHomeRowBuilder(appLanguage: Ref<LanguageCode>): HomeRowBuilde
         authorsById: dictionaries.authorsById,
         locationsById: dictionaries.locationsById,
         sourcesById: dictionaries.sourcesById,
+        tagNamesById: dictionaries.tagNamesById,
         state,
         progressPct,
         disabled,

@@ -18,25 +18,44 @@ function formatReference(ref: Reference): string {
   return tokens.length > 0 ? `${ref.sourceId} ${tokens}` : ref.sourceId
 }
 
+export interface BuildTranscriptViewDataOpts {
+  /**
+   * Auto-paragraph break threshold: when the current group's accumulated
+   * sentence text length crosses this many characters, the next sentence
+   * starts a fresh group. Server-emitted `paragraph` blocks always force a
+   * break too — `paragraphChars` is just a fallback when the server didn't
+   * mark them (which is the common case today).
+   */
+  readonly paragraphChars: number
+}
+
 /**
  * Flattens one domain `Transcript` into UI mirror blocks, grouped by
- * paragraph. A new group starts whenever we hit a paragraph marker;
- * empty groups are dropped.
+ * paragraph. A new group starts at every server-emitted paragraph marker
+ * AND whenever the running character count crosses `paragraphChars`.
+ * Empty groups are dropped.
  */
 export function buildTranscriptViewData(
-  transcript: Transcript | null
+  transcript: Transcript | null,
+  opts: BuildTranscriptViewDataOpts
 ): readonly UiTranscriptBlocksGroup[] {
   if (!transcript) return []
 
   const groups: UiTranscriptBlocksGroup[] = []
   let current: UiTranscriptBlockView[] = []
   let lastSpeaker: string | undefined = undefined
+  let charsAccum = 0
+
+  const flush = () => {
+    if (current.length > 0) groups.push({ blocks: current })
+    current = []
+    lastSpeaker = undefined
+    charsAccum = 0
+  }
 
   for (const block of transcript.blocks) {
     if (block.type === "paragraph") {
-      if (current.length > 0) groups.push({ blocks: current })
-      current = []
-      lastSpeaker = undefined
+      flush()
       continue
     }
 
@@ -73,10 +92,16 @@ export function buildTranscriptViewData(
       selected: false,
     })
 
-    if (block.type === "sentence") lastSpeaker = block.speaker
+    if (block.type === "sentence") {
+      lastSpeaker = block.speaker
+      charsAccum += block.text.length
+      if (opts.paragraphChars > 0 && charsAccum >= opts.paragraphChars) {
+        flush()
+      }
+    }
   }
 
-  if (current.length > 0) groups.push({ blocks: current })
+  flush()
   return groups
 }
 

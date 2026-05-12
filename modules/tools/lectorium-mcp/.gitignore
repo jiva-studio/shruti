@@ -1,0 +1,7 @@
+/bin/
+*.test
+*.out
+lectorium-mcp.yaml
+.env
+__pycache__/
+*.pyc

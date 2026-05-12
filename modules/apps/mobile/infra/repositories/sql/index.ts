@@ -1,4 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
+import type { LanguageCode } from "@lib/domain/core.js"
 import { createSqlNoteRepository } from "./notesRepository.sql.js"
 import { createSqlPlaylistItemRepository } from "./playlistItemsRepository.sql.js"
 import { createSqlListeningSessionRepository } from "./listeningSessionsRepository.sql.js"
@@ -41,6 +42,11 @@ export interface SqlAppRepositories {
 export interface CreateSqlAppRepositoriesDeps {
   readonly contentDb: IDatabase
   readonly userDb: IDatabase
+  /**
+   * Read on every query that depends on the active UI language (e.g. the
+   * tracks repo's by-reference sort joins to track_variants for this code).
+   */
+  readonly getActiveLanguage: () => LanguageCode
 }
 
 /**
@@ -51,7 +57,10 @@ export interface CreateSqlAppRepositoriesDeps {
  */
 export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): SqlAppRepositories {
   return {
-    tracks: createSqlTrackRepository(deps.contentDb),
+    tracks: createSqlTrackRepository({
+      contentDb: deps.contentDb,
+      getActiveLanguage: deps.getActiveLanguage,
+    }),
     authors: createSqlAuthorRepository(deps.contentDb),
     locations: createSqlLocationRepository(deps.contentDb),
     sources: createSqlSourceRepository(deps.contentDb),

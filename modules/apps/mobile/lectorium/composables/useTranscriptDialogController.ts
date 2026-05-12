@@ -35,7 +35,7 @@ export interface TranscriptDialogState {
    */
   readonly mirrorsActivePlayer: ComputedRef<boolean>
   onClose(): void
-  onSeek(positionSeconds: number): void
+  onSeek(positionMs: number): void
   onSelectionAction(action: {
     action: "copy" | "bookmark" | "share"
     text: string
@@ -89,18 +89,31 @@ export function useTranscriptDialogController(
     () => transcriptStore.trackId !== null && transcriptStore.trackId === player.trackId
   )
 
-  const blockGroups = computed(() => buildTranscriptViewData(loader.transcript.value))
+  // Auto-paragraph break threshold (chars). Bound to a user-tunable
+  // setting so a future Settings screen can expose it; 350 is the chosen
+  // default after eyeballing 30-min lectures (~5-10 paragraphs each).
+  const paragraphChars = useConfig<number>("settings.transcript.paragraphChars", 350)
+
+  const blockGroups = computed(() =>
+    buildTranscriptViewData(loader.transcript.value, {
+      paragraphChars: paragraphChars.value,
+    })
+  )
   // Preview mode (Search → Open transcript with no track playing, or a
   // *different* track playing): the global player has no relevance to
   // the open transcript. Surfacing its position/duration would either
   // drift random paragraph timestamps (no track playing → durationMs=0)
   // or pull progress from an unrelated track. Pin to 0 so paragraphs
   // render their own static `startTime` and no progress UI shows.
+  //
+  // Position/duration are kept in MILLISECONDS — same units as
+  // `transcript.blocks[].start`/`end` and `player.positionMs`. The UI
+  // compares them directly without unit conversion.
   const position = computed(() =>
-    mirrorsActivePlayer.value ? Math.max(0, player.positionMs / 1000) : 0
+    mirrorsActivePlayer.value ? Math.max(0, player.positionMs) : 0
   )
   const duration = computed(() =>
-    mirrorsActivePlayer.value ? Math.max(0, player.durationMs / 1000) : 0
+    mirrorsActivePlayer.value ? Math.max(0, player.durationMs) : 0
   )
 
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
@@ -157,11 +170,11 @@ export function useTranscriptDialogController(
     transcriptStore.close()
   }
 
-  function onSeek(positionSeconds: number): void {
+  function onSeek(positionMs: number): void {
     // Preview mode (transcript open without that track in the player):
     // seeking would jump the user's actual playback to a random place.
     if (!mirrorsActivePlayer.value) return
-    void player.seek(Math.round(positionSeconds * 1000))
+    void player.seek(Math.round(positionMs))
   }
 
   function onPickStart(): void {

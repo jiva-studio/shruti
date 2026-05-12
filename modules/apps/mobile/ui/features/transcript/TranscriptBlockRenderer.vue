@@ -12,7 +12,7 @@
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
     :data-speaker="block.block.speaker"
-    @click="emit('seek', block.block.start + 0.01)"
+    @click="emit('seek', block.block.start + 1)"
   />
 
   <VerseTextBlock
@@ -22,7 +22,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 0.01)"
+    @click="emit('seek', block.block.start + 1)"
   />
 
   <VerseTextInlineBlock
@@ -33,7 +33,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 0.01)"
+    @click="emit('seek', block.block.start + 1)"
   />
 
   <VerseTranslationBlock
@@ -42,7 +42,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 0.01)"
+    @click="emit('seek', block.block.start + 1)"
   />
 </template>
 
@@ -56,7 +56,7 @@ import type { UiTranscriptBlockView } from "./types.js"
 
 const props = defineProps<{
   block: UiTranscriptBlockView
-  /** Current playhead position in seconds. */
+  /** Current playhead position in milliseconds (matches block.start/end units). */
   position: number
   /** When true, renders the speaker icon for sentence blocks. */
   displaySpeakerIcon: boolean
@@ -75,7 +75,9 @@ const isCurrent = computed(
 )
 
 const referenceVisible = computed(
-  () => props.block.block.start <= props.position + 1 && props.block.block.end >= props.position - 1
+  () =>
+    props.block.block.start <= props.position + 1000 &&
+    props.block.block.end >= props.position - 1000
 )
 
 const stateClasses = computed(() => ({
