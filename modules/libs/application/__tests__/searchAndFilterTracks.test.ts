@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { searchAndFilterTracks } from "../searchAndFilterTracks.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
-import type { AuthorId, TagId, TrackId } from "@lib/domain/core.js"
+import type { AuthorId, SourceId, TagId, TrackId } from "@lib/domain/core.js"
 
 const mkTrack = (over: Partial<Track> & Pick<Track, "id">): Track => ({
   authorId: null,
@@ -101,6 +101,7 @@ describe("searchAndFilterTracks", () => {
         authorIds: ["a1"],
         locationIds: undefined,
         languageCodes: undefined,
+        sourceIds: undefined,
         tagIds: ["t1"],
         durationMinMs: undefined,
         durationMaxMs: undefined,
@@ -147,6 +148,57 @@ describe("searchAndFilterTracks", () => {
       sortBy: "byReference",
       limit: 20,
       offset: 40,
+    })
+  })
+
+  it("narrows FTS results by sourceIds against track references", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
+      mkTrack({
+        id: "t1" as TrackId,
+        references: [{ sourceId: "src_bg" as SourceId, tokens: ["1", "1"] }],
+      }),
+      mkTrack({
+        id: "t2" as TrackId,
+        references: [{ sourceId: "src_sb" as SourceId, tokens: ["1", "8", "40"] }],
+      }),
+      mkTrack({
+        id: "t3" as TrackId,
+        references: [
+          { sourceId: "src_cc" as SourceId, tokens: ["1", "1"] },
+          { sourceId: "src_bg" as SourceId, tokens: ["2", "13"] },
+        ],
+      }),
+      mkTrack({ id: "t4" as TrackId, references: [] }),
+    ])
+    const repo = makeRepo({ search: searchSpy })
+    const result = await searchAndFilterTracks(
+      { query: "krishna", sourceIds: ["src_bg" as SourceId] },
+      { tracks: repo }
+    )
+    expect(result.map((t) => t.id)).toEqual(["t1", "t3"])
+    expect(searchSpy).toHaveBeenCalled()
+  })
+
+  it("forwards sourceIds into tracks.list filters on the empty-query path", async () => {
+    const listSpy = vi.fn<ITrackRepository["list"]>().mockResolvedValue([])
+    const repo = makeRepo({ list: listSpy })
+    await searchAndFilterTracks(
+      { sourceIds: ["src_bg" as SourceId, "src_sb" as SourceId] },
+      { tracks: repo }
+    )
+    expect(listSpy).toHaveBeenCalledWith({
+      filters: {
+        authorIds: undefined,
+        locationIds: undefined,
+        languageCodes: undefined,
+        sourceIds: ["src_bg", "src_sb"],
+        tagIds: undefined,
+        durationMinMs: undefined,
+        durationMaxMs: undefined,
+      },
+      sortBy: undefined,
+      limit: undefined,
+      offset: undefined,
     })
   })
 

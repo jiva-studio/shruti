@@ -53,6 +53,7 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
         authorIds: options.filters.value.authors,
         languageCodes: options.filters.value.languages,
         locationIds: options.filters.value.locations,
+        sourceIds: options.filters.value.sources,
         durationFilter: options.filters.value.duration as DurationFilterId | undefined,
         sortBy: options.filters.value.sort as SortMethod | undefined,
         limit: PAGE_SIZE,
