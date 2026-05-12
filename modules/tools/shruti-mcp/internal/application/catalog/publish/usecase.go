@@ -1,6 +1,5 @@
 // Package publish copies the local out/ tree into S3, bumps the catalog
-// version, and merges public/config.json. Mirrors content-db-builder's
-// upload.ts logic 1-for-1.
+// version, and merges public/config.json.
 package publish
 
 import (
