@@ -62,17 +62,19 @@ describe("buildTranscriptViewData — paragraph chunking", () => {
   })
 
   it("char-count threshold breaks long sentences into multiple groups", () => {
-    // Each sentence is 100 chars; threshold 250 → group flushes after 3 sentences.
+    // Each sentence is 100 chars; threshold 250 → adding a 3rd sentence
+    // (200+100=300 > 250) starts a new paragraph BEFORE the push, so
+    // each paragraph holds 2 sentences (200 chars).
     const long = "x".repeat(100)
     const blocks: TranscriptBlock[] = []
     for (let i = 0; i < 12; i++) {
       blocks.push(sentence(i * 1000, i * 1000 + 800, long))
     }
     const groups = buildTranscriptViewData(makeTranscript(blocks), { paragraphChars: 250 })
-    // 12 sentences ÷ 3 per group = 4 groups
-    expect(groups).toHaveLength(4)
-    expect(groups[0].blocks).toHaveLength(3)
-    expect(groups[3].blocks).toHaveLength(3)
+    // 12 sentences ÷ 2 per group = 6 groups
+    expect(groups).toHaveLength(6)
+    expect(groups[0].blocks).toHaveLength(2)
+    expect(groups[5].blocks).toHaveLength(2)
   })
 
   it("paragraphChars=0 disables auto-break (single group when no markers)", () => {
