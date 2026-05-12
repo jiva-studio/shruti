@@ -53,9 +53,9 @@ export function useDbSchemeRetry(deps: UseDbSchemeRetryDeps): {
     throw new Error(
       `Content database scheme validation failed after ${maxRetries} attempts. ` +
         `Expected ${deps.supportedScheme}, got: ${observed}. ` +
-        `The CDN likely hasn't published a compatible DB yet — run ` +
-        `content-db-builder, upload a new lectorium.{version}.db with matching ` +
-        `scheme, or bump modules/db-scheme.json to match what's available.`
+        `The CDN likely hasn't published a compatible DB yet — publish a new ` +
+        `lectorium.{version}.db via lectorium-mcp catalog.publish, or bump ` +
+        `modules/db-scheme.json to match what's available.`
     )
   }
 

@@ -6,7 +6,7 @@ import (
 )
 
 // Id is the opaque track identifier with the canonical Lectorium shape:
-// "track_" prefix + 12 chars from [A-Za-z0-9]. Matches content-db-builder/idMap.ts.
+// "track_" prefix + 12 chars from [A-Za-z0-9].
 type Id string
 
 var idPattern = regexp.MustCompile(`^track_[A-Za-z0-9]{12}$`)

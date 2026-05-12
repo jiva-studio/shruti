@@ -23,23 +23,71 @@ import { rowToTrack } from "./contentRowMappers.js"
  *
  * The `unicode61` tokenizer splits on whitespace and punctuation, so
  * "bg 10.5" becomes `{bg, 10, 5}`. We tokenise the user input the
- * same way and then:
- *   - single token → bare prefix `foo*` (FTS4 Cyrillic quirk: a single
- *     quoted prefix like `"джент"*` returns nothing, but the bare
- *     form works);
- *   - multiple tokens → phrase prefix `"foo bar baz"*`. Phrase form
- *     enforces adjacency, so `1.1` doesn't sprawl into every ref
- *     starting with "1".
+ * same way and emit an **implicit AND across prefixes** — every token
+ * must appear (somewhere) in the matched row.
+ *
+ * The search index ships a single `combined` row per track that
+ * concatenates every searchable token (titles + every reference
+ * variant + locations + tags + year/month/day), so AND across fields
+ * works inside that one row. See
+ * `lectorium-mcp/internal/infra/catalog/sqlite/write.go`
+ * (rebuildTrackSearchRows).
+ *
+ * **Phrase queries** in double quotes are passed through to FTS as a
+ * phrase match (`"life after death"` requires the tokens adjacent and
+ * in order). Single-Cyrillic-token phrases stay bare-prefix to dodge
+ * the FTS4 quirk where `"джент"*` returns nothing.
+ *
+ * Negation (`-term`) is intentionally NOT supported here — the stock
+ * SQLite FTS4 build silently ignores `-term` and falls back to a
+ * positive match, which would surprise users. Reach for client-side
+ * filtering if exclusion is needed.
  */
 function buildFtsQuery(raw: string): string {
-  const tokens = raw
+  const pieces = splitQueryPieces(raw)
+  if (pieces.length === 0) return ""
+  const out: string[] = []
+  for (const piece of pieces) {
+    const inner = sanitizeTokens(piece.text)
+    if (inner.length === 0) continue
+    if (piece.phrase) {
+      // Multi-token phrase → quoted FTS expression for adjacency.
+      // Single token → bare prefix (FTS4 Cyrillic quirk).
+      out.push(inner.length === 1 ? `${inner[0]}*` : `"${inner.join(" ")}"`)
+    } else {
+      for (const t of inner) out.push(`${t}*`)
+    }
+  }
+  return out.join(" ")
+}
+
+interface QueryPiece {
+  phrase: boolean
+  text: string
+}
+
+/** Split raw input into quoted phrases and bare words. */
+function splitQueryPieces(raw: string): QueryPiece[] {
+  const out: QueryPiece[] = []
+  const re = /"([^"]+)"|(\S+)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(raw)) !== null) {
+    if (m[1] !== undefined) {
+      const text = m[1].trim()
+      if (text.length > 0) out.push({ phrase: true, text })
+    } else if (m[2] !== undefined) {
+      out.push({ phrase: false, text: m[2] })
+    }
+  }
+  return out
+}
+
+function sanitizeTokens(raw: string): string[] {
+  return raw
     .toLowerCase()
     .split(/[\s.,;:!?()\-"'`[\]{}<>|/\\]+/)
     .map((t) => t.replace(/[^a-zа-я0-9]/gi, ""))
     .filter((t) => t.length > 0)
-  if (tokens.length === 0) return ""
-  if (tokens.length === 1) return `${tokens[0]}*`
-  return `"${tokens.join(" ")}"*`
 }
 
 async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promise<Track[]> {
@@ -189,13 +237,16 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       const fts = buildFtsQuery(text)
       if (fts.length === 0) return []
 
-      // Single path through the unified FTS index: hits against titles
-      // and all reference display variants are returned from one
-      // MATCH, deduplicated at the track level.
+      // Single path through the unified FTS index: every track has one
+      // `combined` row that concatenates every searchable token
+      // (titles + reference variants + year). Scoping the join to that
+      // kind makes implicit-AND across tokens AND across kinds work in
+      // one MATCH — e.g. `"BG 1974 2.12"` succeeds because all three
+      // tokens appear in the same combined row.
       const lang = getActiveLanguage()
       const rows = await contentDb.query<TrackRow>(
-        `SELECT DISTINCT t.* FROM tracks t
-         JOIN tracks_search s ON s.track_id = t.id
+        `SELECT t.* FROM tracks t
+         JOIN tracks_search s ON s.track_id = t.id AND s.kind = 'combined'
          WHERE tracks_search MATCH ? AND t.hidden = 0
          ORDER BY (
            SELECT v.sort_reference FROM track_variants v

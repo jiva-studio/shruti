@@ -132,7 +132,7 @@ my-project/
 └── .env                    # credentials only
 ```
 
-Env vars match `content-db-builder/.env.example` 1-for-1:
+S3 env vars:
 
 ```
 S3_AWS_BUCKET, S3_AWS_REGION, S3_AWS_ACCESS_KEY_ID, S3_AWS_SECRET_ACCESS_KEY

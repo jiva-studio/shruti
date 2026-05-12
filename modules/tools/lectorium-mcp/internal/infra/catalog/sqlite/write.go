@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 )
@@ -103,18 +104,164 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 		}
 	}
 
-	// FTS title row — delete any prior rows for this track and re-insert.
+	// FTS rebuild — drop every prior row for this track, then re-emit:
+	//   - one `title` row per stored variant (back-compat with existing
+	//     consumers that filter by kind)
+	//   - one `combined` row that mashes title + reference variants
+	//     (source_id / short_name / full_name) + year into a single
+	//     space-separated content column. The mobile search path joins
+	//     on `kind = 'combined'` so an implicit-AND multi-token query
+	//     like "BG 1974 2.13" can match across fields.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tracks_search WHERE track_id = ?`, t.Id); err != nil {
 		return fmt.Errorf("delete tracks_search: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO tracks_search (content, track_id, kind)
-		VALUES (?, ?, 'title')`,
-		v.Title, t.Id); err != nil {
-		return fmt.Errorf("insert tracks_search: %w", err)
+	if err := rebuildTrackSearchRows(ctx, tx, t.Id); err != nil {
+		return fmt.Errorf("rebuild tracks_search: %w", err)
 	}
 
 	return tx.Commit()
+}
+
+// rebuildTrackSearchRows recomputes both `title` and `combined` FTS rows
+// for one track from the current state of tracks / track_variants /
+// track_references / sources inside the open transaction. Caller is
+// responsible for having cleared prior rows for this track.
+func rebuildTrackSearchRows(ctx context.Context, tx *sql.Tx, trackID string) error {
+	// One `title` row per stored variant.
+	titleRows, err := tx.QueryContext(ctx,
+		`SELECT title FROM track_variants WHERE track_id = ?`, trackID)
+	if err != nil {
+		return fmt.Errorf("read titles: %w", err)
+	}
+	var titles []string
+	for titleRows.Next() {
+		var title string
+		if err := titleRows.Scan(&title); err != nil {
+			titleRows.Close()
+			return fmt.Errorf("scan title: %w", err)
+		}
+		titles = append(titles, title)
+	}
+	titleRows.Close()
+	for _, title := range titles {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO tracks_search (content, track_id, kind)
+			VALUES (?, ?, 'title')`, title, trackID); err != nil {
+			return fmt.Errorf("insert title row: %w", err)
+		}
+	}
+
+	// `combined` row — every searchable token concatenated, space-
+	// separated. Mobile search ANDs prefixes within this row so a
+	// query like "BG 1974 2.13" hits source short_name (BG), year
+	// (1974), and a reference token (2.13) on the same track.
+	refRows, err := tx.QueryContext(ctx, `
+		SELECT r.source_id, r.tokens, COALESCE(s.short_name, ''), COALESCE(s.full_name, '')
+		FROM track_references r
+		LEFT JOIN sources s ON s.id = r.source_id
+		WHERE r.track_id = ?
+		ORDER BY r.ref_idx, s.language`, trackID)
+	if err != nil {
+		return fmt.Errorf("read references: %w", err)
+	}
+	var refSegs []string
+	for refRows.Next() {
+		var sourceID, tokens, shortName, fullName string
+		if err := refRows.Scan(&sourceID, &tokens, &shortName, &fullName); err != nil {
+			refRows.Close()
+			return fmt.Errorf("scan reference: %w", err)
+		}
+		refSegs = append(refSegs, sourceID+" "+tokens)
+		if shortName != "" {
+			refSegs = append(refSegs, shortName+" "+tokens)
+		}
+		if fullName != "" {
+			refSegs = append(refSegs, fullName+" "+tokens)
+		}
+	}
+	refRows.Close()
+
+	// Location names (per language) so free-text queries like "Bombay"
+	// or "Бомбей" hit tracks recorded there without needing the chip.
+	locRows, err := tx.QueryContext(ctx, `
+		SELECT COALESCE(l.full_name, '')
+		FROM tracks t
+		LEFT JOIN locations l ON l.id = t.location_id
+		WHERE t.id = ? AND t.location_id IS NOT NULL AND t.location_id != ''`,
+		trackID)
+	if err != nil {
+		return fmt.Errorf("read locations: %w", err)
+	}
+	var locNames []string
+	for locRows.Next() {
+		var name string
+		if err := locRows.Scan(&name); err != nil {
+			locRows.Close()
+			return fmt.Errorf("scan location: %w", err)
+		}
+		if name != "" {
+			locNames = append(locNames, name)
+		}
+	}
+	locRows.Close()
+
+	// Tag names (per language) — kind-tags like "morning walk" /
+	// "интервью" become findable as plain free text. Tracks are
+	// language-independent entities, so we index every language we
+	// have on file, not just the active UI locale.
+	tagRows, err := tx.QueryContext(ctx, `
+		SELECT tg.full_name
+		FROM track_tags tt
+		JOIN tags tg ON tg.id = tt.tag_id
+		WHERE tt.track_id = ? AND tg.full_name != ''`,
+		trackID)
+	if err != nil {
+		return fmt.Errorf("read tags: %w", err)
+	}
+	var tagNames []string
+	for tagRows.Next() {
+		var name string
+		if err := tagRows.Scan(&name); err != nil {
+			tagRows.Close()
+			return fmt.Errorf("scan tag: %w", err)
+		}
+		tagNames = append(tagNames, name)
+	}
+	tagRows.Close()
+
+	// Date — year alone, plus YYYY-MM and the full YYYY-MM-DD, so a
+	// query like "1974-10" or "1974-10-20" matches the precise day.
+	// The FTS tokenizer splits on `-`, so each component becomes its
+	// own searchable token; we add the composite forms so an
+	// AND-prefix match (`1974* 10*`) doesn't false-positive on
+	// unrelated tokens elsewhere.
+	var date string
+	row := tx.QueryRowContext(ctx, `SELECT date FROM tracks WHERE id = ?`, trackID)
+	_ = row.Scan(&date)
+	var dateParts []string
+	if len(date) >= 4 {
+		dateParts = append(dateParts, date[:4]) // year
+	}
+	if len(date) >= 7 {
+		dateParts = append(dateParts, date[:7]) // year-month
+	}
+	if len(date) >= 10 {
+		dateParts = append(dateParts, date[:10]) // full date
+	}
+
+	parts := make([]string, 0, len(titles)+len(refSegs)+len(locNames)+len(tagNames)+len(dateParts))
+	parts = append(parts, titles...)
+	parts = append(parts, refSegs...)
+	parts = append(parts, locNames...)
+	parts = append(parts, tagNames...)
+	parts = append(parts, dateParts...)
+	combined := strings.Join(parts, " ")
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO tracks_search (content, track_id, kind)
+		VALUES (?, ?, 'combined')`, combined, trackID); err != nil {
+		return fmt.Errorf("insert combined row: %w", err)
+	}
+	return nil
 }
 
 func assertExists(ctx context.Context, tx *sql.Tx, table, id string) error {

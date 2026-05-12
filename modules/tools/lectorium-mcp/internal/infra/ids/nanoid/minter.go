@@ -6,12 +6,12 @@ import (
 	"fmt"
 )
 
-// Alphabet is the 62-char [A-Za-z0-9] set used for catalog IDs by
-// content-db-builder/idMap.ts. We reuse it for both lake trackIds and
-// dict IDs created via catalog CRUD.
+// Alphabet is the 62-char [A-Za-z0-9] set used for every Lectorium
+// catalog id (track ids, dict ids). Locked to this set so published
+// catalogs stay stable across minter changes.
 const Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-// TailLength matches content-db-builder.
+// TailLength is the canonical Lectorium id-tail width (`<prefix>_<12 alnum>`).
 const TailLength = 12
 
 // Minter implements ports/ids.Minter using crypto/rand.
