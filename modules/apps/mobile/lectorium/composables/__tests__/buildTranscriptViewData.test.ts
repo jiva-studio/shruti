@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
-import type { LanguageCode, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
+import type { Reference } from "@lib/domain/reference.js"
+import type { Source } from "@lib/domain/source.js"
 import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
 import { buildTranscriptViewData } from "../buildTranscriptViewData.js"
 
@@ -15,6 +17,36 @@ function makeTranscript(blocks: TranscriptBlock[]): Transcript {
     blocks,
   }
 }
+
+const EN: LanguageCode = "en" as LanguageCode
+const RU: LanguageCode = "ru" as LanguageCode
+
+function makeSources(): ReadonlyMap<string, Source> {
+  return new Map<string, Source>([
+    [
+      "bg",
+      {
+        id: "bg" as SourceId,
+        names: new Map([
+          [EN, { fullName: "Bhagavad-gītā", shortName: "BG" }],
+          [RU, { fullName: "Бхагавад-гӣта̄", shortName: "БГ" }],
+        ]),
+      },
+    ],
+    [
+      // Short-name only — no fullName entry (synthetic edge case to drive
+      // the full → short fallback path).
+      "sb-short-only",
+      {
+        id: "sb-short-only" as SourceId,
+        names: new Map([[EN, { fullName: "", shortName: "SB" }]]),
+      },
+    ],
+  ])
+}
+
+const ref = (sourceId: string, ...tokens: string[]): Reference =>
+  ({ sourceId: sourceId as Reference["sourceId"], tokens }) as Reference
 
 describe("buildTranscriptViewData — paragraph chunking", () => {
   it("server-emitted paragraph block forces a new group", () => {
@@ -71,5 +103,146 @@ describe("buildTranscriptViewData — paragraph chunking", () => {
 
   it("returns empty array on null transcript", () => {
     expect(buildTranscriptViewData(null, { paragraphChars: 100 })).toEqual([])
+  })
+})
+
+describe("buildTranscriptViewData — reference source-name resolution", () => {
+  const sources = makeSources()
+
+  it("falls back to raw sourceId when no dictionary is provided", () => {
+    const t = makeTranscript([
+      {
+        type: "sentence",
+        start: 0,
+        end: 1000,
+        text: "verse mention",
+        reference: ref("bg", "2", "13"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, { paragraphChars: 9999 })
+    const block = groups[0].blocks[0].block
+    expect(block.type).toBe("sentence")
+    if (block.type !== "sentence") throw new Error("type guard")
+    expect(block.reference).toBe("bg 2.13")
+  })
+
+  it("sentence-block references use the localised SHORT name", () => {
+    const t = makeTranscript([
+      {
+        type: "sentence",
+        start: 0,
+        end: 1000,
+        text: "verse mention",
+        reference: ref("bg", "2", "13"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: EN,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "sentence") throw new Error("type guard")
+    expect(block.reference).toBe("BG 2.13")
+  })
+
+  it("multi-line verse:text uses the localised FULL name", () => {
+    const t = makeTranscript([
+      {
+        type: "verse:text",
+        start: 0,
+        end: 1000,
+        text: ["dharma-kṣetre kuru-kṣetre", "samavetā yuyutsavaḥ"],
+        reference: ref("bg", "1", "1"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: EN,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "verse:text") throw new Error("type guard")
+    expect(block.reference).toBe("Bhagavad-gītā 1.1")
+  })
+
+  it("single-line verse:text (inline) uses the localised SHORT name", () => {
+    const t = makeTranscript([
+      {
+        type: "verse:text",
+        start: 0,
+        end: 1000,
+        text: ["one line only"],
+        reference: ref("bg", "2", "13"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: EN,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "verse:text") throw new Error("type guard")
+    expect(block.reference).toBe("BG 2.13")
+  })
+
+  it("picks up the active language for localised names", () => {
+    const t = makeTranscript([
+      {
+        type: "verse:text",
+        start: 0,
+        end: 1000,
+        text: ["строка 1", "строка 2"],
+        reference: ref("bg", "2", "13"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: RU,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "verse:text") throw new Error("type guard")
+    expect(block.reference).toBe("Бхагавад-гӣта̄ 2.13")
+  })
+
+  it("multi-line verse:text falls back full → short when fullName is empty", () => {
+    const t = makeTranscript([
+      {
+        type: "verse:text",
+        start: 0,
+        end: 1000,
+        text: ["a", "b"],
+        reference: ref("sb-short-only", "1", "1", "1"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: EN,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "verse:text") throw new Error("type guard")
+    expect(block.reference).toBe("SB 1.1.1")
+  })
+
+  it("falls back to raw sourceId when source is missing from the dictionary", () => {
+    const t = makeTranscript([
+      {
+        type: "verse:text",
+        start: 0,
+        end: 1000,
+        text: ["a", "b"],
+        reference: ref("ghost", "1", "1"),
+      },
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      sourcesById: sources,
+      lang: EN,
+    })
+    const block = groups[0].blocks[0].block
+    if (block.type !== "verse:text") throw new Error("type guard")
+    expect(block.reference).toBe("ghost 1.1")
   })
 })

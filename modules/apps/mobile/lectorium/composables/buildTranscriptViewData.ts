@@ -1,4 +1,5 @@
-import type { Reference } from "@lib/domain/reference.js"
+import type { LanguageCode } from "@lib/domain/core.js"
+import type { Source } from "@lib/domain/source.js"
 import type { Transcript } from "@lib/domain/transcript.js"
 import type {
   UiTranscriptBlockRaw,
@@ -6,17 +7,7 @@ import type {
   UiTranscriptBlocksGroup,
   UiTranscriptLanguage,
 } from "@ui/features/transcript/index.js"
-
-/**
- * Default transcript-block reference formatter: "bg 10.5".
- * We don't have the sources dictionary in this layer — downstream UI
- * can replace/localise it if needed, but this keeps the mirror type
- * populated with a sensible string.
- */
-function formatReference(ref: Reference): string {
-  const tokens = ref.tokens.join(".")
-  return tokens.length > 0 ? `${ref.sourceId} ${tokens}` : ref.sourceId
-}
+import { formatReference, formatReferenceFull } from "./groupReferences.js"
 
 export interface BuildTranscriptViewDataOpts {
   /**
@@ -27,6 +18,14 @@ export interface BuildTranscriptViewDataOpts {
    * mark them (which is the common case today).
    */
   readonly paragraphChars: number
+  /**
+   * Catalog `sources` dictionary used to localise scripture references
+   * to "Bhagavad-gītā 2.13" (full) or "BG 2.13" (short). When absent or
+   * missing an entry, the formatter falls back to the raw `sourceId`.
+   */
+  readonly sourcesById?: ReadonlyMap<string, Source>
+  /** Active UI language code used to pick the right localised name. */
+  readonly lang?: LanguageCode
 }
 
 /**
@@ -45,6 +44,9 @@ export function buildTranscriptViewData(
   let current: UiTranscriptBlockView[] = []
   let lastSpeaker: string | undefined = undefined
   let charsAccum = 0
+
+  const lang: LanguageCode = opts.lang ?? "en"
+  const sourcesById = opts.sourcesById
 
   const flush = () => {
     if (current.length > 0) groups.push({ blocks: current })
@@ -68,7 +70,11 @@ export function buildTranscriptViewData(
             text: block.text,
             speaker: block.speaker,
             speakerChanged: block.speaker !== undefined && block.speaker !== lastSpeaker,
-            reference: block.reference ? formatReference(block.reference) : undefined,
+            // Sentence-block references render as an inline / floating chip
+            // (VerseTextInlineBlock-style placement), so use the SHORT name.
+            reference: block.reference
+              ? formatReference(block.reference, sourcesById, lang)
+              : undefined,
           }
         : block.type === "verse:text"
           ? {
@@ -76,7 +82,15 @@ export function buildTranscriptViewData(
               start: block.start,
               end: block.end,
               text: block.text,
-              reference: block.reference ? formatReference(block.reference) : undefined,
+              // The renderer (TranscriptBlockRenderer.vue) splits verse:text
+              // by line count: multi-line goes to VerseTextBlock (centered
+              // chip — room for the FULL name), single-line goes to
+              // VerseTextInlineBlock (floating chip — SHORT name).
+              reference: block.reference
+                ? block.text.length > 1
+                  ? formatReferenceFull(block.reference, sourcesById, lang)
+                  : formatReference(block.reference, sourcesById, lang)
+                : undefined,
             }
           : {
               type: "verse:translation",

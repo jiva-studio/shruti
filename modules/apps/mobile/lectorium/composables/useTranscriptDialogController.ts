@@ -1,9 +1,11 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
 import type { LanguageCode } from "@lib/domain/core.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useSystemBarsStyle } from "@lectorium/composables/useSystemBarsStyle.js"
 import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
@@ -51,6 +53,8 @@ export function useTranscriptDialogController(
   const app = useLectorium()
   const transcriptStore = useTranscriptStore()
   const player = usePlayerStore()
+  const dictionaries = useDictionariesStore()
+  const appLanguage = useAppLanguage()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const systemBars = useSystemBarsStyle()
@@ -97,6 +101,8 @@ export function useTranscriptDialogController(
   const blockGroups = computed(() =>
     buildTranscriptViewData(loader.transcript.value, {
       paragraphChars: paragraphChars.value,
+      sourcesById: dictionaries.sourcesById,
+      lang: appLanguage.value,
     })
   )
   // Preview mode (Search → Open transcript with no track playing, or a
@@ -109,12 +115,8 @@ export function useTranscriptDialogController(
   // Position/duration are kept in MILLISECONDS — same units as
   // `transcript.blocks[].start`/`end` and `player.positionMs`. The UI
   // compares them directly without unit conversion.
-  const position = computed(() =>
-    mirrorsActivePlayer.value ? Math.max(0, player.positionMs) : 0
-  )
-  const duration = computed(() =>
-    mirrorsActivePlayer.value ? Math.max(0, player.durationMs) : 0
-  )
+  const position = computed(() => (mirrorsActivePlayer.value ? Math.max(0, player.positionMs) : 0))
+  const duration = computed(() => (mirrorsActivePlayer.value ? Math.max(0, player.durationMs) : 0))
 
   const availableLanguages = computed<readonly UiTranscriptLanguage[]>(() =>
     hydration.availableLanguages.value.map((code) => ({ code, name: code.toUpperCase() }))
@@ -139,6 +141,11 @@ export function useTranscriptDialogController(
         await loader.reload(undefined, undefined)
         return
       }
+      // Hydrate the sources dictionary so verse references resolve to
+      // localised names (issue #399). Home/Search controllers already
+      // pre-warm it; this covers the case where the dialog opens before
+      // either view has been visited (e.g. tutorial deep-link).
+      void dictionaries.ensureLoaded()
       await hydration.hydrate(id)
       await loader.reload(id, hydration.activeLanguages.value[0])
     },
