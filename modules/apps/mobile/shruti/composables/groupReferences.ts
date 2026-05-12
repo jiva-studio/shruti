@@ -105,6 +105,22 @@ export function formatReference(
   return tokens.length > 0 ? `${localised} ${tokens}` : localised
 }
 
+/**
+ * Renders a single Reference as "{localised-full} {tokens}".
+ * Used by the verse-text block (centered chip above multi-line verse
+ * text), where there is room for the long name. Falls back to the
+ * short name, then the raw `sourceId`.
+ */
+export function formatReferenceFull(
+  ref: Reference,
+  sourcesById: ReadonlyMap<string, Source> | undefined,
+  lang: LanguageCode
+): string {
+  const localised = localisedFullName(ref, sourcesById, lang)
+  const tokens = ref.tokens.join(".")
+  return tokens.length > 0 ? `${localised} ${tokens}` : localised
+}
+
 function localisedShortName(
   ref: Reference,
   sourcesById: ReadonlyMap<string, Source> | undefined,
@@ -116,4 +132,22 @@ function localisedShortName(
     source?.names.values().next().value?.shortName ??
     ref.sourceId
   )
+}
+
+function localisedFullName(
+  ref: Reference,
+  sourcesById: ReadonlyMap<string, Source> | undefined,
+  lang: LanguageCode
+): string {
+  const source = sourcesById?.get(ref.sourceId)
+  const localised = source?.names.get(lang)
+  const anyLocale = localised ?? source?.names.values().next().value
+  // Treat empty strings as "missing" — DB rows with an absent fullName
+  // are stored as "" by the importer, not as `undefined`. We still want
+  // to fall through to the short name (then to the raw sourceId).
+  const full = anyLocale?.fullName
+  if (full && full.length > 0) return full
+  const short = anyLocale?.shortName
+  if (short && short.length > 0) return short
+  return ref.sourceId
 }
