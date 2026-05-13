@@ -31,6 +31,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { useDragPump, type DragRect } from "./useDragPump.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -61,12 +62,14 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const root = ref<HTMLElement | null>(null)
-const dragging = ref(false)
 const livePosition = ref(props.modelValue)
-let pointerId: number | null = null
-let trackRectLeft = 0
-let trackRectWidth = 0
 let lastNearest = props.modelValue
+
+const { dragging, onPointerDown: onPuckPointerDown } = useDragPump({
+  trackEl: () => root.value?.querySelector(".track") as HTMLElement | null,
+  onMove: (clientX, _y, rect) => applyFromClientX(clientX, rect),
+  onCommit: commitDrag,
+})
 
 watch(
   () => props.modelValue,
@@ -135,52 +138,20 @@ function formatRate(rate: number): string {
 /*                                Drag handling                               */
 /* -------------------------------------------------------------------------- */
 
-function startDrag(e: PointerEvent): void {
-  if (!root.value) return
-  const trackEl = root.value.querySelector(".track") as HTMLElement | null
-  if (!trackEl) return
-  const rect = trackEl.getBoundingClientRect()
-  trackRectLeft = rect.left
-  trackRectWidth = rect.width
-  pointerId = e.pointerId
-  dragging.value = true
-  ;(e.target as Element).setPointerCapture?.(e.pointerId)
-  applyFromClientX(e.clientX)
-  window.addEventListener("pointermove", onPointerMove)
-  window.addEventListener("pointerup", onPointerUp)
-  window.addEventListener("pointercancel", onPointerUp)
-  e.stopPropagation()
-}
-
-function onPuckPointerDown(e: PointerEvent): void {
-  startDrag(e)
-}
-
-function onPointerMove(e: PointerEvent): void {
-  if (!dragging.value || e.pointerId !== pointerId) return
-  applyFromClientX(e.clientX)
-}
-
-function onPointerUp(e: PointerEvent): void {
-  if (e.pointerId !== pointerId) return
-  dragging.value = false
-  pointerId = null
-  window.removeEventListener("pointermove", onPointerMove)
-  window.removeEventListener("pointerup", onPointerUp)
-  window.removeEventListener("pointercancel", onPointerUp)
+function commitDrag(): void {
   // Always commit to a preset on release — magnetic snap.
   const target = findNearestPreset(livePosition.value)
   livePosition.value = target
   if (target !== props.modelValue) emit("update:modelValue", target)
 }
 
-function applyFromClientX(clientX: number): void {
-  if (trackRectWidth <= 0) return
+function applyFromClientX(clientX: number, rect: DragRect): void {
+  if (rect.width <= 0) return
   // Drag is mapped over the rail's INNER range — pixels [PUCK_HALF,
   // track_width − PUCK_HALF] — so the puck position lines up with
   // the same fraction the ticks/rail use.
-  const innerWidth = Math.max(1, trackRectWidth - PUCK_HALF * 2)
-  const x = clientX - trackRectLeft - PUCK_HALF
+  const innerWidth = Math.max(1, rect.width - PUCK_HALF * 2)
+  const x = clientX - rect.left - PUCK_HALF
   const fraction = Math.max(0, Math.min(1, x / innerWidth))
   const min = minPreset.value
   const max = maxPreset.value

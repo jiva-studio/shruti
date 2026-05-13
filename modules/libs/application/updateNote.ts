@@ -11,7 +11,7 @@ export interface UpdateNoteInput {
   readonly timeEnd?: number
 }
 
-export type UpdateNoteError = "not-found" | "empty-text" | "invalid-range"
+export type UpdateNoteError = "not-found" | "empty-text" | "invalid-range" | "invalid-time"
 
 export interface UpdateNoteDeps {
   readonly notes: INoteRepository
@@ -29,6 +29,15 @@ export async function updateNote(
 ): Promise<Result<Note, UpdateNoteError>> {
   if (input.text !== undefined && input.text.trim().length === 0) {
     return err("empty-text")
+  }
+  // NaN/±Infinity pass through `<`/`<=` comparisons as false, so the
+  // range guard below would silently accept garbage. Reject explicitly
+  // — mirrors the Number.isFinite check in createNote.
+  if (input.timeStart !== undefined && !Number.isFinite(input.timeStart)) {
+    return err("invalid-time")
+  }
+  if (input.timeEnd !== undefined && !Number.isFinite(input.timeEnd)) {
+    return err("invalid-time")
   }
   return deps.unitOfWork.run(async () => {
     const existing = await deps.notes.getById(input.id)

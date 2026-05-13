@@ -121,4 +121,28 @@ describe("updateNote", () => {
     if (!result.ok) expect(result.error).toBe("invalid-range")
     expect(updateSpy).not.toHaveBeenCalled()
   })
+
+  it("rejects NaN timeStart with invalid-time", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({ update: updateSpy })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, timeStart: NaN },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("invalid-time")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects Infinity timeEnd with invalid-time", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({ update: updateSpy })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, timeEnd: Number.POSITIVE_INFINITY },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("invalid-time")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
 })

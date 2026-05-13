@@ -28,6 +28,15 @@ export interface PlayTrackCommand {
   readonly title: string
   readonly authorName: string
   readonly language: LanguageCode
+  /**
+   * `false` when the user asked for a `preferredLanguage` but no variant
+   * with audio in that language existed and we fell back to the first
+   * audible variant. UI can use this to surface "playing in <X> — your
+   * preferred <Y> is unavailable" instead of silently changing language.
+   * `true` when no preference was supplied, or the preferred variant
+   * was used as-is.
+   */
+  readonly matchesPreferred: boolean
 }
 
 function pickVariantWithAudio(
@@ -62,6 +71,9 @@ export async function playTrack(
   const variant = pickVariantWithAudio(input.track, input.preferredLanguage)
   if (!variant || !variant.audio) return err("no-audio-available")
 
+  const matchesPreferred =
+    input.preferredLanguage === undefined || variant.language === input.preferredLanguage
+
   return ok({
     trackId: input.track.id,
     itemId: input.itemId ?? `track:${input.track.id}`,
@@ -70,5 +82,6 @@ export async function playTrack(
     title: variant.title,
     authorName: resolveAuthorName(input.author, variant.language),
     language: variant.language,
+    matchesPreferred,
   })
 }

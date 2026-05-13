@@ -1,5 +1,5 @@
 import { useShruti } from "@shruti/shruti.js"
-import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
+import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
 

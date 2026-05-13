@@ -9,15 +9,7 @@ const isProd = process.env.NODE_ENV === "production"
 
 export default defineConfigWithVueTs(
   {
-    ignores: [
-      "dist/**",
-      "android/**",
-      "ios/**",
-      "node_modules/**",
-      "submodules/persistence-*/**",
-      "coverage/**",
-      "*.d.ts",
-    ],
+    ignores: ["dist/**", "android/**", "ios/**", "node_modules/**", "coverage/**", "*.d.ts"],
   },
   js.configs.recommended,
   pluginVue.configs["flat/essential"],
@@ -114,6 +106,49 @@ export default defineConfigWithVueTs(
             { group: ["@lib/*"], message: "Ports must not import domain/application" },
             { group: ["@ui/*"], message: "Ports must not import UI" },
             { group: ["@shruti/*"], message: "Ports must not import composition root" },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Persistence (row types): pure type declarations, no imports allowed.
+  // These describe raw SQL row shapes consumed only by @infra/repositories/sql.
+  // Symlinked under submodules/persistence-{main,user}; matched via both paths
+  // so eslint catches the violation regardless of which path it traverses.
+  {
+    files: ["submodules/persistence-*/**/*.ts", "../../libs/persistence/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@infra/*"],
+              message: "Persistence row types must not import infrastructure",
+            },
+            {
+              group: ["@ports/*"],
+              message: "Persistence row types must not import technical ports",
+            },
+            {
+              group: ["@lib/domain/*", "@lib/domain", "@lib/application/*"],
+              message:
+                "Persistence row types must not import domain or application — they are pure row shapes",
+            },
+            { group: ["@ui/*"], message: "Persistence row types must not import UI" },
+            {
+              group: ["@shruti/*"],
+              message: "Persistence row types must not import composition root",
+            },
+            {
+              group: ["@capacitor/*"],
+              message: "Persistence row types must not import platform SDKs",
+            },
+            {
+              group: ["vue", "vue-router", "@ionic/*"],
+              message: "Persistence row types must not import framework code",
+            },
           ],
         },
       ],

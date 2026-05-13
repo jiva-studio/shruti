@@ -39,6 +39,10 @@ export const useDownloadStore = defineStore("downloads", () => {
   const hydrationError = ref<string | null>(null)
   const inFlight = new Map<TrackId, Promise<string | null>>()
   let hydrated = false
+  // Bumped by reset() so an in-flight task started before the wipe
+  // cannot write back into the freshly-emptied state maps. Every task
+  // captures the epoch at start and gates its state writes on a match.
+  let storeEpoch = 0
 
   function setState(trackId: TrackId, state: DownloadState): void {
     const next = new Map(states.value)
@@ -111,6 +115,13 @@ export const useDownloadStore = defineStore("downloads", () => {
     const existing = inFlight.get(trackId)
     if (existing) return existing
 
+    const taskEpoch = storeEpoch
+    const fresh = (): boolean => taskEpoch === storeEpoch
+    // Token used so the task's finally only clears the inFlight slot
+    // if it is still the one we put there — reset() may have wiped
+    // and a newer task may already own this trackId.
+    const ownership: { current: Promise<string | null> | null } = { current: null }
+
     const task = (async (): Promise<string | null> => {
       try {
         // Cache lookup uses the active server's URL; the platform
@@ -119,47 +130,55 @@ export const useDownloadStore = defineStore("downloads", () => {
         const probeUrl = buildServerUrl(app.activeServer.value, path)
         const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
         if (cached) {
-          setState(trackId, "completed")
+          if (fresh()) setState(trackId, "completed")
           // Even when audio is already on disk, make sure transcripts
           // are too — the user might have saved offline before the
           // transcript-prefetch feature shipped, so this self-heals.
-          transcriptPrefetch.prefetchForTrack(trackId)
+          if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
           return cached
         }
-        setProgress(trackId, 0)
-        setState(trackId, "downloading")
+        if (fresh()) {
+          setProgress(trackId, 0)
+          setState(trackId, "downloading")
+        }
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
           {
             mediaItems: app.repositories().mediaItems,
+            unitOfWork: app.repositories().unitOfWork,
             transfer: (url, onProgress) =>
               app.mediaDownloader.download(url, (received, total) => {
                 onProgress?.(received, total)
               }),
           },
-          (pct) => setProgress(trackId, pct)
+          (pct) => {
+            if (fresh()) setProgress(trackId, pct)
+          }
         )
         if (result.ok) {
-          setState(trackId, "completed")
+          if (fresh()) setState(trackId, "completed")
           // Promote the working CDN if it differs from the active
           // server when the download started. Awaited so the
           // transcript prefetch (kicked off below) starts from the
           // updated active server, not the failed one.
-          await promotePreferredServer(app, result.value.server)
-          transcriptPrefetch.prefetchForTrack(trackId)
+          if (fresh()) await promotePreferredServer(app, result.value.server)
+          if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
           return result.value.mediaItem.localPath
         }
-        setState(trackId, "failed")
+        if (fresh()) setState(trackId, "failed")
         return null
       } catch (err) {
         console.error(`[downloads] failed for ${trackId}:`, err)
-        setState(trackId, "failed")
+        if (fresh()) setState(trackId, "failed")
         return null
       } finally {
-        inFlight.delete(trackId)
+        // Only delete our own slot. After a reset() the map was
+        // cleared and a newer task may already own this trackId.
+        if (inFlight.get(trackId) === ownership.current) inFlight.delete(trackId)
       }
     })()
 
+    ownership.current = task
     inFlight.set(trackId, task)
     return task
   }
@@ -213,6 +232,13 @@ export const useDownloadStore = defineStore("downloads", () => {
    * paint Home/Search rows as offline-ready until the next launch.
    */
   function reset(): void {
+    // Bump the epoch so any still-running download task started before
+    // this call cannot write into the freshly-emptied maps when it
+    // resolves later. We can't abort the platform transfer mid-flight
+    // (the downloader port has no AbortSignal yet), so we cancel
+    // logically: the task still resolves but its setState/setProgress
+    // calls become no-ops.
+    storeEpoch += 1
     states.value = new Map()
     progress.value = new Map()
     hydrationError.value = null

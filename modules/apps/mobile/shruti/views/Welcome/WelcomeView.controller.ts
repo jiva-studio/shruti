@@ -1,7 +1,7 @@
 import { computed, onMounted, ref, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
 import { useShruti } from "@shruti/shruti.js"
-import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
+import { bootstrapUserDatabaseFromApp } from "@shruti/services/bootstrap.js"
 import { type ResolveContentDatabaseDeps } from "./composables/resolveContentDatabase.js"
 import {
   checkForUpdatesInBackground as checkForUpdatesInBackgroundImpl,
@@ -106,9 +106,7 @@ export function useWelcomeController(
 
   async function bootstrapApp(): Promise<void> {
     viewState.value = "database:migrations"
-    const userDbPath = shruti.appConfig.database.userLocalPath
-    await shruti.openUserDatabase(userDbPath)
-    await runUserMigrations(shruti.databases.user!)
+    await bootstrapUserDatabaseFromApp(shruti)
 
     viewState.value = "complete"
     if (autoNavigate) {

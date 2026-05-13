@@ -75,7 +75,7 @@ describe("removeDownloadedMedia", () => {
     expect(deleteLocal).not.toHaveBeenCalled()
   })
 
-  it("still drops the row when the file delete throws (orphan-file tolerance)", async () => {
+  it("keeps the row and returns delete-local-failed when the file delete throws (no orphan)", async () => {
     const deleteLocal = vi
       .fn<(url: string) => Promise<void>>()
       .mockRejectedValue(new Error("permission denied"))
@@ -96,8 +96,11 @@ describe("removeDownloadedMedia", () => {
       { trackId: "t-1" as TrackId, remoteUrl: "https://cdn/file.mp3" },
       { mediaItems: repo, deleteLocal }
     )
-    expect(result.ok).toBe(true)
-    expect(deleteByTrack).toHaveBeenCalledWith("t-1")
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("delete-local-failed")
+    // Row demoted but NOT dropped — next retry can pick up at step 2.
+    expect(upsert).toHaveBeenCalledWith("t-1", "failed", null)
+    expect(deleteByTrack).not.toHaveBeenCalled()
   })
 
   it("skips re-marking when the row is already failed with no localPath (idempotent retry)", async () => {

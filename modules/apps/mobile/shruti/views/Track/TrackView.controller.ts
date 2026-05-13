@@ -1,7 +1,8 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
+import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
@@ -67,17 +68,21 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
 
   async function loadEverything(): Promise<void> {
     error.value = null
-    track.value = await repos.tracks.getById(trackId)
-    if (!track.value) {
+    const detail = await loadTrackDetail(
+      { trackId: trackId as TrackId },
+      {
+        tracks: repos.tracks,
+        authors: repos.authors,
+        transcripts: repos.transcripts,
+      }
+    )
+    if (!detail.ok) {
       error.value = t("errors.trackNotFound")
       return
     }
-    if (track.value.authorId) {
-      author.value = await repos.authors.getById(track.value.authorId)
-    } else {
-      author.value = null
-    }
-    availableLanguages.value = await repos.transcripts.availableLanguages(trackId)
+    track.value = detail.value.track
+    author.value = detail.value.author
+    availableLanguages.value = detail.value.availableLanguages
     selectedLanguage.value =
       availableLanguages.value.find((l) => l === appLanguage.value) ??
       availableLanguages.value[0] ??

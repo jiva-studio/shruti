@@ -1,10 +1,11 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
-import type {
-  DailyListeningTotal,
-  ListeningSession,
-  ListeningSessionId,
-  TrackPositionSec,
+import {
+  COMPLETION_THRESHOLD_SEC,
+  type DailyListeningTotal,
+  type ListeningSession,
+  type ListeningSessionId,
+  type TrackPositionSec,
 } from "@lib/domain/listeningSession.js"
 import type {
   IListeningSessionRepository,
@@ -110,14 +111,14 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       const result = new Map<PlaylistItemId, number | null>()
       for (const id of itemIds) result.set(id, null)
       if (itemIds.length === 0) return result
-      // For each (itemId, threshold = duration - 2), find the earliest
-      // session.ended_at where to_position >= threshold. We iterate per
-      // item to keep the SQL simple — itemIds is bounded by playlist
-      // page size, so it's cheap.
+      // For each (itemId, threshold = duration - COMPLETION_THRESHOLD_SEC),
+      // find the earliest session.ended_at where to_position >= threshold.
+      // We iterate per item to keep the SQL simple — itemIds is bounded by
+      // playlist page size, so it's cheap.
       for (const itemId of itemIds) {
         const dur = durations.get(itemId)
         if (typeof dur !== "number" || dur <= 0) continue
-        const threshold = Math.max(0, dur - 2)
+        const threshold = Math.max(0, dur - COMPLETION_THRESHOLD_SEC)
         const rows = await db.query<{ ended_at: number }>(
           `SELECT ended_at FROM listening_sessions
             WHERE item_id = ? AND to_position >= ?
