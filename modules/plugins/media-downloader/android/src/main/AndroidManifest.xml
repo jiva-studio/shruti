@@ -1,22 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!--
-        WorkManager ships its own SystemForegroundService in the androidx.work
-        library, but its base manifest declares it without a foregroundServiceType.
-        On Android 14+ setForeground() with a typed ForegroundInfo throws
-        IllegalArgumentException unless the manifest entry advertises that type
-        too. We merge the dataSync flag in here.
-    -->
-    <application>
-        <service
-            android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge" />
-    </application>
 </manifest>

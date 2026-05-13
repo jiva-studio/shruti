@@ -32,13 +32,6 @@ export interface DownloadOptions {
   headers?: Record<string, string>;
   /** Restrict the network type. Default `"any"`. */
   network?: 'any' | 'wifi-only';
-  /** Whether the platform should show a system notification while running.
-   *  Required `true` on Android 14+ for long downloads — the worker promotes
-   *  itself to a foreground service. */
-  showNotification?: boolean;
-  /** Notification copy. Falls back to a generic plugin string. */
-  notificationTitle?: string;
-  notificationBody?: string;
 }
 
 export type TaskState =
@@ -91,7 +84,7 @@ export interface FailedEvent {
  * Background-capable media downloader.
  *
  * Native implementations:
- * - Android: WorkManager + OkHttp + foreground service. Survives app suspension and process death.
+ * - Android: WorkManager + OkHttp. Survives app suspension within WorkManager's regular (non-foreground) execution window (~10 min per attempt).
  * - iOS:     URLSession with `.background` configuration. Survives app suspension; the OS may relaunch the app to deliver completion events.
  * - Web:     fetch streaming + Cache API. Background lifecycle is bound to the tab; this implementation is for parity / local development.
  */

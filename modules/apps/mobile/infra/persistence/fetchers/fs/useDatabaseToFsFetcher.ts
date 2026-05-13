@@ -54,10 +54,6 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
           id,
           url,
           destination: { directory: "data", subdir, filename },
-          // Database fetch happens at first launch / onboarding while the
-          // user is staring at the screen — surfacing a system notification
-          // is just noise.
-          showNotification: false,
         })
         await completion
       } finally {

@@ -51,7 +51,6 @@ class MediaDownloaderPlugin : Plugin() {
     override fun load() {
         super.load()
         store = DownloadStore(context)
-        DownloadNotification.ensureChannel(context)
         // Re-subscribe to any tasks that outlived the previous process.
         for (entry in store.all()) attachObserver(entry.id, entry.workerId)
     }
@@ -91,9 +90,6 @@ class MediaDownloaderPlugin : Plugin() {
             }
         }
 
-        val showNotification = call.getBoolean("showNotification", true) ?: true
-        val notificationTitle = call.getString("notificationTitle") ?: "Lectorium"
-        val notificationBody = call.getString("notificationBody") ?: "Downloading..."
         val network = call.getString("network", "any") ?: "any"
         val headers = call.getObject("headers")
 
@@ -105,9 +101,6 @@ class MediaDownloaderPlugin : Plugin() {
             DownloadWorker.INPUT_URL to url,
             DownloadWorker.INPUT_LOCAL_PATH to localPath,
             DownloadWorker.INPUT_HEADERS to serialiseHeaders(headers),
-            DownloadWorker.INPUT_NOTIFICATION_TITLE to notificationTitle,
-            DownloadWorker.INPUT_NOTIFICATION_BODY to notificationBody,
-            DownloadWorker.INPUT_SHOW_NOTIFICATION to showNotification,
         )
 
         val request = OneTimeWorkRequestBuilder<DownloadWorker>()
