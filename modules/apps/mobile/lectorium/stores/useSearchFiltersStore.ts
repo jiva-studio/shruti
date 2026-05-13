@@ -3,8 +3,13 @@ import { ref } from "vue"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { detectDeviceLocaleAsync } from "@lectorium/i18n/index.js"
 
-const STORAGE_KEY = "search.filters.v2"
+// v3 introduces locale-seeded defaults on first launch (issue #411). The
+// version bump is intentional: every install — fresh or upgraded from v2 —
+// reads v3 as absent and gets the seeded defaults written in. The old v2
+// key is left orphaned in Preferences.
+const STORAGE_KEY = "search.filters.v3"
 
 export interface PersistedFilters {
   authorIds: readonly string[]
@@ -59,8 +64,20 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       } catch {
         // Corrupt value — reset silently.
       }
+      loaded.value = true
+      return
     }
+
+    // First launch (or first launch under v3): seed the language filter
+    // from the device locale and default the sort to oldest-first. We
+    // persist immediately so subsequent reads take the regular branch
+    // and the user's later changes overwrite the seed instead of racing
+    // with it.
+    const locale = await detectDeviceLocaleAsync()
+    languageCodes.value = [locale]
+    sort.value = "byDateAsc"
     loaded.value = true
+    await persist()
   }
 
   async function persist(): Promise<void> {

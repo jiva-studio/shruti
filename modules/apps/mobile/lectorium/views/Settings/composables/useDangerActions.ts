@@ -64,6 +64,8 @@ export function useDangerActions(app: Lectorium): UseDangerActionsReturn {
     await repos.notes.clearAll()
     await repos.playlistItems.clearAll()
     await repos.mediaItems.clearAll()
+    await app.preferences.remove("search.filters.v3")
+    // Legacy key from before #411; harmless if it doesn't exist.
     await app.preferences.remove("search.filters.v2")
 
     // 2. In-memory Pinia caches that mirror the wiped repos. Without

@@ -145,9 +145,7 @@ async function seedFixture(
     }
   }
   for (const t of tracks) {
-    const defaultSortRef: string | null = t.references[0]
-      ? sortRefFromGroup(t.references[0])
-      : null
+    const defaultSortRef: string | null = t.references[0] ? sortRefFromGroup(t.references[0]) : null
     await db.execute(
       `INSERT INTO tracks (id, author_id, location_id, date, hidden)
        VALUES (?, NULL, ?, ?, ?)`,
@@ -718,15 +716,19 @@ describe("tracksRepository.sql — list sort order", () => {
     // the more recent one wins the tiebreak.
     await db.execute(`DELETE FROM track_variants WHERE track_id = 'morning-walk-1976'`)
     await db.execute(`DELETE FROM tracks WHERE id = 'morning-walk-1976'`)
-    await seedFixture(db, [], [
-      {
-        id: "bg-6-32-older",
-        date: "1960-01-01",
-        titles: { en: "Older" },
-        references: [{ sourceId: "src_bg", tokens: "6.32" }],
-        sortReference: { en: "BG_000006_000032" },
-      },
-    ])
+    await seedFixture(
+      db,
+      [],
+      [
+        {
+          id: "bg-6-32-older",
+          date: "1960-01-01",
+          titles: { en: "Older" },
+          references: [{ sourceId: "src_bg", tokens: "6.32" }],
+          sortReference: { en: "BG_000006_000032" },
+        },
+      ]
+    )
     const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: lang })
     const results = await repo.list({ sortBy: "byReference" })
     const bg = results.filter((t) => t.id.startsWith("bg-6-32"))

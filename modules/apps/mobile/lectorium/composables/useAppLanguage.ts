@@ -1,5 +1,6 @@
 import { type Ref } from "vue"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { detectLocale } from "@lectorium/i18n/index.js"
 
 /**
  * The app-wide UI language setting (`settings.appLanguage`). One
@@ -7,16 +8,10 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
  * dictionary lookups: buildTrackRow picks author/location/source
  * names via `preferredLanguage = useAppLanguage().value`.
  *
- * Falls back to the browser locale on first launch; the Settings
+ * Falls back to the device locale on first launch; the Settings
  * screen binds a chooser to the same `useConfig` key so changes
  * propagate reactively.
  */
 export function useAppLanguage(): Ref<string> {
   return useConfig<string>("settings.appLanguage", detectLocale())
-}
-
-function detectLocale(): string {
-  const nav = typeof navigator !== "undefined" ? navigator.language : "en"
-  const short = nav.split("-")[0]
-  return short === "ru" ? "ru" : "en"
 }
