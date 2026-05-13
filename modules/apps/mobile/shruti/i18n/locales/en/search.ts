@@ -1,6 +1,9 @@
 export default {
   search: "Search | Search through {count} track | Search through {count} tracks",
   specifySearchCriteria: "Please provide a search query or select filters to discover more.",
+  filtersButton: "Filters",
+  filtersSheetTitle: "Filters",
+  filtersReset: "Reset",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
@@ -9,6 +12,7 @@ export default {
     sort: "Sort",
     authors: "Authors",
     sources: "Sources",
+    tags: "Tags",
     locations: "Locations",
     languages: "Languages",
     duration: "Durations",

@@ -149,6 +149,22 @@ describe("searchAndFilterTracks", () => {
     })
   })
 
+  it("narrows FTS results by tagIds against track.tagIds", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
+      mkTrack({ id: "t1" as TrackId, tagIds: ["tag_a" as TagId] }),
+      mkTrack({ id: "t2" as TrackId, tagIds: ["tag_b" as TagId] }),
+      mkTrack({ id: "t3" as TrackId, tagIds: ["tag_a" as TagId, "tag_c" as TagId] }),
+      mkTrack({ id: "t4" as TrackId, tagIds: [] }),
+    ])
+    const repo = makeRepo({ search: searchSpy })
+    const result = await searchAndFilterTracks(
+      { query: "krishna", tagIds: ["tag_a" as TagId] },
+      { tracks: repo }
+    )
+    expect(result.map((t) => t.id)).toEqual(["t1", "t3"])
+    expect(searchSpy).toHaveBeenCalled()
+  })
+
   it("narrows FTS results by sourceIds against track references", async () => {
     const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
       mkTrack({
