@@ -131,9 +131,11 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   pointer-events: auto;
 }
 
-/* Chip row is gone; spacer only needs to clear the input + safe-area. */
+/* Chip row is gone; spacer clears the input + safe-area + the 20px
+   gradient fade region, with a few extra px so the first list row
+   doesn't sit visually inside the fade. */
 .search-content-spacer {
-  height: calc(env(safe-area-inset-top) + 64px);
+  height: calc(env(safe-area-inset-top) + 80px);
 }
 
 /* On Android Capacitor's WebView reports env(safe-area-inset-top) as the
@@ -142,7 +144,7 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
    space above the first result. Drop the env() term on Android — the
    IonContent padding alone is enough to clear the fixed header. */
 .search-content-spacer.is-android {
-  height: 64px;
+  height: 80px;
 }
 
 /* IonList ships with a default --padding-top that leaves visible empty

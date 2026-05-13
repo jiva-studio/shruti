@@ -46,7 +46,6 @@ export interface UiTranscriptBlockView {
   /** Optional speaker emoji/icon rendered in the sentence gutter. */
   readonly icon?: string
   bookmarked: boolean
-  selected: boolean
 }
 
 export interface UiTranscriptBlocksGroup {

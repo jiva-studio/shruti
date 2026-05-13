@@ -35,18 +35,10 @@ const emit = defineEmits<{ click: [] }>()
   height: 36px;
   padding: 0;
   border: none;
-  border-radius: 10px;
   background: transparent;
   color: var(--ion-color-medium, currentColor);
-  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.search-filters-button:active {
-  background: var(--ion-color-medium, rgba(0, 0, 0, 0.12));
+  transition: color 120ms ease;
 }
 
 .search-filters-button.is-active {

@@ -1,4 +1,4 @@
-import type { Ref } from "vue"
+import { ref, type Ref } from "vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptBlockView } from "../types.js"
 
 /** Block kinds whose text contributes to the selected-text payload. */
@@ -16,10 +16,18 @@ export interface TextSelectedPayload {
   event: TouchEvent
 }
 
+/** Inclusive time-range that defines what is currently selected. */
+export interface SelectionRange {
+  start: number
+  end: number
+}
+
 export interface UseTranscriptSelectionReturn {
-  /** Mark blocks within `[start..end]` as selected; clears the rest. */
+  /** Active selection range, or `null` when nothing is selected. */
+  selectionRange: Ref<SelectionRange | null>
+  /** Set the active selection range to `[start..end]`. */
   applySelectionRange: (start: number, end: number) => void
-  /** Clear the `selected` flag on every block. */
+  /** Clear the active selection. */
   clearSelection: () => void
   /** Build a `{ text, timeStart, timeEnd }` payload for emission. */
   buildSelectedPayload: (
@@ -27,6 +35,8 @@ export interface UseTranscriptSelectionReturn {
     end: number,
     event: TouchEvent
   ) => TextSelectedPayload | null
+  /** True when the block falls within the active selection range. */
+  isSelected: (block: UiTranscriptBlockView) => boolean
   /** True when the block contains the current playhead position. */
   isCurrent: (block: UiTranscriptBlockView) => boolean
   /** True when any block in the group brackets the current playhead position. */
@@ -34,28 +44,26 @@ export interface UseTranscriptSelectionReturn {
 }
 
 /**
- * Encapsulates transcript selection state. Mutates the `selected` flag on
- * the input blocks (parent-owned data) — this matches the existing data
- * flow but the mutation is now isolated to a single place so the
- * coupling is visible.
+ * Encapsulates transcript selection state.
+ *
+ * Selection is stored as a single reactive time-range; each renderer
+ * derives its own "selected" flag from that range. The previous
+ * implementation mutated a `selected` boolean on each block, but those
+ * blocks come from a `computed()` returning plain objects — the
+ * mutations never triggered a re-render, so the live drag-selection
+ * highlight was effectively invisible.
  */
 export function useTranscriptSelection(
   options: UseTranscriptSelectionOptions
 ): UseTranscriptSelectionReturn {
+  const selectionRange = ref<SelectionRange | null>(null)
+
   function applySelectionRange(start: number, end: number): void {
-    for (const group of options.groups.value) {
-      for (const block of group.blocks) {
-        block.selected = block.block.start >= start && block.block.end <= end
-      }
-    }
+    selectionRange.value = { start, end }
   }
 
   function clearSelection(): void {
-    for (const group of options.groups.value) {
-      for (const block of group.blocks) {
-        if (block.selected) block.selected = false
-      }
-    }
+    selectionRange.value = null
   }
 
   function buildSelectedPayload(
@@ -78,6 +86,12 @@ export function useTranscriptSelection(
     return { text, timeStart: start, timeEnd: end, event }
   }
 
+  function isSelected(block: UiTranscriptBlockView): boolean {
+    const r = selectionRange.value
+    if (!r) return false
+    return block.block.start >= r.start && block.block.end <= r.end
+  }
+
   function isCurrent(block: UiTranscriptBlockView): boolean {
     const pos = options.position.value
     return block.block.start <= pos && block.block.end >= pos
@@ -91,5 +105,13 @@ export function useTranscriptSelection(
     return first.start <= pos && last.end >= pos
   }
 
-  return { applySelectionRange, clearSelection, buildSelectedPayload, isCurrent, isActiveGroup }
+  return {
+    selectionRange,
+    applySelectionRange,
+    clearSelection,
+    buildSelectedPayload,
+    isSelected,
+    isCurrent,
+    isActiveGroup,
+  }
 }

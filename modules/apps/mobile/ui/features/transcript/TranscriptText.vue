@@ -26,6 +26,7 @@
         :display-speaker-icon="displaySpeakerIcons"
         :should-highlight-current="shouldHighlightCurrentSentence"
         :is-first-in-group="blockIdx === 0"
+        :selection-range="selectionRange"
         @seek="(pos) => emit('seek', pos)"
       />
     </p>
@@ -63,7 +64,7 @@ const emit = defineEmits<{
 }>()
 
 const { groups, position } = toRefs(props)
-const { applySelectionRange, clearSelection, buildSelectedPayload, isActiveGroup } =
+const { selectionRange, applySelectionRange, clearSelection, buildSelectedPayload, isActiveGroup } =
   useTranscriptSelection({
     groups,
     position,
@@ -82,7 +83,7 @@ function onSelected(start: number, end: number, event: TouchEvent): void {
 }
 
 // Expose the imperative clear handle so the parent dialog can wipe the
-// per-block `selected` flags after the popover dismisses or an action
+// active selection range after the popover dismisses or an action
 // completes — without it the highlight stays stuck on the page.
 defineExpose({ clearSelection })
 </script>

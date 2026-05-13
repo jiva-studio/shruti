@@ -1,13 +1,10 @@
 <template>
-  <!-- v-if so the modal fully unmounts after swipe-dismiss; without it
-       IonModal with breakpoints holds onto internal state and the next
-       :is-open=true wouldn't re-open. -->
   <IonModal
-    v-if="open"
-    :is-open="true"
+    :is-open="open"
     class="filters-sheet"
     :breakpoints="[0, 0.5, 0.9]"
     :initial-breakpoint="0.9"
+    :backdrop-breakpoint="0"
     handle
     @did-dismiss="onDismiss"
   >
@@ -21,9 +18,12 @@
         <IonTitle>
           {{ activeSection ? activeSection.title : $t("search.filtersSheetTitle") }}
         </IonTitle>
-        <IonButtons v-if="!activeSection" slot="end">
-          <IonButton :disabled="!canReset" @click="onReset">
+        <IonButtons slot="end">
+          <IonButton v-if="!activeSection" :disabled="!canReset" @click="onReset">
             {{ $t("search.filtersReset") }}
+          </IonButton>
+          <IonButton strong @click="onPrimary">
+            {{ $t("app.ok") }}
           </IonButton>
         </IonButtons>
       </IonToolbar>
@@ -252,6 +252,18 @@ function onReset(): void {
   emit("reset")
 }
 
+// Primary OK in the toolbar: when a sub-picker is on screen it acts as
+// "done with this dimension" (mirrors the back chevron); on the root
+// view it dismisses the whole sheet. Filters apply live as the user
+// toggles them, so closing never loses changes.
+function onPrimary(): void {
+  if (activeSection.value) {
+    leaveSection()
+    return
+  }
+  emit("update:open", false)
+}
+
 function onDismiss(): void {
   emit("update:open", false)
 }
@@ -263,6 +275,15 @@ function onDismiss(): void {
 .filters-sheet ion-header::after {
   display: none;
   background-image: none;
+}
+
+/* backdrop-breakpoint=0 keeps the backdrop layer mounted at every
+   breakpoint so touches/scroll can't leak through to the search page
+   underneath, but the visible dim looks like a stray shadow above the
+   toolbar at the 0.9 stop. Drop its opacity so the backdrop blocks
+   pointer events without rendering anything. */
+.filters-sheet {
+  --backdrop-opacity: 0;
 }
 </style>
 
