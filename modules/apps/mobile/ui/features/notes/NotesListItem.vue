@@ -3,17 +3,9 @@
     <div class="body">
       <HighlightText :text="text" :lang="language" />
 
-      <div v-if="hasHeader" class="header">
-        <span v-if="authorName" class="author">{{ authorName }}</span>
-        <span v-if="trackTitle" class="title">{{ trackTitle }}</span>
-      </div>
+      <div v-if="authorName" class="author">{{ authorName }}</div>
 
-      <div v-if="hasMeta" class="meta">
-        <span v-if="trackDate">{{ trackDate }}</span>
-        <span v-if="locationName">{{ locationName }}</span>
-        <span v-if="reference">{{ reference }}</span>
-        <span class="time">{{ timeRange }}</span>
-      </div>
+      <div v-if="metaLine" class="meta">{{ metaLine }}</div>
     </div>
   </IonItem>
 </template>
@@ -30,41 +22,19 @@ const props = defineProps<{
   authorName?: string
   trackTitle?: string
   trackDate?: string
-  locationName?: string
   reference?: string
-  timeStart?: number
-  timeEnd?: number
 }>()
 
 defineEmits<{ click: [noteId: string] }>()
 
-const hasHeader = computed(() => Boolean(props.authorName || props.trackTitle))
-
-const timeRange = computed<string>(() => formatTimeRange(props.timeStart, props.timeEnd))
-
-const hasMeta = computed(
-  () =>
-    Boolean(props.trackDate) ||
-    Boolean(props.locationName) ||
-    Boolean(props.reference) ||
-    timeRange.value.length > 0
+// Single-line summary under the author: title · reference · date. Empty
+// fields are skipped; if none are present the row is hidden entirely.
+// Separator is the middle-dot (U+00B7) — `·`.
+const metaLine = computed<string>(() =>
+  [props.trackTitle, props.reference, props.trackDate]
+    .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+    .join(" · ")
 )
-
-function formatTimeRange(startSec?: number, endSec?: number): string {
-  if (typeof startSec !== "number" || !Number.isFinite(startSec) || startSec < 0) return ""
-  const start = mmss(startSec)
-  if (typeof endSec !== "number" || !Number.isFinite(endSec) || endSec <= startSec) return start
-  return `${start}–${mmss(endSec)}`
-}
-
-function mmss(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds))
-  const s = total % 60
-  const m = Math.floor(total / 60) % 60
-  const h = Math.floor(total / 3600)
-  const pad = (n: number) => n.toString().padStart(2, "0")
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
-}
 </script>
 
 <style scoped>
@@ -82,39 +52,21 @@ function mmss(seconds: number): string {
 .body {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
   padding: 0.25rem 0;
   width: 100%;
 }
 
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+.author {
   font-size: 0.8rem;
-  color: var(--ion-color-medium);
-  text-align: left;
-}
-
-.header .author {
   font-weight: 600;
-}
-
-.header .title {
-  font-style: italic;
+  color: var(--ion-color-medium);
+  text-align: right;
 }
 
 .meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.6rem;
   font-size: 0.75rem;
   color: var(--ion-color-medium);
   text-align: left;
-}
-
-.meta .time {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
 }
 </style>

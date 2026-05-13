@@ -8,9 +8,10 @@ export type SelectionActionKind = "copy" | "bookmark" | "share"
 export interface SelectionActionEvent {
   action: SelectionActionKind
   text: string
-  /** Start of the selected text range, in seconds. */
+  /** Start of the selected text range, in **milliseconds** (matches the
+   *  `data-time-start` attribute on the dragged blocks). */
   timeStart: number
-  /** End of the selected text range, in seconds. */
+  /** End of the selected text range, in **milliseconds**. */
   timeEnd: number
 }
 
