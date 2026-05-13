@@ -1,8 +1,8 @@
 <template>
   <IonItem button :detail="true" lines="none" @click="open = true">
-    <div slot="start" class="settings-item-icon">
+    <IconChip slot="start">
       <CloudIcon />
-    </div>
+    </IconChip>
 
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t("settings.server.title") }}</h2>
@@ -25,6 +25,7 @@
 import { computed, ref } from "vue"
 import { IonItem, IonLabel } from "@ionic/vue"
 import { CloudIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 
 interface Props {

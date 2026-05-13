@@ -1,8 +1,8 @@
 <template>
   <IonItem lines="none">
-    <div slot="start" class="settings-item-icon">
+    <IconChip slot="start">
       <BellIcon />
-    </div>
+    </IconChip>
 
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t("settings.notifications.enabled.title") }}</h2>
@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
 import { BellIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 
 const value = defineModel<boolean>({ required: true, default: false })
 </script>

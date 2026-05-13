@@ -1,9 +1,9 @@
 <template>
   <IonItem button detail lines="none" @click="open = true">
     <!-- Item Icon -->
-    <div slot="start" class="settings-item-icon">
+    <IconChip slot="start">
       <LanguageIcon />
-    </div>
+    </IconChip>
 
     <!-- Text -->
     <IonLabel class="ion-text-nowrap">
@@ -29,6 +29,7 @@ import { ref } from "vue"
 import { IonItem, IonLabel } from "@ionic/vue"
 import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 import { LanguageIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
