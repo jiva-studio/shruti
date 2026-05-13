@@ -48,6 +48,8 @@ import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
+import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
+import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -83,6 +85,12 @@ initShruti({
   // is backgrounded/killed; on iOS via URLSession.background. Web stays a
   // foreground-only Cache API implementation, the same as before.
   mediaDownloader: useMediaDownloaderAdapter({ cacheDir: "shruti" }),
+  // `databaseTransfer` needs a `() => databases.user` getter; the factory is
+  // invoked inside `initShruti` where that closure is available.
+  databaseTransferFactory: (getUserDb) =>
+    isNative
+      ? useCapacitorDatabaseTransfer(getUserDb)
+      : useWebDatabaseTransfer(config.database.userLocalPath, getUserDb),
   platform,
   initialServer: SERVERS[0],
   serverProber: useHttpServerProber(),

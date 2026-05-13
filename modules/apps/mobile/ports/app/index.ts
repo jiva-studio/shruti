@@ -21,3 +21,4 @@ export type { INotificationScheduler, ScheduledNotification } from "./notificati
 export type { IShareService, ShareOptions } from "./share.js"
 export type { IHaptics, HapticImpactStyle } from "./haptics.js"
 export type { IServerProber, ServerProbeResult } from "./serverProber.js"
+export type { IDatabaseTransfer } from "./databaseTransfer.js"

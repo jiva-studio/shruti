@@ -17,6 +17,8 @@
       v-model:notifications-time="notificationsTime"
     />
 
+    <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
+
     <SettingsDangerGroup
       v-if="debugUnlocked"
       @clear-cache="onClearCache"
@@ -38,6 +40,7 @@ import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAppearanceGroup,
   SettingsDangerGroup,
+  SettingsDataGroup,
   SettingsSadhanaGroup,
 } from "@ui/features/settings/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -63,6 +66,8 @@ const {
   languageItems,
   onClearCache,
   onClearUserData,
+  onExportDatabase,
+  onImportFileSelected,
 } = useSettingsController()
 
 const debugTrigger = useDebugUnlockTrigger()
