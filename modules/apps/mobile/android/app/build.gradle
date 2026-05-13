@@ -15,8 +15,10 @@ android {
         // -PversionName=<mobile_version>). Locally those props are absent, so
         // the fallbacks below are used. Without this wiring the hardcoded `1`
         // makes every Play upload collide with the previously published code.
-        versionCode (project.findProperty('versionCode') ?: 1).toString().toInteger()
-        versionName project.findProperty('versionName') ?: "1.0"
+        def resolvedVersionCode = (project.findProperty('versionCode') ?: 1).toString().toInteger()
+        def resolvedVersionName = (project.findProperty('versionName') ?: '1.0').toString()
+        versionCode resolvedVersionCode
+        versionName resolvedVersionName
         buildConfigField "String", "APPSFLYER_KEY", "\"${System.getenv('APPSFLYER_KEY') ?: 'default-key'}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Support 16 KB page sizes for Android 15+
