@@ -1,8 +1,7 @@
 <template>
-  <IonIcon :icon="pricetagOutline" />
+  <IconTagFilled />
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue"
-import { pricetagOutline } from "ionicons/icons"
+import { IconTagFilled } from "@tabler/icons-vue"
 </script>

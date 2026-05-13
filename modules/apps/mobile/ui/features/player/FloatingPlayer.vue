@@ -65,7 +65,7 @@
       @pointerdown.stop
       @click.stop="onPlayClick"
     >
-      <IonIcon class="icon" :icon="playIcon" />
+      <component :is="playIcon" class="icon" :size="22" />
       <div v-if="showProgress" class="progress">
         <RadialProgress
           :stroke-width="4"
@@ -86,8 +86,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonIcon } from "@ionic/vue"
-import { play, pause, checkmarkDone } from "ionicons/icons"
+import {
+  IconChecks,
+  IconPlayerPauseFilled,
+  IconPlayerPlayFilled,
+} from "@tabler/icons-vue"
 import RadialProgress from "vue3-radial-progress"
 import MixControl from "./MixControl.vue"
 import PlayerControls from "./PlayerControls.vue"
@@ -225,8 +228,8 @@ onBeforeUnmount(cleanupDrag)
 
 const trackCompleted = computed(() => props.duration > 0 && props.position >= props.duration)
 const playIcon = computed(() => {
-  if (trackCompleted.value) return checkmarkDone
-  return props.playing ? pause : play
+  if (trackCompleted.value) return IconChecks
+  return props.playing ? IconPlayerPauseFilled : IconPlayerPlayFilled
 })
 
 function onPlayClick(): void {

@@ -11,14 +11,14 @@
       color="dark"
       @click.stop="$emit('close')"
     >
-      <IonIcon slot="icon-only" :icon="closeCircleOutline" />
+      <IconCircleX slot="icon-only" :size="20" />
     </IonButton>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonButton } from "@ionic/vue"
-import { closeCircleOutline } from "ionicons/icons"
+import { IonButton } from "@ionic/vue"
+import { IconCircleX } from "@tabler/icons-vue"
 
 defineEmits(["close"])
 </script>
