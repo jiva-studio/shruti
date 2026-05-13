@@ -14,10 +14,20 @@ def mobile_version
   @mobile_version ||= JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("version")
 end
 
-# Store build number — always $GITHUB_RUN_NUMBER in CI, empty locally.
-# Store-upload lanes enforce presence via require_ci_build_id!.
+# Historical baseline: an earlier (pre-CI) pipeline pushed versionCode
+# 623 to Play (Dec 2025 release). After repointing to GITHUB_RUN_NUMBER
+# this workflow's run count was ~260, which Play rejects as a downgrade
+# ("doesn't allow any existing users to upgrade"). Offset to stay above
+# the historical high. Drop once raw run_number naturally clears 1000.
+VERSION_CODE_OFFSET = 1000
+
+# Store build number — always $GITHUB_RUN_NUMBER (+ offset) in CI,
+# empty locally. Store-upload lanes enforce presence via
+# require_ci_build_id!.
 def ci_build_id
-  ENV["GITHUB_RUN_NUMBER"].to_s.strip
+  raw = ENV["GITHUB_RUN_NUMBER"].to_s.strip
+  return "" if raw.empty?
+  (raw.to_i + VERSION_CODE_OFFSET).to_s
 end
 
 # ---------------------------------------------------------------------------- #
