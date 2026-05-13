@@ -2,6 +2,7 @@
   <IonSearchbar
     v-model="searchQuery"
     show-cancel-button="focus"
+    show-clear-button="never"
     :placeholder="placeholder"
     :cancel-button-text="$t('app.cancel')"
     @ion-focus="emit('focusChange', true)"
