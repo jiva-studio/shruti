@@ -42,9 +42,9 @@
               :detail="true"
               @click="enterSection(section)"
             >
-              <div slot="start" class="settings-item-icon section-icon-chip">
+              <IconChip slot="start" class="section-icon-chip">
                 <component :is="section.icon" />
-              </div>
+              </IconChip>
               <IonLabel>
                 <h2>{{ section.title }}</h2>
                 <p
@@ -122,7 +122,7 @@ import {
   IonCheckbox,
 } from "@ionic/vue"
 import { IconCheckFilled, IconChevronLeft } from "@tabler/icons-vue"
-import { Header } from "@ui/primitives/index.js"
+import { Header, IconChip } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
 import type {

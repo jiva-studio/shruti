@@ -1,8 +1,8 @@
 <template>
   <IonItem lines="none" @click="open = true">
-    <div slot="start" class="settings-item-icon">
+    <IconChip slot="start">
       <ClockIcon />
-    </div>
+    </IconChip>
 
     <IonLabel class="ion-text-nowrap">
       <h2>{{ $t("settings.notifications.daily.title") }}</h2>
@@ -25,6 +25,7 @@ import { ref } from "vue"
 import { IonItem, IonLabel } from "@ionic/vue"
 import TimePickerDialog from "./TimePickerDialog.vue"
 import { ClockIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                    State                                   */
