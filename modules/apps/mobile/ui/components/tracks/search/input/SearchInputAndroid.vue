@@ -4,7 +4,6 @@
       v-model="searchQuery"
       fill="outline"
       :placeholder="placeholder"
-      :clear-input="true"
       @ion-focus="emit('focusChange', true)"
       @ion-blur="emit('focusChange', false)"
     />
