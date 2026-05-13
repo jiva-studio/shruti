@@ -25,6 +25,12 @@ export interface UseTranscriptHydrationOptions {
 export interface UseTranscriptHydrationReturn {
   title: Ref<string>
   author: Ref<string>
+  /**
+   * The hydrated domain `Track`, exposed so consumers can read
+   * track-level fields not surfaced as separate refs (date, location id,
+   * references). `null` until `hydrate` resolves.
+   */
+  track: Readonly<Ref<Track | null>>
   availableLanguages: Ref<readonly LanguageCode[]>
   /** Active selection (mutable). Defaults to the preferred language when present. */
   activeLanguages: Ref<readonly LanguageCode[]>
@@ -105,5 +111,13 @@ export function useTranscriptHydration(
     activeLanguages.value = []
   }
 
-  return { title, author, availableLanguages, activeLanguages, hydrate, reset }
+  return {
+    title,
+    author,
+    track: trackEntity as Readonly<Ref<Track | null>>,
+    availableLanguages,
+    activeLanguages,
+    hydrate,
+    reset,
+  }
 }

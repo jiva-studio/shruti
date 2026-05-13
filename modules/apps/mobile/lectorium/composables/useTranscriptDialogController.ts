@@ -1,10 +1,14 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
 import type { LanguageCode } from "@lib/domain/core.js"
+import type { Note } from "@lib/domain/note.js"
+import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
+import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
+import { formatReference } from "@lectorium/composables/groupReferences.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@lectorium/composables/useTranscriptSystemBars.js"
@@ -54,9 +58,17 @@ export function useTranscriptDialogController(
   const transcriptStore = useTranscriptStore()
   const player = usePlayerStore()
   const dictionaries = useDictionariesStore()
+  const notesStore = useNotesStore()
   const appLanguage = useAppLanguage()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
+  /**
+   * Saved notes for the currently open transcript, refreshed whenever the
+   * track changes or a new bookmark is created. Drives the `bookmarked`
+   * flag on each block in `blockGroups` so historic highlights reappear
+   * on re-open of the same transcript.
+   */
+  const notesForTrack = ref<readonly Note[]>([])
   useTranscriptSystemBars()
 
   // Repos are resolved lazily — at app root the controller is constructed
@@ -73,10 +85,54 @@ export function useTranscriptDialogController(
     getTranscripts: () => app.repositories().transcripts,
   })
 
+  async function refreshNotesForTrack(): Promise<void> {
+    const id = transcriptStore.trackId
+    if (!id) {
+      notesForTrack.value = []
+      return
+    }
+    try {
+      notesForTrack.value = await app.repositories().notes.listByTrack(id)
+    } catch {
+      notesForTrack.value = []
+    }
+  }
+
+  function buildShareTrackContext(): NoteShareContext["track"] | undefined {
+    const track = hydration.track.value
+    if (!track) return undefined
+    const lang = appLanguage.value
+    const locationName = track.locationId
+      ? (dictionaries.locationsById.get(track.locationId)?.names.get(lang) ??
+        dictionaries.locationsById.get(track.locationId)?.names.values().next().value ??
+        undefined)
+      : undefined
+    const reference =
+      track.references.length > 0
+        ? formatReference(track.references[0]!, dictionaries.sourcesById, lang)
+        : undefined
+    return {
+      title: hydration.title.value || undefined,
+      authorName: hydration.author.value || undefined,
+      date: track.date || undefined,
+      locationName,
+      reference,
+    }
+  }
+
   const selectionActions = useTranscriptSelectionActions({
     getTrackId: () => transcriptStore.trackId,
     getNotes: () => app.repositories().notes,
     shareService: app.shareService,
+    getShareTrackContext: buildShareTrackContext,
+    onNoteCreated: () => {
+      // Refresh both the dialog's in-memory note list (drives the
+      // wavy-underline highlight on the transcript) and the global
+      // notes store (drives the Notes page list). Without this the new
+      // bookmark stays invisible until the user re-opens the app.
+      void refreshNotesForTrack()
+      void notesStore.refresh()
+    },
     onError: (message) => {
       loader.error.value = message
     },
@@ -103,6 +159,7 @@ export function useTranscriptDialogController(
       paragraphChars: paragraphChars.value,
       sourcesById: dictionaries.sourcesById,
       lang: appLanguage.value,
+      notes: notesForTrack.value,
     })
   )
   // Preview mode (Search → Open transcript with no track playing, or a
@@ -138,6 +195,7 @@ export function useTranscriptDialogController(
       loader.error.value = null
       if (!id) {
         hydration.reset()
+        notesForTrack.value = []
         await loader.reload(undefined, undefined)
         return
       }
@@ -148,6 +206,9 @@ export function useTranscriptDialogController(
       void dictionaries.ensureLoaded()
       await hydration.hydrate(id)
       await loader.reload(id, hydration.activeLanguages.value[0])
+      // Load saved notes after the transcript so the first paint of the
+      // block list already has `bookmarked` set on the right paragraphs.
+      await refreshNotesForTrack()
     },
     { immediate: true }
   )
