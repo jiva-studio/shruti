@@ -4,7 +4,6 @@
     class="filters-sheet"
     :breakpoints="[0, 0.5, 0.9]"
     :initial-breakpoint="0.9"
-    :backdrop-breakpoint="0"
     handle
     @did-dismiss="onDismiss"
   >
@@ -19,7 +18,12 @@
           {{ activeSection ? activeSection.title : $t("search.filtersSheetTitle") }}
         </IonTitle>
         <IonButtons slot="end">
-          <IonButton v-if="!activeSection" :disabled="!canReset" @click="onReset">
+          <IonButton
+            v-if="!activeSection"
+            class="filters-secondary-button"
+            :disabled="!canReset"
+            @click="onReset"
+          >
             {{ $t("search.filtersReset") }}
           </IonButton>
           <IonButton strong @click="onPrimary">
@@ -270,20 +274,39 @@ function onDismiss(): void {
 </script>
 
 <style>
-/* Same fix as SelectorDialog in sheet mode: kill the Android toolbar
-   elevation under the sheet's own header. */
+/* Material paints the header elevation in two places: ion-header::after
+   (the iOS-style hairline that lives on every header) and the host
+   `.header-md` selector, which adds a three-layer drop-shadow below
+   the toolbar. The existing `ion-no-border` only kills the host
+   shadow when the platform check hits — but inside the sheet modal
+   that detection isn't reliable, so the shadow leaked back as a faint
+   dark line between the toolbar and the first list row. Suppress both
+   here so the sheet header always renders flat against its content. */
+.filters-sheet ion-header,
 .filters-sheet ion-header::after {
-  display: none;
+  box-shadow: none !important;
   background-image: none;
 }
+.filters-sheet ion-header::after {
+  display: none;
+}
 
-/* backdrop-breakpoint=0 keeps the backdrop layer mounted at every
-   breakpoint so touches/scroll can't leak through to the search page
-   underneath, but the visible dim looks like a stray shadow above the
-   toolbar at the 0.9 stop. Drop its opacity so the backdrop blocks
-   pointer events without rendering anything. */
-.filters-sheet {
-  --backdrop-opacity: 0;
+/* Pin both end-of-toolbar buttons to the same font size so RESET and
+   OK read as a pair regardless of Ionic's internal `strong` styling. */
+.filters-sheet ion-buttons[slot="end"] ion-button {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+/* RESET is the secondary affordance: mute the colour and drop the
+   opacity so the eye lands on OK first. `strong` keeps OK heavier,
+   which is the correct visual hierarchy for primary action. */
+.filters-sheet .filters-secondary-button {
+  --color: var(--ion-color-medium);
+  opacity: 0.55;
+}
+.filters-sheet .filters-secondary-button.button-disabled {
+  opacity: 0.3;
 }
 </style>
 
