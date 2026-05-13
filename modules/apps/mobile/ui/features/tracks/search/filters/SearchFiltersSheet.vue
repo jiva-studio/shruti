@@ -30,7 +30,8 @@
     </Header>
 
     <IonContent>
-      <Transition :name="transitionName" mode="out-in">
+      <div class="view-stack">
+        <Transition :name="transitionName">
         <!-- List view: every dimension as a drill-in row. -->
         <div v-if="!activeSection" key="list" class="view">
           <IonList lines="full" class="ion-no-padding">
@@ -98,7 +99,8 @@
             </template>
           </IonList>
         </div>
-      </Transition>
+        </Transition>
+      </div>
     </IonContent>
   </IonModal>
 </template>
@@ -264,8 +266,25 @@ function onDismiss(): void {
 </style>
 
 <style scoped>
+.view-stack {
+  position: relative;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
 .view {
   width: 100%;
+}
+
+/* Drill transitions run concurrently. The OUTGOING view becomes
+   absolutely positioned over the incoming one so they slide past each
+   other instead of one fully leaving before the other appears. The
+   incoming view stays in normal flow so IonContent's scroll height
+   reflects its content. */
+.drill-in-leave-active,
+.drill-out-leave-active {
+  position: absolute;
+  inset: 0;
 }
 
 .inner-search {
