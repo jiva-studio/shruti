@@ -45,6 +45,15 @@ def is_italic(span):
 def is_bold(span):
     return ("Bold" in span["font"]) or (span["flags"] & 16) != 0
 
+# BBT typesets editorial inserts in a verse line as roman brackets around
+# italic content: e.g. `janma karma [ca] me divyam` → 5 spans, the `[` and
+# `]` in regular Goudy, the Sanskrit in italic. Without ignoring these,
+# the line fails SHLOKA_LINE's `not has_reg` guard and falls through to
+# BODY/TRANSLATION, splitting the verse mid-block.
+_BRACKET_PUNCT = set("[]()")
+def _is_bracket_only(span):
+    return all(c in _BRACKET_PUNCT or c.isspace() for c in span["text"])
+
 def span_classify(line, page_w):
     spans = line["spans"]
     txt = "".join(s["text"] for s in spans).strip()
@@ -57,7 +66,13 @@ def span_classify(line, page_w):
     short_left = (left < 90) and (right < 400)
     has_ital = any(is_italic(s) for s in spans)
     has_bold = any(is_bold(s) for s in spans)
-    has_reg  = any((not is_italic(s)) and (not is_bold(s)) for s in spans)
+    # Roman bracket-only spans (editorial inserts in italic verse lines)
+    # are typographically invisible — exclude them when judging whether
+    # a line has "real" regular-font content.
+    has_reg  = any(
+        (not is_italic(s)) and (not is_bold(s)) and not _is_bracket_only(s)
+        for s in spans
+    )
     big      = any(round(s["size"]) >= 16 for s in spans)
     arial    = any("Arial" in s["font"] for s in spans)
     return {
