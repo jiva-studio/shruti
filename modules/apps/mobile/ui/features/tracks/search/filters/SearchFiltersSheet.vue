@@ -32,75 +32,75 @@
     <IonContent>
       <div class="view-stack">
         <Transition :name="transitionName">
-        <!-- List view: every dimension as a drill-in row. -->
-        <div v-if="!activeSection" key="list" class="view">
-          <IonList lines="full" class="ion-no-padding">
-            <IonItem
-              v-for="section in sections"
-              :key="section.key"
-              button
-              :detail="true"
-              @click="enterSection(section)"
-            >
-              <IconChip slot="start" class="section-icon-chip">
-                <component :is="section.icon" />
-              </IconChip>
-              <IonLabel>
-                <h2>{{ section.title }}</h2>
-                <p
-                  class="section-summary"
-                  :class="{ 'is-placeholder': !sectionSummary(section) }"
-                >
-                  {{ sectionSummary(section) || $t("search.filters.any") }}
-                </p>
-              </IonLabel>
-              <span
-                v-if="section.kind === 'multi' && multiCount(section.key) > 0"
-                slot="end"
-                class="count-pill"
-              >
-                {{ multiCount(section.key) }}
-              </span>
-            </IonItem>
-          </IonList>
-        </div>
-
-        <!-- Section detail view: the picker for the focused dimension. -->
-        <div v-else :key="`section-${activeSectionKey}`" class="view">
-          <div v-if="showInnerSearch" class="inner-search">
-            <SearchInput v-model="innerSearch" :placeholder="$t('app.search')" />
-          </div>
-          <IonList lines="none" class="ion-no-margin ion-no-padding">
-            <template v-if="multiActive">
-              <IonItem v-for="item in filteredItems" :key="item.id">
-                <IonCheckbox
-                  label-placement="end"
-                  justify="start"
-                  :checked="isMultiSelected(multiActive.key, item.id)"
-                  @ion-change="(e) => toggleMulti(multiActive!.key, item.id, e.detail.checked)"
-                >
-                  {{ item.title }}
-                </IonCheckbox>
-              </IonItem>
-            </template>
-            <template v-else-if="singleActive">
+          <!-- List view: every dimension as a drill-in row. -->
+          <div v-if="!activeSection" key="list" class="view">
+            <IonList lines="full" class="ion-no-padding">
               <IonItem
-                v-for="item in filteredItems"
-                :key="item.id ?? '__unset__'"
+                v-for="section in sections"
+                :key="section.key"
                 button
-                @click="toggleSingle(singleActive!.key, item.id)"
+                :detail="true"
+                @click="enterSection(section)"
               >
-                <IonLabel>{{ item.title }}</IonLabel>
-                <IconCheckFilled
-                  v-if="singleValue(singleActive.key) === item.id"
+                <IconChip slot="start" class="section-icon-chip">
+                  <component :is="section.icon" />
+                </IconChip>
+                <IonLabel>
+                  <h2>{{ section.title }}</h2>
+                  <p
+                    class="section-summary"
+                    :class="{ 'is-placeholder': !sectionSummary(section) }"
+                  >
+                    {{ sectionSummary(section) || $t("search.filters.any") }}
+                  </p>
+                </IonLabel>
+                <span
+                  v-if="section.kind === 'multi' && multiCount(section.key) > 0"
                   slot="end"
-                  :size="20"
-                  :style="{ color: 'var(--ion-color-primary)' }"
-                />
+                  class="count-pill"
+                >
+                  {{ multiCount(section.key) }}
+                </span>
               </IonItem>
-            </template>
-          </IonList>
-        </div>
+            </IonList>
+          </div>
+
+          <!-- Section detail view: the picker for the focused dimension. -->
+          <div v-else :key="`section-${activeSectionKey}`" class="view">
+            <div v-if="showInnerSearch" class="inner-search">
+              <SearchInput v-model="innerSearch" :placeholder="$t('app.search')" />
+            </div>
+            <IonList lines="none" class="ion-no-margin ion-no-padding">
+              <template v-if="multiActive">
+                <IonItem v-for="item in filteredItems" :key="item.id">
+                  <IonCheckbox
+                    label-placement="end"
+                    justify="start"
+                    :checked="isMultiSelected(multiActive.key, item.id)"
+                    @ion-change="(e) => toggleMulti(multiActive!.key, item.id, e.detail.checked)"
+                  >
+                    {{ item.title }}
+                  </IonCheckbox>
+                </IonItem>
+              </template>
+              <template v-else-if="singleActive">
+                <IonItem
+                  v-for="item in filteredItems"
+                  :key="item.id ?? '__unset__'"
+                  button
+                  @click="toggleSingle(singleActive!.key, item.id)"
+                >
+                  <IonLabel>{{ item.title }}</IonLabel>
+                  <IconCheckFilled
+                    v-if="singleValue(singleActive.key) === item.id"
+                    slot="end"
+                    :size="20"
+                    :style="{ color: 'var(--ion-color-primary)' }"
+                  />
+                </IonItem>
+              </template>
+            </IonList>
+          </div>
         </Transition>
       </div>
     </IonContent>
@@ -333,7 +333,9 @@ function onDismiss(): void {
 .drill-in-leave-active,
 .drill-out-enter-active,
 .drill-out-leave-active {
-  transition: transform 200ms ease, opacity 200ms ease;
+  transition:
+    transform 200ms ease,
+    opacity 200ms ease;
 }
 .drill-in-enter-from {
   transform: translateX(100%);
