@@ -5,6 +5,13 @@
     :note-id="note.id"
     :text="note.text"
     :language="note.language"
+    :author-name="note.authorName"
+    :track-title="note.trackTitle"
+    :track-date="note.trackDate"
+    :location-name="note.locationName"
+    :reference="note.reference"
+    :time-start="note.timeStart"
+    :time-end="note.timeEnd"
     @click="emit('click', note.id)"
   />
 </template>
