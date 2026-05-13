@@ -89,6 +89,16 @@ export function buildFtsQuery(raw: string): string {
  */
 const REFERENCE_PATTERN = /^\d+(?:\.\d+)+$/
 
+/**
+ * Hard cap on rows scored by JS. FTS4 returns matches in no specific
+ * order so this is a coarse "first N matches" bound; vague prefix
+ * queries (`bg*`, `1*`) that hit >SCORE_CAP rows lose the tail. Picked
+ * to keep the JS-bridge JSON payload (id + date + matchinfo blob per
+ * row) under ~100 KB on Android, where Capacitor-SQLite serializes
+ * blobs as comma-separated decimal byte arrays.
+ */
+const SCORE_CAP = 500
+
 interface QueryPiece {
   phrase: boolean
   text: string
@@ -419,17 +429,22 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
         ? ` AND ${filterParts.clauses.join(" AND ")}`
         : ""
 
-      // Single path through the unified FTS index: every track has one
-      // `combined` row that concatenates every searchable token
-      // (titles + reference variants + year). Scoping the join to that
-      // kind makes implicit-AND across tokens AND across kinds work in
-      // one MATCH — e.g. `"BG 1974 2.12"` succeeds because all three
-      // tokens appear in the same combined row.
+      // Two-stage query: (1) FTS subquery emits the top SCORE_CAP
+      // candidate `combined` rows with their matchinfo blob, bounded
+      // so the virtual table stops yielding immediately — this is the
+      // fix for the device-side 1-7 s floor caused by the old JOIN
+      // form draining the full match set before LIMIT could clip it;
+      // (2) the outer query joins to `tracks`, applies hidden + user
+      // filters, ships back narrow `id + date + __minfo` rows for JS
+      // ranking. The page slice is hydrated below via a second SQL
+      // call so callers get full Track objects.
       //
-      // Filter predicates from `query.filters` are pushed into this
-      // WHERE so the post-scoring slice below operates on narrowed
-      // rows — otherwise pagination breaks (limit consumed by rows
-      // that get dropped by filters).
+      // SCORE_CAP is intentionally an over-fetch — `hidden=0` and
+      // user filters drop rows from the FTS candidate set, so
+      // requesting page_size matches inside FTS would leave the page
+      // short. At SCORE_CAP=500 we can safely page up to a few
+      // hundred results without drift; queries with more matches
+      // than that lose the tail (rank-irrelevant in practice).
       //
       // Relevance: FTS4 `matchinfo(s, 'pcx')` returns a BLOB of 32-bit
       // LE ints — `[p, c, hits_in_row, hits_in_corpus, rows_with_term, …]`
@@ -437,40 +452,46 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // BM25-without-saturation score in JS:
       //     score = Σ hits_in_row × log((N+1) / max(1, rows_with_term))
       // and sort DESC, breaking ties by `t.date DESC, t.id ASC`.
-      // Hidden tracks count toward the corpus stats — fine at 5600
-      // rows, IDF stays sensible.
-      type Row = TrackRow & { __minfo: SqlBlob }
-      const rawRows = await contentDb.query<Row>(
-        `SELECT t.*, matchinfo(tracks_search, 'pcx') AS __minfo
+      type ScoreRow = { id: TrackId; date: string | null; __minfo: SqlBlob }
+      const rawRows = await contentDb.query<ScoreRow>(
+        `SELECT t.id, t.date, sub.__minfo
          FROM tracks t
-         JOIN tracks_search ON tracks_search.track_id = t.id
-                            AND tracks_search.kind = 'combined'
-         WHERE tracks_search MATCH ? AND t.hidden = 0${filterSql}`,
-        [fts, ...filterParts.params]
+         JOIN (
+           SELECT track_id, matchinfo(tracks_search, 'pcx') AS __minfo
+           FROM tracks_search
+           WHERE tracks_search MATCH ? AND kind = 'combined'
+           LIMIT ?
+         ) sub ON sub.track_id = t.id
+         WHERE t.hidden = 0${filterSql}`,
+        [fts, SCORE_CAP, ...filterParts.params]
       )
       if (rawRows.length === 0) return []
 
       const totalDocs = await getCombinedRowCount(contentDb)
       const scored = rawRows.map((row) => ({
-        row,
+        id: row.id,
+        date: row.date,
         score: scoreMatchinfo(row.__minfo, totalDocs),
       }))
       scored.sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score
-        const ad = a.row.date ?? ""
-        const bd = b.row.date ?? ""
+        const ad = a.date ?? ""
+        const bd = b.date ?? ""
         if (ad !== bd) return bd < ad ? -1 : 1
-        return a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
       })
 
-      const paged = scored.slice(offset, offset + limit).map(({ row }) => {
-        // Strip the bookkeeping column before hydration so downstream
-        // mappers see a clean TrackRow.
-        const clean = { ...row } as Partial<Row>
-        delete clean.__minfo
-        return clean as TrackRow
-      })
-      return hydrate(contentDb, paged)
+      const pageIds = scored.slice(offset, offset + limit).map((r) => r.id)
+      if (pageIds.length === 0) return []
+
+      const placeholders = pageIds.map(() => "?").join(", ")
+      const fullRows = await contentDb.query<TrackRow>(
+        `SELECT * FROM tracks WHERE id IN (${placeholders}) AND hidden = 0`,
+        [...pageIds]
+      )
+      const hydrated = await hydrate(contentDb, fullRows)
+      const byId = new Map(hydrated.map((t) => [t.id, t]))
+      return pageIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
     },
 
     async getTranscriptPath(trackId: TrackId, language: LanguageCode): Promise<string | null> {
