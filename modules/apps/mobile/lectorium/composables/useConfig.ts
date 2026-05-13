@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from "vue"
+import { effectScope, ref, watch, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 type Serializer<T> = {
@@ -34,36 +34,43 @@ export function useConfig<T>(
   if (cached) return cached as Ref<T>
 
   const app = useLectorium()
-  const state = ref(initial) as Ref<T>
-  CACHE.set(key, state as Ref<unknown>)
+  // Detached scope so hydrate + persist watcher survive the first
+  // consumer's unmount — otherwise the watcher dies with that scope
+  // and later mutations from other consumers never reach storage.
+  const scope = effectScope(true)
+  const state = scope.run(() => {
+    const inner = ref(initial) as Ref<T>
+    let hydrated = false
+    let persisting = false
 
-  let hydrated = false
-  let persisting = false
-
-  void (async () => {
-    const raw = await app.preferences.get(key)
-    if (raw !== null) {
-      try {
-        state.value = serializer.decode(raw)
-      } catch {
-        // Corrupt payload — leave the initial value in place so the
-        // user still gets a working app.
+    void (async () => {
+      const raw = await app.preferences.get(key)
+      if (raw !== null) {
+        try {
+          inner.value = serializer.decode(raw)
+        } catch {
+          // Corrupt payload — leave the initial value in place so the
+          // user still gets a working app.
+        }
       }
-    }
-    hydrated = true
-  })()
+      hydrated = true
+    })()
 
-  watch(
-    state,
-    (next) => {
-      if (!hydrated || persisting) return
-      persisting = true
-      void app.preferences.set(key, serializer.encode(next)).finally(() => {
-        persisting = false
-      })
-    },
-    { deep: true }
-  )
+    watch(
+      inner,
+      (next) => {
+        if (!hydrated || persisting) return
+        persisting = true
+        void app.preferences.set(key, serializer.encode(next)).finally(() => {
+          persisting = false
+        })
+      },
+      { deep: true }
+    )
 
+    return inner
+  })!
+
+  CACHE.set(key, state as Ref<unknown>)
   return state
 }

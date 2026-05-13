@@ -1,6 +1,6 @@
 import { computed, type ComputedRef, type Ref } from "vue"
 import { buildTrackRow } from "@lectorium/composables/buildTrackRow.js"
-import { maxAudioDurationMs } from "@lectorium/composables/trackDuration.js"
+import { maxAudioDurationMs } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"

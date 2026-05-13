@@ -1,7 +1,7 @@
 import { computed, onMounted, ref, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { runUserMigrations } from "@lectorium/services/migrations/user/runMigrations.js"
+import { bootstrapUserDatabaseFromApp } from "@lectorium/services/bootstrap.js"
 import { type ResolveContentDatabaseDeps } from "./composables/resolveContentDatabase.js"
 import {
   checkForUpdatesInBackground as checkForUpdatesInBackgroundImpl,
@@ -106,9 +106,7 @@ export function useWelcomeController(
 
   async function bootstrapApp(): Promise<void> {
     viewState.value = "database:migrations"
-    const userDbPath = lectorium.appConfig.database.userLocalPath
-    await lectorium.openUserDatabase(userDbPath)
-    await runUserMigrations(lectorium.databases.user!)
+    await bootstrapUserDatabaseFromApp(lectorium)
 
     viewState.value = "complete"
     if (autoNavigate) {

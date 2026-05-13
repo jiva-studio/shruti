@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { searchAndFilterTracks } from "../searchAndFilterTracks.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
-import type { AuthorId, SourceId, TagId, TrackId } from "@lib/domain/core.js"
+import type { AuthorId, LanguageCode, LocationId, SourceId, TagId, TrackId } from "@lib/domain/core.js"
 
 const mkTrack = (over: Partial<Track> & Pick<Track, "id">): Track => ({
   authorId: null,
@@ -18,6 +18,7 @@ const mkTrack = (over: Partial<Track> & Pick<Track, "id">): Track => ({
 function makeRepo(overrides: Partial<ITrackRepository> = {}): ITrackRepository {
   return {
     getById: async () => null,
+    getByIds: async () => new Map(),
     list: async () => [],
     search: async () => [],
     getTranscriptPath: async () => null,
@@ -27,11 +28,10 @@ function makeRepo(overrides: Partial<ITrackRepository> = {}): ITrackRepository {
 }
 
 describe("searchAndFilterTracks", () => {
-  it("routes to tracks.search when query has text and narrows by author filter", async () => {
-    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
-      mkTrack({ id: "t1" as TrackId, authorId: "a1" as AuthorId }),
-      mkTrack({ id: "t2" as TrackId, authorId: "a2" as AuthorId }),
-    ])
+  it("routes to tracks.search when query has text and pushes author filter down", async () => {
+    const searchSpy = vi
+      .fn<ITrackRepository["search"]>()
+      .mockResolvedValue([mkTrack({ id: "t1" as TrackId, authorId: "a1" as AuthorId })])
     const listSpy = vi.fn<ITrackRepository["list"]>()
     const repo = makeRepo({ search: searchSpy, list: listSpy })
     const result = await searchAndFilterTracks(
@@ -39,7 +39,12 @@ describe("searchAndFilterTracks", () => {
       { tracks: repo }
     )
     expect(result.map((t) => t.id)).toEqual(["t1"])
-    expect(searchSpy).toHaveBeenCalled()
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "bhagavad",
+        filters: expect.objectContaining({ authorIds: ["a1"] }),
+      })
+    )
     expect(listSpy).not.toHaveBeenCalled()
   })
 
@@ -47,25 +52,21 @@ describe("searchAndFilterTracks", () => {
     const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
     const repo = makeRepo({ search: searchSpy })
     await searchAndFilterTracks({ query: "  джент  " }, { tracks: repo })
-    expect(searchSpy).toHaveBeenCalledWith({
-      text: "джент",
-      limit: undefined,
-      offset: undefined,
-    })
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "джент", limit: undefined, offset: undefined })
+    )
   })
 
-  it("forwards limit and offset on the search path", async () => {
+  it("forwards limit and offset on the search path so pagination counts narrowed rows", async () => {
     const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
     const repo = makeRepo({ search: searchSpy })
     await searchAndFilterTracks(
       { query: "sb 1.8.40", limit: 25, offset: 50 },
       { tracks: repo }
     )
-    expect(searchSpy).toHaveBeenCalledWith({
-      text: "sb 1.8.40",
-      limit: 25,
-      offset: 50,
-    })
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "sb 1.8.40", limit: 25, offset: 50 })
+    )
   })
 
   it("routes to tracks.list when query is empty", async () => {
@@ -121,7 +122,7 @@ describe("searchAndFilterTracks", () => {
           durationMinMs: 0,
           durationMaxMs: 30 * 60 * 1000,
         }),
-      }),
+      })
     )
 
     await searchAndFilterTracks({ durationFilter: "long" }, { tracks: repo })
@@ -131,7 +132,22 @@ describe("searchAndFilterTracks", () => {
           durationMinMs: 60 * 60 * 1000,
           durationMaxMs: Number.MAX_SAFE_INTEGER,
         }),
-      }),
+      })
+    )
+  })
+
+  it("expands a duration filter id into numeric bounds on the search path too", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
+    const repo = makeRepo({ search: searchSpy })
+
+    await searchAndFilterTracks({ query: "krishna", durationFilter: "long" }, { tracks: repo })
+    expect(searchSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          durationMinMs: 60 * 60 * 1000,
+          durationMaxMs: Number.MAX_SAFE_INTEGER,
+        }),
+      })
     )
   })
 
@@ -149,48 +165,53 @@ describe("searchAndFilterTracks", () => {
     })
   })
 
-  it("narrows FTS results by tagIds against track.tagIds", async () => {
-    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
-      mkTrack({ id: "t1" as TrackId, tagIds: ["tag_a" as TagId] }),
-      mkTrack({ id: "t2" as TrackId, tagIds: ["tag_b" as TagId] }),
-      mkTrack({ id: "t3" as TrackId, tagIds: ["tag_a" as TagId, "tag_c" as TagId] }),
-      mkTrack({ id: "t4" as TrackId, tagIds: [] }),
-    ])
+  it("pushes tagIds down to tracks.search instead of narrowing client-side", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
     const repo = makeRepo({ search: searchSpy })
-    const result = await searchAndFilterTracks(
+    await searchAndFilterTracks(
       { query: "krishna", tagIds: ["tag_a" as TagId] },
       { tracks: repo }
     )
-    expect(result.map((t) => t.id)).toEqual(["t1", "t3"])
-    expect(searchSpy).toHaveBeenCalled()
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ tagIds: ["tag_a"] }),
+      })
+    )
   })
 
-  it("narrows FTS results by sourceIds against track references", async () => {
-    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
-      mkTrack({
-        id: "t1" as TrackId,
-        references: [{ sourceId: "src_bg" as SourceId, tokens: ["1", "1"] }],
-      }),
-      mkTrack({
-        id: "t2" as TrackId,
-        references: [{ sourceId: "src_sb" as SourceId, tokens: ["1", "8", "40"] }],
-      }),
-      mkTrack({
-        id: "t3" as TrackId,
-        references: [
-          { sourceId: "src_cc" as SourceId, tokens: ["1", "1"] },
-          { sourceId: "src_bg" as SourceId, tokens: ["2", "13"] },
-        ],
-      }),
-      mkTrack({ id: "t4" as TrackId, references: [] }),
-    ])
+  it("pushes sourceIds down to tracks.search instead of narrowing client-side", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
     const repo = makeRepo({ search: searchSpy })
-    const result = await searchAndFilterTracks(
+    await searchAndFilterTracks(
       { query: "krishna", sourceIds: ["src_bg" as SourceId] },
       { tracks: repo }
     )
-    expect(result.map((t) => t.id)).toEqual(["t1", "t3"])
-    expect(searchSpy).toHaveBeenCalled()
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ sourceIds: ["src_bg"] }),
+      })
+    )
+  })
+
+  it("pushes locationIds and languageCodes down to tracks.search", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
+    const repo = makeRepo({ search: searchSpy })
+    await searchAndFilterTracks(
+      {
+        query: "krishna",
+        locationIds: ["loc_1" as LocationId],
+        languageCodes: ["ru" as LanguageCode],
+      },
+      { tracks: repo }
+    )
+    expect(searchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          locationIds: ["loc_1"],
+          languageCodes: ["ru"],
+        }),
+      })
+    )
   })
 
   it("forwards sourceIds into tracks.list filters on the empty-query path", async () => {
@@ -216,7 +237,7 @@ describe("searchAndFilterTracks", () => {
     })
   })
 
-  it("returns unmodified search results when no filters are active", async () => {
+  it("returns search results untouched when no filters are active", async () => {
     const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([
       mkTrack({ id: "t1" as TrackId, authorId: "a1" as AuthorId }),
       mkTrack({ id: "t2" as TrackId, authorId: "a2" as AuthorId }),

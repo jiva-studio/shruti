@@ -27,6 +27,11 @@ export interface TrackSearchQuery {
    * titles ("Джентельмен") and references ("bg 10.5", "10.5").
    */
   readonly text?: string
+  /**
+   * Optional filters applied before scoring/pagination, so that
+   * `limit`/`offset` count narrowed rows — not raw FTS matches.
+   */
+  readonly filters?: TrackListFilters
   readonly sortBy?: SortMethod
   readonly limit?: number
   readonly offset?: number
@@ -34,6 +39,13 @@ export interface TrackSearchQuery {
 
 export interface ITrackRepository {
   getById(id: TrackId): Promise<Track | null>
+  /**
+   * Batch fetch — returns a map keyed by the requested ids so callers
+   * can avoid N+1 round-trips when hydrating a playlist or similar.
+   * Missing ids are simply absent from the map; the caller decides
+   * whether that's an error.
+   */
+  getByIds(ids: readonly TrackId[]): Promise<ReadonlyMap<TrackId, Track>>
   list(query: TrackListQuery): Promise<readonly Track[]>
   search(query: TrackSearchQuery): Promise<readonly Track[]>
 

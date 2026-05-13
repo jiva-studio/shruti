@@ -7,7 +7,7 @@ import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
-import { useSystemBarsStyle } from "@lectorium/composables/useSystemBarsStyle.js"
+import { useTranscriptSystemBars } from "@lectorium/composables/useTranscriptSystemBars.js"
 import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
 import { useTranscriptLoader } from "./transcript/useTranscriptLoader.js"
 import { useTranscriptSelectionActions } from "./transcript/useTranscriptSelectionActions.js"
@@ -57,7 +57,7 @@ export function useTranscriptDialogController(
   const appLanguage = useAppLanguage()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
-  const systemBars = useSystemBarsStyle()
+  useTranscriptSystemBars()
 
   // Repos are resolved lazily — at app root the controller is constructed
   // before the content DB is open, so `app.repositories()` would throw.
@@ -155,23 +155,6 @@ export function useTranscriptDialogController(
   watch(hydration.activeLanguages, async (langs) => {
     if (transcriptStore.trackId) await loader.reload(transcriptStore.trackId, langs[0])
   })
-
-  // System-bar theming: the transcript dialog paints a dark immersive
-  // surface that extends under the Android status bar / navigation bar.
-  // The default day-mode icon set is dark-on-light, so against the
-  // dark bleed the icons disappear. Flip both bars to light icons
-  // (`style: "DARK"` = dark background) while open, then restore the
-  // default on close. Covers all close paths — explicit close button,
-  // tap-to-close on FloatingPlayer, and Android system back button —
-  // because they all converge on `transcriptStore.close()`. Android-
-  // only inside the composable; iOS / web are no-ops.
-  watch(
-    () => transcriptStore.open,
-    (isOpenNow) => {
-      if (isOpenNow) void systemBars.applyImmersive()
-      else void systemBars.restoreDefault()
-    }
-  )
 
   function onClose(): void {
     transcriptStore.close()

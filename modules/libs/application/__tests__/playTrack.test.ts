@@ -39,7 +39,10 @@ describe("playTrack", () => {
     ])
     const result = await playTrack({ track, preferredLanguage: "ru" })
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value.language).toBe("ru")
+    if (result.ok) {
+      expect(result.value.language).toBe("ru")
+      expect(result.value.matchesPreferred).toBe(true)
+    }
   })
 
   it("falls back to the first variant with audio when preferred lacks audio", async () => {
@@ -49,7 +52,18 @@ describe("playTrack", () => {
     ])
     const result = await playTrack({ track, preferredLanguage: "ru" })
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.value.language).toBe("en")
+    if (result.ok) {
+      expect(result.value.language).toBe("en")
+      // Caller can detect "I asked for ru, got en" and surface UI.
+      expect(result.value.matchesPreferred).toBe(false)
+    }
+  })
+
+  it("reports matchesPreferred=true when no preference was supplied", async () => {
+    const track = mkTrack([mkVariant("en", true)])
+    const result = await playTrack({ track })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.matchesPreferred).toBe(true)
   })
 
   it("returns no-audio-available when no variant has audio", async () => {

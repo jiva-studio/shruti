@@ -3,6 +3,8 @@
  * services + repository ports. Depends only on `@lib/domain`.
  */
 
+export * from "./getActivityOverview.js"
+export * from "./loadTrackDetail.js"
 export * from "./loadTranscript.js"
 export * from "./listPlaylistTracks.js"
 export * from "./createNote.js"

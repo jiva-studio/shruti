@@ -1,6 +1,7 @@
 import type { TrackId } from "@lib/domain/core.js"
 import type { MediaItem } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
 
@@ -41,6 +42,11 @@ export type MediaTransferFn = (
 export interface DownloadMediaDeps {
   readonly mediaItems: IMediaItemRepository
   readonly transfer: MediaTransferFn
+  /**
+   * Used only to make the "claim the download slot" check-and-set atomic.
+   * The long transfer itself runs outside any transaction.
+   */
+  readonly unitOfWork: IUnitOfWork
 }
 
 export type DownloadMediaError =
@@ -79,17 +85,32 @@ export async function downloadMedia(
 ): Promise<Result<DownloadMediaSuccess, DownloadMediaError>> {
   if (input.candidates.length === 0) return err("no-candidates")
 
-  const existing = await deps.mediaItems.getByTrack(input.trackId)
-  if (existing?.state === "downloading") return err("already-in-progress")
-  if (existing?.state === "ready" && existing.localPath) {
+  // Check-and-claim the "downloading" slot atomically. Two simultaneous
+  // taps on the same track race here; the unit-of-work serialises them,
+  // so the loser sees state="downloading" and bows out with
+  // "already-in-progress" instead of starting a parallel transfer.
+  type Claim =
+    | { kind: "busy" }
+    | { kind: "cached"; mediaItem: MediaItem }
+    | { kind: "claimed" }
+  const claim = await deps.unitOfWork.run<Claim>(async () => {
+    const existing = await deps.mediaItems.getByTrack(input.trackId)
+    if (existing?.state === "downloading") return { kind: "busy" }
+    if (existing?.state === "ready" && existing.localPath) {
+      return { kind: "cached", mediaItem: existing }
+    }
+    await deps.mediaItems.upsert(input.trackId, "downloading", null)
+    return { kind: "claimed" }
+  })
+
+  if (claim.kind === "busy") return err("already-in-progress")
+  if (claim.kind === "cached") {
     // No transfer happened, so we can't truthfully attribute a server.
     // Pick the first candidate (active server) — callers checking
     // `success.server` against `activeServer` will treat this as a
     // no-op promotion, which is correct: nothing changed.
-    return ok({ mediaItem: existing, server: input.candidates[0]! })
+    return ok({ mediaItem: claim.mediaItem, server: input.candidates[0]! })
   }
-
-  await deps.mediaItems.upsert(input.trackId, "downloading", null)
 
   let localUrl: string | null = null
   let workingServer: CdnServer | null = null

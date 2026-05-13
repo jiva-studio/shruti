@@ -11,10 +11,7 @@ import { HighlightText } from "@ui/primitives/index.js"
 defineProps<{
   noteId: string
   text: string
-  author?: string
-  source?: string
   language?: string
-  tags?: readonly string[]
 }>()
 
 defineEmits<{ click: [noteId: string] }>()

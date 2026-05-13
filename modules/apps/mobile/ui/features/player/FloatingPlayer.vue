@@ -14,14 +14,10 @@
       pulsing: pulsing,
     }"
     :style="{ '--play-button-size': playButtonSize + 'px' }"
-    @pointerdown="onPointerDown"
+    @pointerdown="onShellPointerDown"
     @click="onClick"
   >
-    <div class="page-dots" :aria-hidden="hidden">
-      <span :class="{ dot: true, active: page === 0 }" />
-      <span :class="{ dot: true, active: page === 1 }" />
-      <span :class="{ dot: true, active: page === 2 }" />
-    </div>
+    <FloatingPlayerPageDots :page="page" :count="PAGE_COUNT" :hidden="hidden" />
 
     <div ref="viewport" class="pages-viewport">
       <div
@@ -55,42 +51,27 @@
       </div>
     </div>
 
-    <!-- Static Play overlay — never moves with the carousel; visible on
-         every page. Lives outside .pages-viewport so swipe-translate
-         can't push it around. -->
-    <div
-      class="play-fixed"
-      :class="{ completed: trackCompleted }"
-      :aria-hidden="hidden"
-      @pointerdown.stop
-      @click.stop="onPlayClick"
-    >
-      <component :is="playIcon" class="icon" :size="22" />
-      <div v-if="showProgress" class="progress">
-        <RadialProgress
-          :stroke-width="4"
-          :inner-stroke-width="4"
-          :diameter="playButtonSize"
-          :completed-steps="position"
-          :total-steps="duration"
-          :animate-speed="750"
-          start-color="rgba(255, 255, 255, .65)"
-          stop-color="rgba(255, 255, 255, .65)"
-          inner-stroke-color="rgba(255, 255, 255, 0)"
-        />
-      </div>
-    </div>
+    <FloatingPlayerPlayButton
+      :playing="playing"
+      :hidden="hidden"
+      :position="position"
+      :duration="duration"
+      :show-progress="showProgress"
+      :size="playButtonSize"
+      @play="emit('playClicked')"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue"
+import { ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IconChecks, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import RadialProgress from "vue3-radial-progress"
 import MixControl from "./MixControl.vue"
 import PlayerControls from "./PlayerControls.vue"
 import SpeedSkipPanel from "./SpeedSkipPanel.vue"
+import FloatingPlayerPageDots from "./FloatingPlayerPageDots.vue"
+import FloatingPlayerPlayButton from "./FloatingPlayerPlayButton.vue"
+import { useVerticalCarousel } from "./useVerticalCarousel.js"
 
 const { t } = useI18n()
 
@@ -135,115 +116,25 @@ const emit = defineEmits<{
   skipForward: []
 }>()
 
-/* -------------------------------------------------------------------------- */
-/*                                    State                                   */
-/* -------------------------------------------------------------------------- */
-
+const PAGE_COUNT = 3
 const viewport = ref<HTMLElement | null>(null)
 // Default to the centre page (title/author). Mix is page 0 (top), speed
 // is page 2 (bottom) — swipe up reveals speed, swipe down reveals mix.
-const page = ref<number>(1)
-const dragOffset = ref<number>(0)
-const PAGE_COUNT = 3
-
-/* -------------------------------------------------------------------------- */
-/*                              Vertical swipe                                */
-/* -------------------------------------------------------------------------- */
-
-const pointerId = ref<number | null>(null)
-// Pointer position at the start of a drag gesture. Used only to compute
-// the displacement (dx, dy) from the origin for direction-locking and
-// drag-offset translation — never read on its own.
-let gestureOriginX = 0
-let gestureOriginY = 0
-let dragLocked: "horizontal" | "vertical" | null = null
-const DRAG_LOCK_THRESHOLD = 8 // px before deciding direction
-const PAGE_SWITCH_THRESHOLD = 0.25 // fraction of page height
-
-function onPointerDown(e: PointerEvent): void {
-  if (props.hidden) return
-  pointerId.value = e.pointerId
-  gestureOriginX = e.clientX
-  gestureOriginY = e.clientY
-  dragLocked = null
-  window.addEventListener("pointermove", onPointerMove)
-  window.addEventListener("pointerup", onPointerUp)
-  window.addEventListener("pointercancel", onPointerUp)
-}
-
-function onPointerMove(e: PointerEvent): void {
-  if (e.pointerId !== pointerId.value) return
-  const dx = e.clientX - gestureOriginX
-  const dy = e.clientY - gestureOriginY
-  if (dragLocked === null) {
-    if (Math.abs(dx) < DRAG_LOCK_THRESHOLD && Math.abs(dy) < DRAG_LOCK_THRESHOLD) return
-    // Vertical swipe drives the carousel. Horizontal: leave it alone —
-    // an inner slider may want it (mix puck, speed puck), and any other
-    // horizontal drag is just noise.
-    dragLocked = Math.abs(dy) > Math.abs(dx) ? "vertical" : "horizontal"
-    if (dragLocked === "horizontal") {
-      cleanupDrag()
-      return
-    }
-  }
-  // Resist swiping past the first / last page so the user feels the
-  // boundary instead of seeing the empty space above page 0 / below
-  // page 2.
-  let offset = dy
-  if (page.value === 0 && dy > 0) offset = dy * 0.3
-  if (page.value === PAGE_COUNT - 1 && dy < 0) offset = dy * 0.3
-  dragOffset.value = offset
-}
-
-function onPointerUp(e: PointerEvent): void {
-  if (e.pointerId !== pointerId.value) return
-  if (dragLocked === "vertical" && viewport.value) {
-    const h = viewport.value.getBoundingClientRect().height
-    if (h > 0) {
-      const ratio = dragOffset.value / h
-      if (ratio < -PAGE_SWITCH_THRESHOLD && page.value < PAGE_COUNT - 1) page.value += 1
-      else if (ratio > PAGE_SWITCH_THRESHOLD && page.value > 0) page.value -= 1
-    }
-  }
-  dragOffset.value = 0
-  cleanupDrag()
-}
-
-function cleanupDrag(): void {
-  pointerId.value = null
-  window.removeEventListener("pointermove", onPointerMove)
-  window.removeEventListener("pointerup", onPointerUp)
-  window.removeEventListener("pointercancel", onPointerUp)
-}
-
-onBeforeUnmount(cleanupDrag)
-
-/* -------------------------------------------------------------------------- */
-/*                              Play overlay                                  */
-/* -------------------------------------------------------------------------- */
-
-const trackCompleted = computed(() => props.duration > 0 && props.position >= props.duration)
-const playIcon = computed(() => {
-  if (trackCompleted.value) return IconChecks
-  return props.playing ? IconPlayerPauseFilled : IconPlayerPlayFilled
+const { page, dragOffset, pointerId, onPointerDown, consumeVerticalGesture } = useVerticalCarousel({
+  pageCount: PAGE_COUNT,
+  initialPage: 1,
+  viewportEl: () => viewport.value,
 })
 
-function onPlayClick(): void {
-  if (trackCompleted.value) return
-  emit("playClicked")
+function onShellPointerDown(e: PointerEvent): void {
+  if (props.hidden) return
+  onPointerDown(e)
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                    Misc                                    */
-/* -------------------------------------------------------------------------- */
 
 function onClick(): void {
   // Suppress the synthesised click that follows a vertical page swipe
   // — only taps on the free area should open the fullscreen view.
-  if (dragLocked === "vertical") {
-    dragLocked = null
-    return
-  }
+  if (consumeVerticalGesture()) return
   emit("click")
 }
 </script>
@@ -375,69 +266,5 @@ function onClick(): void {
 .page > * {
   width: 100%;
   height: 100%;
-}
-
-.play-fixed {
-  position: absolute;
-  /* Anchor to the centre of the *content slot* (top portion of the
-     player). In stick mode the player itself is taller, but Play
-     stays put — the extra height grows below it. */
-  top: calc(var(--content-height) / 2);
-  right: 8px;
-  transform: translateY(-50%);
-  width: var(--play-button-size);
-  height: var(--play-button-size);
-  border-radius: 50%;
-  background: var(--ion-color-primary, #2a73c2);
-  color: var(--ion-color-primary-contrast, #fff);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  pointer-events: auto;
-  z-index: 2;
-}
-
-.play-fixed.completed {
-  opacity: 0.7;
-}
-
-.play-fixed .icon {
-  font-size: 1.4rem;
-  z-index: 1;
-}
-
-.progress {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  overflow: visible;
-  pointer-events: none;
-}
-
-.page-dots {
-  position: absolute;
-  /* Same content-slot centring as .play-fixed — anchored to the top
-     58 px so it doesn't drift when stick mode extends the player. */
-  top: calc(var(--content-height) / 2);
-  left: 6px;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
-}
-
-.dot.active {
-  background: rgba(255, 255, 255, 0.85);
 }
 </style>

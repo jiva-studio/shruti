@@ -14,7 +14,7 @@ export interface RemoveDownloadedMediaDeps {
   readonly deleteLocal: RemoveMediaTransferFn
 }
 
-export type RemoveDownloadedMediaError = "not-downloaded"
+export type RemoveDownloadedMediaError = "not-downloaded" | "delete-local-failed"
 
 /**
  * Remove a track's downloaded media from disk and clear its state
@@ -27,9 +27,15 @@ export type RemoveDownloadedMediaError = "not-downloaded"
  *   1. Demote the row to "failed" with localPath=null. Hydrate filters
  *      to state="ready", so the UI immediately stops showing the track
  *      as downloaded.
- *   2. Delete the bytes. Tolerate "already gone" — happens after a
- *      partial previous attempt or a user-initiated cache clear.
+ *   2. Delete the bytes. Tolerate "already gone" inside the deleteLocal
+ *      adapter — happens after a partial previous attempt or a
+ *      user-initiated cache clear.
  *   3. Drop the row.
+ *
+ * If step 2 throws, step 3 is skipped: dropping the row would leave an
+ * orphan file with no way to retry the deletion. The row stays in
+ * (failed, localPath=null), so the next removeDownloadedMedia call
+ * picks up at step 2.
  *
  * Re-running this on a row already in step 1 is idempotent.
  */
@@ -47,7 +53,9 @@ export async function removeDownloadedMedia(
   try {
     await deps.deleteLocal(input.remoteUrl)
   } catch {
-    /* swallow — the next removeDownloadedMedia call will retry from step 2 */
+    // Leave the row in (failed, null) so a future call retries from
+    // step 2. Dropping the row would orphan the file.
+    return err("delete-local-failed")
   }
 
   await deps.mediaItems.deleteByTrack(input.trackId)

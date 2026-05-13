@@ -1,5 +1,5 @@
 import { useLectorium } from "@lectorium/lectorium.js"
-import { maxAudioDurationMs } from "@lectorium/composables/trackDuration.js"
+import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
 

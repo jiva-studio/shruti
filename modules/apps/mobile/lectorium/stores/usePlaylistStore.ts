@@ -10,11 +10,11 @@ import {
 } from "@lib/application/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
+import { isCompleted } from "@lib/domain/listeningSession.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
-import type { Track } from "@lib/domain/track.js"
+import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import type { Result } from "@lib/domain/result.js"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { maxAudioDurationMs } from "@lectorium/composables/trackDuration.js"
 import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
 import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
 
@@ -169,7 +169,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     const entry = entries.value.find((e) => e.item.id === itemId)
     if (entry) {
       const durationMs = maxAudioDurationMs(entry.track)
-      if (durationMs > 0 && progressMs >= durationMs - 2000) {
+      if (isCompleted(progressMs, durationMs)) {
         if (completedAtMap.value.get(itemId) == null) {
           const nextCompleted = new Map(completedAtMap.value)
           nextCompleted.set(itemId, Date.now())

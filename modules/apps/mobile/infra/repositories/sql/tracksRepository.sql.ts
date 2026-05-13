@@ -2,6 +2,7 @@ import type { IDatabase, QueryValue } from "@ports/app/index.js"
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type {
   ITrackRepository,
+  TrackListFilters,
   TrackListQuery,
   TrackSearchQuery,
 } from "@lib/domain/ports/trackRepository.js"
@@ -242,6 +243,73 @@ function scoreMatchinfo(blob: Uint8Array | null | undefined, totalDocs: number):
 }
 
 /**
+ * Build the WHERE-clause fragments and bound parameters for a
+ * `TrackListFilters` value. Shared between `list()` and `search()` so
+ * filter narrowing happens in SQL, not after pagination.
+ *
+ * Clauses target the `tracks t` alias and assume the caller has
+ * already added `t.hidden = 0`. Returns a flat array of additive
+ * predicates joined by AND.
+ */
+function buildFilterClauses(filters: TrackListFilters): {
+  readonly clauses: readonly string[]
+  readonly params: readonly QueryValue[]
+} {
+  const clauses: string[] = []
+  const params: QueryValue[] = []
+
+  if (filters.authorIds?.length) {
+    clauses.push(`t.author_id IN (${filters.authorIds.map(() => "?").join(", ")})`)
+    params.push(...filters.authorIds)
+  }
+  if (filters.locationIds?.length) {
+    clauses.push(`t.location_id IN (${filters.locationIds.map(() => "?").join(", ")})`)
+    params.push(...filters.locationIds)
+  }
+  if (filters.tagIds?.length) {
+    clauses.push(
+      `t.id IN (SELECT track_id FROM track_tags WHERE tag_id IN (${filters.tagIds
+        .map(() => "?")
+        .join(", ")}))`
+    )
+    params.push(...filters.tagIds)
+  }
+  if (filters.languageCodes?.length) {
+    clauses.push(
+      `t.id IN (SELECT track_id FROM track_variants WHERE language IN (${filters.languageCodes
+        .map(() => "?")
+        .join(", ")}))`
+    )
+    params.push(...filters.languageCodes)
+  }
+  if (filters.sourceIds?.length) {
+    clauses.push(
+      `t.id IN (SELECT track_id FROM track_references WHERE source_id IN (${filters.sourceIds
+        .map(() => "?")
+        .join(", ")}))`
+    )
+    params.push(...filters.sourceIds)
+  }
+  if (filters.durationMinMs !== undefined) {
+    // Duration comes from any variant that has audio. Pick the max of
+    // the per-variant durations — every variant of the same track
+    // points at the same original recording for now.
+    clauses.push(
+      `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) >= ?`
+    )
+    params.push(filters.durationMinMs)
+  }
+  if (filters.durationMaxMs !== undefined) {
+    clauses.push(
+      `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) < ?`
+    )
+    params.push(filters.durationMaxMs)
+  }
+
+  return { clauses, params }
+}
+
+/**
  * Number of `combined` search rows = number of indexed tracks. Used
  * as the corpus size N in the IDF term. Cached per query (cheap
  * count, runs once).
@@ -275,59 +343,22 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       return hydrated[0] ?? null
     },
 
-    async list(query: TrackListQuery): Promise<readonly Track[]> {
-      const filters = query.filters ?? {}
-      const clauses: string[] = ["t.hidden = 0"]
-      const params: QueryValue[] = []
+    async getByIds(ids: readonly TrackId[]): Promise<ReadonlyMap<TrackId, Track>> {
+      const result = new Map<TrackId, Track>()
+      if (ids.length === 0) return result
+      const placeholders = ids.map(() => "?").join(", ")
+      const rows = await contentDb.query<TrackRow>(
+        `SELECT * FROM tracks WHERE id IN (${placeholders}) AND hidden = 0`,
+        [...ids]
+      )
+      const hydrated = await hydrate(contentDb, rows)
+      for (const track of hydrated) result.set(track.id, track)
+      return result
+    },
 
-      if (filters.authorIds?.length) {
-        clauses.push(`t.author_id IN (${filters.authorIds.map(() => "?").join(", ")})`)
-        params.push(...filters.authorIds)
-      }
-      if (filters.locationIds?.length) {
-        clauses.push(`t.location_id IN (${filters.locationIds.map(() => "?").join(", ")})`)
-        params.push(...filters.locationIds)
-      }
-      if (filters.tagIds?.length) {
-        clauses.push(
-          `t.id IN (SELECT track_id FROM track_tags WHERE tag_id IN (${filters.tagIds
-            .map(() => "?")
-            .join(", ")}))`
-        )
-        params.push(...filters.tagIds)
-      }
-      if (filters.languageCodes?.length) {
-        clauses.push(
-          `t.id IN (SELECT track_id FROM track_variants WHERE language IN (${filters.languageCodes
-            .map(() => "?")
-            .join(", ")}))`
-        )
-        params.push(...filters.languageCodes)
-      }
-      if (filters.sourceIds?.length) {
-        clauses.push(
-          `t.id IN (SELECT track_id FROM track_references WHERE source_id IN (${filters.sourceIds
-            .map(() => "?")
-            .join(", ")}))`
-        )
-        params.push(...filters.sourceIds)
-      }
-      if (filters.durationMinMs !== undefined) {
-        // Duration comes from any variant that has audio. Pick the max of
-        // the per-variant durations — every variant of the same track
-        // points at the same original recording for now.
-        // DB column and the filter bound are both in milliseconds.
-        clauses.push(
-          `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) >= ?`
-        )
-        params.push(filters.durationMinMs)
-      }
-      if (filters.durationMaxMs !== undefined) {
-        clauses.push(
-          `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) < ?`
-        )
-        params.push(filters.durationMaxMs)
-      }
+    async list(query: TrackListQuery): Promise<readonly Track[]> {
+      const filterParts = buildFilterClauses(query.filters ?? {})
+      const clauses = ["t.hidden = 0", ...filterParts.clauses]
 
       const limit = query.limit ?? 50
       const offset = query.offset ?? 0
@@ -338,7 +369,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
          WHERE ${clauses.join(" AND ")}
          ${sort.clause}
          LIMIT ? OFFSET ?`,
-        [...params, ...sort.params, limit, offset]
+        [...filterParts.params, ...sort.params, limit, offset]
       )
       return hydrate(contentDb, rows)
     },
@@ -352,12 +383,22 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       const fts = buildFtsQuery(text)
       if (fts.length === 0) return []
 
+      const filterParts = buildFilterClauses(query.filters ?? {})
+      const filterSql = filterParts.clauses.length
+        ? ` AND ${filterParts.clauses.join(" AND ")}`
+        : ""
+
       // Single path through the unified FTS index: every track has one
       // `combined` row that concatenates every searchable token
       // (titles + reference variants + year). Scoping the join to that
       // kind makes implicit-AND across tokens AND across kinds work in
       // one MATCH — e.g. `"BG 1974 2.12"` succeeds because all three
       // tokens appear in the same combined row.
+      //
+      // Filter predicates from `query.filters` are pushed into this
+      // WHERE so the post-scoring slice below operates on narrowed
+      // rows — otherwise pagination breaks (limit consumed by rows
+      // that get dropped by filters).
       //
       // Relevance: FTS4 `matchinfo(s, 'pcx')` returns a BLOB of 32-bit
       // LE ints — `[p, c, hits_in_row, hits_in_corpus, rows_with_term, …]`
@@ -373,8 +414,8 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
          FROM tracks t
          JOIN tracks_search ON tracks_search.track_id = t.id
                             AND tracks_search.kind = 'combined'
-         WHERE tracks_search MATCH ? AND t.hidden = 0`,
-        [fts]
+         WHERE tracks_search MATCH ? AND t.hidden = 0${filterSql}`,
+        [fts, ...filterParts.params]
       )
       if (rawRows.length === 0) return []
 

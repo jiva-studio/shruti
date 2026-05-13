@@ -1,9 +1,7 @@
 import { getProgressForItem } from "@lib/application/getProgressForItem.js"
 import type { PlaylistItemId } from "@lib/domain/core.js"
+import { isCompleted } from "@lib/domain/listeningSession.js"
 import { useLectorium } from "@lectorium/lectorium.js"
-
-/** Treat playback within this window of the end as "complete". */
-export const COMPLETION_THRESHOLD_MS = 2000
 
 export interface ResumePositionInput {
   readonly itemId?: PlaylistItemId
@@ -46,7 +44,7 @@ export function usePlayerResumePosition(): PlayerResumePositionReturn {
 
   function clampToDuration(resumeMs: number, durationMs: number): number {
     if (!Number.isFinite(resumeMs) || resumeMs <= 0) return 0
-    if (durationMs > 0 && resumeMs >= durationMs - COMPLETION_THRESHOLD_MS) return 0
+    if (isCompleted(resumeMs, durationMs)) return 0
     return resumeMs
   }
 
