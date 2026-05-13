@@ -4,23 +4,19 @@
       <IonRouterOutlet />
       <IonTabBar slot="bottom">
         <IonTabButton tab="home" href="/tabs/home">
-          <IconHome />
-          <IonLabel>{{ $t("app.home") }}</IonLabel>
+          <IconHome :size="26" />
         </IonTabButton>
 
         <IonTabButton tab="search" href="/tabs/search">
-          <IconSearch />
-          <IonLabel>{{ $t("app.search") }}</IonLabel>
+          <IconSearch :size="26" />
         </IonTabButton>
 
         <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
-          <IconBookmark />
-          <IonLabel>{{ $t("app.notes") }}</IonLabel>
+          <IconBookmark :size="26" />
         </IonTabButton>
 
         <IonTabButton tab="settings" href="/tabs/settings">
-          <IconSettings />
-          <IonLabel>{{ $t("app.settings") }}</IonLabel>
+          <IconSettings :size="26" />
         </IonTabButton>
       </IonTabBar>
     </IonTabs>
@@ -28,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonTabBar, IonTabButton, IonTabs, IonLabel, IonPage, IonRouterOutlet } from "@ionic/vue"
+import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 
@@ -44,7 +40,7 @@ ion-tab-bar {
     rgba(var(--lectorium-fade-bg-rgb), 0.8) 35%,
     rgba(var(--lectorium-fade-bg-rgb), 1) 100%
   );
-  padding-top: 50px;
+  padding-top: 12px;
 }
 
 ion-tab-button {

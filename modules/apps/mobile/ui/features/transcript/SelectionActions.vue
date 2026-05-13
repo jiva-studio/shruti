@@ -1,20 +1,20 @@
 <template>
   <div class="selection-actions">
     <IonButton color="dark" size="small" fill="clear" @click="emit('action', 'copy')">
-      <IonIcon slot="start" :icon="copyOutline" />
+      <IconCopy slot="start" :size="20" />
     </IonButton>
     <IonButton size="small" color="dark" fill="clear" @click="emit('action', 'bookmark')">
-      <IonIcon slot="start" :icon="bookmarkOutline" />
+      <IconBookmarkFilled slot="start" :size="20" />
     </IonButton>
     <IonButton size="small" color="dark" fill="clear" @click="emit('action', 'share')">
-      <IonIcon slot="start" :icon="shareOutline" />
+      <IconShare slot="start" :size="20" />
     </IonButton>
   </div>
 </template>
 
 <script lang="ts" setup>
-import { IonButton, IonIcon } from "@ionic/vue"
-import { copyOutline, bookmarkOutline, shareOutline } from "ionicons/icons"
+import { IonButton } from "@ionic/vue"
+import { IconBookmarkFilled, IconCopy, IconShare } from "@tabler/icons-vue"
 
 const emit = defineEmits<{
   action: [action: "copy" | "bookmark" | "share"]
