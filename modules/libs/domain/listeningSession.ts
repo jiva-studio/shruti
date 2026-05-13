@@ -29,3 +29,37 @@ export interface DailyListeningTotal {
   readonly date: string
   readonly listenedSeconds: number
 }
+
+/**
+ * Distance from the end of a track within which we consider the track
+ * "completed" — used both for "mark as listened" semantics in the
+ * playlist and for "restart from 0 on next resume" in the player.
+ *
+ * Two seconds is a fingerprint, not a guess: it matches the engine's
+ * post-pause settle time, after which a "play to end" leaves the
+ * reported position slightly short of duration.
+ */
+export const COMPLETION_THRESHOLD_MS = 2000
+
+/** Same threshold in whole seconds — the SQL adapter stores positions in seconds. */
+export const COMPLETION_THRESHOLD_SEC = COMPLETION_THRESHOLD_MS / 1000
+
+/**
+ * True when the listened position is at or within the completion
+ * threshold of the duration. Returns false when duration is unknown
+ * (≤ 0) so the rule never marks "no-duration" tracks as completed.
+ *
+ * `positionMs` and `durationMs` must be in the same unit; pass either
+ * milliseconds (the engine's native unit) or use {@link isCompletedSec}
+ * for the seconds-based SQL paths.
+ */
+export function isCompleted(positionMs: number, durationMs: number): boolean {
+  if (durationMs <= 0) return false
+  return positionMs >= durationMs - COMPLETION_THRESHOLD_MS
+}
+
+/** Seconds-based companion to {@link isCompleted}. */
+export function isCompletedSec(positionSec: number, durationSec: number): boolean {
+  if (durationSec <= 0) return false
+  return positionSec >= durationSec - COMPLETION_THRESHOLD_SEC
+}

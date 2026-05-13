@@ -20,6 +20,19 @@ function startOfLocalDay(ms: number): Date {
   return d
 }
 
+/**
+ * Whole-day count from `earlier` to `later` in calendar units. Anchors
+ * via Date.UTC so a DST transition in the range does not subtract a
+ * fractional day from the elapsed-millis subtraction (the previous
+ * implementation occasionally rolled Math.round across the wrong
+ * integer near 0.5/1.5 etc. boundaries).
+ */
+function calendarDaysBetween(earlier: Date, later: Date): number {
+  const e = Date.UTC(earlier.getFullYear(), earlier.getMonth(), earlier.getDate())
+  const l = Date.UTC(later.getFullYear(), later.getMonth(), later.getDate())
+  return Math.round((l - e) / 86_400_000)
+}
+
 function toIsoDate(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -56,14 +69,21 @@ export function buildHeatmapDays(
 ): BuildHeatmapDaysResult {
   const today = startOfLocalDay(now)
   const todayStr = toIsoDate(today)
-  const MS_PER_DAY = 86_400_000
 
   // Earliest day with activity → that's how far back we render. Empty
   // history → daysBack = 0 → today is rendered in the left-most column.
+  //
+  // The repo port does not promise any sort order on the totals array;
+  // don't assume `totals[0]` is the minimum — pick the lexicographically
+  // smallest "YYYY-MM-DD" instead, which equals chronological min.
   let daysBack = 0
   if (totals.length > 0) {
-    const earliest = new Date(totals[0].date + "T00:00:00")
-    daysBack = Math.max(0, Math.round((today.getTime() - earliest.getTime()) / MS_PER_DAY))
+    let earliestStr = totals[0].date
+    for (let i = 1; i < totals.length; i++) {
+      if (totals[i].date < earliestStr) earliestStr = totals[i].date
+    }
+    const earliest = new Date(earliestStr + "T00:00:00")
+    daysBack = Math.max(0, calendarDaysBetween(earliest, today))
   }
   // Always keep at least a week of future cells visible on the right.
   daysBack = Math.min(daysBack, totalDays - 7)

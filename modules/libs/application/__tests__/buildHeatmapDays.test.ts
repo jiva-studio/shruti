@@ -77,4 +77,34 @@ describe("buildHeatmapDays", () => {
     expect(todayCol).toBeGreaterThanOrEqual(4)
     expect(todayCol).toBeLessThanOrEqual(6)
   })
+
+  it("picks the chronologically earliest date even when totals are unsorted", () => {
+    const totals = [
+      // Late entry first, earliest second — the port doesn't promise order.
+      { date: "2026-04-10", listenedSeconds: 120 },
+      { date: "2026-02-20", listenedSeconds: 60 },
+      { date: "2026-03-05", listenedSeconds: 90 },
+    ]
+    const { days } = buildHeatmapDays(224, NOW, totals)
+    const earliestEntry = findByDate(days, "2026-02-20")
+    expect(earliestEntry?.listenedSeconds).toBe(60)
+    // The whole history is renderable, including the unsorted earliest.
+    const todayIdx = days.findIndex((d) => d.isToday)
+    const earliestIdx = days.findIndex((d) => d.date === "2026-02-20")
+    expect(earliestIdx).toBeGreaterThanOrEqual(0)
+    expect(earliestIdx).toBeLessThan(todayIdx)
+  })
+
+  it("computes daysBack via calendar units across a DST transition", () => {
+    // EU spring-forward in 2026 is 2026-03-29. Earliest entry just before
+    // it, today just after — millisecond subtraction would lose an hour
+    // and could roll Math.round to the wrong integer near the boundary.
+    const justAfterDst = new Date(2026, 2, 30, 12, 0, 0, 0).getTime() // Mon 2026-03-30
+    const totals = [{ date: "2026-03-28", listenedSeconds: 60 }] // Sat before DST
+    const { days } = buildHeatmapDays(224, justAfterDst, totals)
+    const todayCell = days.find((d) => d.isToday)
+    expect(todayCell?.date).toBe("2026-03-30")
+    const earliest = findByDate(days, "2026-03-28")
+    expect(earliest?.listenedSeconds).toBe(60)
+  })
 })

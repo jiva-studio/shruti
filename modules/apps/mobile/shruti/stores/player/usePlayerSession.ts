@@ -2,7 +2,7 @@ import type { Ref } from "vue"
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useListeningSessionTracker } from "@shruti/composables/useListeningSessionTracker.js"
-import { COMPLETION_THRESHOLD_MS } from "./usePlayerResumePosition.js"
+import { isCompleted } from "@lib/domain/listeningSession.js"
 
 export interface PlayerSessionDeps {
   readonly itemIdRef: Ref<PlaylistItemId | null>
@@ -58,7 +58,7 @@ export function usePlayerSession(deps: PlayerSessionDeps): PlayerSessionReturn {
     const id = deps.itemIdRef.value
     if (!id) return
 
-    const reachedEnd = duration > 0 && position >= duration - COMPLETION_THRESHOLD_MS
+    const reachedEnd = isCompleted(position, duration)
 
     if (reachedEnd) {
       if (tracker.hasActiveSession()) {

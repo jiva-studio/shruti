@@ -1,7 +1,17 @@
-import { useShruti } from "@shruti/shruti.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
+import { useTranscriptPrefetch } from "@shruti/stores/downloads/useTranscriptPrefetch.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { PlaylistEntry } from "@lib/application/listPlaylistTracks.js"
+import { useShruti } from "@shruti/shruti.js"
+
+/**
+ * Cap on parallel per-track transcript prefetch chains during a
+ * playlist fan-out. Each chain itself fetches every advertised language
+ * sequentially, so 3 in flight gives the device useful concurrency
+ * without burying the CDN under a 50-deep request burst on a long
+ * playlist.
+ */
+const TRANSCRIPT_PREFETCH_CONCURRENCY = 3
 
 export interface PlaylistPrefetchReturn {
   /** Audio + transcripts for a single track. Fire-and-forget under the hood. */
@@ -23,6 +33,13 @@ export interface PlaylistPrefetchReturn {
  */
 export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
   const app = useShruti()
+  // Lazy — `useTranscriptPrefetch` reads `useShruti`, must not run
+  // until the composition root is ready.
+  let transcriptPrefetch: ReturnType<typeof useTranscriptPrefetch> | null = null
+  function transcripts(): ReturnType<typeof useTranscriptPrefetch> {
+    if (!transcriptPrefetch) transcriptPrefetch = useTranscriptPrefetch()
+    return transcriptPrefetch
+  }
 
   async function prefetchTrack(trackId: TrackId): Promise<void> {
     try {
@@ -35,31 +52,53 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
     } catch (err) {
       console.error("[playlist] prefetch failed", err)
     }
-    void prefetchTranscripts(trackId)
-  }
-
-  async function prefetchTranscripts(trackId: TrackId): Promise<void> {
-    try {
-      const repos = app.repositories()
-      const languages = await repos.transcripts.availableLanguages(trackId)
-      for (const lang of languages) {
-        repos.transcripts.get(trackId, lang).catch(() => {})
-      }
-    } catch (err) {
-      console.error("[playlist] transcript prefetch failed", err)
-    }
+    // Delegate to the shared transcript prefetcher so the playlist path
+    // gets the same `useServerFallback` CDN rotation the audio-success
+    // path uses. Previously it called `repos.transcripts.get` directly
+    // and skipped fallback entirely.
+    void transcripts().prefetchForTrack(trackId)
   }
 
   function prefetchAll(entries: readonly PlaylistEntry[]): void {
     const downloads = useDownloadStore()
+    const trackIds: TrackId[] = []
     for (const { track } of entries) {
       const variant = track.variants.find((v) => v.audio)
       if (variant?.audio) {
         downloads.prefetch(track.id, variant.audio.path)
       }
-      void prefetchTranscripts(track.id)
+      trackIds.push(track.id)
     }
+    void runWithConcurrency(trackIds, TRANSCRIPT_PREFETCH_CONCURRENCY, (id) =>
+      transcripts().prefetchForTrack(id)
+    )
   }
 
   return { prefetchTrack, prefetchAll }
+}
+
+/**
+ * Run `work(item)` over `items` with at most `limit` in flight. Used to
+ * cap the playlist's per-track transcript fan-out instead of dispatching
+ * all N tasks instantly.
+ */
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return
+  const slots = Math.max(1, Math.min(limit, items.length))
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const idx = cursor++
+      try {
+        await work(items[idx])
+      } catch {
+        // prefetchForTrack already logs at warn-level internally.
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: slots }, () => worker()))
 }

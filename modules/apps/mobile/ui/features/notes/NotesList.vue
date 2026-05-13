@@ -5,9 +5,6 @@
     :note-id="note.id"
     :text="note.text"
     :language="note.language"
-    :tags="note.tags"
-    :author="note.author"
-    :source="note.source"
     @click="emit('click', note.id)"
   />
 </template>

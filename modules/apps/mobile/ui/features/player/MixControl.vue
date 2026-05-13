@@ -16,6 +16,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { useDragPump, type DragRect } from "./useDragPump.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -57,12 +58,14 @@ const emit = defineEmits<{
 /* -------------------------------------------------------------------------- */
 
 const root = ref<HTMLElement | null>(null)
-const dragging = ref(false)
 const livePosition = ref(props.modelValue)
-let pointerId: number | null = null
-let trackRectLeft = 0
-let trackRectWidth = 0
 let lastEngaged = Math.abs(props.modelValue) > props.deadzone
+
+const { dragging, onPointerDown } = useDragPump({
+  trackEl: () => root.value?.querySelector(".track") as HTMLElement | null,
+  onMove: (clientX, _y, rect) => applyFromClientX(clientX, rect),
+  onCommit: commitDrag,
+})
 
 watch(
   () => props.modelValue,
@@ -78,39 +81,7 @@ const puckLeftPct = computed(() => ((livePosition.value + 1) / 2) * 100)
 /*                                Drag handling                               */
 /* -------------------------------------------------------------------------- */
 
-function onPointerDown(e: PointerEvent): void {
-  if (!root.value) return
-  const trackEl = root.value.querySelector(".track") as HTMLElement | null
-  if (!trackEl) return
-  const rect = trackEl.getBoundingClientRect()
-  trackRectLeft = rect.left
-  trackRectWidth = rect.width
-  pointerId = e.pointerId
-  dragging.value = true
-  // Capture so we keep getting move events even if the finger leaves
-  // the track horizontally.
-  ;(e.target as Element).setPointerCapture?.(e.pointerId)
-  applyFromClientX(e.clientX)
-  window.addEventListener("pointermove", onPointerMove)
-  window.addEventListener("pointerup", onPointerUp)
-  window.addEventListener("pointercancel", onPointerUp)
-  // Stop the event so the parent FloatingPlayer's carousel gesture
-  // recognizer doesn't claim this drag as a page swipe.
-  e.stopPropagation()
-}
-
-function onPointerMove(e: PointerEvent): void {
-  if (!dragging.value || e.pointerId !== pointerId) return
-  applyFromClientX(e.clientX)
-}
-
-function onPointerUp(e: PointerEvent): void {
-  if (e.pointerId !== pointerId) return
-  dragging.value = false
-  pointerId = null
-  window.removeEventListener("pointermove", onPointerMove)
-  window.removeEventListener("pointerup", onPointerUp)
-  window.removeEventListener("pointercancel", onPointerUp)
+function commitDrag(): void {
   // Snap back to centre if the user released inside the detent. Floating-
   // point exact zero matters: usePlayerStore derives `enabled` from
   // `mixPosition !== 0`.
@@ -128,10 +99,10 @@ function onPointerUp(e: PointerEvent): void {
   }
 }
 
-function applyFromClientX(clientX: number): void {
-  if (trackRectWidth <= 0) return
-  const x = clientX - trackRectLeft
-  let p = (x / trackRectWidth) * 2 - 1
+function applyFromClientX(clientX: number, rect: DragRect): void {
+  if (rect.width <= 0) return
+  const x = clientX - rect.left
+  let p = (x / rect.width) * 2 - 1
   if (p < -1) p = -1
   if (p > 1) p = 1
   // Inside the deadzone the puck still tracks the finger visually

@@ -23,6 +23,14 @@ function makePlaylistRepo(items: readonly PlaylistItem[]): IPlaylistItemReposito
 function makeTrackRepo(tracks: ReadonlyMap<string, Track>): ITrackRepository {
   return {
     getById: async (id) => tracks.get(id) ?? null,
+    getByIds: async (ids) => {
+      const out = new Map<TrackId, Track>()
+      for (const id of ids) {
+        const t = tracks.get(id)
+        if (t) out.set(id, t)
+      }
+      return out
+    },
     list: async () => [],
     search: async () => [],
     getTranscriptPath: async () => null,

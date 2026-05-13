@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { downloadMedia } from "../downloadMedia.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
 import type { MediaItemId, TrackId } from "@lib/domain/core.js"
 import type { CdnServer } from "@lib/domain/servers.js"
+
+const noopUnitOfWork: IUnitOfWork = { run: async (fn) => fn() }
 
 const SERVER_A: CdnServer = {
   id: "server-a",
@@ -62,7 +65,7 @@ describe("downloadMedia", () => {
       .mockResolvedValue("blob:local/1")
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -93,7 +96,7 @@ describe("downloadMedia", () => {
       .mockResolvedValueOnce("blob:local/from-b")
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -126,7 +129,7 @@ describe("downloadMedia", () => {
       .mockRejectedValue(new Error("network"))
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("transfer-failed")
@@ -142,7 +145,7 @@ describe("downloadMedia", () => {
     const repo = makeRepo()
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("no-candidates")
@@ -158,7 +161,7 @@ describe("downloadMedia", () => {
     })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(true)
     if (result.ok) {
@@ -178,11 +181,61 @@ describe("downloadMedia", () => {
     const repo = makeRepo({ getByTrack: async () => existingItem("downloading") })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, transfer }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("already-in-progress")
     expect(transfer).not.toHaveBeenCalled()
+  })
+
+  it("serialises concurrent claims through the unit of work — only one transfer fires", async () => {
+    // Serialising UoW: every run() waits for the previous one to finish.
+    // Mirrors SQLite's exclusive transaction semantics.
+    let queue: Promise<unknown> = Promise.resolve()
+    const serialUoW: IUnitOfWork = {
+      run: <T,>(fn: () => Promise<T>): Promise<T> => {
+        const next = queue.then(fn) as Promise<T>
+        queue = next.catch(() => undefined)
+        return next
+      },
+    }
+    let state: MediaItemState | null = null
+    const repo = makeRepo({
+      getByTrack: async () =>
+        state === null
+          ? null
+          : { ...existingItem(state, state === "ready" ? "blob:cached" : null) },
+      upsert: async (trackId, nextState, localPath) => {
+        state = nextState
+        return {
+          id: "mi-1" as MediaItemId,
+          trackId: trackId as TrackId,
+          state: nextState,
+          localPath,
+          createdAt: 1000,
+        }
+      },
+    })
+    const transfer = vi.fn<(url: string) => Promise<string>>().mockResolvedValue("blob:local/1")
+
+    const [first, second] = await Promise.all([
+      downloadMedia(
+        { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
+        { mediaItems: repo, unitOfWork: serialUoW, transfer }
+      ),
+      downloadMedia(
+        { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
+        { mediaItems: repo, unitOfWork: serialUoW, transfer }
+      ),
+    ])
+
+    // Exactly one call performed the byte transfer; the other returned
+    // already-in-progress without re-downloading.
+    expect(transfer).toHaveBeenCalledTimes(1)
+    const outcomes = [first.ok, second.ok].sort()
+    expect(outcomes).toEqual([false, true])
+    const failed = first.ok ? second : first
+    if (!failed.ok) expect(failed.error).toBe("already-in-progress")
   })
 
   it("returns persist-failed when post-transfer upsert throws", async () => {
@@ -201,7 +254,7 @@ describe("downloadMedia", () => {
     const repo = makeRepo({ upsert })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
-      { mediaItems: repo, transfer: async () => "blob:local/1" }
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer: async () => "blob:local/1" }
     )
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("persist-failed")
@@ -230,7 +283,7 @@ describe("downloadMedia", () => {
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A] },
       {
-        mediaItems: repo,
+        mediaItems: repo, unitOfWork: noopUnitOfWork,
         transfer: async () => {
           throw new Error("network")
         },
@@ -256,7 +309,7 @@ describe("downloadMedia", () => {
       })
     const result = await downloadMedia(
       { trackId: "t-1" as TrackId, path: PATH, candidates: [SERVER_A, SERVER_B] },
-      { mediaItems: repo, transfer },
+      { mediaItems: repo, unitOfWork: noopUnitOfWork, transfer },
       onProgress
     )
     expect(result.ok).toBe(true)

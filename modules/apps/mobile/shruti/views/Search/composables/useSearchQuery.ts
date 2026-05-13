@@ -76,10 +76,6 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
       const tracks = await fetchPage(0)
       if (token !== searchToken) return
       rawTracks.value = tracks
-      // When FTS + client-side filter trims the page heavily we can get
-      // a short page while the DB still has more rows. Use raw page size
-      // as the stop signal — `loadMore` keeps fetching until the DB
-      // itself returns nothing.
       hasMore.value = tracks.length >= PAGE_SIZE
       offset.value = PAGE_SIZE
     } catch (err) {

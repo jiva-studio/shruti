@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { computed, ref, watch } from "vue"
+import { computed, onScopeDispose, ref, watch } from "vue"
 import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
@@ -88,19 +88,30 @@ export const usePlayerStore = defineStore("player", () => {
   })
   const resumePosition = usePlayerResumePosition()
 
-  let subscribed = false
+  let unsubscribeProgress: (() => void) | null = null
   function subscribeOnce(): void {
-    if (subscribed) return
-    subscribed = true
-    app.audioPlayer.onProgress((status) => {
-      // If the platform fires a late event from a previous track, ignore it.
-      if (itemId.value !== null && status.itemId !== itemId.value) return
+    if (unsubscribeProgress) return
+    unsubscribeProgress = app.audioPlayer.onProgress((status) => {
+      // Ignore events when no track is loaded (mid-swap or pre-open) and
+      // any late events from a previous track. The swap path nulls
+      // `itemId.value` BEFORE awaiting `session.finishCurrent`, so this
+      // guard rejects everything in flight during the handoff.
+      if (itemId.value === null || status.itemId !== itemId.value) return
       playing.value = status.playing
       positionMs.value = status.position
       if (status.duration > 0) durationMs.value = status.duration
       session.applyStatus(status.position, status.duration)
     })
   }
+  // Tear down the platform listener when the store scope is disposed.
+  // In production the store is app-singleton so this rarely fires; the
+  // observable wins are HMR (Vite re-evaluates the module) and Vitest
+  // (each test creates a fresh pinia) — without this, every reload
+  // accumulates a duplicate listener writing into the new store's refs.
+  onScopeDispose(() => {
+    unsubscribeProgress?.()
+    unsubscribeProgress = null
+  })
 
   /** Push the current slider state to the engine. Called on every
    *  slider change and right after `audioPlayer.open()`, since a fresh
@@ -169,15 +180,17 @@ export const usePlayerStore = defineStore("player", () => {
     // Switching to a different item: close out the previous session and
     // patch the playlist's progress map BEFORE we touch the engine, so a
     // fast back-tap to the old row sees the latest position.
+    //
+    // Disarm the progress guard FIRST so late events from the previous
+    // track that arrive during `session.finishCurrent` cannot mutate
+    // playing/positionMs/durationMs against stale state. The progress
+    // callback above rejects everything while `itemId.value === null`.
     const prevItemId = itemId.value
-    if (prevItemId) {
-      await session.finishCurrent(prevItemId, positionMs.value)
-    }
-
-    // Disarm the progress guard while we swap audio. Any emit between
-    // `audioPlayer.open()` and the new `itemId.value` assignment below
-    // could otherwise mark stale data on the new id.
+    const prevPositionMs = positionMs.value
     itemId.value = null
+    if (prevItemId) {
+      await session.finishCurrent(prevItemId, prevPositionMs)
+    }
 
     const duration = cmd.audio.duration ?? 0
     const resumeMs = await resumePosition.resolve(

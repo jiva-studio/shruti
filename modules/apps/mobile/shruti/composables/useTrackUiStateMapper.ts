@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from "vue"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
-import { maxAudioDurationMs } from "@shruti/composables/trackDuration.js"
+import { maxAudioDurationMs } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useDownloadStore, type DownloadState } from "@shruti/stores/useDownloadStore.js"
