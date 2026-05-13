@@ -578,9 +578,7 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
 describe("tracksRepository.sql — scoreMatchinfo blob normalisation", () => {
   // FTS4 matchinfo('pcx') with p=1, c=1, hits_in_row=2, hits_in_corpus=2,
   // rows_with_term=1 → ten u32 LE bytes for the header + triple.
-  const pcxBytes = new Uint8Array(
-    new Uint32Array([1, 1, 2, 2, 1]).buffer
-  )
+  const pcxBytes = new Uint8Array(new Uint32Array([1, 1, 2, 2, 1]).buffer)
 
   it("scores a Uint8Array blob (sql.js path)", () => {
     const score = scoreMatchinfo(pcxBytes, 10)
