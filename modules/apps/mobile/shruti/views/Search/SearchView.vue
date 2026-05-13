@@ -6,9 +6,13 @@
     <div class="search-fixed-top">
       <div class="search-row">
         <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
+        <!-- Hide the filter button while the user is typing — the
+             built-in clear-X takes that slot. Active filter state is
+             still applied to the query in the background. -->
         <SearchFiltersButton
+          v-if="!search.query.value"
           class="search-row-filter-button"
-          :count="search.activeFilterCount.value"
+          :active="search.activeFilterCount.value > 0"
           :aria-label="$t('search.filtersButton')"
           @click="search.filtersOpen.value = true"
         />
