@@ -8,7 +8,7 @@
         :aria-label="$t('app.close')"
         @click="emit('close')"
       >
-        <IconX slot="icon-only" :size="20" />
+        <IconXFilled slot="icon-only" :size="20" />
       </IonButton>
 
       <TranscriptDialogHeader :title="title" :author="author" />
@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
-import { IconX } from "@tabler/icons-vue"
+import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
