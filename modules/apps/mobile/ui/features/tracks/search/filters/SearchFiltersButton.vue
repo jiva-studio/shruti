@@ -34,12 +34,12 @@ const emit = defineEmits<{ click: [] }>()
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
-  border-radius: 12px;
-  background: var(--ion-color-light, rgba(0, 0, 0, 0.06));
+  border-radius: 10px;
+  background: transparent;
   color: var(--ion-color-medium, currentColor);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -57,8 +57,8 @@ const emit = defineEmits<{ click: [] }>()
 }
 
 .icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .count {

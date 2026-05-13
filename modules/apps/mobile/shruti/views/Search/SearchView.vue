@@ -7,6 +7,7 @@
       <div class="search-row">
         <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
         <SearchFiltersButton
+          class="search-row-filter-button"
           :count="search.activeFilterCount.value"
           :aria-label="$t('search.filtersButton')"
           @click="search.filtersOpen.value = true"
@@ -106,15 +107,26 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 }
 
 .search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-inline-end: 8px;
+  position: relative;
 }
 
 .search-row > :first-child {
-  flex: 1 1 auto;
-  min-width: 0;
+  /* SearchInput wrapper is the only flex/block child — let it own the
+     full width. The filter button overlays on top via absolute. */
+  width: 100%;
+}
+
+/* IonInput renders inside SearchInputAndroid wrapped with `margin: 10px`.
+   Push the typed text padding so it never slides under the filter button. */
+.search-row :deep(ion-input) {
+  --padding-end: 56px;
+}
+
+.search-row-filter-button {
+  position: absolute;
+  right: 16px; /* sits just inside the IonInput's right border */
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Chip row is gone; spacer only needs to clear the input + safe-area. */
