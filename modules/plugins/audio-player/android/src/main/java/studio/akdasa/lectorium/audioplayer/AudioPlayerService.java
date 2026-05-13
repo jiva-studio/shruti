@@ -28,6 +28,7 @@ import studio.jiva.shruti.audioplayer.audioprocessor.StereoMixAudioProcessor;
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionActions;
 import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionCallback;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaSessionMediaStateNotifier;
+import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaState;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaStateNotificationService;
 import studio.jiva.shruti.audioplayer.mediaStateNotifications.PluginCallMediaStateNotifier;
 
@@ -35,6 +36,12 @@ import studio.jiva.shruti.audioplayer.mediaStateNotifications.PluginCallMediaSta
 public final class AudioPlayerService extends Service {
     private static final String CHANNEL_ID = "MediaPlaybackChannel";
     private static final int NOTIFICATION_ID = 1;
+    /** Fallback text used in the foreground-service notification before any
+     *  track metadata is known (i.e. between onStartCommand and the first
+     *  MediaSession update). Kept user-visible and descriptive so the FGS
+     *  notification still tells the user what the service is doing, which
+     *  Google Play's FGS review requires. */
+    private static final String FALLBACK_NOTIFICATION_TITLE = "Lectorium audio";
 
     private ExoPlayer exoPlayer;
     private MediaStateNotificationService mediaStateNotificationService;
@@ -268,15 +275,46 @@ public final class AudioPlayerService extends Service {
         });
     }
 
+    /** Build the foreground-service notification.
+     *
+     *  Once a track is loaded, MediaSessionMediaStateNotifier replaces this
+     *  with a full MediaStyle notification (same NOTIFICATION_ID). But for
+     *  the brief window between onStartCommand and the first state update,
+     *  this notification is what the user sees — so it must describe the
+     *  actual playback state instead of the previous hardcoded
+     *  "Media Playback / Playing media" placeholder, which Google Play's
+     *  FGS review treats as a non-descriptive notification.
+     */
     private Notification createNotification() {
         Intent notificationIntent = new Intent(this, getApplicationContext().getClass());
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("Media Playback")
-                .setContentText("Playing media")
+        String title = FALLBACK_NOTIFICATION_TITLE;
+        String text = null;
+        if (mediaStateNotificationService != null) {
+            MediaState state = mediaStateNotificationService.getState();
+            if (state != null) {
+                String stateTitle = state.getTitle();
+                if (stateTitle != null && !stateTitle.isEmpty()) {
+                    title = stateTitle;
+                }
+                String stateArtist = state.getArtist();
+                if (stateArtist != null && !stateArtist.isEmpty()) {
+                    text = stateArtist;
+                }
+            }
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle(title)
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentIntent(pendingIntent)
-                .build();
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true);
+        if (text != null) {
+            builder.setContentText(text);
+        }
+        return builder.build();
     }
 }
