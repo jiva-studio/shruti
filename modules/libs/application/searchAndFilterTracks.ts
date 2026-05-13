@@ -34,6 +34,7 @@ function narrowByFilters(
   const languageSet = new Set(input.languageCodes ?? [])
   const locationSet = new Set(input.locationIds ?? [])
   const sourceSet = new Set(input.sourceIds ?? [])
+  const tagSet = new Set(input.tagIds ?? [])
   const durationBucket = input.durationFilter
     ? DURATION_FILTERS.find((d) => d.id === input.durationFilter)
     : null
@@ -43,6 +44,7 @@ function narrowByFilters(
     if (locationSet.size > 0 && (!t.locationId || !locationSet.has(t.locationId))) return false
     if (languageSet.size > 0 && !t.variants.some((v) => languageSet.has(v.language))) return false
     if (sourceSet.size > 0 && !t.references.some((r) => sourceSet.has(r.sourceId))) return false
+    if (tagSet.size > 0 && !t.tagIds.some((id) => tagSet.has(id))) return false
     if (durationBucket) {
       const anyInRange = t.variants.some((v) => {
         const d = v.audio?.duration

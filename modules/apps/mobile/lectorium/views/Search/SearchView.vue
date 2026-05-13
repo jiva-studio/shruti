@@ -4,8 +4,14 @@
          gradient's bottom 30% fades to transparent, making list rows
          visually dissolve as they pass under the search bar. -->
     <div class="search-fixed-top">
-      <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
-      <SearchFiltersBar v-model="search.filters.value" :chips="search.filterChips.value" />
+      <div class="search-row">
+        <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
+        <SearchFiltersButton
+          :count="search.activeFilterCount.value"
+          :aria-label="$t('search.filtersButton')"
+          @click="search.filtersOpen.value = true"
+        />
+      </div>
     </div>
 
     <!-- Reserves vertical room under the fixed header so the first track
@@ -27,6 +33,15 @@
     <IonInfiniteScroll :disabled="!search.hasMore.value" @ion-infinite="onInfinite">
       <IonInfiniteScrollContent />
     </IonInfiniteScroll>
+
+    <SearchFiltersSheet
+      v-model:filters="search.filters.value"
+      :open="search.filtersOpen.value"
+      :sections="search.filterSections.value"
+      :can-reset="search.activeFilterCount.value > 0"
+      @update:open="search.filtersOpen.value = $event"
+      @reset="search.resetFilters"
+    />
   </AppPage>
 </template>
 
@@ -41,7 +56,10 @@ import {
 import { AppPage } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
-import { SearchFiltersBar } from "@ui/features/tracks/search/filters/index.js"
+import {
+  SearchFiltersButton,
+  SearchFiltersSheet,
+} from "@ui/features/tracks/search/filters/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useSearchController } from "./SearchView.controller.js"
@@ -69,11 +87,11 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   right: 0;
   z-index: 10;
   padding-top: env(safe-area-inset-top);
-  /* Extra space below the chips where the gradient fades over the
+  /* Extra space below the row where the gradient fades over the
      scrolling track rows so there's no hard edge. */
   padding-bottom: 20px;
   /* Wrapper itself is non-interactive so taps in the fade region hit
-     the tracks below; only the search + chips capture taps. */
+     the tracks below; only the search row captures taps. */
   pointer-events: none;
   background: linear-gradient(
     to bottom,
@@ -87,8 +105,21 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   pointer-events: auto;
 }
 
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline-end: 8px;
+}
+
+.search-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Chip row is gone; spacer only needs to clear the input + safe-area. */
 .search-content-spacer {
-  height: calc(env(safe-area-inset-top) + 116px);
+  height: calc(env(safe-area-inset-top) + 64px);
 }
 
 /* On Android Capacitor's WebView reports env(safe-area-inset-top) as the
@@ -97,7 +128,7 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
    space above the first result. Drop the env() term on Android — the
    IonContent padding alone is enough to clear the fixed header. */
 .search-content-spacer.is-android {
-  height: 116px;
+  height: 64px;
 }
 
 /* IonList ships with a default --padding-top that leaves visible empty
@@ -112,10 +143,7 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 }
 
 /* Mirror the page-content constraint on the fixed header so the search
-   input + filter chips stay aligned with the centred content column on
-   wide screens. The gradient narrows along with the wrapper, but the
-   page surface beneath it is the same theme background so the fade has
-   no visible edge. */
+   row stays aligned with the centred content column on wide screens. */
 @media (min-width: 768px) {
   .search-fixed-top {
     max-width: var(--lectorium-content-max-width);

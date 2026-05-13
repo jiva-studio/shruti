@@ -1,6 +1,10 @@
-export { default as SearchFiltersBar } from "./SearchFiltersBar.vue"
-export { default as SearchFilterChip } from "./SearchFilterChip.vue"
-export { default as SearchFilterChipsList } from "./SearchFilterChipsList.vue"
-export { default as SearchFilterChipWithListItems } from "./SearchFilterChipWithListItems.vue"
-export { default as SearchFilterChipWithListItem } from "./SearchFilterChipWithListItem.vue"
-export type { FiltersModel, SearchFilterChipDef } from "./SearchFiltersBar.vue"
+export { default as SearchFiltersButton } from "./SearchFiltersButton.vue"
+export { default as SearchFiltersSheet } from "./SearchFiltersSheet.vue"
+export type {
+  FiltersModel,
+  SearchFilterSectionDef,
+  MultiSectionDef,
+  SingleSectionDef,
+  MultiSectionKey,
+  SingleSectionKey,
+} from "./types.js"

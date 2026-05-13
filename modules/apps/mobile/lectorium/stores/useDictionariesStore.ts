@@ -113,6 +113,13 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     return [...sources.value].sort((a, b) => nameFor(a).localeCompare(nameFor(b)))
   })
 
+  const tagsSorted = computed<readonly Tag[]>(() => {
+    const lang = appLanguage.value
+    return [...tags.value].sort((a, b) =>
+      (a.names.get(lang) ?? a.id).localeCompare(b.names.get(lang) ?? b.id)
+    )
+  })
+
   return {
     authors,
     locations,
@@ -128,6 +135,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     authorsSorted,
     locationsSorted,
     sourcesSorted,
+    tagsSorted,
     isLoading,
     error,
     ensureLoaded,

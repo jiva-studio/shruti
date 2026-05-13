@@ -5,10 +5,13 @@ import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import type { TrackId } from "@lib/domain/core.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
-import type { FiltersModel, SearchFilterChipDef } from "@ui/features/tracks/search/filters/index.js"
+import type {
+  FiltersModel,
+  SearchFilterSectionDef,
+} from "@ui/features/tracks/search/filters/index.js"
 import { useSearchQuery } from "./composables/useSearchQuery.js"
 import { useSearchFiltersBinding } from "./composables/useSearchFiltersBinding.js"
-import { useSearchFilterChips } from "./composables/useSearchFilterChips.js"
+import { useSearchFilterSections } from "./composables/useSearchFilterSections.js"
 
 export interface SearchControllerReturn {
   query: Ref<string>
@@ -18,7 +21,10 @@ export interface SearchControllerReturn {
   emptyMessage: ComputedRef<string>
   filters: Ref<FiltersModel>
   hasMore: Ref<boolean>
-  filterChips: ComputedRef<readonly SearchFilterChipDef[]>
+  filterSections: ComputedRef<readonly SearchFilterSectionDef[]>
+  filtersOpen: Ref<boolean>
+  activeFilterCount: ComputedRef<number>
+  resetFilters: () => Promise<void>
   /** Tap on a track row → open the per-track ActionSheet. */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
@@ -30,10 +36,16 @@ export function useSearchController(): SearchControllerReturn {
   const dictionaries = useDictionariesStore()
 
   const query = ref<string>("")
-  const { filters, ready: filtersReady } = useSearchFiltersBinding()
-  const { chips: filterChips } = useSearchFilterChips()
+  const {
+    filters,
+    ready: filtersReady,
+    activeFilterCount,
+    reset: resetFilters,
+  } = useSearchFiltersBinding()
+  const { sections: filterSections } = useSearchFilterSections()
   const { mapRows } = useTrackUiStateMapper()
   const actionSheet = useTrackActionSheet()
+  const filtersOpen = ref<boolean>(false)
 
   const { rawTracks, isLoading, error, hasMore, runQuery, loadMore } = useSearchQuery({
     query,
@@ -47,7 +59,7 @@ export function useSearchController(): SearchControllerReturn {
     await runQuery()
   })
 
-  // Filter chips fire once per gesture — re-run immediately, not debounced.
+  // Filter edits fire once per gesture — re-run immediately, not debounced.
   watch(
     filters,
     () => {
@@ -75,7 +87,10 @@ export function useSearchController(): SearchControllerReturn {
     emptyMessage,
     filters,
     hasMore,
-    filterChips,
+    filterSections,
+    filtersOpen,
+    activeFilterCount,
+    resetFilters,
     onSelect,
     loadMore,
   }
