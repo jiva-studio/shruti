@@ -29,8 +29,8 @@
           <component :is="section.icon" slot="start" class="section-icon" />
           <IonLabel>
             <h2>{{ section.title }}</h2>
-            <p v-if="sectionSummary(section)" class="section-summary">
-              {{ sectionSummary(section) }}
+            <p class="section-summary" :class="{ 'is-placeholder': !sectionSummary(section) }">
+              {{ sectionSummary(section) || $t("search.filters.any") }}
             </p>
           </IonLabel>
           <span
@@ -194,6 +194,10 @@ function onDismiss(): void {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.section-summary.is-placeholder {
+  opacity: 0.6;
 }
 
 .count-pill {
