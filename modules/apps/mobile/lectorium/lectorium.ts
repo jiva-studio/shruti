@@ -4,6 +4,7 @@ import type {
   IAudioPlayer,
   IDatabase,
   IDatabaseFetcher,
+  IDatabaseTransfer,
   IHaptics,
   IMediaDownloader,
   INotificationScheduler,
@@ -54,6 +55,10 @@ export interface Lectorium {
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly serverProber: IServerProber
+  /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
+   * the user database. Wired with a `() => databases.user` closure so the
+   * user DB doesn't have to be open at app-bootstrap time. */
+  readonly databaseTransfer: IDatabaseTransfer
   /** Runtime platform, captured at bootstrap. Drives layout constants that can't be inferred from CSS. */
   readonly platform: "ios" | "android" | "web"
 
@@ -111,6 +116,10 @@ export interface InitLectoriumSeed {
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly serverProber: IServerProber
+  /** Factory invoked inside `initLectorium` with a `() => databases.user`
+   * getter. The factory pattern keeps the circular dependency local — the
+   * adapter would otherwise need to close over a not-yet-built `Lectorium`. */
+  readonly databaseTransferFactory: (getUserDb: () => IDatabase | null) => IDatabaseTransfer
   readonly platform: "ios" | "android" | "web"
   /** First server to try; the Welcome view may swap it after probing. */
   readonly initialServer: CdnServer
@@ -145,6 +154,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
     serverProber: seed.serverProber,
+    databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
     activeServer,
     contentDbFile,

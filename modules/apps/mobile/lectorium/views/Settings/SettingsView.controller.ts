@@ -6,6 +6,7 @@ import type { CdnServer } from "@lib/domain/servers.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import { useDangerActions } from "./composables/useDangerActions.js"
+import { useDataSettings } from "./composables/useDataSettings.js"
 
 export type { SelectorItem }
 
@@ -33,6 +34,9 @@ export interface SettingsControllerReturn {
   /* Danger handlers */
   onClearCache: () => Promise<void>
   onClearUserData: () => Promise<void>
+  /* Data export/import handlers */
+  onExportDatabase: () => Promise<void>
+  onImportFileSelected: (file: File) => Promise<void>
 }
 
 export function useSettingsController(): SettingsControllerReturn {
@@ -88,6 +92,7 @@ export function useSettingsController(): SettingsControllerReturn {
   )
 
   const { onClearCache, onClearUserData } = useDangerActions(app)
+  const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
 
   return {
     version,
@@ -109,6 +114,8 @@ export function useSettingsController(): SettingsControllerReturn {
     languageItems,
     onClearCache,
     onClearUserData,
+    onExportDatabase,
+    onImportFileSelected,
   }
 }
 

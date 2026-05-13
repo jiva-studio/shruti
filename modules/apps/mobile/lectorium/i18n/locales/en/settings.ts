@@ -4,6 +4,7 @@ export default {
     contacts: "Contact Us",
     status: "Status",
     sadhana: "Sadhana",
+    data: "Data",
     danger: "Danger zone",
     about: "About",
   },
@@ -66,6 +67,26 @@ export default {
     daily: {
       title: "Reminder time",
       description: "The time when notifications will be sent.",
+    },
+  },
+
+  data: {
+    export: {
+      title: "Export user data",
+      description: "Save playlist, notes and progress to a file",
+      error: "Export failed",
+    },
+    import: {
+      title: "Import user data",
+      description: "Replace current data with a previously exported file",
+      error: "Import failed",
+      confirm: {
+        header: "Replace all current data?",
+        message:
+          "Your current playlist, notes, downloads and listening progress will be replaced by the imported file. This cannot be undone.",
+        ok: "Replace",
+        cancel: "Cancel",
+      },
     },
   },
 
