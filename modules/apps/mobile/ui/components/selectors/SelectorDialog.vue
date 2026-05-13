@@ -1,6 +1,7 @@
 <template>
   <IonModal
     :is-open="open"
+    :class="{ 'selector-dialog--sheet': sheet }"
     :breakpoints="sheet ? SHEET_BREAKPOINTS : undefined"
     :initial-breakpoint="sheet ? SHEET_INITIAL : undefined"
     :handle="sheet"
@@ -64,3 +65,14 @@ function onClose() {
   emit("close")
 }
 </script>
+
+<style>
+/* Kill the Material elevation under the toolbar when this dialog opens
+   as a bottom sheet — the parent filters sheet doesn't have one, so the
+   stacked sheet looked inconsistent. iOS hairline is already removed by
+   the Header primitive's `ion-no-border`. */
+.selector-dialog--sheet ion-header::after {
+  display: none;
+  background-image: none;
+}
+</style>
