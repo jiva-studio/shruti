@@ -42,7 +42,9 @@
               :detail="true"
               @click="enterSection(section)"
             >
-              <component :is="section.icon" slot="start" class="section-icon" />
+              <div slot="start" class="settings-item-icon section-icon-chip">
+                <component :is="section.icon" />
+              </div>
               <IonLabel>
                 <h2>{{ section.title }}</h2>
                 <p
@@ -290,12 +292,14 @@ function onDismiss(): void {
   padding: 0 4px;
 }
 
-.section-icon {
+.section-icon-chip {
+  margin-inline-end: 12px;
+  flex: 0 0 auto;
+}
+
+.section-icon-chip > :first-child {
   width: 22px;
   height: 22px;
-  margin-inline-end: 12px;
-  color: var(--ion-color-medium, currentColor);
-  flex: 0 0 auto;
 }
 
 .section-summary {
