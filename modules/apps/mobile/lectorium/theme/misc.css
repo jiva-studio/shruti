@@ -9,6 +9,11 @@
   border-radius: 5px;
 }
 
+.settings-item-icon--danger {
+  background-color: rgba(var(--ion-color-danger-rgb), 0.12);
+  color: var(--ion-color-danger);
+}
+
 /* Toggle OFF-state knob — Ionic defaults to harsh #fff which clashes
  * with the warm cream / espresso palette. step-50 was too close to the
  * page background (~2% delta — effectively invisible against the

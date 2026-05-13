@@ -1,9 +1,9 @@
 <template>
   <IonItem lines="none">
     <!-- Item Icon -->
-    <div slot="start" class="settings-item-icon">
+    <IconChip slot="start">
       <HighlightTextIcon />
-    </div>
+    </IconChip>
 
     <!-- Text -->
     <IonLabel class="ion-text-nowrap">
@@ -19,6 +19,7 @@
 <script setup lang="ts">
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
 import { HighlightTextIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 
 const value = defineModel<boolean>({ required: true, default: true })
 </script>
