@@ -1,0 +1,68 @@
+name: storage-sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (list changes without writing)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: storage-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      BUCKET: akds-lectorium
+      PREFIX: public/
+    steps:
+      - name: install rclone
+        run: |
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          rclone version
+
+      - name: write rclone config
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          YC_ACCESS_KEY_ID: ${{ secrets.LECTORIUM_YC_ACCESS_KEY_ID }}
+          YC_SECRET_ACCESS_KEY: ${{ secrets.LECTORIUM_YC_SECRET_ACCESS_KEY }}
+        run: |
+          mkdir -p ~/.config/rclone
+          cat > ~/.config/rclone/rclone.conf <<EOF
+          [aws]
+          type = s3
+          provider = AWS
+          access_key_id = ${AWS_ACCESS_KEY_ID}
+          secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+          region = ${AWS_REGION}
+
+          [yandex]
+          type = s3
+          provider = Other
+          access_key_id = ${YC_ACCESS_KEY_ID}
+          secret_access_key = ${YC_SECRET_ACCESS_KEY}
+          endpoint = storage.yandexcloud.net
+          region = ru-central1
+          EOF
+          chmod 600 ~/.config/rclone/rclone.conf
+
+      - name: sync
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          FLAGS="--progress --transfers 16 --checksum --stats 10s"
+          if [ "$DRY_RUN" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+            echo "::notice::Dry run mode — no changes will be written"
+          fi
+          rclone sync "aws:${BUCKET}/${PREFIX}" "yandex:${BUCKET}/${PREFIX}" $FLAGS
