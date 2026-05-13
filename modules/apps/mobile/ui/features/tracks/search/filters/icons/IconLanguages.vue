@@ -1,7 +1,7 @@
 <template>
-  <IconLanguage />
+  <IconWorldFilled />
 </template>
 
 <script setup lang="ts">
-import { IconLanguage } from "@tabler/icons-vue"
+import { IconWorldFilled } from "@tabler/icons-vue"
 </script>
