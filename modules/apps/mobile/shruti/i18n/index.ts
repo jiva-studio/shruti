@@ -63,9 +63,36 @@ const ru = {
   welcome: ruWelcome,
 }
 
-function detectLocale(): SupportedLocale {
+/**
+ * Pick a UI locale based on `navigator.language`. Sync — safe to call
+ * at module load. On Capacitor's WebView `navigator.language` already
+ * mirrors the OS locale, so this is enough for the initial i18n boot
+ * and the `useAppLanguage` default. For the search-filter first-launch
+ * seed we prefer {@link detectDeviceLocaleAsync}, which goes through
+ * the native Device plugin and falls back to this on failure.
+ */
+export function detectLocale(): SupportedLocale {
   const nav = typeof navigator !== "undefined" ? navigator.language : "en"
-  const short = nav.split("-")[0] as SupportedLocale
+  return toSupportedLocale(nav)
+}
+
+/**
+ * Asks the native Capacitor Device plugin for the device language; on
+ * failure (e.g. plugin not registered, web environment without the
+ * shim) falls back to {@link detectLocale}.
+ */
+export async function detectDeviceLocaleAsync(): Promise<SupportedLocale> {
+  try {
+    const { Device } = await import("@capacitor/device")
+    const { value } = await Device.getLanguageCode()
+    return toSupportedLocale(value)
+  } catch {
+    return detectLocale()
+  }
+}
+
+function toSupportedLocale(raw: string | null | undefined): SupportedLocale {
+  const short = (raw ?? "en").split("-")[0] as SupportedLocale
   return (SUPPORTED_LOCALES as readonly string[]).includes(short) ? short : "en"
 }
 
