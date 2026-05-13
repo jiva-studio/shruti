@@ -299,7 +299,16 @@ jobs:
   deploy-android:
     name: android / deploy
     needs: [lint, test, build-web, build-android]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # `!cancelled() && needs.build-android.result == 'success'` mirrors the
+    # guard on build-android: `detect-changes` is *skipped* on push/dispatch
+    # and the skip otherwise propagates down the whole chain (build-android
+    # → deploy-android), so a plain `if: push && main` here is silently
+    # skipped on every release push. See the comment on build-android.
+    if: >-
+      !cancelled() &&
+      needs.build-android.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
@@ -405,7 +414,14 @@ jobs:
   deploy-ios:
     name: ios / deploy
     needs: [lint, test, build-web, build-ios]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Same guard as deploy-android — see the comment there. `detect-changes`
+    # is skipped on push/dispatch and the skip propagates through build-ios
+    # into this job unless we explicitly check build-ios's own result.
+    if: >-
+      !cancelled() &&
+      needs.build-ios.result == 'success' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: [self-hosted, macos, mac-host]
     steps:
       - uses: actions/checkout@v5
