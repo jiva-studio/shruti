@@ -6,14 +6,15 @@
     :aria-label="ariaLabel"
     @click="emit('click')"
   >
-    <IconFilters class="icon" />
+    <IonIcon :icon="funnelOutline" class="icon" />
     <SectionBadge v-if="count > 0" accent class="count">{{ count }}</SectionBadge>
   </button>
 </template>
 
 <script setup lang="ts">
+import { IonIcon } from "@ionic/vue"
+import { funnelOutline } from "ionicons/icons"
 import { SectionBadge } from "@ui/primitives/index.js"
-import IconFilters from "./icons/IconFilters.vue"
 
 withDefaults(
   defineProps<{
