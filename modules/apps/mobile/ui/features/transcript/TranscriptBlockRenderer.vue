@@ -106,18 +106,29 @@ const stateClasses = computed(() => ({
   color: #ffc78a !important;
 }
 
+/* Saved note (bookmarked) — wavy underline in warning colour. */
 .highlighted {
-  color: var(--ion-color-warning);
+  text-decoration: underline wavy var(--ion-color-warning);
+  text-decoration-skip-ink: none;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
+/* Drag selection (in progress + popover open) — same wavy underline but
+   in primary colour, so the user can distinguish what they're currently
+   selecting from what was already saved. Stacking is clean: two
+   overlapping notes paint two underlines instead of one muddy fill. */
 .selected {
-  /* The wrapping .prompter has opacity: 0.5, so anything painted here
-     is halved before it hits the page. A 0.24 alpha used to vanish
-     into the immersive background; 0.65 lands at ~0.32 effective —
-     visible enough to track the drag without overpowering the active
-     paragraph or fighting the .current accent. */
-  background-color: rgba(var(--ion-color-primary-rgb), 0.65);
-  border-radius: 3px;
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.65);
+  text-decoration: underline wavy var(--ion-color-primary);
+  text-decoration-skip-ink: none;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+/* When a block is both .selected (just dragged) and .highlighted (already
+   saved as a note), prefer the drag colour — it signals "this is what
+   you're acting on right now". */
+.highlighted.selected {
+  text-decoration-color: var(--ion-color-primary);
 }
 </style>

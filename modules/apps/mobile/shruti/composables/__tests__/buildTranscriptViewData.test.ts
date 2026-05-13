@@ -248,3 +248,37 @@ describe("buildTranscriptViewData — reference source-name resolution", () => {
     expect(block.reference).toBe("ghost 1.1")
   })
 })
+
+describe("buildTranscriptViewData — saved-note overlay", () => {
+  it("marks blocks that overlap any saved note range as bookmarked", () => {
+    const t = makeTranscript([
+      sentence(0, 999, "one"),
+      sentence(1000, 2000, "two"),
+      sentence(2000, 3000, "three"),
+      sentence(3001, 4000, "four"),
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      // Notes are in seconds on disk; blocks are in ms.
+      notes: [{ timeStart: 1, timeEnd: 2.5 }],
+    })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.map((b) => b.bookmarked)).toEqual([false, true, true, false])
+  })
+
+  it("renders bookmarked: false for every block when notes is omitted", () => {
+    const t = makeTranscript([sentence(0, 1000, "x"), sentence(1000, 2000, "y")])
+    const groups = buildTranscriptViewData(t, { paragraphChars: 9999 })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.every((b) => b.bookmarked === false)).toBe(true)
+  })
+
+  it("treats touching boundaries as overlap (inclusive)", () => {
+    const t = makeTranscript([sentence(2000, 3000, "edge")])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [{ timeStart: 0, timeEnd: 2 }],
+    })
+    expect(groups[0]!.blocks[0]!.bookmarked).toBe(true)
+  })
+})

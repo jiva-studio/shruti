@@ -9,6 +9,17 @@ import type {
 } from "@ui/features/transcript/index.js"
 import { formatReference, formatReferenceFull } from "./groupReferences.js"
 
+/**
+ * One saved note's time range, in **seconds**. Note timestamps are
+ * stored in seconds on disk (`notes.time_start REAL`) while transcript
+ * blocks are in milliseconds, so the comparison converts at the
+ * boundary inside `buildTranscriptViewData`.
+ */
+export interface NoteRange {
+  readonly timeStart: number
+  readonly timeEnd: number
+}
+
 export interface BuildTranscriptViewDataOpts {
   /**
    * Auto-paragraph break threshold: when the current group's accumulated
@@ -26,6 +37,13 @@ export interface BuildTranscriptViewDataOpts {
   readonly sourcesById?: ReadonlyMap<string, Source>
   /** Active UI language code used to pick the right localised name. */
   readonly lang?: LanguageCode
+  /**
+   * Saved notes for the current track. Any block whose [start..end] (ms)
+   * overlaps any note range (converted from seconds) is rendered with
+   * `bookmarked: true`, which drives the highlight underline. Omitted /
+   * empty means no historic highlights — used in preview mode.
+   */
+  readonly notes?: readonly NoteRange[]
 }
 
 /**
@@ -47,6 +65,21 @@ export function buildTranscriptViewData(
 
   const lang: LanguageCode = opts.lang ?? "en"
   const sourcesById = opts.sourcesById
+  // Pre-convert note ranges from seconds to ms once so the overlap test
+  // inside the hot loop is a simple int comparison. Empty array → never
+  // marks anything as bookmarked.
+  const noteRangesMs: readonly { start: number; end: number }[] = (opts.notes ?? []).map((n) => ({
+    start: Math.round(n.timeStart * 1000),
+    end: Math.round(n.timeEnd * 1000),
+  }))
+
+  const isBookmarked = (blockStart: number, blockEnd: number): boolean => {
+    for (const r of noteRangesMs) {
+      // Standard interval overlap: not disjoint on either side.
+      if (blockStart <= r.end && blockEnd >= r.start) return true
+    }
+    return false
+  }
 
   const flush = () => {
     if (current.length > 0) groups.push({ blocks: current })
@@ -114,7 +147,7 @@ export function buildTranscriptViewData(
     current.push({
       block: raw,
       language: transcript.language,
-      bookmarked: false,
+      bookmarked: isBookmarked(raw.start, raw.end),
     })
 
     if (block.type === "sentence") {

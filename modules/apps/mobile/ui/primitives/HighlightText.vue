@@ -12,6 +12,9 @@ defineProps<{
 
 <style scoped>
 mark {
-  background: yellow;
+  background: rgba(var(--ion-color-warning-rgb), 0.5);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
 }
 </style>
