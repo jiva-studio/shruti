@@ -1,12 +1,13 @@
 <template>
   <IonModal
     :is-open="open"
+    class="filters-sheet"
     :breakpoints="[0, 0.5, 0.9]"
     :initial-breakpoint="0.9"
     handle
     @did-dismiss="onDismiss"
   >
-    <IonHeader>
+    <Header>
       <IonToolbar>
         <IonTitle>{{ $t("search.filtersSheetTitle") }}</IonTitle>
         <IonButtons slot="end">
@@ -15,7 +16,7 @@
           </IonButton>
         </IonButtons>
       </IonToolbar>
-    </IonHeader>
+    </Header>
 
     <IonContent class="ion-padding-bottom">
       <IonList lines="full" class="ion-no-padding">
@@ -73,7 +74,6 @@
 import { computed, ref } from "vue"
 import {
   IonModal,
-  IonHeader,
   IonToolbar,
   IonTitle,
   IonButtons,
@@ -83,6 +83,7 @@ import {
   IonItem,
   IonLabel,
 } from "@ionic/vue"
+import { Header } from "@ui/primitives/index.js"
 import { ListItemsSelectorDialog, ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 import type {
   FiltersModel,
@@ -180,6 +181,15 @@ function onDismiss(): void {
   emit("update:open", false)
 }
 </script>
+
+<style>
+/* Same fix as SelectorDialog in sheet mode: kill the Android toolbar
+   elevation under the sheet's own header. */
+.filters-sheet ion-header::after {
+  display: none;
+  background-image: none;
+}
+</style>
 
 <style scoped>
 .section-icon {
