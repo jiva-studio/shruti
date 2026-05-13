@@ -1,4 +1,4 @@
-import { onMounted, ref, watch, type Ref } from "vue"
+import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useSearchFiltersStore } from "@shruti/stores/useSearchFiltersStore.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
@@ -7,6 +7,13 @@ import type { FiltersModel } from "@ui/features/tracks/search/filters/index.js"
 export interface UseSearchFiltersBindingReturn {
   filters: Ref<FiltersModel>
   hasActiveFilter: () => boolean
+  /** Number of active filter values across all dimensions — used by the
+   *  Filters button badge so the user sees the live count without
+   *  opening the sheet. */
+  activeFilterCount: ComputedRef<number>
+  /** Clear every dimension in a single round-trip. Live-apply UI uses
+   *  this for the sheet's Reset action. */
+  reset: () => Promise<void>
   /** Resolves once the persisted filter snapshot has been hydrated. */
   ready: Promise<void>
 }
@@ -29,6 +36,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       languages: [...store.languageCodes],
       locations: [...store.locationIds],
       sources: [...store.sourceIds],
+      tags: [...store.tagIds],
       duration: store.duration[0],
       sort: store.sort,
     }
@@ -45,6 +53,7 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       void store.setLanguages(next.languages ?? [])
       void store.setLocations(next.locations ?? [])
       void store.setSources(next.sources ?? [])
+      void store.setTags(next.tags ?? [])
       void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
       void store.setSort(next.sort as SortMethod | undefined)
     },
@@ -58,10 +67,36 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       (f.languages?.length ?? 0) > 0 ||
       (f.locations?.length ?? 0) > 0 ||
       (f.sources?.length ?? 0) > 0 ||
+      (f.tags?.length ?? 0) > 0 ||
       (f.duration !== undefined && f.duration !== "") ||
       (f.sort !== undefined && f.sort !== "")
     )
   }
 
-  return { filters, hasActiveFilter, ready }
+  const activeFilterCount = computed<number>(() => {
+    const f = filters.value
+    return (
+      (f.authors?.length ?? 0) +
+      (f.languages?.length ?? 0) +
+      (f.locations?.length ?? 0) +
+      (f.sources?.length ?? 0) +
+      (f.tags?.length ?? 0) +
+      (f.duration !== undefined && f.duration !== "" ? 1 : 0) +
+      (f.sort !== undefined && f.sort !== "" ? 1 : 0)
+    )
+  })
+
+  async function reset(): Promise<void> {
+    filters.value = {
+      authors: [],
+      languages: [],
+      locations: [],
+      sources: [],
+      tags: [],
+      duration: undefined,
+      sort: undefined,
+    }
+  }
+
+  return { filters, hasActiveFilter, activeFilterCount, reset, ready }
 }

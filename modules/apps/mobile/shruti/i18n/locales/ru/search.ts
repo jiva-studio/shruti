@@ -2,6 +2,9 @@ export default {
   search: "Поиск | Поиск в {count} треке | Поиск в {count} треках",
   specifySearchCriteria:
     "Пожалуйста, введите поисковый запрос или выберите фильтры, чтобы найти больше.",
+  filtersButton: "Фильтры",
+  filtersSheetTitle: "Фильтры",
+  filtersReset: "Сбросить",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
@@ -10,6 +13,7 @@ export default {
     sort: "Порядок",
     authors: "Авторы",
     sources: "Источники",
+    tags: "Темы",
     locations: "Локации",
     languages: "Языки",
     duration: "Длительность",

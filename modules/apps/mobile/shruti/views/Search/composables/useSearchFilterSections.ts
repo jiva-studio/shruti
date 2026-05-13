@@ -3,27 +3,28 @@ import { useI18n } from "vue-i18n"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
-import type { SearchFilterChipDef } from "@ui/features/tracks/search/filters/index.js"
+import type { SearchFilterSectionDef } from "@ui/features/tracks/search/filters/index.js"
 import IconAuthors from "@ui/features/tracks/search/filters/icons/IconAuthors.vue"
 import IconLanguages from "@ui/features/tracks/search/filters/icons/IconLanguages.vue"
 import IconLocations from "@ui/features/tracks/search/filters/icons/IconLocations.vue"
 import IconSources from "@ui/features/tracks/search/filters/icons/IconSources.vue"
+import IconTags from "@ui/features/tracks/search/filters/icons/IconTags.vue"
 import IconClock from "@ui/features/tracks/search/filters/icons/IconClock.vue"
 import IconSort from "@ui/features/tracks/search/filters/icons/IconSort.vue"
 
-export interface UseSearchFilterChipsReturn {
-  /** Chip definitions for `<SearchFiltersBar :chips>`. Reactive to UI
-   *  language changes so localised author/location names refresh
-   *  without a re-query. */
-  chips: ComputedRef<readonly SearchFilterChipDef[]>
+export interface UseSearchFilterSectionsReturn {
+  /** Section definitions for the filters bottom-sheet. Reactive to UI
+   *  language changes so localised author/location/source/tag names
+   *  refresh without a re-query. */
+  sections: ComputedRef<readonly SearchFilterSectionDef[]>
 }
 
 /**
- * Builds the search-filter chip configuration (icons + items + titles)
- * from the loaded dictionaries. All wiring lives in one place so
- * `SearchFiltersBar` can stay agnostic of the specific filter set.
+ * Builds the search-filter section configuration (icons + items + titles)
+ * from the loaded dictionaries. All wiring lives in one place so the
+ * sheet UI can stay agnostic of the specific filter set.
  */
-export function useSearchFilterChips(): UseSearchFilterChipsReturn {
+export function useSearchFilterSections(): UseSearchFilterSectionsReturn {
   const appLanguage = useAppLanguage()
   const dictionaries = useDictionariesStore()
   const { t } = useI18n()
@@ -49,11 +50,15 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
   const sourcesItems = computed<SelectorDialogItem[]>(() =>
     dictionaries.sourcesSorted.map((s) => {
       const localized = s.names.get(appLanguage.value)
-      return {
-        id: s.id,
-        title: localized?.fullName ?? localized?.shortName ?? s.id,
-      }
+      return { id: s.id, title: localized?.fullName ?? localized?.shortName ?? s.id }
     })
+  )
+
+  const tagsItems = computed<SelectorDialogItem[]>(() =>
+    dictionaries.tagsSorted.map((tag) => ({
+      id: tag.id,
+      title: tag.names.get(appLanguage.value) ?? tag.id,
+    }))
   )
 
   const durationItems = computed<SelectorDialogItem[]>(() => [
@@ -63,12 +68,11 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
   ])
 
   const sortItems = computed<SelectorDialogItem[]>(() => [
-    { id: "byDateDesc", title: t("search.filters.sortByDateDesc") },
-    { id: "byDateAsc", title: t("search.filters.sortByDateAsc") },
+    { id: "byDate", title: t("search.filters.sortByDate") },
     { id: "byReference", title: t("search.filters.sortByReference") },
   ])
 
-  const chips = computed<readonly SearchFilterChipDef[]>(() => [
+  const sections = computed<readonly SearchFilterSectionDef[]>(() => [
     {
       kind: "multi",
       key: "languages",
@@ -102,6 +106,14 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
       items: sourcesItems.value,
     },
     {
+      kind: "multi",
+      key: "tags",
+      model: "tags",
+      title: t("search.filters.tags"),
+      icon: IconTags,
+      items: tagsItems.value,
+    },
+    {
       kind: "single",
       key: "duration",
       model: "duration",
@@ -119,5 +131,5 @@ export function useSearchFilterChips(): UseSearchFilterChipsReturn {
     },
   ])
 
-  return { chips }
+  return { sections }
 }
