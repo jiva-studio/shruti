@@ -257,10 +257,10 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
       sentence(2000, 3000, "three"),
       sentence(3001, 4000, "four"),
     ])
+    // Both blocks and note ranges are in milliseconds.
     const groups = buildTranscriptViewData(t, {
       paragraphChars: 9999,
-      // Notes are in seconds on disk; blocks are in ms.
-      notes: [{ timeStart: 1, timeEnd: 2.5 }],
+      notes: [{ timeStart: 1000, timeEnd: 2500 }],
     })
     const blocks = groups.flatMap((g) => g.blocks)
     expect(blocks.map((b) => b.bookmarked)).toEqual([false, true, true, false])
@@ -277,7 +277,7 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
     const t = makeTranscript([sentence(2000, 3000, "edge")])
     const groups = buildTranscriptViewData(t, {
       paragraphChars: 9999,
-      notes: [{ timeStart: 0, timeEnd: 2 }],
+      notes: [{ timeStart: 0, timeEnd: 2000 }],
     })
     expect(groups[0]!.blocks[0]!.bookmarked).toBe(true)
   })

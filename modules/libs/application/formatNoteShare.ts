@@ -7,9 +7,9 @@
  */
 export interface NoteShareContext {
   readonly text: string
-  /** Selection start, in seconds. */
+  /** Selection start, in **milliseconds** (matches `Note.timeStart`). */
   readonly timeStart: number
-  /** Selection end, in seconds. */
+  /** Selection end, in **milliseconds**. */
   readonly timeEnd: number
   readonly track?: {
     readonly title?: string
@@ -50,15 +50,17 @@ function isNonEmpty(s: string | undefined): s is string {
   return typeof s === "string" && s.trim().length > 0
 }
 
-function formatTimeRange(startSec: number, endSec: number): string | null {
-  if (!Number.isFinite(startSec) || startSec < 0) return null
-  const start = formatMmSs(startSec)
-  if (!Number.isFinite(endSec) || endSec <= startSec) return start
-  return `${start}–${formatMmSs(endSec)}`
+function formatTimeRange(startMs: number, endMs: number): string | null {
+  if (!Number.isFinite(startMs) || startMs < 0) return null
+  const start = formatMmSs(startMs)
+  if (!Number.isFinite(endMs) || endMs <= startMs) return start
+  return `${start}–${formatMmSs(endMs)}`
 }
 
-function formatMmSs(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds))
+function formatMmSs(milliseconds: number): string {
+  // Single ms → s conversion at the formatting boundary. Callers and
+  // domain models keep ms end-to-end (see `Note.timeStart`).
+  const total = Math.max(0, Math.floor(milliseconds / 1000))
   const s = total % 60
   const m = Math.floor(total / 60) % 60
   const h = Math.floor(total / 3600)

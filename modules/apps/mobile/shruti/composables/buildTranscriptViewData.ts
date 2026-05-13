@@ -10,10 +10,12 @@ import type {
 import { formatReference, formatReferenceFull } from "./groupReferences.js"
 
 /**
- * One saved note's time range, in **seconds**. Note timestamps are
- * stored in seconds on disk (`notes.time_start REAL`) while transcript
- * blocks are in milliseconds, so the comparison converts at the
- * boundary inside `buildTranscriptViewData`.
+ * One saved note's time range, in **milliseconds** — same unit as the
+ * transcript blocks' `start`/`end`. Notes are written to the DB with the
+ * exact ms values the drag-selection emits (the drag reads
+ * `data-time-start` which is already `block.start` in ms), so no unit
+ * conversion happens anywhere in the path; the overlap check below is a
+ * direct integer comparison.
  */
 export interface NoteRange {
   readonly timeStart: number
@@ -38,10 +40,10 @@ export interface BuildTranscriptViewDataOpts {
   /** Active UI language code used to pick the right localised name. */
   readonly lang?: LanguageCode
   /**
-   * Saved notes for the current track. Any block whose [start..end] (ms)
-   * overlaps any note range (converted from seconds) is rendered with
-   * `bookmarked: true`, which drives the highlight underline. Omitted /
-   * empty means no historic highlights — used in preview mode.
+   * Saved notes for the current track. Any block whose `[start..end]`
+   * (ms) overlaps any note range (also ms — see `NoteRange`) is rendered
+   * with `bookmarked: true`, which drives the highlight underline.
+   * Omitted / empty means no historic highlights — used in preview mode.
    */
   readonly notes?: readonly NoteRange[]
 }
@@ -65,12 +67,13 @@ export function buildTranscriptViewData(
 
   const lang: LanguageCode = opts.lang ?? "en"
   const sourcesById = opts.sourcesById
-  // Pre-convert note ranges from seconds to ms once so the overlap test
-  // inside the hot loop is a simple int comparison. Empty array → never
-  // marks anything as bookmarked.
+  // Snapshot note ranges into the loop-local shape once. Both note
+  // timestamps and block timestamps are in ms (see `NoteRange`), so the
+  // comparison below is a direct integer overlap test — no unit
+  // conversion required. Empty array → nothing gets marked bookmarked.
   const noteRangesMs: readonly { start: number; end: number }[] = (opts.notes ?? []).map((n) => ({
-    start: Math.round(n.timeStart * 1000),
-    end: Math.round(n.timeEnd * 1000),
+    start: n.timeStart,
+    end: n.timeEnd,
   }))
 
   const isBookmarked = (blockStart: number, blockEnd: number): boolean => {

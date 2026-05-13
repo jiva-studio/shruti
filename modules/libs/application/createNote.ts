@@ -6,9 +6,9 @@ import { err, ok, type Result } from "@lib/domain/result.js"
 export interface CreateNoteInput {
   readonly trackId: TrackId
   readonly text: string
-  /** seconds */
+  /** milliseconds — see `Note.timeStart` */
   readonly timeStart: number
-  /** seconds */
+  /** milliseconds — see `Note.timeEnd` */
   readonly timeEnd: number
 }
 
