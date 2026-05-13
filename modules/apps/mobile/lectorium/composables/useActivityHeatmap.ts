@@ -40,7 +40,7 @@ export function useActivityHeatmap(): UseActivityHeatmapReturn {
       const toMs = now + (TOTAL_DAYS + 1) * 86_400_000
 
       const overview = await getActivityOverview(
-        { fromMs, toMs, totalDays: TOTAL_DAYS },
+        { fromMs, toMs, nowMs: now, totalDays: TOTAL_DAYS },
         {
           listeningSessions: repos.listeningSessions,
           playlistItems: repos.playlistItems,

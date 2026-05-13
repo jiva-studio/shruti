@@ -11,6 +11,14 @@ export interface GetActivityOverviewInput {
   /** Window edges in unix ms. The caller anchors them on "now". */
   readonly fromMs: number
   readonly toMs: number
+  /**
+   * Real "now" in unix ms — the anchor for the heatmap's today-cell and
+   * for streak computation. Kept separate from `toMs` (which is the
+   * query upper bound and sits in the future to include the look-ahead
+   * buffer); collapsing the two pushed the today-cell ~225 days into
+   * the future and clamped it to the right edge of the grid.
+   */
+  readonly nowMs: number
   /** Width of the rendered heatmap grid in days. */
   readonly totalDays: number
 }
@@ -40,7 +48,6 @@ export async function getActivityOverview(
   input: GetActivityOverviewInput,
   deps: GetActivityOverviewDeps
 ): Promise<ActivityOverview> {
-  const now = input.toMs
   const [totals, totalSec, activeItems] = await Promise.all([
     getDailyListeningHeatmap(
       { fromMs: input.fromMs, toMs: input.toMs },
@@ -62,7 +69,7 @@ export async function getActivityOverview(
   }
   const completedMap = await deps.listeningSessions.getCompletedAtForItems(itemIds, durations)
 
-  const { days } = buildHeatmapDays(input.totalDays, now, totals)
+  const { days } = buildHeatmapDays(input.totalDays, input.nowMs, totals)
   return {
     days,
     currentStreak: computeCurrentStreak(days),
