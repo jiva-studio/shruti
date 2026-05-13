@@ -1,10 +1,7 @@
 package studio.jiva.shruti.mediadownloader
 
 import android.content.Context
-import android.content.pm.ServiceInfo
-import android.os.Build
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
@@ -18,9 +15,9 @@ import java.util.concurrent.TimeUnit
 /**
  * The worker that actually downloads the file.
  *
- * Runs as a foreground service via setForeground() — required on Android
- * 14+ for any background work that takes longer than ~10s under the
- * dataSync foreground service type. Progress is reported through
+ * Runs as a regular (non-foreground) WorkManager task. Typical lecture
+ * payloads (30-150 MB) complete in under 10 minutes on wifi/4G, which fits
+ * inside the regular execution window. Progress is reported through
  * setProgress() which `MediaDownloaderPlugin` reads via the work info
  * LiveData and forwards to JS.
  *
@@ -38,9 +35,6 @@ internal class DownloadWorker(
         const val INPUT_URL = "url"
         const val INPUT_HEADERS = "headers"          // serialised as String key=value\n pairs
         const val INPUT_LOCAL_PATH = "localPath"
-        const val INPUT_NOTIFICATION_TITLE = "notificationTitle"
-        const val INPUT_NOTIFICATION_BODY = "notificationBody"
-        const val INPUT_SHOW_NOTIFICATION = "showNotification"
 
         const val PROGRESS_BYTES = "bytes"
         const val PROGRESS_TOTAL = "total"
@@ -48,8 +42,6 @@ internal class DownloadWorker(
         const val OUTPUT_BYTES = "bytes"
         const val OUTPUT_TOTAL = "total"
         const val OUTPUT_ERROR = "error"
-
-        private const val NOTIFICATION_ID = 0xACD0 // arbitrary, just stable
 
         // Throttle progress emits so we don't flood the IPC bridge.
         private const val PROGRESS_EMIT_INTERVAL_MS = 100L
@@ -68,20 +60,7 @@ internal class DownloadWorker(
             ?: return@withContext Result.failure(errorOutput("missing url"))
         val localPath = inputData.getString(INPUT_LOCAL_PATH)
             ?: return@withContext Result.failure(errorOutput("missing localPath"))
-        val showNotification = inputData.getBoolean(INPUT_SHOW_NOTIFICATION, true)
-        val notificationTitle = inputData.getString(INPUT_NOTIFICATION_TITLE) ?: "Shruti"
-        val notificationBody = inputData.getString(INPUT_NOTIFICATION_BODY) ?: "Downloading..."
         val headers = parseHeaders(inputData.getString(INPUT_HEADERS))
-
-        if (showNotification) {
-            try {
-                setForeground(buildForegroundInfo(notificationTitle, notificationBody, 0, indeterminate = true))
-            } catch (_: Exception) {
-                // Falling back to a non-foreground execution; WorkManager
-                // will still finish the download but the OS may kill it
-                // sooner if the app is backgrounded for a long time.
-            }
-        }
 
         val targetFile = File(localPath)
         targetFile.parentFile?.mkdirs()
@@ -122,12 +101,6 @@ internal class DownloadWorker(
                                 PROGRESS_BYTES to received,
                                 PROGRESS_TOTAL to total,
                             ))
-                            if (showNotification && total > 0) {
-                                val pct = ((received * 100) / total).toInt()
-                                try {
-                                    setForeground(buildForegroundInfo(notificationTitle, notificationBody, pct, indeterminate = false))
-                                } catch (_: Exception) { /* see fallback above */ }
-                            }
                         }
                     }
                 }
@@ -158,20 +131,6 @@ internal class DownloadWorker(
         } catch (e: Exception) {
             tempFile.delete()
             Result.failure(errorOutput(e.message ?: "unknown error"))
-        }
-    }
-
-    private fun buildForegroundInfo(
-        title: String,
-        body: String,
-        progressPct: Int,
-        indeterminate: Boolean,
-    ): ForegroundInfo {
-        val notification = DownloadNotification.build(applicationContext, title, body, progressPct, indeterminate)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            ForegroundInfo(NOTIFICATION_ID, notification)
         }
     }
 

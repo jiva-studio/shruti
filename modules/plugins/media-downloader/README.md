@@ -32,7 +32,7 @@ Background-capable media downloader for Shruti.
 Background-capable media downloader.
 
 Native implementations:
-- Android: WorkManager + OkHttp + foreground service. Survives app suspension and process death.
+- Android: WorkManager + OkHttp. Survives app suspension within WorkManager's regular (non-foreground) execution window (~10 min per attempt).
 - iOS:     URLSession with `.background` configuration. Survives app suspension; the OS may relaunch the app to deliver completion events.
 - Web:     fetch streaming + Cache API. Background lifecycle is bound to the tab; this implementation is for parity / local development.
 
@@ -257,16 +257,13 @@ Options for `download()`. The `id` is app-chosen and is the addressing
 key for `getTask` / `cancel` / events. Calling `download()` with an `id`
 that is already in flight returns the existing task (idempotent).
 
-| Prop                    | Type                                                                | Description                                                                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`id`**                | <code>string</code>                                                 |                                                                                                                                                                               |
-| **`url`**               | <code>string</code>                                                 |                                                                                                                                                                               |
-| **`destination`**       | <code><a href="#downloaddestination">DownloadDestination</a></code> |                                                                                                                                                                               |
-| **`headers`**           | <code><a href="#record">Record</a>&lt;string, string&gt;</code>     | Extra HTTP request headers (auth tokens, etc.).                                                                                                                               |
-| **`network`**           | <code>'any' \| 'wifi-only'</code>                                   | Restrict the network type. Default `"any"`.                                                                                                                                   |
-| **`showNotification`**  | <code>boolean</code>                                                | Whether the platform should show a system notification while running. Required `true` on Android 14+ for long downloads — the worker promotes itself to a foreground service. |
-| **`notificationTitle`** | <code>string</code>                                                 | Notification copy. Falls back to a generic plugin string.                                                                                                                     |
-| **`notificationBody`**  | <code>string</code>                                                 |                                                                                                                                                                               |
+| Prop              | Type                                                                | Description                                     |
+| ----------------- | ------------------------------------------------------------------- | ----------------------------------------------- |
+| **`id`**          | <code>string</code>                                                 |                                                 |
+| **`url`**         | <code>string</code>                                                 |                                                 |
+| **`destination`** | <code><a href="#downloaddestination">DownloadDestination</a></code> |                                                 |
+| **`headers`**     | <code><a href="#record">Record</a>&lt;string, string&gt;</code>     | Extra HTTP request headers (auth tokens, etc.). |
+| **`network`**     | <code>'any' \| 'wifi-only'</code>                                   | Restrict the network type. Default `"any"`.     |
 
 
 #### PluginListenerHandle

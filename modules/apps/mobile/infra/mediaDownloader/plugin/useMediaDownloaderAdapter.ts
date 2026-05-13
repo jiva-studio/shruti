@@ -63,7 +63,6 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
           id,
           url,
           destination,
-          showNotification: true,
         })
         return await result
       } finally {

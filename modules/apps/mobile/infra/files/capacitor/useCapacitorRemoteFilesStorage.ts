@@ -64,10 +64,6 @@ export function useCapacitorRemoteFilesStorage({
         id,
         url,
         destination: destinationFor(url),
-        // Transcripts and small assets don't need a foreground notification —
-        // the file usually arrives in well under a second. Audio downloads
-        // turn this on through the IMediaDownloader adapter.
-        showNotification: false,
       })
       const localUrl = await completion
       return Capacitor.convertFileSrc(localUrl)
