@@ -89,7 +89,7 @@
                 @click="toggleSingle(singleActive!.key, item.id)"
               >
                 <IonLabel>{{ item.title }}</IonLabel>
-                <IconCheck
+                <IconCheckFilled
                   v-if="singleValue(singleActive.key) === item.id"
                   slot="end"
                   :size="20"
@@ -119,7 +119,7 @@ import {
   IonLabel,
   IonCheckbox,
 } from "@ionic/vue"
-import { IconCheck, IconChevronLeft } from "@tabler/icons-vue"
+import { IconCheckFilled, IconChevronLeft } from "@tabler/icons-vue"
 import { Header } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import type { SelectorDialogItem } from "@ui/components/selectors/index.js"

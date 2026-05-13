@@ -1,7 +1,7 @@
 <template>
   <div class="selection-actions">
     <IonButton color="dark" size="small" fill="clear" @click="emit('action', 'copy')">
-      <IconCopy slot="start" :size="20" />
+      <IconCopyFilled slot="start" :size="20" />
     </IonButton>
     <IonButton size="small" color="dark" fill="clear" @click="emit('action', 'bookmark')">
       <IconBookmarkFilled slot="start" :size="20" />
@@ -14,7 +14,7 @@
 
 <script lang="ts" setup>
 import { IonButton } from "@ionic/vue"
-import { IconBookmarkFilled, IconCopy, IconShare } from "@tabler/icons-vue"
+import { IconBookmarkFilled, IconCopyFilled, IconShare } from "@tabler/icons-vue"
 
 const emit = defineEmits<{
   action: [action: "copy" | "bookmark" | "share"]
