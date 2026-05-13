@@ -110,12 +110,6 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   position: relative;
 }
 
-.search-row > :first-child {
-  /* SearchInput wrapper is the only flex/block child — let it own the
-     full width. The filter button overlays on top via absolute. */
-  width: 100%;
-}
-
 /* IonInput renders inside SearchInputAndroid wrapped with `margin: 10px`.
    Push the typed text padding so it never slides under the filter button. */
 .search-row :deep(ion-input) {
@@ -124,9 +118,17 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 .search-row-filter-button {
   position: absolute;
-  right: 16px; /* sits just inside the IonInput's right border */
+  /* SearchInputAndroid wraps IonInput with margin: 10px, so the input's
+     right border is 10px in from .search-row's right edge. Sit just
+     inside that. */
+  right: 14px;
   top: 50%;
   transform: translateY(-50%);
+  /* Stack above IonInput's own hit area so taps land on the button,
+     and re-enable interactivity in case an ancestor disabled it
+     (.search-fixed-top sets pointer-events: none). */
+  z-index: 2;
+  pointer-events: auto;
 }
 
 /* Chip row is gone; spacer only needs to clear the input + safe-area. */
