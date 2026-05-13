@@ -67,6 +67,6 @@ const metaLine = computed<string>(() =>
 .meta {
   font-size: 0.75rem;
   color: var(--ion-color-medium);
-  text-align: left;
+  text-align: right;
 }
 </style>
