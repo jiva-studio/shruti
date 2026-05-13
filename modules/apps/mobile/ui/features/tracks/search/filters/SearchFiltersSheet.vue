@@ -19,53 +19,51 @@
 
     <IonContent class="ion-padding-bottom">
       <IonList lines="full" class="ion-no-padding">
-        <template v-for="section in sections" :key="section.key">
-          <!-- Multi-select rows open the existing list dialog. -->
-          <IonItem
-            v-if="section.kind === 'multi'"
-            button
-            :detail="true"
-            @click="openMulti(section.key)"
+        <IonItem
+          v-for="section in sections"
+          :key="section.key"
+          button
+          :detail="true"
+          @click="openSection(section.key)"
+        >
+          <component :is="section.icon" slot="start" class="section-icon" />
+          <IonLabel>
+            <h2>{{ section.title }}</h2>
+            <p v-if="sectionSummary(section)" class="section-summary">
+              {{ sectionSummary(section) }}
+            </p>
+          </IonLabel>
+          <span
+            v-if="section.kind === 'multi' && multiCount(section.key) > 0"
+            slot="end"
+            class="count-pill"
           >
-            <component :is="section.icon" slot="start" class="section-icon" />
-            <IonLabel>{{ section.title }}</IonLabel>
-            <span v-if="multiCount(section.key) > 0" slot="end" class="count-pill">
-              {{ multiCount(section.key) }}
-            </span>
-          </IonItem>
-
-          <!-- Single-select sections render an inline segment. -->
-          <IonItem v-else lines="full" class="segment-row">
-            <div class="segment-row-inner">
-              <div class="segment-label">
-                <component :is="section.icon" class="section-icon" />
-                <IonLabel>{{ section.title }}</IonLabel>
-              </div>
-              <IonSegment
-                scrollable
-                :value="singleValue(section.key)"
-                @ion-change="(e) => onSingleChange(section.key, e.detail.value)"
-              >
-                <IonSegmentButton v-for="item in section.items" :key="item.id" :value="item.id">
-                  <IonLabel>{{ item.title }}</IonLabel>
-                </IonSegmentButton>
-              </IonSegment>
-            </div>
-          </IonItem>
-        </template>
+            {{ multiCount(section.key) }}
+          </span>
+        </IonItem>
       </IonList>
     </IonContent>
   </IonModal>
 
-  <!-- Stacked above the sheet. Only one is open at a time. -->
+  <!-- One dialog stacked above the sheet at a time. -->
   <ListItemsSelectorDialog
     v-if="activeMultiSection"
     :title="activeMultiSection.title"
     :open="!!activeMultiSection"
     :items="activeMultiSection.items"
     :selected="multiSelected(activeMultiSection.key)"
-    @close="onMultiClose"
+    @close="onSectionClose"
     @select="onMultiSelect"
+  />
+  <ListItemSelectorDialog
+    v-if="activeSingleSection"
+    :title="activeSingleSection.title"
+    :open="!!activeSingleSection"
+    :items="activeSingleSection.items"
+    :value="singleValue(activeSingleSection.key)"
+    allow-empty
+    @close="onSectionClose"
+    @select="onSingleSelect"
   />
 </template>
 
@@ -82,17 +80,18 @@ import {
   IonList,
   IonItem,
   IonLabel,
-  IonSegment,
-  IonSegmentButton,
 } from "@ionic/vue"
-import { ListItemsSelectorDialog } from "@ui/components/selectors/index.js"
+import { ListItemsSelectorDialog, ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 import type {
   FiltersModel,
   MultiSectionDef,
   MultiSectionKey,
   SearchFilterSectionDef,
+  SingleSectionDef,
   SingleSectionKey,
 } from "./types.js"
+
+type SectionKey = MultiSectionKey | SingleSectionKey
 
 const props = defineProps<{
   open: boolean
@@ -107,13 +106,20 @@ const emit = defineEmits<{
   reset: []
 }>()
 
-const activeMultiKey = ref<MultiSectionKey | null>(null)
+const activeKey = ref<SectionKey | null>(null)
 
 const activeMultiSection = computed<MultiSectionDef | null>(() => {
-  const key = activeMultiKey.value
+  const key = activeKey.value
   if (!key) return null
   const section = props.sections.find((s) => s.key === key)
   return section && section.kind === "multi" ? section : null
+})
+
+const activeSingleSection = computed<SingleSectionDef | null>(() => {
+  const key = activeKey.value
+  if (!key) return null
+  const section = props.sections.find((s) => s.key === key)
+  return section && section.kind === "single" ? section : null
 })
 
 function multiSelected(key: MultiSectionKey): string[] {
@@ -128,24 +134,40 @@ function singleValue(key: SingleSectionKey): string | undefined {
   return filters.value[key] as string | undefined
 }
 
-function openMulti(key: MultiSectionKey): void {
-  activeMultiKey.value = key
+function sectionSummary(section: SearchFilterSectionDef): string {
+  if (section.kind === "multi") {
+    const ids = multiSelected(section.key)
+    if (ids.length === 0) return ""
+    const titles = ids
+      .map((id) => section.items.find((i) => i.id === id)?.title)
+      .filter((t): t is string => !!t)
+    return titles.join(", ")
+  }
+  const current = singleValue(section.key)
+  if (!current) return ""
+  return section.items.find((i) => i.id === current)?.title ?? ""
 }
 
-function onMultiClose(): void {
-  activeMultiKey.value = null
+function openSection(key: SectionKey): void {
+  activeKey.value = key
+}
+
+function onSectionClose(): void {
+  activeKey.value = null
 }
 
 function onMultiSelect(ids: string[]): void {
-  const key = activeMultiKey.value
+  const key = activeKey.value
   if (!key) return
   filters.value = { ...filters.value, [key]: ids }
-  activeMultiKey.value = null
+  activeKey.value = null
 }
 
-function onSingleChange(key: SingleSectionKey, value: string | number | undefined): void {
-  const next = value === undefined || value === "" ? undefined : String(value)
-  filters.value = { ...filters.value, [key]: next }
+function onSingleSelect(id: string | undefined): void {
+  const key = activeKey.value
+  if (!key) return
+  filters.value = { ...filters.value, [key]: id }
+  activeKey.value = null
 }
 
 function onReset(): void {
@@ -166,6 +188,14 @@ function onDismiss(): void {
   flex: 0 0 auto;
 }
 
+.section-summary {
+  color: var(--ion-color-medium, currentColor);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .count-pill {
   display: inline-flex;
   align-items: center;
@@ -178,27 +208,5 @@ function onDismiss(): void {
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.5;
-}
-
-.segment-row {
-  --inner-padding-end: 0;
-  --inner-padding-start: 0;
-}
-
-.segment-row-inner {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 0;
-}
-
-.segment-label {
-  display: flex;
-  align-items: center;
-}
-
-ion-segment {
-  --background: var(--ion-color-light, rgba(0, 0, 0, 0.06));
 }
 </style>
