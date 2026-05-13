@@ -9,6 +9,7 @@ export default {
     openTranscript: "Open transcript",
   },
   filters: {
+    any: "Any",
     sort: "Sort",
     authors: "Authors",
     sources: "Sources",

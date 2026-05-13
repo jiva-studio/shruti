@@ -10,6 +10,7 @@ export default {
     openTranscript: "Открыть транскрипт",
   },
   filters: {
+    any: "Любые",
     sort: "Порядок",
     authors: "Авторы",
     sources: "Источники",
