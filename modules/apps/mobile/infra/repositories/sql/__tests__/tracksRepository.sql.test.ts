@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import type { IDatabase } from "@ports/app/index.js"
 import type { LanguageCode } from "@lib/domain/core.js"
-import { buildFtsQuery, createSqlTrackRepository } from "../tracksRepository.sql.js"
+import {
+  buildFtsQuery,
+  createSqlTrackRepository,
+  normalizeBlob,
+  scoreMatchinfo,
+} from "../tracksRepository.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
@@ -567,6 +572,40 @@ describe("tracksRepository.sql — buildFtsQuery", () => {
   it("returns an empty string for whitespace-only input", () => {
     expect(buildFtsQuery("   ")).toBe("")
     expect(buildFtsQuery("")).toBe("")
+  })
+})
+
+describe("tracksRepository.sql — scoreMatchinfo blob normalisation", () => {
+  // FTS4 matchinfo('pcx') with p=1, c=1, hits_in_row=2, hits_in_corpus=2,
+  // rows_with_term=1 → ten u32 LE bytes for the header + triple.
+  const pcxBytes = new Uint8Array(
+    new Uint32Array([1, 1, 2, 2, 1]).buffer
+  )
+
+  it("scores a Uint8Array blob (sql.js path)", () => {
+    const score = scoreMatchinfo(pcxBytes, 10)
+    expect(score).toBeGreaterThan(0)
+  })
+
+  it("scores a number[] blob — the shape @capacitor-community/sqlite returns on Android/iOS", () => {
+    // Repros the search-page DataView crash: native plugin JSON-serialises
+    // BLOBs as plain number arrays, but scoreMatchinfo used to do
+    // `new DataView(blob.buffer)` and throw because `number[].buffer` is undefined.
+    const asNumberArray = Array.from(pcxBytes)
+    expect(() => scoreMatchinfo(asNumberArray, 10)).not.toThrow()
+    expect(scoreMatchinfo(asNumberArray, 10)).toBe(scoreMatchinfo(pcxBytes, 10))
+  })
+
+  it("scores a base64 string blob (alternate Capacitor path)", () => {
+    const base64 = btoa(String.fromCharCode(...pcxBytes))
+    expect(scoreMatchinfo(base64, 10)).toBe(scoreMatchinfo(pcxBytes, 10))
+  })
+
+  it("returns 0 for null / undefined / malformed input", () => {
+    expect(scoreMatchinfo(null, 10)).toBe(0)
+    expect(scoreMatchinfo(undefined, 10)).toBe(0)
+    expect(scoreMatchinfo(new Uint8Array(4), 10)).toBe(0) // < 8 bytes
+    expect(normalizeBlob("***not-base64***")).toBeNull()
   })
 })
 
