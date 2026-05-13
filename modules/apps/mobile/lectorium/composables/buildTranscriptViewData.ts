@@ -115,7 +115,6 @@ export function buildTranscriptViewData(
       block: raw,
       language: transcript.language,
       bookmarked: false,
-      selected: false,
     })
 
     if (block.type === "sentence") {

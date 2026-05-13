@@ -64,6 +64,8 @@ const props = defineProps<{
   shouldHighlightCurrent: boolean
   /** When true, this block is the first inside its paragraph group. */
   isFirstInGroup: boolean
+  /** Active text-selection range, or null when nothing is selected. */
+  selectionRange?: { start: number; end: number } | null
 }>()
 
 const emit = defineEmits<{
@@ -80,17 +82,28 @@ const referenceVisible = computed(
     props.block.block.end >= props.position - 1000
 )
 
+const isInSelection = computed(() => {
+  const r = props.selectionRange
+  if (!r) return false
+  return props.block.block.start >= r.start && props.block.block.end <= r.end
+})
+
 const stateClasses = computed(() => ({
   current: props.shouldHighlightCurrent && isCurrent.value,
   highlighted: props.block.bookmarked,
-  selected: props.block.selected,
+  selected: isInSelection.value,
 }))
 </script>
 
 <style scoped>
 .current {
   transition: all 0.4s;
-  color: var(--ion-color-primary) !important;
+  /* Pale saffron — reads as "lit" against the dark immersive
+     background and noticeably brighter than its plain-white siblings
+     inside the active paragraph. var(--ion-color-primary) resolves to
+     a saffron that's darker than the surrounding white prompter text,
+     which made the currently-playing line look dimmer than the rest. */
+  color: #ffc78a !important;
 }
 
 .highlighted {
@@ -98,11 +111,13 @@ const stateClasses = computed(() => ({
 }
 
 .selected {
-  /* Subtle theme-tinted highlight: enough to draw the eye to the picked
-     sentence without overpowering the prompter or fighting the .current
-     accent on the active block. */
-  background-color: rgba(var(--ion-color-primary-rgb), 0.24);
+  /* The wrapping .prompter has opacity: 0.5, so anything painted here
+     is halved before it hits the page. A 0.24 alpha used to vanish
+     into the immersive background; 0.65 lands at ~0.32 effective —
+     visible enough to track the drag without overpowering the active
+     paragraph or fighting the .current accent. */
+  background-color: rgba(var(--ion-color-primary-rgb), 0.65);
   border-radius: 3px;
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.24);
+  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.65);
 }
 </style>

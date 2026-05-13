@@ -1,6 +1,6 @@
 export {
-  IconLayoutDashboardFilled as IconHome,
-  IconArticleFilled as IconSearch,
+  IconHomeFilled as IconHome,
+  IconLayoutDashboardFilled as IconSearch,
   IconBookmarkFilled as IconBookmark,
   IconSettingsFilled as IconSettings,
   IconPlayerPlayFilled as IconPlay,
