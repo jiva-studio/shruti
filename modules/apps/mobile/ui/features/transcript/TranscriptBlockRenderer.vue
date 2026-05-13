@@ -110,8 +110,8 @@ const stateClasses = computed(() => ({
 .highlighted {
   text-decoration: underline wavy var(--ion-color-warning);
   text-decoration-skip-ink: none;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 /* Drag selection (in progress + popover open) — same wavy underline but
@@ -121,8 +121,8 @@ const stateClasses = computed(() => ({
 .selected {
   text-decoration: underline wavy var(--ion-color-primary);
   text-decoration-skip-ink: none;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 /* When a block is both .selected (just dragged) and .highlighted (already
