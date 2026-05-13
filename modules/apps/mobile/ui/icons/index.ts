@@ -15,6 +15,6 @@ export {
   IconCloudFilled as CloudIcon,
   IconTrashFilled as TrashIcon,
   IconArchiveFilled as ArchiveIcon,
-  IconDatabaseExport as DatabaseExportIcon,
-  IconDatabaseImport as DatabaseImportIcon,
+  IconFileDownloadFilled as DatabaseExportIcon,
+  IconFileUploadFilled as DatabaseImportIcon,
 } from "@tabler/icons-vue"
