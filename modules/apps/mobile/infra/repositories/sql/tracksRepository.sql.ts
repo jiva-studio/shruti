@@ -217,7 +217,38 @@ function sortOrderClause(
  * If the blob is missing/malformed (defensive — shouldn't happen in
  * practice), returns 0 so the row still surfaces, just unranked.
  */
-function scoreMatchinfo(blob: Uint8Array | null | undefined, totalDocs: number): number {
+/**
+ * Adapter shapes for a SQLite BLOB column observed in this project:
+ *   - `Uint8Array` — sql.js (web) and any IDatabase that hands raw bytes through.
+ *   - `number[]` — @capacitor-community/sqlite on Android (`ByteArrayToJSArray`)
+ *     and iOS (`data.bytes` → `[UInt8]`); the bytes arrive JSON-serialized as a
+ *     plain JS array.
+ *   - base64 `string` — alternate path documented in the same plugin.
+ *
+ * Normalising here keeps consumers (matchinfo scoring) shape-agnostic; we can't
+ * fix the producer because it's a third-party native plugin.
+ */
+export type SqlBlob = Uint8Array | number[] | string | null | undefined
+
+export function normalizeBlob(value: SqlBlob): Uint8Array | null {
+  if (value == null) return null
+  if (value instanceof Uint8Array) return value
+  if (Array.isArray(value)) return Uint8Array.from(value)
+  if (typeof value === "string") {
+    try {
+      const bin = atob(value)
+      const out = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+      return out
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+export function scoreMatchinfo(raw: SqlBlob, totalDocs: number): number {
+  const blob = normalizeBlob(raw)
   if (!blob || blob.byteLength < 8) return 0
   const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength)
   const u32 = (i: number): number => view.getUint32(i * 4, true)
@@ -408,7 +439,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       // and sort DESC, breaking ties by `t.date DESC, t.id ASC`.
       // Hidden tracks count toward the corpus stats — fine at 5600
       // rows, IDF stays sensible.
-      type Row = TrackRow & { __minfo: Uint8Array | null }
+      type Row = TrackRow & { __minfo: SqlBlob }
       const rawRows = await contentDb.query<Row>(
         `SELECT t.*, matchinfo(tracks_search, 'pcx') AS __minfo
          FROM tracks t
