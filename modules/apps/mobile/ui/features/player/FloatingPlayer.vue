@@ -86,11 +86,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import {
-  IconChecks,
-  IconPlayerPauseFilled,
-  IconPlayerPlayFilled,
-} from "@tabler/icons-vue"
+import { IconChecks, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import RadialProgress from "vue3-radial-progress"
 import MixControl from "./MixControl.vue"
 import PlayerControls from "./PlayerControls.vue"
