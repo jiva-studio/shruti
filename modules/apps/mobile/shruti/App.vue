@@ -55,6 +55,7 @@ import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useTranscriptDialogController } from "@shruti/composables/useTranscriptDialogController.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
@@ -70,14 +71,18 @@ const overlays = useOverlaysStore()
 // the cached entities — no extra repo calls.
 const appLanguage = useAppLanguage()
 const dialog = useTranscriptDialogController(appLanguage)
+const { isKeyboardOpen } = useKeyboardVisibility()
 // Hide the FloatingPlayer when:
 //  - the player has nothing to show (default),
+//  - the on-screen keyboard is visible — the floating chrome would
+//    overlap the input or accessory area while typing,
 //  - an ActionSheet is up — keeps the bottom buttons reachable,
 //  - the transcript dialog is open in preview mode (Search → Open
 //    transcript) — the player belongs to a different track and
 //    shouldn't react to taps on the preview surface.
 const floatingPlayerHidden = computed<boolean>(() => {
   if (!player.open) return true
+  if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
   return false
