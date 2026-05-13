@@ -6,13 +6,12 @@
     :aria-label="ariaLabel"
     @click="emit('click')"
   >
-    <IonIcon :icon="funnelOutline" class="icon" />
+    <IconFilterFilled class="icon" :size="20" />
   </button>
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue"
-import { funnelOutline } from "ionicons/icons"
+import { IconFilterFilled } from "@tabler/icons-vue"
 
 withDefaults(
   defineProps<{

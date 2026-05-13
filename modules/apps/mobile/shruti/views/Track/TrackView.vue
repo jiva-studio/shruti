@@ -26,7 +26,7 @@
           class="ion-margin-vertical"
           @click="track.onPlay"
         >
-          <IonIcon slot="start" :icon="playCircle" />
+          <IconPlayerPlayFilled slot="start" :size="20" style="margin-inline-end: 8px" />
           {{ $t("app.ok") }}
         </IonButton>
 
@@ -51,13 +51,12 @@ import {
   IonButtons,
   IonContent,
   IonHeader,
-  IonIcon,
   IonPage,
   IonText,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
-import { playCircle } from "ionicons/icons"
+import { IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { TrackLanguageSelector } from "@ui/features/tracks/index.js"
 import { useTrackController } from "./TrackView.controller.js"
 

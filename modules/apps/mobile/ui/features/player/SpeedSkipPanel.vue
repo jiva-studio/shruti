@@ -14,7 +14,7 @@
       aria-label="Skip back 15 seconds"
       @click.stop="emit('skipBack')"
     >
-      <IonIcon class="skip-icon" :icon="arrowUndoOutline" />
+      <IconArrowBackUp class="skip-icon" :size="14" />
       <IonRippleEffect />
     </button>
 
@@ -24,15 +24,15 @@
       aria-label="Skip forward 15 seconds"
       @click.stop="emit('skipForward')"
     >
-      <IonIcon class="skip-icon" :icon="arrowRedoOutline" />
+      <IconArrowForwardUp class="skip-icon" :size="14" />
       <IonRippleEffect />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonRippleEffect } from "@ionic/vue"
-import { arrowUndoOutline, arrowRedoOutline } from "ionicons/icons"
+import { IonRippleEffect } from "@ionic/vue"
+import { IconArrowBackUp, IconArrowForwardUp } from "@tabler/icons-vue"
 import SpeedSlider from "./SpeedSlider.vue"
 
 defineProps<{

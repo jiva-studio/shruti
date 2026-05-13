@@ -1,16 +1,18 @@
-export { default as IconHome } from "./IconHome.vue"
-export { default as IconBookmark } from "./IconBookmark.vue"
-export { default as IconSearch } from "./IconSearch.vue"
-export { default as IconSettings } from "./IconSettings.vue"
-export { default as IconPlay } from "./IconPlay.vue"
-export { default as HighlightTextIcon } from "./HighlightTextIcon.vue"
-export { default as AnnotationIcon } from "./AnnotationIcon.vue"
-export { default as BellIcon } from "./BellIcon.vue"
-export { default as ClockIcon } from "./ClockIcon.vue"
-export { default as FlameIcon } from "./FlameIcon.vue"
-export { default as CheckDoubleIcon } from "./CheckDoubleIcon.vue"
-export { default as HeadphonesIcon } from "./HeadphonesIcon.vue"
-export { default as LanguageIcon } from "./LanguageIcon.vue"
-export { default as CloudIcon } from "./CloudIcon.vue"
-export { default as TrashIcon } from "./TrashIcon.vue"
-export { default as ArchiveIcon } from "./ArchiveIcon.vue"
+export {
+  IconHomeFilled as IconHome,
+  IconSearch as IconSearch,
+  IconBookmarkFilled as IconBookmark,
+  IconSettingsFilled as IconSettings,
+  IconPlayerPlayFilled as IconPlay,
+  IconHighlight as HighlightTextIcon,
+  IconNotes as AnnotationIcon,
+  IconBellFilled as BellIcon,
+  IconClockFilled as ClockIcon,
+  IconFlameFilled as FlameIcon,
+  IconChecks as CheckDoubleIcon,
+  IconHeadphonesFilled as HeadphonesIcon,
+  IconLanguage as LanguageIcon,
+  IconCloudFilled as CloudIcon,
+  IconTrashFilled as TrashIcon,
+  IconArchiveFilled as ArchiveIcon,
+} from "@tabler/icons-vue"

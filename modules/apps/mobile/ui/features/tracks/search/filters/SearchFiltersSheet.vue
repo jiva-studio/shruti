@@ -15,7 +15,7 @@
       <IonToolbar>
         <IonButtons v-if="activeSection" slot="start">
           <IonButton @click="leaveSection">
-            <IonIcon slot="icon-only" :icon="chevronBackOutline" />
+            <IconChevronLeft slot="icon-only" :size="22" />
           </IonButton>
         </IonButtons>
         <IonTitle>
@@ -89,11 +89,11 @@
                 @click="toggleSingle(singleActive!.key, item.id)"
               >
                 <IonLabel>{{ item.title }}</IonLabel>
-                <IonIcon
+                <IconCheck
                   v-if="singleValue(singleActive.key) === item.id"
                   slot="end"
-                  :icon="checkmark"
-                  color="primary"
+                  :size="20"
+                  :style="{ color: 'var(--ion-color-primary)' }"
                 />
               </IonItem>
             </template>
@@ -113,14 +113,13 @@ import {
   IonTitle,
   IonButtons,
   IonButton,
-  IonIcon,
   IonContent,
   IonList,
   IonItem,
   IonLabel,
   IonCheckbox,
 } from "@ionic/vue"
-import { chevronBackOutline, checkmark } from "ionicons/icons"
+import { IconCheck, IconChevronLeft } from "@tabler/icons-vue"
 import { Header } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import type { SelectorDialogItem } from "@ui/components/selectors/index.js"
