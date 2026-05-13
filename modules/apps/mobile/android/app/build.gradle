@@ -10,8 +10,13 @@ android {
         applicationId "studio.jiva.shruti"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // versionCode / versionName come from gradle -P props in CI (Fastfile
+        // `version_properties` → -PversionCode=<GITHUB_RUN_NUMBER>
+        // -PversionName=<mobile_version>). Locally those props are absent, so
+        // the fallbacks below are used. Without this wiring the hardcoded `1`
+        // makes every Play upload collide with the previously published code.
+        versionCode (project.findProperty('versionCode') ?: 1).toString().toInteger()
+        versionName project.findProperty('versionName') ?: "1.0"
         buildConfigField "String", "APPSFLYER_KEY", "\"${System.getenv('APPSFLYER_KEY') ?: 'default-key'}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Support 16 KB page sizes for Android 15+
