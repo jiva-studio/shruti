@@ -1,5 +1,5 @@
 <template>
-  <SelectorDialog :title="title" :open="open" @select="onSelect" @close="onClose">
+  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
     <SearchInput
       v-if="items.length > SEARCH_VISIBILITY_THRESHOLD"
       v-model="searchQuery"
@@ -39,6 +39,7 @@ const props = defineProps<{
   open: boolean
   items: Item[]
   selected?: ItemId[]
+  sheet?: boolean
 }>()
 
 const emit = defineEmits<{

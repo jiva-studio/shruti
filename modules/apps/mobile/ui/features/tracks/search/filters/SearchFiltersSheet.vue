@@ -52,6 +52,7 @@
     :open="!!activeMultiSection"
     :items="activeMultiSection.items"
     :selected="multiSelected(activeMultiSection.key)"
+    sheet
     @close="onSectionClose"
     @select="onMultiSelect"
   />
@@ -62,6 +63,7 @@
     :items="activeSingleSection.items"
     :value="singleValue(activeSingleSection.key)"
     allow-empty
+    sheet
     @close="onSectionClose"
     @select="onSingleSelect"
   />

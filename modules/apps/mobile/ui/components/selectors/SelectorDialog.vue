@@ -1,5 +1,11 @@
 <template>
-  <IonModal :is-open="open" @did-dismiss="onClose">
+  <IonModal
+    :is-open="open"
+    :breakpoints="sheet ? SHEET_BREAKPOINTS : undefined"
+    :initial-breakpoint="sheet ? SHEET_INITIAL : undefined"
+    :handle="sheet"
+    @did-dismiss="onClose"
+  >
     <Header>
       <IonToolbar>
         <IonTitle>{{ title }}</IonTitle>
@@ -26,10 +32,19 @@ import { Header } from "@ui/primitives/index.js"
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
-defineProps<{
-  open: boolean
-  title: string
-}>()
+const SHEET_BREAKPOINTS = [0, 0.5, 0.9]
+const SHEET_INITIAL = 0.9
+
+withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    /** Render as a draggable bottom sheet (matches the parent filters
+     *  sheet) instead of a full-screen modal. */
+    sheet?: boolean
+  }>(),
+  { sheet: false }
+)
 
 const emit = defineEmits<{
   close: []

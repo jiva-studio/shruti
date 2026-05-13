@@ -1,5 +1,5 @@
 <template>
-  <SelectorDialog :title="title" :open="open" @select="onSelect" @close="onClose">
+  <SelectorDialog :title="title" :open="open" :sheet="sheet" @select="onSelect" @close="onClose">
     <IonList lines="none" class="ion-no-margin ion-no-padding">
       <IonRadioGroup v-model="selected" :allow-empty-selection="allowEmpty">
         <IonItem v-for="item in items" :key="item.id">
@@ -31,10 +31,12 @@ const props = withDefaults(
     items: Item[]
     allowEmpty?: boolean
     value?: ItemId
+    sheet?: boolean
   }>(),
   {
     allowEmpty: false,
     value: undefined,
+    sheet: false,
   }
 )
 
