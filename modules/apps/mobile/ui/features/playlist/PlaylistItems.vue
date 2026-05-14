@@ -51,8 +51,13 @@ const emit = defineEmits<{
    `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
    `is-disabled` is the hard non-interactive flag (used while a download
    is in flight). Both can coexist: a downloading row is both dimmed and
-   non-interactive. */
-.playlist-row.is-dimmed {
+   non-interactive.
+
+   The dim is scoped to <ion-label> only — the state indicator slot
+   (red X / spinner / completed check) sits OUTSIDE the label inside
+   TrackListItem, so it stays at full opacity and reads as the same
+   vivid red on Home as on Search. */
+.playlist-row.is-dimmed :deep(ion-label) {
   opacity: 0.65;
 }
 .playlist-row.is-disabled {
