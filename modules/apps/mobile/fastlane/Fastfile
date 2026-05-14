@@ -194,10 +194,23 @@ platform :android do
       changes_not_sent_for_review: true,
       validate_only: options[:dry_run] ? true : false,
     }
-    # When the internal track has multiple releases, supply errors out unless
-    # we say which one to attach the screenshots to. Use GITHUB_RUN_NUMBER,
-    # which matches the versionCode CI just produced.
-    play_params[:version_code] = ci_build_id.to_i unless ci_build_id.empty?
+    # supply attaches screenshots to a specific release identified by
+    # version_code. The screenshots workflow is standalone (not chained
+    # after deploy-android), so GITHUB_RUN_NUMBER doesn't correspond to
+    # any release in Play Console — Play would respond with
+    # "Could not find release for version code '<N>'". Resolve the
+    # current internal version_code from Play Console at runtime and
+    # use it.
+    version_codes = google_play_track_version_codes(
+      package_name: "studio.jiva.shruti",
+      track: "internal",
+      json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
+    )
+    if version_codes.empty?
+      UI.user_error!("No releases on the Play Console internal track — upload an AAB first")
+    end
+    play_params[:version_code] = version_codes.max.to_i
+    UI.message("Attaching screenshots to internal track version_code=#{play_params[:version_code]}")
     upload_to_play_store(**play_params)
   end
 
