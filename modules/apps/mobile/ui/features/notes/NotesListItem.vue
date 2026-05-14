@@ -3,9 +3,11 @@
     <div class="body">
       <HighlightText :text="text" :lang="language" />
 
-      <div v-if="authorName" class="author">{{ authorName }}</div>
-
-      <div v-if="metaLine" class="meta">{{ metaLine }}</div>
+      <div v-if="authorName || titleText || refDateText" class="meta-block">
+        <div v-if="authorName" class="author">{{ authorName }}</div>
+        <div v-if="titleText" class="title">{{ titleText }}</div>
+        <div v-if="refDateText" class="meta">{{ refDateText }}</div>
+      </div>
     </div>
   </IonItem>
 </template>
@@ -27,11 +29,10 @@ const props = defineProps<{
 
 defineEmits<{ click: [noteId: string] }>()
 
-// Single-line summary under the author: title · reference · date. Empty
-// fields are skipped; if none are present the row is hidden entirely.
-// Separator is the middle-dot (U+00B7) — `·`.
-const metaLine = computed<string>(() =>
-  [props.trackTitle, props.reference, props.trackDate]
+const titleText = computed<string>(() => props.trackTitle?.trim() ?? "")
+// Шлока + дата на третьей строке. Разделитель — middle-dot (U+00B7).
+const refDateText = computed<string>(() =>
+  [props.reference, props.trackDate]
     .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
     .join(" · ")
 )
@@ -57,16 +58,32 @@ const metaLine = computed<string>(() =>
   width: 100%;
 }
 
+.meta-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
 .author {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--ion-color-medium);
   text-align: right;
+  line-height: 1.2;
+}
+
+.title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  text-align: right;
+  line-height: 1.2;
 }
 
 .meta {
   font-size: 0.75rem;
   color: var(--ion-color-medium);
   text-align: right;
+  line-height: 1.2;
 }
 </style>

@@ -20,6 +20,11 @@
         </IonTabButton>
       </IonTabBar>
     </IonTabs>
+    <!-- Закрывает гэп под ion-tab-bar в зоне safe-area-inset-bottom:
+         градиент tab-bar заканчивается на границе safe-area, и без этой
+         плашки под ним просвечивает контент страницы. Цвет совпадает
+         с нижним стопом градиента (opacity 1.0). -->
+    <div class="tab-bar-safe-area-fill" aria-hidden="true" />
   </IonPage>
 </template>
 
@@ -45,6 +50,18 @@ ion-tab-bar {
 
 ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
+}
+
+.tab-bar-safe-area-fill {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: env(safe-area-inset-bottom, 0px);
+  background: rgba(var(--shruti-fade-bg-rgb), 1);
+  pointer-events: none;
+  /* Ниже ion-tab-bar и FloatingPlayer (~999), выше контента страницы. */
+  z-index: 9;
 }
 </style>
 
