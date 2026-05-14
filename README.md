@@ -3,39 +3,44 @@
 </p>
 
 <p align="center"><i>
-Shruti is your personal lecture companion — listen to your lectures, read accurate transcripts, and ask questions anytime, anywhere. Whether you're commuting, walking, or relaxing at home, Shruti makes learning accessible and interactive on the go.
+Shruti is your personal lecture companion — listen to lectures, follow along with synced transcripts, and save what matters. Whether you're commuting, walking, or relaxing at home, Shruti makes learning accessible on the go.
 </i></p>
 
 <p align="center">
-  <a href="#">
-    <img src="assets/splash.png"/>
+  <img src="assets/splash.png"/>
+</p>
+
+<p align="center">
+  <a href="https://apps.apple.com/us/app/listen-to-sadhu/id6745510353">
+    <img src="assets/download-app-store.png" height="50" alt="Download on the App Store">
   </a>
-  <a href="#">
-    <img src="assets/download-app-store.png" height="50">
-  </a>
-  <a href="#">
-    <img src="assets/download-google-play.png" height="50">
-  </a>
+</p>
+
+## Screenshots
+
+<p align="center">
+  <img src="assets/screenshots/01_home.png" height="500" alt="Home with up-next queue, listening streak, and activity heatmap"/>
+  <img src="assets/screenshots/02_library.png" height="500" alt="Full-text search across the lecture catalog with filters"/>
+  <img src="assets/screenshots/03_notes.png" height="500" alt="Saved bookmarks and highlights from transcripts"/>
+  <img src="assets/screenshots/04_transcript.png" height="500" alt="Auto-synced transcript view during playback"/>
 </p>
 
 # Features
 
-🎓 Dive into a World of Knowledge
-Unlock access to thousands of inspiring lectures from top thinkers, creators, and educators — all in one place.
+🎓 **A library of lectures in one place**
+Browse a curated catalog by author, location, source, tag, or language — all searchable full-text from your phone.
 
-🎧 Take Your Learning Offline
-No Wi-Fi? No problem. Download your favorite lectures and take them with you wherever life happens.
+🎧 **Take your learning offline**
+Download lectures for offline playback. No Wi-Fi, no problem.
 
-📖 Read While You Listen
-Follow along with perfectly synced transcripts — read, rewind, and revisit key moments effortlessly.
+📖 **Read while you listen**
+Auto-synced transcripts highlight the current sentence as the lecture plays. Tap to jump, select to copy or share.
 
-🌐 Learn in Your Language
-Instantly translate any lecture into your preferred language. Learning has no borders.
+🔖 **Save what matters**
+Bookmark any moment with a highlight on the transcript. Your notes are searchable and shareable, and tapping one jumps you back to the exact second.
 
-🤖 Ask Anything, Anytime
-Got questions? Shruti lets you ask and get answers straight from the lecture content — like having a professor in your pocket.
-
-
+🔥 **Build a listening habit**
+A queue keeps your "up next" ready, and an activity heatmap and streak counter show your consistency at a glance.
 
 # Architecture
 
