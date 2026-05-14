@@ -11,8 +11,11 @@ const TEMPLATE_URL = pathToFileURL(path.resolve(TOOL_ROOT, "frame/template.html"
 
 const titles = titlesRaw as Record<string, Record<string, string>>
 
-function projectInfo(name: string): { device: "phone"; code: "en" | "ru" } {
-  return { device: "phone", code: name.endsWith("-ru") ? "ru" : "en" }
+type Device = "phone" | "iphone67" | "ipad13"
+
+function projectInfo(name: string): { device: Device; code: "en" | "ru" } {
+  const [device, code] = name.split("-") as [Device, "en" | "ru"]
+  return { device, code }
 }
 
 for (const scenario of scenarios) {
