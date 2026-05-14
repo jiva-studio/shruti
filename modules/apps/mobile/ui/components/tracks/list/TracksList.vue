@@ -13,8 +13,6 @@
       :author="row.author"
       :location="row.location"
       :date="row.date"
-      :disabled="row.disabled"
-      :dimmed="row.dimmed"
       @select="$emit('select', $event)"
     >
       <template #state>
