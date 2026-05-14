@@ -85,6 +85,20 @@ export function useHomeController(): HomeControllerReturn {
   async function onSelect(trackId: string): Promise<void> {
     const entry = playlist.entries.find((e) => e.track.id === trackId)
     if (!entry) return
+
+    // A failed download on Home means the audio file isn't on disk.
+    // Tapping should retry the download, NOT start streaming from CDN
+    // (which is what `openTrack` would do via `localUrl ?? remoteUrl`
+    // fallback). `ensureDownloaded` already does the cache probe first,
+    // so it's equivalent to "check files, then download if missing".
+    if (downloads.getState(trackId) === "failed") {
+      const variant = entry.track.variants.find((v) => v.audio)
+      if (variant?.audio) {
+        void downloads.ensureDownloaded(trackId, variant.audio.path)
+      }
+      return
+    }
+
     const author = entry.track.authorId
       ? (dictionaries.authorsById.get(entry.track.authorId) ?? null)
       : null

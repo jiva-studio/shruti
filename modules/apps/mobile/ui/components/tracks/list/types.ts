@@ -29,6 +29,12 @@ export interface UiTrackRow {
    */
   readonly progressPct: number
   readonly disabled: boolean
+  /**
+   * Visual dim only — applies opacity but does NOT block taps. Used so a
+   * failed-download row reads as "something is off" while still being
+   * tappable to retry. `disabled` remains the hard non-interactive flag.
+   */
+  readonly dimmed: boolean
 }
 
 export type { UiTrackState }

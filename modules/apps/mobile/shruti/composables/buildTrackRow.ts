@@ -26,6 +26,9 @@ export interface BuildTrackRowDeps {
    * flight) so a second tap on the same row doesn't queue another open.
    */
   readonly disabled?: boolean
+  /** Visual dim only (opacity). Keeps the row tappable — used for the
+   *  failed-download state so the user can retry. */
+  readonly dimmed?: boolean
 }
 
 /**
@@ -64,5 +67,6 @@ export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow
     state: deps.state ?? "none",
     progressPct: deps.progressPct ?? 0,
     disabled: deps.disabled ?? false,
+    dimmed: deps.dimmed ?? false,
   }
 }
