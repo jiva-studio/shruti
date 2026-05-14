@@ -32,10 +32,23 @@ jobs:
           API="https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/pages/projects/${PROJECT}"
 
           echo "Fetching preview deployments for branch ${BRANCH}..."
-          ids=$(curl -sS -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            "${API}/deployments?env=preview&per_page=100" \
-            | jq -r --arg branch "${BRANCH}" \
-              '.result[] | select(.deployment_trigger.metadata.branch == $branch) | .id')
+          response=$(curl -sS -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            "${API}/deployments?env=preview&per_page=100")
+
+          # Fail-soft when the API itself rejects the request — most often
+          # "Project not found" on a fresh repo that hasn't had a preview
+          # deploy yet, or a revoked token. Either way there's nothing to
+          # clean up and we MUST NOT block the PR close event with a red X.
+          # (The sibling deploy-preview job in apps-mobile.yml has the same
+          # "no-op when CF isn't wired up" contract.)
+          if [ "$(echo "${response}" | jq -r '.success // false')" != "true" ]; then
+            echo "Cloudflare Pages API returned non-success — nothing to clean up:"
+            echo "${response}" | jq -c '.errors // .messages // .'
+            exit 0
+          fi
+
+          ids=$(echo "${response}" | jq -r --arg branch "${BRANCH}" \
+            '(.result // []) | .[] | select(.deployment_trigger.metadata.branch == $branch) | .id')
 
           if [ -z "${ids}" ]; then
             echo "No preview deployments found for branch ${BRANCH}. Nothing to clean up."
