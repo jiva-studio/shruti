@@ -138,6 +138,15 @@ export const useDownloadStore = defineStore("downloads", () => {
         // file is still resolvable even if we later swapped CDNs.
         const probeUrl = buildServerUrl(app.activeServer.value, path)
         if (isRetryAfterFailure) {
+          // Flip to "downloading" BEFORE the native delete so the spinner
+          // renders on the very next frame — the deleteFile round-trip
+          // (UserDefaults + filesystem) can run ~50-200ms on iOS, and
+          // without this the row keeps the red X during that window,
+          // making the retry tap feel unresponsive.
+          if (fresh()) {
+            setProgress(trackId, 0)
+            setState(trackId, "downloading")
+          }
           // Best-effort: evict stale native cache before re-downloading.
           // iOS keeps a phantom UserDefaults entry for the URL after a
           // failed download; without this delete, a follow-up probe
@@ -153,10 +162,10 @@ export const useDownloadStore = defineStore("downloads", () => {
             if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
             return cached
           }
-        }
-        if (fresh()) {
-          setProgress(trackId, 0)
-          setState(trackId, "downloading")
+          if (fresh()) {
+            setProgress(trackId, 0)
+            setState(trackId, "downloading")
+          }
         }
         const result = await downloadMedia(
           { trackId, path, candidates: fallback.candidates() },
