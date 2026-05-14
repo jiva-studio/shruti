@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
+import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper.js"
 import type { TrackId } from "@lib/domain/core.js"
@@ -25,7 +26,8 @@ export interface SearchControllerReturn {
   filtersOpen: Ref<boolean>
   activeFilterCount: ComputedRef<number>
   resetFilters: () => Promise<void>
-  /** Tap on a track row → open the per-track ActionSheet. */
+  /** Tap on a track row → retry download if failed, else open the
+   *  per-track ActionSheet. */
   onSelect: (trackId: string) => Promise<void>
   loadMore: () => Promise<void>
 }
@@ -45,6 +47,7 @@ export function useSearchController(): SearchControllerReturn {
   const { sections: filterSections } = useSearchFilterSections()
   const { mapRows } = useTrackUiStateMapper()
   const actionSheet = useTrackActionSheet()
+  const downloads = useDownloadStore()
   const filtersOpen = ref<boolean>(false)
 
   const { rawTracks, isLoading, error, hasMore, runQuery, loadMore } = useSearchQuery({
@@ -76,6 +79,16 @@ export function useSearchController(): SearchControllerReturn {
   const emptyMessage = computed(() => "")
 
   async function onSelect(trackId: string): Promise<void> {
+    // Failed downloads retry on tap — no ActionSheet. The red X IS the
+    // retry affordance; ensureDownloaded de-dupes via `inFlight`.
+    if (downloads.getState(trackId) === "failed") {
+      const track = rawTracks.value.find((t) => t.id === trackId)
+      const variant = track?.variants.find((v) => v.audio)
+      if (variant?.audio) {
+        void downloads.ensureDownloaded(trackId as TrackId, variant.audio.path)
+      }
+      return
+    }
     await actionSheet.present(trackId as TrackId)
   }
 
