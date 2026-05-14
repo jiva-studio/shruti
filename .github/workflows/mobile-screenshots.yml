@@ -41,6 +41,15 @@ jobs:
         with:
           node-version: 24
 
+      # The mobile app's package.json depends on two in-house Capacitor
+      # plugins via `file:` paths. Their dist/ is gitignored, so vite's
+      # pre-transform fails with `Failed to resolve import
+      # "@lectorium/plugin-{audio-player,media-downloader}"` unless each
+      # plugin is built first. Same actions every other mobile CI job
+      # calls before `npm ci`.
+      - uses: ./.github/actions/build-audio-player
+      - uses: ./.github/actions/build-media-downloader
+
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
