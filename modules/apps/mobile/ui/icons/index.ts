@@ -9,7 +9,7 @@ export {
   IconBellFilled as BellIcon,
   IconClockFilled as ClockIcon,
   IconFlameFilled as FlameIcon,
-  IconChecks as CheckDoubleIcon,
+  IconRosetteDiscountCheckFilled,
   IconHeadphonesFilled as HeadphonesIcon,
   IconWorldFilled as LanguageIcon,
   IconCloudFilled as CloudIcon,

@@ -1,4 +1,5 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
+import { onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import type { Author } from "@lib/domain/author.js"
@@ -211,6 +212,15 @@ export function useNotesController(): NotesControllerReturn {
     // for the source-context line under each item; pre-warm so the first
     // paint already has them.
     await dictionaries.ensureLoaded()
+    await store.refresh()
+    await refreshTracks()
+  })
+
+  // Ionic Tabs не размонтируют вкладку — `onMounted` стреляет один раз.
+  // Без этого хука после создания заметки и возврата на вкладку список
+  // мог не обновляться. Дубль с `onMounted` на первой активации безобиден:
+  // store.refresh() идемпотентна, словари уже закешированы.
+  onIonViewWillEnter(async () => {
     await store.refresh()
     await refreshTracks()
   })
