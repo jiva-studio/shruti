@@ -9,11 +9,15 @@ name: mobile / screenshots
 on:
   workflow_dispatch:
     inputs:
-      platforms:
-        description: 'Which stores to run (comma-separated subset of android,ios)'
+      platform:
+        description: 'Which store to run'
         required: true
-        default: 'android,ios'
-        type: string
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - android
+          - ios
       locales:
         description: 'Comma-separated locales (subset of en,ru)'
         required: true
@@ -35,14 +39,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Expand the `platform` choice input into a JSON list the matrix can consume.
+  # `matrix` isn't available in job-level `if:`, so we filter at matrix-build
+  # time instead of per-job. Runs on ubuntu-latest — cheap and only emits JSON.
+  prepare:
+    name: prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          case "${{ inputs.platform }}" in
+            android) echo 'matrix=["android"]' >> "$GITHUB_OUTPUT" ;;
+            ios)     echo 'matrix=["ios"]'     >> "$GITHUB_OUTPUT" ;;
+            *)       echo 'matrix=["android","ios"]' >> "$GITHUB_OUTPUT" ;;
+          esac
+
   screenshots:
     name: capture + upload (${{ matrix.platform }})
+    needs: prepare
     runs-on: [self-hosted, macos, mac-host]
     strategy:
       fail-fast: false
       matrix:
-        platform: [android, ios]
-    if: contains(inputs.platforms, matrix.platform)
+        platform: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
 
