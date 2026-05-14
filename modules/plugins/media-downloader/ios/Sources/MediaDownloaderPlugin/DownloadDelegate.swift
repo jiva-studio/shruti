@@ -74,6 +74,12 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
             }
             try FileManager.default.moveItem(at: location, to: destinationUrl)
         } catch {
+            // The download succeeded over the wire but we couldn't put
+            // it at its final path. Drop the bookkeeping so the next
+            // resolveLocalUrl can't hand back a phantom URL for this
+            // trackId, and so the next download attempt starts clean.
+            try? FileManager.default.removeItem(atPath: destinationUrl.path)
+            metadataStore.remove(id: id)
             plugin?.emit(event: "failed", data: [
                 "id": id,
                 "error": "Failed to move downloaded file: \(error.localizedDescription)",
@@ -118,6 +124,17 @@ final class DownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDe
         }
         let retryable = [NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
                          NSURLErrorNotConnectedToInternet].contains(nsError.code)
+        // Clean up the metadata entry AND any partial file URLSession
+        // may have written before failing. Without this, the next call
+        // to `resolveLocalUrl(url)` would still find both the entry and
+        // `fileExists` returning true (for the stale partial), and the
+        // TS store would mark the track as completed without a real
+        // download ever happening. The Android side gets this for free
+        // via its `.download` temp-file + atomic-rename pattern.
+        if let entry = metadataStore.get(id: id) {
+            try? FileManager.default.removeItem(atPath: entry.localPath)
+        }
+        metadataStore.remove(id: id)
         plugin?.emit(event: "failed", data: [
             "id": id,
             "error": error.localizedDescription,

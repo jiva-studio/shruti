@@ -115,6 +115,15 @@ export const useDownloadStore = defineStore("downloads", () => {
     const existing = inFlight.get(trackId)
     if (existing) return existing
 
+    // A "failed" in-memory state means the previous attempt did NOT
+    // produce a usable file. The iOS plugin's `resolveLocalUrl` can
+    // still return a phantom localUrl in this case (its UserDefaults
+    // entry is written at download-start and not cleaned up on
+    // failure), which would flip the row to "completed" with zero
+    // network bytes. So treat the cache as empty AND proactively
+    // delete the native-side mapping for this URL before re-trying.
+    const isRetryAfterFailure = states.value.get(trackId) === "failed"
+
     const taskEpoch = storeEpoch
     const fresh = (): boolean => taskEpoch === storeEpoch
     // Token used so the task's finally only clears the inFlight slot
@@ -128,14 +137,22 @@ export const useDownloadStore = defineStore("downloads", () => {
         // downloader keys by URL pathname, so any previously-downloaded
         // file is still resolvable even if we later swapped CDNs.
         const probeUrl = buildServerUrl(app.activeServer.value, path)
-        const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
-        if (cached) {
-          if (fresh()) setState(trackId, "completed")
-          // Even when audio is already on disk, make sure transcripts
-          // are too — the user might have saved offline before the
-          // transcript-prefetch feature shipped, so this self-heals.
-          if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
-          return cached
+        if (isRetryAfterFailure) {
+          // Best-effort: evict stale native cache before re-downloading.
+          // iOS keeps a phantom UserDefaults entry for the URL after a
+          // failed download; without this delete, a follow-up probe
+          // would hand back a localUrl pointing at nothing.
+          await app.mediaDownloader.delete(probeUrl).catch(() => {})
+        } else {
+          const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
+          if (cached) {
+            if (fresh()) setState(trackId, "completed")
+            // Even when audio is already on disk, make sure transcripts
+            // are too — the user might have saved offline before the
+            // transcript-prefetch feature shipped, so this self-heals.
+            if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
+            return cached
+          }
         }
         if (fresh()) {
           setProgress(trackId, 0)
