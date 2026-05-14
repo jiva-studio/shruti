@@ -1,0 +1,18 @@
+{
+  "01_home": {
+    "en": "Listen every day",
+    "ru": "Слушай каждый день"
+  },
+  "02_library": {
+    "en": "Full library of lectures",
+    "ru": "Большая библиотека лекций"
+  },
+  "03_notes": {
+    "en": "Bookmark what matters",
+    "ru": "Сохраняй важное"
+  },
+  "04_transcript": {
+    "en": "Read along with the talk",
+    "ru": "Читай параллельно с лекцией"
+  }
+}

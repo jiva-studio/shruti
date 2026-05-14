@@ -1,0 +1,119 @@
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/Inter-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Inter", sans-serif;
+  /* Shruti brand palette: --ion-background-color (#faf5ea) +
+   * --ion-border-color (#e8ddc8). The framed art reads as a continuation
+   * of the app's cream surface, not a foreign blue rectangle. */
+  background: linear-gradient(180deg, #ede0c5 0%, #f6ecd6 55%, #faf5ea 100%);
+  color: #3d2b1f;
+  -webkit-font-smoothing: antialiased;
+}
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#title {
+  width: 92%;
+  margin-top: 2.8vh;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.015em;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.device-phone #title { font-size: 3.6vh; }
+.device-tablet7 #title { font-size: 4.4vh; }
+.device-tablet10 #title { font-size: 3.8vh; }
+.device-iphone67 #title { font-size: 3.6vh; }
+.device-ipad13 #title { font-size: 3.8vh; }
+
+.phone {
+  position: absolute;
+  left: 50%;
+  bottom: 4vh;
+  transform: translateX(-50%);
+  width: 84vw;
+  border-radius: 1.8vh;
+  background: #2a1d12;
+  padding: 0.4vh;
+  box-shadow: 0 4vh 8vh rgba(61, 43, 31, 0.18), 0 1vh 3vh rgba(61, 43, 31, 0.10);
+  box-sizing: content-box;
+}
+
+.device-tablet7 .phone {
+  width: 82vw;
+  border-radius: 2.2vh;
+  padding: 1.2vh;
+}
+.device-tablet10 .phone {
+  width: 82vw;
+  border-radius: 1.8vh;
+  padding: 1.0vh;
+}
+.device-iphone67 .phone {
+  width: 84vw;
+  border-radius: 1.8vh;
+  padding: 0.4vh;
+}
+.device-ipad13 .phone {
+  width: 82vw;
+  border-radius: 1.6vh;
+  padding: 1.0vh;
+}
+
+.screen {
+  width: 100%;
+  aspect-ratio: 412 / 892; /* matches phone capture viewport */
+  overflow: hidden;
+  border-radius: 1.4vh;
+}
+.device-tablet7 .screen {
+  aspect-ratio: 600 / 960;
+  border-radius: 1.4vh;
+}
+.device-tablet10 .screen {
+  aspect-ratio: 800 / 1422;
+  border-radius: 1.2vh;
+}
+.device-iphone67 .screen {
+  aspect-ratio: 430 / 932;
+  border-radius: 1.4vh;
+}
+.device-ipad13 .screen {
+  aspect-ratio: 1024 / 1366;
+  border-radius: 1.0vh;
+}
+
+#shot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
