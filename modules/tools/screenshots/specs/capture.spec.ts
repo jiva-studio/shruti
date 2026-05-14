@@ -12,13 +12,16 @@ const FIXTURES_DIR = path.resolve(TOOL_ROOT, "fixtures")
 const CONTENT_DB_PATH = path.resolve(FIXTURES_DIR, "content.db")
 const CONTENT_DB_VERSION = 20260512121125
 
+type Device = "phone" | "iphone67" | "ipad13"
+
 interface ProjectInfo {
   code: "en" | "ru"
-  device: "phone"
+  device: Device
 }
 
 function projectInfo(name: string): ProjectInfo {
-  return { code: name.endsWith("-ru") ? "ru" : "en", device: "phone" }
+  const [device, code] = name.split("-") as [Device, "en" | "ru"]
+  return { device, code }
 }
 
 /* ---------------------- network interception ----------------------- */
