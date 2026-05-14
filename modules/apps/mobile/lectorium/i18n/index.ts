@@ -72,6 +72,15 @@ const ru = {
  * the native Device plugin and falls back to this on failure.
  */
 export function detectLocale(): SupportedLocale {
+  // `?locale=en|ru` overrides device locale — used by the screenshots pipeline
+  // (modules/tools/screenshots) to capture each locale deterministically
+  // without touching the Settings UI.
+  if (typeof window !== "undefined") {
+    const fromQuery = new URLSearchParams(window.location.search).get("locale")
+    if (fromQuery && (SUPPORTED_LOCALES as readonly string[]).includes(fromQuery)) {
+      return fromQuery as SupportedLocale
+    }
+  }
   const nav = typeof navigator !== "undefined" ? navigator.language : "en"
   return toSupportedLocale(nav)
 }

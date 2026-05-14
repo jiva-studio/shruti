@@ -121,23 +121,19 @@ platform :android do
 
     locales = (options[:locales] || "en,ru").split(",").map(&:strip)
     locale_map = { "en" => "en-US", "ru" => "ru-RU" }.select { |k, _| locales.include?(k) }
+    # First iteration: phone-only. tablet7 / tablet10 projects don't exist in
+    # `modules/tools/screenshots/playwright.config.ts` yet — when they're
+    # added, extend this map and the `project_flags` line below.
     device_map = {
       "phone" => "phoneScreenshots",
-      "tablet7" => "sevenInchScreenshots",
-      "tablet10" => "tenInchScreenshots",
     }
-    # Playwright project filter, e.g. "--project=android-en --project=tablet7-en"
-    project_flags = locales.flat_map { |l|
-      ["--project=android-#{l}", "--project=tablet7-#{l}", "--project=tablet10-#{l}"]
-    }.join(" ")
+    project_flags = locales.map { |l| "--project=phone-#{l}" }.join(" ")
 
-    # 1. Regenerate deterministic user fixtures (selected locales × both modes).
+    # 1. Regenerate deterministic user fixtures (one per locale).
     unless options[:skip_generate]
       sh("cd #{screenshots_tool.shellescape} && npm install --no-audit --no-fund")
       locales.each do |loc|
-        ["default", "recall"].each do |mode|
-          sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc} --mode=#{mode}")
-        end
+        sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc}")
       end
     end
 

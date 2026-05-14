@@ -1,0 +1,17 @@
+# Screenshots staged by `bundle exec fastlane android screenshots` before
+# the supply upload — regenerated each run from modules/tools/screenshots.
+metadata/android/**/images/
+
+# iOS screenshot staging (out of scope for the first iteration but listed
+# here so a future iOS lane doesn't accidentally commit binary PNGs).
+ios-screenshots/
+
+# Per-version Play Console changelogs written by write_play_changelog_files!
+metadata/android/**/changelogs/
+
+# Apple cert bundle decoded into work_dir during :ios build.
+.apple-certs/
+
+# Fastlane runtime artifacts.
+report.xml
+*.log
