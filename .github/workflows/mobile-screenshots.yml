@@ -61,6 +61,11 @@ jobs:
     needs: prepare
     runs-on: [self-hosted, macos, mac-host]
     strategy:
+      # Serialize matrix entries — both jobs land on the same self-hosted
+      # mac-host and the Playwright `webServer` config takes a fixed port
+      # (11001). Running them in parallel triggers
+      #   "Error: http://localhost:11001 is already used".
+      max-parallel: 1
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(needs.prepare.outputs.matrix) }}
