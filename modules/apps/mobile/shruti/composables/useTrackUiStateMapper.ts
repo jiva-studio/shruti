@@ -80,12 +80,11 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   function toUiRow(track: Track): UiTrackRow {
     const state = toUiState(track.id, downloads.getState(track.id))
     const progressPct = progressPctFor(track, state)
-    // Dim rows whose audio is in flight or failed — visual parity with
-    // Home so a track that needs attention reads the same regardless of
-    // surface. `disabled` stays off: a failed row must remain tappable
-    // to retry, and a downloading row is harmless to tap on Search
-    // (action-sheet branch is a no-op for the user's intent).
-    const dimmed = state === "downloading" || state === "failed"
+    // Search/Library are discovery surfaces — rows always render at full
+    // opacity. State is communicated by the indicator alone (radial /
+    // red X / check). Dim treatment is reserved for player-context views
+    // (Home playlist), which set `disabled`/`dimmed` themselves in
+    // `useHomeRowBuilder`.
     return buildTrackRow(track, {
       preferredLanguage: appLanguage.value,
       authorsById: dictionaries.authorsById,
@@ -94,7 +93,6 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       tagNamesById: dictionaries.tagNamesById,
       state,
       progressPct,
-      dimmed,
     })
   }
 
