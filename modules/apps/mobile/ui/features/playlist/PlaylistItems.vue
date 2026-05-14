@@ -1,8 +1,6 @@
 <template>
   <template v-for="row in rows" :key="row.id">
-    <div
-      :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]"
-    >
+    <div :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]">
       <WithDeleteAction @delete="emit('delete', row.id)">
         <TrackListItem
           :track-id="row.id"
