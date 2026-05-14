@@ -2,38 +2,47 @@ name: mobile / screenshots
 
 # Manual-only: capture store screenshots from the Vite dev server via the
 # Playwright pipeline in `modules/tools/screenshots/`. With `deploy=true`
-# also pushes the staged PNGs to Google Play through Fastlane `supply`.
-# iOS is intentionally absent — the tablet / iPhone / iPad Playwright
-# projects don't exist yet.
+# also pushes the staged PNGs to the chosen store(s) — Google Play
+# (Fastlane `supply`) and/or App Store Connect (Fastlane `deliver`).
 #
 # Triggered from the Actions tab → "mobile / screenshots" → "Run workflow".
 on:
   workflow_dispatch:
     inputs:
+      platforms:
+        description: 'Which stores to run (comma-separated subset of android,ios)'
+        required: true
+        default: 'android,ios'
+        type: string
       locales:
         description: 'Comma-separated locales (subset of en,ru)'
         required: true
         default: 'en,ru'
         type: string
       deploy:
-        description: 'Upload to Google Play Console (otherwise just stage + frame, leave PNGs as artifact)'
+        description: 'Upload to the chosen store(s) (otherwise just stage + frame, leave PNGs as artifact)'
         required: false
         default: false
         type: boolean
       dry_run:
-        description: 'When deploy=true, run supply in validate-only mode (no Play Console edit committed)'
+        description: 'When deploy=true, run supply/deliver in validate-only mode (no store edit committed)'
         required: false
         default: false
         type: boolean
 
 concurrency:
-  group: mobile-screenshots
+  group: mobile-screenshots-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   screenshots:
-    name: capture + upload
+    name: capture + upload (${{ matrix.platform }})
     runs-on: [self-hosted, macos, mac-host]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [android, ios]
+    if: contains(inputs.platforms, matrix.platform)
     steps:
       - uses: actions/checkout@v5
 
@@ -82,13 +91,16 @@ jobs:
           cp "$src" modules/tools/screenshots/fixtures/content.db
           echo "Staged $src → modules/tools/screenshots/fixtures/content.db"
 
-      - name: run fastlane android screenshots
+      - name: run fastlane ${{ matrix.platform }} screenshots
         env:
-          # Org-level service-account JSON at jiva-studio/. Same key the
-          # `deploy-android` lane uses to upload AABs. Only read when deploy
-          # is requested; supply is skipped otherwise so the lane never
-          # touches Play Console.
+          # Android: org-level service-account JSON at jiva-studio/.
+          # Same key the `deploy-android` lane uses to upload AABs.
           GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+          # iOS: App Store Connect API key (issuer, key id, base64-encoded
+          # .p8). Same secrets the `deploy-ios` lane uses.
+          APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+          APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+          APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
           # Force Playwright's bundled chromium — on this runner the system
           # chrome is sometimes missing dependencies after macOS updates.
           CHROME_PATH: ''
@@ -101,12 +113,12 @@ jobs:
           ARGS="locales:${{ inputs.locales }}"
           if [ "${{ inputs.deploy }}" != "true" ]; then ARGS="$ARGS skip_upload:true"; fi
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS dry_run:true"; fi
-          cd modules/apps/mobile && bundle exec fastlane android screenshots $ARGS
+          cd modules/apps/mobile && bundle exec fastlane ${{ matrix.platform }} screenshots $ARGS
 
       - name: upload framed PNGs as artifact
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: store-screenshots
+          name: store-screenshots-${{ matrix.platform }}
           path: modules/tools/screenshots/out/framed/
           retention-days: 14
