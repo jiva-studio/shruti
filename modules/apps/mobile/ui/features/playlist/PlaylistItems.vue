@@ -10,7 +10,6 @@
           :references="row.references"
           :tags="row.tags"
           :date="row.date"
-          :disabled="row.disabled"
           @select="emit('click', row.id)"
         >
           <template #state>
@@ -52,6 +51,11 @@ const emit = defineEmits<{
    `is-disabled` is the hard non-interactive flag (used while a download
    is in flight). Both can coexist: a downloading row is both dimmed and
    non-interactive.
+
+   Ionic's `<IonItem :disabled>` is intentionally NOT used inside
+   TrackListItem — it stacks its own ~0.5 dim on top, making a
+   downloading row visibly darker than a failed one. Tap blocking is
+   owned by this wrapper's pointer-events:none alone.
 
    The dim is scoped to <ion-label> only — the state indicator slot
    (red X / spinner / completed check) sits OUTSIDE the label inside

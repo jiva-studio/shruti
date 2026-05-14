@@ -1,13 +1,5 @@
 <template>
-  <IonItem
-    class="track"
-    :class="{ 'is-dimmed': dimmed }"
-    lines="none"
-    :disabled="disabled"
-    button
-    :detail="false"
-    @click="$emit('select', trackId)"
-  >
+  <IonItem class="track" lines="none" button :detail="false" @click="$emit('select', trackId)">
     <slot name="state" :track-id="trackId" />
 
     <IonLabel class="ion-text-nowrap">
@@ -26,6 +18,12 @@ import TrackHeader from "./TrackHeader.vue"
 /*                                  Interface                                 */
 /* -------------------------------------------------------------------------- */
 
+// Presentational only. Tap blocking + dim are owned by the outer
+// wrapper (`PlaylistItems.vue` on Home; Search doesn't dim at all).
+// Avoiding Ionic's `<IonItem :disabled>` here keeps the dim opacity
+// consistent across states — Ionic's built-in disabled visuals would
+// stack a ~0.5 multiplier on top of the wrapper's 0.65 label dim,
+// making a downloading row visibly darker than a failed one.
 defineProps<{
   trackId: string
   title: string
@@ -34,10 +32,6 @@ defineProps<{
   author?: string
   location?: string
   date?: string
-  disabled?: boolean
-  /** Visual dim only (opacity on the label). Row stays tappable —
-   *  used for failed/in-flight download rows so the user can retry. */
-  dimmed?: boolean
 }>()
 
 defineEmits<{ select: [trackId: string] }>()
@@ -48,14 +42,5 @@ defineEmits<{ select: [trackId: string] }>()
 .info,
 .details {
   transition: all 1s ease;
-}
-
-/* Dim is scoped to ion-label so the state-indicator slot (red X /
-   spinner / check) stays at full opacity — the indicator reads as the
-   same vivid red whether the row is dim or not. Same trick the Home
-   playlist wrapper uses; both rules target the same element with the
-   same opacity, so they coexist harmlessly. */
-.track.is-dimmed :deep(ion-label) {
-  opacity: 0.65;
 }
 </style>
