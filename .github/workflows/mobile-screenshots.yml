@@ -1,4 +1,4 @@
-name: mobile / screenshots
+name: Mobile / Screenshots
 
 # Manual-only: capture store screenshots from the Vite dev server via the
 # Playwright pipeline in `modules/tools/screenshots/`. With `deploy=true`

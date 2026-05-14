@@ -1,4 +1,4 @@
-name: preview-cleanup
+name: Preview Cleanup
 
 on:
   pull_request:
