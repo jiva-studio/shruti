@@ -102,7 +102,7 @@ const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router
 // Production builds tree-shake this branch entirely — `VITE_DEBUG_API` is unset.
 if (import.meta.env.VITE_DEBUG_API === "true") {
   void import("./services/debug/index.js").then(({ installDebugApi }) => {
-    installDebugApi(app)
+    installDebugApi()
   })
 }
 

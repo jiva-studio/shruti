@@ -240,29 +240,28 @@ interface TranscriptDoc {
   blocks: TranscriptBlock[]
 }
 
-const TRANSCRIPTS_ROOT = path.resolve(
-  __dirname,
-  "../../../../../..",
-  "resources/lake-out/public/tracks"
-)
+// Same S3 origin the runtime app fetches transcripts from — keeps the
+// fixture in sync with what the user will see in the dialog at capture
+// time, with no local-mirror dependency.
+const TRANSCRIPT_BASE_URL = "https://akds-lectorium.s3.us-east-1.amazonaws.com/public/tracks"
 
 async function seedNotes(db: IDatabase, args: Args, rng: () => number): Promise<void> {
   const trackId = demoTranscriptTrackId(args.locale)
-  const transcriptPath = path.resolve(
-    TRANSCRIPTS_ROOT,
-    trackId,
-    "transcripts",
-    `${args.locale}.json`
-  )
-  if (!fs.existsSync(transcriptPath)) {
-    console.warn(`  no transcript file ${transcriptPath} — skipping notes seed`)
+  const transcriptUrl = `${TRANSCRIPT_BASE_URL}/${trackId}/transcripts/${args.locale}.json`
+  let doc: TranscriptDoc
+  try {
+    const response = await fetch(transcriptUrl)
+    if (!response.ok) {
+      console.warn(`  transcript fetch ${response.status} ${transcriptUrl} — skipping notes seed`)
+      return
+    }
+    doc = (await response.json()) as TranscriptDoc
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`  transcript fetch failed (${msg}) — skipping notes seed`)
     return
   }
-  const doc = JSON.parse(fs.readFileSync(transcriptPath, "utf-8")) as TranscriptDoc
   const sentences = doc.blocks.filter((b) => b.type === "sentence")
-  // Pick a handful of sentences (~20-40 chars each, spread across the
-  // first dozen blocks) to highlight as notes — that mimics what a user
-  // would actually bookmark.
   // Pick blocks in the 150–400 char range so the bookmark snippet on the
   // Notes screen has 2–3 lines of readable text — not a single word and
   // not an entire chapter of obeisances. Fall back to longest-available

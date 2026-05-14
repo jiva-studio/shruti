@@ -7,7 +7,6 @@
  * states (open transcript over a known track + mid-playback position)
  * without re-implementing user gestures.
  */
-import type { App } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
@@ -54,7 +53,7 @@ interface LectoriumDebugApi {
   setLocale(loc: SupportedLocale): void
 }
 
-export function installDebugApi(_app: App): void {
+export function installDebugApi(): void {
   const api: LectoriumDebugApi = {
     demoTrackId(): string {
       return DEMO_TRACKS[currentLocale()] ?? DEMO_TRACKS.en
@@ -107,6 +106,5 @@ export function installDebugApi(_app: App): void {
 
   ;(window as Window).__lectorium = (window as Window).__lectorium ?? {}
   ;(window as Window).__lectorium!.debug = api
-  // eslint-disable-next-line no-console
   console.info("[debug] window.__lectorium.debug installed")
 }
