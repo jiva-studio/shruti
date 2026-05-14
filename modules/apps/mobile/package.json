@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:screenshots": "VITE_DEBUG_API=true vite --port 11001",
     "build": "vue-tsc && vite build",
     "build+sync": "npm run build && npx cap sync",
     "preview": "vite preview",

@@ -1,0 +1,15 @@
+{
+  "name": "shruti-screenshots",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "capture": "playwright test specs/capture.spec.ts",
+    "frame": "playwright test specs/frame.spec.ts",
+    "generate-user-fixture": "npm run generate-user-fixture:en && npm run generate-user-fixture:ru",
+    "generate-user-fixture:en": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts -- --locale=en",
+    "generate-user-fixture:ru": "cd ../../apps/mobile && npx vite-node ../../tools/screenshots/generate-fixtures/index.ts -- --locale=ru"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  }
+}

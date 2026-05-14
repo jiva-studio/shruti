@@ -1,0 +1,95 @@
+name: mobile / screenshots
+
+# Manual-only: capture store screenshots from the Vite dev server via the
+# Playwright pipeline in `modules/tools/screenshots/`, then upload them to
+# Google Play through Fastlane `supply`. iOS is intentionally absent — the
+# tablet / iPhone / iPad Playwright projects don't exist yet.
+#
+# Triggered from the Actions tab → "mobile / screenshots" → "Run workflow".
+on:
+  workflow_dispatch:
+    inputs:
+      locales:
+        description: 'Comma-separated locales (subset of en,ru)'
+        required: true
+        default: 'en,ru'
+        type: string
+      skip_upload:
+        description: 'Stage framed PNGs but skip the supply upload'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Run supply in validate-only mode (no Play Console edit committed)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: mobile-screenshots
+  cancel-in-progress: false
+
+jobs:
+  screenshots:
+    name: capture + upload
+    runs-on: [self-hosted, macos, mac-host]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: false
+          working-directory: modules/apps/mobile
+
+      - name: bundle install
+        run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
+
+      - name: install mobile app deps
+        run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
+
+      - name: install screenshots tool deps
+        run: cd modules/tools/screenshots && npm install --no-audit --no-fund
+
+      - name: install playwright chromium
+        run: cd modules/tools/screenshots && npx playwright install chromium
+
+      # Pull the latest published content DB matching the supported scheme.
+      # `db-sync.sh e2e` writes it to modules/tests/e2e/fixtures/public/db/,
+      # which the screenshots tool consumes from fixtures/content.db.
+      - name: sync content DB from S3
+        run: bash modules/db-sync.sh e2e
+
+      - name: stage content.db for screenshots tool
+        run: |
+          set -euo pipefail
+          src=$(ls -t modules/tests/e2e/fixtures/public/db/shruti.*.db | head -1)
+          mkdir -p modules/tools/screenshots/fixtures
+          cp "$src" modules/tools/screenshots/fixtures/content.db
+          echo "Staged $src → modules/tools/screenshots/fixtures/content.db"
+
+      - name: run fastlane android screenshots
+        env:
+          # Org-level service-account JSON at akdasa-studios/. Same key the
+          # `deploy-android` lane uses to upload AABs.
+          GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+          # Force Playwright's bundled chromium — on this runner the system
+          # chrome is sometimes missing dependencies after macOS updates.
+          CHROME_PATH: ''
+        run: |
+          cd modules/apps/mobile && bundle exec fastlane android screenshots \
+            locales:${{ inputs.locales }} \
+            skip_upload:${{ inputs.skip_upload }} \
+            dry_run:${{ inputs.dry_run }}
+
+      - name: upload framed PNGs as artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: store-screenshots
+          path: modules/tools/screenshots/out/framed/
+          retention-days: 14

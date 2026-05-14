@@ -98,6 +98,14 @@ initShruti({
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
 
+// Dev-only debug bridge for the screenshots pipeline (modules/tools/screenshots).
+// Production builds tree-shake this branch entirely — `VITE_DEBUG_API` is unset.
+if (import.meta.env.VITE_DEBUG_API === "true") {
+  void import("./services/debug/index.js").then(({ installDebugApi }) => {
+    installDebugApi(app)
+  })
+}
+
 router.isReady().then(() => {
   app.mount("#app")
 })
