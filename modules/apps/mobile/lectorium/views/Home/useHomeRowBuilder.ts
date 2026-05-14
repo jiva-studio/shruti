@@ -75,9 +75,12 @@ export function useHomeRowBuilder(appLanguage: Ref<LanguageCode>): HomeRowBuilde
       const savedProgressMs =
         player.itemId === item.id ? player.positionMs : playlist.getProgressMs(item.id)
       const progressPct = rowProgressPct(track, track.id, state, savedProgressMs)
-      // Dim + non-interactive while a download is in flight for this row
-      // — the radial download indicator is showing, the row is "busy".
+      // Non-interactive only while a download is in flight (a second tap
+      // would queue a redundant open). A `failed` row stays tappable so
+      // the user can retry — but visually it's still dimmed so the red X
+      // reads as "something is off here", not just "another option".
       const disabled = state === "downloading"
+      const dimmed = state === "downloading" || state === "failed"
       return buildTrackRow(track, {
         preferredLanguage: appLanguage.value,
         authorsById: dictionaries.authorsById,
@@ -87,6 +90,7 @@ export function useHomeRowBuilder(appLanguage: Ref<LanguageCode>): HomeRowBuilde
         state,
         progressPct,
         disabled,
+        dimmed,
       })
     })
   })

@@ -15,6 +15,7 @@ import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import type { Result } from "@lib/domain/result.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
 import { usePlaylistPrefetch } from "./playlist/usePlaylistPrefetch.js"
 
@@ -122,6 +123,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
       { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }
     )
     if (result.ok) {
+      // Synchronously claim "downloading" BEFORE refresh() so the row's
+      // first paint after add-to-playlist already shows the spinner —
+      // otherwise the mapper sees the freshly-inserted playlist entry
+      // (state "added", green check) before prefetch's async path
+      // gets around to setting the download flag. `markStartingDownload`
+      // self-skips when the track is already cached.
+      useDownloadStore().markStartingDownload(trackId)
       await refresh()
       void prefetch.prefetchTrack(trackId)
     }
@@ -162,8 +170,17 @@ export const usePlaylistStore = defineStore("playlist", () => {
    * tracker.
    */
   function patchProgress(itemId: PlaylistItemId, progressMs: number): void {
+    // Once an item is `completed`, the engine can still emit a late
+    // `playing=false, position<duration` tick (it sometimes settles a
+    // few hundred ms before the reported duration). Let it update the
+    // journal via `tracker.finish`, but don't let the UI's progressMap
+    // rewind — that would visually drop the radial back below 100%.
+    const alreadyCompleted = completedAtMap.value.get(itemId) != null
+    const current = progressMap.value.get(itemId) ?? 0
+    const effective = alreadyCompleted ? Math.max(current, progressMs) : progressMs
+
     const next = new Map(progressMap.value)
-    next.set(itemId, progressMs)
+    next.set(itemId, effective)
     progressMap.value = next
 
     const entry = entries.value.find((e) => e.item.id === itemId)

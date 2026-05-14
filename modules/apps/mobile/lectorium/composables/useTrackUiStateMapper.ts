@@ -80,6 +80,10 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   function toUiRow(track: Track): UiTrackRow {
     const state = toUiState(track.id, downloads.getState(track.id))
     const progressPct = progressPctFor(track, state)
+    // Match Home's interaction rules: non-interactive while downloading,
+    // dimmed (but tappable) while failed.
+    const disabled = state === "downloading"
+    const dimmed = state === "downloading" || state === "failed"
     return buildTrackRow(track, {
       preferredLanguage: appLanguage.value,
       authorsById: dictionaries.authorsById,
@@ -88,6 +92,8 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       tagNamesById: dictionaries.tagNamesById,
       state,
       progressPct,
+      disabled,
+      dimmed,
     })
   }
 

@@ -1,6 +1,8 @@
 <template>
   <template v-for="row in rows" :key="row.id">
-    <div :class="['playlist-row', { 'is-disabled': row.disabled }]">
+    <div
+      :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]"
+    >
       <WithDeleteAction @delete="emit('delete', row.id)">
         <TrackListItem
           :track-id="row.id"
@@ -42,12 +44,20 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-/* Disabled visual sits on the outermost wrapper, OUTSIDE WithDeleteAction
-   (IonItemSliding) — Ionic Stencil components reparent slotted content
-   into shadow DOM, which broke opacity/pointer-events on inner wrappers.
-   A regular <div> at the top level isn't touched by Ionic. */
-.playlist-row.is-disabled {
+/* Disabled / dimmed visuals sit on the outermost wrapper, OUTSIDE
+   WithDeleteAction (IonItemSliding) — Ionic Stencil components reparent
+   slotted content into shadow DOM, which broke opacity/pointer-events
+   on inner wrappers. A regular <div> at the top level isn't touched by
+   Ionic.
+
+   `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
+   `is-disabled` is the hard non-interactive flag (used while a download
+   is in flight). Both can coexist: a downloading row is both dimmed and
+   non-interactive. */
+.playlist-row.is-dimmed {
   opacity: 0.65;
+}
+.playlist-row.is-disabled {
   pointer-events: none;
 }
 </style>
