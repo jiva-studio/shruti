@@ -17,7 +17,7 @@
 
     <!-- Reserves vertical room under the fixed header so the first track
          row isn't hidden on initial paint. -->
-    <div class="search-content-spacer" :class="{ 'is-android': isAndroid }" />
+    <div class="search-content-spacer" />
 
     <IonText v-if="search.error.value" color="danger" class="ion-padding">
       <p>{{ search.error.value }}</p>
@@ -51,7 +51,6 @@ import {
   IonText,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
-  isPlatform,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
 import { AppPage } from "@ui/primitives/index.js"
@@ -67,12 +66,6 @@ import { useSearchController } from "./SearchView.controller.js"
 
 const player = usePlayerStore()
 const search = useSearchController()
-// AppPage's IonContent already pads itself by --ion-safe-area-top, and the
-// spacer below adds env(safe-area-inset-top) again. On iOS the WebView's
-// env() resolves to 0 inside ion-content (only the IonContent root sees the
-// inset), so the stack works out. On Android both values are non-zero and
-// stack, leaving an empty-row-sized gap above the first result.
-const isAndroid = isPlatform("android")
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await search.loadMore()
@@ -131,19 +124,13 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   pointer-events: auto;
 }
 
-/* Chip row is gone; spacer clears the input + safe-area + the 20px
-   gradient fade region, with a few extra px so the first list row
-   doesn't sit visually inside the fade. */
+/* Spacer reserves room under the fixed header for the first track row.
+   IonContent (через AppPage) уже padит safe-area-top через
+   --padding-top: var(--ion-safe-area-top), поэтому env() здесь добавлять
+   нельзя — на обеих платформах safe-area складывалась бы дважды и
+   оставляла пустую полосу высотой с целый элемент. 80px = высота input
+   + 20px gradient-fade. */
 .search-content-spacer {
-  height: calc(env(safe-area-inset-top) + 80px);
-}
-
-/* On Android Capacitor's WebView reports env(safe-area-inset-top) as the
-   status-bar height *and* IonContent's --padding-top resolves to the same
-   --ion-safe-area-top, so adding both stacks an extra inset-row of empty
-   space above the first result. Drop the env() term on Android — the
-   IonContent padding alone is enough to clear the fixed header. */
-.search-content-spacer.is-android {
   height: 80px;
 }
 
