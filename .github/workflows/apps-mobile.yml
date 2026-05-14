@@ -1,4 +1,4 @@
-name: app
+name: Mobile / Build
 
 on:
   push:
