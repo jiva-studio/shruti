@@ -60,5 +60,6 @@ modules/
 
 # Get involved
 
-1. Build the mobile app: `cd modules/apps/mobile && npm install && npm run build`.
-2. Run tests: `npm test` (in the mobile package).
+1. First-time setup: `make mobile-install` (installs npm deps for the mobile app).
+2. `make help` from the repo root lists every entry point — dev server, Android/iOS builds, Fastlane screenshots, transcriber/MCP daemons, worktrees.
+3. Common starting points: `make mobile` (dev server on :11001), `make mobile-build` (debug APK — runs `npm ci` itself, no setup needed), `make mobile-deploy` (install on connected device).
