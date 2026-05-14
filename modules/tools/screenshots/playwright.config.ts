@@ -38,7 +38,26 @@ export default defineConfig({
     headless: true,
   },
   projects: [
+    // Android phone: 412×892 × DPR 3 → 1236×2676 PNG (Play `phoneScreenshots`).
     { name: "phone-en", use: { locale: "en-US" } },
     { name: "phone-ru", use: { locale: "ru-RU" } },
+    // iPhone 6.7": 430×932 × DPR 3 → 1290×2796 PNG (App Store iPhone 6.7").
+    {
+      name: "iphone67-en",
+      use: { locale: "en-US", viewport: { width: 430, height: 932 }, deviceScaleFactor: 3 },
+    },
+    {
+      name: "iphone67-ru",
+      use: { locale: "ru-RU", viewport: { width: 430, height: 932 }, deviceScaleFactor: 3 },
+    },
+    // iPad Pro 13": 1024×1366 × DPR 2 → 2048×2732 PNG (App Store iPad 13").
+    {
+      name: "ipad13-en",
+      use: { locale: "en-US", viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2 },
+    },
+    {
+      name: "ipad13-ru",
+      use: { locale: "ru-RU", viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2 },
+    },
   ],
 })
