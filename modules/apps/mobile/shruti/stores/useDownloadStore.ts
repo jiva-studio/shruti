@@ -191,6 +191,22 @@ export const useDownloadStore = defineStore("downloads", () => {
     void ensureDownloaded(trackId, path)
   }
 
+  /**
+   * Synchronously claim "downloading" state for a track. Used by add-to-
+   * playlist so the row paints directly as `downloading` instead of
+   * flashing the "added" checkmark while `prefetch` resolves the audio
+   * path and `ensureDownloaded` probes the cache. A subsequent
+   * `ensureDownloaded` call will either confirm the state, find the file
+   * already cached and flip to "completed", or report "failed". The
+   * already-cached branch is skipped here so re-adding a downloaded
+   * track doesn't visually rewind to "downloading".
+   */
+  function markStartingDownload(trackId: TrackId): void {
+    if (states.value.get(trackId) === "completed") return
+    setProgress(trackId, 0)
+    setState(trackId, "downloading")
+  }
+
   async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
     const repos = app.repositories()
     await removeDownloadedMedia(
@@ -255,6 +271,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     hydrate,
     ensureDownloaded,
     prefetch,
+    markStartingDownload,
     remove,
     reset,
   }
