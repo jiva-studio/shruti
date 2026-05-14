@@ -152,6 +152,18 @@ export const useDownloadStore = defineStore("downloads", () => {
           // failed download; without this delete, a follow-up probe
           // would hand back a localUrl pointing at nothing.
           await app.mediaDownloader.delete(probeUrl).catch(() => {})
+          // Demote any stale "ready" DB row before invoking
+          // `downloadMedia`. The use case's cached branch trusts the DB
+          // (`state === "ready" && localPath`) without verifying the
+          // file is still on disk — so a row left "ready" from a prior
+          // session whose file the OS later evicted (iOS /Caches sweep,
+          // user-initiated clear) would short-circuit the retry and
+          // return success WITHOUT actually transferring any bytes. The
+          // user sees the row flip off-failed but no download happens.
+          await app
+            .repositories()
+            .mediaItems.upsert(trackId, "failed", null)
+            .catch(() => {})
         } else {
           const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
           if (cached) {
@@ -162,6 +174,15 @@ export const useDownloadStore = defineStore("downloads", () => {
             if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
             return cached
           }
+          // Native cache says the file isn't there. Demote any stale
+          // "ready" DB row before invoking downloadMedia for the same
+          // reason as the retry branch above — without this, the use
+          // case's cached branch trusts a stale "ready" claim and
+          // returns success without re-downloading evicted bytes.
+          await app
+            .repositories()
+            .mediaItems.upsert(trackId, "failed", null)
+            .catch(() => {})
           if (fresh()) {
             setProgress(trackId, 0)
             setState(trackId, "downloading")
