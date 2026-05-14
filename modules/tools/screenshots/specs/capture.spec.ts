@@ -11,18 +11,6 @@ const FIXTURES_DIR = path.resolve(TOOL_ROOT, "fixtures")
 
 const CONTENT_DB_PATH = path.resolve(FIXTURES_DIR, "content.db")
 const CONTENT_DB_VERSION = 20260512121125
-// Local mirror of the S3 bucket root — `resources/lake-out/` holds a
-// snapshot of every published path the app might fetch (`public/db/...`,
-// `public/tracks/...`). We serve transcripts from here so scenario
-// `04_transcript` can render `.current` / `.highlighted` without
-// S3 reachability. URLs are full bucket keys (start with `public/`),
-// so PUBLIC_ASSETS_ROOT is the bucket root, not the `public/` subdir.
-// Path: modules/tools/screenshots/specs → up to workspace root → resources/lake-out.
-const PUBLIC_ASSETS_ROOT = path.resolve(
-  __dirname,
-  "../../../../../..",
-  "resources/lake-out"
-)
 
 interface ProjectInfo {
   code: "en" | "ru"
@@ -68,20 +56,8 @@ async function interceptContent(page: Page): Promise<void> {
     })
   })
 
-  // Transcript JSONs — served from resources/lake-out/public/tracks/...
-  // so the dialog can render real blocks without S3 reachability.
-  await page.route("**/public/tracks/*/transcripts/*.json", (route) => {
-    const url = new URL(route.request().url())
-    const localPath = path.join(PUBLIC_ASSETS_ROOT, url.pathname.replace(/^\/+/, ""))
-    if (!fs.existsSync(localPath)) {
-      return route.fulfill({ status: 404, body: "" })
-    }
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: fs.readFileSync(localPath),
-    })
-  })
+  // Transcript JSONs go straight to S3 — no intercept. Same URL the live
+  // app hits at runtime, so we don't have to mirror them anywhere.
 
   // Audio MP3 fetches — the playlist's prefetch loop downloads every
   // track on mount; without this stub it hits real S3, fails, and

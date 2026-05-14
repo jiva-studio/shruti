@@ -1,9 +1,10 @@
 name: mobile / screenshots
 
 # Manual-only: capture store screenshots from the Vite dev server via the
-# Playwright pipeline in `modules/tools/screenshots/`, then upload them to
-# Google Play through Fastlane `supply`. iOS is intentionally absent — the
-# tablet / iPhone / iPad Playwright projects don't exist yet.
+# Playwright pipeline in `modules/tools/screenshots/`. With `deploy=true`
+# also pushes the staged PNGs to Google Play through Fastlane `supply`.
+# iOS is intentionally absent — the tablet / iPhone / iPad Playwright
+# projects don't exist yet.
 #
 # Triggered from the Actions tab → "mobile / screenshots" → "Run workflow".
 on:
@@ -14,13 +15,13 @@ on:
         required: true
         default: 'en,ru'
         type: string
-      skip_upload:
-        description: 'Stage framed PNGs but skip the supply upload'
+      deploy:
+        description: 'Upload to Google Play Console (otherwise just stage + frame, leave PNGs as artifact)'
         required: false
         default: false
         type: boolean
       dry_run:
-        description: 'Run supply in validate-only mode (no Play Console edit committed)'
+        description: 'When deploy=true, run supply in validate-only mode (no Play Console edit committed)'
         required: false
         default: false
         type: boolean
@@ -75,16 +76,23 @@ jobs:
       - name: run fastlane android screenshots
         env:
           # Org-level service-account JSON at akdasa-studios/. Same key the
-          # `deploy-android` lane uses to upload AABs.
+          # `deploy-android` lane uses to upload AABs. Only read when deploy
+          # is requested; supply is skipped otherwise so the lane never
+          # touches Play Console.
           GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
           # Force Playwright's bundled chromium — on this runner the system
           # chrome is sometimes missing dependencies after macOS updates.
           CHROME_PATH: ''
+        # Fastlane parses `key:value` CLI args as strings; even
+        # `skip_upload:false` lands as a non-nil (truthy) string in
+        # `options[:skip_upload]`. So we have to OMIT the flag instead
+        # of passing it as false. Same trick for `dry_run`.
         run: |
-          cd modules/apps/mobile && bundle exec fastlane android screenshots \
-            locales:${{ inputs.locales }} \
-            skip_upload:${{ inputs.skip_upload }} \
-            dry_run:${{ inputs.dry_run }}
+          set -euo pipefail
+          ARGS="locales:${{ inputs.locales }}"
+          if [ "${{ inputs.deploy }}" != "true" ]; then ARGS="$ARGS skip_upload:true"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS dry_run:true"; fi
+          cd modules/apps/mobile && bundle exec fastlane android screenshots $ARGS
 
       - name: upload framed PNGs as artifact
         if: always()

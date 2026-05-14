@@ -7,7 +7,6 @@
  * states (open transcript over a known track + mid-playback position)
  * without re-implementing user gestures.
  */
-import type { App } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
@@ -54,7 +53,7 @@ interface ShrutiDebugApi {
   setLocale(loc: SupportedLocale): void
 }
 
-export function installDebugApi(_app: App): void {
+export function installDebugApi(): void {
   const api: ShrutiDebugApi = {
     demoTrackId(): string {
       return DEMO_TRACKS[currentLocale()] ?? DEMO_TRACKS.en
@@ -107,6 +106,5 @@ export function installDebugApi(_app: App): void {
 
   ;(window as Window).__shruti = (window as Window).__shruti ?? {}
   ;(window as Window).__shruti!.debug = api
-  // eslint-disable-next-line no-console
   console.info("[debug] window.__shruti.debug installed")
 }
