@@ -378,9 +378,7 @@ platform :ios do
     unless options[:skip_generate]
       sh("cd #{screenshots_tool.shellescape} && npm install --no-audit --no-fund")
       locales.each do |loc|
-        ["default", "recall"].each do |mode|
-          sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc} --mode=#{mode}")
-        end
+        sh("cd #{screenshots_tool.shellescape} && npm run generate-user-fixture -- --locale=#{loc}")
       end
     end
 
