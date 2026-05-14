@@ -1,3 +1,4 @@
 source "https://rubygems.org"
 
 gem "fastlane"
+gem "aws-sdk-bedrockruntime", "~> 1.0"
