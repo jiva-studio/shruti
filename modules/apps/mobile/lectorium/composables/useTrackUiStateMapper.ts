@@ -80,10 +80,11 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
   function toUiRow(track: Track): UiTrackRow {
     const state = toUiState(track.id, downloads.getState(track.id))
     const progressPct = progressPctFor(track, state)
-    // Match Home's interaction rules: non-interactive while downloading,
-    // dimmed (but tappable) while failed.
-    const disabled = state === "downloading"
-    const dimmed = state === "downloading" || state === "failed"
+    // Search/Library are discovery surfaces — rows always render at full
+    // opacity. State is communicated by the indicator alone (radial /
+    // red X / check). Dim treatment is reserved for player-context views
+    // (Home playlist), which set `disabled`/`dimmed` themselves in
+    // `useHomeRowBuilder`.
     return buildTrackRow(track, {
       preferredLanguage: appLanguage.value,
       authorsById: dictionaries.authorsById,
@@ -92,8 +93,6 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       tagNamesById: dictionaries.tagNamesById,
       state,
       progressPct,
-      disabled,
-      dimmed,
     })
   }
 
