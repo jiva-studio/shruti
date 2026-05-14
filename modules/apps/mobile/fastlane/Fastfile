@@ -369,7 +369,8 @@ platform :ios do
     metadata_root = File.join(__dir__, "ios-screenshots")
 
     locales = (options[:locales] || "en,ru").split(",").map(&:strip)
-    locale_map = { "en" => "en-US", "ru" => "ru-RU" }.select { |k, _| locales.include?(k) }
+    # App Store Connect uses "ru" (no country suffix), unlike Google Play which uses "ru-RU".
+    locale_map = { "en" => "en-US", "ru" => "ru" }.select { |k, _| locales.include?(k) }
     devices = %w[iphone67 ipad13]
     project_flags = locales.flat_map { |l|
       devices.map { |d| "--project=#{d}-#{l}" }
