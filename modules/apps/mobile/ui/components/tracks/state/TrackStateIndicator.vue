@@ -5,7 +5,7 @@
       v-else-if="mode === 'downloading'"
       slot="end"
       key="downloadProgress"
-      color="primary"
+      color="medium"
       :value="progress || 0"
     />
     <RadialIndicator
