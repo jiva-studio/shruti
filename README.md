@@ -14,15 +14,9 @@ Shruti is your personal lecture companion — listen to lectures, follow along w
   <a href="https://apps.apple.com/us/app/listen-to-sadhu/id6745510353">
     <img src="assets/download-app-store.png" height="50" alt="Download on the App Store">
   </a>
-</p>
-
-## Screenshots
-
-<p align="center">
-  <img src="assets/screenshots/01_home.png" height="500" alt="Home with up-next queue, listening streak, and activity heatmap"/>
-  <img src="assets/screenshots/02_library.png" height="500" alt="Full-text search across the lecture catalog with filters"/>
-  <img src="assets/screenshots/03_notes.png" height="500" alt="Saved bookmarks and highlights from transcripts"/>
-  <img src="assets/screenshots/04_transcript.png" height="500" alt="Auto-synced transcript view during playback"/>
+  <a href="https://play.google.com/store/apps/details?id=studio.jiva.shruti">
+    <img src="assets/download-google-play.png" height="50" alt="Get it on Google Play">
+  </a>
 </p>
 
 # Features
