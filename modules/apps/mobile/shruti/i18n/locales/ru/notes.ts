@@ -8,4 +8,12 @@ export default {
   shareAudioPreparing: "Готовим аудио…",
   shareAudioErrorNoAudio: "Для этой лекции аудио недоступно",
   shareAudioErrorGeneric: "Не удалось подготовить аудио. Попробуйте снова.",
+  shareVideo: "Поделиться видео",
+  shareVideoDialog: "Поделиться видеороликом",
+  shareVideoPreparing: "Готовим видео…",
+  shareVideoRendering: "Создаём ролик…",
+  shareVideoAlmostReady: "Почти готово…",
+  shareVideoStillWorking: "Ещё чуть-чуть…",
+  shareVideoErrorNoAudio: "Для этой лекции аудио недоступно",
+  shareVideoErrorGeneric: "Не удалось подготовить видео. Попробуйте снова.",
 }

@@ -1,4 +1,4 @@
-name: Services / Share-Audio / Yandex Cloud
+name: Services / Share-Video / Yandex Cloud
 
 # Auth flow:
 #   - SHRUTI_YC_SA_KEY_JSON (Service-Account authorized JSON key) is
@@ -8,30 +8,30 @@ name: Services / Share-Audio / Yandex Cloud
 #     the deploy artifact to YC Object Storage.
 # Function runtime envs:
 #   - YC_RUNTIME_* — YC static keys (shruti-share-audio SA) the function
-#     uses to read/write its OWN YC bucket via boto3 (S3_ENDPOINT_URL =
-#     YC). Excerpts land at https://cdn-ru.shruti.local
-#     for russia-region clients (no more cross-cloud writes to AWS).
+#     uses to read/write its OWN YC bucket via @aws-sdk/client-s3.
+#   - SPEECHKIT_API_KEY — Yandex SpeechKit API key (OpenAI is geo-blocked
+#     from YC, so we don't pass any OpenAI creds here).
 
 on:
   push:
     branches: [main]
     paths:
-      - modules/services/share-audio/**
-      - .github/workflows/share-audio-yc.yml
+      - modules/services/share-video/**
+      - .github/workflows/share-video-yc.yml
   pull_request:
     branches: [main]
     paths:
-      - modules/services/share-audio/**
-      - .github/workflows/share-audio-yc.yml
+      - modules/services/share-video/**
+      - .github/workflows/share-video-yc.yml
   workflow_dispatch:
 
 concurrency:
-  group: share-audio-yc-${{ github.ref }}
+  group: share-video-yc-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
-    working-directory: modules/services/share-audio
+    working-directory: modules/services/share-video
 
 jobs:
   validate:
@@ -42,10 +42,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - run: npm ci
+      - run: npm run build
       # YC plugin reads ~/.config/yandex-cloud/config.yaml unconditionally at
       # plugin-init time, even for `serverless print`. Stub it so the plugin
       # can initialise; we never actually call YC APIs in validate.
@@ -56,6 +54,7 @@ jobs:
             > ~/.config/yandex-cloud/config.yaml
       - run: npx serverless print --config serverless-yc.yml
         env:
+          SPEECHKIT_API_KEY: placeholder
           YC_RUNTIME_ACCESS_KEY_ID: placeholder
           YC_RUNTIME_SECRET_ACCESS_KEY: placeholder
           YC_SERVICE_ACCOUNT_ID: placeholder
@@ -71,13 +70,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Fetch ffmpeg static binary
+      - name: Fetch ffmpeg + ffprobe static binaries
         run: |
           mkdir -p layers/ffmpeg/bin
           curl -sSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-            | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg'
-          chmod +x layers/ffmpeg/bin/ffmpeg
+            | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg' '*/ffprobe'
+          chmod +x layers/ffmpeg/bin/ffmpeg layers/ffmpeg/bin/ffprobe
       - run: npm ci
+      - run: npm run build
       - name: Exchange SA key for short-lived IAM token
         id: yc-iam
         uses: yc-actions/yc-iam-token@v1
@@ -93,6 +93,7 @@ jobs:
           # YC plugin uses AWS SDK to upload artifact to YC Object Storage.
           AWS_ACCESS_KEY_ID: ${{ secrets.SHRUTI_YC_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_YC_SECRET_ACCESS_KEY }}
-          # Function-runtime envs — same YC static keys share-video YC uses.
+          # Function-runtime envs: workflow translates cloud-prefixed secret → generic in-function name.
           YC_RUNTIME_ACCESS_KEY_ID: ${{ secrets.SHRUTI_YC_RUNTIME_ACCESS_KEY_ID }}
           YC_RUNTIME_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_YC_RUNTIME_SECRET_ACCESS_KEY }}
+          SPEECHKIT_API_KEY: ${{ secrets.SHRUTI_YC_SPEECHKIT_API_KEY }}

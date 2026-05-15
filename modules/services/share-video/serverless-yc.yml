@@ -1,0 +1,59 @@
+service: shruti-share-video
+
+frameworkVersion: "3"
+
+provider:
+  name: yandex-cloud
+  runtime: nodejs18
+  httpApi:
+    payload: "1.0"
+
+package:
+  patterns:
+    - "!**/*.md"
+    - "!**/*.ts"
+    - "!**/test/**"
+    - "!**/tests/**"
+    - "!**/__tests__/**"
+    - "!.serverless/**"
+    - "!.gitignore"
+    - "!scripts/**"
+    - "!serverless*.yml"
+    - "!tsconfig.json"
+    - "!package*.json"
+    - "!input/**"
+    - "!output/**"
+    - "!node_modules/.cache/**"
+    - "!node_modules/typescript/**"
+    - "!node_modules/ts-node/**"
+    - "!node_modules/@types/**"
+    - "!node_modules/.bin/**"
+    - "!node_modules/serverless/**"
+    - "!node_modules/serverless-*/**"
+    - "!node_modules/@yandex-cloud/**"
+    - "!node_modules/@napi-rs/canvas-linux-x64-musl/**"
+
+functions:
+  reels:
+    handler: dist/handler.handler
+    memorySize: 2048
+    timeout: 600
+    serviceAccount: ${env:YC_SERVICE_ACCOUNT_ID}
+    environment:
+      BUCKET: shruti-engine
+      OUTPUT_PREFIX: ${env:OUTPUT_PREFIX, "public/share/video"}
+      BACKGROUNDS_PREFIX: ${env:BACKGROUNDS_PREFIX, "private/share/video/backgrounds"}
+      OUTPUT_PUBLIC_BASE: https://cdn-ru.shruti.local
+      FFMPEG_BIN: /function/code/layers/ffmpeg/bin/ffmpeg
+      FFPROBE_BIN: /function/code/layers/ffmpeg/bin/ffprobe
+      # OpenAI is geo-blocked from YC IP ranges → use Yandex SpeechKit instead.
+      TRANSCRIBER: speechkit
+      SPEECHKIT_API_KEY: ${env:SPEECHKIT_API_KEY}
+      # YC Object Storage (S3-compatible) — own bucket, YC static keys.
+      S3_ENDPOINT_URL: https://storage.yandexcloud.net
+      AWS_REGION: ru-central1
+      AWS_ACCESS_KEY_ID: ${env:YC_RUNTIME_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${env:YC_RUNTIME_SECRET_ACCESS_KEY}
+
+plugins:
+  - "@yandex-cloud/serverless-plugin"
