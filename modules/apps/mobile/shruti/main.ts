@@ -45,6 +45,7 @@ import { useCapacitorAudioPlayer } from "@infra/audio/capacitor/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications/capacitor/index.js"
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
+import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
@@ -85,6 +86,13 @@ initShruti({
   // is backgrounded/killed; on iOS via URLSession.background. Web stays a
   // foreground-only Cache API implementation, the same as before.
   mediaDownloader: useMediaDownloaderAdapter({ cacheDir: "shruti" }),
+  // RevenueCat-backed IAP. Keys are baked in at build time via Vite
+  // `define` (REVENUECAT_*_KEY env vars). Empty key → `available: false`
+  // → the SDK is never touched and the Subscription UI hides itself.
+  purchases: useCapacitorPurchases({
+    iosApiKey: __REVENUECAT_IOS_KEY__,
+    androidApiKey: __REVENUECAT_ANDROID_KEY__,
+  }),
   // `databaseTransfer` needs a `() => databases.user` getter; the factory is
   // invoked inside `initShruti` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
@@ -106,6 +114,15 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
   })
 }
 
-router.isReady().then(() => {
+router.isReady().then(async () => {
   app.mount("#app")
+  // Fire-and-forget: RevenueCat SDK configure + initial customer fetch
+  // + live-update subscription. Failures must not block app startup —
+  // the purchase UI just stays hidden if init fails.
+  const { usePurchasesStore } = await import("./stores/usePurchasesStore.js")
+  void usePurchasesStore()
+    .init()
+    .catch((e) => {
+      console.warn("purchases.init failed", e)
+    })
 })

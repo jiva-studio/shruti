@@ -1,5 +1,17 @@
 <template>
   <AppPage :reserve-player-space="player.open">
+    <SettingsSubscriptionGroup
+      :available="subscription.available"
+      :is-subscribed="subscription.isSubscribed"
+      :packages="subscription.packages"
+      :purchasing="subscription.purchasing"
+      :restoring="subscription.restoring"
+      :legal-documents="subscription.legalDocuments"
+      @subscribe="subscription.onSubscribe"
+      @restore="subscription.onRestore"
+      @manage="subscription.onManage"
+    />
+
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
       v-model:active-server-id="activeServerId"
@@ -48,6 +60,7 @@ import {
   SettingsDataGroup,
   SettingsHelpGroup,
   SettingsSadhanaGroup,
+  SettingsSubscriptionGroup,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -75,6 +88,7 @@ const {
   onClearUserData,
   onExportDatabase,
   onImportFileSelected,
+  subscription,
 } = useSettingsController()
 
 const debugTrigger = useDebugUnlockTrigger()

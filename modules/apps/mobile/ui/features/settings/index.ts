@@ -14,3 +14,5 @@ export { default as SettingsDangerGroup } from "./groups/SettingsDangerGroup.vue
 export { default as SettingsDataGroup } from "./groups/SettingsDataGroup.vue"
 export { default as SettingsHelpGroup } from "./groups/SettingsHelpGroup.vue"
 export { default as SettingsSadhanaGroup } from "./groups/SettingsSadhanaGroup.vue"
+export { default as SettingsSubscriptionGroup } from "./groups/SettingsSubscriptionGroup.vue"
+export { default as SubscriptionDialog } from "./SubscriptionDialog.vue"

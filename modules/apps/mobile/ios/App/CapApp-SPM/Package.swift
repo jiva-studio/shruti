@@ -25,6 +25,7 @@ let package = Package(
         .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar"),
         .package(name: "ShrutiPluginAudioPlayer", path: "../../../../../plugins/audio-player"),
         .package(name: "ShrutiPluginMediaDownloader", path: "../../../../../plugins/media-downloader"),
+        .package(name: "RevenuecatPurchasesCapacitor", path: "../../../node_modules/@revenuecat/purchases-capacitor"),
         .package(name: "CapacitorPluginSafeArea", path: "../../../node_modules/capacitor-plugin-safe-area")
     ],
     targets: [
@@ -46,6 +47,7 @@ let package = Package(
                 .product(name: "CapacitorStatusBar", package: "CapacitorStatusBar"),
                 .product(name: "ShrutiPluginAudioPlayer", package: "ShrutiPluginAudioPlayer"),
                 .product(name: "ShrutiPluginMediaDownloader", package: "ShrutiPluginMediaDownloader"),
+                .product(name: "RevenuecatPurchasesCapacitor", package: "RevenuecatPurchasesCapacitor"),
                 .product(name: "CapacitorPluginSafeArea", package: "CapacitorPluginSafeArea")
             ]
         )
