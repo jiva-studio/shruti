@@ -51,7 +51,14 @@ jobs:
       - name: Deploy to Yandex Cloud
         run: npx serverless deploy --config serverless-yc.yml
         env:
+          # YC S3-compatible keys used by the plugin's AWS SDK to upload
+          # the >3.5MB package to YC Object Storage.
+          AWS_ACCESS_KEY_ID: ${{ secrets.LECTORIUM_YC_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.LECTORIUM_YC_SECRET_ACCESS_KEY }}
           YC_SERVICE_ACCOUNT_ID: ${{ secrets.LECTORIUM_YC_SERVICE_ACCOUNT_ID }}
+          # Real AWS S3 creds — projected into the FUNCTION env via
+          # serverless-yc.yml so boto3 in the YC runtime can hit
+          # akds-lectorium on AWS.
           AWS_RUNTIME_ACCESS_KEY_ID: ${{ secrets.LECTORIUM_AWS_RUNTIME_ACCESS_KEY_ID }}
           AWS_RUNTIME_SECRET_ACCESS_KEY: ${{ secrets.LECTORIUM_AWS_RUNTIME_SECRET_ACCESS_KEY }}
           AWS_RUNTIME_REGION: ${{ vars.LECTORIUM_AWS_RUNTIME_REGION }}
