@@ -1,0 +1,6 @@
+pyrnnoise
+pydub
+soundfile
+numpy
+scipy
+tqdm
