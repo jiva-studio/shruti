@@ -20,9 +20,9 @@ package:
 functions:
   cut:
     handler: handler.handler
-    memory: 1073741824
+    memorySize: 1024
     timeout: 600
-    account: ${env:YC_SERVICE_ACCOUNT_ID}
+    serviceAccount: ${env:YC_SERVICE_ACCOUNT_ID}
     environment:
       BUCKET: shruti-engine
       EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/excerpts"}
