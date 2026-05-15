@@ -14,6 +14,7 @@ import { formatNoteShare } from "@lib/application/formatNoteShare.js"
 import { formatReference } from "@lectorium/composables/groupReferences.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useLoading } from "@lectorium/services/useLoading.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
@@ -49,6 +50,7 @@ export function useNotesController(): NotesControllerReturn {
   const appLanguage = useAppLanguage()
   const { shareService, shareAudioService, activeServer, haptics } = useLectorium()
   const toast = useToast()
+  const loading = useLoading()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -183,6 +185,34 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   /**
+   * Filesystem path of a previously-shared excerpt for this note in
+   * Capacitor's app cache. Identical to the `path` we feed to
+   * `Filesystem.downloadFile` below; centralised so the cache-check
+   * and the download stay in lock-step.
+   */
+  function localExcerptPath(noteId: NoteId): string {
+    return `share-audio/note-${noteId}.mp3`
+  }
+
+  /**
+   * Local-cache hit check. Returns the `file://...` URI when the
+   * excerpt is already in `Directory.Cache` from a prior share; `null`
+   * otherwise. Same `stat → catch → null` pattern as
+   * `useDatabaseToFsFetcher.exists` — Capacitor's stat throws for
+   * missing files rather than returning a flag.
+   */
+  async function findLocalExcerpt(noteId: NoteId): Promise<string | null> {
+    const path = localExcerptPath(noteId)
+    try {
+      await Filesystem.stat({ path, directory: Directory.Cache })
+      const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache })
+      return uri
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Tries the public excerpt URL on the active CDN first (no compute
    * needed if the file is still there from a prior share). Returns the
    * URL on hit; resolves to `null` on miss / timeout / network error.
@@ -213,40 +243,41 @@ export function useNotesController(): NotesControllerReturn {
       await toast.error(t("notes.shareAudioErrorNoAudio"))
       return
     }
+    const audioPath = variant.audio.path
 
-    await toast.info(t("notes.shareAudioPreparing"))
-
-    let publicUrl: string
     try {
-      const probed = await probeExcerpt(note.id)
-      if (probed) {
-        publicUrl = probed
-      } else {
-        const result = await shareAudioService.cut({
-          sourceKey: variant.audio.path,
-          startMs: note.timeStart,
-          endMs: note.timeEnd,
-          excerptId: note.id,
+      const localPath = await loading.withLoading(t("notes.shareAudioPreparing"), async () => {
+        // 1. Already in app cache? Skip everything (no HTTP at all).
+        const cached = await findLocalExcerpt(note.id)
+        if (cached) return cached
+
+        // 2. Already on the CDN from someone else's prior share? Skip the
+        // cutter, just download.
+        let publicUrl = await probeExcerpt(note.id)
+
+        // 3. Cold path: cut, then download.
+        if (!publicUrl) {
+          const result = await shareAudioService.cut({
+            sourceKey: audioPath,
+            startMs: note.timeStart,
+            endMs: note.timeEnd,
+            excerptId: note.id,
+          })
+          publicUrl = result.url
+        }
+
+        const download = await Filesystem.downloadFile({
+          url: publicUrl,
+          path: localExcerptPath(note.id),
+          directory: Directory.Cache,
+          recursive: true,
         })
-        publicUrl = result.url
-      }
-    } catch {
-      await toast.error(t("notes.shareAudioErrorGeneric"))
-      return
-    }
-
-    try {
-      const download = await Filesystem.downloadFile({
-        url: publicUrl,
-        path: `share-audio/note-${note.id}.mp3`,
-        directory: Directory.Cache,
-        recursive: true,
+        if (!download.path) {
+          throw new Error("Filesystem.downloadFile returned no path")
+        }
+        return download.path
       })
-      const localPath = download.path
-      if (!localPath) {
-        await toast.error(t("notes.shareAudioErrorGeneric"))
-        return
-      }
+
       await shareService.share({
         url: localPath,
         title: resolveTrackTitle(track),
