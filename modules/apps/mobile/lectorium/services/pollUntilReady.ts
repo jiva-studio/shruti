@@ -1,5 +1,5 @@
 export interface PollOptions {
-  /** Hard cap in ms before throwing. Default 180_000 (3 min). */
+  /** Hard cap in ms before throwing. Default 480_000 (8 min) — worst-case AWS cold render observed at ~6 min in production logs; YC sync render is much shorter (~120 s). */
   readonly timeoutMs?: number
   /** Gap between probes in ms. Default 2_000. */
   readonly intervalMs?: number
@@ -29,7 +29,7 @@ export interface PollOptions {
  * Either way, the same call works.
  */
 export async function pollUntilReady(url: string, opts: PollOptions = {}): Promise<void> {
-  const timeoutMs = opts.timeoutMs ?? 180_000
+  const timeoutMs = opts.timeoutMs ?? 480_000
   const intervalMs = opts.intervalMs ?? 2_000
   const probeTimeoutMs = opts.probeTimeoutMs ?? 4_000
   const signal = opts.signal

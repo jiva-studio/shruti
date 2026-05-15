@@ -16,4 +16,6 @@ export default {
   shareVideoStillWorking: "Ещё чуть-чуть…",
   shareVideoErrorNoAudio: "Для этой лекции аудио недоступно",
   shareVideoErrorGeneric: "Не удалось подготовить видео. Попробуйте снова.",
+  shareInBackground: "Шеринг продолжается в фоне…",
+  shareAlreadyInProgress: "Подождите — уже идёт шеринг",
 }

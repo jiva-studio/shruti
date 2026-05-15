@@ -115,6 +115,41 @@ describe("useHttpShareVideoService", () => {
     })
   })
 
+  it("falls through to ready:false when the cut takes longer than 8s (server still rendering)", async () => {
+    vi.useFakeTimers()
+    // fetch never resolves; rejects with AbortError when the controller signals.
+    fetchMock.mockImplementation((_url, init) => {
+      return new Promise((_, reject) => {
+        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
+        sig?.addEventListener(
+          "abort",
+          () => {
+            const err = new Error("aborted") as Error & { name: string }
+            err.name = "AbortError"
+            reject(err)
+          },
+          { once: true }
+        )
+      })
+    })
+
+    const svc = useHttpShareVideoService(() => "https://yc.example/reels")
+    const promise = svc.cut({
+      sourceKey: "k",
+      startMs: 0,
+      endMs: 1000,
+      text: "t",
+      lang: "ru",
+      theme: "prabhupada",
+      videoId: "n1",
+    })
+
+    await vi.advanceTimersByTimeAsync(8_000)
+    const result = await promise
+    expect(result).toEqual({ videoId: "n1", url: "", ready: false })
+    vi.useRealTimers()
+  })
+
   it("throws on non-2xx response", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response("nope", { status: 504, statusText: "Gateway Timeout" })

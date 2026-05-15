@@ -27,11 +27,36 @@ export function useHttpShareVideoService(getEndpointUrl: () => string): IShareVi
       }
       if (req.videoId) body.video_id = req.videoId
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      // The cut is "tell the server to start rendering". On AWS the response
+      // comes back in ~1 s with `ready: false`; on YC the server holds the
+      // response open for ~120 s while it renders inline. Mobile platforms
+      // (Capacitor / Android OkHttp) abort idle fetches around 60-100 s by
+      // default — that surfaces a misleading network error even though the
+      // server is still working and will eventually upload the file.
+      //
+      // Cap the cut at 8 s with our own AbortController. If it returns by
+      // then, surface real 4xx/5xx normally. If not, abort the connection
+      // and report `ready:false` — the caller polls the predicted URL
+      // anyway, so the abandoned cut request doesn't matter (the server
+      // keeps rendering and uploads when done).
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort("cut-timeout-fall-through-to-poll"), 8_000)
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        })
+      } catch (err: unknown) {
+        if ((err as DOMException | undefined)?.name === "AbortError") {
+          return { videoId: req.videoId ?? "", url: "", ready: false }
+        }
+        throw err
+      } finally {
+        clearTimeout(timer)
+      }
       if (!response.ok) {
         throw new Error(`share-video renderer returned ${response.status} ${response.statusText}`)
       }
