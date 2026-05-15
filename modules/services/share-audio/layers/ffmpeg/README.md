@@ -11,8 +11,8 @@ deploy time by the GitHub Actions workflow into `bin/ffmpeg`, and either:
 
 ```bash
 mkdir -p bin
-curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-  | tar -xJ --strip-components=1 -C bin --wildcards '*/ffmpeg'
+curl -fsSL -o bin/ffmpeg \
+  https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64
 chmod +x bin/ffmpeg
 ```
 
