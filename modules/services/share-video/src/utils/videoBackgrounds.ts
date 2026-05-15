@@ -21,21 +21,28 @@ export function getVideoDuration(videoPath: string): Promise<number> {
 /**
  * Concatenate several pre-normalised clips into a single MP4 of (at most)
  * `targetDurationSec` seconds. Used by s3Backgrounds after downloading
- * 5-second pack clips. Re-encodes (we can't `-c copy` since clips may have
- * been touched by ffmpeg but we want a clean monotonic output), scales+crops
- * to the requested aspect, drops audio (the reel's audio comes from the cut
- * MP3, not the background pack).
+ * 5-second pack clips.
  *
- * Pack clips are expected to share codec/profile/fps/pix_fmt — the
- * normalisation step at upload time (scripts/upload-backgrounds.sh) handles
- * that. If they differ, the concat demuxer will refuse and we'd have to
- * switch to the slower concat-filter form.
+ * Pack clips are pre-encoded to the exact target format at upload time
+ * (h264/yuv420p/30fps at the reel's W×H — see scripts/upload-backgrounds.sh),
+ * so the concat demuxer + `-c copy` just muxes streams together without a
+ * second libx264 pass. Measured on Lambda: re-encode form was ~70 s for a
+ * 33 s output, copy-mux form is ~3 s. The `-t` flag cuts at the previous
+ * keyframe, which can leave the output up to ~1 s short — fine for a
+ * background overlay where there is no sync constraint.
+ *
+ * If a future theme is uploaded with a different codec/profile/fps/pix_fmt
+ * the concat demuxer will refuse the mux and we'd have to add a probe-and-
+ * fallback-to-re-encode path. Audio is dropped (`-an`); the reel's audio
+ * comes from the cut MP3, not the background pack. The W×H args are kept
+ * in the signature so callers don't drift, but they are not used here —
+ * the upload-time normalisation owns geometry.
  */
 export function concatClips(
   clipPaths: string[],
   targetDurationSec: number,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
   outPath: string,
   tempDir: string,
 ): Promise<void> {
@@ -55,11 +62,7 @@ export function concatClips(
       .inputOptions(['-f', 'concat', '-safe', '0'])
       .outputOptions([
         '-t', targetDurationSec.toFixed(3),
-        '-vf', `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`,
-        '-c:v', 'libx264',
-        '-preset', 'fast',
-        '-crf', '23',
-        '-pix_fmt', 'yuv420p',
+        '-c', 'copy',
         '-an',
       ])
       .output(outPath)

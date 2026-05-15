@@ -41,64 +41,73 @@ export async function generateSlideImages(
   fs.mkdirSync(tempDir, { recursive: true });
   registerFonts();
 
-  const imagePaths: string[] = [];
+  // Parallel render: canvas.encode() releases the libuv thread pool, so the
+  // 54-frame batch lights up all available vCPUs instead of one.
+  return Promise.all(
+    slides.map((slide, i) =>
+      renderOneSlideImage(slide, options, useTransparentBackground, i, tempDir),
+    ),
+  );
+}
 
-  for (let i = 0; i < slides.length; i++) {
-    const slide = slides[i];
-    const canvas = createCanvas(options.slideWidth, options.slideHeight);
-    const ctx = canvas.getContext('2d');
+async function renderOneSlideImage(
+  slide: Slide,
+  options: ReelGeneratorOptions,
+  useTransparentBackground: boolean,
+  slideIndex: number,
+  tempDir: string,
+): Promise<string> {
+  const canvas = createCanvas(options.slideWidth, options.slideHeight);
+  const ctx = canvas.getContext('2d');
 
-    if (useTransparentBackground) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
-    } else {
-      ctx.fillStyle = options.backgroundColor;
-      ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
-    }
-
-    ctx.font = `bold ${options.fontSize}px ${FONT_FAMILY}`;
-    ctx.fillStyle = options.textColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const maxTextWidth = options.slideWidth * 0.85;
-    const lines = wrapText(ctx, slide.text, maxTextWidth);
-
-    const lineHeight = options.fontSize * 1.2;
-    const totalHeight = lines.length * lineHeight;
-    const startY = options.slideHeight * 0.75 - totalHeight / 2;
-
-    const padding = 40;
-    const bgWidth = maxTextWidth + padding * 2;
-    const bgHeight = totalHeight + padding * 1.5;
-    const bgX = (options.slideWidth - bgWidth) / 2;
-    const bgY = startY - padding * 0.75;
-    const cornerRadius = 30;
-
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-    ctx.beginPath();
-    ctx.roundRect(bgX, bgY, bgWidth, bgHeight, cornerRadius);
-    ctx.fill();
-
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#000000';
-    ctx.fillStyle = options.textColor;
-
-    lines.forEach((line, index) => {
-      const y = startY + (index + 0.5) * lineHeight;
-      ctx.strokeText(line, options.slideWidth / 2, y);
-      ctx.fillText(line, options.slideWidth / 2, y);
-    });
-
-    const imagePath = path.join(
-      tempDir,
-      `slide_${i.toString().padStart(3, '0')}.png`,
-    );
-    fs.writeFileSync(imagePath, canvas.toBuffer('image/png'));
-    imagePaths.push(imagePath);
+  if (useTransparentBackground) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
+  } else {
+    ctx.fillStyle = options.backgroundColor;
+    ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
   }
 
-  return imagePaths;
+  ctx.font = `bold ${options.fontSize}px ${FONT_FAMILY}`;
+  ctx.fillStyle = options.textColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const maxTextWidth = options.slideWidth * 0.85;
+  const lines = wrapText(ctx, slide.text, maxTextWidth);
+
+  const lineHeight = options.fontSize * 1.2;
+  const totalHeight = lines.length * lineHeight;
+  const startY = options.slideHeight * 0.75 - totalHeight / 2;
+
+  const padding = 40;
+  const bgWidth = maxTextWidth + padding * 2;
+  const bgHeight = totalHeight + padding * 1.5;
+  const bgX = (options.slideWidth - bgWidth) / 2;
+  const bgY = startY - padding * 0.75;
+  const cornerRadius = 30;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+  ctx.beginPath();
+  ctx.roundRect(bgX, bgY, bgWidth, bgHeight, cornerRadius);
+  ctx.fill();
+
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#000000';
+  ctx.fillStyle = options.textColor;
+
+  lines.forEach((line, index) => {
+    const y = startY + (index + 0.5) * lineHeight;
+    ctx.strokeText(line, options.slideWidth / 2, y);
+    ctx.fillText(line, options.slideWidth / 2, y);
+  });
+
+  const imagePath = path.join(
+    tempDir,
+    `slide_${slideIndex.toString().padStart(3, '0')}.png`,
+  );
+  await fs.promises.writeFile(imagePath, await canvas.encode('png'));
+  return imagePath;
 }
 
 export async function generateWordHighlightFrames(
@@ -111,8 +120,6 @@ export async function generateWordHighlightFrames(
   fs.mkdirSync(tempDir, { recursive: true });
   registerFonts();
 
-  const frames: Array<{ path: string; duration: number; startTime: number }> = [];
-
   if (!slide.words || slide.words.length === 0) {
     const framePath = await generateSingleFrame(
       slide.text,
@@ -122,33 +129,36 @@ export async function generateWordHighlightFrames(
       -1,
       tempDir,
     );
-    frames.push({
-      path: framePath,
-      duration: slide.duration,
-      startTime: slide.startTime || 0,
-    });
-    return frames;
+    return [
+      {
+        path: framePath,
+        duration: slide.duration,
+        startTime: slide.startTime || 0,
+      },
+    ];
   }
 
-  for (let wordIndex = 0; wordIndex < slide.words.length; wordIndex++) {
-    const word = slide.words[wordIndex];
-    const framePath = await generateSingleFrame(
-      slide.text,
-      options,
-      useTransparentBackground,
-      slideIndex,
-      wordIndex,
-      tempDir,
-      slide.words,
-    );
-    frames.push({
-      path: framePath,
-      duration: word.end - word.start,
-      startTime: word.start,
-    });
-  }
-
-  return frames;
+  // Each word's frame is independent — render in parallel. canvas.encode()
+  // and fs.promises.writeFile both release the libuv thread pool, so a
+  // multi-vCPU runtime actually parallelises instead of serialising.
+  return Promise.all(
+    slide.words.map(async (word, wordIndex) => {
+      const framePath = await generateSingleFrame(
+        slide.text,
+        options,
+        useTransparentBackground,
+        slideIndex,
+        wordIndex,
+        tempDir,
+        slide.words,
+      );
+      return {
+        path: framePath,
+        duration: word.end - word.start,
+        startTime: word.start,
+      };
+    }),
+  );
 }
 
 async function generateSingleFrame(
@@ -212,7 +222,7 @@ async function generateSingleFrame(
       .toString()
       .padStart(3, '0')}.png`,
   );
-  fs.writeFileSync(framePath, canvas.toBuffer('image/png'));
+  await fs.promises.writeFile(framePath, await canvas.encode('png'));
   return framePath;
 }
 
