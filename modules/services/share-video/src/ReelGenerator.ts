@@ -39,11 +39,13 @@ function attachProgressLogger(cmd: any, label: string): void {
 }
 
 const DEFAULTS: ReelGeneratorOptions = {
-  slideWidth: 1080,
-  slideHeight: 1920,
+  slideWidth: 720,
+  slideHeight: 1280,
   backgroundColor: '#000000',
   textColor: '#FFFFFF',
-  fontSize: 80,
+  // Scaled from 80 at the previous 1080p target by 720/1080 = 2/3 so the
+  // text occupies the same relative slice of the frame.
+  fontSize: 53,
   fontFamily: 'NotoSans',
   maxCharsPerSlide: 60,
 };

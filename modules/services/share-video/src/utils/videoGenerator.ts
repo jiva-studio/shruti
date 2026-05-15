@@ -80,19 +80,21 @@ async function renderOneSlideImage(
   const totalHeight = lines.length * lineHeight;
   const startY = options.slideHeight * 0.75 - totalHeight / 2;
 
-  const padding = 40;
+  // Layout constants scaled from the 1080p reference (40/30/8 there) by
+  // 720/1080 = 2/3 so the proportions hold at the new 720p target.
+  const padding = 27;
   const bgWidth = maxTextWidth + padding * 2;
   const bgHeight = totalHeight + padding * 1.5;
   const bgX = (options.slideWidth - bgWidth) / 2;
   const bgY = startY - padding * 0.75;
-  const cornerRadius = 30;
+  const cornerRadius = 20;
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
   ctx.beginPath();
   ctx.roundRect(bgX, bgY, bgWidth, bgHeight, cornerRadius);
   ctx.fill();
 
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 5;
   ctx.strokeStyle = '#000000';
   ctx.fillStyle = options.textColor;
 
@@ -189,12 +191,14 @@ async function generateSingleFrame(
   const totalHeight = lines.length * lineHeight;
   const startY = options.slideHeight * 0.75 - totalHeight / 2;
 
-  const padding = 40;
+  // Layout constants scaled from the 1080p reference (40/30/8 there) by
+  // 720/1080 = 2/3 so the proportions hold at the new 720p target.
+  const padding = 27;
   const bgWidth = maxTextWidth + padding * 2;
   const bgHeight = totalHeight + padding * 1.5;
   const bgX = (options.slideWidth - bgWidth) / 2;
   const bgY = startY - padding * 0.75;
-  const cornerRadius = 30;
+  const cornerRadius = 20;
 
   ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
   ctx.beginPath();
@@ -204,7 +208,7 @@ async function generateSingleFrame(
   if (words && words.length > 0 && highlightWordIndex >= 0 && highlightWordIndex < words.length) {
     renderTextWithWordHighlight(ctx, lines, highlightWordIndex, options, startY, lineHeight);
   } else {
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = '#000000';
     ctx.fillStyle = options.textColor;
     ctx.textAlign = 'center';
@@ -257,7 +261,7 @@ function renderTextWithWordHighlight(
       } else {
         ctx.fillStyle = options.textColor;
       }
-      ctx.lineWidth = 8;
+      ctx.lineWidth = 5;
       ctx.strokeStyle = '#000000';
 
       ctx.strokeText(word, currentX, y);

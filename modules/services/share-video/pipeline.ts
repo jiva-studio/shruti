@@ -9,8 +9,13 @@ import { listAndConcatBackgrounds } from './src/utils/s3Backgrounds';
 import { downloadToFile, uploadFile, buildPublicUrl } from './storage';
 import { RenderRequest } from './eventAdapter';
 
-const SLIDE_WIDTH = 1080;
-const SLIDE_HEIGHT = 1920;
+// 720x1280 (9:16). The pack source clips are archival 70s footage, so 1080p
+// was carrying upscaled noise without any real detail; dropping to 720 has no
+// visible cost on the backgrounds and cuts libx264 composite roughly 2.2x.
+// Text (canvas) and logo regenerated to the same resolution so concat-copy
+// stays valid in concatClips and appendLogo.
+const SLIDE_WIDTH = 720;
+const SLIDE_HEIGHT = 1280;
 const MAX_CHARS_PER_SLIDE = 60;
 const FFMPEG_BIN = process.env.FFMPEG_BIN || '/opt/bin/ffmpeg';
 const FFPROBE_BIN = process.env.FFPROBE_BIN || guessFfprobe(FFMPEG_BIN);
