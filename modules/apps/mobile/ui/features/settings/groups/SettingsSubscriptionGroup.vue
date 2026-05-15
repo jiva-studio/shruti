@@ -38,6 +38,7 @@
       :purchasing="purchasing"
       :restoring="restoring"
       :legal-documents="legalDocuments"
+      :debug-log="debugLog"
       @subscribe="(id) => emit('subscribe', id)"
       @restore="emit('restore')"
     />
@@ -61,6 +62,7 @@ defineProps<{
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
+  debugLog?: string[]
 }>()
 
 const emit = defineEmits<{

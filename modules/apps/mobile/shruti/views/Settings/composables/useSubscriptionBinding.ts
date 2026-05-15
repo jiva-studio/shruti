@@ -22,6 +22,8 @@ export interface SubscriptionBinding {
   readonly purchasing: boolean
   readonly restoring: boolean
   readonly legalDocuments: LegalDocument[]
+  /** Temporary on-screen diagnostic trail — remove once IAP is trusted. */
+  readonly debugLog: string[]
   onSubscribe: (packageId: string) => Promise<void>
   onRestore: () => Promise<void>
   onManage: () => void
@@ -35,12 +37,20 @@ export interface SubscriptionBinding {
  * `ui/features/settings/*` files stay framework-pure.
  */
 export function useSubscriptionBinding(): SubscriptionBinding {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
   const store = usePurchasesStore()
 
   const legalDocuments = computed<LegalDocument[]>(() => {
+    // Privacy policy is served from this repo's GitHub Pages
+    // (.github/workflows/pages.yml uploads modules/web/policy/ as the
+    // site root). EN is index.html, RU is ru.html — link to the locale
+    // the user is currently in.
+    const policyBase = "https://jiva-studio.github.io/shruti"
+    const policyUrl =
+      (i18n.locale.value as string) === "ru" ? `${policyBase}/ru.html` : `${policyBase}/`
     const docs: LegalDocument[] = [
-      { title: t("settings.subscription.legal.privacy"), link: "https://shruti.app/policy" },
+      { title: t("settings.subscription.legal.privacy"), link: policyUrl },
     ]
     // Apple requires a "Terms of Use" link in any UI that sells a
     // subscription; we point to Apple's standard EULA when the app
@@ -116,6 +126,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),
+    debugLog: computed(() => store.debugLog),
     legalDocuments,
     onSubscribe,
     onRestore,
