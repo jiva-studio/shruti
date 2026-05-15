@@ -42,6 +42,8 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __BUILD_ID__: JSON.stringify(process.env.BUILD_ID ?? "dev"),
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
+    __REVENUECAT_IOS_KEY__: JSON.stringify(process.env.SHRUTI_APPLE_REVENUE_CAT_KEY ?? ""),
+    __REVENUECAT_ANDROID_KEY__: JSON.stringify(process.env.SHRUTI_GOOGLE_REVENUE_CAT_KEY ?? ""),
   },
   build: {
     minify: true,
