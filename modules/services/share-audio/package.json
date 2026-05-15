@@ -1,0 +1,16 @@
+{
+  "name": "@lectorium/share-audio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Serverless function that cuts MP3 excerpts. Deploys to AWS Lambda and Yandex Cloud Functions.",
+  "scripts": {
+    "deploy:aws": "serverless deploy --config serverless-aws.yml",
+    "deploy:yc": "serverless deploy --config serverless-yc.yml",
+    "remove:aws": "serverless remove --config serverless-aws.yml",
+    "remove:yc": "serverless remove --config serverless-yc.yml"
+  },
+  "devDependencies": {
+    "serverless": "^3.39.0",
+    "@yandex-cloud/serverless-plugin": "^1.7.25"
+  }
+}

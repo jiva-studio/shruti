@@ -1,0 +1,54 @@
+service: lectorium-share-audio
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: ${env:AWS_REGION, "us-east-1"}
+  memorySize: 1024
+  timeout: 600
+  architecture: x86_64
+  environment:
+    BUCKET: akds-lectorium
+    EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/excerpts"}
+    EXCERPTS_PUBLIC_BASE: ${env:EXCERPTS_PUBLIC_BASE, ""}
+    FFMPEG_BIN: /opt/bin/ffmpeg
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:HeadObject
+            - s3:PutObject
+            - s3:PutObjectAcl
+          Resource: arn:aws:s3:::akds-lectorium/*
+
+package:
+  patterns:
+    - "!node_modules/**"
+    - "!.serverless/**"
+    - "!layers/**"
+    - "!package*.json"
+    - "!serverless*.yml"
+    - "!README.md"
+    - "!.gitignore"
+
+functions:
+  cut:
+    handler: handler.handler
+    layers:
+      - { Ref: FfmpegLambdaLayer }
+    events:
+      - httpApi:
+          method: POST
+          path: /excerpts
+
+layers:
+  ffmpeg:
+    name: lectorium-share-audio-ffmpeg
+    path: layers/ffmpeg
+    description: Static ffmpeg binary at /opt/bin/ffmpeg
+    compatibleRuntimes:
+      - python3.11
