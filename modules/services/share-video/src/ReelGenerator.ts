@@ -15,6 +15,29 @@ if (process.env.FFPROBE_BIN) {
   ffmpeg.setFfprobePath(process.env.FFPROBE_BIN);
 }
 
+// One-line JSON event log; flushed immediately so CloudWatch / YC Logging see
+// ffmpeg pass boundaries and per-pass progress while the worker is still running.
+function logPhase(phase: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({ phase, t_ms: Date.now(), ...fields }));
+}
+
+// Throttled fluent-ffmpeg progress logger: emits at most one event every 5 s
+// (or on the final ~100% tick). Avoids spamming CloudWatch with one line/sec
+// while still showing forward motion during long encodes.
+function attachProgressLogger(cmd: any, label: string): void {
+  let lastEmit = 0;
+  cmd.on('progress', (p: { percent?: number; timemark?: string; currentFps?: number }) => {
+    const now = Date.now();
+    if (now - lastEmit < 5000 && (p.percent == null || p.percent < 99)) return;
+    lastEmit = now;
+    logPhase(`${label}-progress`, {
+      percent: p.percent != null ? Math.round(p.percent * 10) / 10 : null,
+      timemark: p.timemark,
+      fps: p.currentFps,
+    });
+  });
+}
+
 const DEFAULTS: ReelGeneratorOptions = {
   slideWidth: 1080,
   slideHeight: 1920,
@@ -159,13 +182,20 @@ export class ReelGenerator {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
     return new Promise((resolve, reject) => {
-      ffmpeg()
+      logPhase('text-track-start', { frames: frameData.length });
+      const textTrackStartedAt = Date.now();
+      const textCmd = ffmpeg()
         .input(textConcatPath)
         .inputOptions(['-f', 'concat', '-safe', '0'])
         .outputOptions(['-c:v', 'qtrle', '-vsync', 'vfr'])
-        .output(textVideoPath)
+        .output(textVideoPath);
+      attachProgressLogger(textCmd, 'text-track');
+      textCmd
         .on('end', () => {
-          ffmpeg(backgroundVideoPath)
+          logPhase('text-track-done', { ms: Date.now() - textTrackStartedAt });
+          logPhase('composite-start');
+          const compositeStartedAt = Date.now();
+          const compCmd = ffmpeg(backgroundVideoPath)
             .input(textVideoPath)
             .input(audioPath)
             .complexFilter([
@@ -183,8 +213,13 @@ export class ReelGenerator {
               '-c:a', 'aac',
               '-shortest',
             ])
-            .output(outputPath)
-            .on('end', () => resolve())
+            .output(outputPath);
+          attachProgressLogger(compCmd, 'composite');
+          compCmd
+            .on('end', () => {
+              logPhase('composite-done', { ms: Date.now() - compositeStartedAt });
+              resolve();
+            })
             .on('error', reject)
             .run();
         })
@@ -200,7 +235,9 @@ export class ReelGenerator {
   ): Promise<void> {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     return new Promise((resolve, reject) => {
-      ffmpeg()
+      logPhase('logo-append-start');
+      const startedAt = Date.now();
+      const cmd = ffmpeg()
         .input(mainVideoPath)
         .input(logoVideoPath)
         .complexFilter(['[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]'])
@@ -213,8 +250,13 @@ export class ReelGenerator {
           '-pix_fmt', 'yuv420p',
           '-c:a', 'aac',
         ])
-        .output(outputPath)
-        .on('end', () => resolve())
+        .output(outputPath);
+      attachProgressLogger(cmd, 'logo-append');
+      cmd
+        .on('end', () => {
+          logPhase('logo-append-done', { ms: Date.now() - startedAt });
+          resolve();
+        })
         .on('error', reject)
         .run();
     });
