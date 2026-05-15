@@ -21,6 +21,12 @@ function guessFfprobe(ffmpegPath: string): string {
   return fs.existsSync(cand) ? cand : 'ffprobe';
 }
 
+// Single-line JSON event log; flushes immediately so CloudWatch / YC Logging
+// see phase boundaries while the worker is still running, not only at the end.
+function logPhase(phase: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({ phase, t_ms: Date.now(), ...fields }));
+}
+
 export interface RenderArgs {
   req: RenderRequest;
   videoId: string;
@@ -47,11 +53,25 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
   const { req, videoId, bucket, backgroundsPrefix, outputPrefix, logoPath, s3, tempDir } = args;
   const t0 = Date.now();
   fs.mkdirSync(tempDir, { recursive: true });
+  logPhase('render-start', {
+    video_id: videoId,
+    source_key: req.sourceKey,
+    duration_sec: (req.endMs - req.startMs) / 1000,
+    theme: req.theme,
+    lang: req.lang,
+    transcriber: process.env.TRANSCRIBER || 'whisper',
+  });
 
   // 1. Download source MP3.
   const srcMp3 = path.join(tempDir, 'source.mp3');
+  logPhase('download-src-start', { video_id: videoId, key: req.sourceKey });
   await downloadToFile(s3, bucket, req.sourceKey, srcMp3);
   const t1 = Date.now();
+  logPhase('download-src-done', {
+    video_id: videoId,
+    ms: t1 - t0,
+    bytes: fs.statSync(srcMp3).size,
+  });
 
   // 2. Cut to [start_ms, end_ms]. Probe first to fail fast on out-of-range.
   const sourceDurMs = ffprobeDurationMs(srcMp3);
@@ -65,10 +85,13 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
   const cutMp3 = path.join(tempDir, 'cut.mp3');
   cutAudio(srcMp3, cutMp3, req.startMs, req.endMs);
   const t2 = Date.now();
+  logPhase('cut-done', { video_id: videoId, ms: t2 - t1 });
 
   const durationSec = (req.endMs - req.startMs) / 1000;
 
   // 3. Background list + concat (parallel with Whisper).
+  logPhase('backgrounds-start', { video_id: videoId, theme: req.theme });
+  const bgStartedAt = Date.now();
   const backgroundPromise = listAndConcatBackgrounds({
     bucket,
     prefix: backgroundsPrefix,
@@ -79,9 +102,14 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
     height: SLIDE_HEIGHT,
     tempDir,
     s3,
+  }).then((p) => {
+    logPhase('backgrounds-done', { video_id: videoId, ms: Date.now() - bgStartedAt });
+    return p;
   });
 
   // 4. Word-level transcription via the configured provider (whisper or speechkit).
+  logPhase('transcribe-start', { video_id: videoId, provider: process.env.TRANSCRIBER || 'whisper' });
+  const transcribeStartedAt = Date.now();
   let whisper;
   try {
     const transcriber = await getTranscriber({ s3, bucket });
@@ -93,6 +121,7 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
     throw err;
   }
   const t3 = Date.now();
+  logPhase('transcribe-done', { video_id: videoId, ms: t3 - transcribeStartedAt, words: whisper.words.length });
 
   const backgroundVideoPath = await backgroundPromise;
   const t4 = Date.now();
@@ -101,9 +130,11 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
   const aligned = forceAlign(req.text, whisper.words, durationSec);
   const slides = wordsToSlides(aligned, MAX_CHARS_PER_SLIDE);
   const t5 = Date.now();
+  logPhase('align-done', { video_id: videoId, ms: t5 - t4, slides: slides.length });
 
   // 6. Render reel.
   const finalMp4 = path.join(tempDir, 'reel.mp4');
+  logPhase('render-reel-start', { video_id: videoId, slides: slides.length });
   await new ReelGenerator().generateReel({
     audioPath: cutMp3,
     outputPath: finalMp4,
@@ -116,11 +147,14 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
     maxCharsPerSlide: MAX_CHARS_PER_SLIDE,
   });
   const t6 = Date.now();
+  logPhase('render-reel-done', { video_id: videoId, ms: t6 - t5 });
 
   // 7. Upload.
   const outputKey = `${outputPrefix.replace(/\/$/, '')}/${videoId}.mp4`;
+  logPhase('upload-start', { video_id: videoId, key: outputKey, bytes: fs.statSync(finalMp4).size });
   await uploadFile(s3, bucket, outputKey, finalMp4, 'video/mp4', 'public, max-age=31536000, immutable');
   const t7 = Date.now();
+  logPhase('upload-done', { video_id: videoId, ms: t7 - t6 });
 
   console.log(
     JSON.stringify({
