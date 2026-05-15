@@ -5,8 +5,16 @@ export default {
     status: "Status",
     sadhana: "Sadhana",
     data: "Data",
+    help: "Help",
     danger: "Danger zone",
     about: "About",
+  },
+
+  help: {
+    open: {
+      title: "Open help",
+      description: "Indicators, settings and features explained",
+    },
   },
 
   appLanguage: {

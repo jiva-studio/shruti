@@ -19,6 +19,8 @@
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
+    <SettingsHelpGroup @open-help="helpOpen = true" />
+
     <SettingsDangerGroup
       v-if="debugUnlocked"
       @clear-cache="onClearCache"
@@ -32,17 +34,22 @@
       :db-scheme="dbScheme"
       @tap="debugTrigger.onTap"
     />
+
+    <HelpDialog v-model:open="helpOpen" />
   </AppPage>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAppearanceGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
+  SettingsHelpGroup,
   SettingsSadhanaGroup,
 } from "@ui/features/settings/index.js"
+import { HelpDialog } from "@ui/features/help/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useDebugUnlockTrigger } from "@shruti/composables/useDebugUnlockTrigger.js"
 import { useSettingsController } from "./SettingsView.controller.js"
@@ -72,4 +79,6 @@ const {
 
 const debugTrigger = useDebugUnlockTrigger()
 const debugUnlocked = debugTrigger.unlocked
+
+const helpOpen = ref(false)
 </script>
