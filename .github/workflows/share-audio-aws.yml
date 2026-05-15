@@ -1,0 +1,67 @@
+name: share-audio (AWS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - modules/services/share-audio/**
+      - .github/workflows/share-audio-aws.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - modules/services/share-audio/**
+      - .github/workflows/share-audio-aws.yml
+  workflow_dispatch:
+
+concurrency:
+  group: share-audio-aws-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: modules/services/share-audio
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: npm ci
+      - run: npx serverless print --config serverless-aws.yml
+        env:
+          AWS_REGION: us-east-1
+
+  deploy:
+    name: deploy
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch ffmpeg static binary
+        run: |
+          mkdir -p layers/ffmpeg/bin
+          curl -sSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
+            | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg'
+          chmod +x layers/ffmpeg/bin/ffmpeg
+      - run: npm ci
+      - name: Deploy to AWS Lambda
+        run: npx serverless deploy --config serverless-aws.yml
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.SHRUTI_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
