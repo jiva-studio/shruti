@@ -36,7 +36,10 @@ package:
 functions:
   reels:
     handler: dist/handler.handler
-    memorySize: 2048
+    # YC Functions, like Lambda, scale vCPU with memorySize — there's no
+    # separate CPU knob. 4096 MB is the max tier and the only way to get
+    # max vCPU for the x264 encode.
+    memorySize: 4096
     timeout: 600
     serviceAccount: ${env:YC_SERVICE_ACCOUNT_ID}
     environment:

@@ -6,7 +6,10 @@ provider:
   name: aws
   runtime: nodejs20.x
   region: ${env:AWS_REGION, "us-east-1"}
-  memorySize: 3008
+  # Lambda has no separate CPU knob — vCPU count scales with memory.
+  # 10240 MB ≈ 6 vCPUs (vs ~1.7 at 3008 MB). x264 -preset fast benefits ~2-3x
+  # from the extra cores on a 1080x1920 reel; render is the dominant phase.
+  memorySize: 10240
   timeout: 900
   architecture: x86_64
   httpApi:
