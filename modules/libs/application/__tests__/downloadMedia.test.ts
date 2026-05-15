@@ -12,11 +12,13 @@ const SERVER_A: CdnServer = {
   id: "server-a",
   name: "Server A",
   urlTemplate: "https://a.example.com/{path}",
+  shareAudioUrl: "https://a.example.com/excerpts",
 }
 const SERVER_B: CdnServer = {
   id: "server-b",
   name: "Server B",
   urlTemplate: "https://b.example.com/{path}",
+  shareAudioUrl: "https://b.example.com/excerpts",
 }
 
 const PATH = "public/tracks/t-1/audio/original.mp3"

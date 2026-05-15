@@ -2,7 +2,7 @@
 
 The same handler runs unchanged on AWS Lambda and Yandex Cloud Functions.
 Source and excerpt live in the same single bucket; excerpts go under
-EXCERPTS_PREFIX (default `public/excerpts`).
+EXCERPTS_PREFIX (default `public/shares/audio`).
 """
 
 from __future__ import annotations
@@ -22,11 +22,19 @@ log = logging.getLogger()
 log.setLevel(logging.INFO)
 
 BUCKET = os.environ["BUCKET"]
-EXCERPTS_PREFIX = os.environ.get("EXCERPTS_PREFIX", "public/excerpts")
+EXCERPTS_PREFIX = os.environ.get("EXCERPTS_PREFIX", "public/shares/audio")
 FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "/opt/bin/ffmpeg")
 
 
 def handler(event, context):  # noqa: ANN001 — cloud SDKs pass arbitrary dicts
+    # CORS preflight — browser-served clients (mobile web build, `ionic
+    # serve`) send an OPTIONS before the POST. Answer it directly; AWS
+    # HTTP API's built-in cors handles its own preflight, but the YC
+    # Function delivers OPTIONS to the handler, so we have to.
+    method = _request_method(event)
+    if method == "OPTIONS":
+        return _response(204, None)
+
     try:
         req = parse_request(event)
     except ValueError as exc:
@@ -87,9 +95,30 @@ def _object_exists(client, bucket: str, key: str) -> bool:
         return False
 
 
-def _response(status: int, body: dict) -> dict:
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "600",
+}
+
+
+def _request_method(event) -> str:  # noqa: ANN001
+    # AWS HTTP API v2: event.requestContext.http.method
+    # Direct invoke / YC: event.httpMethod or event.request_context.http_method
+    ctx = event.get("requestContext", {}) if isinstance(event, dict) else {}
+    http = ctx.get("http") if isinstance(ctx, dict) else None
+    if isinstance(http, dict) and "method" in http:
+        return str(http["method"]).upper()
+    if isinstance(event, dict) and "httpMethod" in event:
+        return str(event["httpMethod"]).upper()
+    return ""
+
+
+def _response(status: int, body):  # noqa: ANN001 — `body` is dict|None
+    headers = {"Content-Type": "application/json", **_CORS_HEADERS}
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body),
+        "headers": headers,
+        "body": json.dumps(body) if body is not None else "",
     }
