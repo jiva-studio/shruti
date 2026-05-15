@@ -25,7 +25,7 @@ functions:
     serviceAccount: ${env:YC_SERVICE_ACCOUNT_ID}
     environment:
       BUCKET: shruti-engine
-      EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/excerpts"}
+      EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/shares/audio"}
       FFMPEG_BIN: /function/code/layers/ffmpeg/bin/ffmpeg
       # YC SA can't sign AWS S3 requests — use a dedicated runtime IAM user.
       AWS_ACCESS_KEY_ID: ${env:AWS_RUNTIME_ACCESS_KEY_ID}
