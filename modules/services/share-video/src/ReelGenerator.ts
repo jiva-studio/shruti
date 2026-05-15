@@ -212,10 +212,26 @@ export class ReelGenerator {
               '-map', '[outv]',
               '-map', '2:a',
               '-c:v', 'libx264',
-              '-preset', 'fast',
+              // veryfast: ~1.5x faster than `fast`, ~10% larger file at the same
+              // CRF. Social platforms re-transcode anyway; quality hit is
+              // invisible after their pipeline.
+              '-preset', 'veryfast',
+              // zerolatency: drops B-frames and lookahead; another ~15% encode
+              // speedup. Slightly worse compression but acceptable for our use.
+              '-tune', 'zerolatency',
               '-crf', '23',
               '-pix_fmt', 'yuv420p',
+              // Force CFR @ 30 fps so the output matches the logo container.
+              // Without this, libx264 defaults to 25 fps (PAL fallback when no
+              // input framerate is asserted), which (a) was an unintended drop
+              // from the 30 fps bg clips, and (b) made the logo-append concat
+              // demuxer reject `-c copy` due to framerate mismatch.
+              '-r', '30',
               '-c:a', 'aac',
+              // Lock audio params to match logo.mp4 so the post-composite logo
+              // append can stream-copy instead of re-encode.
+              '-ar', '44100',
+              '-ac', '2',
               '-shortest',
             ])
             .output(outputPath);
@@ -233,28 +249,41 @@ export class ReelGenerator {
     });
   }
 
+  /**
+   * Append the static logo MP4 to the end of the composited reel.
+   *
+   * Both files share codec params (h264/High/yuv420p/30fps/1080x1920, AAC
+   * LC/44.1k/stereo) — the composite step pins them explicitly so this
+   * holds. That means the concat *demuxer* with `-c copy` can mux the two
+   * streams together without re-encoding. Previous form used the concat
+   * *filter* + libx264 re-encode, which on a 67 s reel costs ~139 s on the
+   * Lambda 3008 MB tier — for what is essentially a 3 s append. Now it
+   * costs ~tail-of-disk-I/O.
+   *
+   * If a future change drops codec parity (e.g. logo regenerated at a
+   * different fps), the concat demuxer will refuse the mux with a clear
+   * "non-monotonous DTS" / "Could not find codec parameters" error in the
+   * worker logs and we'd add a probe-and-fallback path.
+   */
   private appendLogo(
     mainVideoPath: string,
     logoVideoPath: string,
     outputPath: string,
   ): Promise<void> {
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    const listPath = path.join(path.dirname(outputPath), 'logo_concat.txt');
+    const lines = [mainVideoPath, logoVideoPath]
+      .map((p) => `file '${p.replace(/'/g, "'\\''")}'`)
+      .join('\n');
+    fs.writeFileSync(listPath, lines);
+
     return new Promise((resolve, reject) => {
       logPhase('logo-append-start');
       const startedAt = Date.now();
       const cmd = ffmpeg()
-        .input(mainVideoPath)
-        .input(logoVideoPath)
-        .complexFilter(['[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]'])
-        .outputOptions([
-          '-map', '[outv]',
-          '-map', '[outa]',
-          '-c:v', 'libx264',
-          '-preset', 'fast',
-          '-crf', '23',
-          '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac',
-        ])
+        .input(listPath)
+        .inputOptions(['-f', 'concat', '-safe', '0'])
+        .outputOptions(['-c', 'copy', '-movflags', '+faststart'])
         .output(outputPath);
       attachProgressLogger(cmd, 'logo-append');
       cmd
