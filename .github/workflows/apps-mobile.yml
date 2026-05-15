@@ -118,8 +118,12 @@ jobs:
       - name: build web bundle
         # Vite reads BUILD_ID via process.env and inlines it as __BUILD_ID__
         # (shown in Settings → About). Version comes from package.json.
+        # RevenueCat SDK keys (public, platform-scoped) are baked into the
+        # bundle as compile-time defines; absent keys → IAP UI hides itself.
         env:
           BUILD_ID: ${{ github.run_number }}
+          LECTORIUM_APPLE_REVENUE_CAT_KEY: ${{ secrets.LECTORIUM_APPLE_REVENUE_CAT_KEY }}
+          LECTORIUM_GOOGLE_REVENUE_CAT_KEY: ${{ secrets.LECTORIUM_GOOGLE_REVENUE_CAT_KEY }}
         run: cd modules/apps/mobile && npm run build
       - uses: actions/upload-artifact@v7
         with:

@@ -1,0 +1,209 @@
+<template>
+  <IonModal :is-open="open" @did-dismiss="open = false">
+    <IonHeader>
+      <IonToolbar>
+        <IonTitle>{{ $t("settings.subscription.title") }}</IonTitle>
+        <IonButtons slot="end">
+          <IonButton shape="round" size="small" @click="open = false">
+            {{ $t("app.close") }}
+          </IonButton>
+        </IonButtons>
+      </IonToolbar>
+    </IonHeader>
+
+    <IonContent>
+      <div class="header">
+        <h2>{{ $t("settings.subscription.choose") }}</h2>
+        <p>{{ $t("settings.subscription.benefits.intro") }}</p>
+      </div>
+
+      <div v-for="(index, idx) in benefitIndices" :key="index" class="benefit-wrap">
+        <IonItem class="benefit" lines="none">
+          <div slot="start" class="benefit-icon">
+            {{ $t(`settings.subscription.benefits.benefit${index}.icon`) }}
+          </div>
+          <IonLabel>
+            <h2>{{ $t(`settings.subscription.benefits.benefit${index}.title`) }}</h2>
+            <p>{{ $t(`settings.subscription.benefits.benefit${index}.description`) }}</p>
+          </IonLabel>
+        </IonItem>
+        <div v-if="idx > 1" class="benefit-tag">{{ $t("app.soon") }}</div>
+      </div>
+
+      <template v-if="!isSubscribed && packages.length > 0">
+        <IonItem
+          v-for="pkg in packages"
+          :key="pkg.packageId"
+          :color="selectedPackageId === pkg.packageId ? 'primary' : 'light'"
+          class="plan"
+          lines="none"
+          @click="selectedPackageId = pkg.packageId"
+        >
+          <div slot="start">⭐️</div>
+          <IonLabel>
+            <h2>
+              <b>{{ planTitle(pkg.packageId) }}</b>
+            </h2>
+            <p>{{ pkg.priceString }} / {{ periodLabel(pkg.billingPeriod) }}</p>
+          </IonLabel>
+          <IonIcon v-if="selectedPackageId === pkg.packageId" slot="end" :icon="checkmarkCircle" />
+        </IonItem>
+
+        <IonButton
+          expand="block"
+          class="subscribe"
+          :disabled="!selectedPackageId || purchasing"
+          @click="onSubscribeClick"
+        >
+          {{ $t("settings.subscription.subscribe") }}
+        </IonButton>
+
+        <IonButton expand="block" fill="clear" :disabled="restoring" @click="emit('restore')">
+          {{ $t("settings.subscription.restore") }}
+        </IonButton>
+      </template>
+
+      <IonNote class="legal">
+        <a v-for="doc in legalDocuments" :key="doc.title" :href="doc.link" target="_blank">
+          {{ doc.title }}
+        </a>
+      </IonNote>
+    </IonContent>
+  </IonModal>
+</template>
+
+<script setup lang="ts">
+import { ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
+import {
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonModal,
+  IonNote,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
+import { checkmarkCircle } from "ionicons/icons"
+
+export interface SubscriptionPlanView {
+  packageId: string
+  productId: string
+  title: string
+  description: string
+  priceString: string
+  billingPeriod: string
+}
+
+export interface LegalDocumentView {
+  title: string
+  link: string
+}
+
+const props = defineProps<{
+  packages: SubscriptionPlanView[]
+  isSubscribed: boolean
+  purchasing: boolean
+  restoring: boolean
+  legalDocuments: LegalDocumentView[]
+}>()
+
+const emit = defineEmits<{
+  subscribe: [packageId: string]
+  restore: []
+}>()
+
+const open = defineModel<boolean>("open", { required: true })
+
+const { t, te } = useI18n()
+
+const benefitIndices = [0, 1, 2, 3, 4, 5] as const
+const selectedPackageId = ref<string | undefined>(undefined)
+
+watch(
+  () => props.packages,
+  (next) => {
+    if (selectedPackageId.value) return
+    if (next.length === 0) return
+    selectedPackageId.value = next[0]?.packageId
+  },
+  { immediate: true }
+)
+
+function planTitle(packageId: string): string {
+  const key = `settings.subscription.plans.${packageId}`
+  return te(key) ? t(key) : packageId
+}
+
+function periodLabel(period: string): string {
+  if (!period) return ""
+  const key = `settings.subscription.periods.${period}`
+  return te(key) ? t(key) : period
+}
+
+function onSubscribeClick(): void {
+  if (!selectedPackageId.value) return
+  emit("subscribe", selectedPackageId.value)
+}
+</script>
+
+<style scoped>
+.header {
+  text-align: center;
+  padding: 1.5rem 1rem 0.5rem;
+}
+
+.benefit-wrap {
+  position: relative;
+}
+
+.benefit {
+  margin: 0 1rem 0.5rem;
+  border-radius: 8px;
+  --background: var(--ion-color-step-50, var(--ion-color-light));
+}
+
+.benefit-icon {
+  font-size: 1.25rem;
+}
+
+.benefit-tag {
+  position: absolute;
+  border-radius: 5px;
+  padding: 0.3rem;
+  transform: rotate(-15deg);
+  top: 3px;
+  right: 4px;
+  background-color: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
+  font-size: 0.55rem;
+}
+
+.plan {
+  margin: 0 1rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.subscribe {
+  margin: 1.5rem 1rem 0.25rem;
+}
+
+.legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.legal a {
+  color: var(--ion-color-medium);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+</style>

@@ -10,6 +10,7 @@ import type {
   INotificationScheduler,
   IPersistence,
   IPreferences,
+  IPurchases,
   IRemoteFilesStorage,
   IServerProber,
   IShareAudioService,
@@ -69,6 +70,7 @@ export interface Lectorium {
   readonly shareVideoService: IShareVideoService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
+  readonly purchases: IPurchases
   readonly serverProber: IServerProber
   /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
    * the user database. Wired with a `() => databases.user` closure so the
@@ -130,6 +132,7 @@ export interface InitLectoriumSeed {
   readonly shareService: IShareService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
+  readonly purchases: IPurchases
   readonly serverProber: IServerProber
   /** Factory invoked inside `initLectorium` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
@@ -176,6 +179,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     shareVideoService,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
+    purchases: seed.purchases,
     serverProber: seed.serverProber,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,

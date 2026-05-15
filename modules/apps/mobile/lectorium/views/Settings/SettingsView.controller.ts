@@ -7,6 +7,10 @@ import { useAppLanguageList, type SelectorItem } from "./composables/useAppLangu
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import { useDangerActions } from "./composables/useDangerActions.js"
 import { useDataSettings } from "./composables/useDataSettings.js"
+import {
+  useSubscriptionBinding,
+  type SubscriptionBinding,
+} from "./composables/useSubscriptionBinding.js"
 
 export type { SelectorItem }
 
@@ -37,6 +41,8 @@ export interface SettingsControllerReturn {
   /* Data export/import handlers */
   onExportDatabase: () => Promise<void>
   onImportFileSelected: (file: File) => Promise<void>
+  /* RevenueCat-backed subscription state + handlers */
+  subscription: SubscriptionBinding
 }
 
 export function useSettingsController(): SettingsControllerReturn {
@@ -93,6 +99,7 @@ export function useSettingsController(): SettingsControllerReturn {
 
   const { onClearCache, onClearUserData } = useDangerActions(app)
   const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
+  const subscription = useSubscriptionBinding()
 
   return {
     version,
@@ -116,6 +123,7 @@ export function useSettingsController(): SettingsControllerReturn {
     onClearUserData,
     onExportDatabase,
     onImportFileSelected,
+    subscription,
   }
 }
 
