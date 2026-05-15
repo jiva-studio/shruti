@@ -22,8 +22,13 @@ export interface HomeRowBuilderReturn {
  * Per-row state precedence (highest first):
  *  - "downloading" — active download (radial with download %).
  *  - "failed"      — download failed (warning icon).
- *  - "playing"     — currently-active player track (radial with playback %).
- *  - "completed"   — listened to the end (double check).
+ *  - "playing"     — currently-active player track AND playback position
+ *                    is still short of the end. Re-listening a completed
+ *                    track goes through this branch again until the new
+ *                    pass reaches the end.
+ *  - "completed"   — listened to the end (double check). Wins over the
+ *                    bare "player is on this track" check so a finished
+ *                    track in the player surfaces immediately on the row.
  *  - "queued"      — everything else, including a fully-downloaded track
  *                    that hasn't been played yet — empty/in-progress radial,
  *                    NOT the "added" checkmark. The checkmark belongs on
@@ -39,8 +44,16 @@ export function useHomeRowBuilder(appLanguage: Ref<LanguageCode>): HomeRowBuilde
     const dl = downloads.getState(trackId)
     if (dl === "downloading") return "downloading"
     if (dl === "failed") return "failed"
-    if (player.trackId === trackId) return "playing"
+
+    const isPlayerOnThisTrack = player.trackId === trackId
+    const playerProgressing =
+      isPlayerOnThisTrack && player.durationMs > 0 && player.positionMs < player.durationMs
+
+    if (playerProgressing) return "playing"
     if (completedAt !== null) return "completed"
+    // Player is on this track but duration/position not yet hydrated —
+    // don't fall through to "queued" and flash the wrong indicator.
+    if (isPlayerOnThisTrack) return "playing"
     return "queued"
   }
 
@@ -69,6 +82,7 @@ export function useHomeRowBuilder(appLanguage: Ref<LanguageCode>): HomeRowBuilde
     void player.durationMs
     void downloads.states
     void downloads.progress
+    void playlist.completedAtMap
     return playlist.entries.map(({ item, track }) => {
       const completedAt = playlist.getCompletedAt(item.id)
       const state = rowState(track.id, completedAt)
