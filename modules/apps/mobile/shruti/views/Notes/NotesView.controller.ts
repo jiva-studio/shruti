@@ -189,9 +189,15 @@ export function useNotesController(): NotesControllerReturn {
    * Capacitor's app cache. Identical to the `path` we feed to
    * `Filesystem.downloadFile` below; centralised so the cache-check
    * and the download stay in lock-step.
+   *
+   * Flat (no subdir) because `@capacitor/filesystem`'s legacy
+   * `downloadFile` on Android does NOT create intermediate directories
+   * (iOS does — see iOS LegacyFilesystemImplementation.downloadFile).
+   * A subdir would make the first share on Android fail with
+   * `FileNotFoundException`.
    */
   function localExcerptPath(noteId: NoteId): string {
-    return `share-audio/note-${noteId}.mp3`
+    return `share-audio-note-${noteId}.mp3`
   }
 
   /**
