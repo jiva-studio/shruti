@@ -55,8 +55,9 @@ jobs:
       - name: Fetch ffmpeg static binary
         run: |
           mkdir -p layers/ffmpeg/bin
-          curl -sSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-            | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg'
+          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+            -o layers/ffmpeg/bin/ffmpeg \
+            https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-linux-x64
           chmod +x layers/ffmpeg/bin/ffmpeg
       - run: npm ci
       - name: Deploy to AWS Lambda
