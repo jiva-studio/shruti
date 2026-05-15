@@ -5,8 +5,16 @@ export default {
     status: "Статус",
     sadhana: "Садхана",
     data: "Данные",
+    help: "Помощь",
     danger: "Опасная зона",
     about: "О приложении",
+  },
+
+  help: {
+    open: {
+      title: "Открыть справку",
+      description: "Объяснение индикаторов, настроек и возможностей",
+    },
   },
 
   appLanguage: {

@@ -17,4 +17,6 @@ export {
   IconArchiveFilled as ArchiveIcon,
   IconFileDownloadFilled as DatabaseExportIcon,
   IconFileUploadFilled as DatabaseImportIcon,
+  IconHelpCircleFilled as HelpIcon,
+  IconBookFilled as BookIcon,
 } from "@tabler/icons-vue"

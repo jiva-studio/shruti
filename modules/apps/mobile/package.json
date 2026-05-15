@@ -38,6 +38,7 @@
     "@tabler/icons-vue": "^3.44.0",
     "@vueuse/core": "^14.3.0",
     "capacitor-plugin-safe-area": "^5.0.0",
+    "marked": "^18.0.3",
     "nanoid": "^5.1.9",
     "pinia": "^3.0.2",
     "sql.js": "^1.14.1",
