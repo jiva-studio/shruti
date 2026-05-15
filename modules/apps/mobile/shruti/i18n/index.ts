@@ -3,6 +3,7 @@ import { createI18n } from "vue-i18n"
 import enActivity from "./locales/en/activity.js"
 import enApp from "./locales/en/app.js"
 import enErrors from "./locales/en/errors.js"
+import enHelp from "./locales/en/help.js"
 import enHome from "./locales/en/home.js"
 import enLibrary from "./locales/en/library.js"
 import enNotes from "./locales/en/notes.js"
@@ -17,6 +18,7 @@ import enWelcome from "./locales/en/welcome.js"
 import ruActivity from "./locales/ru/activity.js"
 import ruApp from "./locales/ru/app.js"
 import ruErrors from "./locales/ru/errors.js"
+import ruHelp from "./locales/ru/help.js"
 import ruHome from "./locales/ru/home.js"
 import ruLibrary from "./locales/ru/library.js"
 import ruNotes from "./locales/ru/notes.js"
@@ -35,6 +37,7 @@ const en = {
   activity: enActivity,
   app: enApp,
   errors: enErrors,
+  help: enHelp,
   home: enHome,
   library: enLibrary,
   notes: enNotes,
@@ -51,6 +54,7 @@ const ru = {
   activity: ruActivity,
   app: ruApp,
   errors: ruErrors,
+  help: ruHelp,
   home: ruHome,
   library: ruLibrary,
   notes: ruNotes,
