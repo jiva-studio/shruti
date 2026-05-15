@@ -104,16 +104,21 @@ export class ReelGenerator {
     let frameData: Array<{ path: string; duration: number; startTime: number }> = [];
 
     if (hasWordTimings) {
-      for (let i = 0; i < config.slides.length; i++) {
-        const frames = await generateWordHighlightFrames(
-          config.slides[i],
-          opts,
-          true, // transparent — overlay on top of background
-          i,
-          config.tempDir,
-        );
-        frameData.push(...frames);
-      }
+      // Slides are independent; render each slide's frames in parallel.
+      // generateWordHighlightFrames itself parallelises across words within
+      // a slide, so the full N-frame batch lights up every available vCPU.
+      const perSlide = await Promise.all(
+        config.slides.map((slide, i) =>
+          generateWordHighlightFrames(
+            slide,
+            opts,
+            true,
+            i,
+            config.tempDir,
+          ),
+        ),
+      );
+      frameData = perSlide.flat();
     } else {
       const paths = await generateSlideImages(config.slides, opts, true, config.tempDir);
       frameData = config.slides.map((slide, i) => ({
