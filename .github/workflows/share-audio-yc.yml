@@ -1,10 +1,12 @@
 name: Services / Share-Audio / Yandex Cloud
 
 # Manual dispatch only — YC deploys run on demand, not on every push.
-# Auth: LECTORIUM_YC_OAUTH_TOKEN deploys; LECTORIUM_YC_SERVICE_ACCOUNT_ID
-# is what the function executes under. AWS_RUNTIME_* are a dedicated AWS
-# IAM user (s3 rw on akds-lectorium only) used by boto3 inside the YC
-# function — YC service accounts can't sign AWS S3 requests.
+# Auth: LECTORIUM_YC_SA_KEY_JSON (Service-Account authorized JSON key)
+# is exchanged for a short-lived IAM token via yc-actions/yc-iam-token.
+# The deployed function runs under LECTORIUM_YC_SERVICE_ACCOUNT_ID.
+# AWS_RUNTIME_* are a dedicated AWS IAM user (s3 rw on akds-lectorium
+# only) used by boto3 inside the YC function — YC service accounts can't
+# sign AWS S3 requests.
 
 on:
   workflow_dispatch:
@@ -34,25 +36,21 @@ jobs:
             | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg'
           chmod +x layers/ffmpeg/bin/ffmpeg
       - run: npm ci
-      - name: Write yc config (plugin reads ~/.config/yandex-cloud/config.yaml)
-        env:
-          YC_OAUTH_TOKEN: ${{ secrets.LECTORIUM_YC_OAUTH_TOKEN }}
-          YC_FOLDER_ID: ${{ vars.LECTORIUM_YC_FOLDER_ID }}
-        run: |
-          mkdir -p ~/.config/yandex-cloud
-          cat > ~/.config/yandex-cloud/config.yaml <<EOF
-          current: default
-          profiles:
-            default:
-              token: ${YC_OAUTH_TOKEN}
-              cloud-id: b1gjad74ff5i9opem2aj
-              folder-id: ${YC_FOLDER_ID}
-          EOF
+      - name: Exchange SA key for short-lived IAM token
+        id: yc-iam
+        uses: yc-actions/yc-iam-token@v1
+        with:
+          yc-sa-json-credentials: ${{ secrets.LECTORIUM_YC_SA_KEY_JSON }}
       - name: Deploy to Yandex Cloud
         run: npx serverless deploy --config serverless-yc.yml
         env:
-          # YC S3-compatible keys used by the plugin's AWS SDK to upload
-          # the >3.5MB package to YC Object Storage.
+          # Plugin picks YC_IAM_TOKEN / YC_CLOUD_ID / YC_FOLDER_ID from env;
+          # no ~/.config/yandex-cloud/config.yaml needed.
+          YC_IAM_TOKEN: ${{ steps.yc-iam.outputs.token }}
+          YC_CLOUD_ID: b1gjad74ff5i9opem2aj
+          YC_FOLDER_ID: ${{ vars.LECTORIUM_YC_FOLDER_ID }}
+          # YC S3-compatible static keys used by the plugin's AWS SDK to
+          # upload the >3.5MB package to YC Object Storage.
           AWS_ACCESS_KEY_ID: ${{ secrets.LECTORIUM_YC_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.LECTORIUM_YC_SECRET_ACCESS_KEY }}
           YC_SERVICE_ACCOUNT_ID: ${{ secrets.LECTORIUM_YC_SERVICE_ACCOUNT_ID }}
