@@ -11,6 +11,8 @@
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		4DA5F9B42F8F6DC500AD290B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4DA5F9B32F8F6DC500AD290B /* PrivacyInfo.xcprivacy */; };
 		4DA5F9B92F8F6E1900AD290B /* BundledDatabaseHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA5F9B82F8F6E1900AD290B /* BundledDatabaseHelper.swift */; };
+		4DB2E7A02DFEBF570055ABF3 /* DevStoreKit.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */; };
+		4DDECDCA2E00499100373BA5 /* StoreKitTestCertificate.cer in Resources */ = {isa = PBXBuildFile; fileRef = 4DDECDC92E00499100373BA5 /* StoreKitTestCertificate.cer */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
@@ -24,6 +26,8 @@
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		4DA5F9B32F8F6DC500AD290B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		4DA5F9B82F8F6E1900AD290B /* BundledDatabaseHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledDatabaseHelper.swift; sourceTree = "<group>"; };
+		4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = DevStoreKit.storekit; sourceTree = "<group>"; };
+		4DDECDC92E00499100373BA5 /* StoreKitTestCertificate.cer */ = {isa = PBXFileReference; lastKnownFileType = file; path = StoreKitTestCertificate.cer; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -63,6 +67,8 @@
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
+				4DB2E79F2DFEBF570055ABF3 /* DevStoreKit.storekit */,
+				4DDECDC92E00499100373BA5 /* StoreKitTestCertificate.cer */,
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
@@ -166,6 +172,8 @@
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				4DA5F9B42F8F6DC500AD290B /* PrivacyInfo.xcprivacy in Resources */,
+				4DB2E7A02DFEBF570055ABF3 /* DevStoreKit.storekit in Resources */,
+				4DDECDCA2E00499100373BA5 /* StoreKitTestCertificate.cer in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,

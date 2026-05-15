@@ -1,5 +1,5 @@
 <template>
-  <IonModal :is-open="open" @did-dismiss="open = false">
+  <IonModal :is-open="open" class="subscription-modal" @did-dismiss="open = false">
     <IonHeader>
       <IonToolbar>
         <IonTitle>{{ $t("settings.subscription.title") }}</IonTitle>
@@ -17,17 +17,17 @@
         <p>{{ $t("settings.subscription.benefits.intro") }}</p>
       </div>
 
-      <div v-for="(index, idx) in benefitIndices" :key="index" class="benefit-wrap">
+      <div v-for="benefit in benefits" :key="benefit.key" class="benefit-wrap">
         <IonItem class="benefit" lines="none">
           <div slot="start" class="benefit-icon">
-            {{ $t(`settings.subscription.benefits.benefit${index}.icon`) }}
+            {{ $t(`settings.subscription.benefits.${benefit.key}.icon`) }}
           </div>
           <IonLabel>
-            <h2>{{ $t(`settings.subscription.benefits.benefit${index}.title`) }}</h2>
-            <p>{{ $t(`settings.subscription.benefits.benefit${index}.description`) }}</p>
+            <h2>{{ $t(`settings.subscription.benefits.${benefit.key}.title`) }}</h2>
+            <p>{{ $t(`settings.subscription.benefits.${benefit.key}.description`) }}</p>
           </IonLabel>
         </IonItem>
-        <div v-if="idx > 1" class="benefit-tag">{{ $t("app.soon") }}</div>
+        <div v-if="benefit.soon" class="benefit-tag">{{ $t("app.soon") }}</div>
       </div>
 
       <template v-if="!isSubscribed && packages.length > 0">
@@ -52,6 +52,7 @@
         <IonButton
           expand="block"
           class="subscribe"
+          :strong="true"
           :disabled="!selectedPackageId || purchasing"
           @click="onSubscribeClick"
         >
@@ -68,6 +69,8 @@
           {{ doc.title }}
         </a>
       </IonNote>
+
+      <pre v-if="debugLog && debugLog.length > 0" class="debug-log">{{ debugLog.join("\n") }}</pre>
     </IonContent>
   </IonModal>
 </template>
@@ -110,6 +113,7 @@ const props = defineProps<{
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
+  debugLog?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -121,7 +125,15 @@ const open = defineModel<boolean>("open", { required: true })
 
 const { t, te } = useI18n()
 
-const benefitIndices = [0, 1, 2, 3, 4, 5] as const
+// Order matters: it's the order rendered in the paywall. `soon` flips
+// the "Soon" tag on for features not yet shipped.
+const benefits = [
+  { key: "benefit0", soon: false }, // new lectures
+  { key: "benefit1", soon: false }, // bookmarks
+  { key: "benefit2", soon: true }, // auto-download lectures
+  { key: "benefit5", soon: true }, // advanced search
+] as const
+
 const selectedPackageId = ref<string | undefined>(undefined)
 
 watch(
@@ -181,6 +193,10 @@ function onSubscribeClick(): void {
   background-color: var(--ion-color-primary);
   color: var(--ion-color-primary-contrast);
   font-size: 0.55rem;
+  /* IonItem opens its own stacking context; without z-index the tag
+     ends up behind the row. */
+  z-index: 2;
+  pointer-events: none;
 }
 
 .plan {
@@ -191,6 +207,9 @@ function onSubscribeClick(): void {
 
 .subscribe {
   margin: 1.5rem 1rem 0.25rem;
+  /* Material flavour adds a drop-shadow / elevation by default; we
+     keep dialog surfaces flat across the app. */
+  --box-shadow: none;
 }
 
 .legal {
@@ -205,5 +224,33 @@ function onSubscribeClick(): void {
   color: var(--ion-color-medium);
   text-decoration: none;
   font-size: 0.9rem;
+}
+
+/* Temporary diagnostic block — see usePurchasesStore.debugLog. */
+.debug-log {
+  margin: 1rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.15);
+  color: var(--ion-color-medium);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: auto;
+}
+</style>
+
+<style>
+/* IonModal renders into a teleport portal, so scoped styles can't
+   reach the sheet itself. Kill Material's drop-shadow on the modal
+   frame AND the elevation strip Material paints under the header. */
+.subscription-modal {
+  --box-shadow: none;
+}
+.subscription-modal ion-header::after {
+  display: none;
+  background-image: none;
 }
 </style>

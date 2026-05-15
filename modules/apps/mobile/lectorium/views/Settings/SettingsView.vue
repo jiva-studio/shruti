@@ -7,6 +7,7 @@
       :purchasing="subscription.purchasing"
       :restoring="subscription.restoring"
       :legal-documents="subscription.legalDocuments"
+      :debug-log="subscription.debugLog"
       @subscribe="subscription.onSubscribe"
       @restore="subscription.onRestore"
       @manage="subscription.onManage"
