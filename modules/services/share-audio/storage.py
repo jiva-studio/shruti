@@ -17,8 +17,13 @@ from botocore.config import Config
 
 @lru_cache(maxsize=1)
 def get_storage_client():
+    # S3_ENDPOINT_URL lets the same client talk to a non-AWS S3-compatible
+    # store (used on YC: https://storage.yandexcloud.net). Unset on AWS →
+    # boto3 picks the real AWS endpoint per region.
+    endpoint_url = os.environ.get("S3_ENDPOINT_URL") or None
     return boto3.client(
         "s3",
+        endpoint_url=endpoint_url,
         config=Config(
             retries={"max_attempts": 3, "mode": "standard"},
             signature_version="s3v4",

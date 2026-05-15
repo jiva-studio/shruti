@@ -8,4 +8,12 @@ export default {
   shareAudioPreparing: "Preparing audio…",
   shareAudioErrorNoAudio: "Audio is not available for this track",
   shareAudioErrorGeneric: "Couldn't prepare audio. Try again.",
+  shareVideo: "Share video",
+  shareVideoDialog: "Share video reel",
+  shareVideoPreparing: "Preparing video…",
+  shareVideoRendering: "Rendering reel…",
+  shareVideoAlmostReady: "Almost ready…",
+  shareVideoStillWorking: "Hang on, still working…",
+  shareVideoErrorNoAudio: "Audio is not available for this track",
+  shareVideoErrorGeneric: "Couldn't prepare video. Try again.",
 }

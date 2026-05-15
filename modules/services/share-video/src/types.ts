@@ -1,17 +1,17 @@
 export interface ReelConfig {
   audioPath: string;
-  text?: string; // Optional if using transcription
   outputPath: string;
-  maxCharsPerSlide?: number;
+  tempDir: string;
+  slides: Slide[]; // Preassembled slides with word timings
+  backgroundVideoPath: string; // Preconcatenated background MP4
+  logoVideoPath?: string; // Optional logo clip to append at the end
   slideWidth?: number;
   slideHeight?: number;
-  backgroundColor?: string;
-  backgroundVideosFolder?: string; // Path to folder with background videos
   textColor?: string;
   fontSize?: number;
   fontFamily?: string;
-  transcribe?: boolean; // Set to true to auto-transcribe audio
-  openaiApiKey?: string; // OpenAI API key for transcription
+  backgroundColor?: string; // Only used when no background video (kept for parity)
+  maxCharsPerSlide?: number; // Used by upstream slide-splitter, not by ReelGenerator
 }
 
 export interface WordTiming {
@@ -23,17 +23,17 @@ export interface WordTiming {
 export interface Slide {
   text: string;
   duration: number;
-  startTime?: number; // Start time in seconds
-  endTime?: number;   // End time in seconds
-  words?: WordTiming[]; // Word-level timings for highlighting
+  startTime?: number;
+  endTime?: number;
+  words?: WordTiming[];
 }
 
 export interface ReelGeneratorOptions {
-  maxCharsPerSlide: number;
   slideWidth: number;
   slideHeight: number;
   backgroundColor: string;
   textColor: string;
   fontSize: number;
   fontFamily: string;
+  maxCharsPerSlide: number;
 }

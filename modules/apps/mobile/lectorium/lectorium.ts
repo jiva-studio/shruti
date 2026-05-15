@@ -14,12 +14,14 @@ import type {
   IServerProber,
   IShareAudioService,
   IShareService,
+  IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
 import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
+import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 
 /**
@@ -60,6 +62,11 @@ export interface Lectorium {
    * `activeServer` ref to pick the per-region endpoint at call time.
    */
   readonly shareAudioService: IShareAudioService
+  /**
+   * Cloud-side share-video reel renderer. Same lazy-getter wiring as
+   * `shareAudioService` — picks the per-region endpoint at call time.
+   */
+  readonly shareVideoService: IShareVideoService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly serverProber: IServerProber
@@ -153,6 +160,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   // per-region cutter endpoint at call time, so a settings flip
   // routes subsequent share-audio calls to the new region.
   const shareAudioService = useHttpShareAudioService(() => activeServer.value.shareAudioUrl)
+  const shareVideoService = useHttpShareVideoService(() => activeServer.value.shareVideoUrl)
 
   const self: Lectorium = {
     appConfig: seed.appConfig,
@@ -165,6 +173,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     notifications: seed.notifications,
     shareService: seed.shareService,
     shareAudioService,
+    shareVideoService,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
     serverProber: seed.serverProber,
