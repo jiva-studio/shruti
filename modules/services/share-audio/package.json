@@ -12,5 +12,9 @@
   "devDependencies": {
     "serverless": "^3.39.0",
     "@yandex-cloud/serverless-plugin": "^1.7.25"
+  },
+  "overrides": {
+    "tar": "^7.5.11",
+    "file-type": "^22.0.0"
   }
 }
