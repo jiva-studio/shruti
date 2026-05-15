@@ -24,11 +24,31 @@ export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAu
       }
       if (req.excerptId) body.excerpt_id = req.excerptId
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      // Cap the cut at 8 s with our own AbortController. share-audio is
+      // sync stream-copy and almost always returns in <1 s — the abort
+      // path basically never fires in practice — but the share-video
+      // service uses the same pattern (see useHttpShareVideoService.ts
+      // for full reasoning) and consistency keeps the controller's
+      // workflow helper provider-agnostic. If the abort fires, return
+      // {ready:false}; the caller polls the predicted URL.
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort("cut-timeout-fall-through-to-poll"), 8_000)
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        })
+      } catch (err: unknown) {
+        if ((err as DOMException | undefined)?.name === "AbortError") {
+          return { excerptId: req.excerptId ?? "", url: "", ready: false }
+        }
+        throw err
+      } finally {
+        clearTimeout(timer)
+      }
       if (!response.ok) {
         throw new Error(`share-audio cutter returned ${response.status} ${response.statusText}`)
       }
