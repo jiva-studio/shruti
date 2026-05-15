@@ -272,16 +272,23 @@ export function useNotesController(): NotesControllerReturn {
           publicUrl = result.url
         }
 
-        const download = await Filesystem.downloadFile({
+        await Filesystem.downloadFile({
           url: publicUrl,
           path: localExcerptPath(note.id),
           directory: Directory.Cache,
           recursive: true,
         })
-        if (!download.path) {
-          throw new Error("Filesystem.downloadFile returned no path")
-        }
-        return download.path
+        // Normalize via getUri so cold and warm paths return the same
+        // `file://...` shape. Android's downloadFile returns a raw
+        // absolute path (`/data/user/0/.../cache/...`) without a scheme,
+        // which `@capacitor/share` can't pipe through FileProvider — the
+        // share sheet silently no-ops. iOS returns `file://...` here
+        // already, but getUri is cheap and keeps both platforms aligned.
+        const { uri } = await Filesystem.getUri({
+          path: localExcerptPath(note.id),
+          directory: Directory.Cache,
+        })
+        return uri
       })
 
       await shareService.share({
