@@ -83,6 +83,32 @@ describe("useHttpShareAudioService", () => {
     expect(body).toEqual({ source_key: "k", start_ms: 0, end_ms: 100 })
   })
 
+  it("falls through to ready:false when the cut takes longer than 8s (defensive parity with share-video)", async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementation((_url, init) => {
+      return new Promise((_, reject) => {
+        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
+        sig?.addEventListener(
+          "abort",
+          () => {
+            const err = new Error("aborted") as Error & { name: string }
+            err.name = "AbortError"
+            reject(err)
+          },
+          { once: true }
+        )
+      })
+    })
+
+    const svc = useHttpShareAudioService(() => "https://endpoint")
+    const promise = svc.cut({ sourceKey: "k", startMs: 0, endMs: 1, excerptId: "note-x" })
+
+    await vi.advanceTimersByTimeAsync(8_000)
+    const result = await promise
+    expect(result).toEqual({ excerptId: "note-x", url: "", ready: false })
+    vi.useRealTimers()
+  })
+
   it("throws on non-2xx response", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response("nope", { status: 504, statusText: "Gateway Timeout" })

@@ -16,4 +16,6 @@ export default {
   shareVideoStillWorking: "Hang on, still working…",
   shareVideoErrorNoAudio: "Audio is not available for this track",
   shareVideoErrorGeneric: "Couldn't prepare video. Try again.",
+  shareInBackground: "Sharing continues in background…",
+  shareAlreadyInProgress: "Another share is already in progress",
 }

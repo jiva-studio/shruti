@@ -12,7 +12,8 @@
         </IonTabButton>
 
         <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
-          <IconBookmark :size="26" />
+          <IonSpinner v-if="shareJob.isRunning" class="notes-tab-spinner" name="dots" />
+          <IconBookmark v-else :size="26" />
         </IonTabButton>
 
         <IonTabButton tab="settings" href="/tabs/settings">
@@ -29,11 +30,17 @@
 </template>
 
 <script setup lang="ts">
-import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet } from "@ionic/vue"
+import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
 
 const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
+// Tracks the current share job (audio or video). When isRunning flips to
+// true we show a small spinner overlay on the bookmark icon — the share
+// flow has handed off to background and the user knows something's still
+// in flight.
+const shareJob = useShareJobStore()
 </script>
 
 <style scoped>
@@ -74,5 +81,17 @@ ion-tab-button {
   border-radius: 8px;
   top: 12%;
   right: 33%;
+}
+
+/* While a background share job runs, the bookmark icon is replaced by
+ * a centered spinner of the same visual weight as the icon. Sized to
+ * 26px to match IconBookmark; coloured `--ion-color-step-700` so it
+ * reads dark against the gradient tab bar (the default primary blue
+ * was too pale). v-if/v-else swap in the template means the spinner
+ * lands where the icon was — no positioning needed. */
+.notes-tab-spinner {
+  width: 26px;
+  height: 26px;
+  color: var(--ion-color-step-700, #4a4a4a);
 }
 </style>

@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { onIonViewWillEnter } from "@ionic/vue"
+import { loadingController, onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { Directory, Filesystem } from "@capacitor/filesystem"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
@@ -14,12 +14,13 @@ import { formatNoteShare } from "@lib/application/formatNoteShare.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { useLoading } from "@shruti/services/useLoading.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
 import { withProgressLabels, type LabelStep } from "@shruti/services/withProgressLabels.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { useDebugStore } from "@shruti/stores/useDebugStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
+import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
 
 /**
  * Minimum query length that triggers `<mark>` injection in the notes
@@ -53,7 +54,8 @@ export function useNotesController(): NotesControllerReturn {
   const { shareService, shareAudioService, shareVideoService, activeServer, haptics } =
     useShruti()
   const toast = useToast()
-  const loading = useLoading()
+  const debug = useDebugStore()
+  const shareJob = useShareJobStore()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -239,6 +241,111 @@ export function useNotesController(): NotesControllerReturn {
     }
   }
 
+  /**
+   * Wraps the share work (cache → probe → cut+poll → download → share-sheet)
+   * with a 3-second handoff: keep the user blocked behind a spinner while
+   * the work might still finish quickly (audio cache-hit / sync cut), then
+   * release the UI to the background and let the work continue. When the
+   * background work eventually resolves, fire the system share sheet —
+   * Capacitor handles cross-tab fine, so the user gets their result even
+   * if they've moved on.
+   *
+   * Single-slot guard via `useShareJobStore`: a second tap while a job
+   * runs gets a "wait" toast and no-op. Same noteId or different noteId,
+   * audio or video — same behaviour for simplicity.
+   *
+   * Owns the loading modal directly (not via `useLoading.withLoading`)
+   * because the modal lifetime needs to be 3 s, not "the whole work".
+   */
+  const HANDOFF_MS = 3_000
+
+  async function runShareWorkflow(args: {
+    jobKind: ShareJobKind
+    noteId: NoteId
+    initialLabel: string
+    workFn: (ctx: { setLabel: (label: string) => void }) => Promise<string>
+    openShareSheet: (localUri: string) => Promise<void>
+    errorLabel: string
+  }): Promise<void> {
+    if (!shareJob.tryStart(args.jobKind, args.noteId)) {
+      await toast.info(t("notes.shareAlreadyInProgress"))
+      return
+    }
+
+    const modal = await loadingController.create({
+      message: args.initialLabel,
+      spinner: "crescent",
+    })
+    await modal.present()
+    const setLabel = (label: string): void => {
+      modal.message = label
+    }
+
+    const work = args.workFn({ setLabel })
+    let settled: { ok: true; uri: string } | { ok: false; err: unknown } | null = null
+    work.then(
+      (uri) => {
+        settled = { ok: true, uri }
+      },
+      (err) => {
+        settled = { ok: false, err }
+      }
+    )
+    // Suppress unhandled-rejection: every consumer below either reads
+    // `settled` or attaches its own .catch in the background branch.
+    work.catch(() => undefined)
+
+    // Race vs HANDOFF_MS — early-resolve if work settles first.
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, HANDOFF_MS)
+      work.finally(() => {
+        clearTimeout(t)
+        resolve()
+      })
+    })
+
+    // Branch 1: work finished successfully within 3 s.
+    if (settled !== null && (settled as { ok: true; uri: string }).ok === true) {
+      await modal.dismiss()
+      try {
+        await args.openShareSheet((settled as { ok: true; uri: string }).uri)
+      } catch {
+        await toast.error(args.errorLabel)
+      }
+      shareJob.finish()
+      return
+    }
+
+    // Branch 2: work failed within 3 s.
+    if (settled !== null && (settled as { ok: false; err: unknown }).ok === false) {
+      await modal.dismiss()
+      shareJob.finish()
+      await toast.error(args.errorLabel)
+      return
+    }
+
+    // Branch 3: still running. Hand off to background; tab spinner is
+    // already showing because shareJob.isRunning is true.
+    await modal.dismiss()
+    await toast.info(t("notes.shareInBackground"))
+    work
+      .then(async (uri) => {
+        try {
+          await args.openShareSheet(uri)
+        } catch (e) {
+          // Sheet failed (rare, e.g. app fully backgrounded). Don't toast —
+          // file is on the CDN, next tap on the same note is a cache-hit.
+          console.warn("background share-sheet failed:", e)
+        }
+      })
+      .catch(async () => {
+        await toast.error(args.errorLabel)
+      })
+      .finally(() => {
+        shareJob.finish()
+      })
+  }
+
   async function onShareNoteAudioClicked(): Promise<void> {
     const note: Note | null = currentNote()
     if (!note) return
@@ -254,8 +361,12 @@ export function useNotesController(): NotesControllerReturn {
     }
     const audioPath = variant.audio.path
 
-    try {
-      const localPath = await loading.withLoading(t("notes.shareAudioPreparing"), async () => {
+    await runShareWorkflow({
+      jobKind: "audio",
+      noteId: note.id,
+      initialLabel: t("notes.shareAudioPreparing"),
+      errorLabel: t("notes.shareAudioErrorGeneric"),
+      workFn: async () => {
         // 1. Already in app cache? Skip everything (no HTTP at all).
         const cached = await findLocalExcerpt(note.id)
         if (cached) return cached
@@ -272,11 +383,11 @@ export function useNotesController(): NotesControllerReturn {
             endMs: note.timeEnd,
             excerptId: note.id,
           })
-          publicUrl = result.url
-          // Defensive: share-audio is sync today (always `ready: true`),
-          // but if it ever migrates to async dispatch we don't want a
-          // 404 on the immediate download. The poll is a no-op when the
-          // file is already there.
+          // The cut() returns a sentinel `{ready:false, url:""}` if the
+          // server is still processing past the 8 s client-side cap (rare
+          // for share-audio); fall back to the predicted URL.
+          publicUrl =
+            result.url || buildServerUrl(activeServer.value, `public/shares/audio/${note.id}.mp3`)
           if (!result.ready) await pollUntilReady(publicUrl)
         }
 
@@ -297,16 +408,14 @@ export function useNotesController(): NotesControllerReturn {
           directory: Directory.Cache,
         })
         return uri
-      })
-
-      await shareService.share({
-        url: localPath,
-        title: resolveTrackTitle(track),
-        dialogTitle: t("notes.shareAudioDialog"),
-      })
-    } catch {
-      await toast.error(t("notes.shareAudioErrorGeneric"))
-    }
+      },
+      openShareSheet: (uri) =>
+        shareService.share({
+          url: uri,
+          title: resolveTrackTitle(track),
+          dialogTitle: t("notes.shareAudioDialog"),
+        }),
+    })
   }
 
   /** Filesystem path of a previously-shared reel for this note. */
@@ -361,8 +470,12 @@ export function useNotesController(): NotesControllerReturn {
       return
     }
 
-    try {
-      const localPath = await loading.withLoading(t("notes.shareVideoPreparing"), async (ctx) => {
+    await runShareWorkflow({
+      jobKind: "video",
+      noteId: note.id,
+      initialLabel: t("notes.shareVideoPreparing"),
+      errorLabel: t("notes.shareVideoErrorGeneric"),
+      workFn: async (ctx) => {
         // 1. App-cache hit.
         const cached = await findLocalVideo(note.id)
         if (cached) return cached
@@ -370,9 +483,9 @@ export function useNotesController(): NotesControllerReturn {
         // 2. CDN warm hit (someone else's prior render still on the bucket).
         let publicUrl = await probeVideo(note.id)
 
-        // 3. Cold path: trigger the render, wait for the file. Same
-        // labels on AWS (poll-driven) and YC (server-blocking) — see
-        // withProgressLabels.
+        // 3. Cold path: trigger the render, wait for the file. Labels
+        // progress on a wall clock so YC's server-blocking 120 s wait
+        // looks the same to the user as AWS's poll-driven flow.
         if (!publicUrl) {
           const labelSchedule: ReadonlyArray<LabelStep> = [
             { atMs: 5_000, label: t("notes.shareVideoRendering") },
@@ -385,8 +498,10 @@ export function useNotesController(): NotesControllerReturn {
           )
           await withProgressLabels(
             (async () => {
-              // Tell the server to start. We only need to know it
-              // accepted (any 2xx); the response body is irrelevant.
+              // Tell the server to start. The response body is ignored —
+              // useHttpShareVideoService aborts the cut() at 8 s and
+              // returns a sentinel `{ready:false}` for slow clouds (YC),
+              // so we always end up polling the predicted URL.
               await shareVideoService.cut({
                 sourceKey: audioPath,
                 startMs: note.timeStart,
@@ -396,10 +511,6 @@ export function useNotesController(): NotesControllerReturn {
                 theme: "prabhupada",
                 videoId: note.id,
               })
-              // Wait for the predicted URL to become live. On YC the
-              // first probe is an instant 200 (server already uploaded
-              // before responding); on AWS we poll for ~100 s while the
-              // worker renders.
               await pollUntilReady(predictedUrl)
             })(),
             labelSchedule,
@@ -419,16 +530,14 @@ export function useNotesController(): NotesControllerReturn {
           directory: Directory.Cache,
         })
         return uri
-      })
-
-      await shareService.share({
-        url: localPath,
-        title: resolveTrackTitle(track),
-        dialogTitle: t("notes.shareVideoDialog"),
-      })
-    } catch {
-      await toast.error(t("notes.shareVideoErrorGeneric"))
-    }
+      },
+      openShareSheet: (uri) =>
+        shareService.share({
+          url: uri,
+          title: resolveTrackTitle(track),
+          dialogTitle: t("notes.shareVideoDialog"),
+        }),
+    })
   }
 
   async function onDeleteNoteClicked(): Promise<void> {
@@ -437,43 +546,53 @@ export function useNotesController(): NotesControllerReturn {
     await store.remove(id)
   }
 
-  const actionSheetButtons = computed<readonly NotesActionSheetButton[]>(() => [
-    {
-      text: t("notes.shareText"),
-      handler: () => {
-        void onShareNoteClicked()
+  const actionSheetButtons = computed<readonly NotesActionSheetButton[]>(() => {
+    const buttons: NotesActionSheetButton[] = [
+      {
+        text: t("notes.shareText"),
+        handler: () => {
+          void onShareNoteClicked()
+        },
       },
-    },
-    {
-      text: t("notes.shareAudio"),
-      handler: () => {
-        void onShareNoteAudioClicked()
+      {
+        text: t("notes.shareAudio"),
+        handler: () => {
+          void onShareNoteAudioClicked()
+        },
       },
-    },
-    {
-      text: t("notes.shareVideo"),
-      handler: () => {
-        void onShareNoteVideoClicked()
+    ]
+    // Share Video is gated behind debug mode while the feature stabilises
+    // (renders are slow, server perf work pending). Settings → tap the
+    // BuildInfo row 5× within 3 s to flip useDebugStore().unlocked.
+    if (debug.unlocked) {
+      buttons.push({
+        text: t("notes.shareVideo"),
+        handler: () => {
+          void onShareNoteVideoClicked()
+        },
+      })
+    }
+    buttons.push(
+      {
+        text: t("app.copy"),
+        handler: () => {
+          void onCopyNoteClicked()
+        },
       },
-    },
-    {
-      text: t("app.copy"),
-      handler: () => {
-        void onCopyNoteClicked()
+      {
+        text: t("app.delete"),
+        role: "destructive",
+        handler: () => {
+          void onDeleteNoteClicked()
+        },
       },
-    },
-    {
-      text: t("app.delete"),
-      role: "destructive",
-      handler: () => {
-        void onDeleteNoteClicked()
-      },
-    },
-    {
-      text: t("app.cancel"),
-      role: "cancel",
-    },
-  ])
+      {
+        text: t("app.cancel"),
+        role: "cancel",
+      }
+    )
+    return buttons
+  })
 
   async function onQuery(next: string): Promise<void> {
     await store.setQuery(next)
