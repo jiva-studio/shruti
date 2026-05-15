@@ -20,7 +20,7 @@ package:
 functions:
   cut:
     handler: handler.handler
-    memory: 1024
+    memory: 1073741824
     timeout: 600
     account: ${env:YC_SERVICE_ACCOUNT_ID}
     environment:
