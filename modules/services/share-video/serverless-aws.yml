@@ -6,10 +6,12 @@ provider:
   name: aws
   runtime: nodejs20.x
   region: ${env:AWS_REGION, "us-east-1"}
-  # Lambda has no separate CPU knob — vCPU count scales with memory.
-  # 10240 MB ≈ 6 vCPUs (vs ~1.7 at 3008 MB). x264 -preset fast benefits ~2-3x
-  # from the extra cores on a 1080x1920 reel; render is the dominant phase.
-  memorySize: 10240
+  # Lambda has no separate CPU knob — vCPU count scales with memory. 3008 MB
+  # is the per-function quota cap for un-raised AWS accounts (the absolute
+  # service max is 10240 MB but requires a support-ticket increase first).
+  # At 3008 MB we get ~1.75 vCPUs, which is what x264 -preset fast actually
+  # uses on a 1080x1920 reel; render is the dominant phase.
+  memorySize: 3008
   timeout: 900
   architecture: x86_64
   httpApi:
