@@ -34,11 +34,23 @@ jobs:
             | tar -xJ --strip-components=1 -C layers/ffmpeg/bin --wildcards '*/ffmpeg'
           chmod +x layers/ffmpeg/bin/ffmpeg
       - run: npm ci
-      - name: Deploy to Yandex Cloud
-        run: npx serverless deploy --config serverless-yc.yml
+      - name: Write yc config (plugin reads ~/.config/yandex-cloud/config.yaml)
         env:
           YC_OAUTH_TOKEN: ${{ secrets.SHRUTI_YC_OAUTH_TOKEN }}
           YC_FOLDER_ID: ${{ vars.SHRUTI_YC_FOLDER_ID }}
+        run: |
+          mkdir -p ~/.config/yandex-cloud
+          cat > ~/.config/yandex-cloud/config.yaml <<EOF
+          current: default
+          profiles:
+            default:
+              token: ${YC_OAUTH_TOKEN}
+              cloud-id: b1gjad74ff5i9opem2aj
+              folder-id: ${YC_FOLDER_ID}
+          EOF
+      - name: Deploy to Yandex Cloud
+        run: npx serverless deploy --config serverless-yc.yml
+        env:
           YC_SERVICE_ACCOUNT_ID: ${{ secrets.SHRUTI_YC_SERVICE_ACCOUNT_ID }}
           AWS_RUNTIME_ACCESS_KEY_ID: ${{ secrets.SHRUTI_AWS_RUNTIME_ACCESS_KEY_ID }}
           AWS_RUNTIME_SECRET_ACCESS_KEY: ${{ secrets.SHRUTI_AWS_RUNTIME_SECRET_ACCESS_KEY }}
