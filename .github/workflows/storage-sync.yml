@@ -1,4 +1,4 @@
-name: Storage Sync
+name: Services / Storage Sync
 
 on:
   workflow_dispatch:
