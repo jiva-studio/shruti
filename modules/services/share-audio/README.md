@@ -1,7 +1,7 @@
 # share-audio
 
 Serverless function that cuts a fragment from an MP3 stored in **AWS S3** and
-uploads it back as a public excerpt under `public/excerpts/`. Same Python
+uploads it back as a public excerpt under `public/shares/audio/`. Same Python
 handler deploys to **AWS Lambda** and **Yandex Cloud Functions** via the
 [Serverless Framework].
 
@@ -27,7 +27,7 @@ a dedicated AWS IAM user (YC service accounts can't sign AWS S3 requests).
 ```json
 {
   "excerpt_id": "abc123",
-  "url": "https://<bucket>.s3.<region>.amazonaws.com/public/excerpts/abc123.mp3",
+  "url": "https://<bucket>.s3.<region>.amazonaws.com/public/shares/audio/abc123.mp3",
   "ready": true
 }
 ```
@@ -61,7 +61,7 @@ and `requirements.txt`. Only the `serverless-*.yml` differs.
 | Var                    | AWS Lambda                       | YC Function                      |
 | ---------------------- | -------------------------------- | -------------------------------- |
 | `BUCKET`               | hardcoded `akds-lectorium`       | same (single bucket both clouds) |
-| `EXCERPTS_PREFIX`      | default `public/excerpts`        | same                             |
+| `EXCERPTS_PREFIX`      | default `public/shares/audio`        | same                             |
 | `EXCERPTS_PUBLIC_BASE` | optional CDN base (env)          | same                             |
 | `AWS_REGION`           | from Lambda runtime              | from `AWS_RUNTIME_REGION` var    |
 | AWS credentials        | Lambda IAM role (no env)         | `AWS_RUNTIME_*` secrets          |

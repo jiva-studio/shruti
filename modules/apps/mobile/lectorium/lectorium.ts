@@ -12,12 +12,14 @@ import type {
   IPreferences,
   IRemoteFilesStorage,
   IServerProber,
+  IShareAudioService,
   IShareService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
+import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 
 /**
@@ -52,6 +54,12 @@ export interface Lectorium {
   readonly audioPlayer: IAudioPlayer
   readonly notifications: INotificationScheduler
   readonly shareService: IShareService
+  /**
+   * Cloud-side share-audio cutter. Constructed locally inside
+   * `initLectorium` (no seed entry) — it only needs a getter over the
+   * `activeServer` ref to pick the per-region endpoint at call time.
+   */
+  readonly shareAudioService: IShareAudioService
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly serverProber: IServerProber
@@ -141,6 +149,11 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   // `setActiveServer` swaps it.
   const storagePublicUrl: IStoragePublicUrl = useStoragePublicUrl(() => activeServer.value)
 
+  // Same lazy-getter pattern as storagePublicUrl: resolves the
+  // per-region cutter endpoint at call time, so a settings flip
+  // routes subsequent share-audio calls to the new region.
+  const shareAudioService = useHttpShareAudioService(() => activeServer.value.shareAudioUrl)
+
   const self: Lectorium = {
     appConfig: seed.appConfig,
     persistence: seed.persistence,
@@ -151,6 +164,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     audioPlayer: seed.audioPlayer,
     notifications: seed.notifications,
     shareService: seed.shareService,
+    shareAudioService,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
     serverProber: seed.serverProber,

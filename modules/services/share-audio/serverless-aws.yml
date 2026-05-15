@@ -9,9 +9,19 @@ provider:
   memorySize: 1024
   timeout: 600
   architecture: x86_64
+  httpApi:
+    cors:
+      allowedOrigins:
+        - "*"
+      allowedMethods:
+        - POST
+        - OPTIONS
+      allowedHeaders:
+        - Content-Type
+      maxAge: 600
   environment:
     BUCKET: akds-lectorium
-    EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/excerpts"}
+    EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/shares/audio"}
     EXCERPTS_PUBLIC_BASE: ${env:EXCERPTS_PUBLIC_BASE, ""}
     FFMPEG_BIN: /opt/bin/ffmpeg
   iam:

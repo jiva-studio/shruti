@@ -1,15 +1,20 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
+import { Directory, Filesystem } from "@capacitor/filesystem"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Location } from "@lib/domain/location.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
+import type { Note } from "@lib/domain/note.js"
+import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Track } from "@lib/domain/track.js"
+import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import { formatNoteShare } from "@lib/application/formatNoteShare.js"
 import { formatReference } from "@lectorium/composables/groupReferences.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useToast } from "@lectorium/services/useToast.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 
@@ -42,7 +47,8 @@ export function useNotesController(): NotesControllerReturn {
   const store = useNotesStore()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
-  const { shareService, haptics } = useLectorium()
+  const { shareService, shareAudioService, activeServer, haptics } = useLectorium()
+  const toast = useToast()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -165,6 +171,92 @@ export function useNotesController(): NotesControllerReturn {
     await shareService.share({ text: payload })
   }
 
+  /**
+   * Pick the audio source for cutting: prefer the `original` variant, fall
+   * back to the first variant whose `audio` is non-null. Returns `null` if
+   * the track has no audio at all (translation-only).
+   */
+  function pickAudioVariant(track: Track): TrackVariant | null {
+    const original = track.variants.find((v) => v.audio !== null && v.audio.kind === "original")
+    if (original) return original
+    return track.variants.find((v) => v.audio !== null) ?? null
+  }
+
+  /**
+   * Tries the public excerpt URL on the active CDN first (no compute
+   * needed if the file is still there from a prior share). Returns the
+   * URL on hit; resolves to `null` on miss / timeout / network error.
+   */
+  async function probeExcerpt(noteId: string): Promise<string | null> {
+    const candidate = buildServerUrl(activeServer.value, `public/shares/audio/${noteId}.mp3`)
+    try {
+      const response = await fetch(candidate, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(1500),
+      })
+      return response.ok ? candidate : null
+    } catch {
+      return null
+    }
+  }
+
+  async function onShareNoteAudioClicked(): Promise<void> {
+    const note: Note | null = currentNote()
+    if (!note) return
+    const { track } = trackContextFor(note.trackId as TrackId)
+    if (!track) {
+      await toast.error(t("notes.shareAudioErrorNoAudio"))
+      return
+    }
+    const variant = pickAudioVariant(track)
+    if (!variant || !variant.audio) {
+      await toast.error(t("notes.shareAudioErrorNoAudio"))
+      return
+    }
+
+    await toast.info(t("notes.shareAudioPreparing"))
+
+    let publicUrl: string
+    try {
+      const probed = await probeExcerpt(note.id)
+      if (probed) {
+        publicUrl = probed
+      } else {
+        const result = await shareAudioService.cut({
+          sourceKey: variant.audio.path,
+          startMs: note.timeStart,
+          endMs: note.timeEnd,
+          excerptId: note.id,
+        })
+        publicUrl = result.url
+      }
+    } catch {
+      await toast.error(t("notes.shareAudioErrorGeneric"))
+      return
+    }
+
+    try {
+      const download = await Filesystem.downloadFile({
+        url: publicUrl,
+        path: `share-audio/note-${note.id}.mp3`,
+        directory: Directory.Cache,
+        recursive: true,
+      })
+      const localPath = download.path
+      if (!localPath) {
+        await toast.error(t("notes.shareAudioErrorGeneric"))
+        return
+      }
+      await shareService.share({
+        url: localPath,
+        title: resolveTrackTitle(track),
+        dialogTitle: t("notes.shareAudioDialog"),
+      })
+    } catch {
+      await toast.error(t("notes.shareAudioErrorGeneric"))
+    }
+  }
+
   async function onDeleteNoteClicked(): Promise<void> {
     const id = selectedNoteId.value
     if (!id) return
@@ -173,9 +265,15 @@ export function useNotesController(): NotesControllerReturn {
 
   const actionSheetButtons = computed<readonly NotesActionSheetButton[]>(() => [
     {
-      text: t("app.share"),
+      text: t("notes.shareText"),
       handler: () => {
         void onShareNoteClicked()
+      },
+    },
+    {
+      text: t("notes.shareAudio"),
+      handler: () => {
+        void onShareNoteAudioClicked()
       },
     },
     {
