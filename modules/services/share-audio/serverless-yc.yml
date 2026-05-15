@@ -1,0 +1,37 @@
+service: shruti-share-audio
+
+frameworkVersion: "3"
+
+provider:
+  name: yandex-cloud
+  runtime: python311
+  httpApi:
+    payload: "1.0"
+
+package:
+  patterns:
+    - "!**"
+    - handler.py
+    - storage.py
+    - event_adapter.py
+    - requirements.txt
+    - layers/ffmpeg/bin/ffmpeg
+
+functions:
+  cut:
+    handler: handler.handler
+    memory: 1024
+    timeout: 600
+    account: ${env:YC_SERVICE_ACCOUNT_ID}
+    environment:
+      BUCKET: shruti-engine
+      EXCERPTS_PREFIX: ${env:EXCERPTS_PREFIX, "public/excerpts"}
+      EXCERPTS_PUBLIC_BASE: ${env:EXCERPTS_PUBLIC_BASE, ""}
+      FFMPEG_BIN: /function/code/layers/ffmpeg/bin/ffmpeg
+      # YC SA can't sign AWS S3 requests — use a dedicated runtime IAM user.
+      AWS_ACCESS_KEY_ID: ${env:AWS_RUNTIME_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${env:AWS_RUNTIME_SECRET_ACCESS_KEY}
+      AWS_REGION: ${env:AWS_RUNTIME_REGION}
+
+plugins:
+  - "@yandex-cloud/serverless-plugin"
