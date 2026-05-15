@@ -1,4 +1,4 @@
-name: share-audio (AWS)
+name: Services / Share-Audio / AWS
 
 on:
   push:

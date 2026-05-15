@@ -1,4 +1,4 @@
-name: share-audio (Yandex Cloud)
+name: Services / Share-Audio / Yandex Cloud
 
 # Manual dispatch only — YC deploys run on demand, not on every push.
 # Auth: LECTORIUM_YC_OAUTH_TOKEN deploys; LECTORIUM_YC_SERVICE_ACCOUNT_ID
