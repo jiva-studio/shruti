@@ -9,8 +9,8 @@
     @pointerdown.stop
     @click.stop="onClick"
   >
-    <component :is="icon" class="icon" :size="22" />
-    <div v-if="showProgress" class="progress">
+    <component :is="icon" class="icon" :size="iconSize" />
+    <div v-if="showProgress && !trackCompleted" class="progress">
       <RadialProgress
         :stroke-width="4"
         :inner-stroke-width="4"
@@ -28,7 +28,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import { IconChecks, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
 import RadialProgress from "vue3-radial-progress"
 
 const props = defineProps<{
@@ -50,9 +51,13 @@ const emit = defineEmits<{
 const trackCompleted = computed(() => props.duration > 0 && props.position >= props.duration)
 
 const icon = computed(() => {
-  if (trackCompleted.value) return IconChecks
+  if (trackCompleted.value) return IconRosetteDiscountCheckFilled
   return props.playing ? IconPlayerPauseFilled : IconPlayerPlayFilled
 })
+
+// The rosette glyph is denser than the play/pause triangles — bump it
+// up a touch so it visually fills the button the same way.
+const iconSize = computed(() => (trackCompleted.value ? 28 : 22))
 
 function onClick(): void {
   // Done lectures shouldn't re-trigger play — only the parent's

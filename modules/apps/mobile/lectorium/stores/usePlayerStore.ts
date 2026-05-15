@@ -77,7 +77,10 @@ export const usePlayerStore = defineStore("player", () => {
   const open = computed(() => trackId.value !== null)
 
   function patchPlaylistProgress(id: PlaylistItemId, ms: number): void {
-    void usePlaylistStore().patchProgress(id, ms)
+    // Pass the engine-reported `durationMs` so `patchProgress` can mark
+    // completion for items that live past the first paged window of the
+    // playlist (where `entries.find(...)` wouldn't see them).
+    void usePlaylistStore().patchProgress(id, ms, durationMs.value)
   }
 
   const session = usePlayerSession({

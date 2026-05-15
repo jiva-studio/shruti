@@ -168,8 +168,14 @@ export const usePlaylistStore = defineStore("playlist", () => {
    * item. Called by the player on each session finalize. Pure UI sync —
    * no DB write here, since the DB is already up-to-date through the
    * tracker.
+   *
+   * `durationMs` is the engine-reported duration of the currently-loaded
+   * track. It's used so we can still mark completion for items that live
+   * past the first paged window (`entries`) — without it we'd need
+   * `entry.track` to read the duration, and items off-page wouldn't be
+   * eligible.
    */
-  function patchProgress(itemId: PlaylistItemId, progressMs: number): void {
+  function patchProgress(itemId: PlaylistItemId, progressMs: number, durationMs?: number): void {
     // Once an item is `completed`, the engine can still emit a late
     // `playing=false, position<duration` tick (it sometimes settles a
     // few hundred ms before the reported duration). Let it update the
@@ -184,15 +190,15 @@ export const usePlaylistStore = defineStore("playlist", () => {
     progressMap.value = next
 
     const entry = entries.value.find((e) => e.item.id === itemId)
-    if (entry) {
-      const durationMs = maxAudioDurationMs(entry.track)
-      if (isCompleted(progressMs, durationMs)) {
-        if (completedAtMap.value.get(itemId) == null) {
-          const nextCompleted = new Map(completedAtMap.value)
-          nextCompleted.set(itemId, Date.now())
-          completedAtMap.value = nextCompleted
-        }
-      }
+    const resolvedDurationMs = entry ? maxAudioDurationMs(entry.track) : (durationMs ?? 0)
+    if (
+      resolvedDurationMs > 0 &&
+      isCompleted(progressMs, resolvedDurationMs) &&
+      completedAtMap.value.get(itemId) == null
+    ) {
+      const nextCompleted = new Map(completedAtMap.value)
+      nextCompleted.set(itemId, Date.now())
+      completedAtMap.value = nextCompleted
     }
   }
 
