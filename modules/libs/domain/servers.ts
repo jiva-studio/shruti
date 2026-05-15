@@ -8,6 +8,10 @@
  * `russia`). Both return the same `public/shares/audio/<id>.mp3` URL on
  * the underlying S3 bucket; the consumer only needs to pick the
  * geographically-closer compute endpoint.
+ *
+ * `shareVideoUrl` is the analogous per-region endpoint of the share-video
+ * reel renderer. Returns `public/share/video/<id>.mp4`. Placeholder URLs
+ * below are replaced with real ones after the first AWS / YC deploy.
  */
 
 export interface CdnServer {
@@ -15,6 +19,7 @@ export interface CdnServer {
   readonly name: string
   readonly urlTemplate: string
   readonly shareAudioUrl: string
+  readonly shareVideoUrl: string
 }
 
 export const SERVERS: readonly CdnServer[] = [
@@ -23,12 +28,14 @@ export const SERVERS: readonly CdnServer[] = [
     name: "Global",
     urlTemplate: "https://cdn-s3.shruti.local/{path}",
     shareAudioUrl: "https://7hl2sboutd.execute-api.us-east-1.amazonaws.com/excerpts",
+    shareVideoUrl: "https://rl1sq2aa2m.execute-api.us-east-1.amazonaws.com/reels",
   },
   {
     id: "russia",
     name: "Russia",
     urlTemplate: "https://cdn-ru.shruti.local/{path}",
     shareAudioUrl: "https://functions.yandexcloud.net/d4er0qjat23q6ic6dt0p",
+    shareVideoUrl: "https://functions.yandexcloud.net/d4ejoscqdtsma2g73pg1",
   },
 ]
 

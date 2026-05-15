@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.serverless/
+layers/ffmpeg/bin/
+input/
+output/
+backgrounds/
+logos/
+temp_slides/
+assets/fonts/NotoSans-*.woff2
+*.log

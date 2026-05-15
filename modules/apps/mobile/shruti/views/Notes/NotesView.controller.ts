@@ -15,6 +15,8 @@ import { formatReference } from "@shruti/composables/groupReferences.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useLoading } from "@shruti/services/useLoading.js"
+import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
+import { withProgressLabels, type LabelStep } from "@shruti/services/withProgressLabels.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
@@ -48,7 +50,8 @@ export function useNotesController(): NotesControllerReturn {
   const store = useNotesStore()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
-  const { shareService, shareAudioService, activeServer, haptics } = useShruti()
+  const { shareService, shareAudioService, shareVideoService, activeServer, haptics } =
+    useShruti()
   const toast = useToast()
   const loading = useLoading()
 
@@ -270,6 +273,11 @@ export function useNotesController(): NotesControllerReturn {
             excerptId: note.id,
           })
           publicUrl = result.url
+          // Defensive: share-audio is sync today (always `ready: true`),
+          // but if it ever migrates to async dispatch we don't want a
+          // 404 on the immediate download. The poll is a no-op when the
+          // file is already there.
+          if (!result.ready) await pollUntilReady(publicUrl)
         }
 
         await Filesystem.downloadFile({
@@ -301,6 +309,128 @@ export function useNotesController(): NotesControllerReturn {
     }
   }
 
+  /** Filesystem path of a previously-shared reel for this note. */
+  function localVideoPath(noteId: NoteId): string {
+    return `share-video-note-${noteId}.mp4`
+  }
+
+  /** Local-cache hit check for a video reel. Mirrors `findLocalExcerpt`. */
+  async function findLocalVideo(noteId: NoteId): Promise<string | null> {
+    const path = localVideoPath(noteId)
+    try {
+      await Filesystem.stat({ path, directory: Directory.Cache })
+      const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache })
+      return uri
+    } catch {
+      return null
+    }
+  }
+
+  /** CDN warm-probe for a video reel. Mirrors `probeExcerpt`. */
+  async function probeVideo(noteId: string): Promise<string | null> {
+    const candidate = buildServerUrl(activeServer.value, `public/share/video/${noteId}.mp4`)
+    try {
+      const response = await fetch(candidate, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(1500),
+      })
+      return response.ok ? candidate : null
+    } catch {
+      return null
+    }
+  }
+
+  async function onShareNoteVideoClicked(): Promise<void> {
+    const note: Note | null = currentNote()
+    if (!note) return
+    const { track } = trackContextFor(note.trackId as TrackId)
+    if (!track) {
+      await toast.error(t("notes.shareVideoErrorNoAudio"))
+      return
+    }
+    const variant = pickAudioVariant(track)
+    if (!variant || !variant.audio) {
+      await toast.error(t("notes.shareVideoErrorNoAudio"))
+      return
+    }
+    const audioPath = variant.audio.path
+
+    // Empty-text guard: share-video's `text` field requires non-empty.
+    if (!note.text || note.text.trim().length === 0) {
+      await toast.error(t("notes.shareVideoErrorGeneric"))
+      return
+    }
+
+    try {
+      const localPath = await loading.withLoading(t("notes.shareVideoPreparing"), async (ctx) => {
+        // 1. App-cache hit.
+        const cached = await findLocalVideo(note.id)
+        if (cached) return cached
+
+        // 2. CDN warm hit (someone else's prior render still on the bucket).
+        let publicUrl = await probeVideo(note.id)
+
+        // 3. Cold path: trigger the render, wait for the file. Same
+        // labels on AWS (poll-driven) and YC (server-blocking) — see
+        // withProgressLabels.
+        if (!publicUrl) {
+          const labelSchedule: ReadonlyArray<LabelStep> = [
+            { atMs: 5_000, label: t("notes.shareVideoRendering") },
+            { atMs: 45_000, label: t("notes.shareVideoAlmostReady") },
+            { atMs: 90_000, label: t("notes.shareVideoStillWorking") },
+          ]
+          const predictedUrl = buildServerUrl(
+            activeServer.value,
+            `public/share/video/${note.id}.mp4`
+          )
+          await withProgressLabels(
+            (async () => {
+              // Tell the server to start. We only need to know it
+              // accepted (any 2xx); the response body is irrelevant.
+              await shareVideoService.cut({
+                sourceKey: audioPath,
+                startMs: note.timeStart,
+                endMs: note.timeEnd,
+                text: note.text,
+                lang: variant.language,
+                theme: "prabhupada",
+                videoId: note.id,
+              })
+              // Wait for the predicted URL to become live. On YC the
+              // first probe is an instant 200 (server already uploaded
+              // before responding); on AWS we poll for ~100 s while the
+              // worker renders.
+              await pollUntilReady(predictedUrl)
+            })(),
+            labelSchedule,
+            ctx.setLabel
+          )
+          publicUrl = predictedUrl
+        }
+
+        await Filesystem.downloadFile({
+          url: publicUrl,
+          path: localVideoPath(note.id),
+          directory: Directory.Cache,
+          recursive: true,
+        })
+        const { uri } = await Filesystem.getUri({
+          path: localVideoPath(note.id),
+          directory: Directory.Cache,
+        })
+        return uri
+      })
+
+      await shareService.share({
+        url: localPath,
+        title: resolveTrackTitle(track),
+        dialogTitle: t("notes.shareVideoDialog"),
+      })
+    } catch {
+      await toast.error(t("notes.shareVideoErrorGeneric"))
+    }
+  }
+
   async function onDeleteNoteClicked(): Promise<void> {
     const id = selectedNoteId.value
     if (!id) return
@@ -318,6 +448,12 @@ export function useNotesController(): NotesControllerReturn {
       text: t("notes.shareAudio"),
       handler: () => {
         void onShareNoteAudioClicked()
+      },
+    },
+    {
+      text: t("notes.shareVideo"),
+      handler: () => {
+        void onShareNoteVideoClicked()
       },
     },
     {

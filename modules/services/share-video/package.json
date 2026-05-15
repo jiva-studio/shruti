@@ -1,34 +1,39 @@
 {
-  "name": "reels-generator",
-  "version": "1.0.0",
-  "description": "Video reels generator for social media platforms",
-  "main": "dist/index.js",
+  "name": "@shruti/share-video",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Serverless function that renders short-form video reels. Cuts audio, transcribes via Whisper, force-aligns caller text, overlays on themed S3 background pack, appends bundled logo, uploads to S3. Deploys to AWS Lambda and Yandex Cloud Functions.",
+  "main": "dist/handler.js",
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/index.ts",
-    "start": "node dist/index.js",
-    "main": "ts-node main.ts",
-    "example": "ts-node examples/transcription-usage.ts"
+    "deploy:aws": "npm run build && serverless deploy --config serverless-aws.yml",
+    "deploy:yc": "npm run build && serverless deploy --config serverless-yc.yml",
+    "remove:aws": "serverless remove --config serverless-aws.yml",
+    "remove:yc": "serverless remove --config serverless-yc.yml",
+    "postinstall": "node scripts/copy-bundled-font.js",
+    "render-local": "ts-node scripts/render-local.ts"
   },
-  "keywords": [
-    "video",
-    "reels",
-    "tiktok",
-    "instagram",
-    "facebook"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-lambda": "^3.658.0",
+    "@aws-sdk/client-s3": "^3.658.0",
+    "@aws-sdk/lib-storage": "^3.658.0",
+    "@aws-sdk/s3-request-presigner": "^3.1047.0",
+    "@fontsource/noto-sans": "^5.2.10",
     "@napi-rs/canvas": "^0.1.80",
     "fluent-ffmpeg": "^2.1.2",
-    "form-data": "^4.0.0",
     "openai": "^4.20.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.140",
     "@types/fluent-ffmpeg": "^2.1.24",
     "@types/node": "^20.10.0",
+    "@yandex-cloud/serverless-plugin": "^1.7.25",
+    "serverless": "^3.39.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "tar": "^7.5.11",
+    "file-type": "^22.0.0"
   }
 }
