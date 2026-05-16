@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { loadingController, onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
+import { useRouter } from "vue-router"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Location } from "@lib/domain/location.js"
@@ -17,12 +18,13 @@ import {
 } from "@shruti/composables/resolveLocalized.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useConfig } from "@shruti/composables/useConfig.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
-import { withProgressLabels, type LabelStep } from "@shruti/services/withProgressLabels.js"
 import { useToast } from "@shruti/services/useToast.js"
-import { useDebugStore } from "@shruti/stores/useDebugStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
+import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
+import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
 
 /**
@@ -50,21 +52,18 @@ export interface NotesControllerReturn {
 
 export function useNotesController(): NotesControllerReturn {
   const { t } = useI18n()
+  const router = useRouter()
   const app = useShruti()
   const store = useNotesStore()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
-  const {
-    shareService,
-    shareAudioService,
-    shareVideoService,
-    activeServer,
-    haptics,
-    excerptCache,
-  } = useShruti()
+  const { shareService, shareAudioService, activeServer, haptics, excerptCache } = useShruti()
   const toast = useToast()
-  const debug = useDebugStore()
   const shareJob = useShareJobStore()
+  const purchases = usePurchasesStore()
+  const paywall = usePaywallStore()
+  // Studio entry visibility — default ON; matches the toggle in Settings.
+  const studioEnabled = useConfig<boolean>("settings.notes.studioEnabled", true)
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -386,101 +385,19 @@ export function useNotesController(): NotesControllerReturn {
     })
   }
 
-  /** Canonical filename of a previously-rendered reel for this note. */
-  function localVideoPath(noteId: NoteId): string {
-    return `share-video-note-${noteId}.mp4`
-  }
-
-  /** Local-cache hit check for a video reel. Mirrors `findLocalExcerpt`. */
-  async function findLocalVideo(noteId: NoteId): Promise<string | null> {
-    return excerptCache.findLocal(localVideoPath(noteId))
-  }
-
-  /** CDN warm-probe for a video reel. Mirrors `probeExcerpt`. */
-  async function probeVideo(noteId: string): Promise<string | null> {
-    const candidate = buildServerUrl(activeServer.value, `public/share/video/${noteId}.mp4`)
-    return (await excerptCache.probeRemote(candidate)) ? candidate : null
-  }
-
-  async function onShareNoteVideoClicked(): Promise<void> {
-    const note: Note | null = currentNote()
-    if (!note) return
-    const { track } = trackContextFor(note.trackId as TrackId)
-    if (!track) {
-      await toast.error(t("notes.shareVideoErrorNoAudio"))
+  /**
+   * Studio entry point. Pro-gated — non-subscribers see the paywall
+   * instead of navigating to the editor. The editor itself re-checks
+   * the gate on mount so a stale "subscribed" cache can't slip through.
+   */
+  function onOpenInStudioClicked(): void {
+    const id = selectedNoteId.value
+    if (!id) return
+    if (!purchases.isSubscribed) {
+      paywall.requestOpen()
       return
     }
-    const variant = pickAudioVariant(track)
-    if (!variant || !variant.audio) {
-      await toast.error(t("notes.shareVideoErrorNoAudio"))
-      return
-    }
-    const audioPath = variant.audio.path
-
-    // Empty-text guard: share-video's `text` field requires non-empty.
-    if (!note.text || note.text.trim().length === 0) {
-      await toast.error(t("notes.shareVideoErrorGeneric"))
-      return
-    }
-
-    await runShareWorkflow({
-      jobKind: "video",
-      noteId: note.id,
-      initialLabel: t("notes.shareVideoPreparing"),
-      errorLabel: t("notes.shareVideoErrorGeneric"),
-      workFn: async (ctx) => {
-        // 1. App-cache hit.
-        const cached = await findLocalVideo(note.id)
-        if (cached) return cached
-
-        // 2. CDN warm hit (someone else's prior render still on the bucket).
-        let publicUrl = await probeVideo(note.id)
-
-        // 3. Cold path: trigger the render, wait for the file. Labels
-        // progress on a wall clock so YC's server-blocking 120 s wait
-        // looks the same to the user as AWS's poll-driven flow.
-        if (!publicUrl) {
-          const labelSchedule: ReadonlyArray<LabelStep> = [
-            { atMs: 5_000, label: t("notes.shareVideoRendering") },
-            { atMs: 45_000, label: t("notes.shareVideoAlmostReady") },
-            { atMs: 90_000, label: t("notes.shareVideoStillWorking") },
-          ]
-          const predictedUrl = buildServerUrl(
-            activeServer.value,
-            `public/share/video/${note.id}.mp4`
-          )
-          await withProgressLabels(
-            (async () => {
-              // Tell the server to start. The response body is ignored —
-              // useHttpShareVideoService aborts the cut() at 8 s and
-              // returns a sentinel `{ready:false}` for slow clouds (YC),
-              // so we always end up polling the predicted URL.
-              await shareVideoService.cut({
-                sourceKey: audioPath,
-                startMs: note.timeStart,
-                endMs: note.timeEnd,
-                text: note.text,
-                lang: variant.language,
-                theme: "prabhupada",
-                videoId: note.id,
-              })
-              await pollUntilReady(predictedUrl)
-            })(),
-            labelSchedule,
-            ctx.setLabel
-          )
-          publicUrl = predictedUrl
-        }
-
-        return excerptCache.download({ url: publicUrl, filename: localVideoPath(note.id) })
-      },
-      openShareSheet: (uri) =>
-        shareService.share({
-          url: uri,
-          title: resolveTrackTitle(track),
-          dialogTitle: t("notes.shareVideoDialog"),
-        }),
-    })
+    void router.push(`/tabs/studio/${id}`)
   }
 
   async function onDeleteNoteClicked(): Promise<void> {
@@ -504,14 +421,17 @@ export function useNotesController(): NotesControllerReturn {
         },
       },
     ]
-    // Share Video is gated behind debug mode while the feature stabilises
-    // (renders are slow, server perf work pending). Settings → tap the
-    // BuildInfo row 5× within 3 s to flip useDebugStore().unlocked.
-    if (debug.unlocked) {
+    // Studio entry — toggle in Settings hides it. Non-subscribers still
+    // see the row (with the PRO suffix) so the feature is discoverable;
+    // tapping opens the paywall rather than the editor. Action sheets
+    // can't render rich children, so the PRO marker is part of the
+    // label text.
+    if (studioEnabled.value) {
+      const proSuffix = purchases.isSubscribed ? "" : ` · ${t("app.proBadge")}`
       buttons.push({
-        text: t("notes.shareVideo"),
+        text: t("studio.openInStudio") + proSuffix,
         handler: () => {
-          void onShareNoteVideoClicked()
+          onOpenInStudioClicked()
         },
       })
     }

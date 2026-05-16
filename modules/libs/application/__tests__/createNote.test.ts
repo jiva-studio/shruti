@@ -28,6 +28,7 @@ const created: Note = {
   timeStart: 5,
   timeEnd: 10,
   createdAt: 1000,
+  meta: null,
 }
 
 describe("createNote", () => {

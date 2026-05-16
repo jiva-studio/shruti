@@ -12,6 +12,7 @@ import enPlayer from "./locales/en/player.js"
 import enSearch from "./locales/en/search.js"
 import enSettings from "./locales/en/settings.js"
 import enShare from "./locales/en/share.js"
+import enStudio from "./locales/en/studio.js"
 import enTranscript from "./locales/en/transcript.js"
 import enWelcome from "./locales/en/welcome.js"
 
@@ -27,6 +28,7 @@ import ruPlayer from "./locales/ru/player.js"
 import ruSearch from "./locales/ru/search.js"
 import ruSettings from "./locales/ru/settings.js"
 import ruShare from "./locales/ru/share.js"
+import ruStudio from "./locales/ru/studio.js"
 import ruTranscript from "./locales/ru/transcript.js"
 import ruWelcome from "./locales/ru/welcome.js"
 
@@ -46,6 +48,7 @@ const en = {
   search: enSearch,
   settings: enSettings,
   share: enShare,
+  studio: enStudio,
   transcript: enTranscript,
   welcome: enWelcome,
 }
@@ -63,6 +66,7 @@ const ru = {
   search: ruSearch,
   settings: ruSettings,
   share: ruShare,
+  studio: ruStudio,
   transcript: ruTranscript,
   welcome: ruWelcome,
 }

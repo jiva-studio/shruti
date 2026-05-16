@@ -1,6 +1,6 @@
 import type { ListeningSession } from "@lib/domain/listeningSession.js"
 import type { MediaItem, MediaItemState } from "@lib/domain/mediaItem.js"
-import type { Note } from "@lib/domain/note.js"
+import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type {
   ListeningSessionRow,
@@ -23,6 +23,22 @@ export function rowToNote(row: NoteRow): Note {
     timeStart: row.time_start,
     timeEnd: row.time_end,
     createdAt: row.created_at,
+    meta: parseNoteMeta(row.meta),
+  }
+}
+
+function parseNoteMeta(raw: string | null): NoteMeta | null {
+  if (raw === null || raw === "") return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as NoteMeta
+    }
+    return null
+  } catch {
+    // Corrupt rows shouldn't take down the notes list — log and drop.
+    console.warn("[rowToNote] failed to parse meta:", raw)
+    return null
   }
 }
 

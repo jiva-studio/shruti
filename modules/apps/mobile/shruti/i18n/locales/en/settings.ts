@@ -148,6 +148,10 @@ export default {
       title: "Player on notes page",
       description: "Show an inline audio player next to each quote",
     },
+    studio: {
+      title: "Studio",
+      description: 'Adds "Open in Studio" to the note share menu',
+    },
   },
   activityTracker: {
     show: {
