@@ -38,6 +38,17 @@ export const useDownloadStore = defineStore("downloads", () => {
   // why. The Welcome screen / Settings can render a banner from this.
   const hydrationError = ref<string | null>(null)
   const inFlight = new Map<TrackId, Promise<string | null>>()
+  // Bounded FIFO for prefetch-style enqueues. Without this, restoring
+  // many tracks at once fires `ensureDownloaded` in a tight loop and
+  // the native plugin's WorkManager (Android) / URLSession (iOS) drops
+  // everything past the first transfer to "failed". The queue keeps
+  // explicit-await callers (player auto-start) on their own fast path
+  // — `prefetch` is the parallel-spam entry point and is the one we
+  // serialize.
+  const PREFETCH_CONCURRENCY = 1
+  const prefetchQueue: Array<{ trackId: TrackId; path: string }> = []
+  const queuedTrackIds = new Set<TrackId>()
+  let queueDraining = false
   let hydrated = false
   // Bumped by reset() so an in-flight task started before the wipe
   // cannot write back into the freshly-emptied state maps. Every task
@@ -230,12 +241,49 @@ export const useDownloadStore = defineStore("downloads", () => {
     return task
   }
 
+  async function drainPrefetchQueue(): Promise<void> {
+    if (queueDraining) return
+    queueDraining = true
+    try {
+      while (prefetchQueue.length > 0) {
+        const batch = prefetchQueue.splice(0, PREFETCH_CONCURRENCY)
+        await Promise.allSettled(
+          batch.map(async (job) => {
+            queuedTrackIds.delete(job.trackId)
+            try {
+              await ensureDownloaded(job.trackId, job.path)
+            } catch {
+              // ensureDownloaded already records "failed"; don't break the queue.
+            }
+          })
+        )
+      }
+    } finally {
+      queueDraining = false
+    }
+  }
+
   /**
-   * Fire-and-forget wrapper for "add to playlist" flows that don't want to
-   * block the UI on the download result.
+   * Fire-and-forget enqueue for "add to playlist" / data-restore flows.
+   * Replaces a previous unbounded parallel dispatch that caused every
+   * download past the first to fail when the native plugin's transfer
+   * limit was exceeded (issue #474). Skips tracks already in flight or
+   * already queued — same-track double-tap is a no-op.
+   *
+   * Marks the row as `downloading` immediately on enqueue (unless it
+   * was already `failed` — leave that state intact so `ensureDownloaded`
+   * still picks the retry path) so the dim treatment doesn't flicker
+   * between `idle` and `downloading` while the FIFO is draining.
    */
   function prefetch(trackId: TrackId, path: string): void {
-    void ensureDownloaded(trackId, path)
+    if (queuedTrackIds.has(trackId)) return
+    if (inFlight.has(trackId)) return
+    const current = states.value.get(trackId)
+    if (current === "completed") return
+    queuedTrackIds.add(trackId)
+    prefetchQueue.push({ trackId, path })
+    if (current !== "failed") markStartingDownload(trackId)
+    void drainPrefetchQueue()
   }
 
   /**
@@ -306,6 +354,8 @@ export const useDownloadStore = defineStore("downloads", () => {
     progress.value = new Map()
     hydrationError.value = null
     inFlight.clear()
+    prefetchQueue.length = 0
+    queuedTrackIds.clear()
     hydrated = false
   }
 
