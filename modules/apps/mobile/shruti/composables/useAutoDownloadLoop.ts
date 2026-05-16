@@ -1,7 +1,10 @@
 import { computed, onMounted, watch } from "vue"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useAutoDownloadFiltersStore } from "@shruti/stores/useAutoDownloadFiltersStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { durationFilterBounds } from "@lib/domain/durationFilters.js"
+import type { TrackListFilters } from "@lib/domain/ports/trackRepository.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 
 const MAX_ATTEMPTS_PER_RUN = 50
@@ -26,8 +29,24 @@ const PAGE_SIZE = 50
 export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useConfig<number>> } {
   const app = useShruti()
   const playlist = usePlaylistStore()
+  const filtersStore = useAutoDownloadFiltersStore()
   const targetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
   let running = false
+
+  function currentFilters(): TrackListFilters {
+    const duration = filtersStore.duration[0]
+      ? durationFilterBounds(filtersStore.duration[0])
+      : undefined
+    return {
+      authorIds: filtersStore.authorIds,
+      locationIds: filtersStore.locationIds,
+      languageCodes: filtersStore.languageCodes,
+      sourceIds: filtersStore.sourceIds,
+      tagIds: filtersStore.tagIds,
+      durationMinMs: duration?.minMs,
+      durationMaxMs: duration?.maxMs,
+    }
+  }
 
   function queueDurationSec(): number {
     let total = 0
@@ -58,12 +77,14 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
       for (const i of activeItems) skipIds.add(i.trackId)
       for (const i of archivedItems) skipIds.add(i.trackId)
 
+      const filters = currentFilters()
+      const sortBy = filtersStore.sort
       let pageOffset = 0
       for (let attempts = 0; attempts < MAX_ATTEMPTS_PER_RUN; attempts++) {
         if (queueDurationSec() >= target) return
         const page = await repos.tracks.list({
-          filters: {},
-          sortBy: undefined,
+          filters,
+          sortBy,
           limit: PAGE_SIZE,
           offset: pageOffset,
         })
@@ -89,9 +110,10 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
   }
 
   onMounted(() => {
-    // Best-effort first refill — if DBs aren't open yet, the
-    // playlist watcher will catch the first real refresh.
-    void Promise.resolve().then(refill)
+    // Hydrate the filter snapshot before the first refill so the very
+    // first page request reflects the user's selection instead of
+    // hitting the library unfiltered for one cycle.
+    void filtersStore.load().then(refill)
   })
 
   // Trigger refill on discrete events instead of a deep watch over
@@ -108,7 +130,22 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     return n
   })
 
-  watch([targetSeconds, () => playlist.entries.length, completedCount], () => {
+  // Re-fetch when the user edits the filter selection so the loop
+  // picks up new criteria immediately (and drops candidates that no
+  // longer match on the next refill cycle).
+  const filtersFingerprint = computed(() =>
+    JSON.stringify({
+      a: filtersStore.authorIds,
+      l: filtersStore.locationIds,
+      lc: filtersStore.languageCodes,
+      s: filtersStore.sourceIds,
+      t: filtersStore.tagIds,
+      d: filtersStore.duration,
+      so: filtersStore.sort ?? "",
+    })
+  )
+
+  watch([targetSeconds, () => playlist.entries.length, completedCount, filtersFingerprint], () => {
     void refill()
   })
 

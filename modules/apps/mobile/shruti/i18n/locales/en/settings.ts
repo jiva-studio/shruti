@@ -96,6 +96,16 @@ export default {
   autoDownload: {
     title: "Auto-download",
     description: "Keep unlistened lectures ready on device",
+    enable: "Enable",
+    hint: "The app keeps a buffer of unlistened lectures of the chosen length. Which lectures get queued is controlled by the filter below.",
+    sections: {
+      filter: "What to download",
+      target: "Queue length",
+    },
+    filter: {
+      label: "Filter",
+      none: "All lectures",
+    },
     target: {
       off: "Off",
       "30m": "30 minutes",

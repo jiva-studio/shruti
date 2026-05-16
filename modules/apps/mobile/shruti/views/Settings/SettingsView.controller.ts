@@ -10,6 +10,10 @@ import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import type { CdnServer } from "@lib/domain/servers.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
+import {
+  useAutoDownloadBinding,
+  type UseAutoDownloadBindingReturn,
+} from "./composables/useAutoDownloadBinding.js"
 import { useDangerActions } from "./composables/useDangerActions.js"
 import { useDataSettings } from "./composables/useDataSettings.js"
 import {
@@ -39,6 +43,7 @@ export interface SettingsControllerReturn {
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
   autoDownloadTargetSeconds: Ref<number>
+  autoDownload: UseAutoDownloadBindingReturn
   /* Selector sources */
   activeServerId: Ref<string>
   serverItems: SelectorItem[]
@@ -90,6 +95,7 @@ export function useSettingsController(): SettingsControllerReturn {
     [9, 0]
   )
   const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
+  const autoDownload = useAutoDownloadBinding(autoDownloadTargetSeconds)
 
   const { activeServerId, serverItems } = useActiveServerBinding({
     servers: app.appConfig.servers,
@@ -139,6 +145,7 @@ export function useSettingsController(): SettingsControllerReturn {
     notificationsEnabled,
     notificationsTime,
     autoDownloadTargetSeconds,
+    autoDownload,
     activeServerId,
     serverItems,
     languageItems,

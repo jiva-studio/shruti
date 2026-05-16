@@ -7,6 +7,7 @@ export { default as ShowPlayerOnNotesSettingsItem } from "./ShowPlayerOnNotesSet
 export { default as NotificationsEnabledSettingsItem } from "./NotificationsEnabledSettingsItem.vue"
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"
 export { default as AutoDownloadTargetSettingsItem } from "./AutoDownloadTargetSettingsItem.vue"
+export { default as AutoDownloadConfigDialog } from "./AutoDownloadConfigDialog.vue"
 export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vue"
 export { default as AutoArchiveDelaySettingsItem } from "./AutoArchiveDelaySettingsItem.vue"
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"
