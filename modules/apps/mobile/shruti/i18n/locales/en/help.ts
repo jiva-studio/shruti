@@ -34,6 +34,10 @@ export default {
       title: "Settings overview",
       summary: "Every settings group and item explained",
     },
+    "smart-library": {
+      title: "Smart library",
+      summary: "Auto-update lectures and clean up after listening (PRO)",
+    },
     "export-import": {
       title: "Export and import",
       summary: "Backup and restore your personal data",

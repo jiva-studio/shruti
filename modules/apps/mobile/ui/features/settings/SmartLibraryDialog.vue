@@ -1,0 +1,230 @@
+<template>
+  <IonModal :is-open="open" class="smart-library-dialog" @did-dismiss="onClose">
+    <Header>
+      <IonToolbar>
+        <IonTitle>{{ $t("settings.smartLibrary.title") }}</IonTitle>
+        <IonButtons slot="end">
+          <IonButton strong @click="onClose">{{ $t("app.ok") }}</IonButton>
+        </IonButtons>
+      </IonToolbar>
+    </Header>
+
+    <IonContent>
+      <IonList lines="none" class="ion-no-margin ion-no-padding">
+        <IonItem>
+          <IonLabel>{{ $t("settings.smartLibrary.enable") }}</IonLabel>
+          <IonToggle
+            :key="toggleEpoch"
+            slot="end"
+            :checked="isEnabled"
+            label-placement="start"
+            @ion-change="onToggleEnabled"
+          />
+        </IonItem>
+      </IonList>
+
+      <p class="hint">{{ $t("settings.smartLibrary.hint") }}</p>
+
+      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+        <IonLabel>{{ $t("settings.smartLibrary.sections.filter") }}</IonLabel>
+      </IonListHeader>
+      <IonList lines="none" class="ion-no-margin ion-no-padding">
+        <IonItem button detail :disabled="!isEnabled" @click="emit('open-filters')">
+          <IconChip slot="start">
+            <IconFilterFilled :size="22" />
+          </IconChip>
+          <IonLabel class="ion-text-nowrap">
+            <h2>{{ $t("settings.smartLibrary.filter.label") }}</h2>
+            <p>{{ filterSummary || $t("settings.smartLibrary.filter.none") }}</p>
+          </IonLabel>
+        </IonItem>
+      </IonList>
+
+      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+        <IonLabel>{{ $t("settings.smartLibrary.sections.target") }}</IonLabel>
+      </IonListHeader>
+      <IonList lines="none" class="ion-no-margin ion-no-padding">
+        <IonRadioGroup :model-value="selectedPreset" @ion-change="onPresetChange">
+          <IonItem v-for="preset in TARGET_PRESETS" :key="preset.id" :disabled="!isEnabled">
+            <IonRadio :value="preset.id">
+              {{ $t(`settings.smartLibrary.target.${preset.id}`) }}
+            </IonRadio>
+          </IonItem>
+        </IonRadioGroup>
+      </IonList>
+
+      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+        <IonLabel>{{ $t("settings.smartLibrary.sections.archive") }}</IonLabel>
+      </IonListHeader>
+      <IonList lines="none" class="ion-no-margin ion-no-padding">
+        <IonRadioGroup :model-value="effectiveArchive" @ion-change="onArchiveChange">
+          <IonItem v-for="opt in ARCHIVE_OPTIONS" :key="opt" :disabled="!isEnabled">
+            <IonRadio :value="opt">
+              {{ $t(`settings.smartLibrary.archive.${archiveKey(opt)}`) }}
+            </IonRadio>
+          </IonItem>
+        </IonRadioGroup>
+      </IonList>
+    </IonContent>
+  </IonModal>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from "vue"
+import {
+  IonModal,
+  IonToolbar,
+  IonTitle,
+  IonButtons,
+  IonButton,
+  IonContent,
+  IonList,
+  IonListHeader,
+  IonItem,
+  IonLabel,
+  IonRadioGroup,
+  IonRadio,
+  IonToggle,
+} from "@ionic/vue"
+import { IconFilterFilled } from "@tabler/icons-vue"
+import { Header, IconChip } from "@ui/primitives/index.js"
+
+type AutoArchiveDelay = "off" | "immediate" | "8h" | "1d" | "2d" | "3d"
+
+const DEFAULT_SECONDS = 30 * 60
+const DEFAULT_ARCHIVE: ArchiveOption = "1d"
+
+const TARGET_PRESETS = [
+  { id: "30m", seconds: 30 * 60 },
+  { id: "1h", seconds: 60 * 60 },
+  { id: "2h", seconds: 2 * 60 * 60 },
+  { id: "3h", seconds: 3 * 60 * 60 },
+  { id: "5h", seconds: 5 * 60 * 60 },
+  { id: "8h", seconds: 8 * 60 * 60 },
+  { id: "10h", seconds: 10 * 60 * 60 },
+] as const
+
+type PresetId = (typeof TARGET_PRESETS)[number]["id"]
+
+type ArchiveOption = Exclude<AutoArchiveDelay, "off">
+const ARCHIVE_OPTIONS = [
+  "immediate",
+  "8h",
+  "1d",
+  "2d",
+  "3d",
+] as const satisfies readonly ArchiveOption[]
+
+const props = defineProps<{
+  open: boolean
+  filterSummary: string
+  isSubscribed: boolean
+}>()
+
+const targetSeconds = defineModel<number>("targetSeconds", { required: true, default: 0 })
+const archiveDelay = defineModel<AutoArchiveDelay>("archiveDelay", {
+  required: true,
+  default: "off",
+})
+
+const emit = defineEmits<{
+  "update:open": [open: boolean]
+  "open-filters": []
+  "request-paywall": []
+}>()
+
+const lastNonZeroSeconds = ref<number>(targetSeconds.value > 0 ? targetSeconds.value : 0)
+const lastArchive = ref<ArchiveOption>(
+  archiveDelay.value !== "off" ? (archiveDelay.value as ArchiveOption) : DEFAULT_ARCHIVE
+)
+// Bumped to force-remount the toggle when we reject the user's flip
+// (see onToggleEnabled paywall branch).
+const toggleEpoch = ref(0)
+
+watch(targetSeconds, (v) => {
+  if (v > 0) lastNonZeroSeconds.value = v
+})
+
+watch(archiveDelay, (v) => {
+  if (v !== "off") lastArchive.value = v as ArchiveOption
+})
+
+// Master toggle is OFF for non-subscribers regardless of stored state.
+// Stored values stay intact so a subsequent purchase silently restores
+// the user's previous configuration.
+const isEnabled = computed<boolean>(() => targetSeconds.value > 0 && props.isSubscribed)
+
+const selectedPreset = computed<PresetId | undefined>(() => {
+  const match = TARGET_PRESETS.find((p) => p.seconds === targetSeconds.value)
+  return match?.id
+})
+
+const effectiveArchive = computed<ArchiveOption>(() => {
+  return archiveDelay.value !== "off" ? (archiveDelay.value as ArchiveOption) : DEFAULT_ARCHIVE
+})
+
+function archiveKey(opt: ArchiveOption): string {
+  return opt === "immediate" ? "immediate" : `_${opt}`
+}
+
+function onToggleEnabled(ev: CustomEvent): void {
+  const checked = (ev.detail as { checked: boolean }).checked
+  if (checked && !props.isSubscribed) {
+    emit("request-paywall")
+    // The web component already flipped its own DOM state on the tap.
+    // isEnabled stayed false, so Vue won't diff the `checked` prop and
+    // the toggle would visually stick at ON. Bumping the key forces a
+    // fresh IonToggle that boots from `:checked="isEnabled" = false`.
+    toggleEpoch.value++
+    return
+  }
+  if (checked) {
+    targetSeconds.value = lastNonZeroSeconds.value > 0 ? lastNonZeroSeconds.value : DEFAULT_SECONDS
+    if (archiveDelay.value === "off") archiveDelay.value = lastArchive.value
+  } else {
+    targetSeconds.value = 0
+  }
+}
+
+function onPresetChange(ev: CustomEvent): void {
+  const id = (ev.detail as { value?: PresetId }).value
+  if (!id) return
+  const preset = TARGET_PRESETS.find((p) => p.id === id)
+  if (!preset) return
+  targetSeconds.value = preset.seconds
+}
+
+function onArchiveChange(ev: CustomEvent): void {
+  const value = (ev.detail as { value?: ArchiveOption }).value
+  if (!value) return
+  archiveDelay.value = value
+}
+
+function onClose(): void {
+  emit("update:open", false)
+}
+</script>
+
+<style scoped>
+.hint {
+  margin: 16px 16px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ion-color-medium);
+}
+
+.is-disabled {
+  opacity: 0.4;
+}
+</style>
+
+<style>
+.smart-library-dialog ion-header,
+.smart-library-dialog ion-header::after {
+  box-shadow: none !important;
+  background-image: none;
+}
+.smart-library-dialog ion-header::after {
+  display: none;
+}
+</style>

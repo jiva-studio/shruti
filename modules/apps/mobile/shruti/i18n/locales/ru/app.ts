@@ -13,6 +13,7 @@ export default {
   delete: "Удалить",
   deleted: "Удалено",
   soon: "Скоро",
+  proBadge: "PRO",
   back: "Назад",
   notes: "Заметки",
   ok: "Oк",
