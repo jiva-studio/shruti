@@ -28,7 +28,7 @@ type StateIconMap = { [key in StateIcon]: StateIconEntry }
 const stateIconMaps: StateIconMap = {
   none: { icon: undefined, color: undefined, size: 24 },
   failed: { icon: IconCircleXFilled, color: "danger", size: 24 },
-  added: { icon: IconCircleCheckFilled, color: "primary", size: 24 },
+  added: { icon: IconCircleCheckFilled, color: "medium", size: 24 },
   completed: { icon: IconRosetteDiscountCheckFilled, color: "medium", size: 24 },
 }
 const statusIcon = computed(() => stateIconMaps[props.icon])
