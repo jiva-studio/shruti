@@ -40,7 +40,7 @@ interface OpenArgs {
  */
 export const usePlayerStore = defineStore("player", () => {
   const app = useShruti()
-  const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", true)
+  const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", false)
 
   const trackId = ref<TrackId | null>(null)
   const title = ref<string>("")
