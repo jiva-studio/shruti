@@ -7,6 +7,7 @@ export { default as NotificationsEnabledSettingsItem } from "./NotificationsEnab
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"
 export { default as AutoDownloadTargetSettingsItem } from "./AutoDownloadTargetSettingsItem.vue"
 export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vue"
+export { default as AutoArchiveDelaySettingsItem } from "./AutoArchiveDelaySettingsItem.vue"
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"
 export { default as TimePicker } from "./TimePicker.vue"
 export { default as TimePickerDialog } from "./TimePickerDialog.vue"
