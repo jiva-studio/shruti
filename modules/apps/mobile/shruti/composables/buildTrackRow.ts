@@ -5,6 +5,7 @@ import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 import { groupReferences } from "./groupReferences.js"
+import { resolveLocalizedNameOrEmpty, resolveTrackTitle } from "./resolveLocalized.js"
 
 export interface BuildTrackRowDeps {
   readonly preferredLanguage: LanguageCode
@@ -38,17 +39,11 @@ export interface BuildTrackRowDeps {
  * localised source short-names.
  */
 export function buildTrackRow(track: Track, deps: BuildTrackRowDeps): UiTrackRow {
-  const variant =
-    track.variants.find((v) => v.language === deps.preferredLanguage) ?? track.variants[0]
-  const title = variant?.title ?? track.id
-
+  const title = resolveTrackTitle(track, deps.preferredLanguage) ?? track.id
   const author = track.authorId ? deps.authorsById.get(track.authorId) : null
-  const authorName =
-    author?.names.get(deps.preferredLanguage) ?? author?.names.values().next().value ?? ""
-
+  const authorName = resolveLocalizedNameOrEmpty(author, deps.preferredLanguage)
   const location = track.locationId ? deps.locationsById?.get(track.locationId) : null
-  const locationName =
-    location?.names.get(deps.preferredLanguage) ?? location?.names.values().next().value ?? ""
+  const locationName = resolveLocalizedNameOrEmpty(location, deps.preferredLanguage)
 
   const references = groupReferences(track.references, deps.sourcesById, deps.preferredLanguage)
   const tagDisplay =

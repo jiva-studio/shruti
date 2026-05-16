@@ -30,6 +30,20 @@ export function useWebRemoteFilesStorage({
       const blob = await response.blob()
       return URL.createObjectURL(blob)
     },
+    async getJson<T = unknown>(url: string): Promise<T> {
+      const cache = await caches.open(cacheName)
+      const cacheKey = urlToCacheKey(url)
+      const cached = await cache.match(cacheKey)
+      if (cached) return (await cached.json()) as T
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(
+          `Remote file fetch failed: ${response.status} ${response.statusText} (${url})`
+        )
+      }
+      await cache.put(cacheKey, response.clone())
+      return (await response.json()) as T
+    },
     async has(url: string): Promise<boolean> {
       const cache = await caches.open(cacheName)
       const response = await cache.match(urlToCacheKey(url))

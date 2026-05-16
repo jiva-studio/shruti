@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, onMounted, onBeforeUnmount } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog } from "@ui/features/transcript/index.js"
@@ -62,6 +62,7 @@ import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
+import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudio.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
@@ -101,6 +102,21 @@ usePlayerProgressFlush()
 useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
+
+// When a Notes inline excerpt starts playing, pause the main lecture so
+// the user never hears two streams at once. The notes coordinator owns
+// the pauser set; we register a callback that asks the player store to
+// pause if it's currently playing.
+let disposeMainPauser: (() => void) | null = null
+onMounted(() => {
+  disposeMainPauser = registerMainPlayerPauser(() => {
+    if (player.playing) void player.togglePause()
+  })
+})
+onBeforeUnmount(() => {
+  disposeMainPauser?.()
+  disposeMainPauser = null
+})
 
 // LanguageSelector wants a mutable string[] v-model. Wrap the readonly
 // controller ref so two-way binding still compiles.

@@ -1,4 +1,5 @@
 import { computed, watch, type ComputedRef, type Ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import {
   AUTO_ARCHIVE_DELAY_KEY,
@@ -54,6 +55,7 @@ export interface SettingsControllerReturn {
 
 export function useSettingsController(): SettingsControllerReturn {
   const app = useShruti()
+  const { t } = useI18n()
 
   const version = __APP_VERSION__
   const buildId = __BUILD_ID__
@@ -79,7 +81,7 @@ export function useSettingsController(): SettingsControllerReturn {
   )
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
   const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
-  const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", false)
+  const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
@@ -99,10 +101,18 @@ export function useSettingsController(): SettingsControllerReturn {
 
   /* Notifications scheduler */
   watch(
-    [notificationsEnabled, notificationsTime],
+    [notificationsEnabled, notificationsTime, appLanguage],
     ([enabled, time]) => {
       const hhmm = time ? `${pad(time[0])}:${pad(time[1])}` : "09:00"
-      void applyDailyReminder({ enabled, time: hhmm }, { notifications: app.notifications })
+      void applyDailyReminder(
+        {
+          enabled,
+          time: hhmm,
+          title: t("app.title"),
+          body: t("notifications.timeToListen"),
+        },
+        { notifications: app.notifications }
+      )
     },
     { immediate: true }
   )

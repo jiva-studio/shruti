@@ -5,6 +5,7 @@ import type {
   IDatabase,
   IDatabaseFetcher,
   IDatabaseTransfer,
+  IExcerptCache,
   IHaptics,
   IMediaDownloader,
   INotificationScheduler,
@@ -68,6 +69,12 @@ export interface Shruti {
    * `shareAudioService` — picks the per-region endpoint at call time.
    */
   readonly shareVideoService: IShareVideoService
+  /**
+   * Per-note excerpt cache (Filesystem stat / downloadFile + HEAD
+   * probe). Hides the Capacitor + fetch choreography from the Notes
+   * share workflow.
+   */
+  readonly excerptCache: IExcerptCache
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
@@ -134,6 +141,7 @@ export interface InitShrutiSeed {
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
+  readonly excerptCache: IExcerptCache
   /** Factory invoked inside `initShruti` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
    * adapter would otherwise need to close over a not-yet-built `Shruti`. */
@@ -177,6 +185,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     shareService: seed.shareService,
     shareAudioService,
     shareVideoService,
+    excerptCache: seed.excerptCache,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
     purchases: seed.purchases,

@@ -337,6 +337,31 @@ export const useDownloadStore = defineStore("downloads", () => {
   }
 
   /**
+   * Drop a track from the prefetch FIFO before its turn starts. Called
+   * by `playlist.archive` so archiving a track that the auto-download
+   * loop (or "add to playlist") has just queued does not waste bandwidth
+   * cabling a file the user no longer wants offline. If the track is
+   * already mid-flight there is no AbortSignal yet — the download
+   * resolves naturally and lands in the (now archived) cache; that's
+   * acceptable for the rare race.
+   */
+  function cancelPrefetch(trackId: TrackId): void {
+    if (!queuedTrackIds.has(trackId)) return
+    const idx = prefetchQueue.findIndex((j) => j.trackId === trackId)
+    if (idx >= 0) prefetchQueue.splice(idx, 1)
+    queuedTrackIds.delete(trackId)
+    // Roll back the optimistic "downloading" paint applied at enqueue
+    // time, but only if the track hasn't started transferring yet.
+    if (!inFlight.has(trackId) && states.value.get(trackId) === "downloading") {
+      const nextStates = new Map(states.value)
+      nextStates.delete(trackId)
+      states.value = nextStates
+      const nextProgress = new Map(progress.value)
+      if (nextProgress.delete(trackId)) progress.value = nextProgress
+    }
+  }
+
+  /**
    * Wipe in-memory download state and force a re-hydrate on next access.
    * Used by the "Clear user data" flow in Settings — after the user DB
    * has been emptied, the cached `Map<TrackId, "completed">` would still
@@ -368,6 +393,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     hydrate,
     ensureDownloaded,
     prefetch,
+    cancelPrefetch,
     markStartingDownload,
     remove,
     reset,

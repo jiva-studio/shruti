@@ -6,6 +6,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { resolveLocalizedName, resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 
@@ -52,16 +53,13 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const title = computed(() => {
     if (!track.value) return ""
     const lang = selectedLanguage.value ?? appLanguage.value
-    const variant = track.value.variants.find((v) => v.language === lang) ?? track.value.variants[0]
-    return variant?.title ?? track.value.id
+    return resolveTrackTitle(track.value, lang) ?? track.value.id
   })
 
   const authorName = computed(() => {
     if (!author.value) return track.value?.authorId ?? ""
     const lang = selectedLanguage.value ?? appLanguage.value
-    return (
-      author.value.names.get(lang) ?? author.value.names.values().next().value ?? author.value.id
-    )
+    return resolveLocalizedName(author.value, lang) ?? author.value.id
   })
 
   const hasAudio = computed(() => track.value?.variants.some((v) => v.audio !== null) ?? false)
