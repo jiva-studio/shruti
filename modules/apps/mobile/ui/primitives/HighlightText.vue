@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="highlight-text">
     <span v-html="text" />
   </div>
 </template>
@@ -11,10 +11,15 @@ defineProps<{
 </script>
 
 <style scoped>
-mark {
-  background: rgba(var(--ion-color-warning-rgb), 0.5);
+/*
+ * `<mark>` is injected via v-html, so Vue's scoped attribute selector
+ * never reaches it. Use :deep() so the rule penetrates the scope and
+ * actually styles the highlight.
+ */
+.highlight-text :deep(mark) {
+  background: rgba(var(--ion-color-medium-rgb), 0.22);
   color: inherit;
-  border-radius: 2px;
-  padding: 0 1px;
+  border-radius: 4px;
+  padding: 1px 4px;
 }
 </style>

@@ -658,16 +658,20 @@ function escapeRegExp(s: string): string {
 
 /**
  * Returns `text` with every case-insensitive occurrence of `query`
- * wrapped in `<mark>`. The text is HTML-escaped first so user-supplied
- * characters can't break the `v-html` render in HighlightText, and the
- * substring match runs against the escaped string with the query also
- * escaped — so a query like "a<b" still highlights the same characters
- * after they're rewritten to `a&lt;b`.
+ * wrapped in `<mark>`. The mark expands to the whole word that
+ * contains the match (so a search for "поль" highlights the entire
+ * "польза", not just the prefix). Word boundaries are computed against
+ * Unicode letter / digit / underscore — punctuation and whitespace end
+ * the word. The text is HTML-escaped first so user-supplied characters
+ * can't break the `v-html` render in HighlightText.
  */
 function highlightMatches(text: string, query: string): string {
   const escaped = escapeHtml(text)
   const needle = escapeHtml(query)
   if (needle.length === 0) return escaped
-  const pattern = new RegExp(escapeRegExp(needle), "gi")
+  // Greedy word match: walk back to the start of the surrounding word
+  // and forward to its end, then wrap the whole word. \p{L} keeps
+  // Cyrillic/Latin/Greek letters etc. together with digits + `_`.
+  const pattern = new RegExp(`[\\p{L}\\p{N}_]*${escapeRegExp(needle)}[\\p{L}\\p{N}_]*`, "giu")
   return escaped.replace(pattern, (match) => `<mark>${match}</mark>`)
 }
