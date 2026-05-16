@@ -5,6 +5,7 @@ export { default as ShowActivityTrackerSettingsItem } from "./ShowActivityTracke
 export { default as ShowNotesTabSettingsItem } from "./ShowNotesTabSettingsItem.vue"
 export { default as NotificationsEnabledSettingsItem } from "./NotificationsEnabledSettingsItem.vue"
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"
+export { default as AutoDownloadTargetSettingsItem } from "./AutoDownloadTargetSettingsItem.vue"
 export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vue"
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"
 export { default as TimePicker } from "./TimePicker.vue"

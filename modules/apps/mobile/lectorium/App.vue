@@ -59,6 +59,7 @@ import { useKeyboardVisibility } from "@lectorium/composables/useKeyboardVisibil
 import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@lectorium/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@lectorium/composables/usePlayerTutorialPulse.js"
+import { useAutoDownloadLoop } from "@lectorium/composables/useAutoDownloadLoop.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
 const app = useLectorium()
@@ -95,6 +96,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 useLocaleSync(appLanguage)
 usePlayerProgressFlush()
 const pulsing = usePlayerTutorialPulse()
+useAutoDownloadLoop()
 
 // LanguageSelector wants a mutable string[] v-model. Wrap the readonly
 // controller ref so two-way binding still compiles.

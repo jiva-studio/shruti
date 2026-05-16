@@ -31,6 +31,7 @@ export interface SettingsControllerReturn {
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
+  autoDownloadTargetSeconds: Ref<number>
   /* Selector sources */
   activeServerId: Ref<string>
   serverItems: SelectorItem[]
@@ -78,6 +79,7 @@ export function useSettingsController(): SettingsControllerReturn {
     "settings.notificationsTime",
     [9, 0]
   )
+  const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
 
   const { activeServerId, serverItems } = useActiveServerBinding({
     servers: app.appConfig.servers,
@@ -116,6 +118,7 @@ export function useSettingsController(): SettingsControllerReturn {
     openTranscriptAutomatically,
     notificationsEnabled,
     notificationsTime,
+    autoDownloadTargetSeconds,
     activeServerId,
     serverItems,
     languageItems,

@@ -28,6 +28,7 @@
       v-model:show-activity-tracker="showActivityTracker"
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
+      v-model:auto-download-target-seconds="autoDownloadTargetSeconds"
     />
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
@@ -82,6 +83,7 @@ const {
   openTranscriptAutomatically,
   notificationsEnabled,
   notificationsTime,
+  autoDownloadTargetSeconds,
   activeServerId,
   serverItems,
   languageItems,
