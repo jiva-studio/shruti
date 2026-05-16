@@ -21,6 +21,12 @@ export interface CustomerState {
   activeEntitlements: string[]
   /** Store-side subscription-management URL (Play / App Store). */
   managementUrl: string | undefined
+  /**
+   * RevenueCat-side customer id (anonymous `$RCAnonymousID:…` unless the
+   * app explicitly logs the user in). Surfaced in the debug footer so
+   * we can look the customer up in the RC dashboard.
+   */
+  appUserId: string | undefined
 }
 
 export type CustomerInfoListener = (state: CustomerState) => void

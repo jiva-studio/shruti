@@ -66,6 +66,7 @@
       :build-id="buildId"
       :db-number="dbNumber"
       :db-scheme="dbScheme"
+      :app-user-id="debugUnlocked ? subscription.appUserId : undefined"
       @tap="debugTrigger.onTap"
     />
 

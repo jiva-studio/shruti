@@ -133,6 +133,7 @@ const EMPTY_STATE: CustomerState = {
   activePackageId: undefined,
   activeEntitlements: [],
   managementUrl: undefined,
+  appUserId: undefined,
 }
 
 const NOOP_UNSUB = (): void => {}
@@ -149,18 +150,19 @@ function toPurchasePackage(pkg: PurchasesPackage): PurchasePackage {
 }
 
 async function toCustomerState(info: CustomerInfo): Promise<CustomerState> {
+  // `entitlements.active` is RC's canonical "is this customer entitled
+  // right now" signal — it's the only thing that respects expiry. Do
+  // NOT fall back to `info.activeSubscriptions`: that list keeps
+  // product ids through grace / billing-retry and the sandbox transition
+  // window after the final renewal, so it can report a product as
+  // "active" after RC backend has already marked the customer expired.
+  // If a purchase shows up here but `entitlements.active` is empty,
+  // the fix is to attach the product to an Entitlement in the RC
+  // dashboard, not to mask it on the client.
   const activeEntitlements = Object.keys(info.entitlements.active)
   const activeEnt =
     activeEntitlements.length > 0 ? info.entitlements.active[activeEntitlements[0]] : undefined
-
-  // Prefer the entitlement-attached product id, but fall back to RC's
-  // raw `activeSubscriptions` list. A common RC mis-setup is to forget
-  // to attach a product to an Entitlement — the purchase still shows up
-  // as a "Recent transaction" but `entitlements.active` is empty.
-  // Falling back here means the UI flips to "Subscription is active"
-  // either way.
-  const activeProductId: string | undefined =
-    activeEnt?.productIdentifier ?? info.activeSubscriptions?.[0]
+  const activeProductId = activeEnt?.productIdentifier
 
   let activePackageId: string | undefined
   if (activeProductId) {
@@ -186,6 +188,7 @@ async function toCustomerState(info: CustomerInfo): Promise<CustomerState> {
     // customer has an active subscription. Fall back to our
     // hand-built link if it's missing (e.g. lapsed sub).
     managementUrl: info.managementURL ?? getManagementUrl(activeProductId),
+    appUserId: info.originalAppUserId,
   }
 }
 
