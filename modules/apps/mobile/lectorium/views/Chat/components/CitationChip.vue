@@ -54,7 +54,7 @@ import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
+import { resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
@@ -120,20 +120,10 @@ const LONG_PRESS_MS = 500
 let pressTimer: ReturnType<typeof setTimeout> | null = null
 let suppressClick = false
 
-const formattedRange = computed(
-  () => `${formatTimestamp(props.startMs)}–${formatTimestamp(props.endMs)}`
-)
-
 const lectureTitle = computed(() => {
   if (!track.value) return ""
   return resolveTrackTitle(track.value, appLanguage.value) ?? ""
 })
-
-const authorName = computed(() =>
-  author.value ? (resolveLocalizedName(author.value, appLanguage.value) ?? "") : ""
-)
-
-const dateLabel = computed(() => track.value?.date ?? "")
 
 const referenceLabel = computed<string>(() => {
   const refs = track.value?.references ?? []
@@ -160,17 +150,6 @@ const chipTitle = computed<string>(() => {
 const ariaLabel = computed(() => {
   if (isPreparing.value) return t("chat.citationLoading")
   return chipTitle.value
-})
-
-const actionSheetHeader = computed(() => lectureTitle.value || t("chat.citationDetailsTitle"))
-
-const actionSheetSubHeader = computed(() => {
-  const parts: string[] = []
-  if (referenceLabel.value) parts.push(referenceLabel.value)
-  if (authorName.value) parts.push(authorName.value)
-  if (dateLabel.value) parts.push(dateLabel.value)
-  parts.push(formattedRange.value)
-  return parts.join(" · ")
 })
 
 interface ChipActionSheetButton {
@@ -322,13 +301,6 @@ function onTimeUpdate(): void {
   progressPct.value = Math.min(100, Math.max(0, (el.currentTime / dur) * 100))
 }
 
-function formatTimestamp(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`
-}
-
 watch(
   () => props.trackId,
   () => {
@@ -380,7 +352,9 @@ onBeforeUnmount(() => {
   inset: 0;
   width: var(--progress, 0%);
   background: rgba(var(--ion-color-primary-rgb), 0.28);
-  transition: width 120ms linear, opacity 180ms ease;
+  transition:
+    width 120ms linear,
+    opacity 180ms ease;
   pointer-events: none;
   z-index: 0;
   opacity: 0;

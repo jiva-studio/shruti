@@ -113,11 +113,7 @@ const headerTitle = computed<string>(() => {
    *   - non-linear cream fade — holds near-opaque through the top third,
    *     then eases out smoothly toward transparent. */
   background:
-    linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0.05) 0%,
-      rgba(0, 0, 0, 0) 100%
-    ),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0) 100%),
     linear-gradient(
       to bottom,
       rgba(var(--lectorium-fade-bg-rgb), 1) 0%,

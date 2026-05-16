@@ -11,12 +11,7 @@
           <IconSearch :size="26" />
         </IonTabButton>
 
-        <IonTabButton
-          v-if="showChatTab"
-          tab="chat"
-          href="/tabs/chat"
-          class="chat-tab-button"
-        >
+        <IonTabButton v-if="showChatTab" tab="chat" href="/tabs/chat" class="chat-tab-button">
           <IconAppSadhu :size="42" />
         </IonTabButton>
 
