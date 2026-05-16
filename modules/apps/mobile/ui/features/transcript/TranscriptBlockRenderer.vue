@@ -12,7 +12,7 @@
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
     :data-speaker="block.block.speaker"
-    @click="emit('seek', block.block.start + 1)"
+    @click="onBlockClick"
   />
 
   <VerseTextBlock
@@ -22,7 +22,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 1)"
+    @click="onBlockClick"
   />
 
   <VerseTextInlineBlock
@@ -33,7 +33,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 1)"
+    @click="onBlockClick"
   />
 
   <VerseTranslationBlock
@@ -42,7 +42,7 @@
     :class="stateClasses"
     :data-time-start="block.block.start"
     :data-time-end="block.block.end"
-    @click="emit('seek', block.block.start + 1)"
+    @click="onBlockClick"
   />
 </template>
 
@@ -70,6 +70,14 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seek: [position: number]
+  /**
+   * The user tapped a block that is covered by one or more saved notes.
+   * The parent opens the selection popover anchored to `event` and uses
+   * `noteIds` to drive the Delete action. Suppresses the seek emission
+   * for this tap — for highlighted spans we treat tap as "open contextual
+   * actions for this note", not "seek to this point".
+   */
+  noteTapped: [payload: { noteIds: readonly string[]; event: MouseEvent }]
 }>()
 
 const isCurrent = computed(
@@ -93,6 +101,23 @@ const stateClasses = computed(() => ({
   highlighted: props.block.bookmarked,
   selected: isInSelection.value,
 }))
+
+/**
+ * Tap routing:
+ *  - On a highlighted block with at least one resolved note id, fire
+ *    `noteTapped` so the dialog opens the popover with the Delete
+ *    affordance (issue #478). The seek is suppressed — for a saved note,
+ *    the user's intent is "act on this note", not "seek here".
+ *  - Anywhere else (plain sentence, verse, or a bookmarked block whose
+ *    notes have no ids — preview mode), fall back to the legacy seek.
+ */
+function onBlockClick(event: MouseEvent): void {
+  if (props.block.bookmarked && props.block.noteIds.length > 0) {
+    emit("noteTapped", { noteIds: props.block.noteIds, event })
+    return
+  }
+  emit("seek", props.block.block.start + 1)
+}
 </script>
 
 <style scoped>

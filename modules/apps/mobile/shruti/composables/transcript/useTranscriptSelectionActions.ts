@@ -1,9 +1,11 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { NoteId, TrackId } from "@lib/domain/core.js"
 import { createNote } from "@lib/application/createNote.js"
+import { deleteNote } from "@lib/application/deleteNote.js"
 import { formatNoteShare, type NoteShareContext } from "@lib/application/formatNoteShare.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
+import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 
-export type SelectionActionKind = "copy" | "bookmark" | "share"
+export type SelectionActionKind = "copy" | "bookmark" | "share" | "delete"
 
 export interface SelectionActionEvent {
   action: SelectionActionKind
@@ -13,6 +15,12 @@ export interface SelectionActionEvent {
   timeStart: number
   /** End of the selected text range, in **milliseconds**. */
   timeEnd: number
+  /**
+   * Populated only when `action === "delete"` (tap-on-highlight path).
+   * The first id is removed; multi-note overlap can be addressed in a
+   * follow-up.
+   */
+  noteIds?: readonly NoteId[]
 }
 
 export interface UseTranscriptSelectionActionsOptions {
@@ -21,6 +29,8 @@ export interface UseTranscriptSelectionActionsOptions {
   /** Resolved on each call so the composable can be constructed before
    *  the user DB is open. */
   getNotes: () => INoteRepository
+  /** Resolved lazily — needed only for the delete path. */
+  getUnitOfWork: () => IUnitOfWork
   shareService: {
     copyToClipboard(text: string): Promise<void>
     share(input: { text: string }): Promise<void>
@@ -37,20 +47,24 @@ export interface UseTranscriptSelectionActionsOptions {
   /** Fires after a bookmark is saved, so the caller can refresh stores
    *  / re-apply highlights to the open transcript. */
   onNoteCreated?: () => void
+  /** Fires after a note is deleted via tap-on-highlight Delete, so the
+   *  caller can refresh stores / drop the underline from the view. */
+  onNoteDeleted?: () => void
   /** Surface a load/save error back to the consumer. */
   onError?: (message: string) => void
 }
 
 export interface UseTranscriptSelectionActionsReturn {
-  /** Dispatches the selected action (copy/bookmark/share) on the
+  /** Dispatches the selected action (copy/bookmark/share/delete) on the
    *  current track. */
   perform: (event: SelectionActionEvent) => Promise<void>
 }
 
 /**
- * Encapsulates the three things a transcript-selection popover can do:
+ * Encapsulates the four things a transcript-selection popover can do:
  * copy text to clipboard, save a bookmark note, share via the platform
- * sheet. Side-effecting deps are injected so the composable is testable.
+ * sheet, delete an existing note. Side-effecting deps are injected so the
+ * composable is testable.
  */
 export function useTranscriptSelectionActions(
   options: UseTranscriptSelectionActionsOptions
@@ -94,6 +108,26 @@ export function useTranscriptSelectionActions(
     }
     if (event.action === "share") {
       await options.shareService.share({ text: buildShareText(event) })
+      return
+    }
+    if (event.action === "delete") {
+      // Tap-on-highlight Delete. The popover always sends at least one
+      // id in this branch (the renderer only emits `noteTapped` when
+      // `block.noteIds.length > 0`), but stay defensive — a stale
+      // payload after the underlying notes refreshed could in principle
+      // arrive empty.
+      const id = event.noteIds?.[0]
+      if (!id) return
+      const result = await deleteNote(
+        { id },
+        { notes: options.getNotes(), unitOfWork: options.getUnitOfWork() }
+      )
+      if (!result.ok) {
+        options.onError?.(`Could not delete note: ${result.error}`)
+        return
+      }
+      options.onNoteDeleted?.()
+      return
     }
   }
 

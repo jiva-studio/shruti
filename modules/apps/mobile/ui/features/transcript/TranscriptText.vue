@@ -28,6 +28,7 @@
         :is-first-in-group="blockIdx === 0"
         :selection-range="selectionRange"
         @seek="(pos) => emit('seek', pos)"
+        @note-tapped="(payload) => emit('noteTapped', payload)"
       />
     </p>
   </TextSelector>
@@ -45,6 +46,10 @@ import {
 } from "./composables/useTranscriptSelection.js"
 
 export type TextSelectedEvent = TextSelectedPayload
+export interface NoteTappedEvent {
+  noteIds: readonly string[]
+  event: MouseEvent
+}
 
 const props = defineProps<{
   displaySpeakerIcons: boolean
@@ -59,6 +64,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   seek: [position: number]
   textSelected: [event: TextSelectedEvent]
+  /** Re-emitted from TranscriptBlockRenderer when a highlighted span is tapped. */
+  noteTapped: [event: NoteTappedEvent]
   /** Propagates the long-press-on-selectable signal up to the controller. */
   pickStart: []
 }>()

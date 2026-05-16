@@ -1,4 +1,4 @@
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, NoteId } from "@lib/domain/core.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Transcript } from "@lib/domain/transcript.js"
 import type {
@@ -16,8 +16,14 @@ import { formatReference, formatReferenceFull } from "./groupReferences.js"
  * `data-time-start` which is already `block.start` in ms), so no unit
  * conversion happens anywhere in the path; the overlap check below is a
  * direct integer comparison.
+ *
+ * `id` is optional so preview callers can synthesize ranges without a
+ * full `Note` shape; the controller's real-note path always passes the
+ * id, which then flows into each overlapping block's `noteIds` for the
+ * tap-on-highlight Delete affordance.
  */
 export interface NoteRange {
+  readonly id?: NoteId
   readonly timeStart: number
   readonly timeEnd: number
 }
@@ -71,17 +77,33 @@ export function buildTranscriptViewData(
   // timestamps and block timestamps are in ms (see `NoteRange`), so the
   // comparison below is a direct integer overlap test — no unit
   // conversion required. Empty array → nothing gets marked bookmarked.
-  const noteRangesMs: readonly { start: number; end: number }[] = (opts.notes ?? []).map((n) => ({
+  // Carry the optional id through so the per-block overlap pass can
+  // collect every matching note id into the block's `noteIds`.
+  const noteRangesMs: readonly { id?: NoteId; start: number; end: number }[] = (
+    opts.notes ?? []
+  ).map((n) => ({
+    id: n.id,
     start: n.timeStart,
     end: n.timeEnd,
   }))
 
-  const isBookmarked = (blockStart: number, blockEnd: number): boolean => {
+  const collectOverlap = (
+    blockStart: number,
+    blockEnd: number
+  ): { bookmarked: boolean; noteIds: readonly NoteId[] } => {
+    let bookmarked = false
+    let ids: NoteId[] | null = null
     for (const r of noteRangesMs) {
       // Standard interval overlap: not disjoint on either side.
-      if (blockStart <= r.end && blockEnd >= r.start) return true
+      if (blockStart <= r.end && blockEnd >= r.start) {
+        bookmarked = true
+        if (r.id !== undefined) {
+          if (ids === null) ids = []
+          ids.push(r.id)
+        }
+      }
     }
-    return false
+    return { bookmarked, noteIds: ids ?? [] }
   }
 
   const flush = () => {
@@ -147,10 +169,12 @@ export function buildTranscriptViewData(
               text: block.text,
             }
 
+    const overlap = collectOverlap(raw.start, raw.end)
     current.push({
       block: raw,
       language: transcript.language,
-      bookmarked: isBookmarked(raw.start, raw.end),
+      bookmarked: overlap.bookmarked,
+      noteIds: overlap.noteIds,
     })
 
     if (block.type === "sentence") {
