@@ -1,5 +1,12 @@
 <template>
-  <IonModal :is-open="isOpen" @did-dismiss="onCancel">
+  <IonModal
+    :is-open="isOpen"
+    class="time-picker-sheet"
+    :breakpoints="[0, 0.5, 0.9]"
+    :initial-breakpoint="0.9"
+    handle
+    @did-dismiss="onCancel"
+  >
     <IonToolbar>
       <IonButtons slot="start">
         <IonButton shape="round" size="small" @click="onCancel">
@@ -13,13 +20,15 @@
       </IonButtons>
     </IonToolbar>
 
-    <TimePicker :hours="hours ?? 9" :minutes="minutes ?? 0" @change="onChange" />
+    <IonContent>
+      <TimePicker :hours="hours ?? 9" :minutes="minutes ?? 0" @change="onChange" />
+    </IonContent>
   </IonModal>
 </template>
 
 <script lang="ts" setup>
 import { ref } from "vue"
-import { IonModal, IonButtons, IonButton, IonToolbar } from "@ionic/vue"
+import { IonModal, IonButtons, IonButton, IonContent, IonToolbar } from "@ionic/vue"
 import TimePicker from "./TimePicker.vue"
 
 /* -------------------------------------------------------------------------- */
@@ -69,7 +78,7 @@ function onSaveClicked() {
   justify-content: center;
 }
 
-ion-modal {
-  --height: auto;
+ion-modal.time-picker-sheet ion-content {
+  --background: var(--ion-background-color);
 }
 </style>
