@@ -2,6 +2,7 @@
   <p class="build-info" @click="emit('tap')">
     v{{ version }} ({{ buildId }})
     <span class="build-info-db"> DB {{ dbNumber ?? "—" }} · scheme {{ dbScheme }} </span>
+    <span v-if="appUserId" class="build-info-user"> uid {{ appUserId }} </span>
   </p>
 </template>
 
@@ -11,6 +12,8 @@ defineProps<{
   buildId: string
   dbNumber: string | null
   dbScheme: number
+  /** RC customer id, shown only in debug mode. Caller passes `undefined` otherwise. */
+  appUserId?: string | undefined
 }>()
 
 const emit = defineEmits<{
@@ -42,5 +45,13 @@ const emit = defineEmits<{
   display: block;
   margin-top: 2px;
   opacity: 0.75;
+}
+
+.build-info-user {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.6;
+  font-family: var(--ion-font-family-monospace, ui-monospace, monospace);
+  word-break: break-all;
 }
 </style>
