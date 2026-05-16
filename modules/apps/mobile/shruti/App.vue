@@ -59,6 +59,7 @@ import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
+import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
@@ -95,6 +96,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 useLocaleSync(appLanguage)
 usePlayerProgressFlush()
 const pulsing = usePlayerTutorialPulse()
+useAutoDownloadLoop()
 
 // LanguageSelector wants a mutable string[] v-model. Wrap the readonly
 // controller ref so two-way binding still compiles.
