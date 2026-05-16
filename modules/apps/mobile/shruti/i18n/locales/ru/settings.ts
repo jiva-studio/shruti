@@ -123,6 +123,10 @@ export default {
       title: "Вкладка заметок",
       description: "Показывать вкладку заметок внизу",
     },
+    showPlayer: {
+      title: "Плеер на странице заметок",
+      description: "Показывать встроенный аудиоплеер рядом с цитатами",
+    },
   },
   activityTracker: {
     show: {

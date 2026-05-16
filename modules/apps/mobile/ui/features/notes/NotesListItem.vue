@@ -1,6 +1,13 @@
 <template>
   <IonItem lines="none" class="note" button :detail="false" @click="$emit('click', noteId)">
     <div class="body">
+      <!--
+        Caller-supplied content rendered above the quote — e.g. the
+        Notes inline audio player. Composition root injects it via
+        `<NotesList>`'s scoped slot so the UI layer doesn't need to
+        reach into @shruti / @lib/domain types itself.
+      -->
+      <slot name="player" />
       <HighlightText :text="text" :lang="language" />
 
       <div v-if="authorName || titleText || refDateText" class="meta-block">
