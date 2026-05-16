@@ -15,7 +15,7 @@ export default {
     title: "Subscription",
     description: "Subscription management",
     subscriptionIsActive: "Subscription is active",
-    tapToManage: "You are already subscribed. Tap to manage your subscription.",
+    tapToManage: "You are already subscribed",
     choose: 'Support "Shruti"',
     subscribe: "Subscribe",
     subscribed: "Subscription completed",
