@@ -17,11 +17,11 @@ interface State {
  * single daily notification id so flipping the toggle off + on doesn't
  * leave stragglers behind.
  *
- * The scheduler only supports absolute `at`; we compute the next local
- * occurrence and re-schedule on every `apply()` — called once at Settings
- * mount and again on each state change. A drift-free implementation
- * (proper repeating) would need platform-specific `repeats: true` and
- * a `DateTime.interval`, which the port doesn't cover yet.
+ * Uses the `every: "day"` recurrence so the OS keeps re-arming the alarm
+ * on its own — previously a one-shot `at` schedule worked on iOS (calendar
+ * triggers handle recurrence natively) but stopped firing on Android
+ * after the first occurrence unless the user opened the app. The plugin's
+ * boot receiver carries the recurring alarm across reboots.
  */
 export async function applyDailyReminder(state: State, deps: Deps): Promise<void> {
   await deps.notifications.cancel(NOTIFICATION_ID)
@@ -29,12 +29,22 @@ export async function applyDailyReminder(state: State, deps: Deps): Promise<void
   const at = nextOccurrence(state.time)
   if (at === null) return
   const permission = await deps.notifications.requestPermission()
-  if (permission === "denied") return
+  if (permission === "denied") {
+    // Don't silently swallow — without surfacing this the toggle reads as
+    // ON in Settings but no notification ever fires. The Settings UI
+    // can grow a banner later; for now this is the only signal.
+    console.warn(
+      "[daily-reminder] cannot schedule — notification permission denied. " +
+        "Enable notifications in system settings to receive reminders."
+    )
+    return
+  }
   await deps.notifications.schedule({
     id: NOTIFICATION_ID,
     title: "Lectorium",
     body: "A short lecture break is waiting.",
     at,
+    every: "day",
   })
 }
 

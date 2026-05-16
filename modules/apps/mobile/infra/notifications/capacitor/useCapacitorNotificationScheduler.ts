@@ -19,6 +19,28 @@ export function useCapacitorNotificationScheduler(): INotificationScheduler {
     },
 
     async schedule(n: ScheduledNotification) {
+      if (n.every === "day") {
+        // Daily recurrence: fire at the same local hour/minute every day.
+        // Capacitor's `on: { hour, minute }` schedules the next occurrence
+        // and re-arms itself on fire — on Android this rides over reboots
+        // (the plugin auto-registers RECEIVE_BOOT_COMPLETED) and avoids
+        // the iOS calendar limitation of one-off alarms.
+        const date = new Date(n.at)
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: n.id,
+              title: n.title,
+              body: n.body,
+              schedule: {
+                on: { hour: date.getHours(), minute: date.getMinutes() },
+                allowWhileIdle: true,
+              },
+            },
+          ],
+        })
+        return
+      }
       await LocalNotifications.schedule({
         notifications: [
           {
