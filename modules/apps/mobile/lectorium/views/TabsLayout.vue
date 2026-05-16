@@ -12,7 +12,7 @@
         </IonTabButton>
 
         <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
-          <IonSpinner v-if="shareJob.isRunning" class="notes-tab-spinner" name="dots" />
+          <IonSpinner v-if="shareJob.isInBackground" class="notes-tab-spinner" name="dots" />
           <IconBookmark v-else :size="26" />
         </IonTabButton>
 
