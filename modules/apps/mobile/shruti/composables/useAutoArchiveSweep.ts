@@ -5,6 +5,7 @@ import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 
 /**
  * User-facing key for the auto-archive delay setting. Read by Settings
@@ -111,10 +112,12 @@ export function useAutoArchiveSweep(): {
   const delay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const app = useShruti()
   const playlist = usePlaylistStore()
+  const purchases = usePurchasesStore()
 
   let running = false
 
   async function sweep(): Promise<void> {
+    if (!purchases.isSubscribed) return
     if (delay.value === "off") return
     if (running) return
     running = true
@@ -165,6 +168,15 @@ export function useAutoArchiveSweep(): {
   // `1d → immediate`). Without this the previous completions sit until
   // the next fresh finish triggers the completion-watcher below.
   watch(delay, () => void sweep())
+
+  // Run a sweep right after the user subscribes (they may have a backlog
+  // of long-finished items waiting for the gate to lift).
+  watch(
+    () => purchases.isSubscribed,
+    (subscribed) => {
+      if (subscribed) void sweep()
+    }
+  )
 
   // React to fresh completions. We snapshot the previous key set so the
   // sweep only fires when an item flips from `not-completed` to

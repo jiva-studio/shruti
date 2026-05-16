@@ -5,7 +5,10 @@
     </IconChip>
 
     <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.autoDownload.title") }}</h2>
+      <h2>
+        {{ $t("settings.smartLibrary.title") }}
+        <ProBadge />
+      </h2>
       <p>{{ subtitle }}</p>
     </IonLabel>
   </IonItem>
@@ -14,7 +17,7 @@
 <script setup lang="ts">
 import { IonItem, IonLabel } from "@ionic/vue"
 import { IconDownload } from "@tabler/icons-vue"
-import { IconChip } from "@ui/primitives/index.js"
+import { IconChip, ProBadge } from "@ui/primitives/index.js"
 
 defineProps<{ subtitle: string }>()
 

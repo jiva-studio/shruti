@@ -21,19 +21,8 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const purchasing = ref(false)
   const restoring = ref(false)
   const ready = ref(false)
-  // On-device diagnostic trail. Each step of init / purchase / restore
-  // pushes a one-line description; the dialog renders the tail of this
-  // ring buffer at the bottom so we can debug without adb on Xiaomi /
-  // without a Mac on iOS. Remove once IAP is trusted.
-  const debugLog = ref<string[]>([])
   let unsubscribe: (() => void) | undefined
   let resumeHandle: { remove(): Promise<void> } | undefined
-
-  function logDiag(line: string): void {
-    const stamp = new Date().toISOString().slice(11, 19)
-    debugLog.value.push(`${stamp} ${line}`)
-    if (debugLog.value.length > 40) debugLog.value.shift()
-  }
 
   const available = computed(() => useShruti().purchases.available)
   const isSubscribed = computed(() => activePackageId.value !== undefined)
@@ -49,19 +38,15 @@ export const usePurchasesStore = defineStore("purchases", () => {
     if (!purchases.available) return
     try {
       const state = await purchases.getCustomerState()
-      logDiag(
-        `refresh pkg=${state.activePackageId ?? "—"} ent=${state.activeEntitlements.join(",") || "—"}`
-      )
       applyState(state)
     } catch (e) {
-      logDiag(`refresh FAILED: ${(e as Error)?.message ?? String(e)}`)
+      console.error("[purchases] refresh failed:", e)
     }
   }
 
   async function init(): Promise<void> {
     if (ready.value) return
     const purchases = useShruti().purchases
-    logDiag(`init available=${purchases.available}`)
     if (!purchases.available) {
       ready.value = true
       return
@@ -69,19 +54,13 @@ export const usePurchasesStore = defineStore("purchases", () => {
     loading.value = true
     try {
       await purchases.configure()
-      logDiag("configure ok")
       const [pkgs, state] = await Promise.all([
         purchases.listPackages(),
         purchases.getCustomerState(),
       ])
-      logDiag(`packages=${pkgs.length} (${pkgs.map((p) => p.packageId).join(",") || "—"})`)
-      logDiag(
-        `state pkg=${state.activePackageId ?? "—"} ent=${state.activeEntitlements.join(",") || "—"}`
-      )
       packages.value = pkgs
       applyState(state)
       unsubscribe = purchases.onCustomerInfoChanged((s) => {
-        logDiag(`live pkg=${s.activePackageId ?? "—"} ent=${s.activeEntitlements.join(",") || "—"}`)
         applyState(s)
       })
       // Re-fetch on foreground. The RC SDK has its own push channel but
@@ -92,9 +71,6 @@ export const usePurchasesStore = defineStore("purchases", () => {
         if (state.isActive) void refresh()
       })
       ready.value = true
-    } catch (e) {
-      logDiag(`init FAILED: ${(e as Error)?.message ?? String(e)}`)
-      throw e
     } finally {
       loading.value = false
     }
@@ -143,7 +119,6 @@ export const usePurchasesStore = defineStore("purchases", () => {
     ready,
     available,
     isSubscribed,
-    debugLog,
     init,
     purchase,
     restore,

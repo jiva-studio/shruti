@@ -13,6 +13,7 @@ export default {
   delete: "Delete",
   deleted: "Deleted",
   soon: "Soon",
+  proBadge: "PRO",
   back: "Back",
   notes: "Notes",
   ok: "Ok",

@@ -15,6 +15,7 @@ export {
   IconCloudFilled as CloudIcon,
   IconTrashFilled as TrashIcon,
   IconArchiveFilled as ArchiveIcon,
+  IconDownload,
   IconFileDownloadFilled as DatabaseExportIcon,
   IconFileUploadFilled as DatabaseImportIcon,
   IconHelpCircleFilled as HelpIcon,

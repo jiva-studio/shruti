@@ -69,8 +69,6 @@
           {{ doc.title }}
         </a>
       </IonNote>
-
-      <pre v-if="debugLog && debugLog.length > 0" class="debug-log">{{ debugLog.join("\n") }}</pre>
     </IonContent>
   </IonModal>
 </template>
@@ -113,7 +111,6 @@ const props = defineProps<{
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
-  debugLog?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -130,7 +127,7 @@ const { t, te } = useI18n()
 const benefits = [
   { key: "benefit0", soon: false }, // new lectures
   { key: "benefit1", soon: false }, // bookmarks
-  { key: "benefit2", soon: true }, // auto-download lectures
+  { key: "benefit2", soon: false }, // smart library
   { key: "benefit5", soon: true }, // advanced search
 ] as const
 
@@ -225,21 +222,6 @@ function onSubscribeClick(): void {
   text-decoration: none;
   font-size: 0.9rem;
 }
-
-/* Temporary diagnostic block — see usePurchasesStore.debugLog. */
-.debug-log {
-  margin: 1rem;
-  padding: 0.75rem;
-  border-radius: 6px;
-  background: rgba(127, 127, 127, 0.15);
-  color: var(--ion-color-medium);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.7rem;
-  line-height: 1.35;
-  white-space: pre-wrap;
-  word-break: break-all;
-  overflow-x: auto;
-}
 </style>
 
 <style>
@@ -249,8 +231,12 @@ function onSubscribeClick(): void {
 .subscription-modal {
   --box-shadow: none;
 }
+.subscription-modal ion-header,
+.subscription-modal ion-header::after {
+  box-shadow: none !important;
+  background-image: none;
+}
 .subscription-modal ion-header::after {
   display: none;
-  background-image: none;
 }
 </style>
