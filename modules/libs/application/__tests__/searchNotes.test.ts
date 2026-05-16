@@ -27,6 +27,7 @@ const mk = (id: string, text: string): Note => ({
   timeStart: 0,
   timeEnd: 0,
   createdAt: 1000,
+  meta: null,
 })
 
 describe("searchNotes", () => {

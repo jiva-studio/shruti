@@ -3,7 +3,7 @@
     <SettingsSubscriptionGroup
       :available="subscription.available"
       :is-subscribed="subscription.isSubscribed"
-      @open-paywall="subscriptionDialogOpen = true"
+      @open-paywall="paywall.requestOpen"
       @manage="subscription.onManage"
     />
 
@@ -13,6 +13,7 @@
       v-model:show-player-progress="showPlayerProgress"
       v-model:show-notes-tab="showNotesTab"
       v-model:show-player-on-notes="showPlayerOnNotes"
+      v-model:studio-enabled="studioEnabled"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
@@ -35,7 +36,7 @@
       :is-subscribed="subscription.isSubscribed"
       @update:open="smartLibraryDialogOpen = $event"
       @open-filters="smartLibraryFiltersOpen = true"
-      @request-paywall="subscriptionDialogOpen = true"
+      @request-paywall="paywall.requestOpen"
     />
 
     <SearchFiltersSheet
@@ -45,17 +46,6 @@
       :can-reset="smartLibrary.activeFilterCount.value > 0"
       @update:open="smartLibraryFiltersOpen = $event"
       @reset="smartLibrary.reset"
-    />
-
-    <SubscriptionDialog
-      v-model:open="subscriptionDialogOpen"
-      :packages="subscription.packages"
-      :is-subscribed="subscription.isSubscribed"
-      :purchasing="subscription.purchasing"
-      :restoring="subscription.restoring"
-      :legal-documents="subscription.legalDocuments"
-      @subscribe="subscription.onSubscribe"
-      @restore="subscription.onRestore"
     />
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
@@ -92,15 +82,16 @@ import {
   SettingsSadhanaGroup,
   SettingsSubscriptionGroup,
   SmartLibraryDialog,
-  SubscriptionDialog,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
+import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()
+const paywall = usePaywallStore()
 const {
   version,
   buildId,
@@ -110,6 +101,7 @@ const {
   showPlayerProgress,
   showNotesTab,
   showPlayerOnNotes,
+  studioEnabled,
   showActivityTracker,
   autoArchiveDelay,
   highlightCurrentSentence,
@@ -134,5 +126,4 @@ const debugUnlocked = debugTrigger.unlocked
 const helpOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
-const subscriptionDialogOpen = ref(false)
 </script>

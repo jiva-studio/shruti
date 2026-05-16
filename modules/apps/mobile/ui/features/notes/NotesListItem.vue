@@ -55,6 +55,10 @@ const refDateText = computed<string>(() =>
   text-justify: inter-word;
   hyphens: auto;
   -moz-hyphens: auto;
+
+  /* Снимаем дефолтный ripple у IonItem[button]. Тап по заметке открывает
+     action-sheet — визуального echo тут не нужно, он мешает. */
+  --ripple-color: rgba(0, 0, 0, 0);
 }
 
 .body {

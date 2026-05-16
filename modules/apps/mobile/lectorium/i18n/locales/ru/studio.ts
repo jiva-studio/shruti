@@ -1,0 +1,16 @@
+export default {
+  title: "Студия",
+  hint: "Можно подправить цитату перед сборкой видео.",
+  placeholder: "Текст цитаты",
+  download: "Скачать",
+  preparing: "Подготовка…",
+  rendering: "Создаём ролик…",
+  almostReady: "Почти готово…",
+  stillWorking: "Ещё чуть-чуть…",
+  downloading: "Загружаем…",
+  shareDialog: "Поделиться видеороликом",
+  errorEmpty: "Цитата не может быть пустой",
+  errorNoAudio: "Для этой лекции аудио недоступно",
+  errorGeneric: "Не удалось подготовить видео. Попробуйте снова.",
+  openInStudio: "Открыть в Студии",
+}

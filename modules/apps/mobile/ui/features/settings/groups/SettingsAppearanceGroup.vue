@@ -7,6 +7,7 @@
   <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
   <ShowNotesTabSettingsItem v-model="showNotesTab" />
   <ShowPlayerOnNotesSettingsItem v-if="showNotesTab" v-model="showPlayerOnNotes" />
+  <StudioSettingsItem v-if="showNotesTab" v-model="studioEnabled" />
   <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
   <OpenTranscriptAutomaticallySettingsItem v-model="openTranscriptAutomatically" />
 </template>
@@ -20,6 +21,7 @@ import ServerSettingsItem from "../ServerSettingsItem.vue"
 import ShowNotesTabSettingsItem from "../ShowNotesTabSettingsItem.vue"
 import ShowPlayerOnNotesSettingsItem from "../ShowPlayerOnNotesSettingsItem.vue"
 import ShowPlayerProgressSettingsItem from "../ShowPlayerProgressSettingsItem.vue"
+import StudioSettingsItem from "../StudioSettingsItem.vue"
 
 interface SelectorItem {
   id: string
@@ -36,6 +38,7 @@ const activeServerId = defineModel<string>("activeServerId", { required: true })
 const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
 const showNotesTab = defineModel<boolean>("showNotesTab", { required: true })
 const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
+const studioEnabled = defineModel<boolean>("studioEnabled", { required: true })
 const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
   required: true,
 })

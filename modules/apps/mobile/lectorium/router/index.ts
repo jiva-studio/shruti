@@ -40,6 +40,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Track/TrackView.vue"),
         props: true,
       },
+      {
+        path: "studio/:noteId",
+        name: "studio",
+        component: () => import("@lectorium/views/Studio/StudioView.vue"),
+        props: true,
+      },
     ],
   },
 ]

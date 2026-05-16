@@ -4,6 +4,7 @@ export { default as ShowPlayerProgressSettingsItem } from "./ShowPlayerProgressS
 export { default as ShowActivityTrackerSettingsItem } from "./ShowActivityTrackerSettingsItem.vue"
 export { default as ShowNotesTabSettingsItem } from "./ShowNotesTabSettingsItem.vue"
 export { default as ShowPlayerOnNotesSettingsItem } from "./ShowPlayerOnNotesSettingsItem.vue"
+export { default as StudioSettingsItem } from "./StudioSettingsItem.vue"
 export { default as NotificationsEnabledSettingsItem } from "./NotificationsEnabledSettingsItem.vue"
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"
 export { default as SmartLibrarySettingsItem } from "./SmartLibrarySettingsItem.vue"

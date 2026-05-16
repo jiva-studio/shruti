@@ -36,6 +36,7 @@ export interface SettingsControllerReturn {
   showPlayerProgress: Ref<boolean>
   showNotesTab: Ref<boolean>
   showPlayerOnNotes: Ref<boolean>
+  studioEnabled: Ref<boolean>
   showActivityTracker: Ref<boolean>
   autoArchiveDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
@@ -87,6 +88,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
   const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
   const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
+  const studioEnabled = useConfig<boolean>("settings.notes.studioEnabled", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
@@ -143,6 +145,7 @@ export function useSettingsController(): SettingsControllerReturn {
     showPlayerProgress,
     showNotesTab,
     showPlayerOnNotes,
+    studioEnabled,
     showActivityTracker,
     autoArchiveDelay,
     highlightCurrentSentence,
