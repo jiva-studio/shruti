@@ -112,7 +112,10 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       for (const id of itemIds) result.set(id, null)
       if (itemIds.length === 0) return result
       // For each (itemId, threshold = duration - COMPLETION_THRESHOLD_SEC),
-      // find the earliest session.ended_at where to_position >= threshold.
+      // find the latest session.ended_at where to_position >= threshold.
+      // Latest (not earliest) so that re-listening a completed track
+      // resets the auto-archive clock — otherwise an "immediate" sweep
+      // would archive a track the user just finished replaying.
       // We iterate per item to keep the SQL simple — itemIds is bounded by
       // playlist page size, so it's cheap.
       for (const itemId of itemIds) {
@@ -122,7 +125,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         const rows = await db.query<{ ended_at: number }>(
           `SELECT ended_at FROM listening_sessions
             WHERE item_id = ? AND to_position >= ?
-            ORDER BY ended_at ASC
+            ORDER BY ended_at DESC
             LIMIT 1`,
           [itemId, threshold]
         )

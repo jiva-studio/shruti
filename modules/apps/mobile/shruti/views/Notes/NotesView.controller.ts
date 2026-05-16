@@ -1,7 +1,6 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { loadingController, onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
-import { Directory, Filesystem } from "@capacitor/filesystem"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Location } from "@lib/domain/location.js"
@@ -12,6 +11,10 @@ import type { Track } from "@lib/domain/track.js"
 import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import { formatNoteShare } from "@lib/application/formatNoteShare.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
+import {
+  resolveLocalizedName,
+  resolveTrackTitle as resolveTitleForLang,
+} from "@shruti/composables/resolveLocalized.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
@@ -51,8 +54,14 @@ export function useNotesController(): NotesControllerReturn {
   const store = useNotesStore()
   const dictionaries = useDictionariesStore()
   const appLanguage = useAppLanguage()
-  const { shareService, shareAudioService, shareVideoService, activeServer, haptics } =
-    useShruti()
+  const {
+    shareService,
+    shareAudioService,
+    shareVideoService,
+    activeServer,
+    haptics,
+    excerptCache,
+  } = useShruti()
   const toast = useToast()
   const debug = useDebugStore()
   const shareJob = useShareJobStore()
@@ -96,22 +105,15 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   function resolveAuthorName(author: Author | undefined): string | undefined {
-    if (!author) return undefined
-    const name = author.names.get(appLanguage.value) ?? author.names.values().next().value
-    return name && name.length > 0 ? name : undefined
+    return resolveLocalizedName(author, appLanguage.value)
   }
 
   function resolveLocationName(location: Location | undefined): string | undefined {
-    if (!location) return undefined
-    const name = location.names.get(appLanguage.value) ?? location.names.values().next().value
-    return name && name.length > 0 ? name : undefined
+    return resolveLocalizedName(location, appLanguage.value)
   }
 
   function resolveTrackTitle(track: Track | undefined): string | undefined {
-    if (!track || track.variants.length === 0) return undefined
-    const variant =
-      track.variants.find((v) => v.language === appLanguage.value) ?? track.variants[0]
-    return variant?.title && variant.title.length > 0 ? variant.title : undefined
+    return resolveTitleForLang(track, appLanguage.value)
   }
 
   function resolveReference(track: Track | undefined): string | undefined {
@@ -192,16 +194,10 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   /**
-   * Filesystem path of a previously-shared excerpt for this note in
-   * Capacitor's app cache. Identical to the `path` we feed to
-   * `Filesystem.downloadFile` below; centralised so the cache-check
-   * and the download stay in lock-step.
-   *
-   * Flat (no subdir) because `@capacitor/filesystem`'s legacy
-   * `downloadFile` on Android does NOT create intermediate directories
-   * (iOS does — see iOS LegacyFilesystemImplementation.downloadFile).
-   * A subdir would make the first share on Android fail with
-   * `FileNotFoundException`.
+   * Canonical filename of a previously-shared excerpt for this note,
+   * stored flat in the platform cache by {@link excerptCache.download}.
+   * Centralised here so the cache lookup and the download stay in
+   * lock-step.
    */
   function localExcerptPath(noteId: NoteId): string {
     return `share-audio-note-${noteId}.mp3`
@@ -209,20 +205,12 @@ export function useNotesController(): NotesControllerReturn {
 
   /**
    * Local-cache hit check. Returns the `file://...` URI when the
-   * excerpt is already in `Directory.Cache` from a prior share; `null`
-   * otherwise. Same `stat → catch → null` pattern as
-   * `useDatabaseToFsFetcher.exists` — Capacitor's stat throws for
-   * missing files rather than returning a flag.
+   * excerpt is in the platform cache from a prior share; `null`
+   * otherwise. Delegates the stat / URI normalization to the port so
+   * this controller stays platform-API-free.
    */
   async function findLocalExcerpt(noteId: NoteId): Promise<string | null> {
-    const path = localExcerptPath(noteId)
-    try {
-      await Filesystem.stat({ path, directory: Directory.Cache })
-      const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache })
-      return uri
-    } catch {
-      return null
-    }
+    return excerptCache.findLocal(localExcerptPath(noteId))
   }
 
   /**
@@ -232,15 +220,7 @@ export function useNotesController(): NotesControllerReturn {
    */
   async function probeExcerpt(noteId: string): Promise<string | null> {
     const candidate = buildServerUrl(activeServer.value, `public/shares/audio/${noteId}.mp3`)
-    try {
-      const response = await fetch(candidate, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(1500),
-      })
-      return response.ok ? candidate : null
-    } catch {
-      return null
-    }
+    return (await excerptCache.probeRemote(candidate)) ? candidate : null
   }
 
   /**
@@ -395,23 +375,7 @@ export function useNotesController(): NotesControllerReturn {
           if (!result.ready) await pollUntilReady(publicUrl)
         }
 
-        await Filesystem.downloadFile({
-          url: publicUrl,
-          path: localExcerptPath(note.id),
-          directory: Directory.Cache,
-          recursive: true,
-        })
-        // Normalize via getUri so cold and warm paths return the same
-        // `file://...` shape. Android's downloadFile returns a raw
-        // absolute path (`/data/user/0/.../cache/...`) without a scheme,
-        // which `@capacitor/share` can't pipe through FileProvider — the
-        // share sheet silently no-ops. iOS returns `file://...` here
-        // already, but getUri is cheap and keeps both platforms aligned.
-        const { uri } = await Filesystem.getUri({
-          path: localExcerptPath(note.id),
-          directory: Directory.Cache,
-        })
-        return uri
+        return excerptCache.download({ url: publicUrl, filename: localExcerptPath(note.id) })
       },
       openShareSheet: (uri) =>
         shareService.share({
@@ -422,35 +386,20 @@ export function useNotesController(): NotesControllerReturn {
     })
   }
 
-  /** Filesystem path of a previously-shared reel for this note. */
+  /** Canonical filename of a previously-rendered reel for this note. */
   function localVideoPath(noteId: NoteId): string {
     return `share-video-note-${noteId}.mp4`
   }
 
   /** Local-cache hit check for a video reel. Mirrors `findLocalExcerpt`. */
   async function findLocalVideo(noteId: NoteId): Promise<string | null> {
-    const path = localVideoPath(noteId)
-    try {
-      await Filesystem.stat({ path, directory: Directory.Cache })
-      const { uri } = await Filesystem.getUri({ path, directory: Directory.Cache })
-      return uri
-    } catch {
-      return null
-    }
+    return excerptCache.findLocal(localVideoPath(noteId))
   }
 
   /** CDN warm-probe for a video reel. Mirrors `probeExcerpt`. */
   async function probeVideo(noteId: string): Promise<string | null> {
     const candidate = buildServerUrl(activeServer.value, `public/share/video/${noteId}.mp4`)
-    try {
-      const response = await fetch(candidate, {
-        method: "HEAD",
-        signal: AbortSignal.timeout(1500),
-      })
-      return response.ok ? candidate : null
-    } catch {
-      return null
-    }
+    return (await excerptCache.probeRemote(candidate)) ? candidate : null
   }
 
   async function onShareNoteVideoClicked(): Promise<void> {
@@ -523,17 +472,7 @@ export function useNotesController(): NotesControllerReturn {
           publicUrl = predictedUrl
         }
 
-        await Filesystem.downloadFile({
-          url: publicUrl,
-          path: localVideoPath(note.id),
-          directory: Directory.Cache,
-          recursive: true,
-        })
-        const { uri } = await Filesystem.getUri({
-          path: localVideoPath(note.id),
-          directory: Directory.Cache,
-        })
-        return uri
+        return excerptCache.download({ url: publicUrl, filename: localVideoPath(note.id) })
       },
       openShareSheet: (uri) =>
         shareService.share({

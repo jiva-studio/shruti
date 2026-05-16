@@ -46,7 +46,7 @@ export function useHomeController(): HomeControllerReturn {
   const { t } = useI18n()
   const heatmap = useActivityHeatmap()
 
-  const { rows, queueCount, queueTotalSeconds } = useHomeRowBuilder(appLanguage)
+  const { rows, queueCount, queueTotalSeconds } = useHomeRowBuilder()
 
   onMounted(async () => {
     await Promise.all([

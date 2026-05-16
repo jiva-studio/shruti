@@ -10,6 +10,9 @@ interface State {
   enabled: boolean
   /** "HH:mm" — 24h local time. */
   time: string
+  /** Localized copy — caller resolves via i18n so this module stays Vue-free. */
+  title: string
+  body: string
 }
 
 /**
@@ -41,8 +44,8 @@ export async function applyDailyReminder(state: State, deps: Deps): Promise<void
   }
   await deps.notifications.schedule({
     id: NOTIFICATION_ID,
-    title: "Shruti",
-    body: "A short lecture break is waiting.",
+    title: state.title,
+    body: state.body,
     at,
     every: "day",
   })

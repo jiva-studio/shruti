@@ -1,4 +1,4 @@
-import { onMounted, watch } from "vue"
+import { computed, onMounted, watch } from "vue"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
@@ -94,18 +94,23 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     void Promise.resolve().then(refill)
   })
 
-  watch(
-    [
-      targetSeconds,
-      () => playlist.entries,
-      () => playlist.progressMap,
-      () => playlist.completedAtMap,
-    ],
-    () => {
-      void refill()
-    },
-    { deep: true }
-  )
+  // Trigger refill on discrete events instead of a deep watch over
+  // `progressMap` (which fires on every player tick — ~1 Hz during
+  // playback). The conditions that actually change "should we add more?"
+  // are: the target moved, a track was added/archived, or a track flipped
+  // completed. Progress ticks alone don't enqueue: the next completion
+  // event will shrink the queue and re-trigger.
+  const completedCount = computed(() => {
+    let n = 0
+    for (const value of playlist.completedAtMap.values()) {
+      if (value !== null && value !== undefined) n++
+    }
+    return n
+  })
+
+  watch([targetSeconds, () => playlist.entries.length, completedCount], () => {
+    void refill()
+  })
 
   return { targetSeconds }
 }

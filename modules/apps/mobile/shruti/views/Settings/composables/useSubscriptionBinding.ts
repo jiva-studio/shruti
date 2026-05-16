@@ -1,7 +1,7 @@
 import { computed, reactive } from "vue"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
-import { Capacitor } from "@capacitor/core"
+import { useShruti } from "@shruti/shruti.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { PurchaseCancelledError, type PurchasePackage } from "@ports/app/purchases.js"
 
@@ -40,6 +40,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
   const i18n = useI18n()
   const { t } = i18n
   const store = usePurchasesStore()
+  const platform = useShruti().platform
 
   const legalDocuments = computed<LegalDocument[]>(() => {
     // Privacy policy is served from this repo's GitHub Pages
@@ -55,7 +56,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     // Apple requires a "Terms of Use" link in any UI that sells a
     // subscription; we point to Apple's standard EULA when the app
     // has no product-specific terms page.
-    if (Capacitor.getPlatform() === "ios") {
+    if (platform === "ios") {
       docs.push({
         title: t("settings.subscription.legal.terms"),
         link: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",

@@ -9,6 +9,7 @@ import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@shruti/composables/buildTranscriptViewData.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
+import { resolveLocalizedName } from "@shruti/composables/resolveLocalized.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@shruti/composables/useTranscriptSystemBars.js"
@@ -103,11 +104,8 @@ export function useTranscriptDialogController(
     const track = hydration.track.value
     if (!track) return undefined
     const lang = appLanguage.value
-    const locationName = track.locationId
-      ? (dictionaries.locationsById.get(track.locationId)?.names.get(lang) ??
-        dictionaries.locationsById.get(track.locationId)?.names.values().next().value ??
-        undefined)
-      : undefined
+    const location = track.locationId ? dictionaries.locationsById.get(track.locationId) : undefined
+    const locationName = resolveLocalizedName(location, lang)
     const reference =
       track.references.length > 0
         ? formatReference(track.references[0]!, dictionaries.sourcesById, lang)

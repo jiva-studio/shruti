@@ -1,4 +1,5 @@
-import { Capacitor, registerPlugin } from "@capacitor/core"
+import { registerPlugin } from "@capacitor/core"
+import { useShruti } from "@shruti/shruti.js"
 
 /**
  * Built-in Capacitor v6+ core plugin. Exposed in:
@@ -41,7 +42,7 @@ export function useSystemBarsStyle(): {
   applyImmersive(): Promise<void>
   restoreDefault(): Promise<void>
 } {
-  const isAndroid = Capacitor.getPlatform() === "android"
+  const isAndroid = useShruti().platform === "android"
 
   async function applyImmersive(): Promise<void> {
     if (!isAndroid) return

@@ -7,6 +7,12 @@
  */
 export interface IRemoteFilesStorage {
   get(url: string): Promise<string>
+  /**
+   * Like {@link get} but resolves to the parsed JSON body. Avoids the
+   * caller-level `fetch(cachedUrl)` workaround that leaks platform IO
+   * out of the port boundary.
+   */
+  getJson<T = unknown>(url: string): Promise<T>
   has(url: string): Promise<boolean>
   delete(url: string): Promise<void>
   clearAll(): Promise<void>

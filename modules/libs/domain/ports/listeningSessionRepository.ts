@@ -46,10 +46,13 @@ export interface IListeningSessionRepository {
   getProgressForItems(itemIds: readonly PlaylistItemId[]): Promise<Map<PlaylistItemId, ProgressEntry>>
 
   /**
-   * For each item id, return `ended_at` (unix seconds) of the *first*
-   * session whose `to_position >= duration - 2` (i.e. the moment the
-   * track was first considered finished). null means not yet finished.
-   * `durations` is keyed by item id and expresses seconds.
+   * For each item id, return `ended_at` (unix seconds) of the *most
+   * recent* session whose `to_position >= duration - 2` (i.e. the last
+   * time the track crossed the completion threshold). null means not
+   * yet finished. Latest (not first) so that re-listening a completed
+   * track resets time-based downstream behavior such as the
+   * auto-archive sweep. `durations` is keyed by item id and expresses
+   * seconds.
    */
   getCompletedAtForItems(
     itemIds: readonly PlaylistItemId[],
