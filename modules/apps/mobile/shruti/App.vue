@@ -64,6 +64,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount } from "vue"
+import { useRoute } from "vue-router"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { SubscriptionDialog } from "@ui/features/settings/index.js"
@@ -87,6 +88,7 @@ import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudi
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
+const route = useRoute()
 const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const tutorial = useTutorialStore()
@@ -110,12 +112,16 @@ const { isKeyboardOpen } = useKeyboardVisibility()
 //  - an ActionSheet is up — keeps the bottom buttons reachable,
 //  - the transcript dialog is open in preview mode (Search → Open
 //    transcript) — the player belongs to a different track and
-//    shouldn't react to taps on the preview surface.
+//    shouldn't react to taps on the preview surface,
+//  - on the chat tab the floating chrome would cover the sliding
+//    input bar; hide it for the duration of the chat view.
 const floatingPlayerHidden = computed<boolean>(() => {
   if (!player.open) return true
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
+  const routeName = route.name
+  if (routeName === "chat" || routeName === "chat-session") return true
   return false
 })
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)

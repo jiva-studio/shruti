@@ -30,6 +30,17 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@shruti/views/Notes/NotesView.vue"),
       },
       {
+        path: "chat",
+        name: "chat",
+        component: () => import("@shruti/views/Chat/ChatView.vue"),
+      },
+      {
+        path: "chat/:sessionId",
+        name: "chat-session",
+        component: () => import("@shruti/views/Chat/ChatView.vue"),
+        props: true,
+      },
+      {
         path: "settings",
         name: "settings",
         component: () => import("@shruti/views/Settings/SettingsView.vue"),

@@ -44,6 +44,10 @@ export default defineConfig({
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
     __REVENUECAT_IOS_KEY__: JSON.stringify(process.env.SHRUTI_APPLE_REVENUE_CAT_KEY ?? ""),
     __REVENUECAT_ANDROID_KEY__: JSON.stringify(process.env.SHRUTI_GOOGLE_REVENUE_CAT_KEY ?? ""),
+    __CHAT_API_BASE_URL__: JSON.stringify(
+      process.env.SHRUTI_CHAT_API_BASE_URL ?? "https://api.shruti.local"
+    ),
+    __CHAT_APP_TOKEN__: JSON.stringify(process.env.SHRUTI_CHAT_APP_TOKEN ?? "dev-token"),
   },
   build: {
     minify: true,
