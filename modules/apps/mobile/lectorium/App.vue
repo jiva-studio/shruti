@@ -52,6 +52,7 @@ import { TranscriptDialog } from "@ui/features/transcript/index.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
+import { useTutorialStore } from "@lectorium/stores/useTutorialStore.js"
 import { useTranscriptDialogController } from "@lectorium/composables/useTranscriptDialogController.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
@@ -65,6 +66,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 const app = useLectorium()
 const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
+const tutorial = useTutorialStore()
 const overlays = useOverlaysStore()
 // Resolve the UI language ref first so the transcript dialog controller
 // can localize the track title + author name reactively (issue #367).
@@ -118,7 +120,12 @@ async function onTogglePause(): Promise<void> {
 // visible exit.
 function onOpenTranscript(): void {
   if (transcriptStore.open) transcriptStore.close()
-  else if (player.trackId) transcriptStore.show(player.trackId)
+  else if (player.trackId) {
+    // Explicit user tap — mark the transcript as discovered so the
+    // FloatingPlayer pulse cue stops inviting on subsequent opens.
+    void tutorial.dismiss("transcriptOpened")
+    transcriptStore.show(player.trackId)
+  }
 }
 
 function onSliderTick(): void {

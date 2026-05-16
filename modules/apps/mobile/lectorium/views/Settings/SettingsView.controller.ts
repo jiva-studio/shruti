@@ -69,7 +69,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const openTranscriptAutomatically = useConfig<boolean>(
     "settings.openTranscriptAutomatically",
-    true
+    false
   )
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
   const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)

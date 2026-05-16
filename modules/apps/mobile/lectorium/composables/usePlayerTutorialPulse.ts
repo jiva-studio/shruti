@@ -1,39 +1,34 @@
-import { onMounted, ref, watch, type Ref } from "vue"
+import { computed, onMounted, type ComputedRef } from "vue"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTutorialStore } from "@lectorium/stores/useTutorialStore.js"
 
 /**
- * One-shot pulse cue applied to the FloatingPlayer the first time it
- * appears after the tutorial state has hydrated. Three seconds long;
- * dismisses the `player` tutorial flag in the same go so the cue
- * doesn't fire again on later opens.
+ * Looping pulse cue for the FloatingPlayer. Stays on whenever the
+ * player is visible AND the user hasn't yet discovered the transcript
+ * affordance. Driven directly by the tutorial flags so it keeps
+ * inviting on every session until the user actually taps; tapping the
+ * player calls `tutorial.dismiss("transcriptOpened")` in App.vue, which
+ * flips this computed to `false` permanently.
+ *
+ * `player` flag stays in the gate as a back-compat for users who
+ * dismissed it via the previous one-shot timer — they should not see
+ * the cue re-appear.
  *
  * Returned ref is wired straight to the `pulsing` prop on
- * `FloatingPlayer`.
+ * `FloatingPlayer`. The CSS animation (`@keyframes inviteClick`) is
+ * already `infinite`, so as long as this returns `true` the player
+ * keeps pulsing.
  */
-export function usePlayerTutorialPulse(): Ref<boolean> {
+export function usePlayerTutorialPulse(): ComputedRef<boolean> {
   const player = usePlayerStore()
   const tutorial = useTutorialStore()
-  const pulsing = ref<boolean>(false)
 
-  // Bootstrap the tutorial-flag hydration. Idempotent inside the store
-  // so calling it from multiple composables is safe.
   onMounted(() => {
     void tutorial.load()
   })
 
-  watch(
-    () => player.open,
-    (open, prev) => {
-      if (!prev && open && tutorial.loaded && !tutorial.flags.player) {
-        pulsing.value = true
-        setTimeout(() => {
-          pulsing.value = false
-        }, 3000)
-        void tutorial.dismiss("player")
-      }
-    }
+  return computed<boolean>(
+    () =>
+      tutorial.loaded && player.open && !tutorial.flags.player && !tutorial.flags.transcriptOpened
   )
-
-  return pulsing
 }

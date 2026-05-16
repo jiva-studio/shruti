@@ -4,6 +4,7 @@ import type { TrackId } from "@lib/domain/core.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
+import { useTutorialStore } from "@lectorium/stores/useTutorialStore.js"
 import { useAddToPlaylist } from "./useAddToPlaylist.js"
 
 export interface UseTrackActionSheetReturn {
@@ -23,6 +24,7 @@ export function useTrackActionSheet(): UseTrackActionSheetReturn {
   const { t } = useI18n()
   const app = useLectorium()
   const transcriptStore = useTranscriptStore()
+  const tutorial = useTutorialStore()
   const overlays = useOverlaysStore()
   const { addToPlaylist } = useAddToPlaylist()
 
@@ -49,6 +51,10 @@ export function useTrackActionSheet(): UseTrackActionSheetReturn {
           text: t("search.actions.openTranscript"),
           disabled: !hasTranscripts,
           handler: () => {
+            // Explicit user tap on a transcript action — mark the
+            // transcript as discovered so the FloatingPlayer pulse cue
+            // stops inviting on subsequent opens.
+            void tutorial.dismiss("transcriptOpened")
             transcriptStore.show(trackId)
           },
         },
