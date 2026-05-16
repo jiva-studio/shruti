@@ -61,6 +61,22 @@ const emit = defineEmits<{
    (red X / spinner / completed check) sits OUTSIDE the label inside
    TrackListItem, so it stays at full opacity and reads as the same
    vivid red on Home as on Search. */
+/* IonItemSliding translates the IonItem horizontally to reveal the
+   IonItemOptions (trash) underneath. The IonItem is set to a transparent
+   background globally (TrackListItem.vue), so on Search/Library the row
+   blends with the surrounding list. On the Home playlist, however, the
+   transparent IonItem lets the revealed trash icon bleed through the
+   row content during the swipe. Force an opaque background only here,
+   on the actually-translated layer (the IonItem). The previous
+   background-color on `.playlist-row` was a no-op for this — that
+   wrapper never moves. */
+.playlist-row {
+  background-color: var(--ion-background-color);
+}
+.playlist-row :deep(ion-item.track) {
+  --ion-item-background: var(--ion-background-color);
+  --background: var(--ion-background-color);
+}
 .playlist-row.is-dimmed :deep(ion-label) {
   opacity: 0.65;
 }
