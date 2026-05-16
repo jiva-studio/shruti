@@ -52,6 +52,7 @@ import { useHttpServerProber } from "@infra/servers/index.js"
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
+import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -120,12 +121,11 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
   })
 }
 
-router.isReady().then(async () => {
+router.isReady().then(() => {
   app.mount("#app")
   // Fire-and-forget: RevenueCat SDK configure + initial customer fetch
   // + live-update subscription. Failures must not block app startup —
   // the purchase UI just stays hidden if init fails.
-  const { usePurchasesStore } = await import("./stores/usePurchasesStore.js")
   void usePurchasesStore()
     .init()
     .catch((e) => {
