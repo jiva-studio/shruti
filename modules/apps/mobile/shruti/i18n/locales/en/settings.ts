@@ -93,6 +93,21 @@ export default {
     description: "Language of an interface",
   },
 
+  autoDownload: {
+    title: "Auto-download",
+    description: "Keep unlistened lectures ready on device",
+    target: {
+      off: "Off",
+      "30m": "30 minutes",
+      "1h": "1 hour",
+      "2h": "2 hours",
+      "3h": "3 hours",
+      "5h": "5 hours",
+      "8h": "8 hours",
+      "10h": "10 hours",
+    },
+  },
+
   server: {
     title: "Server",
     description: "Content delivery network",
