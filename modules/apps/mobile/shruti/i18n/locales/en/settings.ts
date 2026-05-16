@@ -139,6 +139,16 @@ export default {
       description: "Show progress around play button",
     },
   },
+  chat: {
+    showTab: {
+      title: "Chat tab",
+      description: "Show the Sadhu chat tab at the bottom",
+    },
+    clearHistory: {
+      title: "Clear chat history",
+      description: "Delete every chat session and message from this device",
+    },
+  },
   notes: {
     showTab: {
       title: "Notes tab",

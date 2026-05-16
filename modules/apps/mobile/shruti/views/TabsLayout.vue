@@ -11,6 +11,15 @@
           <IconSearch :size="26" />
         </IonTabButton>
 
+        <IonTabButton
+          v-if="showChatTab"
+          tab="chat"
+          href="/tabs/chat"
+          class="chat-tab-button"
+        >
+          <IconAppSadhu :size="42" />
+        </IonTabButton>
+
         <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
           <IonSpinner v-if="shareJob.isInBackground" class="notes-tab-spinner" name="dots" />
           <IconBookmark v-else :size="26" />
@@ -34,8 +43,10 @@ import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner 
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
+import IconAppSadhu from "@shruti/views/Chat/components/IconAppSadhu.vue"
 
 const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
+const showChatTab = useConfig<boolean>("settings.chat.showTab", true)
 // Tracks the current share job (audio or video). When isRunning flips to
 // true we show a small spinner overlay on the bookmark icon — the share
 // flow has handed off to background and the user knows something's still
@@ -57,6 +68,20 @@ ion-tab-bar {
 
 ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
+}
+
+/* Chat tab is a regular flex item at DOM position 3 of 5 (home, search,
+ * chat, notes, settings) — that's the geometric center under Ionic's
+ * `flex: 1` per-tab layout. Just lift it ~6 px above the baseline so the
+ * disc reads as the primary action. */
+ion-tab-button.chat-tab-button {
+  transform: translateY(-6px);
+}
+
+/* When the chat tab is active, just bump the disc behind the Sadhu icon
+ * a bit brighter — same colour family, no ring, no halo. */
+ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
+  background: rgba(var(--ion-color-primary-rgb), 0.28);
 }
 
 .tab-bar-safe-area-fill {

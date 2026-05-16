@@ -48,6 +48,11 @@
       @reset="smartLibrary.reset"
     />
 
+    <SettingsChatGroup
+      v-model:show-chat-tab="showChatTab"
+      @clear-chat-history="onClearChatHistory"
+    />
+
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
     <SettingsHelpGroup @open-help="helpOpen = true" />
@@ -76,6 +81,7 @@ import { ref } from "vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAppearanceGroup,
+  SettingsChatGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
   SettingsHelpGroup,
@@ -100,6 +106,7 @@ const {
   appLanguage,
   showPlayerProgress,
   showNotesTab,
+  showChatTab,
   showPlayerOnNotes,
   studioEnabled,
   showActivityTracker,
@@ -115,6 +122,7 @@ const {
   languageItems,
   onClearCache,
   onClearUserData,
+  onClearChatHistory,
   onExportDatabase,
   onImportFileSelected,
   subscription,

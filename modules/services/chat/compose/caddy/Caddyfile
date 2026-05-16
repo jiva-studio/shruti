@@ -1,0 +1,31 @@
+# Caddy auto-acquires Let's Encrypt cert via HTTP-01 challenge for any
+# hostname that resolves to this server's IP (including <ip>.sslip.io).
+#
+# DOMAIN comes from .env. For sslip.io: 159-69-12-34.sslip.io
+# ACME_EMAIL goes to Let's Encrypt for renewal notices.
+
+{
+    email {$ACME_EMAIL}
+    # Keep Caddy's own access logs minimal — chat app logs structured JSON.
+    log {
+        output stderr
+        level WARN
+    }
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # SSE: disable response buffering so chunks reach the client immediately.
+    reverse_proxy chat:8080 {
+        flush_interval -1
+        transport http {
+            read_buffer 8192
+        }
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

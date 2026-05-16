@@ -1,0 +1,28 @@
+# Claude Code session state
+*.session.json
+.local/
+.cache/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python build artefacts
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.*
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform.lock.hcl
+
+# Build artefacts
+build/
+dist/
+.venv/
