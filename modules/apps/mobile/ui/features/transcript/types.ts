@@ -46,6 +46,15 @@ export interface UiTranscriptBlockView {
   /** Optional speaker emoji/icon rendered in the sentence gutter. */
   readonly icon?: string
   bookmarked: boolean
+  /**
+   * Ids of the saved notes whose time-range overlaps this block. Empty
+   * when `bookmarked` is false; non-empty when the block sits inside one
+   * or more saved notes. Populated by `buildTranscriptViewData` during
+   * the same overlap pass that sets `bookmarked`, so tap-on-highlight in
+   * the transcript can dispatch a Delete action without re-doing the
+   * lookup.
+   */
+  noteIds: readonly string[]
 }
 
 export interface UiTranscriptBlocksGroup {
