@@ -4,6 +4,11 @@
       <p>{{ error }}</p>
     </IonText>
     <template v-else>
+      <SubscriptionNagBanner
+        v-if="showSubscriptionNag"
+        @open="subscriptionDialogOpen = true"
+        @dismiss="onDismissSubscriptionNag"
+      />
       <template v-if="showActivity">
         <SectionHeader :title="$t('activity.title')">
           <StreakBadge :value="currentStreak" />
@@ -31,11 +36,6 @@
           </SectionHeader>
         </template>
       </PlaylistSection>
-      <SubscriptionNagBanner
-        v-if="showSubscriptionNag"
-        @open="subscriptionDialogOpen = true"
-        @dismiss="onDismissSubscriptionNag"
-      />
     </template>
     <IonInfiniteScroll :disabled="!hasMore" @ion-infinite="onInfinite">
       <IonInfiniteScrollContent />
