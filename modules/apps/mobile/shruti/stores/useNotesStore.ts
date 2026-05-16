@@ -4,7 +4,7 @@ import { deleteNote, type DeleteNoteError } from "@lib/application/deleteNote.js
 import { searchNotes } from "@lib/application/searchNotes.js"
 import { updateNote, type UpdateNoteError } from "@lib/application/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
-import type { Note } from "@lib/domain/note.js"
+import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { Result } from "@lib/domain/result.js"
 import { useShruti } from "@shruti/shruti.js"
 
@@ -58,6 +58,7 @@ export const useNotesStore = defineStore("notes", () => {
     text?: string
     timeStart?: number
     timeEnd?: number
+    meta?: NoteMeta | null
   }): Promise<Result<Note, UpdateNoteError>> {
     const repos = app.repositories()
     const result = await updateNote(input, { notes: repos.notes, unitOfWork: repos.unitOfWork })

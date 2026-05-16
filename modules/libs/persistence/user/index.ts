@@ -11,6 +11,8 @@ export interface NoteRow {
   readonly time_start: number
   readonly time_end: number
   readonly created_at: number
+  /** JSON-serialised `Record<string, unknown> | null` (006_notes_meta). */
+  readonly meta: string | null
 }
 
 export interface PlaylistItemRow {

@@ -31,6 +31,7 @@ const sample = (over: Partial<Note> = {}): Note => ({
   timeStart: 0,
   timeEnd: 0,
   createdAt: 1000,
+  meta: null,
   ...over,
 })
 

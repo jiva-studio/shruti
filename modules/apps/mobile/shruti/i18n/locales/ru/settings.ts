@@ -146,6 +146,10 @@ export default {
       title: "Плеер на странице заметок",
       description: "Показывать встроенный аудиоплеер рядом с цитатами",
     },
+    studio: {
+      title: "Студия",
+      description: "Добавляет «Открыть в студии» в меню заметки",
+    },
   },
   activityTracker: {
     show: {

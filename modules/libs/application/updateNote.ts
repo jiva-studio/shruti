@@ -1,5 +1,5 @@
 import type { NoteId } from "@lib/domain/core.js"
-import type { Note } from "@lib/domain/note.js"
+import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
@@ -9,6 +9,8 @@ export interface UpdateNoteInput {
   readonly text?: string
   readonly timeStart?: number
   readonly timeEnd?: number
+  /** `undefined` = don't touch, `null` = clear, object = replace wholesale. */
+  readonly meta?: NoteMeta | null
 }
 
 export type UpdateNoteError = "not-found" | "empty-text" | "invalid-range" | "invalid-time"
@@ -53,6 +55,7 @@ export async function updateNote(
       text: input.text,
       timeStart: input.timeStart,
       timeEnd: input.timeEnd,
+      meta: input.meta,
     })
     return ok(updated)
   })

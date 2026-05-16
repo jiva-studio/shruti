@@ -40,6 +40,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@shruti/views/Track/TrackView.vue"),
         props: true,
       },
+      {
+        path: "studio/:noteId",
+        name: "studio",
+        component: () => import("@shruti/views/Studio/StudioView.vue"),
+        props: true,
+      },
     ],
   },
 ]

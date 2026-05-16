@@ -1,6 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
-import type { Note } from "@lib/domain/note.js"
+import type { Note, NoteMeta } from "@lib/domain/note.js"
 import type {
   CreateNoteInput,
   INoteRepository,
@@ -11,6 +11,11 @@ import { createIdGenerator } from "./idGenerator.js"
 import { rowToNote } from "./rowMappers.js"
 
 const newNoteId = createIdGenerator("note")
+
+function serializeMeta(meta: NoteMeta | null | undefined): string | null {
+  if (meta === null || meta === undefined) return null
+  return JSON.stringify(meta)
+}
 
 export function createSqlNoteRepository(db: IDatabase): INoteRepository {
   return {
@@ -37,10 +42,11 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
     async create(input: CreateNoteInput): Promise<Note> {
       const id = newNoteId()
       const now = Date.now()
+      const meta = input.meta ?? null
       await db.execute(
-        `INSERT INTO notes (id, track_id, text, time_start, time_end, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, input.trackId, input.text, input.timeStart, input.timeEnd, now]
+        `INSERT INTO notes (id, track_id, text, time_start, time_end, created_at, meta)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, input.trackId, input.text, input.timeStart, input.timeEnd, now, serializeMeta(meta)]
       )
       await db.save()
       return {
@@ -50,24 +56,25 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
         timeStart: input.timeStart,
         timeEnd: input.timeEnd,
         createdAt: now,
+        meta,
       }
     },
 
     async update(input: UpdateNoteInput): Promise<Note> {
       const existing = await this.getById(input.id)
       if (!existing) throw new Error(`Note not found: ${input.id}`)
+      const nextMeta = input.meta === undefined ? existing.meta : input.meta
       const next: Note = {
         ...existing,
         text: input.text ?? existing.text,
         timeStart: input.timeStart ?? existing.timeStart,
         timeEnd: input.timeEnd ?? existing.timeEnd,
+        meta: nextMeta,
       }
-      await db.execute("UPDATE notes SET text = ?, time_start = ?, time_end = ? WHERE id = ?", [
-        next.text,
-        next.timeStart,
-        next.timeEnd,
-        input.id,
-      ])
+      await db.execute(
+        "UPDATE notes SET text = ?, time_start = ?, time_end = ?, meta = ? WHERE id = ?",
+        [next.text, next.timeStart, next.timeEnd, serializeMeta(next.meta), input.id]
+      )
       await db.save()
       return next
     },
