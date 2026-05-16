@@ -98,10 +98,6 @@ const title = computed(() => {
   return resolveTrackTitle(track.value, appLanguage.value) ?? track.value.id
 })
 
-const authorName = computed(() =>
-  author.value ? (resolveLocalizedName(author.value, appLanguage.value) ?? "") : ""
-)
-
 const locationName = computed(() =>
   location.value ? (resolveLocalizedName(location.value, appLanguage.value) ?? "") : ""
 )
@@ -216,7 +212,9 @@ watch(
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 120ms ease, transform 60ms ease;
+  transition:
+    background 120ms ease,
+    transform 60ms ease;
 }
 
 .lecture-card:active {
@@ -255,7 +253,7 @@ watch(
   font-size: 11px;
   font-weight: 500;
   padding: 2px 8px;
-  border-radius: 999px;  /* full pill */
+  border-radius: 999px; /* full pill */
   background: rgba(var(--ion-color-primary-rgb), 0.18);
   color: var(--ion-color-primary);
   white-space: nowrap;
