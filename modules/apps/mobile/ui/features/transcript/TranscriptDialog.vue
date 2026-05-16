@@ -1,6 +1,11 @@
 <template>
-  <IonModal :is-open="open" class="transcript-dialog" @did-dismiss="open = false">
-    <IonContent>
+  <IonModal
+    :is-open="open"
+    class="transcript-dialog"
+    @did-present="onModalPresented"
+    @did-dismiss="open = false"
+  >
+    <IonContent ref="contentRef">
       <IonButton
         class="close-button"
         fill="clear"
@@ -55,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from "vue"
+import { computed, nextTick, ref, useTemplateRef } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
@@ -119,6 +124,27 @@ const statusState = computed<"loading" | "error" | "empty" | null>(() => {
 
 const lastTextSelectedEvent = ref<TextSelectedEvent>()
 const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcriptText")
+const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
+
+/**
+ * Snap the scroll position onto the active paragraph as soon as the
+ * modal animation finishes. The block layout is identified by the
+ * `.paragraph` class set in `TranscriptText.vue` (the prompter scales
+ * up the currently-playing group). If there's no active block — e.g.
+ * `position` is still 0 or this is a preview-mode open — the query
+ * returns null and we leave the scroll position untouched (top).
+ */
+async function onModalPresented(): Promise<void> {
+  await nextTick()
+  const host = contentRef.value?.$el
+  if (!host) return
+  const active = host.querySelector(".transcript-text .paragraph") as HTMLElement | null
+  if (!active) return
+  // Smooth scroll so the jump from "top of doc" to the current paragraph
+  // reads as a deliberate animation rather than an instant jolt — matches
+  // how the prompter scaling already eases in around the same paragraph.
+  active.scrollIntoView({ behavior: "smooth", block: "center" })
+}
 
 function onTextSelected(event: TextSelectedEvent): void {
   lastTextSelectedEvent.value = event
