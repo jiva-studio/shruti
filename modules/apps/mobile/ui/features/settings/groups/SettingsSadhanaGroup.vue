@@ -6,7 +6,10 @@
   <AutoArchiveDelaySettingsItem v-model="autoArchiveDelay" />
   <NotificationsEnabledSettingsItem v-model="notificationsEnabled" />
   <DailyNotificationsTimeSettingsItem v-if="notificationsEnabled" v-model="notificationsTime" />
-  <AutoDownloadTargetSettingsItem v-model="autoDownloadTargetSeconds" />
+  <AutoDownloadTargetSettingsItem
+    :subtitle="autoDownloadSubtitle"
+    @click="emit('open-auto-download-config')"
+  />
 </template>
 
 <script setup lang="ts">
@@ -25,7 +28,8 @@ const notificationsEnabled = defineModel<boolean>("notificationsEnabled", { requ
 const notificationsTime = defineModel<[number, number] | undefined>("notificationsTime", {
   required: true,
 })
-const autoDownloadTargetSeconds = defineModel<number>("autoDownloadTargetSeconds", {
-  required: true,
-})
+
+defineProps<{ autoDownloadSubtitle: string }>()
+
+const emit = defineEmits<{ "open-auto-download-config": [] }>()
 </script>
