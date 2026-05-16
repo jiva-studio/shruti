@@ -16,6 +16,7 @@ export default {
   proBadge: "PRO",
   back: "Назад",
   notes: "Заметки",
+  chat: "Чат",
   ok: "Oк",
   share: "Поделиться",
   copy: "Копировать",

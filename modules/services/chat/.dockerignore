@@ -1,0 +1,16 @@
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/node_modules
+**/*.egg-info
+.git
+.gitignore
+*.tsv
+.povtorenie-work
+compose/
+scripts/
+fly.toml
+.env
+.env.*
+README.md

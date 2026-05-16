@@ -30,6 +30,17 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Notes/NotesView.vue"),
       },
       {
+        path: "chat",
+        name: "chat",
+        component: () => import("@lectorium/views/Chat/ChatView.vue"),
+      },
+      {
+        path: "chat/:sessionId",
+        name: "chat-session",
+        component: () => import("@lectorium/views/Chat/ChatView.vue"),
+        props: true,
+      },
+      {
         path: "settings",
         name: "settings",
         component: () => import("@lectorium/views/Settings/SettingsView.vue"),

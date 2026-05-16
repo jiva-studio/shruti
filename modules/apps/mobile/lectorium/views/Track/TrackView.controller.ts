@@ -1,4 +1,5 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
+import { useRoute } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { loadTrackDetail } from "@lib/application/loadTrackDetail.js"
 import type { Author } from "@lib/domain/author.js"
@@ -42,7 +43,14 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   const repos = app.repositories()
   const player = usePlayerStore()
   const playlist = usePlaylistStore()
+  const route = useRoute()
   const { t } = useI18n()
+
+  // Deep-link timecode: when the route carries `?resumeFromMs=…` (chat
+  // citation chip), auto-open the audio at that position once the
+  // track has loaded. Plain navigations have no query and stay on the
+  // existing manual-play behaviour.
+  const resumeFromMs = parseResumeFromMs(route.query.resumeFromMs)
 
   const track = ref<Track | null>(null)
   const author = ref<Author | null>(null)
@@ -107,7 +115,19 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
   }
 
   onMounted(() => {
-    void loadEverything()
+    void loadEverything().then(async () => {
+      if (resumeFromMs !== null && track.value) {
+        const lang = selectedLanguage.value ?? appLanguage.value
+        const entry = playlist.getEntryByTrackId(track.value.id)
+        await player.openTrack({
+          track: track.value,
+          preferredLanguage: lang,
+          author: author.value,
+          itemId: entry?.item.id,
+          resumeFromMs,
+        })
+      }
+    })
   })
 
   return {
@@ -121,4 +141,11 @@ export function useTrackController(options: TrackControllerOptions): TrackContro
     onLanguageChange,
     onPlay,
   }
+}
+
+function parseResumeFromMs(raw: unknown): number | null {
+  if (typeof raw !== "string" || raw.length === 0) return null
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n < 0) return null
+  return n
 }

@@ -2,6 +2,7 @@ import { createI18n } from "vue-i18n"
 
 import enActivity from "./locales/en/activity.js"
 import enApp from "./locales/en/app.js"
+import enChat from "./locales/en/chat.js"
 import enErrors from "./locales/en/errors.js"
 import enHelp from "./locales/en/help.js"
 import enHome from "./locales/en/home.js"
@@ -18,6 +19,7 @@ import enWelcome from "./locales/en/welcome.js"
 
 import ruActivity from "./locales/ru/activity.js"
 import ruApp from "./locales/ru/app.js"
+import ruChat from "./locales/ru/chat.js"
 import ruErrors from "./locales/ru/errors.js"
 import ruHelp from "./locales/ru/help.js"
 import ruHome from "./locales/ru/home.js"
@@ -38,6 +40,7 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 const en = {
   activity: enActivity,
   app: enApp,
+  chat: enChat,
   errors: enErrors,
   help: enHelp,
   home: enHome,
@@ -56,6 +59,7 @@ const en = {
 const ru = {
   activity: ruActivity,
   app: ruApp,
+  chat: ruChat,
   errors: ruErrors,
   help: ruHelp,
   home: ruHome,

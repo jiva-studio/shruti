@@ -1,0 +1,270 @@
+"""Indexer scheduler — bootstrap + periodic refresh.
+
+Two phases:
+1. Bootstrap (synchronous on cold start): ensure catalog is present, then return.
+   This unblocks /readyz; transcript indexing continues in the background.
+2. Periodic loop: every INDEXER_INTERVAL_HOURS, refresh catalog + diff transcripts.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+import uuid
+from contextlib import suppress
+
+import structlog
+
+from lectorium_chat.config import Settings, get_settings
+from lectorium_chat.db.client import get_pool
+from lectorium_chat.indexer import catalog, s3
+from lectorium_chat.indexer.chunker import Chunk, chunk_reviewed
+from lectorium_chat.indexer.embed import Embedder, get_embedder
+from lectorium_chat.observability.logging import get_logger
+
+log = get_logger(__name__)
+
+
+# ── Bootstrap ──────────────────────────────────────────────────────────
+
+
+async def bootstrap_catalog(settings: Settings | None = None) -> None:
+    """Synchronous catalog presence check + initial download if missing.
+
+    Called from main.py lifespan before /readyz can return ready=true.
+    Also marks any leftover `running` indexer runs (from a previous crash
+    or rolling restart) as `failed`, so /status reflects reality.
+    """
+    s = settings or get_settings()
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE indexer_runs
+            SET state='failed', finished_at=NOW(), error='abandoned at restart'
+            WHERE state='running'
+            """,
+        )
+    await catalog.ensure_catalog(s)
+
+
+# ── Periodic loop ──────────────────────────────────────────────────────
+
+
+async def scheduler_loop(settings: Settings | None = None, stop_event: asyncio.Event | None = None) -> None:
+    s = settings or get_settings()
+    stop = stop_event or asyncio.Event()
+    interval = max(60, s.indexer_interval_hours * 3600)
+
+    # First run on boot — already loads in the background after bootstrap.
+    while not stop.is_set():
+        try:
+            await run_once(s, trigger="scheduled")
+        except Exception as exc:
+            log.exception("indexer_loop_iteration_failed", error=str(exc))
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+
+
+# ── One run ────────────────────────────────────────────────────────────
+
+
+async def run_once(
+    settings: Settings | None = None,
+    *,
+    trigger: str = "manual",
+    track_ids_filter: list[str] | None = None,
+    lang_filter: str | None = None,
+    force_catalog: bool = False,
+) -> str:
+    """Execute one indexer pass. Returns the run_id."""
+    s = settings or get_settings()
+    embedder = get_embedder(s)
+    pool = get_pool()
+    run_id = f"r-{uuid.uuid4().hex[:8]}"
+    structlog.contextvars.bind_contextvars(run_id=run_id)
+    try:
+        log.info("indexer_run_start", trigger=trigger)
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO indexer_runs (run_id, state, trigger, started_at)
+                VALUES ($1, 'running', $2, NOW())
+                """,
+                run_id, trigger,
+            )
+
+        catalog_from = await catalog.read_current_version()
+        catalog_to = None
+        try:
+            catalog_to = await catalog.ensure_catalog(s, force=force_catalog) or catalog_from
+        except Exception as exc:
+            log.error("catalog_refresh_failed", error=str(exc))
+
+        # List all transcripts on the requested languages
+        langs = [lang_filter] if lang_filter else s.langs
+        objects = await asyncio.to_thread(s3.list_transcripts, langs, s)
+        if track_ids_filter:
+            objects = [o for o in objects if o.track_id in set(track_ids_filter)]
+        log.info("transcript_discovered", total=len(objects), langs=langs)
+
+        # Diff against indexed_tracks for the active embed_model
+        async with pool.acquire() as conn:
+            indexed = await conn.fetch(
+                """
+                SELECT track_id, lang, etag FROM indexed_tracks
+                WHERE embed_model = $1
+                """,
+                embedder.name,
+            )
+        indexed_map = {(r["track_id"], r["lang"]): r["etag"] for r in indexed}
+        to_process = [o for o in objects if indexed_map.get((o.track_id, o.lang)) != o.etag]
+        log.info(
+            "transcript_diff",
+            total=len(objects),
+            to_process=len(to_process),
+            embed_model=embedder.name,
+        )
+
+        # GC: tracks indexed but no longer in S3
+        objects_set = {(o.track_id, o.lang) for o in objects}
+        stale = [k for k in indexed_map if k not in objects_set]
+        if stale:
+            async with pool.acquire() as conn:
+                await conn.executemany(
+                    "DELETE FROM chunks WHERE track_id = $1 AND lang = $2",
+                    stale,
+                )
+                await conn.executemany(
+                    """
+                    DELETE FROM indexed_tracks
+                    WHERE track_id = $1 AND lang = $2 AND embed_model = $3
+                    """,
+                    [(t, lang, embedder.name) for t, lang in stale],
+                )
+            log.info("transcript_gc", removed=len(stale))
+
+        # Parallel processing: API embedder + HTTP S3 fetches are I/O bound,
+        # 8 concurrent workers ≈ 5-7× speed-up over serial.
+        chunks_total = 0
+        tracks_done = 0
+        progress_lock = asyncio.Lock()
+        sem = asyncio.Semaphore(8)
+
+        async def worker(obj: s3.TranscriptObject) -> None:
+            nonlocal chunks_total, tracks_done
+            async with sem:
+                try:
+                    added = await _process_one(obj, embedder, settings=s)
+                except Exception as exc:
+                    log.exception(
+                        "transcript_index_failed",
+                        track_id=obj.track_id, lang=obj.lang, error=str(exc),
+                    )
+                    added = 0
+                async with progress_lock:
+                    chunks_total += added
+                    tracks_done += 1
+                    if tracks_done % 20 == 0:
+                        async with pool.acquire() as conn:
+                            await conn.execute(
+                                """
+                                UPDATE indexer_runs SET tracks_done = $1, chunks_total = $2
+                                WHERE run_id = $3
+                                """,
+                                tracks_done, chunks_total, run_id,
+                            )
+
+        await asyncio.gather(*(worker(o) for o in to_process))
+
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE indexer_runs
+                SET state='success', finished_at=NOW(),
+                    tracks_done=$1, chunks_total=$2,
+                    catalog_from=$3, catalog_to=$4
+                WHERE run_id=$5
+                """,
+                len(to_process), chunks_total,
+                catalog_from, catalog_to, run_id,
+            )
+        log.info(
+            "indexer_run_complete",
+            tracks_indexed=len(to_process),
+            chunks_total=chunks_total,
+        )
+        return run_id
+    except Exception as exc:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE indexer_runs
+                SET state='failed', finished_at=NOW(), error=$1
+                WHERE run_id=$2
+                """,
+                str(exc), run_id,
+            )
+        log.exception("indexer_run_failed", error=str(exc))
+        raise
+    finally:
+        structlog.contextvars.unbind_contextvars("run_id")
+
+
+async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: Settings) -> int:
+    """Fetch one transcript, chunk, embed, upsert, mark indexed. Returns chunk count."""
+    t0 = time.monotonic()
+    reviewed = await s3.fetch_transcript(obj.key, settings)
+    chunks = chunk_reviewed(reviewed)
+    if not chunks:
+        async with get_pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO indexed_tracks (track_id, lang, embed_model, etag, indexed_at)
+                VALUES ($1, $2, $3, $4, NOW())
+                ON CONFLICT (track_id, lang, embed_model)
+                DO UPDATE SET etag=$4, indexed_at=NOW()
+                """,
+                obj.track_id, obj.lang, embedder.name, obj.etag,
+            )
+        return 0
+
+    vectors = await embedder.embed_documents([c.text for c in chunks])
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM chunks WHERE track_id=$1 AND lang=$2 AND embed_model=$3",
+                obj.track_id, obj.lang, embedder.name,
+            )
+            await conn.executemany(
+                """
+                INSERT INTO chunks
+                  (track_id, lang, start_ms, end_ms, text,
+                   reference_source_id, embed_model, embedding)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                [
+                    (c.track_id, c.lang, c.start_ms, c.end_ms, c.text,
+                     c.reference_source_id, embedder.name, v)
+                    for c, v in zip(chunks, vectors, strict=True)
+                ],
+            )
+            await conn.execute(
+                """
+                INSERT INTO indexed_tracks (track_id, lang, embed_model, etag, indexed_at)
+                VALUES ($1, $2, $3, $4, NOW())
+                ON CONFLICT (track_id, lang, embed_model)
+                DO UPDATE SET etag=$4, indexed_at=NOW()
+                """,
+                obj.track_id, obj.lang, embedder.name, obj.etag,
+            )
+
+    log.info(
+        "chunk_track_done",
+        track_id=obj.track_id,
+        lang=obj.lang,
+        chunks_created=len(chunks),
+        duration_ms=int((time.monotonic() - t0) * 1000),
+    )
+    return len(chunks)

@@ -16,6 +16,7 @@ export default {
   proBadge: "PRO",
   back: "Back",
   notes: "Notes",
+  chat: "Chat",
   ok: "Ok",
   share: "Share",
   copy: "Copy",
