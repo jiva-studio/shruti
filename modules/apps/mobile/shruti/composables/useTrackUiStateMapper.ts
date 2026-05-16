@@ -9,12 +9,24 @@ import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
 
+export type RowContext = "playlist" | "discovery"
+
 export interface UseTrackUiStateMapperReturn {
   /** Convert a single domain `Track` into the UI row used by lists. */
   toUiRow: (track: Track) => UiTrackRow
-  /** Map a list of domain tracks reactively. Recomputes when downloads,
-   *  playlist membership, current playback, or the UI language change. */
-  mapRows: (tracks: () => readonly Track[]) => ComputedRef<readonly UiTrackRow[]>
+  /**
+   * Map a list of domain tracks reactively. Recomputes when downloads,
+   * playlist membership, current playback, or the UI language change.
+   *
+   * `context: "discovery"` (Search / Library) folds the playback-progress
+   * states (`playing` and `queued`) into the flat `added` state and zeroes
+   * the progress bar — discovery surfaces only communicate the binary
+   * "in your queue" / "completed" outcome, never a progress radial.
+   */
+  mapRows: (
+    tracks: () => readonly Track[],
+    options?: { context?: RowContext }
+  ) => ComputedRef<readonly UiTrackRow[]>
   /** Translate raw `DownloadState` + playlist state to the list state. */
   toUiState: (trackId: string, downloadState: DownloadState) => UiTrackState
 }
@@ -66,6 +78,11 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     if (isPlayerOnThisTrack) return "playing"
     if (entry && playlist.getProgressMs(entry.item.id) > 0) return "queued"
 
+    // Completion across the union of active + archived items. Archive
+    // only removes the row from the active list; listening_sessions and
+    // the trackId-keyed set are untouched, so the badge survives.
+    if (playlist.hasCompletedTrack(trackId)) return "completed"
+
     if (playlist.hasTrack(trackId)) return "added"
     return "none"
   }
@@ -105,7 +122,11 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
     })
   }
 
-  function mapRows(tracks: () => readonly Track[]): ComputedRef<readonly UiTrackRow[]> {
+  function mapRows(
+    tracks: () => readonly Track[],
+    options?: { context?: RowContext }
+  ): ComputedRef<readonly UiTrackRow[]> {
+    const discovery = options?.context === "discovery"
     return computed(() => {
       // Touch reactive sources so `computed` re-runs on changes.
       void downloads.states
@@ -113,10 +134,21 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       void playlist.entries
       void playlist.progressMap
       void playlist.completedAtMap
+      void playlist.completedTrackIds
       void player.trackId
       void player.positionMs
       void player.durationMs
-      return tracks().map(toUiRow)
+      const mapped = tracks().map(toUiRow)
+      if (!discovery) return mapped
+      // Discovery surfaces (Search/Library): collapse playback-progress
+      // states to the binary "added"/"completed" badges. Progress radials
+      // belong to the Home playlist view only.
+      return mapped.map((row) => {
+        if (row.state === "playing" || row.state === "queued") {
+          return { ...row, state: "added" as UiTrackState, progressPct: 0 }
+        }
+        return row
+      })
     })
   }
 
