@@ -9,7 +9,21 @@
     />
 
     <!-- Notes -->
-    <NotesList v-if="!isEmpty" :notes="rows" @click="onNoteClicked" />
+    <NotesList v-if="!isEmpty" :notes="rows" @click="onNoteClicked">
+      <template #player="{ note }">
+        <NotesInlinePlayer
+          v-if="showPlayerOnNotes"
+          :note="{
+            noteId: note.id,
+            trackId: note.trackId,
+            sourceKey: note.audioPath ?? '',
+            timeStart: note.timeStart,
+            timeEnd: note.timeEnd,
+          }"
+          @click.stop
+        />
+      </template>
+    </NotesList>
 
     <!-- No notes -->
     <PageSticker
@@ -36,11 +50,14 @@ import { AppPage, PageSticker } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { NotesList } from "@ui/features/notes/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { useConfig } from "@shruti/composables/useConfig.js"
 import { useNotesController } from "./NotesView.controller.js"
+import NotesInlinePlayer from "./NotesInlinePlayer.vue"
 
 const player = usePlayerStore()
 const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, onNoteClicked } =
   useNotesController()
+const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", false)
 
 const emptyImage = "/empty.png"
 </script>

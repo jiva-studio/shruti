@@ -124,6 +124,10 @@ export default {
       title: "Notes tab",
       description: "Show notes tab at the bottom",
     },
+    showPlayer: {
+      title: "Player on notes page",
+      description: "Show an inline audio player next to each quote",
+    },
   },
   activityTracker: {
     show: {

@@ -125,6 +125,7 @@ export function useNotesController(): NotesControllerReturn {
 
     return store.filtered.map((n) => {
       const { track, author, location } = trackContextFor(n.trackId as TrackId)
+      const audioVariant = track ? pickAudioVariant(track) : null
       return {
         id: n.id,
         text: wrap ? highlightMatches(n.text, q) : escapeHtml(n.text),
@@ -138,6 +139,7 @@ export function useNotesController(): NotesControllerReturn {
         trackDate: track?.date || undefined,
         locationName: resolveLocationName(location),
         reference: resolveReference(track),
+        audioPath: audioVariant?.audio?.path,
       }
     })
   })
