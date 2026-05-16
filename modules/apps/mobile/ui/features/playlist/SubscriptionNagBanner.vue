@@ -35,13 +35,12 @@ defineEmits<{
 
 <style scoped>
 .subscription-nag {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
-  margin: 0 1rem 0.75rem;
-  border-radius: 8px;
-  background: var(--ion-color-step-50, var(--ion-color-light));
+  position: relative;
+  padding: 10px 12px;
+  margin: 0.5rem 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ion-color-success) 16%, var(--ion-background-color));
+  border: 1px solid color-mix(in srgb, var(--ion-color-success) 40%, transparent);
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -52,30 +51,30 @@ defineEmits<{
 }
 
 .subscription-nag-body {
-  flex: 1;
-  min-width: 0;
+  padding-right: 24px;
 }
 
 .subscription-nag-title {
   font-size: 1em;
   font-weight: 600;
-  color: var(--ion-text-color);
+  color: var(--ion-color-success-shade, var(--ion-color-success));
   margin-bottom: 2px;
 }
 
 .subscription-nag-description {
   font-size: 0.875em;
-  color: var(--ion-color-medium-shade, var(--ion-color-medium));
+  color: var(--ion-text-color);
   line-height: 1.4;
 }
 
 .subscription-nag-dismiss {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 6px;
+  right: 6px;
   background: transparent;
   border: none;
   padding: 4px;
-  margin: -4px -4px 0 0;
-  color: var(--ion-color-medium);
+  color: var(--ion-color-success-shade, var(--ion-color-success));
   cursor: pointer;
   border-radius: 4px;
   display: inline-flex;
