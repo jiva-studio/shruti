@@ -6,10 +6,22 @@ import { onBeforeUnmount, ref } from "vue"
  * when one player starts, the coordinator pauses everyone else so the
  * user never hears two excerpts overlapping.
  *
- * Independent of the main `usePlayerStore` — these excerpts are short
- * clips (a quote's span), not lecture playback.
+ * The main lecture player can also opt in via {@link registerMainPlayerPauser}
+ * so an excerpt and a lecture never play at the same time.
  */
 const pausers = new Set<() => void>()
+
+/**
+ * Register a `pause()` callback owned by something outside the inline-
+ * note-player rows (e.g. the main lecture player). Unlike the per-row
+ * registration, the returned dispose handle is the caller's
+ * responsibility — there is no Vue lifecycle hook here, since the main
+ * player lives for the app's lifetime.
+ */
+export function registerMainPlayerPauser(fn: () => void): () => void {
+  pausers.add(fn)
+  return () => pausers.delete(fn)
+}
 
 export function useNotesInlineAudio(): {
   registerPauser: (fn: () => void) => () => void

@@ -219,11 +219,26 @@ async function maybeLoadRealPeaks(): Promise<void> {
   }
 }
 
-function pauseSelf(): void {
-  audioEl.value?.pause()
+/**
+ * Pause this player AND rewind it to the start. When another inline
+ * player on the page (or the main lecture, via App.vue) signals that
+ * it's about to play, all other inline players should reset to their
+ * initial state — leaving them mid-clip / mid-pause means the user sees
+ * "multiple players in different positions, none at the beginning."
+ *
+ * The main lecture player intentionally keeps its position (registered
+ * with its own pause-only callback in App.vue) so a tap on a note
+ * excerpt doesn't lose the lecture's resume point.
+ */
+function pauseAndResetSelf(): void {
+  const el = audioEl.value
+  if (!el) return
+  el.pause()
+  el.currentTime = 0
+  positionMs.value = 0
 }
 
-const unregister = inline.registerPauser(pauseSelf)
+const unregister = inline.registerPauser(pauseAndResetSelf)
 
 async function onToggle(): Promise<void> {
   const el = audioEl.value
@@ -249,7 +264,7 @@ async function onToggle(): Promise<void> {
   } else if (!el.src) {
     el.src = cachedUrl
   }
-  inline.notifyPlaying(pauseSelf)
+  inline.notifyPlaying(pauseAndResetSelf)
   try {
     await el.play()
   } catch (err) {
@@ -379,7 +394,13 @@ onBeforeUnmount(() => {
   min-height: 2px;
   background: rgba(var(--ion-color-medium-rgb), 0.35);
   border-radius: 2px;
-  transition: background 80ms linear;
+  /* `height` transitions so the swap from the random placeholder peaks
+   * to the real decoded peaks reads as a wave settling into shape
+   * rather than a hard jump. Bar count is constant (`BAR_COUNT = 96`),
+   * so Vue updates inline styles in place and CSS handles the tween. */
+  transition:
+    background 80ms linear,
+    height 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .bar.is-played {

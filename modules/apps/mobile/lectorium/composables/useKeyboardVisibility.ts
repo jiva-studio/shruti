@@ -1,6 +1,7 @@
 import { onBeforeUnmount, onMounted, ref, type Ref } from "vue"
-import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
+import type { PluginListenerHandle } from "@capacitor/core"
 import { Keyboard } from "@capacitor/keyboard"
+import { useLectorium } from "@lectorium/lectorium.js"
 
 /**
  * Tracks whether the native on-screen keyboard is currently visible so
@@ -18,7 +19,7 @@ import { Keyboard } from "@capacitor/keyboard"
  */
 export function useKeyboardVisibility(): { isKeyboardOpen: Ref<boolean> } {
   const isKeyboardOpen = ref<boolean>(false)
-  const isNative = Capacitor.getPlatform() !== "web"
+  const isNative = useLectorium().platform !== "web"
 
   let showHandle: Promise<PluginListenerHandle> | undefined
   let hideHandle: Promise<PluginListenerHandle> | undefined

@@ -97,6 +97,15 @@ function readTimesFrom(el: HTMLElement | null): [number, number] {
 }
 
 function onTouchStart(event: TouchEvent) {
+  // Reset both pairs on every new touch — leaving stale `currentTime*`
+  // from a prior gesture causes `onTouchEnd` to emit a phantom selection
+  // when the new long-press lands on a non-selectable region (verse
+  // block, whitespace) and `initialTime*` was never set.
+  initialTimeStart.value = -1
+  initialTimeEnd.value = -1
+  currentTimeStart.value = -1
+  currentTimeEnd.value = -1
+
   const { clientX: touchX, clientY: touchY } = event.touches[0]
   const [timeStart, timeEnd] = readTimesFrom(resolveSentenceAt(touchX, touchY))
 

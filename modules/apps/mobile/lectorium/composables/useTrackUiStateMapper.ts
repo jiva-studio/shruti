@@ -143,8 +143,17 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       // Discovery surfaces (Search/Library): collapse playback-progress
       // states to the binary "added"/"completed" badges. Progress radials
       // belong to the Home playlist view only.
+      //
+      // Re-listen of a completed track: `toUiState` returns "playing" mid-
+      // replay (player progresses through the new pass), but on discovery
+      // the row should stay "completed" — the user has already finished
+      // this lecture. Look up `hasCompletedTrack` to override before the
+      // playing/queued → added fold.
       return mapped.map((row) => {
         if (row.state === "playing" || row.state === "queued") {
+          if (playlist.hasCompletedTrack(row.id)) {
+            return { ...row, state: "completed" as UiTrackState, progressPct: 0 }
+          }
           return { ...row, state: "added" as UiTrackState, progressPct: 0 }
         }
         return row

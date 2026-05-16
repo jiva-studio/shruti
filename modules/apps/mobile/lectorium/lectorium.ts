@@ -5,6 +5,7 @@ import type {
   IDatabase,
   IDatabaseFetcher,
   IDatabaseTransfer,
+  IExcerptCache,
   IHaptics,
   IMediaDownloader,
   INotificationScheduler,
@@ -68,6 +69,12 @@ export interface Lectorium {
    * `shareAudioService` — picks the per-region endpoint at call time.
    */
   readonly shareVideoService: IShareVideoService
+  /**
+   * Per-note excerpt cache (Filesystem stat / downloadFile + HEAD
+   * probe). Hides the Capacitor + fetch choreography from the Notes
+   * share workflow.
+   */
+  readonly excerptCache: IExcerptCache
   readonly haptics: IHaptics
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
@@ -134,6 +141,7 @@ export interface InitLectoriumSeed {
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
+  readonly excerptCache: IExcerptCache
   /** Factory invoked inside `initLectorium` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
    * adapter would otherwise need to close over a not-yet-built `Lectorium`. */
@@ -177,6 +185,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     shareService: seed.shareService,
     shareAudioService,
     shareVideoService,
+    excerptCache: seed.excerptCache,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,
     purchases: seed.purchases,

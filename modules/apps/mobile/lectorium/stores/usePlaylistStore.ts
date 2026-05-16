@@ -174,6 +174,13 @@ export const usePlaylistStore = defineStore("playlist", () => {
 
   async function archive(itemId: PlaylistItemId): Promise<Result<void, ArchivePlaylistItemError>> {
     const repos = app.repositories()
+    // Drop any pending prefetch for this track so we don't waste
+    // bandwidth on a file the user is archiving. Mid-flight transfers
+    // can't be aborted yet; this only covers the queued case (the
+    // common one — auto-download queues many items deeper than the
+    // user's reach).
+    const entry = entries.value.find((e) => e.item.id === itemId)
+    if (entry) useDownloadStore().cancelPrefetch(entry.item.trackId)
     const result = await archivePlaylistItem(
       { itemId },
       { playlistItems: repos.playlistItems, unitOfWork: repos.unitOfWork }

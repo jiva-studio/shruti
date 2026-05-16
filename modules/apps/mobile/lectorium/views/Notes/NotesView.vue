@@ -57,7 +57,7 @@ import NotesInlinePlayer from "./NotesInlinePlayer.vue"
 const player = usePlayerStore()
 const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, onNoteClicked } =
   useNotesController()
-const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", false)
+const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
 
 const emptyImage = "/empty.png"
 </script>

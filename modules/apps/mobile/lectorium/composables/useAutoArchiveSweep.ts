@@ -1,4 +1,4 @@
-import { onMounted, watch, type Ref } from "vue"
+import { onBeforeUnmount, onMounted, watch, type Ref } from "vue"
 import { archivePlaylistItem } from "@lib/application/archivePlaylistItem.js"
 import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
@@ -161,10 +161,19 @@ export function useAutoArchiveSweep(): {
     void Promise.resolve().then(sweep)
   })
 
+  // Re-sweep when the user flips the delay (e.g. `off → immediate` or
+  // `1d → immediate`). Without this the previous completions sit until
+  // the next fresh finish triggers the completion-watcher below.
+  watch(delay, () => void sweep())
+
   // React to fresh completions. We snapshot the previous key set so the
   // sweep only fires when an item flips from `not-completed` to
   // `completed`, not on every page-in that brings new keys to the map.
   let previousCompletedIds = new Set<PlaylistItemId>()
+  // Trailing-edge debounce: a burst of completions queues one sweep,
+  // not N. The pending timer is cleared on each new completion so
+  // bursts collapse to a single delayed sweep.
+  let pendingTimer: ReturnType<typeof setTimeout> | null = null
   watch(
     () => playlist.completedAtMap,
     (next) => {
@@ -179,10 +188,21 @@ export function useAutoArchiveSweep(): {
       if (newlyCompleted.length === 0) return
       // Short debounce so the "completed" badge gets a moment to render
       // before the row disappears under the "immediate" setting.
-      setTimeout(() => void sweep(), 750)
+      if (pendingTimer) clearTimeout(pendingTimer)
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null
+        void sweep()
+      }, 750)
     },
     { deep: true }
   )
+
+  onBeforeUnmount(() => {
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
+  })
 
   return { delay, sweep }
 }

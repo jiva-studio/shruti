@@ -9,6 +9,7 @@ import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
 import { formatReference } from "@lectorium/composables/groupReferences.js"
+import { resolveLocalizedName } from "@lectorium/composables/resolveLocalized.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useTranscriptSystemBars } from "@lectorium/composables/useTranscriptSystemBars.js"
@@ -103,11 +104,8 @@ export function useTranscriptDialogController(
     const track = hydration.track.value
     if (!track) return undefined
     const lang = appLanguage.value
-    const locationName = track.locationId
-      ? (dictionaries.locationsById.get(track.locationId)?.names.get(lang) ??
-        dictionaries.locationsById.get(track.locationId)?.names.values().next().value ??
-        undefined)
-      : undefined
+    const location = track.locationId ? dictionaries.locationsById.get(track.locationId) : undefined
+    const locationName = resolveLocalizedName(location, lang)
     const reference =
       track.references.length > 0
         ? formatReference(track.references[0]!, dictionaries.sourcesById, lang)

@@ -1,5 +1,5 @@
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
-import { Filesystem, Directory } from "@capacitor/filesystem"
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem"
 import { MediaDownloader, type DownloadDestination } from "@lectorium/plugin-media-downloader"
 import type { IRemoteFilesStorage } from "@ports/app/index.js"
 
@@ -67,6 +67,32 @@ export function useCapacitorRemoteFilesStorage({
       })
       const localUrl = await completion
       return Capacitor.convertFileSrc(localUrl)
+    },
+
+    async getJson<T = unknown>(url: string): Promise<T> {
+      // Ensure the file is cached locally, then read its bytes via the
+      // Filesystem plugin. Going through `fetch(localUrl)` would work in
+      // the WebView too but couples the caller to a particular runtime
+      // capability; keep the IO inside the port.
+      let { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
+      if (!localUrl) {
+        const id = idFor(url)
+        const completion = awaitCompletion(id)
+        await MediaDownloader.download({
+          id,
+          url,
+          destination: destinationFor(url),
+        })
+        localUrl = await completion
+      }
+      // `localUrl` is an absolute file:// path; `Filesystem.readFile`
+      // accepts that form directly when no `directory` is supplied.
+      const result = await Filesystem.readFile({
+        path: localUrl,
+        encoding: Encoding.UTF8,
+      })
+      const text = typeof result.data === "string" ? result.data : ""
+      return JSON.parse(text) as T
     },
 
     async has(url: string): Promise<boolean> {

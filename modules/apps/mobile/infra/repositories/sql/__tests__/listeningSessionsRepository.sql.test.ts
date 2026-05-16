@@ -124,8 +124,10 @@ describe("listeningSessionsRepository.sql", () => {
     expect(progress.get(ITEM_B)?.position).toBe(5)
   })
 
-  it("getCompletedAtForItems returns earliest ended_at where to_position >= duration - 2", async () => {
-    // Two sessions for item A; first one finished the track (>= dur-2).
+  it("getCompletedAtForItems returns latest ended_at where to_position >= duration - 2", async () => {
+    // Two sessions for item A; first one finished the track (>= dur-2),
+    // the user later replays and finishes it again. Anchor must be the
+    // latest completion so the auto-archive timer resets on re-listen.
     // duration = 1000, threshold = 998.
     await rawInsert(db, {
       id: "a1",
@@ -152,7 +154,7 @@ describe("listeningSessionsRepository.sql", () => {
         [ITEM_B, 600],
       ])
     )
-    expect(result.get(ITEM_A)).toBe(200)
+    expect(result.get(ITEM_A)).toBe(400)
     expect(result.get(ITEM_B)).toBeNull()
   })
 

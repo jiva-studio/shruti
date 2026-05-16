@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, useTemplateRef } from "vue"
+import { computed, nextTick, ref, useTemplateRef, watch } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
@@ -144,24 +144,83 @@ const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcrip
 const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
 
 /**
- * Snap the scroll position onto the active paragraph as soon as the
- * modal animation finishes. The block layout is identified by the
- * `.paragraph` class set in `TranscriptText.vue` (the prompter scales
- * up the currently-playing group). If there's no active block — e.g.
- * `position` is still 0 or this is a preview-mode open — the query
- * returns null and we leave the scroll position untouched (top).
+ * Has the user manually scrolled since the auto-scroll attempted to
+ * land on the active paragraph? Set on the first touchstart/wheel after
+ * `onModalPresented` so a smooth animation in-flight stops fighting the
+ * user, and the retry watcher below stays out of the way.
+ *
+ * Reset when the modal closes so the next open is a fresh attempt.
  */
-async function onModalPresented(): Promise<void> {
-  await nextTick()
-  const host = contentRef.value?.$el
-  if (!host) return
+const userScrolled = ref<boolean>(false)
+const autoScrollSettled = ref<boolean>(false)
+
+function attachUserScrollListeners(host: HTMLElement): () => void {
+  const onUserScroll = (): void => {
+    userScrolled.value = true
+  }
+  host.addEventListener("touchstart", onUserScroll, { passive: true, once: true })
+  host.addEventListener("wheel", onUserScroll, { passive: true, once: true })
+  return () => {
+    host.removeEventListener("touchstart", onUserScroll)
+    host.removeEventListener("wheel", onUserScroll)
+  }
+}
+
+let detachUserScroll: (() => void) | null = null
+
+function tryScrollToActive(host: HTMLElement): boolean {
   const active = host.querySelector(".transcript-text .paragraph") as HTMLElement | null
-  if (!active) return
+  if (!active) return false
   // Smooth scroll so the jump from "top of doc" to the current paragraph
   // reads as a deliberate animation rather than an instant jolt — matches
   // how the prompter scaling already eases in around the same paragraph.
   active.scrollIntoView({ behavior: "smooth", block: "center" })
+  return true
 }
+
+/**
+ * Snap the scroll position onto the active paragraph as soon as the
+ * modal animation finishes. The block layout is identified by the
+ * `.paragraph` class set in `TranscriptText.vue` (the prompter scales
+ * up the currently-playing group). If there's no active block — e.g.
+ * `position` is still 0 or this is a preview-mode open — the watcher
+ * below retries once `position` propagates and a `.paragraph` exists.
+ */
+async function onModalPresented(): Promise<void> {
+  await nextTick()
+  userScrolled.value = false
+  autoScrollSettled.value = false
+  const host = contentRef.value?.$el
+  if (!host) return
+  detachUserScroll = attachUserScrollListeners(host)
+  if (tryScrollToActive(host)) autoScrollSettled.value = true
+}
+
+// Cold-open retry: if `position` was 0 (or the active paragraph hadn't
+// rendered yet) at modal-present time, retry on the first `position`
+// update. The user-scroll guard stops the retry from yanking the
+// viewport after a manual pull.
+watch(
+  () => props.position,
+  async () => {
+    if (autoScrollSettled.value) return
+    if (userScrolled.value) return
+    if (!open.value) return
+    await nextTick()
+    const host = contentRef.value?.$el
+    if (!host) return
+    if (tryScrollToActive(host)) autoScrollSettled.value = true
+  }
+)
+
+// Reset on close so the next open starts clean.
+watch(open, (next) => {
+  if (next) return
+  autoScrollSettled.value = false
+  userScrolled.value = false
+  detachUserScroll?.()
+  detachUserScroll = null
+})
 
 function onTextSelected(event: TextSelectedEvent): void {
   lastNoteTappedEvent.value = undefined

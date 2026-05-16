@@ -17,7 +17,7 @@ export interface DatabaseLocatorDeps {
   readonly config: DatabaseLocatorConfig
   readonly supportedScheme: number
   getPublicUrl(path: string): string
-  filesStorage: Pick<IRemoteFilesStorage, "get" | "delete">
+  filesStorage: Pick<IRemoteFilesStorage, "get" | "getJson" | "delete">
   databaseFetcher: Pick<IDatabaseFetcher, "list">
 }
 
@@ -44,9 +44,7 @@ export async function fetchConfigUncached(
   deps: DatabaseLocatorDeps,
   configUrl: string
 ): Promise<RemoteAppConfig> {
-  const cachedConfigUrl = await deps.filesStorage.get(configUrl)
-  const response = await fetch(cachedConfigUrl)
-  return response.json() as Promise<RemoteAppConfig>
+  return deps.filesStorage.getJson<RemoteAppConfig>(configUrl)
 }
 
 /**

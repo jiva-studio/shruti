@@ -1,7 +1,8 @@
 /**
  * Port over a platform audio-playback engine.
- * Implemented by @infra/audio/capacitor (wrapping @lectorium/plugin-audio-player)
- * and @infra/audio/web (wrapping HTMLAudioElement).
+ * Implemented by @infra/audio/capacitor (a single cross-platform adapter
+ * wrapping @lectorium/plugin-audio-player; the plugin itself handles the
+ * web fallback via HTMLAudioElement).
  */
 export interface AudioOpenParams {
   itemId: string

@@ -51,6 +51,7 @@ import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.j
 import { useHttpServerProber } from "@infra/servers/index.js"
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
+import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -93,6 +94,11 @@ initLectorium({
     iosApiKey: __REVENUECAT_IOS_KEY__,
     androidApiKey: __REVENUECAT_ANDROID_KEY__,
   }),
+  // Wraps Capacitor.Filesystem + HEAD probe — used by the Notes share
+  // workflow to look up / download per-note excerpt files. Single
+  // adapter; the operations are all native, the web build never hits
+  // this path (no share workflow exists there yet).
+  excerptCache: useCapacitorExcerptCache(),
   // `databaseTransfer` needs a `() => databases.user` getter; the factory is
   // invoked inside `initLectorium` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
