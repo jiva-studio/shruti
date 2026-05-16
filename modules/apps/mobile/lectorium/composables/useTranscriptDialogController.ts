@@ -1,5 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
-import type { LanguageCode } from "@lib/domain/core.js"
+import type { LanguageCode, NoteId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
 import { useLectorium } from "@lectorium/lectorium.js"
@@ -43,10 +43,11 @@ export interface TranscriptDialogState {
   onClose(): void
   onSeek(positionMs: number): void
   onSelectionAction(action: {
-    action: "copy" | "bookmark" | "share"
+    action: "copy" | "bookmark" | "share" | "delete"
     text: string
     timeStart: number
     timeEnd: number
+    noteIds: readonly NoteId[]
   }): Promise<void>
   onPickStart(): void
 }
@@ -123,6 +124,7 @@ export function useTranscriptDialogController(
   const selectionActions = useTranscriptSelectionActions({
     getTrackId: () => transcriptStore.trackId,
     getNotes: () => app.repositories().notes,
+    getUnitOfWork: () => app.repositories().unitOfWork,
     shareService: app.shareService,
     getShareTrackContext: buildShareTrackContext,
     onNoteCreated: () => {
@@ -130,6 +132,12 @@ export function useTranscriptDialogController(
       // wavy-underline highlight on the transcript) and the global
       // notes store (drives the Notes page list). Without this the new
       // bookmark stays invisible until the user re-opens the app.
+      void refreshNotesForTrack()
+      void notesStore.refresh()
+    },
+    onNoteDeleted: () => {
+      // Same refresh dance as onNoteCreated: drop the underline from the
+      // transcript and remove the row from the Notes tab.
       void refreshNotesForTrack()
       void notesStore.refresh()
     },

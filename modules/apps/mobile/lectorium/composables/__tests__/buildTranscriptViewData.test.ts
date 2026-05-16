@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, NoteId, SourceId, TrackId } from "@lib/domain/core.js"
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Transcript, TranscriptBlock } from "@lib/domain/transcript.js"
@@ -271,6 +271,8 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
     const groups = buildTranscriptViewData(t, { paragraphChars: 9999 })
     const blocks = groups.flatMap((g) => g.blocks)
     expect(blocks.every((b) => b.bookmarked === false)).toBe(true)
+    // No notes → no ids attached.
+    expect(blocks.every((b) => b.noteIds.length === 0)).toBe(true)
   })
 
   it("treats touching boundaries as overlap (inclusive)", () => {
@@ -280,5 +282,53 @@ describe("buildTranscriptViewData — saved-note overlay", () => {
       notes: [{ timeStart: 0, timeEnd: 2000 }],
     })
     expect(groups[0]!.blocks[0]!.bookmarked).toBe(true)
+  })
+
+  it("collects overlapping note ids onto each block's `noteIds`", () => {
+    const t = makeTranscript([
+      sentence(0, 999, "one"),
+      sentence(1000, 2000, "two"),
+      sentence(2000, 3000, "three"),
+      sentence(3001, 4000, "four"),
+    ])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [
+        { id: "note-a" as NoteId, timeStart: 1000, timeEnd: 2500 },
+        { id: "note-b" as NoteId, timeStart: 3001, timeEnd: 4000 },
+      ],
+    })
+    const blocks = groups.flatMap((g) => g.blocks)
+    expect(blocks.map((b) => Array.from(b.noteIds))).toEqual([
+      [],
+      ["note-a"],
+      ["note-a"],
+      ["note-b"],
+    ])
+  })
+
+  it("multiple overlapping notes append all their ids onto the same block", () => {
+    const t = makeTranscript([sentence(0, 2000, "covered twice")])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [
+        { id: "note-a" as NoteId, timeStart: 0, timeEnd: 1000 },
+        { id: "note-b" as NoteId, timeStart: 500, timeEnd: 1500 },
+      ],
+    })
+    const block = groups[0]!.blocks[0]!
+    expect(block.bookmarked).toBe(true)
+    expect(Array.from(block.noteIds)).toEqual(["note-a", "note-b"])
+  })
+
+  it("notes without an `id` (preview mode) still set `bookmarked` but leave `noteIds` empty", () => {
+    const t = makeTranscript([sentence(0, 1000, "preview")])
+    const groups = buildTranscriptViewData(t, {
+      paragraphChars: 9999,
+      notes: [{ timeStart: 0, timeEnd: 500 }],
+    })
+    const block = groups[0]!.blocks[0]!
+    expect(block.bookmarked).toBe(true)
+    expect(block.noteIds).toEqual([])
   })
 })

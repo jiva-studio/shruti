@@ -45,11 +45,13 @@
         :enable-active-prominence="enableActiveProminence !== false"
         @seek="(pos) => emit('seek', pos)"
         @text-selected="onTextSelected"
+        @note-tapped="onNoteTapped"
         @pick-start="emit('pickStart')"
       />
 
       <TranscriptSelectionPopover
         :selection="lastTextSelectedEvent"
+        :existing="lastNoteTappedEvent"
         @action="onSelectionAction"
         @dismissed="onSelectionDismissed"
       />
@@ -67,12 +69,19 @@ import LanguageSelector from "./LanguageSelector.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import TranscriptStatus from "./TranscriptStatus.vue"
-import TranscriptSelectionPopover, { type SelectionAction } from "./TranscriptSelectionPopover.vue"
-import TranscriptText, { type TextSelectedEvent } from "./TranscriptText.vue"
+import TranscriptSelectionPopover, {
+  type SelectionAction,
+  type ExistingNoteSelection,
+} from "./TranscriptSelectionPopover.vue"
+import TranscriptText, { type TextSelectedEvent, type NoteTappedEvent } from "./TranscriptText.vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from "./types.js"
 
 export type SelectionActionEvent = Pick<TextSelectedEvent, "timeStart" | "timeEnd" | "text"> & {
   action: SelectionAction
+  /** Set when the action is `"delete"` (tap-on-highlight path); empty
+   *  array otherwise. The controller uses this to drive the notes-store
+   *  remove call. */
+  noteIds: readonly string[]
 }
 
 const props = defineProps<{
@@ -123,6 +132,14 @@ const statusState = computed<"loading" | "error" | "empty" | null>(() => {
 })
 
 const lastTextSelectedEvent = ref<TextSelectedEvent>()
+/**
+ * Mirrors `lastTextSelectedEvent` for the tap-on-highlight path. Setting
+ * this drives the popover into `mode="existing"` (Copy/Share/Delete);
+ * clearing it closes the popover, same lifecycle as a drag-select event.
+ * Kept separate from `lastTextSelectedEvent` so the two flows stay
+ * orthogonal — opening one always clears the other.
+ */
+const lastNoteTappedEvent = ref<ExistingNoteSelection>()
 const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcriptText")
 const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
 
@@ -147,7 +164,13 @@ async function onModalPresented(): Promise<void> {
 }
 
 function onTextSelected(event: TextSelectedEvent): void {
+  lastNoteTappedEvent.value = undefined
   lastTextSelectedEvent.value = event
+}
+
+function onNoteTapped(event: NoteTappedEvent): void {
+  lastTextSelectedEvent.value = undefined
+  lastNoteTappedEvent.value = { noteIds: event.noteIds, event: event.event }
 }
 
 function onSelectionAction(payload: {
@@ -155,14 +178,17 @@ function onSelectionAction(payload: {
   text: string
   timeStart: number
   timeEnd: number
+  noteIds: readonly string[]
 }): void {
   emit("selectionAction", payload)
   lastTextSelectedEvent.value = undefined
+  lastNoteTappedEvent.value = undefined
   transcriptText.value?.clearSelection()
 }
 
 function onSelectionDismissed(): void {
   lastTextSelectedEvent.value = undefined
+  lastNoteTappedEvent.value = undefined
   transcriptText.value?.clearSelection()
   emit("selectionDismissed")
 }
