@@ -71,7 +71,7 @@ export function useSearchController(): SearchControllerReturn {
     { deep: true }
   )
 
-  const rows = mapRows(() => rawTracks.value)
+  const rows = mapRows(() => rawTracks.value, { context: "discovery" })
 
   // Empty query + no filters now lists the full catalog (paginated), so
   // there's no "specify search criteria" prompt on the fresh state. The

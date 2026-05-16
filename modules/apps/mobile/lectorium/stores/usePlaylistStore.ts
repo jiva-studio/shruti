@@ -48,6 +48,11 @@ export const usePlaylistStore = defineStore("playlist", () => {
   // rows have been paged into `entries` yet. Backs hasTrack() so Search
   // shows the "added" indicator even for tracks past the first page.
   const activeTrackIds = ref<ReadonlySet<string>>(new Set())
+  // Track ids that have ever been completed across the union of active +
+  // archived playlist items. Backs hasCompletedTrack() so Search/Library
+  // keeps the "listened" badge after a track is archived — archive only
+  // removes the item from the active list, listening_sessions is untouched.
+  const completedTrackIds = ref<ReadonlySet<string>>(new Set())
   const progressMap = ref<ReadonlyMap<PlaylistItemId, number>>(new Map())
   const completedAtMap = ref<ReadonlyMap<PlaylistItemId, number | null>>(new Map())
   const isLoading = ref<boolean>(false)
@@ -73,12 +78,43 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const next = await derived.loadFor(page.entries)
       progressMap.value = next.progress
       completedAtMap.value = next.completed
+      // Union active + archived items, then run the same completion check
+      // (`getCompletedAtForItems`) used for the active page. The archive
+      // action sets `archived_at` but does NOT touch listening_sessions,
+      // so we can still tell which tracks the user has finished — the
+      // listened/completed badge has to survive archive (issue #470).
+      const archivedItems = await repos.playlistItems.listArchived()
+      const allUnionItems = [...allItems, ...archivedItems]
+      if (allUnionItems.length === 0) {
+        completedTrackIds.value = new Set()
+      } else {
+        const unionTrackIds = [...new Set(allUnionItems.map((i) => i.trackId))]
+        const trackById = await repos.tracks.getByIds(unionTrackIds)
+        const durationsSec = new Map<PlaylistItemId, number>()
+        for (const item of allUnionItems) {
+          const t = trackById.get(item.trackId)
+          if (!t) continue
+          const ms = maxAudioDurationMs(t)
+          if (ms > 0) durationsSec.set(item.id, Math.floor(ms / 1000))
+        }
+        const completedSecMap = await repos.listeningSessions.getCompletedAtForItems(
+          allUnionItems.map((i) => i.id),
+          durationsSec
+        )
+        const completedSet = new Set<string>()
+        for (const item of allUnionItems) {
+          const sec = completedSecMap.get(item.id)
+          if (sec !== null && sec !== undefined) completedSet.add(item.trackId)
+        }
+        completedTrackIds.value = completedSet
+      }
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load playlist"
       entries.value = []
       total.value = 0
       activeTrackIds.value = new Set()
+      completedTrackIds.value = new Set()
       progressMap.value = new Map()
       completedAtMap.value = new Map()
     } finally {
@@ -158,6 +194,16 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return activeTrackIds.value.has(trackId)
   }
 
+  /**
+   * True if the user has ever completed a playlist item for this track,
+   * regardless of whether it's still active or archived. Backs the
+   * Library/Search "listened" badge so archiving doesn't drop the
+   * indicator (issue #470).
+   */
+  function hasCompletedTrack(trackId: TrackId): boolean {
+    return completedTrackIds.value.has(trackId)
+  }
+
   /** First entry whose track matches the given id, or `undefined`. */
   function getEntryByTrackId(trackId: TrackId): PlaylistEntry | undefined {
     return entries.value.find((e) => e.item.trackId === trackId)
@@ -222,6 +268,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     error,
     progressMap,
     completedAtMap,
+    completedTrackIds,
     refresh,
     loadMore,
     ensureLoaded,
@@ -229,6 +276,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
     archive,
     archiveByTrackId,
     hasTrack,
+    hasCompletedTrack,
     getEntryByTrackId,
     getProgressMs,
     getCompletedAt,
