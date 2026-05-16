@@ -50,17 +50,55 @@ onLongPress(textSelector, onLongPressed, {
   },
 })
 
+/**
+ * Resolve the touch point to the sentence span it visually overlaps.
+ *
+ * `document.elementFromPoint` alone returns the topmost element AT the
+ * pixel — if the user lifts on inter-sentence whitespace, that element
+ * is the whitespace text-wrapper, and `.closest()` walks up past the
+ * sentence boundary and binds to whichever ancestor is shared. The net
+ * effect is an off-by-one sentence on either side of the selection.
+ *
+ * Probe the stacked elements at the point and pick the candidate
+ * sentence span whose visual center is nearest by horizontal distance,
+ * so a release on whitespace snaps to the visually-closest sentence
+ * rather than to the DOM ancestor of the whitespace itself.
+ */
+function resolveSentenceAt(touchX: number, touchY: number): HTMLElement | null {
+  const stack = document.elementsFromPoint(touchX, touchY) as HTMLElement[]
+  for (const el of stack) {
+    if (el.hasAttribute(props.datasetFieldStart) && el.hasAttribute(props.datasetFieldEnd)) {
+      return el
+    }
+  }
+  let best: HTMLElement | null = null
+  let bestDist = Infinity
+  for (const el of stack) {
+    const parent = el.closest(
+      `[${props.datasetFieldStart}][${props.datasetFieldEnd}]`
+    ) as HTMLElement | null
+    if (!parent) continue
+    const r = parent.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const dist = Math.abs(cx - touchX)
+    if (dist < bestDist) {
+      bestDist = dist
+      best = parent
+    }
+  }
+  return best
+}
+
+function readTimesFrom(el: HTMLElement | null): [number, number] {
+  if (!el) return [-1, -1]
+  const start = parseFloat(el.getAttribute(props.datasetFieldStart) || "-1")
+  const end = parseFloat(el.getAttribute(props.datasetFieldEnd) || "-1")
+  return [start, end]
+}
+
 function onTouchStart(event: TouchEvent) {
   const { clientX: touchX, clientY: touchY } = event.touches[0]
-  const element = document.elementFromPoint(touchX, touchY)
-
-  const parentWithTimes = element?.closest(`[${props.datasetFieldStart}][${props.datasetFieldEnd}]`)
-  const timeStart = parentWithTimes
-    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldStart) || "-1")
-    : -1
-  const timeEnd = parentWithTimes
-    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldEnd) || "-1")
-    : -1
+  const [timeStart, timeEnd] = readTimesFrom(resolveSentenceAt(touchX, touchY))
 
   if (timeStart !== -1 && timeEnd !== -1) {
     initialTimeStart.value = currentTimeStart.value = timeStart
@@ -78,15 +116,7 @@ function onTouchMove(event: TouchEvent) {
   event.preventDefault()
 
   const { clientX: touchX, clientY: touchY } = event.touches[0]
-  const element = document.elementFromPoint(touchX, touchY)
-
-  const parentWithTimes = element?.closest(`[${props.datasetFieldStart}][${props.datasetFieldEnd}]`)
-  const timeStart = parentWithTimes
-    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldStart) || "-1")
-    : -1
-  const timeEnd = parentWithTimes
-    ? parseFloat(parentWithTimes.getAttribute(props.datasetFieldEnd) || "-1")
-    : -1
+  const [timeStart, timeEnd] = readTimesFrom(resolveSentenceAt(touchX, touchY))
 
   if (timeStart !== -1 && timeStart < initialTimeStart.value) {
     currentTimeStart.value = timeStart
