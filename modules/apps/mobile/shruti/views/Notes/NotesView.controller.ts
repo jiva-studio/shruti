@@ -324,8 +324,10 @@ export function useNotesController(): NotesControllerReturn {
       return
     }
 
-    // Branch 3: still running. Hand off to background; tab spinner is
-    // already showing because shareJob.isRunning is true.
+    // Branch 3: still running. Hand off to background and only NOW show the
+    // tab spinner — until this point isInBackground is false so fast paths
+    // (Branch 1/2) never flicker the indicator on.
+    shareJob.markInBackground()
     await modal.dismiss()
     await toast.info(t("notes.shareInBackground"))
     work
