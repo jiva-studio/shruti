@@ -79,11 +79,20 @@ const {
   onRemove,
 } = useHomeController()
 
-// Hide the activity widget while the playlist is empty: a brand-new
-// user has nothing to chart yet, and an empty heatmap reads as a wall
-// of skipped days. The block reappears once the user has at least one
-// queued lecture.
-const showActivity = computed(() => showActivityTracker.value && rows.value.length > 0)
+// Show the activity widget whenever the user has anything to chart —
+// either a non-empty current playlist OR a track-record from previous
+// sessions (any completed track or any listened time). Hiding it only
+// when the user is brand-new keeps the home screen useful after
+// auto-archive runs the queue dry: the heatmap above + "playlist is
+// empty, tap to add" below reads as "your progress is intact, just
+// pick the next thing", rather than the dead full-screen empty state
+// the user used to land on.
+const hasAnyActivity = computed(
+  () => completedCount.value > 0 || totalListenedSeconds.value > 0 || currentStreak.value > 0
+)
+const showActivity = computed(
+  () => showActivityTracker.value && (rows.value.length > 0 || hasAnyActivity.value)
+)
 
 onIonViewWillEnter(() => {
   void reloadHeatmap()

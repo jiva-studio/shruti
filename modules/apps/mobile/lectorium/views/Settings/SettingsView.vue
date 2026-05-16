@@ -26,6 +26,7 @@
 
     <SettingsSadhanaGroup
       v-model:show-activity-tracker="showActivityTracker"
+      v-model:auto-archive-delay="autoArchiveDelay"
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
       v-model:auto-download-target-seconds="autoDownloadTargetSeconds"
@@ -79,6 +80,7 @@ const {
   showPlayerProgress,
   showNotesTab,
   showActivityTracker,
+  autoArchiveDelay,
   highlightCurrentSentence,
   openTranscriptAutomatically,
   notificationsEnabled,

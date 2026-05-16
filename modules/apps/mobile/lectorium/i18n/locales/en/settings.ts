@@ -131,6 +131,18 @@ export default {
       description: "Show listening heatmap on the home screen",
     },
   },
+  autoArchive: {
+    title: "Auto-archive listened",
+    description: "Move finished tracks out of the playlist after a delay",
+    delay: {
+      off: "Off",
+      immediate: "Immediately",
+      _8h: "After 8 hours",
+      _1d: "After 1 day",
+      _2d: "After 2 days",
+      _3d: "After 3 days",
+    },
+  },
   transcript: {
     highlightCurrentSentence: {
       title: "Highlight sentence",

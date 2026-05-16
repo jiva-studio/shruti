@@ -1,5 +1,9 @@
 import { computed, watch, type ComputedRef, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
+import {
+  AUTO_ARCHIVE_DELAY_KEY,
+  type AutoArchiveDelay,
+} from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import type { CdnServer } from "@lib/domain/servers.js"
@@ -27,6 +31,7 @@ export interface SettingsControllerReturn {
   showPlayerProgress: Ref<boolean>
   showNotesTab: Ref<boolean>
   showActivityTracker: Ref<boolean>
+  autoArchiveDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
@@ -74,6 +79,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
   const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
+  const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
   const notificationsTime = useConfig<[number, number] | undefined>(
     "settings.notificationsTime",
@@ -114,6 +120,7 @@ export function useSettingsController(): SettingsControllerReturn {
     showPlayerProgress,
     showNotesTab,
     showActivityTracker,
+    autoArchiveDelay,
     highlightCurrentSentence,
     openTranscriptAutomatically,
     notificationsEnabled,
