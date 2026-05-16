@@ -24,6 +24,8 @@ export interface SubscriptionBinding {
   readonly legalDocuments: LegalDocument[]
   /** Temporary on-screen diagnostic trail — remove once IAP is trusted. */
   readonly debugLog: string[]
+  /** RC-side customer id; surfaced in the debug build-info footer. */
+  readonly appUserId: string | undefined
   onSubscribe: (packageId: string) => Promise<void>
   onRestore: () => Promise<void>
   onManage: () => void
@@ -128,6 +130,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),
     debugLog: computed(() => store.debugLog),
+    appUserId: computed(() => store.appUserId),
     legalDocuments,
     onSubscribe,
     onRestore,

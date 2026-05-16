@@ -1,5 +1,6 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
+import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
 
@@ -15,6 +16,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const packages = ref<PurchasePackage[]>([])
   const activePackageId = ref<string | undefined>(undefined)
   const managementUrl = ref<string | undefined>(undefined)
+  const appUserId = ref<string | undefined>(undefined)
   const loading = ref(false)
   const purchasing = ref(false)
   const restoring = ref(false)
@@ -25,6 +27,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // without a Mac on iOS. Remove once IAP is trusted.
   const debugLog = ref<string[]>([])
   let unsubscribe: (() => void) | undefined
+  let resumeHandle: { remove(): Promise<void> } | undefined
 
   function logDiag(line: string): void {
     const stamp = new Date().toISOString().slice(11, 19)
@@ -38,6 +41,21 @@ export const usePurchasesStore = defineStore("purchases", () => {
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId
     managementUrl.value = s.managementUrl
+    appUserId.value = s.appUserId
+  }
+
+  async function refresh(): Promise<void> {
+    const purchases = useLectorium().purchases
+    if (!purchases.available) return
+    try {
+      const state = await purchases.getCustomerState()
+      logDiag(
+        `refresh pkg=${state.activePackageId ?? "—"} ent=${state.activeEntitlements.join(",") || "—"}`
+      )
+      applyState(state)
+    } catch (e) {
+      logDiag(`refresh FAILED: ${(e as Error)?.message ?? String(e)}`)
+    }
   }
 
   async function init(): Promise<void> {
@@ -65,6 +83,13 @@ export const usePurchasesStore = defineStore("purchases", () => {
       unsubscribe = purchases.onCustomerInfoChanged((s) => {
         logDiag(`live pkg=${s.activePackageId ?? "—"} ent=${s.activeEntitlements.join(",") || "—"}`)
         applyState(s)
+      })
+      // Re-fetch on foreground. The RC SDK has its own push channel but
+      // for sandbox / late-renewal cases the client doesn't get notified
+      // until the next explicit call — without this the badge can stay
+      // "active" for the whole session after a sub has expired.
+      resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
+        if (state.isActive) void refresh()
       })
       ready.value = true
     } catch (e) {
@@ -102,6 +127,8 @@ export const usePurchasesStore = defineStore("purchases", () => {
   function dispose(): void {
     unsubscribe?.()
     unsubscribe = undefined
+    void resumeHandle?.remove()
+    resumeHandle = undefined
     ready.value = false
   }
 
@@ -109,6 +136,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     packages,
     activePackageId,
     managementUrl,
+    appUserId,
     loading,
     purchasing,
     restoring,
@@ -119,6 +147,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     init,
     purchase,
     restore,
+    refresh,
     dispose,
   }
 })
