@@ -5,6 +5,7 @@ import {
   BookIcon,
   DatabaseExportIcon,
   FlameIcon,
+  IconPlay,
   IconRosetteDiscountCheckFilled,
   IconSettings,
 } from "@ui/icons/index.js"
@@ -17,6 +18,8 @@ import activityEn from "./markdown/activity-tracker.en.md?raw"
 import activityRu from "./markdown/activity-tracker.ru.md?raw"
 import notificationsEn from "./markdown/notifications.en.md?raw"
 import notificationsRu from "./markdown/notifications.ru.md?raw"
+import playerControlsEn from "./markdown/player-controls.en.md?raw"
+import playerControlsRu from "./markdown/player-controls.ru.md?raw"
 import settingsOverviewEn from "./markdown/settings-overview.en.md?raw"
 import settingsOverviewRu from "./markdown/settings-overview.ru.md?raw"
 import exportImportEn from "./markdown/export-import.en.md?raw"
@@ -26,6 +29,7 @@ export type HelpPageId =
   | "what-is-sadhana"
   | "activity-tracker"
   | "notifications"
+  | "player-controls"
   | "indicators"
   | "settings-overview"
   | "export-import"
@@ -79,6 +83,13 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(BellIcon),
         en: notificationsEn,
         ru: notificationsRu,
+      },
+      {
+        id: "player-controls",
+        type: "markdown",
+        icon: markRaw(IconPlay),
+        en: playerControlsEn,
+        ru: playerControlsRu,
       },
       {
         id: "indicators",
