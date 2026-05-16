@@ -22,6 +22,10 @@ export default {
       title: "Notifications and reminders",
       summary: "Daily reminder, time, and system permissions",
     },
+    "player-controls": {
+      title: "Player gestures and controls",
+      summary: "Swipe between panels, playback speed, and stereo→mono balance",
+    },
     indicators: {
       title: "Track indicators",
       summary: "What each badge next to a track means, screen by screen",
