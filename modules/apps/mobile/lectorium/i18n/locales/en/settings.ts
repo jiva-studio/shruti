@@ -40,9 +40,9 @@ export default {
         icon: "🔖",
       },
       benefit2: {
-        title: "Automatic Lecture Downloads",
+        title: "Smart Library",
         description:
-          "You will always have lectures without needing to manually add them from the library.",
+          "The app keeps fresh lectures on your device and automatically clears finished ones.",
         icon: "📥",
       },
       benefit3: {
@@ -93,14 +93,15 @@ export default {
     description: "Language of an interface",
   },
 
-  autoDownload: {
-    title: "Auto-download",
-    description: "Keep unlistened lectures ready on device",
+  smartLibrary: {
+    title: "Smart library",
+    description: "Keep fresh lectures ready and clean up after listening",
     enable: "Enable",
-    hint: "The app keeps a buffer of unlistened lectures of the chosen length. Which lectures get queued is controlled by the filter below.",
+    hint: "The app keeps a buffer of unlistened lectures and automatically removes finished ones. Use the filter to choose what gets queued.",
     sections: {
       filter: "What to download",
       target: "Queue length",
+      archive: "Archive after listening",
     },
     filter: {
       label: "Filter",
@@ -116,6 +117,15 @@ export default {
       "8h": "8 hours",
       "10h": "10 hours",
     },
+    archive: {
+      immediate: "Immediately",
+      _8h: "After 8 hours",
+      _1d: "After 1 day",
+      _2d: "After 2 days",
+      _3d: "After 3 days",
+    },
+    subtitleOff: "Auto-update lectures and clean up after listening",
+    subtitleArchivePrefix: "archive",
   },
 
   server: {
@@ -143,18 +153,6 @@ export default {
     show: {
       title: "Activity tracker",
       description: "Show listening heatmap on the home screen",
-    },
-  },
-  autoArchive: {
-    title: "Auto-archive listened",
-    description: "Move finished tracks out of the playlist after a delay",
-    delay: {
-      off: "Off",
-      immediate: "Immediately",
-      _8h: "After 8 hours",
-      _1d: "After 1 day",
-      _2d: "After 2 days",
-      _3d: "After 3 days",
     },
   },
   transcript: {

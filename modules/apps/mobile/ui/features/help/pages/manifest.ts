@@ -5,6 +5,7 @@ import {
   BookIcon,
   DatabaseExportIcon,
   FlameIcon,
+  IconDownload,
   IconPlay,
   IconRosetteDiscountCheckFilled,
   IconSettings,
@@ -22,6 +23,8 @@ import playerControlsEn from "./markdown/player-controls.en.md?raw"
 import playerControlsRu from "./markdown/player-controls.ru.md?raw"
 import settingsOverviewEn from "./markdown/settings-overview.en.md?raw"
 import settingsOverviewRu from "./markdown/settings-overview.ru.md?raw"
+import smartLibraryEn from "./markdown/smart-library.en.md?raw"
+import smartLibraryRu from "./markdown/smart-library.ru.md?raw"
 import exportImportEn from "./markdown/export-import.en.md?raw"
 import exportImportRu from "./markdown/export-import.ru.md?raw"
 
@@ -32,6 +35,7 @@ export type HelpPageId =
   | "player-controls"
   | "indicators"
   | "settings-overview"
+  | "smart-library"
   | "export-import"
 
 export type HelpCategoryId = "features" | "settings" | "data"
@@ -108,6 +112,13 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(IconSettings),
         en: settingsOverviewEn,
         ru: settingsOverviewRu,
+      },
+      {
+        id: "smart-library",
+        type: "markdown",
+        icon: markRaw(IconDownload),
+        en: smartLibraryEn,
+        ru: smartLibraryRu,
       },
     ],
   },

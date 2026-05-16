@@ -3,13 +3,7 @@
     <SettingsSubscriptionGroup
       :available="subscription.available"
       :is-subscribed="subscription.isSubscribed"
-      :packages="subscription.packages"
-      :purchasing="subscription.purchasing"
-      :restoring="subscription.restoring"
-      :legal-documents="subscription.legalDocuments"
-      :debug-log="subscription.debugLog"
-      @subscribe="subscription.onSubscribe"
-      @restore="subscription.onRestore"
+      @open-paywall="subscriptionDialogOpen = true"
       @manage="subscription.onManage"
     />
 
@@ -27,28 +21,41 @@
 
     <SettingsSadhanaGroup
       v-model:show-activity-tracker="showActivityTracker"
-      v-model:auto-archive-delay="autoArchiveDelay"
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
-      :auto-download-subtitle="autoDownload.subtitle.value"
-      @open-auto-download-config="autoDownloadConfigOpen = true"
+      :smart-library-subtitle="smartLibrary.subtitle.value"
+      @open-smart-library="smartLibraryDialogOpen = true"
     />
 
-    <AutoDownloadConfigDialog
+    <SmartLibraryDialog
       v-model:target-seconds="autoDownloadTargetSeconds"
-      :open="autoDownloadConfigOpen"
-      :filter-summary="autoDownload.filterSummary.value"
-      @update:open="autoDownloadConfigOpen = $event"
-      @open-filters="autoDownloadFiltersOpen = true"
+      v-model:archive-delay="autoArchiveDelay"
+      :open="smartLibraryDialogOpen"
+      :filter-summary="smartLibrary.filterSummary.value"
+      :is-subscribed="subscription.isSubscribed"
+      @update:open="smartLibraryDialogOpen = $event"
+      @open-filters="smartLibraryFiltersOpen = true"
+      @request-paywall="subscriptionDialogOpen = true"
     />
 
     <SearchFiltersSheet
-      v-model:filters="autoDownload.filters.value"
-      :open="autoDownloadFiltersOpen"
-      :sections="autoDownload.sections.value"
-      :can-reset="autoDownload.activeFilterCount.value > 0"
-      @update:open="autoDownloadFiltersOpen = $event"
-      @reset="autoDownload.reset"
+      v-model:filters="smartLibrary.filters.value"
+      :open="smartLibraryFiltersOpen"
+      :sections="smartLibrary.sections.value"
+      :can-reset="smartLibrary.activeFilterCount.value > 0"
+      @update:open="smartLibraryFiltersOpen = $event"
+      @reset="smartLibrary.reset"
+    />
+
+    <SubscriptionDialog
+      v-model:open="subscriptionDialogOpen"
+      :packages="subscription.packages"
+      :is-subscribed="subscription.isSubscribed"
+      :purchasing="subscription.purchasing"
+      :restoring="subscription.restoring"
+      :legal-documents="subscription.legalDocuments"
+      @subscribe="subscription.onSubscribe"
+      @restore="subscription.onRestore"
     />
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
@@ -78,13 +85,14 @@
 import { ref } from "vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
-  AutoDownloadConfigDialog,
   SettingsAppearanceGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
   SettingsHelpGroup,
   SettingsSadhanaGroup,
   SettingsSubscriptionGroup,
+  SmartLibraryDialog,
+  SubscriptionDialog,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
@@ -109,7 +117,7 @@ const {
   notificationsEnabled,
   notificationsTime,
   autoDownloadTargetSeconds,
-  autoDownload,
+  smartLibrary,
   activeServerId,
   serverItems,
   languageItems,
@@ -124,6 +132,7 @@ const debugTrigger = useDebugUnlockTrigger()
 const debugUnlocked = debugTrigger.unlocked
 
 const helpOpen = ref(false)
-const autoDownloadConfigOpen = ref(false)
-const autoDownloadFiltersOpen = ref(false)
+const smartLibraryDialogOpen = ref(false)
+const smartLibraryFiltersOpen = ref(false)
+const subscriptionDialogOpen = ref(false)
 </script>

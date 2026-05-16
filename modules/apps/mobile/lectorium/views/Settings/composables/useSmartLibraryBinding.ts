@@ -1,6 +1,7 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useAutoDownloadFiltersStore } from "@lectorium/stores/useAutoDownloadFiltersStore.js"
+import type { AutoArchiveDelay } from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useSearchFilterSections } from "@lectorium/views/Search/composables/useSearchFilterSections.js"
 import type { DurationFilterId } from "@lib/domain/durationFilters.js"
 import type { SortMethod } from "@lib/domain/sortMethods.js"
@@ -21,27 +22,20 @@ const PRESETS = [
   { id: "10h" as const, seconds: 10 * 60 * 60 },
 ]
 
-export interface UseAutoDownloadBindingReturn {
-  /** Two-way model fed into `SearchFiltersSheet`; writes are mirrored
-   *  to the persisted store. */
+export interface UseSmartLibraryBindingReturn {
   filters: Ref<FiltersModel>
   sections: ComputedRef<readonly SearchFilterSectionDef[]>
-  /** Comma-separated localized names of every selected filter value,
-   *  used for the row subtitle and the dialog's filter row. */
   filterSummary: ComputedRef<string>
-  /** Display string for the settings row: target label plus filter
-   *  summary, or the static description when the feature is off. */
   subtitle: ComputedRef<string>
   activeFilterCount: ComputedRef<number>
   reset: () => Promise<void>
 }
 
-/**
- * Glue between the auto-download filter store, the shared search-filter
- * section definitions, and the UI dialog/row. Lives in the composition
- * root so the UI components stay free of `@lectorium`/`@lib` imports.
- */
-export function useAutoDownloadBinding(targetSeconds: Ref<number>): UseAutoDownloadBindingReturn {
+export function useSmartLibraryBinding(
+  targetSeconds: Ref<number>,
+  archiveDelay: Ref<AutoArchiveDelay>,
+  isSubscribed: Ref<boolean>
+): UseSmartLibraryBindingReturn {
   const { t } = useI18n()
   const store = useAutoDownloadFiltersStore()
   const { sections } = useSearchFilterSections()
@@ -102,13 +96,22 @@ export function useAutoDownloadBinding(targetSeconds: Ref<number>): UseAutoDownl
   const targetLabel = computed<string>(() => {
     const preset = PRESETS.find((p) => p.seconds === targetSeconds.value)
     const id = preset ? preset.id : "off"
-    return t(`settings.autoDownload.target.${id}`)
+    return t(`settings.smartLibrary.target.${id}`)
+  })
+
+  const archiveLabel = computed<string>(() => {
+    if (archiveDelay.value === "off") return ""
+    const key = archiveDelay.value === "immediate" ? "immediate" : `_${archiveDelay.value}`
+    const localized = t(`settings.smartLibrary.archive.${key}`).toLowerCase()
+    return `${t("settings.smartLibrary.subtitleArchivePrefix")} ${localized}`
   })
 
   const subtitle = computed<string>(() => {
-    if (targetSeconds.value === 0) return t("settings.autoDownload.description")
+    if (targetSeconds.value === 0 || !isSubscribed.value)
+      return t("settings.smartLibrary.subtitleOff")
     const parts = [targetLabel.value]
     if (filterSummary.value) parts.push(filterSummary.value)
+    if (archiveLabel.value) parts.push(archiveLabel.value)
     return parts.join(" · ")
   })
 

@@ -3,6 +3,7 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAutoDownloadFiltersStore } from "@lectorium/stores/useAutoDownloadFiltersStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { durationFilterBounds } from "@lib/domain/durationFilters.js"
 import type { TrackListFilters } from "@lib/domain/ports/trackRepository.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
@@ -30,6 +31,7 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
   const app = useLectorium()
   const playlist = usePlaylistStore()
   const filtersStore = useAutoDownloadFiltersStore()
+  const purchases = usePurchasesStore()
   const targetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
   let running = false
 
@@ -62,6 +64,7 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
 
   async function refill(): Promise<void> {
     if (running) return
+    if (!purchases.isSubscribed) return
     const target = targetSeconds.value
     if (target <= 0) return
     if (queueDurationSec() >= target) return
@@ -145,9 +148,18 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     })
   )
 
-  watch([targetSeconds, () => playlist.entries.length, completedCount, filtersFingerprint], () => {
-    void refill()
-  })
+  watch(
+    [
+      targetSeconds,
+      () => playlist.entries.length,
+      completedCount,
+      filtersFingerprint,
+      () => purchases.isSubscribed,
+    ],
+    () => {
+      void refill()
+    }
+  )
 
   return { targetSeconds }
 }

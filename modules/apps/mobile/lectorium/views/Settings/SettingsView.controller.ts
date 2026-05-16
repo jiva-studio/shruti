@@ -11,9 +11,9 @@ import type { CdnServer } from "@lib/domain/servers.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import {
-  useAutoDownloadBinding,
-  type UseAutoDownloadBindingReturn,
-} from "./composables/useAutoDownloadBinding.js"
+  useSmartLibraryBinding,
+  type UseSmartLibraryBindingReturn,
+} from "./composables/useSmartLibraryBinding.js"
 import { useDangerActions } from "./composables/useDangerActions.js"
 import { useDataSettings } from "./composables/useDataSettings.js"
 import {
@@ -43,7 +43,7 @@ export interface SettingsControllerReturn {
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
   autoDownloadTargetSeconds: Ref<number>
-  autoDownload: UseAutoDownloadBindingReturn
+  smartLibrary: UseSmartLibraryBindingReturn
   /* Selector sources */
   activeServerId: Ref<string>
   serverItems: SelectorItem[]
@@ -95,7 +95,13 @@ export function useSettingsController(): SettingsControllerReturn {
     [9, 0]
   )
   const autoDownloadTargetSeconds = useConfig<number>("settings.autoDownloadTargetSeconds", 0)
-  const autoDownload = useAutoDownloadBinding(autoDownloadTargetSeconds)
+  const subscription = useSubscriptionBinding()
+  const isSubscribedRef = computed(() => subscription.isSubscribed)
+  const smartLibrary = useSmartLibraryBinding(
+    autoDownloadTargetSeconds,
+    autoArchiveDelay,
+    isSubscribedRef
+  )
 
   const { activeServerId, serverItems } = useActiveServerBinding({
     servers: app.appConfig.servers,
@@ -125,7 +131,6 @@ export function useSettingsController(): SettingsControllerReturn {
 
   const { onClearCache, onClearUserData } = useDangerActions(app)
   const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
-  const subscription = useSubscriptionBinding()
 
   return {
     version,
@@ -145,7 +150,7 @@ export function useSettingsController(): SettingsControllerReturn {
     notificationsEnabled,
     notificationsTime,
     autoDownloadTargetSeconds,
-    autoDownload,
+    smartLibrary,
     activeServerId,
     serverItems,
     languageItems,
