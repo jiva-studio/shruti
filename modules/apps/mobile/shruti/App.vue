@@ -55,6 +55,7 @@ import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useTutorialStore } from "@shruti/stores/useTutorialStore.js"
 import { useTranscriptDialogController } from "@shruti/composables/useTranscriptDialogController.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useAutoArchiveSweep } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
@@ -97,6 +98,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
 usePlayerProgressFlush()
+useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
 
