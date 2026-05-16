@@ -15,7 +15,7 @@ export default {
     title: "Подписка",
     description: "Управление подпиской",
     subscriptionIsActive: "Подписка активна",
-    tapToManage: "Вы уже подписаны. Нажмите, чтобы управлять подпиской.",
+    tapToManage: "Вы уже подписаны",
     choose: "Поддержите «Слушай Садху»",
     subscribe: "Подписаться",
     subscribed: "Подписка оформлена",
