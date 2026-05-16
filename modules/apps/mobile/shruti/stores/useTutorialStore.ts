@@ -6,10 +6,16 @@ interface SeenFlags {
   home: boolean
   search: boolean
   player: boolean
+  /**
+   * The user has explicitly opened a transcript (manual tap, not the
+   * auto-open path). Used to keep the first-time floating-player pulse
+   * cue alive until the user has actually discovered the transcript.
+   */
+  transcriptOpened: boolean
 }
 
 const STORAGE_KEY = "tutorial.v1"
-const DEFAULT: SeenFlags = { home: false, search: false, player: false }
+const DEFAULT: SeenFlags = { home: false, search: false, player: false, transcriptOpened: false }
 
 /**
  * Persisted "seen this onboarding step" flags. Lives in preferences so a
