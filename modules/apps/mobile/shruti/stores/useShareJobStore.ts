@@ -28,17 +28,25 @@ export interface ShareJob {
  */
 export const useShareJobStore = defineStore("shareJob", () => {
   const job = ref<ShareJob | null>(null)
+  const inBackground = ref(false)
   const isRunning = computed(() => job.value !== null)
+  const isInBackground = computed(() => job.value !== null && inBackground.value)
 
   function tryStart(kind: ShareJobKind, noteId: string): boolean {
     if (job.value !== null) return false
     job.value = { kind, noteId, startedAt: Date.now() }
+    inBackground.value = false
     return true
+  }
+
+  function markInBackground(): void {
+    if (job.value !== null) inBackground.value = true
   }
 
   function finish(): void {
     job.value = null
+    inBackground.value = false
   }
 
-  return { job, isRunning, tryStart, finish }
+  return { job, isRunning, isInBackground, tryStart, markInBackground, finish }
 })
