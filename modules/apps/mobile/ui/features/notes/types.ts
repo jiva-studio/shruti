@@ -29,4 +29,11 @@ export interface UiNoteRow {
   readonly locationName?: string
   /** Pre-formatted scripture reference (e.g. "BG 2.13"). */
   readonly reference?: string
+  /**
+   * Storage path of the source track audio. Forwarded by the composition
+   * root so the caller can render an inline excerpt player above the
+   * quote without the UI layer reaching into the track domain itself.
+   * Absent when the track has no audio variant.
+   */
+  readonly audioPath?: string
 }

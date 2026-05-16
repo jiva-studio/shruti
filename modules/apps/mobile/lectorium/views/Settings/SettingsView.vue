@@ -18,6 +18,7 @@
       v-model:active-server-id="activeServerId"
       v-model:show-player-progress="showPlayerProgress"
       v-model:show-notes-tab="showNotesTab"
+      v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
@@ -79,6 +80,7 @@ const {
   appLanguage,
   showPlayerProgress,
   showNotesTab,
+  showPlayerOnNotes,
   showActivityTracker,
   autoArchiveDelay,
   highlightCurrentSentence,

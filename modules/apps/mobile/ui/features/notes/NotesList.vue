@@ -10,16 +10,16 @@
     :track-date="note.trackDate"
     :reference="note.reference"
     @click="emit('click', note.id)"
-  />
+  >
+    <template #player>
+      <slot name="player" :note="note" />
+    </template>
+  </NotesListItem>
 </template>
 
 <script lang="ts" setup>
 import NotesListItem from "./NotesListItem.vue"
 import type { UiNoteRow } from "./types.js"
-
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
 
 defineProps<{
   notes: readonly UiNoteRow[]
@@ -27,5 +27,10 @@ defineProps<{
 
 const emit = defineEmits<{
   click: [noteId: string]
+}>()
+
+// Re-declare the slot scope so consumers get typed `note` access.
+defineSlots<{
+  player(props: { note: UiNoteRow }): unknown
 }>()
 </script>
