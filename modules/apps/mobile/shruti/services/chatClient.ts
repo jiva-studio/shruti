@@ -41,6 +41,7 @@ export type ActionPayload =
 
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
+  | { readonly type: "tool_start"; readonly name: string }
   | {
       readonly type: "tool"
       readonly name: string
@@ -346,6 +347,11 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
   switch (name) {
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
+    case "tool_start":
+      return {
+        type: "tool_start",
+        name: typeof payload.name === "string" ? payload.name : "unknown",
+      }
     case "tool":
       return {
         type: "tool",
