@@ -25,8 +25,6 @@ export default {
   citationAddedToPlaylist: "Added to playlist",
   citationAddFailed: "Couldn't add to playlist",
   lectureCardMissing: "Lecture not available in the local catalog.",
-  showTab: "Chat tab",
-  showTabHint: "Adds a Chat tab to the bottom navigation.",
   errRate: "Too many requests. Try again in a minute.",
   errNetwork: "Couldn't reach the chat service. Check your connection.",
   errServiceNotReady: "Chat service is warming up. Try again shortly.",

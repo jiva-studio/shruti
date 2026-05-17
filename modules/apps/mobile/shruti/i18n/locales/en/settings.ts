@@ -139,24 +139,10 @@ export default {
       description: "Show progress around play button",
     },
   },
-  chat: {
-    showTab: {
-      title: "Chat tab",
-      description: "Show the Sadhu chat tab at the bottom",
-    },
-  },
   notes: {
-    showTab: {
-      title: "Notes tab",
-      description: "Show notes tab at the bottom",
-    },
     showPlayer: {
       title: "Player on notes page",
       description: "Show an inline audio player next to each quote",
-    },
-    studio: {
-      title: "Studio",
-      description: 'Adds "Open in Studio" to the note share menu',
     },
   },
   activityTracker: {
