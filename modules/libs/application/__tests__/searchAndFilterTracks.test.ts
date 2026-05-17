@@ -23,6 +23,7 @@ function makeRepo(overrides: Partial<ITrackRepository> = {}): ITrackRepository {
     search: async () => [],
     getTranscriptPath: async () => null,
     listTranscriptLanguages: async () => [],
+    getDurationsMs: async () => new Map(),
     ...overrides,
   }
 }

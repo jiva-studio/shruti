@@ -4,6 +4,8 @@ import { marked } from "marked"
 /*                                  Types                                     */
 /* -------------------------------------------------------------------------- */
 
+export type ActionKind = "create_playlist" | "save_note"
+
 export type ChatToken =
   | { readonly kind: "text"; readonly html: string }
   | {
@@ -17,6 +19,12 @@ export type ChatToken =
       readonly caption: string
     }
   | { readonly kind: "card"; readonly trackId: string }
+  | { readonly kind: "outline"; readonly trackId: string }
+  | {
+      readonly kind: "action"
+      readonly actionKind: ActionKind
+      readonly actionId: string
+    }
 
 /* -------------------------------------------------------------------------- */
 /*                                  Regexes                                   */
@@ -27,6 +35,12 @@ export type ChatToken =
 // optional `|caption` tail captures everything up to the closing `]`.
 const CITE_RE = /\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]/g
 const CARD_RE = /\[card:([A-Za-z0-9_.-]+)\]/g
+const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
+// Snake-case kinds throughout: marker, action-card payload, action enum
+// — one wire format end-to-end. Regex stays permissive (matches `a-z0-9_`)
+// so a malformed marker with a stray dash is still captured by the
+// outer pattern and then rejected by `parseActionKind` below.
+const ACTION_RE = /\[action:([a-z][a-z0-9_]*)\|id=([A-Za-z0-9_-]+)\]/g
 
 interface MarkerHit {
   readonly start: number
@@ -75,6 +89,26 @@ export function parseChatMarkers(input: string): ChatToken[] {
       token: { kind: "card", trackId },
     })
   }
+  for (const match of input.matchAll(OUTLINE_RE)) {
+    const [full, trackId] = match
+    const start = match.index ?? 0
+    hits.push({
+      start,
+      end: start + full.length,
+      token: { kind: "outline", trackId },
+    })
+  }
+  for (const match of input.matchAll(ACTION_RE)) {
+    const [full, rawKind, actionId] = match
+    const actionKind = parseActionKind(rawKind)
+    if (!actionKind) continue
+    const start = match.index ?? 0
+    hits.push({
+      start,
+      end: start + full.length,
+      token: { kind: "action", actionKind, actionId },
+    })
+  }
   hits.sort((a, b) => a.start - b.start)
 
   const out: ChatToken[] = []
@@ -105,6 +139,8 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   const LEAD = /^(?:\s|<br\s*\/?>)+/i
   const TRAIL = /(?:\s|<br\s*\/?>)+$/i
   const isBlank = (html: string) => /^(?:\s|<br\s*\/?>)*$/i.test(html)
+  const blockLike = (k: ChatToken["kind"] | undefined) =>
+    k === "card" || k === "outline" || k === "action"
   const out: ChatToken[] = []
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]
@@ -113,16 +149,30 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
       continue
     }
     let html = tok.html
-    if (tokens[i - 1]?.kind === "card") html = html.replace(LEAD, "")
-    if (tokens[i + 1]?.kind === "card") html = html.replace(TRAIL, "")
+    if (blockLike(tokens[i - 1]?.kind)) html = html.replace(LEAD, "")
+    if (blockLike(tokens[i + 1]?.kind)) html = html.replace(TRAIL, "")
     if (isBlank(html)) continue
     out.push({ kind: "text", html })
   }
   return out
 }
 
+/** Strict whitelist — only the two known action kinds are accepted.
+ *  Anything else (including legacy kebab `create-playlist`) returns null
+ *  so the marker is silently dropped from the parsed token stream. */
+function parseActionKind(raw: string): ActionKind | null {
+  if (raw === "create_playlist" || raw === "save_note") return raw
+  return null
+}
+
 function pushTextToken(out: ChatToken[], raw: string): void {
   if (!raw) return
+  // Markdown list bullets are a BLOCK-level feature and `marked.parseInline`
+  // doesn't expand them — without this the LLM's "* item" prints literally,
+  // and the `*` looks like a multiplication glyph. Substitute a real bullet
+  // glyph BEFORE inline-parsing so it survives as plain text and only the
+  // inline emphasis around it (`**X**` → `<strong>X</strong>`) is parsed.
+  const withBullets = raw.replace(/^[ \t]*[*\-+][ \t]+/gm, "• ")
   let html: string
   try {
     // First run marked.parseInline for emphasis / bold / code spans, then
@@ -133,8 +183,8 @@ function pushTextToken(out: ChatToken[], raw: string): void {
     // This is cheaper than spinning up the full block parser and avoids
     // marked wrapping snippets in <p>…</p> tags that would break our
     // inline-mixed token stream.
-    const inline = marked.parseInline(raw, { async: false }) as unknown
-    const inlineHtml = typeof inline === "string" ? inline : escapeHtml(raw)
+    const inline = marked.parseInline(withBullets, { async: false }) as unknown
+    const inlineHtml = typeof inline === "string" ? inline : escapeHtml(withBullets)
     html = inlineHtml
       .replace(/\n{2,}/g, "<br><br>")
       .replace(/\n/g, "<br>")
@@ -143,7 +193,7 @@ function pushTextToken(out: ChatToken[], raw: string): void {
       // visual gap in rendered prose.
       .replace(/ {2,}/g, " ")
   } catch {
-    html = escapeHtml(raw)
+    html = escapeHtml(withBullets)
       .replace(/\n{2,}/g, "<br><br>")
       .replace(/\n/g, "<br>")
       .replace(/ {2,}/g, " ")

@@ -1,5 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import type { PlaylistItemId } from "@lib/domain/core.js"
+import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import {
   COMPLETION_THRESHOLD_SEC,
   type DailyListeningTotal,
@@ -10,6 +10,7 @@ import {
 import type {
   IListeningSessionRepository,
   ProgressEntry,
+  RecentTrackProgress,
 } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { createIdGenerator } from "./idGenerator.js"
@@ -154,6 +155,37 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         [fromSec, toSec]
       )
       return rows.map((r) => ({ date: r.date, listenedSeconds: Number(r.listened_seconds) }))
+    },
+
+    async listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]> {
+      // GROUP BY playlist item collapses many sessions per track to one
+      // row carrying the latest session's end time + to_position. JOIN
+      // to playlist_items resolves the track_id (listening_sessions only
+      // stores item_id). Sub-select for to_position is a correlated
+      // lookup keyed on the latest end — exactly the value useChatStore
+      // used to fetch inline.
+      const rows = await db.query<{
+        track_id: string
+        ended_at: number
+        position: number
+      }>(
+        `SELECT pi.track_id AS track_id,
+                MAX(ls.ended_at) AS ended_at,
+                (SELECT to_position FROM listening_sessions
+                  WHERE item_id = ls.item_id
+                  ORDER BY ended_at DESC LIMIT 1) AS position
+           FROM listening_sessions ls
+           JOIN playlist_items pi ON pi.id = ls.item_id
+          GROUP BY ls.item_id
+          ORDER BY ended_at DESC
+          LIMIT ?`,
+        [limit]
+      )
+      return rows.map((r) => ({
+        trackId: r.track_id as TrackId,
+        endedAtMs: Number(r.ended_at) * 1000,
+        positionSec: Number(r.position),
+      }))
     },
   }
 }

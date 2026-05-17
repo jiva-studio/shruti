@@ -25,6 +25,7 @@ function makeListeningSessions(
         listenedSeconds,
       })),
     getTotalListenedSeconds: async () => 0,
+    listRecentTracksWithProgress: async () => [],
   }
 }
 
