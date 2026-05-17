@@ -19,12 +19,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
-import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 interface OutlineItem {
@@ -37,11 +35,21 @@ const props = defineProps<{
   items: readonly OutlineItem[]
 }>()
 
-const { t } = useI18n()
+/** Tap on a chapter. Carries the item itself + the next item (for end-of-
+ *  chapter bound). The controller composes the recap prompt + focus
+ *  fragment and dispatches via the chat store — this card stays pure
+ *  presentation. */
+const emit = defineEmits<{
+  "pick-chapter": [args: {
+    trackId: string
+    item: OutlineItem
+    nextItem: OutlineItem | null
+  }]
+}>()
+
 const router = useRouter()
 const app = useLectorium()
 const appLanguage = useAppLanguage()
-const chat = useChatStore()
 
 const COLLAPSED_LIMIT = 7
 const expanded = ref(false)
@@ -72,30 +80,13 @@ function openLecture(startMs: number): void {
   })
 }
 
-/** Default chapter window when there's no "next" item to bound it. */
-const FALLBACK_CHAPTER_MS = 5 * 60 * 1000
-
-/** User tapped chapter `i` → send a "recap this segment" turn with the
- *  range tagged as `focus` in user_context. The agent uses it as the
- *  anchor for get_transcript_window. */
+/** User tapped chapter `i` → notify the controller. The controller owns
+ *  prompt assembly + chat.sendMessage, this card just signals intent. */
 function onPickChapter(i: number): void {
   const it = props.items[i]
   if (!it) return
-  const next = props.items[i + 1]
-  const endMs = next ? Math.max(next.startMs, it.startMs + 1000) : it.startMs + FALLBACK_CHAPTER_MS
-  const text = t("chat.outlineRecapPrompt", {
-    from: formatTs(it.startMs),
-    to: formatTs(endMs),
-    title: it.title,
-  })
-  void chat.sendMessage(text, {
-    focus: {
-      track_id: props.trackId,
-      start_ms: it.startMs,
-      end_ms: endMs,
-      title: it.title,
-    },
-  })
+  const next = props.items[i + 1] ?? null
+  emit("pick-chapter", { trackId: props.trackId, item: it, nextItem: next })
 }
 
 /** Always zero-pad MM and SS so every timestamp has the same width

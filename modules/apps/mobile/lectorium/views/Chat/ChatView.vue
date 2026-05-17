@@ -23,7 +23,11 @@
     </div>
     <IonContent class="chat-content" :fullscreen="true">
       <div ref="contentRef" class="chat-scroll">
-        <ChatMessageList v-if="hasMessages" :messages="messages" />
+        <ChatMessageList
+          v-if="hasMessages"
+          :messages="messages"
+          @pick-chapter="onPickChapter"
+        />
         <div v-else class="empty-state">
           <img src="/agent.png" class="empty-icon" alt="" aria-hidden="true" />
           <SuggestionChips
@@ -83,6 +87,7 @@ const {
   onPickSession,
   onDeleteSession,
   onDeleteAllSessions,
+  onPickChapter,
 } = useChatController()
 
 function onPickSuggestion(text: string): void {

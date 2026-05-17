@@ -17,6 +17,12 @@ import { useToast } from "@lectorium/services/useToast.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 
+export interface OutlineChapterPick {
+  trackId: string
+  item: { startMs: number; title: string }
+  nextItem: { startMs: number; title: string } | null
+}
+
 export interface ChatControllerReturn {
   messages: ComputedRef<ChatMessage[]>
   sessions: ComputedRef<ChatSession[]>
@@ -35,6 +41,7 @@ export interface ChatControllerReturn {
   onPickSession: (id: string) => Promise<void>
   onDeleteSession: (id: string) => Promise<void>
   onDeleteAllSessions: () => Promise<void>
+  onPickChapter: (pick: OutlineChapterPick) => Promise<void>
 }
 
 /**
@@ -156,6 +163,45 @@ export function useChatController(): ChatControllerReturn {
     await dialog.present()
   }
 
+  /** Default chapter window when there's no "next" item to bound it. */
+  const FALLBACK_CHAPTER_MS = 5 * 60 * 1000
+
+  /** Always zero-pad MM and SS so every timestamp has the same width. */
+  function formatTs(ms: number): string {
+    const s = Math.max(0, Math.floor(ms / 1000))
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
+    return h ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
+  }
+
+  /** User tapped an outline chapter inside an OutlineCard. Assemble the
+   *  recap prompt + focus fragment and dispatch a chat turn. Prompt
+   *  assembly + ms math live here (not in the card) so the card stays
+   *  pure presentation. */
+  async function onPickChapter(pick: OutlineChapterPick): Promise<void> {
+    const { trackId, item, nextItem } = pick
+    const endMs = nextItem
+      ? Math.max(nextItem.startMs, item.startMs + 1000)
+      : item.startMs + FALLBACK_CHAPTER_MS
+    const text = t("chat.outlineRecapPrompt", {
+      from: formatTs(item.startMs),
+      to: formatTs(endMs),
+      title: item.title,
+    })
+    await store.sendMessage(text, {
+      focus: {
+        track_id: trackId,
+        start_ms: item.startMs,
+        end_ms: endMs,
+        title: item.title,
+      },
+    })
+    await nextTick()
+    scrollToBottom()
+  }
+
   function surfaceError(): void {
     const err = store.lastError
     if (!err) return
@@ -254,5 +300,6 @@ export function useChatController(): ChatControllerReturn {
     onPickSession,
     onDeleteSession,
     onDeleteAllSessions,
+    onPickChapter,
   }
 }
