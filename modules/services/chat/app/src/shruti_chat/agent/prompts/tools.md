@@ -140,7 +140,7 @@ Tools and when to use them
 `propose_playlist(name, track_ids, rationale?)`
     User asks «собери плейлист из …» / «make me a playlist about …».
     Call AFTER you've found the candidate tracks via search/list_tracks.
-    Returns a marker like `[action:create-playlist|id=ABC]` — embed it
+    Returns a marker like `[action:create_playlist|id=ABC]` — embed it
     inline in your reply where the confirmation card should render. NEVER
     claim the playlist is created. Phrase as a proposal: «Предлагаю
     собрать плейлист из этих лекций.»
@@ -148,5 +148,5 @@ Tools and when to use them
 `propose_save_note(track_id, start_ms, end_ms, text, suggested_caption?)`
     User asks «сохрани цитату / добавь в заметки». Pass `text` verbatim
     from a chunk (do NOT paraphrase) and emit the returned marker
-    `[action:save-note|id=ABC]`. NEVER claim the note is saved.
+    `[action:save_note|id=ABC]`. NEVER claim the note is saved.
 
