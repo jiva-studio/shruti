@@ -26,6 +26,22 @@ class CatalogRepository(Protocol):
     async def get_track(self, track_id: str, *, lang: str) -> Track | None:
         ...
 
+    async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:
+        """Return the subset of `track_ids` that exist in the catalog and
+        are not hidden. Used by action proposals to validate input."""
+        ...
+
+    async def resolve_transcript_path(
+        self, track_id: str, *, requested_lang: str,
+    ) -> tuple[str | None, str]:
+        """Return `(transcript_path, effective_lang)` for a track.
+
+        Prefer the requested language; fall back to ANY available
+        transcript variant when the requested lang has none. Returns
+        `(None, requested_lang)` if the track has no transcripts at all.
+        """
+        ...
+
     async def list_tracks(
         self,
         *,

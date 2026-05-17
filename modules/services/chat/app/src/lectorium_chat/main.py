@@ -29,6 +29,8 @@ from lectorium_chat.indexer import run as indexer_run
 from lectorium_chat.indexer.embed import get_embedder
 from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import SqliteCatalogRepository
+from lectorium_chat.infra.storage.s3_outline_cache import S3OutlineCache
+from lectorium_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
 from lectorium_chat.observability.logging import get_logger, setup_logging
 
 
@@ -50,6 +52,8 @@ async def lifespan(app: FastAPI):
     bind_repositories(
         chunk_repo=PgChunkRepository(),
         catalog_repo=SqliteCatalogRepository(),
+        transcript_storage=S3TranscriptStorage(),
+        outline_cache=S3OutlineCache(),
     )
 
     if s.indexer_bootstrap_on_start:
