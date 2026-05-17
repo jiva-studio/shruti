@@ -41,8 +41,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import { useRouter } from "vue-router"
 import { IonSpinner } from "@ionic/vue"
+import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
 import type { ActionPayload } from "@lectorium/services/chatClient.js"
 import type { ActionState } from "@lectorium/stores/useChatStore.js"
 
@@ -56,24 +56,12 @@ const emit = defineEmits<{
   (e: "confirm", actionId: string): void
 }>()
 
-const router = useRouter()
-
 const metaLine = computed(() => {
   if (!props.payload) return ""
-  return formatTs(props.payload.startMs)
+  return formatTimestamp(props.payload.startMs)
 })
 
-function formatTs(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`
-}
-
 function onConfirm() { emit("confirm", props.actionId) }
-function openNotes() { void router.push({ name: "notes" }) }
 </script>
 
 <style scoped>

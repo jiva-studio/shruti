@@ -80,5 +80,14 @@ export default {
   citationSaveAsNote: "Save as note",
   citationAddLectureToPlaylist: "Add lecture to playlist",
   recentSessionsLabel: "Recent chats",
+  /** Short relative-time labels for RecentSessions. Localise the suffix
+   *  only; the number is rendered by the component (`5m`, `2h`, `3d`). */
   timeJustNow: "just now",
+  timeYesterday: "yesterday",
+  timeUnitMinute: "m",
+  timeUnitHour: "h",
+  timeUnitDay: "d",
+  timeUnitWeek: "w",
+  timeUnitMonth: "mo",
+  timeUnitYear: "y",
 }

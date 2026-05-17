@@ -12,6 +12,17 @@
         </span>
         <template v-else>
           <template v-for="(token, idx) in tokens" :key="idx">
+            <!--
+              v-html XSS note: `token.html` is the output of marked.parseInline
+              run on `message.content` inside `useMarkerParser.parseChatMarkers`.
+              `marked` HTML-escapes raw text by default (it doesn't run an
+              HTML sanitizer, but it never passes through arbitrary tags from
+              source unless explicitly enabled). The content itself comes from
+              the LLM (assistant role) — not user-typed — and the chat agent
+              prompt forbids emitting raw HTML. If we ever start letting users
+              author markdown that flows through this same code path, swap
+              `marked.parseInline` for a DOMPurify pass first.
+            -->
             <span v-if="token.kind === 'text'" v-html="token.html" />
             <CitationChip
               v-else-if="token.kind === 'cite'"
