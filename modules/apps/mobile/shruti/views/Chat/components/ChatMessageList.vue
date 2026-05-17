@@ -1,6 +1,11 @@
 <template>
   <div class="chat-message-list">
-    <ChatMessageBubble v-for="msg in messages" :key="msg.id" :message="msg" />
+    <ChatMessageBubble
+      v-for="msg in messages"
+      :key="msg.id"
+      :message="msg"
+      @pick-chapter="$emit('pick-chapter', $event)"
+    />
   </div>
 </template>
 
@@ -9,6 +14,13 @@ import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import ChatMessageBubble from "./ChatMessageBubble.vue"
 
 defineProps<{ messages: readonly ChatMessage[] }>()
+defineEmits<{
+  "pick-chapter": [args: {
+    trackId: string
+    item: { startMs: number; title: string }
+    nextItem: { startMs: number; title: string } | null
+  }]
+}>()
 </script>
 
 <style scoped>

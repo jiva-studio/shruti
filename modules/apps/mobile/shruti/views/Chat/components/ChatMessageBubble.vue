@@ -25,6 +25,7 @@
               v-else-if="token.kind === 'outline'"
               :track-id="token.trackId"
               :items="message.outlines?.[token.trackId]?.items ?? []"
+              @pick-chapter="$emit('pick-chapter', $event)"
             />
             <ActionCardPlaylist
               v-else-if="token.kind === 'action' && token.actionKind === 'create_playlist'"
@@ -69,6 +70,15 @@ import ActionCardPlaylist from "./ActionCardPlaylist.vue"
 import ActionCardNote from "./ActionCardNote.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
+defineEmits<{
+  /** Forwarded from the inline OutlineCard. The view-level controller
+   *  owns prompt assembly + chat.sendMessage. */
+  "pick-chapter": [args: {
+    trackId: string
+    item: { startMs: number; title: string }
+    nextItem: { startMs: number; title: string } | null
+  }]
+}>()
 const chat = useChatStore()
 const { t } = useI18n()
 
