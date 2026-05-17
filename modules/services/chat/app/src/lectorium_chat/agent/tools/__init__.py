@@ -33,6 +33,7 @@ from importlib import import_module
 from typing import Any, Awaitable, Callable
 
 from lectorium_chat.domain import UserContext
+from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 
 ToolFn = Callable[..., Awaitable[Any]]
@@ -93,24 +94,39 @@ _register()
 EMITS_EVENTS: frozenset[str] = frozenset(_EMITS_EVENTS)
 
 
-def bind_repositories(*, chunk_repo: ChunkRepository) -> None:
+def bind_repositories(
+    *,
+    chunk_repo: ChunkRepository,
+    catalog_repo: CatalogRepository,
+) -> None:
     """Inject infrastructure adapters into the registered tool callables.
 
     Tool modules register bare functions at import time. They declare
     repository parameters as keyword-only (e.g.
-    `search_transcripts(..., *, chunk_repo)`), then the composition root
-    calls this once at startup to replace each `TOOLS[name]` with a
-    `functools.partial` that supplies the actual adapter.
+    `search_transcripts(..., *, chunk_repo, catalog_repo)`), then the
+    composition root calls this once at startup to replace each
+    `TOOLS[name]` with a `functools.partial` that supplies the actual
+    adapter.
 
-    Grows phase-by-phase as more ports come online (catalog_repo,
-    transcript_storage, ...). Phase 2 binds the two ChunkRepository
-    consumers; later phases extend the signature.
+    Grows phase-by-phase as more ports come online. Phase 7 will replace
+    this dispatch table with a single Repositories dataclass and
+    explicit `register_tool` calls in lifespan.
     """
-    for name in ("search_transcripts", "get_transcript_window"):
+    bindings: dict[str, dict[str, Any]] = {
+        "search_transcripts":     {"chunk_repo": chunk_repo, "catalog_repo": catalog_repo},
+        "get_transcript_window":  {"chunk_repo": chunk_repo},
+        "get_track":              {"catalog_repo": catalog_repo},
+        "list_tracks":            {"catalog_repo": catalog_repo},
+        "resolve_author":         {"catalog_repo": catalog_repo},
+        "resolve_source":         {"catalog_repo": catalog_repo},
+        "resolve_location":       {"catalog_repo": catalog_repo},
+        "resolve_tag":            {"catalog_repo": catalog_repo},
+    }
+    for name, kwargs in bindings.items():
         fn = TOOLS.get(name)
         if fn is None:
             continue
-        TOOLS[name] = partial(fn, chunk_repo=chunk_repo)
+        TOOLS[name] = partial(fn, **kwargs)
 
 
 def build_personalized_tools(
