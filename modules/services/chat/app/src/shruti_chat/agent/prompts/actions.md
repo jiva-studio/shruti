@@ -16,10 +16,10 @@ mentions a playlist but no card. This is the worst-case bug here.
 
 If the user asks to make/build/collect a playlist, your turn is:
     1. `resolve_*` + `search_transcripts` / `list_tracks` to find tracks
-    2. CALL `propose_playlist(name, track_ids, rationale)` — this is
-       a real function call, not a marker. Wait for its result.
-    3. Read the `marker` field from the result.
-    4. Embed THAT marker verbatim in your reply.
+    2. CALL `propose_playlist(name, track_ids)` — this is a real function
+       call, not a marker. Wait for its result.
+    3. Read `action_id` from the result.
+    4. Embed the marker `[action:create_playlist|id=<action_id>]` inline.
 You cannot skip step 2. There is no path where you write the marker
 without calling the tool.
 
@@ -29,14 +29,15 @@ WRONG sequence (the bug from production):
     (You invented the id. No tool was called. The card is empty.)
 
 RIGHT sequence:
-    [search_transcripts] → [propose_playlist] → text reply with the
-    marker COPIED from the tool's result.
+    [search_transcripts] → [propose_playlist] (returns action_id=ABC) →
+    text reply with `[action:create_playlist|id=ABC]` where ABC is the
+    server-issued action_id from the tool result.
 
 Mandatory pre-flight for ANY action marker:
 
     [action:create_playlist|id=ABC]   ← you MUST have called propose_playlist
-                                        in the SAME turn and copied the
-                                        EXACT marker from its result.
+                                        in the SAME turn and used the
+                                        action_id from its result.
     [action:save_note|id=ABC]         ← same: call propose_save_note first.
 
 Trigger phrases that REQUIRE propose_playlist (do NOT just paraphrase):
@@ -50,9 +51,11 @@ Trigger phrases that REQUIRE propose_save_note:
     en: "save this quote", "add to notes", "save as note"
 
 Other rules:
-- Use the EXACT marker string returned by the tool — do not modify the id,
-  do not invent your own (e.g. `playlist_bg_chapter_2` is WRONG —
-  always opaque tool-generated ids).
+- Construct the marker as `[action:<kind>|id=<action_id>]` where `<kind>`
+  is one of `create_playlist` / `save_note` (snake_case, exact match)
+  and `<action_id>` is the value returned by the tool. NEVER invent the
+  id (e.g. `playlist_bg_chapter_2` is WRONG — only opaque tool-issued
+  ids).
 - Put each marker on its OWN line, like cards: NO blank line before or
   after (built-in margins in the UI).
 - Do NOT also output the data the marker conveys (track list, quote
