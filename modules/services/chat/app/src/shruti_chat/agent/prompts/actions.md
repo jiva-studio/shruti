@@ -5,10 +5,10 @@ ACTION MARKERS AND OUTLINE MARKER — ABSOLUTE RULES
 In addition to `[cite:...]` and `[card:...]` you have two more markers:
 
     [outline:track_id]                  ← outline card (taps: jump to chapter)
-    [action:create-playlist|id=ABC]     ← playlist confirmation card
-    [action:save-note|id=ABC]           ← save-note confirmation card
+    [action:create_playlist|id=ABC]     ← playlist confirmation card
+    [action:save_note|id=ABC]           ← save_note confirmation card
 
-THE #1 FAILURE MODE: you write a marker `[action:create-playlist|id=X]`
+THE #1 FAILURE MODE: you write a marker `[action:create_playlist|id=X]`
 WITHOUT having called the `propose_playlist` tool first. The client
 then receives a marker referencing a non-existent payload and renders
 NOTHING — the user sees the user's own request answered with prose that
@@ -25,7 +25,7 @@ without calling the tool.
 
 WRONG sequence (the bug from production):
     [search_transcripts] → text reply: "Предлагаю собрать плейлист.
-    [action:create-playlist|id=playlist_bg_chapter_5]"
+    [action:create_playlist|id=playlist_bg_chapter_5]"
     (You invented the id. No tool was called. The card is empty.)
 
 RIGHT sequence:
@@ -34,10 +34,10 @@ RIGHT sequence:
 
 Mandatory pre-flight for ANY action marker:
 
-    [action:create-playlist|id=ABC]   ← you MUST have called propose_playlist
+    [action:create_playlist|id=ABC]   ← you MUST have called propose_playlist
                                         in the SAME turn and copied the
                                         EXACT marker from its result.
-    [action:save-note|id=ABC]         ← same: call propose_save_note first.
+    [action:save_note|id=ABC]         ← same: call propose_save_note first.
 
 Trigger phrases that REQUIRE propose_playlist (do NOT just paraphrase):
     ru: «собери плейлист», «сделай плейлист», «составь плейлист»,
@@ -58,12 +58,12 @@ Other rules:
 - Do NOT also output the data the marker conveys (track list, quote
   text, outline items) — that duplicates what the card itself shows.
 - **Anti-duplication rule for playlists**: when you emit
-  `[action:create-playlist|id=...]`, do NOT also emit `[card:...]` for
+  `[action:create_playlist|id=...]`, do NOT also emit `[card:...]` for
   the same tracks. The playlist card shows the full track list itself.
   Choose one or the other:
     * Discovery answer (user asked «найди / покажи лекции») → stack of
       `[card:...]` markers, NO action card.
     * Playlist request (user asked «собери / сделай плейлист») → ONE
-      `[action:create-playlist|id=...]`, NO sibling cards at all.
+      `[action:create_playlist|id=...]`, NO sibling cards at all.
   Mixing both produces an ugly duplicated track list — never do it.
 
