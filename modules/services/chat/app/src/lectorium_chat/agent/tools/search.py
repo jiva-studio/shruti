@@ -84,40 +84,49 @@ async def search_transcripts(
 
     embedder = get_embedder()
     q_vec = await embedder.embed_query(query)
-
     pool = get_pool()
-    where = ["embed_model = $1"]
-    params: list[Any] = [embedder.name]
-    if lang:
-        where.append(f"lang = ${len(params) + 1}")
-        params.append(lang)
-    if eligible_ids is not None:
-        where.append(f"track_id = ANY(${len(params) + 1}::text[])")
-        params.append(eligible_ids)
-    params.append(q_vec)
-    params.append(top_k)
-    sql = f"""
-      SELECT track_id, lang, start_ms, end_ms, text, reference_source_id,
-             1 - (embedding <=> ${len(params) - 1}::vector) AS score
-      FROM chunks
-      WHERE {' AND '.join(where)}
-      ORDER BY embedding <=> ${len(params) - 1}::vector
-      LIMIT ${len(params)}
-    """
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(sql, *params)
-    return [
-        {
-            "track_id": r["track_id"],
-            "lang": r["lang"],
-            "start_ms": r["start_ms"],
-            "end_ms": r["end_ms"],
-            "text": r["text"],
-            "reference_source_id": r["reference_source_id"],
-            "score": float(r["score"]),
-        }
-        for r in rows
-    ]
+
+    async def _run(use_lang: str | None) -> list[dict[str, Any]]:
+        where = ["embed_model = $1"]
+        params: list[Any] = [embedder.name]
+        if use_lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(use_lang)
+        if eligible_ids is not None:
+            where.append(f"track_id = ANY(${len(params) + 1}::text[])")
+            params.append(eligible_ids)
+        params.append(q_vec)
+        params.append(top_k)
+        sql = f"""
+          SELECT track_id, lang, start_ms, end_ms, text, reference_source_id,
+                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY embedding <=> ${len(params) - 1}::vector
+          LIMIT ${len(params)}
+        """
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            {
+                "track_id": r["track_id"],
+                "lang": r["lang"],
+                "start_ms": r["start_ms"],
+                "end_ms": r["end_ms"],
+                "text": r["text"],
+                "reference_source_id": r["reference_source_id"],
+                "score": float(r["score"]),
+            }
+            for r in rows
+        ]
+
+    # Prefer the requested language; if nothing matches, transparently
+    # broaden to any-language chunks. The LLM sees each chunk's real
+    # `lang` field and can warn the user accordingly.
+    rows = await _run(lang)
+    if not rows and lang is not None:
+        rows = await _run(None)
+    return rows
 
 
 TOOL_REGISTRY = [
