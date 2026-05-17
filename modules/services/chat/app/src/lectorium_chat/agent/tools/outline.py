@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from lectorium_chat.agent import llm
 from lectorium_chat.config import get_settings
 from lectorium_chat.indexer.s3 import (
+    OutlineAlreadyExists,
     fetch_transcript,
     get_outline_sync,
     outline_exists_sync,
@@ -39,6 +41,19 @@ YieldEvent = Callable[[str, dict[str, Any]], None]
 
 def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
     """Fallback when this tool is invoked outside the agent loop (tests)."""
+
+
+# Per-(track_id, lang) async locks. Two concurrent /chat requests in the
+# same worker process that both ask for an outline of the same track will
+# now serialize through this lock — the second one re-HEADs S3 inside the
+# critical section and reads the freshly-written artifact rather than
+# paying for a redundant gemini-flash call.
+#
+# Cross-process races (two workers, two pods) are caught by the
+# conditional PUT below (If-None-Match: *).
+_OUTLINE_LOCKS: defaultdict[tuple[str, str], asyncio.Lock] = defaultdict(
+    asyncio.Lock
+)
 
 
 SYSTEM_PROMPT = """Ты помощник, который составляет краткое оглавление лекции по таймкодированному транскрипту.
@@ -175,7 +190,7 @@ async def get_track_outline(
     """Return outline items + emit `outline` side-event for the client."""
     s = get_settings()
 
-    # 1. Warm path — S3 HEAD/GET.
+    # 1. Warm path — S3 HEAD/GET (no lock, no LLM cost).
     try:
         exists = await asyncio.to_thread(outline_exists_sync, track_id, lang, s)
     except Exception as exc:
@@ -192,19 +207,65 @@ async def get_track_outline(
 
     # 2. Cold path — generate + persist.
     if payload is None:
-        try:
-            payload = await _generate_outline(track_id, lang, settings_=s)
-        except RuntimeError as exc:
-            return {
-                "error": str(exc),
-                "track_id": track_id,
-                "lang": lang,
-            }
-        try:
-            await asyncio.to_thread(put_outline_sync, track_id, lang, payload, s)
-        except Exception as exc:
-            # Persist failure isn't fatal — the user still gets the outline.
-            log.warning("outline_put_failed", track_id=track_id, lang=lang, error=str(exc))
+        async with _OUTLINE_LOCKS[(track_id, lang)]:
+            # Re-check inside the lock — another coroutine in this process
+            # may have just written it while we were queued.
+            try:
+                exists_after_lock = await asyncio.to_thread(
+                    outline_exists_sync, track_id, lang, s,
+                )
+            except Exception as exc:
+                log.warning(
+                    "outline_head_failed_in_lock",
+                    track_id=track_id, lang=lang, error=str(exc),
+                )
+                exists_after_lock = False
+            if exists_after_lock:
+                try:
+                    payload = await asyncio.to_thread(get_outline_sync, track_id, lang, s)
+                except Exception as exc:
+                    log.warning(
+                        "outline_get_failed_in_lock",
+                        track_id=track_id, lang=lang, error=str(exc),
+                    )
+
+            if payload is None:
+                try:
+                    payload = await _generate_outline(track_id, lang, settings_=s)
+                except RuntimeError as exc:
+                    return {
+                        "error": str(exc),
+                        "track_id": track_id,
+                        "lang": lang,
+                    }
+                # Conditional PUT — refuses to overwrite if another worker
+                # (different pod / process) wrote the artifact while we
+                # were running gemini-flash. On loss, refetch theirs.
+                try:
+                    await asyncio.to_thread(
+                        put_outline_sync, track_id, lang, payload, s,
+                        if_none_match=True,
+                    )
+                except OutlineAlreadyExists:
+                    log.info(
+                        "outline_put_lost_race",
+                        track_id=track_id, lang=lang,
+                    )
+                    try:
+                        payload = await asyncio.to_thread(
+                            get_outline_sync, track_id, lang, s,
+                        )
+                    except Exception as exc:
+                        log.warning(
+                            "outline_get_after_race_failed",
+                            track_id=track_id, lang=lang, error=str(exc),
+                        )
+                except Exception as exc:
+                    # Persist failure isn't fatal — the user still gets the outline.
+                    log.warning(
+                        "outline_put_failed",
+                        track_id=track_id, lang=lang, error=str(exc),
+                    )
 
     items = payload.get("items") or []
     yield_event("outline", {"track_id": track_id, "items": items})

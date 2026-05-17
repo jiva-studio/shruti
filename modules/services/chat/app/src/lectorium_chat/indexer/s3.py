@@ -20,6 +20,7 @@ import aiofiles
 import boto3
 import httpx
 from botocore.config import Config as BotoConfig
+from botocore.exceptions import ClientError
 
 from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.observability.logging import get_logger
@@ -133,21 +134,26 @@ def _outline_key(track_id: str, lang: str) -> str:
     return f"artifacts/tracks/{track_id}/outlines/{lang}.json"
 
 
+_S3_ABSENT_CODES = frozenset({"404", "NoSuchKey", "NotFound"})
+
+
 def outline_exists_sync(track_id: str, lang: str, settings: Settings | None = None) -> bool:
-    """HEAD artifacts/tracks/.../outlines/{lang}.json (sync — call from worker)."""
+    """HEAD artifacts/tracks/.../outlines/{lang}.json (sync — call from worker).
+
+    Returns False on a true 404 / NoSuchKey; re-raises on every other
+    error (network blip, signature error, etc.) so the caller can decide
+    whether to retry rather than silently treating a transient failure
+    as "not present" and triggering a redundant cold-path generation.
+    """
     s = settings or get_settings()
     client = _make_s3_client(s)
     key = _outline_key(track_id, lang)
     try:
         client.head_object(Bucket=s.s3_bucket, Key=key)
         return True
-    except Exception as exc:
-        code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}) or {}
-        # botocore raises ClientError; treat 404 as absent, anything else as
-        # an error we surface to the caller (transient → retry-able).
-        status = getattr(exc, "response", {}).get("ResponseMetadata", {}).get("HTTPStatusCode") \
-            if hasattr(exc, "response") else None
-        if status == 404 or code.get("Code") in ("404", "NoSuchKey", "NotFound"):
+    except ClientError as exc:
+        err = exc.response.get("Error", {})
+        if err.get("Code") in _S3_ABSENT_CODES:
             return False
         raise
 
@@ -161,14 +167,41 @@ def get_outline_sync(track_id: str, lang: str, settings: Settings | None = None)
     return json.loads(obj["Body"].read())
 
 
-def put_outline_sync(track_id: str, lang: str, payload: dict, settings: Settings | None = None) -> None:
-    """PUT artifacts/tracks/.../outlines/{lang}.json (overwrite)."""
+class OutlineAlreadyExists(Exception):
+    """Raised by `put_outline_sync(if_none_match=True)` when another writer
+    won the race (S3 PreconditionFailed on the conditional PUT)."""
+
+
+def put_outline_sync(
+    track_id: str,
+    lang: str,
+    payload: dict,
+    settings: Settings | None = None,
+    *,
+    if_none_match: bool = False,
+) -> None:
+    """PUT artifacts/tracks/.../outlines/{lang}.json.
+
+    With `if_none_match=True`, sends `If-None-Match: *` so the PUT is
+    rejected with 412 PreconditionFailed if the key already exists. We
+    raise `OutlineAlreadyExists` in that case so the caller can refetch
+    the winning writer's payload instead of overwriting it.
+    """
     s = settings or get_settings()
     client = _make_s3_client(s)
     key = _outline_key(track_id, lang)
-    client.put_object(
-        Bucket=s.s3_bucket,
-        Key=key,
-        Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-    )
+    kwargs: dict = {
+        "Bucket": s.s3_bucket,
+        "Key": key,
+        "Body": json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        "ContentType": "application/json",
+    }
+    if if_none_match:
+        kwargs["IfNoneMatch"] = "*"
+    try:
+        client.put_object(**kwargs)
+    except ClientError as exc:
+        err = exc.response.get("Error", {})
+        if if_none_match and err.get("Code") in ("PreconditionFailed", "412"):
+            raise OutlineAlreadyExists(key) from exc
+        raise
