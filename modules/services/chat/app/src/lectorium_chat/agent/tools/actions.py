@@ -5,7 +5,7 @@ These don't execute anything server-side. They:
 2. Call the loop-supplied `yield_event` callable to emit the SSE
    `action` side-event with the full payload (kind, id, name, tracks…).
 3. Return a small dict containing the `marker` string the LLM should
-   embed inline in its reply (e.g. `[action:create-playlist|id=abc12345]`).
+   embed inline in its reply (e.g. `[action:create_playlist|id=abc12345]`).
 
 The client picks up the SSE event, stores the payload by `id`, finds the
 inline marker in the rendered text, and mounts the corresponding card.
@@ -85,7 +85,7 @@ async def propose_playlist(
     return {
         "ok": True,
         "action_id": action_id,
-        "marker": f"[action:create-playlist|id={action_id}]",
+        "marker": f"[action:create_playlist|id={action_id}]",
         "validated_track_ids": valid,
     }
 
@@ -123,7 +123,7 @@ async def propose_save_note(
     return {
         "ok": True,
         "action_id": action_id,
-        "marker": f"[action:save-note|id={action_id}]",
+        "marker": f"[action:save_note|id={action_id}]",
     }
 
 
@@ -136,7 +136,7 @@ TOOL_REGISTRY = [
         "description": (
             "Propose creating a playlist for the user — DOES NOT create it. "
             "The client will render a card with a confirm button. After "
-            "calling, embed the returned marker (e.g. '[action:create-playlist|id=...]') "
+            "calling, embed the returned marker (e.g. '[action:create_playlist|id=...]') "
             "inline in your reply at the position the card should render. "
             "Never claim the playlist exists — say 'предлагаю собрать плейлист'. "
             "Pick at most 20 track_ids (server hard-caps at 30). "

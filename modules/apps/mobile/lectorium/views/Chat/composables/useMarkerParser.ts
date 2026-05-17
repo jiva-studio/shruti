@@ -36,10 +36,11 @@ export type ChatToken =
 const CITE_RE = /\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]/g
 const CARD_RE = /\[card:([A-Za-z0-9_.-]+)\]/g
 const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
-// LLM emits dash-style kinds (create-playlist, save-note); we map to the
-// stored kind (create_playlist, save_note) here so token consumers can
-// switch on the same enum the SSE payload uses.
-const ACTION_RE = /\[action:([a-z][a-z0-9_-]*)\|id=([A-Za-z0-9_-]+)\]/g
+// Snake-case kinds throughout: marker, action-card payload, action enum
+// — one wire format end-to-end. Regex stays permissive (matches `a-z0-9_`)
+// so a malformed marker with a stray dash is still captured by the
+// outer pattern and then rejected by `parseActionKind` below.
+const ACTION_RE = /\[action:([a-z][a-z0-9_]*)\|id=([A-Za-z0-9_-]+)\]/g
 
 interface MarkerHit {
   readonly start: number
@@ -99,7 +100,7 @@ export function parseChatMarkers(input: string): ChatToken[] {
   }
   for (const match of input.matchAll(ACTION_RE)) {
     const [full, rawKind, actionId] = match
-    const actionKind = normalizeActionKind(rawKind)
+    const actionKind = parseActionKind(rawKind)
     if (!actionKind) continue
     const start = match.index ?? 0
     hits.push({
@@ -156,9 +157,11 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   return out
 }
 
-function normalizeActionKind(raw: string): ActionKind | null {
-  const t = raw.replace(/-/g, "_").toLowerCase()
-  if (t === "create_playlist" || t === "save_note") return t
+/** Strict whitelist — only the two known action kinds are accepted.
+ *  Anything else (including legacy kebab `create-playlist`) returns null
+ *  so the marker is silently dropped from the parsed token stream. */
+function parseActionKind(raw: string): ActionKind | null {
+  if (raw === "create_playlist" || raw === "save_note") return raw
   return null
 }
 
