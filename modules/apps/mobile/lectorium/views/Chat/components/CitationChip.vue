@@ -41,6 +41,7 @@
     />
     <IonActionSheet
       :is-open="actionSheetOpen"
+      :header="actionSheetHeader"
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
@@ -56,6 +57,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
+import { useChatActions } from "@lectorium/composables/useChatActions.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
@@ -95,6 +97,7 @@ const app = useLectorium()
 const appLanguage = useAppLanguage()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
+const { saveCitation } = useChatActions()
 
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
@@ -102,6 +105,9 @@ const isPlaying = ref(false)
 const isPreparing = ref(false)
 const cachedUrl = ref<string | null>(null)
 const actionSheetOpen = ref(false)
+/** Guard so a second tap on "Save as note" while the transcript is still
+ *  loading does NOT create a duplicate note. */
+const savingNote = ref(false)
 const progressPct = ref(0)
 
 const chipStyle = computed(() => ({
@@ -158,9 +164,19 @@ interface ChipActionSheetButton {
   readonly handler: () => void
 }
 
+/** Header — lecture title only. The chip's caption already sits in the
+ *  message body above, so duplicating it here was visual noise. */
+const actionSheetHeader = computed(() => lectureTitle.value)
+
 const actionSheetButtons = computed<readonly ChipActionSheetButton[]>(() => [
   {
-    text: t("search.actions.addToPlaylist"),
+    text: t("chat.citationSaveAsNote"),
+    handler: (): void => {
+      void onSaveAsNote()
+    },
+  },
+  {
+    text: t("chat.citationAddLectureToPlaylist"),
     handler: (): void => {
       void onAddToPlaylist()
     },
@@ -179,6 +195,24 @@ async function onAddToPlaylist(): Promise<void> {
   } catch (err) {
     console.warn("[citation-chip] add to playlist failed", err)
     await toast.error(t("chat.citationAddFailed"))
+  }
+}
+
+async function onSaveAsNote(): Promise<void> {
+  // Local reentrancy guard — local because it controls THIS chip's
+  // disabled state, not a global "saving" notion. The transcript fetch
+  // + overlap + createNote pipeline itself lives in saveCitation.
+  if (savingNote.value) return
+  savingNote.value = true
+  try {
+    await saveCitation({
+      trackId: props.trackId,
+      startMs: props.startMs,
+      endMs: props.endMs,
+      caption: props.caption ?? "",
+    })
+  } finally {
+    savingNote.value = false
   }
 }
 

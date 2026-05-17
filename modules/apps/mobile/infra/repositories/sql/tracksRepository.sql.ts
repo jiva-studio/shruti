@@ -513,5 +513,28 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       )
       return rows.map((r) => r.language)
     },
+
+    async getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
+      const out = new Map<TrackId, number>()
+      if (trackIds.length === 0) return out
+      // GROUP BY + MAX picks the longest variant per track. Variants
+      // typically differ in language but share audio length within a few
+      // hundred ms; MAX is the conservative pick when they don't.
+      const placeholders = trackIds.map(() => "?").join(",")
+      const rows = await contentDb.query<{
+        track_id: string
+        duration: number | null
+      }>(
+        `SELECT track_id, MAX(audio_duration) AS duration
+           FROM track_variants
+          WHERE track_id IN (${placeholders})
+          GROUP BY track_id`,
+        [...trackIds]
+      )
+      for (const r of rows) {
+        if (r.duration !== null) out.set(r.track_id as TrackId, Number(r.duration))
+      }
+      return out
+    },
   }
 }

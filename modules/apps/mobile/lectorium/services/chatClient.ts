@@ -11,20 +11,45 @@ export interface ChatTurn {
   readonly content: string
 }
 
+export interface OutlineItemPayload {
+  readonly startMs: number
+  readonly title: string
+}
+
+export interface OutlinePayload {
+  readonly trackId: string
+  readonly items: readonly OutlineItemPayload[]
+}
+
+export type ActionPayload =
+  | {
+      readonly kind: "create_playlist"
+      readonly id: string
+      readonly name: string
+      readonly trackIds: readonly string[]
+    }
+  | {
+      readonly kind: "save_note"
+      readonly id: string
+      readonly trackId: string
+      readonly startMs: number
+      readonly endMs: number
+      readonly text: string
+    }
+
+/**
+ * Decoded SSE events. `tool_start`, `tool`, `done` carry no payload —
+ * the event type alone is the signal. Server-side metrics (tokens,
+ * tool durations, request id) live in structured logs, not on the
+ * wire.
+ */
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
-  | {
-      readonly type: "tool"
-      readonly name: string
-      readonly durationMs?: number
-      readonly resultCount?: number
-    }
-  | {
-      readonly type: "done"
-      readonly requestId?: string
-      readonly totalTokens?: number
-      readonly toolCalls?: number
-    }
+  | { readonly type: "tool_start" }
+  | { readonly type: "tool" }
+  | { readonly type: "action"; readonly payload: ActionPayload }
+  | { readonly type: "outline"; readonly payload: OutlinePayload }
+  | { readonly type: "done" }
   | {
       readonly type: "error"
       readonly code: string
@@ -32,12 +57,57 @@ export type ChatStreamEvent =
       readonly retryAfter?: number
     }
 
+/* -------------------------------------------------------------------------- */
+/*                               Title generator                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * POST /title — quick LLM-rephrased chat session title (3-5 words).
+ * Called fire-and-forget after the first assistant reply to replace the
+ * crude `deriveTitle(text)` truncation. Returns the trimmed title on
+ * success, or `null` on any failure (HTTP error, network, parse). The
+ * caller MUST treat a null return as "keep the current title".
+ */
+export async function fetchSessionTitle(
+  messages: readonly ChatTurn[],
+  lang: "ru" | "en",
+  opts: { baseUrl?: string; appToken?: string; clientId?: string; signal?: AbortSignal } = {}
+): Promise<string | null> {
+  if (messages.length === 0) return null
+  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
+  const clientId = opts.clientId ?? (await resolveClientId())
+
+  try {
+    const response = await fetch(joinUrl(baseUrl, "/title"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Device-Id": clientId,
+        "X-App-Token": appToken,
+        "Idempotency-Key": newIdempotencyKey(),
+      },
+      body: JSON.stringify({ messages, lang }),
+      signal: opts.signal,
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as { title?: unknown }
+    const title = typeof body.title === "string" ? body.title.trim() : ""
+    return title.length > 0 ? title : null
+  } catch {
+    return null
+  }
+}
+
 export interface StreamChatOptions {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
   readonly appToken?: string
   /** Override for tests; in production we read from IPreferences. */
   readonly clientId?: string
+  /** Snapshot of recent listening + notes for personalization tools. */
+  readonly userContext?: unknown
 }
 
 /* -------------------------------------------------------------------------- */
@@ -62,25 +132,63 @@ export async function* streamChat(
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
   const clientId = opts.clientId ?? (await resolveClientId())
 
-  let response: Response
-  try {
-    response = await fetch(joinUrl(baseUrl, "/chat"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        "X-Device-Id": clientId,
-        "X-App-Token": appToken,
-      },
-      body: JSON.stringify({ messages, lang }),
-      signal: opts.signal,
-    })
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError") return
+  // Transient errors (network blip, 502/503/504 during a server redeploy)
+  // get up to 3 retries with exponential backoff, but only as a *fallback*
+  // — if the server set `Retry-After` we honour it instead. Non-transient
+  // (400/401/403/429) bail out immediately. SSE streaming itself is NOT
+  // retried — once bytes start flowing we commit to that connection.
+  //
+  // `Idempotency-Key` is generated per turn so a retried POST can be
+  // server-side dedup'd in the future (Redis dedup is followup-PR
+  // territory; today the server just logs the key). Without it, two
+  // attempts after a 502 from a proxy that sat in front of a backend
+  // that already started work would both bill the LLM.
+  const idempotencyKey = newIdempotencyKey()
+  const url = joinUrl(baseUrl, "/chat")
+  const requestInit: RequestInit = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "X-Device-Id": clientId,
+      "X-App-Token": appToken,
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(
+      opts.userContext !== undefined
+        ? { messages, lang, user_context: opts.userContext }
+        : { messages, lang }
+    ),
+    signal: opts.signal,
+  }
+
+  let response: Response | null = null
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (opts.signal?.aborted) return
+    try {
+      response = await fetch(url, requestInit)
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return
+      lastErr = err
+      response = null
+    }
+    if (response && response.ok) break
+    if (response && !isTransientStatus(response.status)) break
+    // Prefer the server's Retry-After (clamped). Fallback to fixed
+    // exponential 250ms / 750ms / 2250ms.
+    const fallback = 250 * Math.pow(3, attempt)
+    const delay = response
+      ? parseRetryAfterMs(response.headers.get("Retry-After"), fallback)
+      : fallback
+    await sleep(delay, opts.signal)
+  }
+
+  if (!response) {
     yield {
       type: "error",
       code: "network",
-      message: err instanceof Error ? err.message : "Network error",
+      message: lastErr instanceof Error ? lastErr.message : "Network error",
     }
     return
   }
@@ -174,6 +282,51 @@ function joinUrl(base: string, path: string): string {
   return base + path
 }
 
+function isTransientStatus(code: number): boolean {
+  // 502/503/504 cover redeploy and gateway downtime — retrying typically
+  // succeeds once the next instance comes up. 408 (Request Timeout) is
+  // intentionally NOT retried: it's almost always "the server is too
+  // busy / IDLE'd out the request", and retrying compounds the load
+  // without actually changing whether the server can answer.
+  return code === 502 || code === 503 || code === 504
+}
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+/** Parse a `Retry-After` header value. Returns seconds, capped to 60s
+ *  so a server bug or proxy can't pin the client to a multi-hour wait. */
+function parseRetryAfterMs(raw: string | null, fallbackMs: number): number {
+  if (!raw) return fallbackMs
+  const n = Number(raw)
+  if (Number.isFinite(n) && n > 0) return Math.min(60_000, n * 1000)
+  // HTTP-date form is allowed by the spec but neither our backend nor
+  // the relevant proxies emit it; falling back is the right move.
+  return fallbackMs
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve()
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true }
+    )
+  })
+}
+
 async function safeReadText(response: Response): Promise<string> {
   try {
     return await response.text()
@@ -224,45 +377,20 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
   switch (name) {
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
+    case "tool_start":
+      return { type: "tool_start" }
     case "tool":
-      return {
-        type: "tool",
-        name: typeof payload.name === "string" ? payload.name : "unknown",
-        durationMs:
-          typeof payload.duration_ms === "number"
-            ? payload.duration_ms
-            : typeof payload.durationMs === "number"
-              ? payload.durationMs
-              : undefined,
-        resultCount:
-          typeof payload.result_count === "number"
-            ? payload.result_count
-            : typeof payload.resultCount === "number"
-              ? payload.resultCount
-              : undefined,
-      }
+      return { type: "tool" }
     case "done":
-      return {
-        type: "done",
-        requestId:
-          typeof payload.request_id === "string"
-            ? payload.request_id
-            : typeof payload.requestId === "string"
-              ? payload.requestId
-              : undefined,
-        totalTokens:
-          typeof payload.total_tokens === "number"
-            ? payload.total_tokens
-            : typeof payload.totalTokens === "number"
-              ? payload.totalTokens
-              : undefined,
-        toolCalls:
-          typeof payload.tool_calls === "number"
-            ? payload.tool_calls
-            : typeof payload.toolCalls === "number"
-              ? payload.toolCalls
-              : undefined,
-      }
+      return { type: "done" }
+    case "action": {
+      const ap = parseActionPayload(payload)
+      return ap ? { type: "action", payload: ap } : null
+    }
+    case "outline": {
+      const op = parseOutlinePayload(payload)
+      return op ? { type: "outline", payload: op } : null
+    }
     case "error":
       return {
         type: "error",
@@ -276,6 +404,56 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
               : undefined,
       }
     default:
+      // Unknown event name. The server may have shipped ahead of the
+      // client (new event type added in a later release); log it so a
+      // silent feature-drop shows up in dev consoles and crash logs,
+      // and return null so the rest of the stream still flows.
+
+      console.warn("[chat] unknown sse event:", name)
       return null
   }
+}
+
+function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
+  const trackId = typeof p.track_id === "string" ? p.track_id : null
+  const itemsRaw = Array.isArray(p.items) ? p.items : null
+  if (!trackId || !itemsRaw) return null
+  const items: OutlineItemPayload[] = []
+  for (const it of itemsRaw) {
+    if (it && typeof it === "object") {
+      const obj = it as Record<string, unknown>
+      const startMs = typeof obj.start_ms === "number" ? obj.start_ms : null
+      const title = typeof obj.title === "string" ? obj.title.trim() : ""
+      if (startMs !== null && title) items.push({ startMs, title })
+    }
+  }
+  if (items.length === 0) return null
+  return { trackId, items }
+}
+
+function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
+  const kind = typeof p.kind === "string" ? p.kind : ""
+  const id = typeof p.id === "string" ? p.id : ""
+  if (!kind || !id) return null
+  if (kind === "create_playlist") {
+    const name = typeof p.name === "string" ? p.name : ""
+    const trackIdsRaw = Array.isArray(p.track_ids) ? p.track_ids : []
+    const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
+    if (!name || trackIds.length === 0) return null
+    return { kind: "create_playlist", id, name, trackIds }
+  }
+  if (kind === "save_note") {
+    const trackId = typeof p.track_id === "string" ? p.track_id : ""
+    const text = typeof p.text === "string" ? p.text : ""
+    if (!trackId || !text) return null
+    return {
+      kind: "save_note",
+      id,
+      trackId,
+      startMs: typeof p.start_ms === "number" ? p.start_ms : 0,
+      endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
+      text,
+    }
+  }
+  return null
 }

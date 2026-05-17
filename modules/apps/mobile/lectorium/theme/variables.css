@@ -109,6 +109,15 @@
   --lectorium-immersive-background: #1a130d;
   --lectorium-immersive-text: #c0b8a8;
 
+  /* Raised input surface — chat input bar, search box, anywhere a
+   * text-entry capsule needs to sit visually ABOVE the page surface.
+   * Light theme: brightened past the cream page so the capsule reads
+   * as an interactive slot. Dark theme overrides below pick a slightly
+   * lifted espresso. Border is a hairline tinted matching the surface
+   * so the capsule has a defined edge without the heavy step-200. */
+  --lectorium-input-surface: #ffffff;
+  --lectorium-input-border: rgba(0, 0, 0, 0.08);
+
   /* Maximum width of the centred content column on wide screens
    * (>=768px). Applied to AppPage's slot wrapper, the tab bar's button
    * row, and the floating mini-player so they all share the same
@@ -235,6 +244,12 @@
 
     --ion-card-background: #261c13;
     --ion-card-color: #c0b8a8;
+
+    /* Raised input surface — see :root for the rationale. Dark theme
+     * picks a tone slightly lifted above --ion-card-background so the
+     * input bar still reads as elevated against the chat card column. */
+    --lectorium-input-surface: #2e2218;
+    --lectorium-input-border: rgba(255, 255, 255, 0.08);
 
     /* Warm step colors — replace Ionic's cool grayscale steps so secondary
      * text, dividers, captions, etc. stay in the warm espresso family

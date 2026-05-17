@@ -40,7 +40,14 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
     },
 
     async create(input: CreateNoteInput): Promise<Note> {
-      const id = newNoteId()
+      // Idempotent path: caller passes a deterministic id (e.g. derived
+      // from a chat action id). If a row already exists with this id,
+      // return it as-is so a re-tap after a flaky network is a no-op.
+      if (input.id) {
+        const existing = await this.getById(input.id)
+        if (existing) return existing
+      }
+      const id = input.id ?? newNoteId()
       const now = Date.now()
       const meta = input.meta ?? null
       await db.execute(

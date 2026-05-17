@@ -1,32 +1,53 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { streamChat, type ChatStreamEvent, type ChatTurn } from "@lectorium/services/chatClient.js"
+import {
+  useTrackUserState,
+  type FocusFragmentPayload,
+} from "@lectorium/composables/useTrackUserState.js"
+import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
+import { useToast } from "@lectorium/services/useToast.js"
+import { parseChatMarkers } from "@lectorium/views/Chat/composables/useMarkerParser.js"
+import {
+  addTracksToPlaylist,
+  runChatTurn,
+  saveChatNote,
+  type RunChatTurnEvent,
+} from "@lib/application"
+import type {
+  ChatActionPayload,
+  ChatActionState,
+  ChatMessage as DomainChatMessage,
+  ChatMessageError,
+  ChatOutlinePayload,
+  ChatSession as DomainChatSession,
+} from "@lib/domain"
+import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
+import { createHttpChatStreamClient } from "@lectorium/services/chat/httpChatStreamClient.js"
+import { createHttpChatTitleService } from "@lectorium/services/chat/httpChatTitleService.js"
+import {
+  createSqlChatSessionRepository,
+  createSqlChatMessageRepository,
+} from "@infra/repositories/sql/index.js"
+import { fetchSessionTitle } from "@lectorium/services/chatClient.js"
+import type { ChatTurn } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface ChatSession {
-  readonly id: string
-  readonly title: string | null
-  readonly createdAt: number
-  readonly updatedAt: number
-}
-
-export interface ChatMessage {
-  readonly id: string
-  readonly sessionId: string
-  readonly role: "user" | "assistant"
-  /** Raw markdown — assistant content can contain [cite:...] / [card:...]. */
-  content: string
-  readonly createdAt: number
-  /** Local-only flag so the UI can show a "thinking…" indicator on the
-   *  currently-streaming assistant bubble without leaking that state
-   *  into SQLite (we persist final content only). */
-  streaming?: boolean
-}
+// Re-export domain types so consumers can keep importing them from
+// `@lectorium/stores/useChatStore` (the legacy path) while the
+// canonical declarations live in `@lib/domain`.
+export type ChatSession = DomainChatSession
+export type ChatMessage = DomainChatMessage & { streaming?: boolean }
+export type ActionPayload = ChatActionPayload
+export type OutlinePayload = ChatOutlinePayload
+export type ActionState = ChatActionState
+export type { ChatMessageError }
 
 /* -------------------------------------------------------------------------- */
 /*                                  Helpers                                   */
@@ -45,24 +66,67 @@ function deriveTitle(text: string, max = 48): string {
   return trimmed.slice(0, max - 1).trimEnd() + "…"
 }
 
+/** chat_sessions.title_attempt_count semantics — see ChatSession docs.
+ *  0 / 1..MAX: retry-eligible; MAX+1 = success or exhausted. */
+const TITLE_MAX_ATTEMPTS = 3
+
+/**
+ * LLM occasionally writes `[action:create-playlist|id=X]` inline without
+ * calling propose_playlist (a known DeepSeek failure mode). Salvage:
+ * scan content for orphan markers and synthesize from sibling
+ * `[card:track_id]` markers. Runs once on message finalisation.
+ */
+function salvageOrphanActions(
+  content: string,
+  existing: Record<string, ActionPayload>,
+  fallbackName: string
+): Record<string, ActionPayload> {
+  const tokens = parseChatMarkers(content)
+  const orphans = tokens
+    .filter(
+      (t): t is Extract<typeof t, { kind: "action" }> =>
+        t.kind === "action" && t.actionKind === "create_playlist" && !existing[t.actionId]
+    )
+    .map((t) => t.actionId)
+  if (orphans.length === 0) return existing
+  const trackIds = tokens
+    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
+    .map((t) => t.trackId)
+  if (trackIds.length === 0) return existing
+  const out = { ...existing }
+  for (const id of orphans) {
+    out[id] = {
+      kind: "create_playlist",
+      id,
+      name: fallbackName,
+      trackIds,
+    }
+  }
+  return out
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                   Store                                    */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Owns the chat tab's reactive state. Single active session at a time;
- * messages are streamed in-place onto the last assistant bubble and
- * persisted to SQLite once the SSE stream finishes (or errors).
+ * Owns the chat tab's reactive state and dispatches workflow verbs to
+ * the use-cases in `@lib/application/chat`.
  *
- * Lifecycle:
- *   1. `refreshSessions()` — load list for the session sheet
- *   2. `openSession(id)` OR `startNewSession()` — set `activeSessionId`
- *   3. `sendMessage(text)` — append user msg + stream assistant reply
- *   4. `deleteSession(id)` / `clearAll()` — danger-zone operations
+ * The store does NOT touch SQL or HTTP directly — it constructs the
+ * SQL repos + HTTP wrappers lazily from `useLectorium()` and feeds them
+ * into use-cases. This keeps the layering rule satisfied (presentation
+ * → use-case → repo/service ports) and makes `sendMessage` testable by
+ * stubbing `runChatTurn`.
  */
 export const useChatStore = defineStore("chat", () => {
   const app = useLectorium()
   const appLanguage = useAppLanguage()
+  const trackUserState = useTrackUserState()
+  const playlist = usePlaylistStore()
+  const notes = useNotesStore()
+  const toast = useToast()
+  const { t } = useI18n()
 
   const sessions = ref<ChatSession[]>([])
   const activeSessionId = ref<string | null>(null)
@@ -78,49 +142,40 @@ export const useChatStore = defineStore("chat", () => {
     return db
   }
 
+  function chatRepos() {
+    const userDatabase = userDb()
+    return {
+      sessions: createSqlChatSessionRepository(userDatabase),
+      messages: createSqlChatMessageRepository(userDatabase),
+    }
+  }
+
+  function streamClient() {
+    return createHttpChatStreamClient()
+  }
+  function titleService() {
+    return createHttpChatTitleService()
+  }
+
   async function refreshSessions(): Promise<void> {
-    const rows = await userDb().query<{
-      id: string
-      title: string | null
-      created_at: number
-      updated_at: number
-    }>(
-      "SELECT id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT 200"
-    )
-    sessions.value = rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      createdAt: Number(r.created_at),
-      updatedAt: Number(r.updated_at),
+    const repos = chatRepos()
+    const rows = await repos.sessions.list(200)
+    sessions.value = rows.map((s) => ({
+      id: s.id,
+      title: s.title,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      titleAttemptCount: s.titleAttemptCount,
     }))
   }
 
   async function openSession(id: string): Promise<void> {
     activeSessionId.value = id
-    const rows = await userDb().query<{
-      id: string
-      session_id: string
-      role: string
-      content: string
-      created_at: number
-    }>(
-      "SELECT id, session_id, role, content, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC",
-      [id]
-    )
-    messages.value = rows.map((r) => ({
-      id: r.id,
-      sessionId: r.session_id,
-      role: r.role === "assistant" ? "assistant" : "user",
-      content: r.content,
-      createdAt: Number(r.created_at),
-    }))
+    const repos = chatRepos()
+    const rows = await repos.messages.listBySession(id as ChatSessionId)
+    messages.value = rows.map((m) => ({ ...m }))
   }
 
-  /**
-   * Reset to a blank, unpersisted session. Row is only inserted on the
-   * first `sendMessage()` so back-tapping out of an empty chat doesn't
-   * leave a debris session in the list.
-   */
   function startNewSession(): void {
     if (sending.value) cancelStream()
     activeSessionId.value = null
@@ -130,99 +185,73 @@ export const useChatStore = defineStore("chat", () => {
 
   async function ensureActiveSession(seedTitle: string): Promise<string> {
     if (activeSessionId.value) return activeSessionId.value
-    const id = randomId()
-    const now = Date.now()
-    await userDb().execute(
-      "INSERT INTO chat_sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-      [id, deriveTitle(seedTitle), now, now]
-    )
+    const repos = chatRepos()
+    const id = randomId() as ChatSessionId
+    const created = await repos.sessions.create({ id, title: deriveTitle(seedTitle) })
     activeSessionId.value = id
-    sessions.value = [
-      { id, title: deriveTitle(seedTitle), createdAt: now, updatedAt: now },
-      ...sessions.value,
-    ]
+    sessions.value = [created, ...sessions.value]
     return id
   }
 
-  async function persistMessage(msg: ChatMessage): Promise<void> {
-    const db = userDb()
-    await db.execute(
-      "INSERT INTO chat_messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-      [msg.id, msg.sessionId, msg.role, msg.content, msg.createdAt]
-    )
-    await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
-      msg.createdAt,
-      msg.sessionId,
-    ])
-    await db.save()
-    // Re-order the in-memory session list so the freshly-touched session
-    // floats to the top without a roundtrip.
-    const idx = sessions.value.findIndex((s) => s.id === msg.sessionId)
-    if (idx >= 0) {
-      const updated = { ...sessions.value[idx], updatedAt: msg.createdAt }
-      sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
-    }
-  }
-
-  async function sendMessage(text: string): Promise<void> {
+  async function sendMessage(
+    text: string,
+    options?: { focus?: FocusFragmentPayload }
+  ): Promise<void> {
     const clean = text.trim()
     if (!clean || sending.value) return
     lastError.value = null
     sending.value = true
 
-    const sessionId = await ensureActiveSession(clean)
-    const userMsg: ChatMessage = {
-      id: randomId(),
-      sessionId,
-      role: "user",
-      content: clean,
-      createdAt: Date.now(),
-    }
-    messages.value = [...messages.value, userMsg]
-    try {
-      await persistMessage(userMsg)
-    } catch (err) {
-      // Persist failure is non-fatal for the in-memory turn — we'll
-      // still attempt to stream a reply, but warn so future history
-      // reload shows the gap.
-      console.warn("chat: failed to persist user message", err)
-    }
-
-    const assistantMsg: ChatMessage = {
-      id: randomId(),
-      sessionId,
-      role: "assistant",
-      content: "",
-      createdAt: Date.now(),
-      streaming: true,
-    }
-    messages.value = [...messages.value, assistantMsg]
-
+    const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
     abort = new AbortController()
-    const lang: "ru" | "en" = appLanguage.value === "ru" ? "ru" : "en"
-    const turns: ChatTurn[] = messages.value
-      .filter((m) => !m.streaming || m.id !== assistantMsg.id)
+    const repos = chatRepos()
+
+    // Snapshot history BEFORE we add the new turn so the server doesn't
+    // see its own optimistic placeholder.
+    const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+    const history: ChatTurn[] = messages.value
+      .filter((m) => !m.streaming)
       .map((m) => ({ role: m.role, content: m.content }))
 
+    let assistantMsgId: ChatMessageId | null = null
     let acc = ""
+
     try {
-      for await (const event of streamChat(turns, lang, { signal: abort.signal })) {
-        const finished = applyEvent(
-          event,
-          assistantMsg,
-          (delta) => {
-            acc += delta
-            updateAssistantContent(assistantMsg.id, acc)
-          },
-          () => {
-            // A tool fired — anything streamed before it was the model's
-            // "thinking preamble" ("Я сделаю это с помощью…"). Drop it so
-            // only the final post-tool answer survives.
-            acc = ""
-            updateAssistantContent(assistantMsg.id, acc)
+      const isFirst =
+        messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 0
+      for await (const event of runChatTurn(
+        {
+          sessionId,
+          text: clean,
+          lang,
+          history,
+          focus: options?.focus,
+          isFirstAssistantTurn: isFirst,
+          newMessageId: () => randomId() as ChatMessageId,
+          signal: abort.signal,
+        },
+        {
+          sessions: repos.sessions,
+          messages: repos.messages,
+          stream: streamClient(),
+          title: titleService(),
+          buildUserContext: (focus) => trackUserState.buildUserContext(focus),
+          salvageOrphanActions,
+          fallbackPlaylistName: t("chat.fallbackPlaylistName"),
+        }
+      )) {
+        applyTurnEvent(event)
+        if (event.kind === "user-message") {
+          // session list re-order
+          const idx = sessions.value.findIndex((s) => s.id === sessionId)
+          if (idx >= 0) {
+            const updated = { ...sessions.value[idx], updatedAt: Date.now() }
+            sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
           }
-        )
-        if (finished) break
+        }
+        if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
+        if (event.kind === "delta") acc += event.text
+        if (event.kind === "tool-start") acc = ""
       }
     } catch (err) {
       lastError.value = {
@@ -232,82 +261,181 @@ export const useChatStore = defineStore("chat", () => {
     } finally {
       abort = null
       sending.value = false
-      // Snapshot the bubble: drop the streaming flag and freeze content.
-      const idx = messages.value.findIndex((m) => m.id === assistantMsg.id)
-      if (idx >= 0) {
-        const next = [...messages.value]
-        next[idx] = { ...next[idx], content: acc, streaming: false }
-        messages.value = next
-      }
-      if (acc.length > 0) {
-        try {
-          await persistMessage({ ...assistantMsg, content: acc, streaming: false })
-        } catch (err) {
-          console.warn("chat: failed to persist assistant message", err)
+      // If the assistant bubble was never finalised (e.g. abort mid-stream),
+      // drop the streaming placeholder so the UI doesn't keep its spinner.
+      if (assistantMsgId) {
+        const idx = messages.value.findIndex((m) => m.id === assistantMsgId)
+        if (idx >= 0 && messages.value[idx].streaming) {
+          if (acc.length === 0) {
+            messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
+          }
         }
-      } else if (!lastError.value) {
-        // No text and no error means an empty done — drop the empty bubble.
-        messages.value = messages.value.filter((m) => m.id !== assistantMsg.id)
-      } else {
-        // Errored before any text — drop the empty bubble; the toast / error
-        // banner conveys the failure.
-        messages.value = messages.value.filter((m) => m.id !== assistantMsg.id)
       }
     }
   }
 
-  function applyEvent(
-    event: ChatStreamEvent,
-    assistantMsg: ChatMessage,
-    onDelta: (text: string) => void,
-    onTool: () => void
-  ): boolean {
-    switch (event.type) {
-      case "delta":
-        onDelta(event.text)
-        return false
-      case "tool":
-        onTool()
-        return false
-      case "done":
-        return true
-      case "error":
+  function applyTurnEvent(event: RunChatTurnEvent): void {
+    switch (event.kind) {
+      case "user-message":
+        messages.value = [...messages.value, event.message]
+        return
+      case "assistant-placeholder": {
+        const placeholder: ChatMessage = {
+          id: event.messageId,
+          sessionId: (activeSessionId.value ?? "") as ChatSessionId,
+          role: "assistant",
+          content: "",
+          createdAt: Date.now(),
+          streaming: true,
+        }
+        messages.value = [...messages.value, placeholder]
+        return
+      }
+      case "delta": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], content: next[idx].content + event.text }
+        messages.value = next
+        return
+      }
+      case "tool-start": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], content: "" }
+        messages.value = next
+        return
+      }
+      case "action": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          actions: { ...(cur.actions ?? {}), [event.actionId]: event.payload },
+        }
+        messages.value = next
+        return
+      }
+      case "outline": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          outlines: { ...(cur.outlines ?? {}), [event.trackId]: event.payload },
+        }
+        messages.value = next
+        return
+      }
+      case "finalised": {
+        // Replace the streaming placeholder with the persisted entity.
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) {
+          messages.value = [...messages.value, { ...event.message }]
+          return
+        }
+        const next = [...messages.value]
+        next[idx] = { ...event.message }
+        messages.value = next
+        return
+      }
+      case "title-updated": {
+        const sid = activeSessionId.value
+        if (!sid) return
+        const i = sessions.value.findIndex((s) => s.id === sid)
+        if (i < 0) return
+        const next = [...sessions.value]
+        next[i] = { ...next[i], title: event.title }
+        sessions.value = next
+        return
+      }
+      case "error": {
         lastError.value = {
           code: event.code,
           message: event.message,
           retryAfter: event.retryAfter,
         }
-        return true
+        // Drop the empty placeholder — the toast / banner conveys failure.
+        messages.value = messages.value.filter((m) => !m.streaming)
+        return
+      }
     }
-    // exhaustiveness check — keep TS happy if new events are added
-    void assistantMsg
-    return false
-  }
-
-  function updateAssistantContent(messageId: string, content: string): void {
-    const idx = messages.value.findIndex((m) => m.id === messageId)
-    if (idx < 0) return
-    const next = [...messages.value]
-    next[idx] = { ...next[idx], content }
-    messages.value = next
   }
 
   function cancelStream(): void {
-    if (abort) {
-      abort.abort()
-      abort = null
+    if (abort) abort.abort()
+    abort = null
+  }
+
+  async function setActionState(
+    messageId: string,
+    actionId: string,
+    state: ActionState
+  ): Promise<void> {
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+    const prev = messages.value[idx]
+    const actionStates = { ...(prev.actionStates ?? {}), [actionId]: state }
+    const next = [...messages.value]
+    next[idx] = { ...prev, actionStates }
+    messages.value = next
+    try {
+      await chatRepos().messages.updateActionStates(messageId as ChatMessageId, actionStates)
+    } catch (err) {
+      console.warn("chat: failed to persist action state", err)
+    }
+  }
+
+  async function executeAction(messageId: string, actionId: string): Promise<void> {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg) return
+    const action = msg.actions?.[actionId]
+    if (!action) return
+    const currentState = msg.actionStates?.[actionId] ?? "pending"
+    if (currentState === "executing" || currentState === "done") return
+
+    await setActionState(messageId, actionId, "executing")
+    try {
+      if (action.kind === "create_playlist") {
+        const r = await addTracksToPlaylist(
+          { trackIds: action.trackIds as readonly TrackId[] },
+          {
+            playlist: {
+              add: (id) => playlist.add(id as TrackId) as unknown as Promise<unknown>,
+            },
+          }
+        )
+        if (!r.ok) throw new Error(`add to playlist failed: ${r.error}`)
+      } else if (action.kind === "save_note") {
+        const r = await saveChatNote(
+          {
+            trackId: action.trackId as TrackId,
+            text: action.text,
+            startMs: action.startMs,
+            endMs: action.endMs,
+            chatActionId: actionId,
+          },
+          { notes: app.repositories().notes }
+        )
+        if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
+        await notes.refresh()
+        await toast.info(t("chat.noteSaved"))
+      }
+      await setActionState(messageId, actionId, "done")
+    } catch (err) {
+      console.warn("chat: action execution failed", err)
+      await setActionState(messageId, actionId, "error")
     }
   }
 
   async function deleteSession(id: string): Promise<void> {
-    const db = userDb()
-    // chat_messages.ON DELETE CASCADE is declared in the migration, but
-    // SQLite only enforces it when `PRAGMA foreign_keys = ON` — which the
-    // Capacitor adapter does not toggle by default. Delete manually to be
-    // safe across web (sql.js) and native back-ends.
-    await db.execute("DELETE FROM chat_messages WHERE session_id = ?", [id])
-    await db.execute("DELETE FROM chat_sessions WHERE id = ?", [id])
-    await db.save()
+    const repos = chatRepos()
+    await repos.messages.deleteBySession(id as ChatSessionId)
+    await repos.sessions.delete(id as ChatSessionId)
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
       activeSessionId.value = null
@@ -320,10 +448,9 @@ export const useChatStore = defineStore("chat", () => {
     // finally-block would persist its accumulated reply into the
     // freshly-emptied tables, leaving an orphan row.
     cancelStream()
-    const db = userDb()
-    await db.execute("DELETE FROM chat_messages")
-    await db.execute("DELETE FROM chat_sessions")
-    await db.save()
+    const repos = chatRepos()
+    await repos.messages.clearAll()
+    await repos.sessions.clearAll()
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
@@ -342,6 +469,44 @@ export const useChatStore = defineStore("chat", () => {
     return sessions.value.filter((s) => (s.title ?? "").toLowerCase().includes(needle))
   }
 
+  /**
+   * Foreground worker — re-attempts `/title` for sessions whose initial
+   * call returned null. Bounded by attempt-count and a 7-day window.
+   * The chat client's null-on-failure semantics (added in 3.6) make
+   * this safe to call freely on app resume / view mount.
+   */
+  async function retryPendingTitles(lang: "ru" | "en"): Promise<void> {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const repos = chatRepos()
+    const all = await repos.sessions.list(200)
+    const candidates = all.filter(
+      (s) =>
+        s.titleAttemptCount >= 1 &&
+        s.titleAttemptCount <= TITLE_MAX_ATTEMPTS &&
+        s.createdAt > sevenDaysAgo
+    )
+    for (const session of candidates.slice(0, 10)) {
+      const rows = await repos.messages.listBySession(session.id)
+      const turns: ChatTurn[] = rows
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .slice(0, 4)
+        .map((r) => ({ role: r.role, content: r.content }))
+      if (turns.length === 0) continue
+      const newTitle = await fetchSessionTitle(turns, lang)
+      if (newTitle) {
+        await repos.sessions.updateTitle(session.id, newTitle)
+        const idx = sessions.value.findIndex((s) => s.id === session.id)
+        if (idx >= 0) {
+          const next = [...sessions.value]
+          next[idx] = { ...next[idx], title: newTitle }
+          sessions.value = next
+        }
+      } else {
+        await repos.sessions.incrementTitleAttempt(session.id)
+      }
+    }
+  }
+
   return {
     sessions,
     activeSessionId,
@@ -353,8 +518,10 @@ export const useChatStore = defineStore("chat", () => {
     startNewSession,
     sendMessage,
     cancelStream,
+    executeAction,
     deleteSession,
     clearAll,
     searchSessions,
+    retryPendingTitles,
   }
 })

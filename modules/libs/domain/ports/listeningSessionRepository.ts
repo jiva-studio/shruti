@@ -1,4 +1,4 @@
-import type { PlaylistItemId } from "../core.js"
+import type { PlaylistItemId, TrackId, UnixMs } from "../core.js"
 import type {
   DailyListeningTotal,
   ListeningSession,
@@ -9,6 +9,17 @@ import type {
 export interface ProgressEntry {
   readonly position: TrackPositionSec
   readonly updatedAtSec: number
+}
+
+/** One row of "what did the user recently listen to". Joins
+ *  `listening_sessions` ⨝ `playlist_items` and folds the latest end-time
+ *  + position per playlist item. Used to build the chat `UserContext`. */
+export interface RecentTrackProgress {
+  readonly trackId: TrackId
+  /** Unix ms of the most recent session that touched this item. */
+  readonly endedAtMs: UnixMs
+  /** Last known `to_position` for the latest session, in seconds. */
+  readonly positionSec: TrackPositionSec
 }
 
 export interface IListeningSessionRepository {
@@ -68,4 +79,13 @@ export interface IListeningSessionRepository {
 
   /** Sum `to_position - from_position` across every session, in seconds. */
   getTotalListenedSeconds(): Promise<number>
+
+  /**
+   * Most-recent tracks with their last position, ordered by `ended_at`
+   * DESC. One row per distinct playlist item (the GROUP BY collapses
+   * sessions). Used by the chat composable to build the `recent_tracks`
+   * field of the request's `UserContext`. Limit is small (typically 10);
+   * the SQL adapter cleans up its IN-list size accordingly.
+   */
+  listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]>
 }

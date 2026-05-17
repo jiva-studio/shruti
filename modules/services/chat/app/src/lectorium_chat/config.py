@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     llm_default: str = "openrouter/deepseek/deepseek-chat"
     llm_fallback: str = "openrouter/anthropic/claude-3-haiku"
     llm_premium: str = "openrouter/anthropic/claude-3.5-sonnet"
+    # Outline generation is a one-shot JSON-mode call, not the chat agent
+    # itself — picked separately for cost (~$0.0007 per lecture, see
+    # /tmp/outline_bench.py).
+    llm_outline: str = "openrouter/google/gemini-2.0-flash-001"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.
@@ -67,6 +71,19 @@ class Settings(BaseSettings):
     app_shared_token: str = ""
     device_rate_limit_per_day: int = 50
     ip_rate_limit_per_day: int = 200
+    # /title is a separate cheap call (~40 tokens out, gemini-flash) so it
+    # gets a smaller quota with a separate bucket — heavier than /chat per
+    # device because a user starting many sessions in a row is normal, but
+    # not infinite. A leaked app_shared_token (it's baked into every APK)
+    # without this gate gives an attacker free billable LLM access.
+    title_device_rate_limit_per_day: int = 60
+    title_ip_rate_limit_per_day: int = 300
+
+    # ── CORS ────────────────────────────────────────────────────────────
+    # Comma-separated list of allowed origins. Default `*` keeps dev easy;
+    # production override pins to the real app origin via env
+    # (CORS_ALLOW_ORIGINS=https://app.lectorium.example,ionic://localhost).
+    cors_allow_origins: str = "*"
 
     # ── Derived helpers ────────────────────────────────────────────────
     @property
@@ -76,6 +93,11 @@ class Settings(BaseSettings):
     @property
     def langs(self) -> list[str]:
         return [s.strip() for s in self.indexer_langs.split(",") if s.strip()]
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS allow-list. `*` stays as-is (single-element list)."""
+        return [s.strip() for s in self.cors_allow_origins.split(",") if s.strip()]
 
     @property
     def s3_public_url(self) -> str:

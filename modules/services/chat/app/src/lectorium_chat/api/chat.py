@@ -4,31 +4,22 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, AsyncIterator, Literal
+from typing import Any, AsyncIterator
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
-from lectorium_chat.agent.loop import run_agent
+from lectorium_chat.api.schemas.chat import ChatRequestDto
+from lectorium_chat.application.chat_turn import run_chat_turn
+from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.ratelimit import check_and_increment
+
 
 log = get_logger(__name__)
 
 router = APIRouter()
-
-
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str
-
-
-class ChatRequest(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1)
-    lang: Literal["ru", "en"] = "ru"
 
 
 def _check_app_token(token: str | None) -> None:
@@ -46,9 +37,11 @@ def _check_device_id(device_id: str | None) -> str:
 @router.post("/chat")
 async def chat(
     request: Request,
-    body: ChatRequest,
+    body: ChatRequestDto,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
+    idempotency_key: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
 ):
     _check_app_token(x_app_token)
     device_id = _check_device_id(x_device_id)
@@ -56,7 +49,7 @@ async def chat(
 
     # Rate-limit gate (per-day per device + per-IP)
     ip = request.client.host if request.client else "unknown"
-    rl = await check_and_increment(device_id, ip)
+    rl = await deps.rate_limiter.check_and_increment(device_id, ip)
     if not rl.allowed:
         raise HTTPException(
             status_code=429,
@@ -76,16 +69,29 @@ async def chat(
         "chat_request",
         message_count=len(body.messages),
         lang=body.lang,
+        # `Idempotency-Key` is logged for observability only — once
+        # Redis-backed dedup lands (followup PR) the same key will key
+        # the per-request reply cache. For now its presence tells us
+        # whether the mobile client is sending it after a retry, which
+        # is the dataset that decides whether dedup is worth building.
+        idempotency_key=idempotency_key,
     )
+
+    user_ctx = body.user_context.to_domain() if body.user_context else None
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         try:
-            async for ev in run_agent(
+            async for ev in run_chat_turn(
                 [m.model_dump() for m in body.messages],
                 lang=body.lang,
                 request_id=request_id,
+                user_context=user_ctx,
+                is_disconnected=request.is_disconnected,
             ):
-                yield {"event": ev.type, "data": json.dumps(ev.data, ensure_ascii=False)}
+                yield {
+                    "event": ev.type,
+                    "data": json.dumps(ev.data, ensure_ascii=False),
+                }
         finally:
             structlog.contextvars.unbind_contextvars("request_id", "device_id", "ip")
 

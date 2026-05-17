@@ -16,5 +16,14 @@ export type { IPlaylistItemRepository } from "./playlistItemRepository.js"
 export type {
   IListeningSessionRepository,
   ProgressEntry,
+  RecentTrackProgress,
 } from "./listeningSessionRepository.js"
 export type { IMediaItemRepository } from "./mediaItemRepository.js"
+export type {
+  IChatSessionRepository,
+  CreateChatSessionInput,
+} from "./chatSessionRepository.js"
+export type {
+  IChatMessageRepository,
+  CreateChatMessageInput,
+} from "./chatMessageRepository.js"

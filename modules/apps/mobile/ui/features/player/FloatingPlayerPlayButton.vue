@@ -3,7 +3,7 @@
        centre; never moves with the carousel. -->
   <div
     class="play-fixed"
-    :class="{ completed: trackCompleted }"
+    :class="{ completed: trackCompleted, hidden }"
     :aria-hidden="hidden"
     :style="{ '--play-button-size': size + 'px' }"
     @pointerdown.stop
@@ -89,6 +89,16 @@ function onClick(): void {
 
 .play-fixed.completed {
   opacity: 0.7;
+}
+
+/* Parent FloatingPlayer drops pointer-events on .hidden, but children
+ * with explicit pointer-events: auto (this button) re-enable click
+ * capture even when invisible — taps in the player's screen region
+ * fall through to the play handler instead of reaching elements
+ * underneath (chat input bar, suggestion chips, …). Match the parent
+ * here so a hidden player is fully click-inert. */
+.play-fixed.hidden {
+  pointer-events: none;
 }
 
 .play-fixed .icon {
