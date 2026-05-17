@@ -1,72 +1,61 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import {
   useTrackUserState,
   type FocusFragmentPayload,
 } from "@shruti/composables/useTrackUserState.js"
-import {
-  fetchSessionTitle,
-  streamChat,
-  type ActionPayload,
-  type ChatStreamEvent,
-  type ChatTurn,
-  type OutlinePayload,
-} from "@shruti/services/chatClient.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
-import { useI18n } from "vue-i18n"
 import { parseChatMarkers } from "@shruti/views/Chat/composables/useMarkerParser.js"
-import { createNote } from "@lib/application/createNote.js"
-import type { NoteId, TrackId } from "@lib/domain/core.js"
+import {
+  addTracksToPlaylist,
+  runChatTurn,
+  saveChatNote,
+  type RunChatTurnEvent,
+} from "@lib/application"
+import type {
+  ChatActionPayload,
+  ChatActionState,
+  ChatMessage as DomainChatMessage,
+  ChatMessageError,
+  ChatOutlinePayload,
+  ChatSession as DomainChatSession,
+} from "@lib/domain"
+import type {
+  ChatMessageId,
+  ChatSessionId,
+  TrackId,
+} from "@lib/domain/core.js"
+import {
+  createHttpChatStreamClient,
+} from "@infra/chat/httpChatStreamClient.js"
+import {
+  createHttpChatTitleService,
+} from "@infra/chat/httpChatTitleService.js"
+import {
+  createSqlChatSessionRepository,
+  createSqlChatMessageRepository,
+} from "@infra/repositories/sql/index.js"
+import { fetchSessionTitle } from "@shruti/services/chatClient.js"
+import type { ChatTurn } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface ChatSession {
-  readonly id: string
-  readonly title: string | null
-  readonly createdAt: number
-  readonly updatedAt: number
-}
-
-export type ActionState = "pending" | "executing" | "done" | "error" | "dismissed"
-
-/** JSON envelope persisted in `chat_messages.error` for messages that
- *  didn't end cleanly. Discriminated on `kind` so we can grow new error
- *  shapes (rate_limited, blocked, …) later without a schema migration —
- *  the bubble renderer pattern-matches on `kind` and falls back to a
- *  generic suffix on unknowns. Today only `truncated` is used. */
-export type ChatMessageError = { kind: "truncated"; reason: "stream" | "turns" }
-
-export interface ChatMessage {
-  readonly id: string
-  readonly sessionId: string
-  readonly role: "user" | "assistant"
-  /** Raw markdown — assistant content can contain [cite:...] / [card:...] /
-   *  [action:...|id=...] / [outline:track_id] markers. */
-  content: string
-  readonly createdAt: number
-  /** Local-only flag so the UI can show a "thinking…" indicator on the
-   *  currently-streaming assistant bubble without leaking that state
-   *  into SQLite (we persist final content only). */
-  streaming?: boolean
-  /** Server-emitted action payloads keyed by `action.id`. The inline
-   *  marker `[action:<kind>|id=<id>]` references this map. */
-  actions?: Record<string, ActionPayload>
-  /** Outline payloads keyed by `track_id`. The inline marker
-   *  `[outline:<track_id>]` references this map. */
-  outlines?: Record<string, OutlinePayload>
-  /** Per-action user-confirmation state. Defaults to "pending" for any
-   *  action present in `actions` but not here. */
-  actionStates?: Record<string, ActionState>
-  /** Set when the message ended abnormally — UI renders a corresponding
-   *  affordance (e.g. "(прервано)" suffix for `kind: "truncated"`). */
-  error?: ChatMessageError
-}
+// Re-export domain types so consumers can keep importing them from
+// `@shruti/stores/useChatStore` (the legacy path) while the
+// canonical declarations live in `@lib/domain`.
+export type ChatSession = DomainChatSession
+export type ChatMessage = DomainChatMessage & { streaming?: boolean }
+export type ActionPayload = ChatActionPayload
+export type OutlinePayload = ChatOutlinePayload
+export type ActionState = ChatActionState
+export type { ChatMessageError }
 
 /* -------------------------------------------------------------------------- */
 /*                                  Helpers                                   */
@@ -85,30 +74,61 @@ function deriveTitle(text: string, max = 48): string {
   return trimmed.slice(0, max - 1).trimEnd() + "…"
 }
 
-/**
- * `chat_sessions.title_attempt_count` semantics:
- *   0                        — never tried (initial)
- *   1 … TITLE_MAX_ATTEMPTS   — N failed attempts, still retry-eligible
- *   TITLE_FINALIZED          — succeeded OR exhausted retries
- * The retry worker scans [1 … TITLE_MAX_ATTEMPTS] in a 7-day window.
- */
+/** chat_sessions.title_attempt_count semantics — see ChatSession docs.
+ *  0 / 1..MAX: retry-eligible; MAX+1 = success or exhausted. */
 const TITLE_MAX_ATTEMPTS = 3
-const TITLE_FINALIZED = TITLE_MAX_ATTEMPTS + 1
+
+/**
+ * LLM occasionally writes `[action:create-playlist|id=X]` inline without
+ * calling propose_playlist (a known DeepSeek failure mode). Salvage:
+ * scan content for orphan markers and synthesize from sibling
+ * `[card:track_id]` markers. Runs once on message finalisation.
+ */
+function salvageOrphanActions(
+  content: string,
+  existing: Record<string, ActionPayload>,
+  fallbackName: string
+): Record<string, ActionPayload> {
+  const tokens = parseChatMarkers(content)
+  const orphans = tokens
+    .filter(
+      (t): t is Extract<typeof t, { kind: "action" }> =>
+        t.kind === "action" &&
+        t.actionKind === "create_playlist" &&
+        !existing[t.actionId]
+    )
+    .map((t) => t.actionId)
+  if (orphans.length === 0) return existing
+  const trackIds = tokens
+    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
+    .map((t) => t.trackId)
+  if (trackIds.length === 0) return existing
+  const out = { ...existing }
+  for (const id of orphans) {
+    out[id] = {
+      kind: "create_playlist",
+      id,
+      name: fallbackName,
+      trackIds,
+      rationale: "",
+    }
+  }
+  return out
+}
 
 /* -------------------------------------------------------------------------- */
 /*                                   Store                                    */
 /* -------------------------------------------------------------------------- */
 
 /**
- * Owns the chat tab's reactive state. Single active session at a time;
- * messages are streamed in-place onto the last assistant bubble and
- * persisted to SQLite once the SSE stream finishes (or errors).
+ * Owns the chat tab's reactive state and dispatches workflow verbs to
+ * the use-cases in `@lib/application/chat`.
  *
- * Lifecycle:
- *   1. `refreshSessions()` — load list for the session sheet
- *   2. `openSession(id)` OR `startNewSession()` — set `activeSessionId`
- *   3. `sendMessage(text)` — append user msg + stream assistant reply
- *   4. `deleteSession(id)` / `clearAll()` — danger-zone operations
+ * The store does NOT touch SQL or HTTP directly — it constructs the
+ * SQL repos + HTTP wrappers lazily from `useShruti()` and feeds them
+ * into use-cases. This keeps the layering rule satisfied (presentation
+ * → use-case → repo/service ports) and makes `sendMessage` testable by
+ * stubbing `runChatTurn`.
  */
 export const useChatStore = defineStore("chat", () => {
   const app = useShruti()
@@ -133,178 +153,40 @@ export const useChatStore = defineStore("chat", () => {
     return db
   }
 
-  /**
-   * Versioned payload codec for `actions_json` / `outlines_json` /
-   * `action_states_json`. We wrap each record in `{ _v, data }` so we can
-   * evolve the payload shape without lockstep migrations:
-   *   - reader sees `_v <= CURRENT` → returns `data`
-   *   - reader sees `_v > CURRENT`  → returns `{}` (forward-compat: a
-   *     newer app wrote this row; rendering an empty card is safer than
-   *     crashing on missing fields)
-   *   - reader sees no `_v`         → legacy raw record, returned as-is
-   *
-   * Bump `CURRENT_PAYLOAD_V` whenever the in-record shape changes in a
-   * non-additive way, and add a migration arm here that up-converts old
-   * versions instead of returning `{}`.
-   */
-  const CURRENT_PAYLOAD_V = 1
-
-  function parseVersionedRecord<T>(s: unknown): Record<string, T> {
-    if (typeof s !== "string" || s === "") return {}
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(s)
-    } catch {
-      return {}
+  function chatRepos() {
+    const userDatabase = userDb()
+    return {
+      sessions: createSqlChatSessionRepository(userDatabase),
+      messages: createSqlChatMessageRepository(userDatabase),
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
-    const obj = parsed as Record<string, unknown>
-    if (typeof obj._v === "number") {
-      if (obj._v > CURRENT_PAYLOAD_V) {
-        console.warn(
-          `[chat] payload schema v${obj._v} > known v${CURRENT_PAYLOAD_V}; rendering empty`
-        )
-        return {}
-      }
-      const data = obj.data
-      return data && typeof data === "object" && !Array.isArray(data)
-        ? (data as Record<string, T>)
-        : {}
-    }
-    // Legacy format (pre-_v): the parsed object IS the record.
-    return obj as Record<string, T>
   }
 
-  function wrapVersionedRecord<T>(data: Record<string, T>): string {
-    return JSON.stringify({ _v: CURRENT_PAYLOAD_V, data })
+  function streamClient() {
+    return createHttpChatStreamClient()
   }
-
-  /** Parse the persisted `chat_messages.error` JSON. Returns `undefined`
-   *  for null / malformed / unrecognized shapes — those messages render
-   *  as if they ended cleanly (no suffix). */
-  function parseMessageError(raw: unknown): ChatMessageError | undefined {
-    if (typeof raw !== "string" || raw === "") return undefined
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(raw)
-    } catch {
-      return undefined
-    }
-    if (!parsed || typeof parsed !== "object") return undefined
-    const obj = parsed as Record<string, unknown>
-    if (obj.kind === "truncated" && (obj.reason === "stream" || obj.reason === "turns")) {
-      return { kind: "truncated", reason: obj.reason }
-    }
-    return undefined
-  }
-
-  /**
-   * Workaround for a known LLM failure mode (especially DeepSeek): the
-   * model writes `[action:create-playlist|id=ABC]` inline in its reply
-   * without actually calling `propose_playlist`. The marker references
-   * an `id` that never arrived as a server-side `action` event, so
-   * `msg.actions[ABC]` is undefined → the bubble would render an empty
-   * card placeholder.
-   *
-   * Salvage: scan the assistant content for orphan action markers and
-   * synthesize a `create_playlist` payload from the sibling
-   * `[card:track_id]` markers in the same message. The user-facing
-   * intent ("collect these lectures into a playlist") IS preserved by
-   * the marker neighborhood — we just rebuild the wire payload.
-   *
-   * Runs once at message finalisation (in `sendMessage`'s finally) so
-   * the bubble itself stays pure-render and the persisted row already
-   * has the synthesized payload — re-reading the message from SQLite
-   * doesn't need to re-run the salvage.
-   */
-  function salvageOrphanActions(
-    content: string,
-    existing: Record<string, ActionPayload>,
-    fallbackName: string
-  ): Record<string, ActionPayload> {
-    const tokens = parseChatMarkers(content)
-    const orphanIds = tokens
-      .filter(
-        (t): t is Extract<typeof t, { kind: "action" }> =>
-          t.kind === "action" &&
-          t.actionKind === "create_playlist" &&
-          !existing[t.actionId]
-      )
-      .map((t) => t.actionId)
-    if (orphanIds.length === 0) return existing
-    const trackIds = tokens
-      .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
-      .map((t) => t.trackId)
-    if (trackIds.length === 0) return existing  // nothing to salvage with
-    const out = { ...existing }
-    for (const id of orphanIds) {
-      out[id] = {
-        kind: "create_playlist",
-        id,
-        name: fallbackName,
-        trackIds,
-        rationale: "",
-      }
-    }
-    return out
+  function titleService() {
+    return createHttpChatTitleService()
   }
 
   async function refreshSessions(): Promise<void> {
-    const rows = await userDb().query<{
-      id: string
-      title: string | null
-      created_at: number
-      updated_at: number
-    }>(
-      "SELECT id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC LIMIT 200"
-    )
-    sessions.value = rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      createdAt: Number(r.created_at),
-      updatedAt: Number(r.updated_at),
+    const repos = chatRepos()
+    const rows = await repos.sessions.list(200)
+    sessions.value = rows.map((s) => ({
+      id: s.id,
+      title: s.title,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      titleAttemptCount: s.titleAttemptCount,
     }))
   }
 
   async function openSession(id: string): Promise<void> {
     activeSessionId.value = id
-    const rows = await userDb().query<{
-      id: string
-      session_id: string
-      role: string
-      content: string
-      created_at: number
-      actions_json: string | null
-      outlines_json: string | null
-      action_states_json: string | null
-      error: string | null
-    }>(
-      `SELECT id, session_id, role, content, created_at,
-              actions_json, outlines_json, action_states_json,
-              error
-         FROM chat_messages
-        WHERE session_id = ?
-        ORDER BY created_at ASC`,
-      [id]
-    )
-    messages.value = rows.map((r) => ({
-      id: r.id,
-      sessionId: r.session_id,
-      role: r.role === "assistant" ? "assistant" : "user",
-      content: r.content,
-      createdAt: Number(r.created_at),
-      actions: parseVersionedRecord<ActionPayload>(r.actions_json),
-      outlines: parseVersionedRecord<OutlinePayload>(r.outlines_json),
-      actionStates: parseVersionedRecord<ActionState>(r.action_states_json),
-      error: parseMessageError(r.error),
-    }))
+    const repos = chatRepos()
+    const rows = await repos.messages.listBySession(id as ChatSessionId)
+    messages.value = rows.map((m) => ({ ...m }))
   }
 
-  /**
-   * Reset to a blank, unpersisted session. Row is only inserted on the
-   * first `sendMessage()` so back-tapping out of an empty chat doesn't
-   * leave a debris session in the list.
-   */
   function startNewSession(): void {
     if (sending.value) cancelStream()
     activeSessionId.value = null
@@ -314,142 +196,12 @@ export const useChatStore = defineStore("chat", () => {
 
   async function ensureActiveSession(seedTitle: string): Promise<string> {
     if (activeSessionId.value) return activeSessionId.value
-    const id = randomId()
-    const now = Date.now()
-    await userDb().execute(
-      "INSERT INTO chat_sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-      [id, deriveTitle(seedTitle), now, now]
-    )
+    const repos = chatRepos()
+    const id = randomId() as ChatSessionId
+    const created = await repos.sessions.create({ id, title: deriveTitle(seedTitle) })
     activeSessionId.value = id
-    sessions.value = [
-      { id, title: deriveTitle(seedTitle), createdAt: now, updatedAt: now },
-      ...sessions.value,
-    ]
+    sessions.value = [created, ...sessions.value]
     return id
-  }
-
-  /**
-   * Replace the session's auto-derived title (truncated user prompt) with
-   * a 3-5 word LLM-generated title. Runs in the background. On failure
-   * (null response or persist error) the original title stays in place
-   * and `title_attempt_count` is incremented so `retryPendingTitles()`
-   * can pick the session up on a future foreground.
-   *
-   * Success sentinel: count = TITLE_MAX_ATTEMPTS + 1 (4). Anything ≤
-   * TITLE_MAX_ATTEMPTS is retry-eligible for up to 7 days.
-   */
-  async function refreshSessionTitle(
-    sessionId: string,
-    forTurns: readonly ChatTurn[],
-    lang: "ru" | "en"
-  ): Promise<void> {
-    const newTitle = await fetchSessionTitle(forTurns, lang)
-    if (!newTitle) {
-      try {
-        await userDb().execute(
-          "UPDATE chat_sessions SET title_attempt_count = title_attempt_count + 1 WHERE id = ?",
-          [sessionId]
-        )
-        await userDb().save()
-      } catch (err) {
-        console.warn("chat: failed to bump title_attempt_count", err)
-      }
-      return
-    }
-    try {
-      await userDb().execute(
-        "UPDATE chat_sessions SET title = ?, title_attempt_count = ? WHERE id = ?",
-        [newTitle, TITLE_FINALIZED, sessionId]
-      )
-      await userDb().save()
-    } catch (err) {
-      console.warn("chat: failed to persist new title", err)
-      return
-    }
-    const idx = sessions.value.findIndex((s) => s.id === sessionId)
-    if (idx >= 0) {
-      const next = [...sessions.value]
-      next[idx] = { ...next[idx], title: newTitle }
-      sessions.value = next
-    }
-  }
-
-  /**
-   * Foreground retry worker. Looks for sessions whose `/title` call
-   * never produced a rephrase (LLM hiccup, transient network) and tries
-   * once more per call. Capped at TITLE_MAX_ATTEMPTS retries and a
-   * 7-day window — older sessions stay with their deriveTitle()
-   * truncation forever.
-   *
-   * Called by ChatView on mount + appStateChange→active.
-   */
-  async function retryPendingTitles(lang: "ru" | "en"): Promise<void> {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-    let candidates: Array<{ id: string }>
-    try {
-      candidates = await userDb().query<{ id: string }>(
-        `SELECT id FROM chat_sessions
-          WHERE title_attempt_count BETWEEN 1 AND ?
-            AND created_at > ?
-          ORDER BY created_at DESC
-          LIMIT 10`,
-        [TITLE_MAX_ATTEMPTS, sevenDaysAgo]
-      )
-    } catch (err) {
-      console.warn("chat: retryPendingTitles query failed", err)
-      return
-    }
-    for (const { id: sessionId } of candidates) {
-      let rows: Array<{ role: string; content: string }>
-      try {
-        rows = await userDb().query<{ role: string; content: string }>(
-          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT 4",
-          [sessionId]
-        )
-      } catch (err) {
-        console.warn("chat: retryPendingTitles message-load failed", { sessionId, err })
-        continue
-      }
-      const turns: ChatTurn[] = rows
-        .filter((r) => r.role === "user" || r.role === "assistant")
-        .map((r) => ({ role: r.role as ChatTurn["role"], content: r.content }))
-      if (turns.length === 0) continue
-      await refreshSessionTitle(sessionId, turns, lang)
-    }
-  }
-
-  async function persistMessage(msg: ChatMessage): Promise<void> {
-    const db = userDb()
-    await db.execute(
-      `INSERT INTO chat_messages
-         (id, session_id, role, content, created_at,
-          actions_json, outlines_json, action_states_json,
-          error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        msg.id,
-        msg.sessionId,
-        msg.role,
-        msg.content,
-        msg.createdAt,
-        wrapVersionedRecord(msg.actions ?? {}),
-        wrapVersionedRecord(msg.outlines ?? {}),
-        wrapVersionedRecord(msg.actionStates ?? {}),
-        msg.error ? JSON.stringify(msg.error) : null,
-      ]
-    )
-    await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
-      msg.createdAt,
-      msg.sessionId,
-    ])
-    await db.save()
-    // Re-order the in-memory session list so the freshly-touched session
-    // floats to the top without a roundtrip.
-    const idx = sessions.value.findIndex((s) => s.id === msg.sessionId)
-    if (idx >= 0) {
-      const updated = { ...sessions.value[idx], updatedAt: msg.createdAt }
-      sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
-    }
   }
 
   async function sendMessage(
@@ -461,82 +213,56 @@ export const useChatStore = defineStore("chat", () => {
     lastError.value = null
     sending.value = true
 
-    const sessionId = await ensureActiveSession(clean)
-    const userMsg: ChatMessage = {
-      id: randomId(),
-      sessionId,
-      role: "user",
-      content: clean,
-      createdAt: Date.now(),
-    }
-    messages.value = [...messages.value, userMsg]
-    try {
-      await persistMessage(userMsg)
-    } catch (err) {
-      // Persist failure is non-fatal for the in-memory turn — we'll
-      // still attempt to stream a reply, but warn so future history
-      // reload shows the gap.
-      console.warn("chat: failed to persist user message", err)
-    }
-
-    const assistantMsg: ChatMessage = {
-      id: randomId(),
-      sessionId,
-      role: "assistant",
-      content: "",
-      createdAt: Date.now(),
-      streaming: true,
-      actions: {},
-      outlines: {},
-      actionStates: {},
-    }
-    messages.value = [...messages.value, assistantMsg]
-
+    const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
     abort = new AbortController()
-    const lang: "ru" | "en" = appLanguage.value === "ru" ? "ru" : "en"
-    const turns: ChatTurn[] = messages.value
-      .filter((m) => !m.streaming || m.id !== assistantMsg.id)
+    const repos = chatRepos()
+
+    // Snapshot history BEFORE we add the new turn so the server doesn't
+    // see its own optimistic placeholder.
+    const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+    const history: ChatTurn[] = messages.value
+      .filter((m) => !m.streaming)
       .map((m) => ({ role: m.role, content: m.content }))
 
-    // Snapshot user state for personalization tools. Failures degrade
-    // gracefully — server tolerates missing `user_context`.
-    // `options?.focus` tags this one request with a span the agent
-    // should retell (outline chapter tap, citation re-ask, ...).
-    let userContext: unknown = undefined
-    try {
-      userContext = await trackUserState.buildUserContext(options?.focus)
-    } catch (err) {
-      console.warn("chat: failed to build user_context", err)
-    }
-
+    let assistantMsgId: ChatMessageId | null = null
     let acc = ""
-    let sawDone = false
-    let sawTurnsLimit = false
+
     try {
-      for await (const event of streamChat(turns, lang, {
-        signal: abort.signal,
-        userContext,
-      })) {
-        if (event.type === "done") sawDone = true
-        if (event.type === "error" && event.code === "max_turns_exceeded") {
-          sawTurnsLimit = true
+      const isFirst =
+        messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 0
+      for await (const event of runChatTurn(
+        {
+          sessionId,
+          text: clean,
+          lang,
+          history,
+          focus: options?.focus,
+          isFirstAssistantTurn: isFirst,
+          newMessageId: () => randomId() as ChatMessageId,
+          signal: abort.signal,
+        },
+        {
+          sessions: repos.sessions,
+          messages: repos.messages,
+          stream: streamClient(),
+          title: titleService(),
+          buildUserContext: (focus) => trackUserState.buildUserContext(focus),
+          salvageOrphanActions,
+          fallbackPlaylistName: t("chat.fallbackPlaylistName"),
         }
-        const finished = applyEvent(
-          event,
-          assistantMsg,
-          (delta) => {
-            acc += delta
-            updateAssistantContent(assistantMsg.id, acc)
-          },
-          () => {
-            // A tool fired — anything streamed before it was the model's
-            // "thinking preamble" ("Я сделаю это с помощью…"). Drop it so
-            // only the final post-tool answer survives.
-            acc = ""
-            updateAssistantContent(assistantMsg.id, acc)
+      )) {
+        applyTurnEvent(event)
+        if (event.kind === "user-message") {
+          // session list re-order
+          const idx = sessions.value.findIndex((s) => s.id === sessionId)
+          if (idx >= 0) {
+            const updated = { ...sessions.value[idx], updatedAt: Date.now() }
+            sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
           }
-        )
-        if (finished) break
+        }
+        if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
+        if (event.kind === "delta") acc += event.text
+        if (event.kind === "tool-start") acc = ""
       }
     } catch (err) {
       lastError.value = {
@@ -546,140 +272,114 @@ export const useChatStore = defineStore("chat", () => {
     } finally {
       abort = null
       sending.value = false
-      // Build the abnormal-termination marker BEFORE finalising — drives
-      // the "(прервано)" suffix and gets persisted in chat_messages.error.
-      const errorMeta: ChatMessageError | undefined =
-        !sawDone && acc.length > 0
-          ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
-          : undefined
-      // Snapshot the bubble: drop the streaming flag and freeze content.
-      const idx = messages.value.findIndex((m) => m.id === assistantMsg.id)
-      const existing = idx >= 0 ? messages.value[idx] : assistantMsg
-      // Salvage any `[action:create-playlist|id=X]` markers the LLM
-      // emitted without calling propose_playlist (see helper docstring).
-      // Use the user's request as the synthesized playlist name — it's
-      // a better default than a generic localized label.
-      const salvagedActions = salvageOrphanActions(
-        acc,
-        existing.actions ?? {},
-        userMsg.content.slice(0, 60) || t("chat.fallbackPlaylistName")
-      )
-      const finalised: ChatMessage = {
-        ...existing,
-        content: acc,
-        streaming: false,
-        error: errorMeta,
-        actions: salvagedActions,
-      }
-      if (idx >= 0) {
-        const next = [...messages.value]
-        next[idx] = finalised
-        messages.value = next
-      }
-      if (acc.length > 0) {
-        try {
-          await persistMessage(finalised)
-        } catch (err) {
-          console.warn("chat: failed to persist assistant message", err)
+      // If the assistant bubble was never finalised (e.g. abort mid-stream),
+      // drop the streaming placeholder so the UI doesn't keep its spinner.
+      if (assistantMsgId) {
+        const idx = messages.value.findIndex((m) => m.id === assistantMsgId)
+        if (idx >= 0 && messages.value[idx].streaming) {
+          if (acc.length === 0) {
+            messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
+          }
         }
-        // Background title refresh — only on the very first round-trip
-        // (one user + one assistant turn). Subsequent turns keep the
-        // generated title. Fire-and-forget — failures are silent.
-        if (
-          messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 1
-        ) {
-          const initialTurns: ChatTurn[] = [
-            { role: userMsg.role, content: userMsg.content },
-            { role: finalised.role, content: finalised.content },
-          ]
-          void refreshSessionTitle(sessionId, initialTurns, lang)
-        }
-      } else if (!lastError.value) {
-        // No text and no error means an empty done — drop the empty bubble.
-        messages.value = messages.value.filter((m) => m.id !== assistantMsg.id)
-      } else {
-        // Errored before any text — drop the empty bubble; the toast / error
-        // banner conveys the failure.
-        messages.value = messages.value.filter((m) => m.id !== assistantMsg.id)
       }
     }
   }
 
-  function applyEvent(
-    event: ChatStreamEvent,
-    assistantMsg: ChatMessage,
-    onDelta: (text: string) => void,
-    onToolStart: () => void
-  ): boolean {
-    switch (event.type) {
-      case "delta":
-        onDelta(event.text)
-        return false
-      case "tool_start":
-        // Server signal: "about to dispatch a tool, drop any preamble
-        // text streamed in this turn". This used to be `tool` (post-
-        // dispatch); now we have an explicit pre-dispatch event.
-        onToolStart()
-        return false
-      case "tool":
-        // Informational only — the dispatch finished. No state mutation
-        // (the bubble's already cleared from tool_start). Keep the case
-        // so unknown-event warnings don't fire for the legacy bookkeeping.
-        return false
-      case "action":
-        mergeActionInto(assistantMsg.id, event.payload)
-        return false
-      case "outline":
-        mergeOutlineInto(assistantMsg.id, event.payload)
-        return false
-      case "done":
-        return true
-      case "error":
+  function applyTurnEvent(event: RunChatTurnEvent): void {
+    switch (event.kind) {
+      case "user-message":
+        messages.value = [...messages.value, event.message]
+        return
+      case "assistant-placeholder": {
+        const placeholder: ChatMessage = {
+          id: event.messageId,
+          sessionId: (activeSessionId.value ?? "") as ChatSessionId,
+          role: "assistant",
+          content: "",
+          createdAt: Date.now(),
+          streaming: true,
+        }
+        messages.value = [...messages.value, placeholder]
+        return
+      }
+      case "delta": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], content: next[idx].content + event.text }
+        messages.value = next
+        return
+      }
+      case "tool-start": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], content: "" }
+        messages.value = next
+        return
+      }
+      case "action": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          actions: { ...(cur.actions ?? {}), [event.actionId]: event.payload },
+        }
+        messages.value = next
+        return
+      }
+      case "outline": {
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          outlines: { ...(cur.outlines ?? {}), [event.trackId]: event.payload },
+        }
+        messages.value = next
+        return
+      }
+      case "finalised": {
+        // Replace the streaming placeholder with the persisted entity.
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) {
+          messages.value = [...messages.value, { ...event.message }]
+          return
+        }
+        const next = [...messages.value]
+        next[idx] = { ...event.message }
+        messages.value = next
+        return
+      }
+      case "title-updated": {
+        const sid = activeSessionId.value
+        if (!sid) return
+        const i = sessions.value.findIndex((s) => s.id === sid)
+        if (i < 0) return
+        const next = [...sessions.value]
+        next[i] = { ...next[i], title: event.title }
+        sessions.value = next
+        return
+      }
+      case "error": {
         lastError.value = {
           code: event.code,
           message: event.message,
           retryAfter: event.retryAfter,
         }
-        return true
+        // Drop the empty placeholder — the toast / banner conveys failure.
+        messages.value = messages.value.filter((m) => !m.streaming)
+        return
+      }
     }
-    return false
-  }
-
-  function mergeActionInto(messageId: string, payload: ActionPayload): void {
-    const idx = messages.value.findIndex((m) => m.id === messageId)
-    if (idx < 0) return
-    const prev = messages.value[idx]
-    const actions = { ...(prev.actions ?? {}), [payload.id]: payload }
-    const actionStates = { ...(prev.actionStates ?? {}) }
-    if (!actionStates[payload.id]) actionStates[payload.id] = "pending"
-    const next = [...messages.value]
-    next[idx] = { ...prev, actions, actionStates }
-    messages.value = next
-  }
-
-  function mergeOutlineInto(messageId: string, payload: OutlinePayload): void {
-    const idx = messages.value.findIndex((m) => m.id === messageId)
-    if (idx < 0) return
-    const prev = messages.value[idx]
-    const outlines = { ...(prev.outlines ?? {}), [payload.trackId]: payload }
-    const next = [...messages.value]
-    next[idx] = { ...prev, outlines }
-    messages.value = next
-  }
-
-  function updateAssistantContent(messageId: string, content: string): void {
-    const idx = messages.value.findIndex((m) => m.id === messageId)
-    if (idx < 0) return
-    const next = [...messages.value]
-    next[idx] = { ...next[idx], content }
-    messages.value = next
   }
 
   function cancelStream(): void {
-    if (abort) {
-      abort.abort()
-      abort = null
-    }
+    if (abort) abort.abort()
+    abort = null
   }
 
   async function setActionState(
@@ -694,19 +394,13 @@ export const useChatStore = defineStore("chat", () => {
     const next = [...messages.value]
     next[idx] = { ...prev, actionStates }
     messages.value = next
-    // Persist the new state map only (small write).
     try {
-      await userDb().execute(
-        "UPDATE chat_messages SET action_states_json = ? WHERE id = ?",
-        [wrapVersionedRecord(actionStates), messageId]
-      )
-      await userDb().save()
+      await chatRepos().messages.updateActionStates(messageId as ChatMessageId, actionStates)
     } catch (err) {
       console.warn("chat: failed to persist action state", err)
     }
   }
 
-  /** Execute the action the user just confirmed. Idempotent on `done`. */
   async function executeAction(messageId: string, actionId: string): Promise<void> {
     const msg = messages.value.find((m) => m.id === messageId)
     if (!msg) return
@@ -718,30 +412,28 @@ export const useChatStore = defineStore("chat", () => {
     await setActionState(messageId, actionId, "executing")
     try {
       if (action.kind === "create_playlist") {
-        // `playlist.add` returns a Result — `not-ok` here means "already in
-        // playlist" (or another business rule), NOT a thrown failure. We
-        // treat those as success: the trackId IS in the playlist after.
-        for (const trackId of action.trackIds) {
-          await playlist.add(trackId as TrackId)
-        }
-        // No toast — the card's own "done" hint is the confirmation.
-      } else if (action.kind === "save_note") {
-        // Derive a deterministic note id from the chat action id so a
-        // re-tap on a flaky network is a no-op rather than a dup. The
-        // action.id is server-issued (secrets.token_hex(4) → 8 hex chars),
-        // already unique per action — `note_<id>` is collision-free.
-        const noteId = `note_chat_${actionId}` as NoteId
-        const result = await createNote(
+        const r = await addTracksToPlaylist(
+          { trackIds: action.trackIds as readonly TrackId[] },
           {
-            id: noteId,
+            playlist: {
+              add: (id) =>
+                playlist.add(id as TrackId) as unknown as Promise<unknown>,
+            },
+          }
+        )
+        if (!r.ok) throw new Error(`add to playlist failed: ${r.error}`)
+      } else if (action.kind === "save_note") {
+        const r = await saveChatNote(
+          {
             trackId: action.trackId as TrackId,
             text: action.text,
-            timeStart: Math.max(0, action.startMs),
-            timeEnd: Math.max(action.startMs, action.endMs),
+            startMs: action.startMs,
+            endMs: action.endMs,
+            chatActionId: actionId,
           },
           { notes: app.repositories().notes }
         )
-        if (!result.ok) throw new Error(`createNote failed: ${result.error}`)
+        if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
         await notes.refresh()
         await toast.info(t("chat.noteSaved"))
       }
@@ -753,14 +445,9 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function deleteSession(id: string): Promise<void> {
-    const db = userDb()
-    // chat_messages.ON DELETE CASCADE is declared in the migration, but
-    // SQLite only enforces it when `PRAGMA foreign_keys = ON` — which the
-    // Capacitor adapter does not toggle by default. Delete manually to be
-    // safe across web (sql.js) and native back-ends.
-    await db.execute("DELETE FROM chat_messages WHERE session_id = ?", [id])
-    await db.execute("DELETE FROM chat_sessions WHERE id = ?", [id])
-    await db.save()
+    const repos = chatRepos()
+    await repos.messages.deleteBySession(id as ChatSessionId)
+    await repos.sessions.delete(id as ChatSessionId)
     sessions.value = sessions.value.filter((s) => s.id !== id)
     if (activeSessionId.value === id) {
       activeSessionId.value = null
@@ -773,10 +460,9 @@ export const useChatStore = defineStore("chat", () => {
     // finally-block would persist its accumulated reply into the
     // freshly-emptied tables, leaving an orphan row.
     cancelStream()
-    const db = userDb()
-    await db.execute("DELETE FROM chat_messages")
-    await db.execute("DELETE FROM chat_sessions")
-    await db.save()
+    const repos = chatRepos()
+    await repos.messages.clearAll()
+    await repos.sessions.clearAll()
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
@@ -793,6 +479,44 @@ export const useChatStore = defineStore("chat", () => {
     const needle = query.trim().toLowerCase()
     if (needle.length === 0) return sessions.value.slice()
     return sessions.value.filter((s) => (s.title ?? "").toLowerCase().includes(needle))
+  }
+
+  /**
+   * Foreground worker — re-attempts `/title` for sessions whose initial
+   * call returned null. Bounded by attempt-count and a 7-day window.
+   * The chat client's null-on-failure semantics (added in 3.6) make
+   * this safe to call freely on app resume / view mount.
+   */
+  async function retryPendingTitles(lang: "ru" | "en"): Promise<void> {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const repos = chatRepos()
+    const all = await repos.sessions.list(200)
+    const candidates = all.filter(
+      (s) =>
+        s.titleAttemptCount >= 1 &&
+        s.titleAttemptCount <= TITLE_MAX_ATTEMPTS &&
+        s.createdAt > sevenDaysAgo
+    )
+    for (const session of candidates.slice(0, 10)) {
+      const rows = await repos.messages.listBySession(session.id)
+      const turns: ChatTurn[] = rows
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .slice(0, 4)
+        .map((r) => ({ role: r.role, content: r.content }))
+      if (turns.length === 0) continue
+      const newTitle = await fetchSessionTitle(turns, lang)
+      if (newTitle) {
+        await repos.sessions.updateTitle(session.id, newTitle)
+        const idx = sessions.value.findIndex((s) => s.id === session.id)
+        if (idx >= 0) {
+          const next = [...sessions.value]
+          next[idx] = { ...next[idx], title: newTitle }
+          sessions.value = next
+        }
+      } else {
+        await repos.sessions.incrementTitleAttempt(session.id)
+      }
+    }
   }
 
   return {
