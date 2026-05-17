@@ -208,6 +208,11 @@ export function useChatController(): ChatControllerReturn {
     if (!err) return
     if (err.code === "rate_limited") {
       void toast.error(t("chat.errRate"))
+    } else if (err.code === "max_turns_exceeded") {
+      // Agent didn't converge within MAX_TOOL_TURNS. Network was fine —
+      // the model just kept calling tools without producing a final
+      // answer. "Couldn't reach the chat service" would be a lie.
+      void toast.error(t("chat.errMaxTurns"))
     } else if (err.code.startsWith("http_5")) {
       void toast.error(t("chat.errServiceNotReady"))
     } else {

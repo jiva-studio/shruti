@@ -40,7 +40,14 @@ from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-MAX_TOOL_TURNS = 5
+# Ceiling on tool-call turns per /chat request. Real-world playlist /
+# multi-criteria queries observably need 5-7 turns (resolve_source →
+# search_transcripts → list_tracks → resolve_tag → list_tracks → answer).
+# 10 leaves comfortable headroom for the agent's exploratory passes
+# without inviting runaway loops. Hitting the ceiling surfaces a typed
+# error to the client so the UX can render a specific "agent didn't
+# converge" message instead of a generic network failure.
+MAX_TOOL_TURNS = 10
 
 
 @dataclass
