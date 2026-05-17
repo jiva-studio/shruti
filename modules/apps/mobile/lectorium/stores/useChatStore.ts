@@ -497,14 +497,22 @@ export const useChatStore = defineStore("chat", () => {
     event: ChatStreamEvent,
     assistantMsg: ChatMessage,
     onDelta: (text: string) => void,
-    onTool: () => void
+    onToolStart: () => void
   ): boolean {
     switch (event.type) {
       case "delta":
         onDelta(event.text)
         return false
+      case "tool_start":
+        // Server signal: "about to dispatch a tool, drop any preamble
+        // text streamed in this turn". This used to be `tool` (post-
+        // dispatch); now we have an explicit pre-dispatch event.
+        onToolStart()
+        return false
       case "tool":
-        onTool()
+        // Informational only — the dispatch finished. No state mutation
+        // (the bubble's already cleared from tool_start). Keep the case
+        // so unknown-event warnings don't fire for the legacy bookkeeping.
         return false
       case "action":
         mergeActionInto(assistantMsg.id, event.payload)
