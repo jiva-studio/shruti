@@ -89,7 +89,16 @@ app.add_middleware(
     allow_origins=get_settings().cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept", "X-Device-Id", "X-App-Token"],
+    allow_headers=[
+        "Content-Type",
+        "Accept",
+        "X-Device-Id",
+        "X-App-Token",
+        # Client-generated request id for retry dedup (Etap 4.4). Without
+        # this in the allow-list, every browser preflight fails — the
+        # actual POST never lands.
+        "Idempotency-Key",
+    ],
     expose_headers=["Retry-After"],
     max_age=86400,
 )
