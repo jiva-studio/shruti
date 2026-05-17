@@ -37,23 +37,19 @@ export type ActionPayload =
       readonly text: string
     }
 
+/**
+ * Decoded SSE events. `tool_start`, `tool`, `done` carry no payload —
+ * the event type alone is the signal. Server-side metrics (tokens,
+ * tool durations, request id) live in structured logs, not on the
+ * wire.
+ */
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
-  | { readonly type: "tool_start"; readonly name: string }
-  | {
-      readonly type: "tool"
-      readonly name: string
-      readonly durationMs?: number
-      readonly resultCount?: number
-    }
+  | { readonly type: "tool_start" }
+  | { readonly type: "tool" }
   | { readonly type: "action"; readonly payload: ActionPayload }
   | { readonly type: "outline"; readonly payload: OutlinePayload }
-  | {
-      readonly type: "done"
-      readonly requestId?: string
-      readonly totalTokens?: number
-      readonly toolCalls?: number
-    }
+  | { readonly type: "done" }
   | {
       readonly type: "error"
       readonly code: string
@@ -382,49 +378,11 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
     case "tool_start":
-      return {
-        type: "tool_start",
-        name: typeof payload.name === "string" ? payload.name : "unknown",
-      }
+      return { type: "tool_start" }
     case "tool":
-      return {
-        type: "tool",
-        name: typeof payload.name === "string" ? payload.name : "unknown",
-        durationMs:
-          typeof payload.duration_ms === "number"
-            ? payload.duration_ms
-            : typeof payload.durationMs === "number"
-              ? payload.durationMs
-              : undefined,
-        resultCount:
-          typeof payload.result_count === "number"
-            ? payload.result_count
-            : typeof payload.resultCount === "number"
-              ? payload.resultCount
-              : undefined,
-      }
+      return { type: "tool" }
     case "done":
-      return {
-        type: "done",
-        requestId:
-          typeof payload.request_id === "string"
-            ? payload.request_id
-            : typeof payload.requestId === "string"
-              ? payload.requestId
-              : undefined,
-        totalTokens:
-          typeof payload.total_tokens === "number"
-            ? payload.total_tokens
-            : typeof payload.totalTokens === "number"
-              ? payload.totalTokens
-              : undefined,
-        toolCalls:
-          typeof payload.tool_calls === "number"
-            ? payload.tool_calls
-            : typeof payload.toolCalls === "number"
-              ? payload.toolCalls
-              : undefined,
-      }
+      return { type: "done" }
     case "action": {
       const ap = parseActionPayload(payload)
       return ap ? { type: "action", payload: ap } : null

@@ -4,18 +4,18 @@ Every LLM call is streamed: text deltas are yielded immediately so the
 client gets a typing-effect render, while tool_call fragments are buffered
 and dispatched only once the stream completes. Up to MAX_TOOL_TURNS rounds.
 
-AgentEvent types:
-    - 'delta'      : text fragment of assistant response
-    - 'tool_start' : about to dispatch a tool ({name}). Client should
-                     drop any preamble text streamed so far.
-    - 'tool'       : tool call completed ({name, duration_ms,
-                     result_count}). Informational; no state mutation
-                     expected on the client. Alias for backward compat
-                     with the initial-chat ship — keep emitting it.
+AgentEvent types (data shapes shown — `{}` means empty payload, the
+event type itself is the whole signal):
+    - 'delta'      : text fragment ({text})
+    - 'tool_start' : about to dispatch a tool ({}). Client drops any
+                     preamble text streamed so far.
+    - 'tool'       : tool call completed ({}). Bookend marker only —
+                     metrics live in structured logs.
     - 'action'     : client-side action proposed by a tool ({kind, id, ...})
     - 'outline'    : track outline payload ({track_id, items: [...]})
-    - 'done'       : final summary
-    - 'error'      : error payload
+    - 'done'       : final terminator ({}). Per-request stats are in
+                     structured logs (`chat_done` log line).
+    - 'error'      : error payload ({code, message, retry_after?})
 """
 
 from __future__ import annotations
@@ -266,15 +266,17 @@ async def run_agent(
 
             if not tool_calls:
                 # Final answer was streamed; nothing more to do.
-                yield AgentEvent(
-                    type="done",
-                    data={
-                        "request_id": rid,
-                        "total_tokens": total_input_tokens + total_output_tokens,
-                        "tool_calls": tool_calls_made,
-                        "duration_ms": int((time.monotonic() - started) * 1000),
-                    },
+                # Metrics (tokens, duration, tool count) live in structured
+                # logs (`log.info("llm_call", ...)`) — SSE is for UX events,
+                # not telemetry.
+                log.info(
+                    "chat_done",
+                    request_id=rid,
+                    total_tokens=total_input_tokens + total_output_tokens,
+                    tool_calls=tool_calls_made,
+                    duration_ms=int((time.monotonic() - started) * 1000),
                 )
+                yield AgentEvent(type="done", data={})
                 return
 
             # Persist the assistant turn that requested tools. The text
@@ -323,7 +325,9 @@ async def run_agent(
                 # the responsibility is explicit and lives BEFORE the
                 # dispatch so the UI clears immediately, not after the
                 # tool finishes (which can take seconds).
-                yield AgentEvent(type="tool_start", data={"name": name})
+                # tool_start is a clear-preamble signal — the event type
+                # is the entire message; name is in structured logs.
+                yield AgentEvent(type="tool_start", data={})
                 fn = tools.get(name)
                 # Per-call buffer for side-events the tool may emit via the
                 # injected `yield_event` callable. Drained after the tool
@@ -371,14 +375,11 @@ async def run_agent(
 
                 for se in side_events:
                     yield se
-                yield AgentEvent(
-                    type="tool",
-                    data={
-                        "name": name,
-                        "duration_ms": duration_ms,
-                        "result_count": result_count,
-                    },
-                )
+                # `tool` event is the closing bookend (between tool_start
+                # and the next delta). Metrics — name, duration_ms,
+                # result_count — live in `log.info("tool_call", ...)`
+                # above. Client uses the event-type only.
+                yield AgentEvent(type="tool", data={})
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc_id,

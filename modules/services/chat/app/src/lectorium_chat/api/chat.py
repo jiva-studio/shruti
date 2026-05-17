@@ -92,13 +92,6 @@ async def chat(
     )
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
-        # Monotonic per-stream sequence number. Lands as the SSE `id:`
-        # field on every event. The mobile client doesn't drive resume on
-        # it yet (no replay buffer), but exposing the id lets us tell
-        # `saw event N → clean done` from `dropped before id N` once we
-        # wire Last-Event-ID. Also makes server-side logs of cancelled
-        # streams more useful — we know exactly how far the client got.
-        seq = 0
         try:
             async for ev in run_agent(
                 [m.model_dump() for m in body.messages],
@@ -107,9 +100,7 @@ async def chat(
                 user_context=body.user_context,
                 is_disconnected=request.is_disconnected,
             ):
-                seq += 1
                 yield {
-                    "id": str(seq),
                     "event": ev.type,
                     "data": json.dumps(ev.data, ensure_ascii=False),
                 }
