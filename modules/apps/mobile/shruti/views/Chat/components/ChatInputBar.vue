@@ -70,6 +70,22 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault()
   if (canSend.value) onSendClick()
 }
+
+/** Programmatically fill the input — used by SuggestionChips to seed a
+ *  prompt onto the empty composer. Focuses + grows the textarea so the
+ *  user can tweak before sending. */
+function setText(next: string): void {
+  text.value = next
+  void nextTick(() => {
+    resize()
+    textareaRef.value?.focus()
+    // Move caret to end so further typing appends.
+    const el = textareaRef.value
+    if (el) el.setSelectionRange(el.value.length, el.value.length)
+  })
+}
+
+defineExpose({ setText })
 </script>
 
 <style scoped>
@@ -92,16 +108,20 @@ function onKeydown(event: KeyboardEvent): void {
   position: relative;
   display: flex;
   align-items: flex-end;
-  /* Theme-aware surface — cream in light, espresso in dark.
-   * Was hardcoded #ffffff which made the capsule a stark white slab in
-   * dark mode and washed out the typed text. */
-  background: var(--ion-card-background);
-  border: 1px solid var(--ion-color-step-200);
+  /* Palette tokens — see theme/variables.css :root +
+   * @media (prefers-color-scheme: dark). Light theme lifts to white
+   * above the cream page; dark theme picks a tone slightly above
+   * --ion-card-background. */
+  background: var(--shruti-input-surface);
+  border: 1px solid var(--shruti-input-border);
   border-radius: 24px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  padding: 14px 4px 14px 0;
-  min-height: 49px;
+  /* Single-line geometry: capsule height matches the 36px send button
+   * + 4px padding top/bottom = 44px total. With input.padding 7/7 the
+   * one-line text sits flush vertical-center with the button. */
+  padding: 4px 4px 4px 0;
+  min-height: 44px;
   transition: padding-right 180ms cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
@@ -120,7 +140,11 @@ function onKeydown(event: KeyboardEvent): void {
   font: inherit;
   font-size: 15px;
   line-height: 21px;
-  padding: 0 8px 0 16px;
+  /* Own vertical padding (7/7) — combined with the capsule's 4/4 this
+   * makes the one-line scrollHeight = 35px and total capsule height
+   * = 35 + 8 ≈ 44px (clamped by min-height). The text sits flush with
+   * the 36px send button. */
+  padding: 7px 8px 7px 16px;
   max-height: 126px;
   overflow-y: auto;
   scrollbar-width: none;

@@ -11,6 +11,8 @@ import { createSqlLocationRepository } from "./locationsRepository.sql.js"
 import { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 import { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 import { createSqlTagRepository } from "./tagsRepository.sql.js"
+import { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
+import { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -24,6 +26,8 @@ export { createSqlLocationRepository } from "./locationsRepository.sql.js"
 export { createSqlSourceRepository } from "./sourcesRepository.sql.js"
 export { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 export { createSqlTagRepository } from "./tagsRepository.sql.js"
+export { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
+export { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 
 export interface SqlAppRepositories {
   readonly tracks: ReturnType<typeof createSqlTrackRepository>
@@ -37,6 +41,8 @@ export interface SqlAppRepositories {
   readonly listeningSessions: ReturnType<typeof createSqlListeningSessionRepository>
   readonly mediaItems: ReturnType<typeof createSqlMediaItemRepository>
   readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
+  readonly chatSessions: ReturnType<typeof createSqlChatSessionRepository>
+  readonly chatMessages: ReturnType<typeof createSqlChatMessageRepository>
 }
 
 export interface CreateSqlAppRepositoriesDeps {
@@ -71,5 +77,7 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     listeningSessions: createSqlListeningSessionRepository(deps.userDb),
     mediaItems: createSqlMediaItemRepository(deps.userDb),
     unitOfWork: createSqlUnitOfWork(deps.userDb),
+    chatSessions: createSqlChatSessionRepository(deps.userDb),
+    chatMessages: createSqlChatMessageRepository(deps.userDb),
   }
 }

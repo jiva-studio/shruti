@@ -32,3 +32,11 @@ export type {
   CustomerInfoListener,
 } from "./purchases.js"
 export { PurchaseCancelledError } from "./purchases.js"
+export type {
+  IChatStreamClient,
+  ChatRole,
+  ChatStreamEvent,
+  ChatTurn,
+  StreamChatOptions,
+} from "./chatStreamClient.js"
+export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"

@@ -15,6 +15,8 @@ export type TagId = string
 export type NoteId = string
 export type PlaylistItemId = string
 export type MediaItemId = string
+export type ChatSessionId = string
+export type ChatMessageId = string
 
 /** ISO-639 code, e.g. "ru", "en", "hi". */
 export type LanguageCode = string
