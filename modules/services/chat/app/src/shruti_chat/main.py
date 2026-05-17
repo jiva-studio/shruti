@@ -20,12 +20,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from shruti_chat.agent import llm
+from shruti_chat.agent.tools import bind_repositories
 from shruti_chat.api import admin, chat, title
 from shruti_chat.config import get_settings
 from shruti_chat.db.client import close_pool, init_pool
 from shruti_chat.db.migrate import apply_schema
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.embed import get_embedder
+from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.observability.logging import get_logger, setup_logging
 
 
@@ -42,6 +44,9 @@ async def lifespan(app: FastAPI):
     llm.configure_providers(s)
     # Load embedder synchronously — heavy but only once.
     get_embedder(s)
+    # Wire concrete repositories into the agent's tool registry now
+    # that the pg pool and embedder are live.
+    bind_repositories(chunk_repo=PgChunkRepository())
 
     if s.indexer_bootstrap_on_start:
         try:
