@@ -29,14 +29,17 @@ const props = withDefaults(
 
 defineEmits<{ (e: "pick", sessionId: string): void }>()
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const visible = computed(() => props.sessions.slice(0, props.limit))
 
 /**
- * Compact "5м / 2ч / вчера / 3д / 1нед" format — `Intl.RelativeTimeFormat`
- * produces a long localised string ("3 минуты назад") that takes ~30% of
- * the row, crowding the title.
+ * Compact "5м / 2ч / вчера / 3д / 1нед" form — `Intl.RelativeTimeFormat`
+ * even with `style: "narrow"` still produces "5 м назад" / "5m ago"
+ * (~9 chars), which crowds the title against the timestamp column on
+ * a 360dp phone. Unit suffixes are sourced from i18n keys so new
+ * locales drop in via the chat.timeUnit* set instead of editing this
+ * file.
  */
 function relativeTime(epochMs: number): string {
   const abs = Math.max(0, Math.round((Date.now() - epochMs) / 1000))
@@ -46,18 +49,14 @@ function relativeTime(epochMs: number): string {
   const wk = Math.round(abs / 604_800)
   const mo = Math.round(abs / 2_592_000)
   const yr = Math.round(abs / 31_536_000)
-  const isRu = String(locale.value).startsWith("ru")
-  const u = isRu
-    ? { m: "м", h: "ч", d: "д", w: "нед", mo: "мес", y: "г", yesterday: "вчера" }
-    : { m: "m", h: "h", d: "d", w: "w", mo: "mo", y: "y", yesterday: "yesterday" }
   if (abs < 60) return t("chat.timeJustNow")
-  if (min < 60) return `${min}${u.m}`
-  if (hr < 24) return `${hr}${u.h}`
-  if (day === 1) return u.yesterday
-  if (day < 7) return `${day}${u.d}`
-  if (wk < 5) return `${wk}${u.w}`
-  if (mo < 12) return `${mo}${u.mo}`
-  return `${yr}${u.y}`
+  if (min < 60) return `${min}${t("chat.timeUnitMinute")}`
+  if (hr < 24) return `${hr}${t("chat.timeUnitHour")}`
+  if (day === 1) return t("chat.timeYesterday")
+  if (day < 7) return `${day}${t("chat.timeUnitDay")}`
+  if (wk < 5) return `${wk}${t("chat.timeUnitWeek")}`
+  if (mo < 12) return `${mo}${t("chat.timeUnitMonth")}`
+  return `${yr}${t("chat.timeUnitYear")}`
 }
 </script>
 

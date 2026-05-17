@@ -16,6 +16,7 @@ import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores
 import { useToast } from "@shruti/services/useToast.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
+import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 
 export interface OutlineChapterPick {
@@ -176,16 +177,6 @@ export function useChatController(): ChatControllerReturn {
   /** Default chapter window when there's no "next" item to bound it. */
   const FALLBACK_CHAPTER_MS = 5 * 60 * 1000
 
-  /** Always zero-pad MM and SS so every timestamp has the same width. */
-  function formatTs(ms: number): string {
-    const s = Math.max(0, Math.floor(ms / 1000))
-    const h = Math.floor(s / 3600)
-    const m = Math.floor((s % 3600) / 60)
-    const sec = s % 60
-    const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-    return h ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
-  }
-
   /** User tapped an outline chapter inside an OutlineCard. Assemble the
    *  recap prompt + focus fragment and dispatch a chat turn. Prompt
    *  assembly + ms math live here (not in the card) so the card stays
@@ -196,8 +187,8 @@ export function useChatController(): ChatControllerReturn {
       ? Math.max(nextItem.startMs, item.startMs + 1000)
       : item.startMs + FALLBACK_CHAPTER_MS
     const text = t("chat.outlineRecapPrompt", {
-      from: formatTs(item.startMs),
-      to: formatTs(endMs),
+      from: formatTimestamp(item.startMs),
+      to: formatTimestamp(endMs),
       title: item.title,
     })
     await store.sendMessage(text, {

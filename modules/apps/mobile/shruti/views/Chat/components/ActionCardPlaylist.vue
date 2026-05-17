@@ -53,7 +53,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { useRouter } from "vue-router"
 import { IonSpinner } from "@ionic/vue"
 import TrackMiniRow from "./TrackMiniRow.vue"
 import type { ActionPayload } from "@shruti/services/chatClient.js"
@@ -68,8 +67,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "confirm", actionId: string): void
 }>()
-
-const router = useRouter()
 
 const COLLAPSED_LIMIT = 5
 const expanded = ref(false)
@@ -87,10 +84,6 @@ const visibleIds = computed(() => {
 
 function onConfirm() {
   emit("confirm", props.actionId)
-}
-
-function openLibrary() {
-  void router.push({ name: "home" })
 }
 </script>
 
