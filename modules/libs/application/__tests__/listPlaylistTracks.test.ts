@@ -35,6 +35,7 @@ function makeTrackRepo(tracks: ReadonlyMap<string, Track>): ITrackRepository {
     search: async () => [],
     getTranscriptPath: async () => null,
     listTranscriptLanguages: async () => [],
+    getDurationsMs: async () => new Map(),
   }
 }
 
