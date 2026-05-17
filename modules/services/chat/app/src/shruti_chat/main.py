@@ -81,10 +81,12 @@ app = FastAPI(
 
 # CORS — mobile app talks to us cross-origin (Capacitor wraps webview as
 # `capacitor://localhost`, `ionic://localhost`, `http://localhost:8100` in
-# dev). Allow all so first-deploy works; tighten when we own a real origin.
+# dev). Allow-list comes from `CORS_ALLOW_ORIGINS` (comma-separated).
+# Default `*` keeps dev frictionless; prod env should pin to the real
+# app origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_settings().cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Accept", "X-Device-Id", "X-App-Token"],

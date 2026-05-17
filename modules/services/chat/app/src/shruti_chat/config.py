@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     title_device_rate_limit_per_day: int = 60
     title_ip_rate_limit_per_day: int = 300
 
+    # ── CORS ────────────────────────────────────────────────────────────
+    # Comma-separated list of allowed origins. Default `*` keeps dev easy;
+    # production override pins to the real app origin via env
+    # (CORS_ALLOW_ORIGINS=https://app.shruti.example,ionic://localhost).
+    cors_allow_origins: str = "*"
+
     # ── Derived helpers ────────────────────────────────────────────────
     @property
     def catalog_db_path(self) -> Path:
@@ -87,6 +93,11 @@ class Settings(BaseSettings):
     @property
     def langs(self) -> list[str]:
         return [s.strip() for s in self.indexer_langs.split(",") if s.strip()]
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS allow-list. `*` stays as-is (single-element list)."""
+        return [s.strip() for s in self.cors_allow_origins.split(",") if s.strip()]
 
     @property
     def s3_public_url(self) -> str:
