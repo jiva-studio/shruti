@@ -19,9 +19,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from lectorium_chat.db.client import get_pool
 from lectorium_chat.domain import UserContext
-from lectorium_chat.indexer.embed import get_embedder
+from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
+from lectorium_chat.domain.ports.embedder import EmbedderPort
 
 
 _NO_CTX_HINT = (
@@ -34,6 +34,20 @@ def _ok_or_empty(items: list, has_ctx: bool) -> dict[str, Any] | list:
     if not has_ctx:
         return {"error": "user_context_missing", "hint": _NO_CTX_HINT}
     return items
+
+
+def _chunk_to_wire(s, *, include_ref: bool) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "track_id": s.chunk.track_id,
+        "lang": s.chunk.lang,
+        "start_ms": s.chunk.start_ms,
+        "end_ms": s.chunk.end_ms,
+        "text": s.chunk.text,
+        "score": s.score,
+    }
+    if include_ref:
+        row["reference_source_id"] = s.chunk.reference_source_id
+    return row
 
 
 async def continue_listening(
@@ -70,6 +84,8 @@ async def search_my_history(
     user_context: UserContext | None = None,
     lang: str | None = None,
     top_k: int = 8,
+    chunk_repo: ChunkRepository,
+    embedder: EmbedderPort,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Semantic search restricted to recent_tracks."""
     if user_context is None:
@@ -77,40 +93,17 @@ async def search_my_history(
     ids = [t.track_id for t in user_context.recent_tracks]
     if not ids:
         return []
-    embedder = get_embedder()
     q_vec = await embedder.embed_query(query)
-    pool = get_pool()
+    k = max(1, min(top_k, 16))
 
     async def _run(use_lang: str | None) -> list[dict[str, Any]]:
-        where = ["embed_model = $1", "track_id = ANY($2::text[])"]
-        params: list[Any] = [embedder.name, ids]
-        if use_lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(use_lang)
-        params.append(q_vec)
-        params.append(max(1, min(top_k, 16)))
-        sql = f"""
-          SELECT track_id, lang, start_ms, end_ms, text, reference_source_id,
-                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY embedding <=> ${len(params) - 1}::vector
-          LIMIT ${len(params)}
-        """
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        return [
-            {
-                "track_id": r["track_id"],
-                "lang": r["lang"],
-                "start_ms": r["start_ms"],
-                "end_ms": r["end_ms"],
-                "text": r["text"],
-                "reference_source_id": r["reference_source_id"],
-                "score": float(r["score"]),
-            }
-            for r in rows
-        ]
+        scored = await chunk_repo.search_by_embedding(
+            q_vec,
+            eligible_track_ids=ids,
+            lang=use_lang,
+            top_k=k,
+        )
+        return [_chunk_to_wire(s, include_ref=True) for s in scored]
 
     rows = await _run(lang)
     if not rows and lang is not None:
@@ -123,6 +116,7 @@ async def recommend_next(
     user_context: UserContext | None = None,
     lang: str | None = None,
     top_k: int = 6,
+    chunk_repo: ChunkRepository,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """ANN from a centroid of the user's recent listening.
 
@@ -135,66 +129,24 @@ async def recommend_next(
     """
     if user_context is None:
         return _ok_or_empty([], False)
-    embedder = get_embedder()
-    pool = get_pool()
-
     seed_ids = [t.track_id for t in user_context.recent_tracks[:5]]
     if not seed_ids:
         return []
+    k = max(1, min(top_k, 12))
 
     async def _run(use_lang: str | None) -> list[dict[str, Any]]:
-        # Pull one representative chunk per seed (first chunk) for centroid.
-        where_seed = ["embed_model = $1", "track_id = ANY($2::text[])"]
-        params_seed: list[Any] = [embedder.name, seed_ids]
-        if use_lang:
-            where_seed.append(f"lang = ${len(params_seed) + 1}")
-            params_seed.append(use_lang)
-        sql_seed = f"""
-          SELECT DISTINCT ON (track_id) track_id, embedding
-          FROM chunks
-          WHERE {' AND '.join(where_seed)}
-          ORDER BY track_id, start_ms
-        """
-        async with pool.acquire() as conn:
-            seed_rows = await conn.fetch(sql_seed, *params_seed)
-        if not seed_rows:
+        seed_vecs = await chunk_repo.get_first_chunk_embeddings(seed_ids, lang=use_lang)
+        if not seed_vecs:
             return []
-
-        # Centroid (average of vectors). pgvector's asyncpg codec is registered
-        # in `_init_connection` (db/client.py), so `embedding` arrives as a
-        # list[float] / numpy array directly — no string-repr parsing needed.
-        vecs: list[list[float]] = [list(r["embedding"]) for r in seed_rows]
-        dim = len(vecs[0])
-        centroid = [sum(v[i] for v in vecs) / len(vecs) for i in range(dim)]
-
-        where = ["embed_model = $1", "track_id <> ALL($2::text[])"]
-        params: list[Any] = [embedder.name, seed_ids]
-        if use_lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(use_lang)
-        params.append(centroid)
-        params.append(max(1, min(top_k, 12)))
-        sql = f"""
-          SELECT DISTINCT ON (track_id) track_id, lang, start_ms, end_ms, text,
-                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY track_id, embedding <=> ${len(params) - 1}::vector
-          LIMIT ${len(params)}
-        """
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
-        return [
-            {
-                "track_id": r["track_id"],
-                "lang": r["lang"],
-                "start_ms": r["start_ms"],
-                "end_ms": r["end_ms"],
-                "text": r["text"],
-                "score": float(r["score"]),
-            }
-            for r in rows
-        ]
+        dim = len(seed_vecs[0])
+        centroid = [sum(v[i] for v in seed_vecs) / len(seed_vecs) for i in range(dim)]
+        scored = await chunk_repo.search_by_embedding(
+            centroid,
+            excluded_track_ids=seed_ids,
+            lang=use_lang,
+            top_k=k,
+        )
+        return [_chunk_to_wire(s, include_ref=False) for s in scored]
 
     rows = await _run(lang)
     if not rows and lang is not None:

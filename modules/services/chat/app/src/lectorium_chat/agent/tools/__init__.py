@@ -35,6 +35,7 @@ from typing import Any, Awaitable, Callable
 from lectorium_chat.domain import UserContext
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
+from lectorium_chat.domain.ports.embedder import EmbedderPort
 from lectorium_chat.domain.ports.outline_cache import OutlineCache
 from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 
@@ -102,6 +103,7 @@ def bind_repositories(
     catalog_repo: CatalogRepository,
     transcript_storage: TranscriptStorage,
     outline_cache: OutlineCache,
+    embedder: EmbedderPort,
 ) -> None:
     """Inject infrastructure adapters into the registered tool callables.
 
@@ -117,8 +119,15 @@ def bind_repositories(
     explicit `register_tool` calls in lifespan.
     """
     bindings: dict[str, dict[str, Any]] = {
-        "search_transcripts":     {"chunk_repo": chunk_repo, "catalog_repo": catalog_repo},
+        "search_transcripts":     {
+            "chunk_repo": chunk_repo,
+            "catalog_repo": catalog_repo,
+            "embedder": embedder,
+        },
         "get_transcript_window":  {"chunk_repo": chunk_repo},
+        "find_similar_chunks":    {"chunk_repo": chunk_repo, "embedder": embedder},
+        "search_my_history":      {"chunk_repo": chunk_repo, "embedder": embedder},
+        "recommend_next":         {"chunk_repo": chunk_repo},
         "get_track":              {"catalog_repo": catalog_repo},
         "list_tracks":            {"catalog_repo": catalog_repo},
         "resolve_author":         {"catalog_repo": catalog_repo},

@@ -3,20 +3,25 @@
 Two modes:
 - Fragment mode: caller supplies `track_id + start_ms + end_ms`. The
   chunks inside that window are re-embedded as one query and matched
-  against the rest of the corpus. Use for "where else did he say
-  something similar" given an existing citation.
+  against the rest of the corpus.
 - Whole-track mode: caller supplies just `track_id`. The first ~5
   chunks of the track are used as the seed instead — same query
-  shape, broader anchor. Use for "find lectures like this one"
-  without a specific timecode.
+  shape, broader anchor.
+
+Anchored use-case: language is set by the source citation, so the
+language filter stays strict (no lang fallback like the discovery
+tools do).
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from lectorium_chat.db.client import get_pool
-from lectorium_chat.indexer.embed import get_embedder
+from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
+from lectorium_chat.domain.ports.embedder import EmbedderPort
+
+
+ANCHOR_LIMIT = 5
 
 
 async def find_similar_chunks(
@@ -25,65 +30,36 @@ async def find_similar_chunks(
     end_ms: int | None = None,
     top_k: int = 6,
     lang: str | None = None,
+    *,
+    chunk_repo: ChunkRepository,
+    embedder: EmbedderPort,
 ) -> list[dict[str, Any]]:
-    pool = get_pool()
-
-    # Fetch source chunks. With a (start_ms, end_ms) window we anchor on
-    # that fragment; without one we take the first 5 chunks of the track
-    # as a "what's this track about" centroid.
-    where_src: list[str] = ["track_id = $1"]
-    params_src: list[Any] = [track_id]
-    if start_ms is not None and end_ms is not None:
-        where_src.append(f"end_ms >= ${len(params_src) + 1}")
-        params_src.append(int(start_ms))
-        where_src.append(f"start_ms <= ${len(params_src) + 1}")
-        params_src.append(int(end_ms))
-    if lang:
-        where_src.append(f"lang = ${len(params_src) + 1}")
-        params_src.append(lang)
-    sql_src = f"""
-      SELECT text FROM chunks
-      WHERE {' AND '.join(where_src)}
-      ORDER BY start_ms
-      LIMIT 5
-    """
-    async with pool.acquire() as conn:
-        src_rows = await conn.fetch(sql_src, *params_src)
-    if not src_rows:
+    src_texts = await chunk_repo.get_anchor_texts(
+        track_id,
+        start_ms=start_ms, end_ms=end_ms, lang=lang,
+        limit=ANCHOR_LIMIT,
+    )
+    if not src_texts:
         return []
-    src_text = " ".join(r["text"] for r in src_rows)
+    q_vec = await embedder.embed_query(" ".join(src_texts))
 
-    embedder = get_embedder()
-    q_vec = await embedder.embed_query(src_text)
-
-    where = ["embed_model = $1", "track_id <> $2"]
-    params: list[Any] = [embedder.name, track_id]
-    if lang:
-        where.append(f"lang = ${len(params) + 1}")
-        params.append(lang)
-    params.append(q_vec)
-    params.append(max(1, min(top_k, 12)))
-    sql = f"""
-      SELECT track_id, lang, start_ms, end_ms, text, reference_source_id,
-             1 - (embedding <=> ${len(params) - 1}::vector) AS score
-      FROM chunks
-      WHERE {' AND '.join(where)}
-      ORDER BY embedding <=> ${len(params) - 1}::vector
-      LIMIT ${len(params)}
-    """
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(sql, *params)
+    scored = await chunk_repo.search_by_embedding(
+        q_vec,
+        excluded_track_ids=[track_id],
+        lang=lang,
+        top_k=max(1, min(top_k, 12)),
+    )
     return [
         {
-            "track_id": r["track_id"],
-            "lang": r["lang"],
-            "start_ms": r["start_ms"],
-            "end_ms": r["end_ms"],
-            "text": r["text"],
-            "reference_source_id": r["reference_source_id"],
-            "score": float(r["score"]),
+            "track_id": s.chunk.track_id,
+            "lang": s.chunk.lang,
+            "start_ms": s.chunk.start_ms,
+            "end_ms": s.chunk.end_ms,
+            "text": s.chunk.text,
+            "reference_source_id": s.chunk.reference_source_id,
+            "score": s.score,
         }
-        for r in rows
+        for s in scored
     ]
 
 

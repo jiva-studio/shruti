@@ -16,7 +16,7 @@ from typing import Any
 
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
-from lectorium_chat.indexer.embed import get_embedder
+from lectorium_chat.domain.ports.embedder import EmbedderPort
 
 
 _DESCRIPTION = (
@@ -40,6 +40,7 @@ async def search_transcripts(
     *,
     chunk_repo: ChunkRepository,
     catalog_repo: CatalogRepository,
+    embedder: EmbedderPort,
 ) -> list[dict[str, Any]]:
     eligible_ids = await catalog_repo.filter_track_ids(
         author_id=author_id, source_id=source_id, location_id=location_id,
@@ -49,7 +50,7 @@ async def search_transcripts(
         # Filter matched no tracks → no semantic search needed.
         return []
 
-    q_vec = await get_embedder().embed_query(query)
+    q_vec = await embedder.embed_query(query)
 
     async def _run(use_lang: str | None) -> list[dict[str, Any]]:
         scored = await chunk_repo.search_by_embedding(
