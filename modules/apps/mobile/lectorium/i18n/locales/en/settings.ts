@@ -144,10 +144,6 @@ export default {
       title: "Chat tab",
       description: "Show the Sadhu chat tab at the bottom",
     },
-    clearHistory: {
-      title: "Clear chat history",
-      description: "Delete every chat session and message from this device",
-    },
   },
   notes: {
     showTab: {
@@ -229,12 +225,12 @@ export default {
     },
     clearUserData: {
       title: "Clear user data",
-      description: "Deletes all tracks, playlists, notes and bookmarks",
+      description: "Deletes all tracks, playlists, notes, bookmarks and chats",
     },
     confirmClearUserData: {
       header: "Clear all user data?",
       message:
-        "Notes, playlist, downloaded tracks and search filters will be permanently deleted. This cannot be undone.",
+        "Notes, playlist, downloaded tracks, chats and search filters will be permanently deleted. This cannot be undone.",
       cancel: "Cancel",
       confirm: "Delete everything",
     },

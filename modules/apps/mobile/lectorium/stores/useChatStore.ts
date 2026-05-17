@@ -316,6 +316,10 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function clearAll(): Promise<void> {
+    // Stop any in-flight SSE stream first — otherwise the streaming
+    // finally-block would persist its accumulated reply into the
+    // freshly-emptied tables, leaving an orphan row.
+    cancelStream()
     const db = userDb()
     await db.execute("DELETE FROM chat_messages")
     await db.execute("DELETE FROM chat_sessions")
@@ -323,6 +327,19 @@ export const useChatStore = defineStore("chat", () => {
     sessions.value = []
     activeSessionId.value = null
     messages.value = []
+  }
+
+  /**
+   * Case-insensitive title-only search over the loaded sessions list.
+   * Runs in JS because SQLite's `LOWER()` / `LIKE` only fold ASCII and
+   * would silently miss Cyrillic uppercase ("Сколько" vs "сколько").
+   * Session list is capped at 200 by `refreshSessions`, so a linear
+   * scan per keystroke is trivial.
+   */
+  function searchSessions(query: string): ChatSession[] {
+    const needle = query.trim().toLowerCase()
+    if (needle.length === 0) return sessions.value.slice()
+    return sessions.value.filter((s) => (s.title ?? "").toLowerCase().includes(needle))
   }
 
   return {
@@ -338,5 +355,6 @@ export const useChatStore = defineStore("chat", () => {
     cancelStream,
     deleteSession,
     clearAll,
+    searchSessions,
   }
 })

@@ -8,6 +8,8 @@ export default {
   newSession: "Новый чат",
   history: "История чатов",
   historyEmpty: "Пока нет ни одного чата.",
+  searchPlaceholder: "Поиск по истории",
+  searchEmpty: "Ничего не найдено",
   untitledSession: "Без названия",
   clearHistory: "Очистить историю чатов",
   clearHistoryConfirm: "Удалить все чаты и сообщения? Это действие нельзя отменить.",

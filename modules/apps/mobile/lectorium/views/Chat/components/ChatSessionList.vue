@@ -1,14 +1,23 @@
 <template>
-  <IonModal :is-open="open" class="chat-session-list" @did-dismiss="$emit('update:open', false)">
+  <IonModal :is-open="open" class="chat-session-list" @did-dismiss="onDismiss">
     <Header>
       <IonToolbar>
         <IonTitle>{{ $t("chat.history") }}</IonTitle>
         <IonButtons slot="end">
+          <IonButton
+            color="danger"
+            :disabled="sessions.length === 0 && !searchQuery"
+            :aria-label="$t('chat.clearHistory')"
+            @click="$emit('delete-all')"
+          >
+            <TrashIcon :size="20" />
+          </IonButton>
           <IonButton @click="$emit('update:open', false)">
             {{ $t("app.close") }}
           </IonButton>
         </IonButtons>
       </IonToolbar>
+      <SearchInput v-model="bridgedQuery" :placeholder="$t('chat.searchPlaceholder')" />
     </Header>
     <IonContent>
       <IonList v-if="sessions.length > 0">
@@ -32,13 +41,14 @@
         </IonItemSliding>
       </IonList>
       <div v-else class="empty">
-        {{ $t("chat.historyEmpty") }}
+        {{ searchQuery ? $t("chat.searchEmpty") : $t("chat.historyEmpty") }}
       </div>
     </IonContent>
   </IonModal>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"
 import {
   IonButton,
   IonButtons,
@@ -54,25 +64,46 @@ import {
   IonToolbar,
 } from "@ionic/vue"
 import { Header } from "@ui/primitives/index.js"
+import { TrashIcon } from "@ui/icons/index.js"
+import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import type { ChatSession } from "@lectorium/stores/useChatStore.js"
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   sessions: readonly ChatSession[]
   activeSessionId: string | null
+  searchQuery: string
 }>()
 
 const emit = defineEmits<{
   "update:open": [value: boolean]
+  "update:searchQuery": [value: string]
   pick: [id: string]
   delete: [id: string]
+  "delete-all": []
 }>()
 
 const appLanguage = useAppLanguage()
 
+// Bridge the parent-owned searchQuery prop to a v-model-compatible
+// ref so SearchInput (which uses defineModel) can read/write it.
+const bridgedQuery = computed<string>({
+  get: () => props.searchQuery,
+  set: (v) => emit("update:searchQuery", v),
+})
+
 function onPick(id: string): void {
   emit("pick", id)
+}
+
+function onDismiss(): void {
+  // Reset the search box when the sheet closes so reopening starts from
+  // a clean slate; IonModal keeps the DOM around between presentations.
+  if (props.searchQuery.length > 0) {
+    emit("update:searchQuery", "")
+  }
+  emit("update:open", false)
 }
 
 function formatTimestamp(ms: number): string {

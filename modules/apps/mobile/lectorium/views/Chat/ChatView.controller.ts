@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, ref, watch, type Ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
+import { alertController } from "@ionic/vue"
 import { useChatStore, type ChatMessage, type ChatSession } from "@lectorium/stores/useChatStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
 
@@ -12,12 +13,15 @@ export interface ChatControllerReturn {
   isHistoryOpen: Ref<boolean>
   hasMessages: Ref<boolean>
   contentRef: Ref<HTMLElement | null>
+  searchQuery: Ref<string>
+  filteredSessions: Ref<ChatSession[]>
   onSend: (text: string) => Promise<void>
   onNewSession: () => void
   onOpenHistory: () => Promise<void>
   onCloseHistory: () => void
   onPickSession: (id: string) => Promise<void>
   onDeleteSession: (id: string) => Promise<void>
+  onDeleteAllSessions: () => Promise<void>
 }
 
 /**
@@ -39,6 +43,12 @@ export function useChatController(): ChatControllerReturn {
   const contentRef = ref<HTMLElement | null>(null)
 
   const hasMessages = computed(() => store.messages.length > 0)
+
+  const searchQuery = ref<string>("")
+  // Filter runs in JS against `store.sessions` (capped at 200) so it
+  // auto-recomputes whenever the store list mutates — no separate
+  // sync watcher needed.
+  const filteredSessions = computed<ChatSession[]>(() => store.searchSessions(searchQuery.value))
 
   async function ensureSessionFromRoute(): Promise<void> {
     const param = route.params.sessionId
@@ -76,6 +86,7 @@ export function useChatController(): ChatControllerReturn {
 
   async function onOpenHistory(): Promise<void> {
     await store.refreshSessions()
+    searchQuery.value = ""
     isHistoryOpen.value = true
   }
 
@@ -97,6 +108,36 @@ export function useChatController(): ChatControllerReturn {
     if (wasActive && route.name === "chat-session") {
       void router.replace({ name: "chat" })
     }
+  }
+
+  async function onDeleteAllSessions(): Promise<void> {
+    const dialog = await alertController.create({
+      header: t("chat.clearHistory"),
+      message: t("chat.clearHistoryConfirm"),
+      buttons: [
+        { text: t("app.cancel"), role: "cancel" },
+        {
+          text: t("app.delete"),
+          role: "destructive",
+          handler: () => {
+            void (async () => {
+              try {
+                await store.clearAll()
+                searchQuery.value = ""
+                if (route.name === "chat-session") {
+                  void router.replace({ name: "chat" })
+                }
+                toast.info(t("chat.clearedToast"))
+              } catch (err) {
+                console.warn("chat: failed to clear all sessions", err)
+                void toast.error(t("chat.errNetwork"))
+              }
+            })()
+          },
+        },
+      ],
+    })
+    await dialog.present()
   }
 
   function surfaceError(): void {
@@ -160,11 +201,14 @@ export function useChatController(): ChatControllerReturn {
     isHistoryOpen,
     hasMessages,
     contentRef,
+    searchQuery,
+    filteredSessions,
     onSend,
     onNewSession,
     onOpenHistory,
     onCloseHistory,
     onPickSession,
     onDeleteSession,
+    onDeleteAllSessions,
   }
 }
