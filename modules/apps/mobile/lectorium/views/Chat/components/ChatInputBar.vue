@@ -108,12 +108,12 @@ defineExpose({ setText })
   position: relative;
   display: flex;
   align-items: flex-end;
-  /* Theme-aware surface. `--ion-card-background` collapses to the page
-   * cream in light theme — the input was indistinguishable from the
-   * surrounding page. Hardcode: bright white in light (raised over the
-   * cream), near-black in dark (raised over espresso). */
-  background: #ffffff;
-  border: 1px solid var(--ion-color-step-200);
+  /* Palette tokens — see theme/variables.css :root +
+   * @media (prefers-color-scheme: dark). Light theme lifts to white
+   * above the cream page; dark theme picks a tone slightly above
+   * --ion-card-background. */
+  background: var(--lectorium-input-surface);
+  border: 1px solid var(--lectorium-input-border);
   border-radius: 24px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
@@ -123,14 +123,6 @@ defineExpose({ setText })
   padding: 4px 4px 4px 0;
   min-height: 44px;
   transition: padding-right 180ms cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-@media (prefers-color-scheme: dark) {
-  .input-capsule {
-    background: #11161d;
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  }
 }
 
 .input-capsule.has-text {
