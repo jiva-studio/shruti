@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     app_shared_token: str = ""
     device_rate_limit_per_day: int = 50
     ip_rate_limit_per_day: int = 200
+    # /title is a separate cheap call (~40 tokens out, gemini-flash) so it
+    # gets a smaller quota with a separate bucket — heavier than /chat per
+    # device because a user starting many sessions in a row is normal, but
+    # not infinite. A leaked app_shared_token (it's baked into every APK)
+    # without this gate gives an attacker free billable LLM access.
+    title_device_rate_limit_per_day: int = 60
+    title_ip_rate_limit_per_day: int = 300
 
     # ── Derived helpers ────────────────────────────────────────────────
     @property
