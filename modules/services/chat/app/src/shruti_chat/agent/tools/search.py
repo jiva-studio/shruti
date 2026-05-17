@@ -2,59 +2,21 @@
 
 Flow:
 1. If any catalog-side filter is set (author/source/location/tag/date),
-   compute the eligible track_id set from SQLite first.
+   compute the eligible track_id set via `CatalogRepository.filter_track_ids`.
 2. Embed the query via the active embedder.
 3. Delegate to `ChunkRepository.search_by_embedding` for the ANN call.
 
-Postgres access is encapsulated by the repository — this module no
-longer imports `db.client`.
+Postgres + SQLite access are both encapsulated by repositories — this
+module no longer imports `db.client` or the sqlite helper.
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-from shruti_chat.agent.tools._sqlite import catalog_conn
+from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.indexer.embed import get_embedder
-
-
-def _filter_track_ids_sync(
-    *,
-    author_id: str | None,
-    source_id: str | None,
-    location_id: str | None,
-    tag_ids: list[str] | None,
-    date_from: str | None,
-    date_to: str | None,
-) -> list[str] | None:
-    """Return list of eligible track_ids, or None if no filter is active."""
-    if not any([author_id, source_id, location_id, tag_ids, date_from, date_to]):
-        return None
-    sql = ["SELECT t.id FROM tracks t WHERE t.hidden = 0"]
-    params: list[Any] = []
-    if author_id:
-        sql.append("AND t.author_id = ?"); params.append(author_id)
-    if location_id:
-        sql.append("AND t.location_id = ?"); params.append(location_id)
-    if date_from:
-        sql.append("AND t.date >= ?"); params.append(date_from)
-    if date_to:
-        sql.append("AND t.date <= ?"); params.append(date_to)
-    if tag_ids:
-        ph = ",".join("?" * len(tag_ids))
-        sql.append(
-            f"AND EXISTS (SELECT 1 FROM track_tags "
-            f"WHERE track_id = t.id AND tag_id IN ({ph}))")
-        params.extend(tag_ids)
-    if source_id:
-        sql.append(
-            "AND EXISTS (SELECT 1 FROM track_references "
-            "WHERE track_id = t.id AND source_id = ?)")
-        params.append(source_id)
-    with catalog_conn() as conn:
-        return [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
 
 
 _DESCRIPTION = (
@@ -77,9 +39,9 @@ async def search_transcripts(
     top_k: int = 8,
     *,
     chunk_repo: ChunkRepository,
+    catalog_repo: CatalogRepository,
 ) -> list[dict[str, Any]]:
-    eligible_ids = await asyncio.to_thread(
-        _filter_track_ids_sync,
+    eligible_ids = await catalog_repo.filter_track_ids(
         author_id=author_id, source_id=source_id, location_id=location_id,
         tag_ids=tag_ids, date_from=date_from, date_to=date_to,
     )

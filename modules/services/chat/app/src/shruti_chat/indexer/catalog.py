@@ -79,7 +79,9 @@ async def ensure_catalog(settings: Settings | None = None, force: bool = False) 
     await write_current_version(latest)
     # Drop the in-memory dict cache (resolve_*) so next call sees fresh data.
     try:
-        from shruti_chat.agent.tools.resolve import invalidate_dict_cache
+        from shruti_chat.infra.repositories.sqlite_catalog_repository import (
+            invalidate_dict_cache,
+        )
         invalidate_dict_cache()
     except Exception:
         pass
