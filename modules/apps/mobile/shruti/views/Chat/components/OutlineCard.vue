@@ -41,11 +41,13 @@ const props = defineProps<{
  *  fragment and dispatches via the chat store — this card stays pure
  *  presentation. */
 const emit = defineEmits<{
-  "pick-chapter": [args: {
-    trackId: string
-    item: OutlineItem
-    nextItem: OutlineItem | null
-  }]
+  "pick-chapter": [
+    args: {
+      trackId: string
+      item: OutlineItem
+      nextItem: OutlineItem | null
+    },
+  ]
 }>()
 
 const router = useRouter()
@@ -102,7 +104,7 @@ watch(() => props.trackId, loadTitle)
    * to the rounded corners. */
   padding: 4px 0;
   border-radius: 12px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.20);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.2);
   background: rgba(var(--ion-color-primary-rgb), 0.04);
   overflow: hidden;
 }
@@ -118,11 +120,13 @@ watch(() => props.trackId, loadTitle)
   border: 0;
   text-align: left;
   cursor: pointer;
-  border-bottom: 1px solid rgba(var(--ion-color-primary-rgb), 0.10);
+  border-bottom: 1px solid rgba(var(--ion-color-primary-rgb), 0.1);
   -webkit-tap-highlight-color: transparent;
 }
 
-.head:active { background: rgba(var(--ion-color-primary-rgb), 0.06); }
+.head:active {
+  background: rgba(var(--ion-color-primary-rgb), 0.06);
+}
 
 .lecture-title {
   font-size: 13px;
@@ -159,7 +163,9 @@ watch(() => props.trackId, loadTitle)
   line-height: 1.3;
 }
 
-.chapter:active { background: rgba(var(--ion-color-primary-rgb), 0.08); }
+.chapter:active {
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
 
 .ts {
   flex: 0 0 auto;

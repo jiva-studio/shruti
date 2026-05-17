@@ -21,18 +21,14 @@ import type { Migration } from "./types.js"
 export const migration_008_chat_message_actions: Migration = {
   name: "008_chat_message_actions",
   up: async (db) => {
-    await db.execute(
-      "ALTER TABLE chat_messages ADD COLUMN actions_json TEXT NOT NULL DEFAULT '{}'"
-    )
+    await db.execute("ALTER TABLE chat_messages ADD COLUMN actions_json TEXT NOT NULL DEFAULT '{}'")
     await db.execute(
       "ALTER TABLE chat_messages ADD COLUMN outlines_json TEXT NOT NULL DEFAULT '{}'"
     )
     await db.execute(
       "ALTER TABLE chat_messages ADD COLUMN action_states_json TEXT NOT NULL DEFAULT '{}'"
     )
-    await db.execute(
-      "ALTER TABLE chat_messages ADD COLUMN error TEXT"
-    )
+    await db.execute("ALTER TABLE chat_messages ADD COLUMN error TEXT")
     await db.execute(
       "ALTER TABLE chat_sessions ADD COLUMN title_attempt_count INTEGER NOT NULL DEFAULT 0"
     )

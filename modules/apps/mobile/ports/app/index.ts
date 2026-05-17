@@ -39,7 +39,4 @@ export type {
   ChatTurn,
   StreamChatOptions,
 } from "./chatStreamClient.js"
-export type {
-  IChatTitleService,
-  FetchSessionTitleOptions,
-} from "./chatTitleService.js"
+export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"

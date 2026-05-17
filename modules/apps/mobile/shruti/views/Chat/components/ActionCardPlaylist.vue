@@ -5,11 +5,7 @@
     </header>
 
     <div class="rows">
-      <TrackMiniRow
-        v-for="id in visibleIds"
-        :key="id"
-        :track-id="id"
-      />
+      <TrackMiniRow v-for="id in visibleIds" :key="id" :track-id="id" />
       <button v-if="hiddenCount > 0" type="button" class="more" @click="expanded = true">
         {{ $t("chat.actionPlaylistMore", { n: hiddenCount }) }}
       </button>
@@ -22,25 +18,13 @@
       <span v-else-if="state === 'error'" class="hint error">
         {{ $t("chat.actionPlaylistError") }}
       </span>
-      <button
-        v-if="state === 'pending'"
-        class="btn primary"
-        @click="onConfirm"
-      >
+      <button v-if="state === 'pending'" class="btn primary" @click="onConfirm">
         {{ $t("chat.actionPlaylistConfirm") }}
       </button>
-      <button
-        v-else-if="state === 'executing'"
-        class="btn primary"
-        disabled
-      >
+      <button v-else-if="state === 'executing'" class="btn primary" disabled>
         <IonSpinner name="dots" class="spinner" />
       </button>
-      <button
-        v-else-if="state === 'error'"
-        class="btn primary"
-        @click="onConfirm"
-      >
+      <button v-else-if="state === 'error'" class="btn primary" @click="onConfirm">
         {{ $t("chat.actionRetry") }}
       </button>
     </footer>
@@ -77,9 +61,7 @@ const hiddenCount = computed(() => {
 })
 const visibleIds = computed(() => {
   if (!props.payload) return []
-  return expanded.value
-    ? props.payload.trackIds
-    : props.payload.trackIds.slice(0, COLLAPSED_LIMIT)
+  return expanded.value ? props.payload.trackIds : props.payload.trackIds.slice(0, COLLAPSED_LIMIT)
 })
 
 function onConfirm() {

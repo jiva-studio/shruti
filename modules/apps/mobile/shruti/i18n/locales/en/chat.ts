@@ -44,12 +44,12 @@ export default {
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
   suggestions: [
-    "Where did I stop?",          // continue_listening
-    "Playlist on Gita ch. 2",     // propose_playlist
-    "What I heard this week",     // search_my_history + now
-    "What to listen next?",       // recommend_next
-    "About varnashrama",          // search_transcripts (classic)
-    "Bombay morning walks 1973",  // list_tracks (classic)
+    "Where did I stop?", // continue_listening
+    "Playlist on Gita ch. 2", // propose_playlist
+    "What I heard this week", // search_my_history + now
+    "What to listen next?", // recommend_next
+    "About varnashrama", // search_transcripts (classic)
+    "Bombay morning walks 1973", // list_tracks (classic)
   ],
 
   outlineTitle: "Outline",
