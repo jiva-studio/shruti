@@ -95,3 +95,21 @@ def _get_track_sync(track_id: str, lang: str) -> dict[str, Any] | None:
 
 async def get_track(track_id: str, lang: str = "ru") -> dict[str, Any] | None:
     return await asyncio.to_thread(_get_track_sync, track_id, lang)
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "get_track",
+        "fn": get_track,
+        "personalized": False,
+        "description": "Fetch full metadata for one track by id. Use to enrich a citation.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string"},
+                "lang": {"type": "string", "default": "ru"},
+            },
+            "required": ["track_id"],
+        },
+    },
+]

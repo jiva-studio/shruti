@@ -112,3 +112,51 @@ async def propose_save_note(
             },
         ],
     }
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "propose_playlist",
+        "fn": propose_playlist,
+        "personalized": False,
+        "description": (
+            "Propose creating a playlist for the user — DOES NOT create it. "
+            "The client will render a card with a confirm button. After "
+            "calling, embed the returned marker (e.g. '[action:create-playlist|id=...]') "
+            "inline in your reply at the position the card should render. "
+            "Never claim the playlist exists — say 'предлагаю собрать плейлист'. "
+            "Pick at most 20 track_ids (server hard-caps at 30). "
+            "DO NOT also emit `[card:...]` for the same tracks — the action card shows them itself."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Short playlist name (3-6 words)"},
+                "track_ids": {"type": "array", "items": {"type": "string"}},
+                "rationale": {"type": "string"},
+            },
+            "required": ["name", "track_ids"],
+        },
+    },
+    {
+        "name": "propose_save_note",
+        "fn": propose_save_note,
+        "personalized": False,
+        "description": (
+            "Propose saving a quote as a user note — DOES NOT save it. "
+            "The client will render a card with a confirm button. Embed "
+            "the returned marker inline. Never claim the note is saved."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string"},
+                "start_ms": {"type": "integer"},
+                "end_ms": {"type": "integer"},
+                "text": {"type": "string"},
+                "suggested_caption": {"type": "string"},
+            },
+            "required": ["track_id", "start_ms", "end_ms", "text"],
+        },
+    },
+]
