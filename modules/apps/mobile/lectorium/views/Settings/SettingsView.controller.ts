@@ -34,10 +34,7 @@ export interface SettingsControllerReturn {
   /* Config v-models (backed by IPreferences via useConfig) */
   appLanguage: Ref<string>
   showPlayerProgress: Ref<boolean>
-  showNotesTab: Ref<boolean>
-  showChatTab: Ref<boolean>
   showPlayerOnNotes: Ref<boolean>
-  studioEnabled: Ref<boolean>
   showActivityTracker: Ref<boolean>
   autoArchiveDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
@@ -87,10 +84,7 @@ export function useSettingsController(): SettingsControllerReturn {
     false
   )
   const showPlayerProgress = useConfig<boolean>("settings.showPlayerProgress", true)
-  const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
-  const showChatTab = useConfig<boolean>("settings.chat.showTab", true)
   const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
-  const studioEnabled = useConfig<boolean>("settings.notes.studioEnabled", true)
   const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
   const autoArchiveDelay = useConfig<AutoArchiveDelay>(AUTO_ARCHIVE_DELAY_KEY, "off")
   const notificationsEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
@@ -145,10 +139,7 @@ export function useSettingsController(): SettingsControllerReturn {
     dbNumber,
     appLanguage,
     showPlayerProgress,
-    showNotesTab,
-    showChatTab,
     showPlayerOnNotes,
-    studioEnabled,
     showActivityTracker,
     autoArchiveDelay,
     highlightCurrentSentence,

@@ -11,9 +11,7 @@
       v-model:app-language="appLanguage"
       v-model:active-server-id="activeServerId"
       v-model:show-player-progress="showPlayerProgress"
-      v-model:show-notes-tab="showNotesTab"
       v-model:show-player-on-notes="showPlayerOnNotes"
-      v-model:studio-enabled="studioEnabled"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
@@ -48,8 +46,6 @@
       @reset="smartLibrary.reset"
     />
 
-    <SettingsChatGroup v-model:show-chat-tab="showChatTab" />
-
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
     <SettingsHelpGroup @open-help="helpOpen = true" />
@@ -78,7 +74,6 @@ import { ref } from "vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAppearanceGroup,
-  SettingsChatGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
   SettingsHelpGroup,
@@ -102,10 +97,7 @@ const {
   dbNumber,
   appLanguage,
   showPlayerProgress,
-  showNotesTab,
-  showChatTab,
   showPlayerOnNotes,
-  studioEnabled,
   showActivityTracker,
   autoArchiveDelay,
   highlightCurrentSentence,

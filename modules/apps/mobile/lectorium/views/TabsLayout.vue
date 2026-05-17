@@ -11,11 +11,11 @@
           <IconSearch :size="26" />
         </IonTabButton>
 
-        <IonTabButton v-if="showChatTab" tab="chat" href="/tabs/chat" class="chat-tab-button">
+        <IonTabButton tab="chat" href="/tabs/chat" class="chat-tab-button">
           <IconAppSadhu :size="42" />
         </IonTabButton>
 
-        <IonTabButton v-if="showNotesTab" tab="notes" href="/tabs/notes">
+        <IonTabButton tab="notes" href="/tabs/notes">
           <IonSpinner v-if="shareJob.isInBackground" class="notes-tab-spinner" name="dots" />
           <IconBookmark v-else :size="26" />
         </IonTabButton>
@@ -36,12 +36,9 @@
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
-import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
 import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 
-const showNotesTab = useConfig<boolean>("settings.notes.showTab", true)
-const showChatTab = useConfig<boolean>("settings.chat.showTab", true)
 // Tracks the current share job (audio or video). When isRunning flips to
 // true we show a small spinner overlay on the bookmark icon — the share
 // flow has handed off to background and the user knows something's still
