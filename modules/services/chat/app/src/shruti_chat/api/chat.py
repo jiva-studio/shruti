@@ -4,37 +4,22 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, AsyncIterator, Literal
+from typing import Any, AsyncIterator
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from shruti_chat.agent.loop import run_agent
+from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.config import get_settings
-from shruti_chat.domain import FocusFragment, UserContext, UserContextTrack
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.ratelimit import check_and_increment
 
-# Re-exports — pre-existing callers (and tests) import these names from
-# `api.chat`; the types themselves now live in `domain.user_context`.
-__all__ = ["FocusFragment", "UserContext", "UserContextTrack"]
 
 log = get_logger(__name__)
 
 router = APIRouter()
-
-
-class ChatMessage(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str
-
-
-class ChatRequest(BaseModel):
-    messages: list[ChatMessage] = Field(min_length=1)
-    lang: Literal["ru", "en"] = "ru"
-    user_context: UserContext | None = None
 
 
 def _check_app_token(token: str | None) -> None:
@@ -52,7 +37,7 @@ def _check_device_id(device_id: str | None) -> str:
 @router.post("/chat")
 async def chat(
     request: Request,
-    body: ChatRequest,
+    body: ChatRequestDto,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
@@ -91,13 +76,15 @@ async def chat(
         idempotency_key=idempotency_key,
     )
 
+    user_ctx = body.user_context.to_domain() if body.user_context else None
+
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         try:
             async for ev in run_agent(
                 [m.model_dump() for m in body.messages],
                 lang=body.lang,
                 request_id=request_id,
-                user_context=body.user_context,
+                user_context=user_ctx,
                 is_disconnected=request.is_disconnected,
             ):
                 yield {
