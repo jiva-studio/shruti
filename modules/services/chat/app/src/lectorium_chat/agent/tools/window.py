@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 
 
@@ -43,24 +44,21 @@ async def get_transcript_window(
     ]
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "get_transcript_window",
-        "fn": get_transcript_window,
-        "personalized": False,
-        "description": (
-            "Fetch transcript chunks within ±window_seconds of a given timecode "
-            "to enrich context around an existing citation."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "track_id": {"type": "string"},
-                "around_ms": {"type": "integer"},
-                "window_seconds": {"type": "integer", "default": 60},
-                "lang": {"type": "string", "enum": ["ru", "en"]},
-            },
-            "required": ["track_id", "around_ms"],
+register_tool(ToolDef(
+    name="get_transcript_window",
+    fn=get_transcript_window,
+    description=(
+        "Fetch transcript chunks within ±window_seconds of a given timecode "
+        "to enrich context around an existing citation."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "track_id": {"type": "string"},
+            "around_ms": {"type": "integer"},
+            "window_seconds": {"type": "integer", "default": 60},
+            "lang": {"type": "string", "enum": ["ru", "en"]},
         },
+        "required": ["track_id", "around_ms"],
     },
-]
+))

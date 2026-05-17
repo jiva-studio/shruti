@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from lectorium_chat.agent import llm
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.outline_cache import OutlineCache, OutlineCacheConflict
@@ -300,27 +301,24 @@ async def get_track_outline(
     }
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "get_track_outline",
-        "fn": get_track_outline,
-        "personalized": False,
-        "emits_events": True,
-        "description": (
-            "Generate (or fetch cached) outline for a track: 5-8 chapter-like "
-            "items with timecodes (start_ms) and titles. Use when the user asks "
-            "for a summary, the contents of a lecture, or 'recap what I just "
-            "listened to'. After calling, embed the marker '[outline:<track_id>]' "
-            "in your reply where the outline card should render — the client "
-            "mounts an interactive list at that position."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "track_id": {"type": "string"},
-                "lang": {"type": "string", "enum": ["ru", "en"]},
-            },
-            "required": ["track_id"],
+register_tool(ToolDef(
+    name="get_track_outline",
+    fn=get_track_outline,
+    emits_events=True,
+    description=(
+        "Generate (or fetch cached) outline for a track: 5-8 chapter-like "
+        "items with timecodes (start_ms) and titles. Use when the user asks "
+        "for a summary, the contents of a lecture, or 'recap what I just "
+        "listened to'. After calling, embed the marker '[outline:<track_id>]' "
+        "in your reply where the outline card should render — the client "
+        "mounts an interactive list at that position."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "track_id": {"type": "string"},
+            "lang": {"type": "string", "enum": ["ru", "en"]},
         },
+        "required": ["track_id"],
     },
-]
+))

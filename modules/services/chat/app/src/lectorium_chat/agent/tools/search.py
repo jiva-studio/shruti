@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
@@ -81,26 +82,23 @@ async def search_transcripts(
     return rows
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "search_transcripts",
-        "fn": search_transcripts,
-        "personalized": False,
-        "description": _DESCRIPTION,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
-                "author_id": {"type": "string"},
-                "source_id": {"type": "string"},
-                "location_id": {"type": "string"},
-                "tag_ids": {"type": "array", "items": {"type": "string"}},
-                "date_from": {"type": "string", "description": "YYYY-MM-DD"},
-                "date_to": {"type": "string", "description": "YYYY-MM-DD"},
-                "lang": {"type": "string", "enum": ["ru", "en"]},
-                "top_k": {"type": "integer", "default": 8},
-            },
-            "required": ["query"],
+register_tool(ToolDef(
+    name="search_transcripts",
+    fn=search_transcripts,
+    description=_DESCRIPTION,
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "author_id": {"type": "string"},
+            "source_id": {"type": "string"},
+            "location_id": {"type": "string"},
+            "tag_ids": {"type": "array", "items": {"type": "string"}},
+            "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+            "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+            "lang": {"type": "string", "enum": ["ru", "en"]},
+            "top_k": {"type": "integer", "default": 8},
         },
+        "required": ["query"],
     },
-]
+))

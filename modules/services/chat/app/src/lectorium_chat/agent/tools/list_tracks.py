@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain.entities import Track
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 
@@ -73,41 +74,38 @@ async def list_tracks(
     return [_to_wire(t) for t in rows]
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "list_tracks",
-        "fn": list_tracks,
-        "personalized": False,
-        "description": (
-            "Deterministic metadata filter over the lecture catalog. Use "
-            "for list-style queries: 'lectures by X from Y in period Z'. "
-            "Returns tracks for [card:track_id] markers in your reply. "
-            "Kind (morning walk / conversation / lecture / ...) is "
-            "passed via tag_ids (e.g. ['tag_morning_walk']).\n\n"
-            "**`title_query` is the way to find a lecture by name.** "
-            "When the user says «найди лекцию «X»» / «перескажи лекцию X», "
-            "pass the bare phrase (no quotes) as `title_query` — it runs "
-            "FTS against the actual lecture titles (with prefix matching, "
-            "accent-insensitive). search_transcripts searches the SPOKEN "
-            "TEXT, not titles — don't use it for 'find lecture named X'."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "author_id": {"type": "string"},
-                "source_id": {"type": "string"},
-                "location_id": {"type": "string"},
-                "tag_ids": {"type": "array", "items": {"type": "string"}},
-                "title_query": {
-                    "type": "string",
-                    "description": "Fuzzy FTS query over track titles. Use for «найди лекцию X».",
-                },
-                "date_from": {"type": "string"},
-                "date_to": {"type": "string"},
-                "lang": {"type": "string", "enum": ["ru", "en"], "default": "ru"},
-                "limit": {"type": "integer", "default": 20},
-                "offset": {"type": "integer", "default": 0},
+register_tool(ToolDef(
+    name="list_tracks",
+    fn=list_tracks,
+    description=(
+        "Deterministic metadata filter over the lecture catalog. Use "
+        "for list-style queries: 'lectures by X from Y in period Z'. "
+        "Returns tracks for [card:track_id] markers in your reply. "
+        "Kind (morning walk / conversation / lecture / ...) is "
+        "passed via tag_ids (e.g. ['tag_morning_walk']).\n\n"
+        "**`title_query` is the way to find a lecture by name.** "
+        "When the user says «найди лекцию «X»» / «перескажи лекцию X», "
+        "pass the bare phrase (no quotes) as `title_query` — it runs "
+        "FTS against the actual lecture titles (with prefix matching, "
+        "accent-insensitive). search_transcripts searches the SPOKEN "
+        "TEXT, not titles — don't use it for 'find lecture named X'."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "author_id": {"type": "string"},
+            "source_id": {"type": "string"},
+            "location_id": {"type": "string"},
+            "tag_ids": {"type": "array", "items": {"type": "string"}},
+            "title_query": {
+                "type": "string",
+                "description": "Fuzzy FTS query over track titles. Use for «найди лекцию X».",
             },
+            "date_from": {"type": "string"},
+            "date_to": {"type": "string"},
+            "lang": {"type": "string", "enum": ["ru", "en"], "default": "ru"},
+            "limit": {"type": "integer", "default": 20},
+            "offset": {"type": "integer", "default": 0},
         },
     },
-]
+))

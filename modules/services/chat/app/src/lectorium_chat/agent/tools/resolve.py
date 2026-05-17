@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 
 
@@ -72,45 +73,42 @@ _RESOLVE_PARAMS = {
 }
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "resolve_author",
-        "fn": resolve_author,
-        "personalized": False,
-        "description": (
-            "Translate a human author name into author_id. Call BEFORE "
-            "list_tracks/search_transcripts when filtering by author."
-        ),
-        "parameters": _RESOLVE_PARAMS,
-    },
-    {
-        "name": "resolve_source",
-        "fn": resolve_source,
-        "personalized": False,
-        "description": (
-            "Translate a book/source name (e.g. 'Bhagavad-gita', "
-            "'Шримад-Бхагаватам') into source_id."
-        ),
-        "parameters": _RESOLVE_PARAMS,
-    },
-    {
-        "name": "resolve_location",
-        "fn": resolve_location,
-        "personalized": False,
-        "description": "Translate a location name (city, place) into location_id.",
-        "parameters": _RESOLVE_PARAMS,
-    },
-    {
-        "name": "resolve_tag",
-        "fn": resolve_tag,
-        "personalized": False,
-        "description": (
-            "Translate a tag name into tag_id. Includes kind-tags: "
-            "'tag_morning_walk', 'tag_conversation', 'tag_lecture', "
-            "'tag_initiation', 'tag_address', 'tag_festival', "
-            "'tag_interview', 'tag_press_conf', 'tag_bhajan', "
-            "'tag_vyasa_puja', 'tag_wedding', 'tag_other'."
-        ),
-        "parameters": _RESOLVE_PARAMS,
-    },
-]
+register_tool(ToolDef(
+    name="resolve_author",
+    fn=resolve_author,
+    description=(
+        "Translate a human author name into author_id. Call BEFORE "
+        "list_tracks/search_transcripts when filtering by author."
+    ),
+    parameters=_RESOLVE_PARAMS,
+))
+
+register_tool(ToolDef(
+    name="resolve_source",
+    fn=resolve_source,
+    description=(
+        "Translate a book/source name (e.g. 'Bhagavad-gita', "
+        "'Шримад-Бхагаватам') into source_id."
+    ),
+    parameters=_RESOLVE_PARAMS,
+))
+
+register_tool(ToolDef(
+    name="resolve_location",
+    fn=resolve_location,
+    description="Translate a location name (city, place) into location_id.",
+    parameters=_RESOLVE_PARAMS,
+))
+
+register_tool(ToolDef(
+    name="resolve_tag",
+    fn=resolve_tag,
+    description=(
+        "Translate a tag name into tag_id. Includes kind-tags: "
+        "'tag_morning_walk', 'tag_conversation', 'tag_lecture', "
+        "'tag_initiation', 'tag_address', 'tag_festival', "
+        "'tag_interview', 'tag_press_conf', 'tag_bhajan', "
+        "'tag_vyasa_puja', 'tag_wedding', 'tag_other'."
+    ),
+    parameters=_RESOLVE_PARAMS,
+))

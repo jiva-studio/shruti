@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain.entities import Track
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 
@@ -51,19 +52,16 @@ async def get_track(
     return _to_wire(track) if track else None
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "get_track",
-        "fn": get_track,
-        "personalized": False,
-        "description": "Fetch full metadata for one track by id. Use to enrich a citation.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "track_id": {"type": "string"},
-                "lang": {"type": "string", "default": "ru"},
-            },
-            "required": ["track_id"],
+register_tool(ToolDef(
+    name="get_track",
+    fn=get_track,
+    description="Fetch full metadata for one track by id. Use to enrich a citation.",
+    parameters={
+        "type": "object",
+        "properties": {
+            "track_id": {"type": "string"},
+            "lang": {"type": "string", "default": "ru"},
         },
+        "required": ["track_id"],
     },
-]
+))

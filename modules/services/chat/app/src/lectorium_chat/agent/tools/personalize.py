@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain import UserContext
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
@@ -150,52 +151,52 @@ async def recommend_next(
     return rows
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "continue_listening",
-        "fn": continue_listening,
-        "personalized": True,
-        "description": (
-            "Return the user's in-progress tracks (top 3, recency-ordered). "
-            "Use when user asks 'where did I stop', 'continue listening'."
-        ),
-        "parameters": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "recommend_next",
-        "fn": recommend_next,
-        "personalized": True,
-        "description": (
-            "Recommend tracks similar to what the user recently listened to "
-            "(centroid of last 5 recent_tracks). Requires user_context with "
-            "non-empty recent listening. For 'recommend something like THIS "
-            "lecture' (no user history needed) use `find_similar_chunks` "
-            "with just `track_id`."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "lang": {"type": "string", "enum": ["ru", "en"]},
-                "top_k": {"type": "integer", "default": 6},
-            },
+register_tool(ToolDef(
+    name="continue_listening",
+    fn=continue_listening,
+    personalized=True,
+    description=(
+        "Return the user's in-progress tracks (top 3, recency-ordered). "
+        "Use when user asks 'where did I stop', 'continue listening'."
+    ),
+    parameters={"type": "object", "properties": {}},
+))
+
+register_tool(ToolDef(
+    name="recommend_next",
+    fn=recommend_next,
+    personalized=True,
+    description=(
+        "Recommend tracks similar to what the user recently listened to "
+        "(centroid of last 5 recent_tracks). Requires user_context with "
+        "non-empty recent listening. For 'recommend something like THIS "
+        "lecture' (no user history needed) use `find_similar_chunks` "
+        "with just `track_id`."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "lang": {"type": "string", "enum": ["ru", "en"]},
+            "top_k": {"type": "integer", "default": 6},
         },
     },
-    {
-        "name": "search_my_history",
-        "fn": search_my_history,
-        "personalized": True,
-        "description": (
-            "Semantic search restricted to the user's recent_tracks. Use for "
-            "'I heard something about X recently, find it'."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
-                "lang": {"type": "string", "enum": ["ru", "en"]},
-                "top_k": {"type": "integer", "default": 8},
-            },
-            "required": ["query"],
+))
+
+register_tool(ToolDef(
+    name="search_my_history",
+    fn=search_my_history,
+    personalized=True,
+    description=(
+        "Semantic search restricted to the user's recent_tracks. Use for "
+        "'I heard something about X recently, find it'."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+            "lang": {"type": "string", "enum": ["ru", "en"]},
+            "top_k": {"type": "integer", "default": 8},
         },
+        "required": ["query"],
     },
-]
+))
