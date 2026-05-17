@@ -15,6 +15,7 @@ import { App, type AppState } from "@capacitor/app"
 import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores/useChatStore.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 
 export interface OutlineChapterPick {
@@ -31,6 +32,9 @@ export interface ChatControllerReturn {
   isHistoryOpen: Ref<boolean>
   hasMessages: ComputedRef<boolean>
   hasCurrentTrack: ComputedRef<boolean>
+  /** True once the user DB has ≥1 listening_sessions row. Drives the
+   *  "recap last lecture" suggestion chip on the empty state. */
+  hasRecentListening: Ref<boolean>
   contentRef: Ref<HTMLElement | null>
   searchQuery: Ref<string>
   filteredSessions: Ref<ChatSession[]>
@@ -66,6 +70,12 @@ export function useChatController(): ChatControllerReturn {
   const hasMessages = computed(() => store.messages.length > 0)
   /** Drives the "Recap what I just listened to" suggestion chip. */
   const hasCurrentTrack = computed(() => player.open && !!player.trackId)
+  /** Set once on mount from the user DB. Used to pick the "recap last
+   *  lecture" chip when the player isn't open. The chip is a pure-props
+   *  presenter — the fetch lives here so we can centralise listening-
+   *  state lookups instead of letting every chip reach into the DB. */
+  const trackUserState = useTrackUserState()
+  const hasRecentListening = ref(false)
 
   const searchQuery = ref<string>("")
   // Filter runs in JS against `store.sessions` (capped at 200) so it
@@ -266,6 +276,14 @@ export function useChatController(): ChatControllerReturn {
       retryTitles()
     })()
     void (async () => {
+      try {
+        const recent = await trackUserState.listRecent(1)
+        hasRecentListening.value = recent.length > 0
+      } catch {
+        hasRecentListening.value = false
+      }
+    })()
+    void (async () => {
       resumeHandle = await App.addListener(
         "appStateChange",
         (state: AppState) => {
@@ -290,6 +308,7 @@ export function useChatController(): ChatControllerReturn {
     isHistoryOpen,
     hasMessages,
     hasCurrentTrack,
+    hasRecentListening,
     contentRef,
     searchQuery,
     filteredSessions,
