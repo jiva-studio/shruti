@@ -1,4 +1,4 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
@@ -10,6 +10,11 @@ export interface CreateNoteInput {
   readonly timeStart: number
   /** milliseconds — see `Note.timeEnd` */
   readonly timeEnd: number
+  /** Optional deterministic id. When supplied, the repo becomes
+   *  idempotent: re-runs return the existing note instead of inserting
+   *  a duplicate. Chat callers derive it from action.id so a flaky-
+   *  network re-tap on "save as note" doesn't double-save. */
+  readonly id?: NoteId
 }
 
 export type CreateNoteError =
@@ -43,6 +48,7 @@ export async function createNote(
     text,
     timeStart: input.timeStart,
     timeEnd: input.timeEnd,
+    id: input.id,
   })
   return ok(note)
 }

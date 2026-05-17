@@ -19,7 +19,7 @@ import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useI18n } from "vue-i18n"
 import { createNote } from "@lib/application/createNote.js"
-import type { TrackId } from "@lib/domain/core.js"
+import type { NoteId, TrackId } from "@lib/domain/core.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -670,8 +670,14 @@ export const useChatStore = defineStore("chat", () => {
         }
         // No toast — the card's own "done" hint is the confirmation.
       } else if (action.kind === "save_note") {
+        // Derive a deterministic note id from the chat action id so a
+        // re-tap on a flaky network is a no-op rather than a dup. The
+        // action.id is server-issued (secrets.token_hex(4) → 8 hex chars),
+        // already unique per action — `note_<id>` is collision-free.
+        const noteId = `note_chat_${actionId}` as NoteId
         const result = await createNote(
           {
+            id: noteId,
             trackId: action.trackId as TrackId,
             text: action.text,
             timeStart: Math.max(0, action.startMs),
