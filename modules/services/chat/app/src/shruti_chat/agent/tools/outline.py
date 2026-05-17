@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from shruti_chat.agent import llm
 from shruti_chat.config import get_settings
@@ -32,6 +32,13 @@ from shruti_chat.observability.logging import get_logger
 from shruti_chat.agent.tools._sqlite import catalog_conn
 
 log = get_logger(__name__)
+
+
+YieldEvent = Callable[[str, dict[str, Any]], None]
+
+
+def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
+    """Fallback when this tool is invoked outside the agent loop (tests)."""
 
 
 SYSTEM_PROMPT = """Ты помощник, который составляет краткое оглавление лекции по таймкодированному транскрипту.
@@ -162,6 +169,8 @@ async def _generate_outline(
 async def get_track_outline(
     track_id: str,
     lang: str = "ru",
+    *,
+    yield_event: YieldEvent = _noop_yield,
 ) -> dict[str, Any]:
     """Return outline items + emit `outline` side-event for the client."""
     s = get_settings()
@@ -198,14 +207,12 @@ async def get_track_outline(
             log.warning("outline_put_failed", track_id=track_id, lang=lang, error=str(exc))
 
     items = payload.get("items") or []
+    yield_event("outline", {"track_id": track_id, "items": items})
     return {
         "track_id": track_id,
         "lang": lang,
         "items": items,
         "marker": f"[outline:{track_id}]",
-        "_side_events": [
-            {"type": "outline", "data": {"track_id": track_id, "items": items}},
-        ],
     }
 
 
@@ -214,6 +221,7 @@ TOOL_REGISTRY = [
         "name": "get_track_outline",
         "fn": get_track_outline,
         "personalized": False,
+        "emits_events": True,
         "description": (
             "Generate (or fetch cached) outline for a track: 5-8 chapter-like "
             "items with timecodes (start_ms) and titles. Use when the user asks "
