@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shruti_chat.agent import llm
 from shruti_chat.config import get_settings
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.ratelimit import check_and_increment
 
 log = get_logger(__name__)
 
@@ -75,13 +76,33 @@ def _clean(raw: str) -> str:
 
 @router.post("/title", response_model=TitleResponse)
 async def title(
+    request: Request,
     body: TitleRequest,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
 ) -> TitleResponse:
     _check_app_token(x_app_token)
-    _check_device_id(x_device_id)
+    device_id = _check_device_id(x_device_id)
     settings = get_settings()
+
+    # Separate quota bucket from /chat so heavy title traffic from a flaky
+    # client retrying many fresh sessions can't drain the main chat quota,
+    # and a leaked app_shared_token (it ships in every APK) can't be used
+    # to bill unlimited /title calls.
+    ip = request.client.host if request.client else "unknown"
+    rl = await check_and_increment(device_id, ip, scope="title")
+    if not rl.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": rl.code,
+                "limit": rl.limit,
+                "current": rl.current,
+                "key_type": rl.key_type,
+                "scope": "title",
+            },
+            headers={"Retry-After": str(rl.retry_after or 60)},
+        )
 
     convo = "\n\n".join(
         f"{m.role.upper()}: {m.content.strip()}"
