@@ -56,7 +56,6 @@ MAX_PLAYLIST_TRACKS = 30
 async def propose_playlist(
     name: str,
     track_ids: list[str],
-    rationale: str | None = None,
     *,
     yield_event: YieldEvent = _noop_yield,
 ) -> dict[str, Any]:
@@ -79,13 +78,11 @@ async def propose_playlist(
             "id": action_id,
             "name": name,
             "track_ids": valid,
-            "rationale": rationale or "",
         },
     )
     return {
         "ok": True,
         "action_id": action_id,
-        "marker": f"[action:create_playlist|id={action_id}]",
         "validated_track_ids": valid,
     }
 
@@ -95,7 +92,6 @@ async def propose_save_note(
     start_ms: int,
     end_ms: int,
     text: str,
-    suggested_caption: str | None = None,
     *,
     yield_event: YieldEvent = _noop_yield,
 ) -> dict[str, Any]:
@@ -117,13 +113,11 @@ async def propose_save_note(
             "start_ms": int(start_ms),
             "end_ms": int(end_ms),
             "text": text,
-            "suggested_caption": (suggested_caption or "").strip(),
         },
     )
     return {
         "ok": True,
         "action_id": action_id,
-        "marker": f"[action:save_note|id={action_id}]",
     }
 
 
@@ -136,18 +130,18 @@ TOOL_REGISTRY = [
         "description": (
             "Propose creating a playlist for the user — DOES NOT create it. "
             "The client will render a card with a confirm button. After "
-            "calling, embed the returned marker (e.g. '[action:create_playlist|id=...]') "
-            "inline in your reply at the position the card should render. "
-            "Never claim the playlist exists — say 'предлагаю собрать плейлист'. "
-            "Pick at most 20 track_ids (server hard-caps at 30). "
-            "DO NOT also emit `[card:...]` for the same tracks — the action card shows them itself."
+            "calling, embed the marker `[action:create_playlist|id=<action_id>]` "
+            "inline in your reply where the card should render (construct it "
+            "from the returned `action_id`). Never claim the playlist exists — "
+            "say 'предлагаю собрать плейлист'. Pick at most 20 track_ids "
+            "(server hard-caps at 30). DO NOT also emit `[card:...]` for the "
+            "same tracks — the action card shows them itself."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "name": {"type": "string", "description": "Short playlist name (3-6 words)"},
                 "track_ids": {"type": "array", "items": {"type": "string"}},
-                "rationale": {"type": "string"},
             },
             "required": ["name", "track_ids"],
         },
@@ -160,7 +154,8 @@ TOOL_REGISTRY = [
         "description": (
             "Propose saving a quote as a user note — DOES NOT save it. "
             "The client will render a card with a confirm button. Embed "
-            "the returned marker inline. Never claim the note is saved."
+            "`[action:save_note|id=<action_id>]` inline (construct from the "
+            "returned action_id). Never claim the note is saved."
         ),
         "parameters": {
             "type": "object",
@@ -169,7 +164,6 @@ TOOL_REGISTRY = [
                 "start_ms": {"type": "integer"},
                 "end_ms": {"type": "integer"},
                 "text": {"type": "string"},
-                "suggested_caption": {"type": "string"},
             },
             "required": ["track_id", "start_ms", "end_ms", "text"],
         },

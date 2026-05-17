@@ -354,7 +354,6 @@ async def get_track_outline(
         "track_id": track_id,
         "lang": effective_lang,
         "items": items,
-        "marker": f"[outline:{track_id}]",
     }
 
 

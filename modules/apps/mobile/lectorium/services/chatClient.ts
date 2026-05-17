@@ -27,7 +27,6 @@ export type ActionPayload =
       readonly id: string
       readonly name: string
       readonly trackIds: readonly string[]
-      readonly rationale: string
     }
   | {
       readonly kind: "save_note"
@@ -36,7 +35,6 @@ export type ActionPayload =
       readonly startMs: number
       readonly endMs: number
       readonly text: string
-      readonly suggestedCaption: string
     }
 
 export type ChatStreamEvent =
@@ -484,13 +482,7 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     const trackIdsRaw = Array.isArray(p.track_ids) ? p.track_ids : []
     const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
     if (!name || trackIds.length === 0) return null
-    return {
-      kind: "create_playlist",
-      id,
-      name,
-      trackIds,
-      rationale: typeof p.rationale === "string" ? p.rationale : "",
-    }
+    return { kind: "create_playlist", id, name, trackIds }
   }
   if (kind === "save_note") {
     const trackId = typeof p.track_id === "string" ? p.track_id : ""
@@ -503,7 +495,6 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
       startMs: typeof p.start_ms === "number" ? p.start_ms : 0,
       endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
       text,
-      suggestedCaption: typeof p.suggested_caption === "string" ? p.suggested_caption : "",
     }
   }
   return null

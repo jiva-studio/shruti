@@ -98,8 +98,9 @@ Tools and when to use them
     After the tool returns, write a 2-4 sentence prose summary based on
     the `items[].title` ONLY — do NOT make up topics the outline doesn't
     cover. Then embed the marker `[outline:<track_id>]` at the position
-    where the card should render. Do NOT enumerate items in text — the
-    card shows them.
+    where the card should render — construct it from the same `track_id`
+    you called the tool with. Do NOT enumerate items in text — the card
+    shows them.
 
 `get_transcript_window(track_id, around_ms, window_seconds=60, lang)`
     Enrich context around an existing citation. Useful when one chunk hints
@@ -137,16 +138,18 @@ Tools and when to use them
     invent dates. Do NOT call resolve_*/list_tracks for «last week» —
     that's a history-of-listening query, not a catalog query.
 
-`propose_playlist(name, track_ids, rationale?)`
+`propose_playlist(name, track_ids)`
     User asks «собери плейлист из …» / «make me a playlist about …».
     Call AFTER you've found the candidate tracks via search/list_tracks.
-    Returns a marker like `[action:create_playlist|id=ABC]` — embed it
-    inline in your reply where the confirmation card should render. NEVER
-    claim the playlist is created. Phrase as a proposal: «Предлагаю
-    собрать плейлист из этих лекций.»
+    Returns `{ok, action_id, validated_track_ids}`. Embed the marker
+    `[action:create_playlist|id=<action_id>]` inline in your reply where
+    the confirmation card should render — construct it from the returned
+    `action_id`, NEVER invent the id. Phrase as a proposal: «Предлагаю
+    собрать плейлист из этих лекций.» — never claim the playlist exists.
 
-`propose_save_note(track_id, start_ms, end_ms, text, suggested_caption?)`
+`propose_save_note(track_id, start_ms, end_ms, text)`
     User asks «сохрани цитату / добавь в заметки». Pass `text` verbatim
-    from a chunk (do NOT paraphrase) and emit the returned marker
-    `[action:save_note|id=ABC]`. NEVER claim the note is saved.
+    from a chunk (do NOT paraphrase). Returns `{ok, action_id}`. Embed
+    the marker `[action:save_note|id=<action_id>]` constructed from the
+    returned `action_id`. NEVER claim the note is saved.
 
