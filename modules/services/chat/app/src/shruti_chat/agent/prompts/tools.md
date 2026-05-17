@@ -21,18 +21,19 @@ Tools and when to use them
       `"Бхагавад-гита учение Кришна Арджуна объяснение"`
 
     **Language filter is implicit.** Do NOT pass `lang` unless the user
-    explicitly asked to broaden across languages. The server defaults
-    `lang` to the user's interface language — so a Russian user gets
-    Russian-only citations, an English user gets English-only. To break
-    that default (e.g. user says «и на английском тоже»), pass `lang=null`
-    in one search to widen, then a second search with the explicit other
-    language. Otherwise omit `lang` entirely.
+    explicitly asked for a specific language. The server defaults `lang`
+    to the user's interface language. If the requested language has no
+    matching content, the tool transparently falls back to any available
+    language — you'll see each chunk's actual `lang` field in the result,
+    so you can warn the user gracefully ("в русском материале этого не
+    нашёл, но есть в английских лекциях:"). To force a different
+    language, pass `lang="en"` etc. explicitly.
 
-    If the first search returns 0 or few results, **drop OTHER filters one
-    by one** (first date_from/date_to, then author_id, then source_id).
-    Do NOT widen language unless the user asked. Never accept "0 results"
-    as the final answer — broaden the query or drop a non-lang filter
-    before giving up.
+    If the first search returns 0 or few results, **drop OTHER filters
+    one by one** (first date_from/date_to, then author_id, then
+    source_id). Don't bother dropping lang — the tool already tried that.
+    Never accept "0 results" as the final answer — broaden the query or
+    drop a non-lang filter before giving up.
 
 `list_tracks(...filters)`
     For list-style questions: "lectures by X from Y in 1972", "all morning
@@ -43,10 +44,11 @@ Tools and when to use them
     via tag_ids, e.g. ['tag_morning_walk'].
 
     Like search_transcripts, **do NOT pass `lang`** — the server defaults
-    it to the user's language and restricts results to tracks that actually
-    have a transcript in that language (so card citations work). Override
-    only with explicit `lang=null` if the user asked to broaden across
-    languages.
+    it to the user's language and prefers tracks that actually have a
+    transcript in that language. If none exist, the tool transparently
+    broadens to any-language tracks; the actual variant language comes
+    back in each row's `lang` field. Override with explicit `lang="en"`
+    etc. only when the user asks for a specific other language.
 
 `resolve_author / resolve_source / resolve_location / resolve_tag(text)`
     Fuzzy dictionary lookup. Returns up to 8 candidates ranked by similarity
