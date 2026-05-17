@@ -1,7 +1,7 @@
 <template>
   <span class="app-icon-wrap" :style="wrapStyle">
     <img
-      src="/app-icon.png"
+      src="/agent-icon.png"
       alt="Chat"
       :width="size"
       :height="size"
