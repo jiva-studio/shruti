@@ -55,6 +55,7 @@ async def chat(
     body: ChatRequest,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
+    idempotency_key: str | None = Header(default=None),
 ):
     _check_app_token(x_app_token)
     device_id = _check_device_id(x_device_id)
@@ -82,6 +83,12 @@ async def chat(
         "chat_request",
         message_count=len(body.messages),
         lang=body.lang,
+        # `Idempotency-Key` is logged for observability only — once
+        # Redis-backed dedup lands (followup PR) the same key will key
+        # the per-request reply cache. For now its presence tells us
+        # whether the mobile client is sending it after a retry, which
+        # is the dataset that decides whether dedup is worth building.
+        idempotency_key=idempotency_key,
     )
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
