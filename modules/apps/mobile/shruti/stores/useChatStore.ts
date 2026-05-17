@@ -74,6 +74,16 @@ function deriveTitle(text: string, max = 48): string {
   return trimmed.slice(0, max - 1).trimEnd() + "…"
 }
 
+/**
+ * `chat_sessions.title_attempt_count` semantics:
+ *   0                        — never tried (initial)
+ *   1 … TITLE_MAX_ATTEMPTS   — N failed attempts, still retry-eligible
+ *   TITLE_FINALIZED          — succeeded OR exhausted retries
+ * The retry worker scans [1 … TITLE_MAX_ATTEMPTS] in a 7-day window.
+ */
+const TITLE_MAX_ATTEMPTS = 3
+const TITLE_FINALIZED = TITLE_MAX_ATTEMPTS + 1
+
 /* -------------------------------------------------------------------------- */
 /*                                   Store                                    */
 /* -------------------------------------------------------------------------- */
@@ -236,24 +246,36 @@ export const useChatStore = defineStore("chat", () => {
 
   /**
    * Replace the session's auto-derived title (truncated user prompt) with
-   * a 3-5 word LLM-generated title. Runs in the background — failures are
-   * silent and leave the original title in place.
+   * a 3-5 word LLM-generated title. Runs in the background. On failure
+   * (null response or persist error) the original title stays in place
+   * and `title_attempt_count` is incremented so `retryPendingTitles()`
+   * can pick the session up on a future foreground.
+   *
+   * Success sentinel: count = TITLE_MAX_ATTEMPTS + 1 (4). Anything ≤
+   * TITLE_MAX_ATTEMPTS is retry-eligible for up to 7 days.
    */
   async function refreshSessionTitle(
     sessionId: string,
-    forMessages: readonly ChatMessage[],
+    forTurns: readonly ChatTurn[],
     lang: "ru" | "en"
   ): Promise<void> {
-    const turns: ChatTurn[] = forMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }))
-    const newTitle = await fetchSessionTitle(turns, lang)
-    if (!newTitle) return
+    const newTitle = await fetchSessionTitle(forTurns, lang)
+    if (!newTitle) {
+      try {
+        await userDb().execute(
+          "UPDATE chat_sessions SET title_attempt_count = title_attempt_count + 1 WHERE id = ?",
+          [sessionId]
+        )
+        await userDb().save()
+      } catch (err) {
+        console.warn("chat: failed to bump title_attempt_count", err)
+      }
+      return
+    }
     try {
       await userDb().execute(
-        "UPDATE chat_sessions SET title = ? WHERE id = ?",
-        [newTitle, sessionId]
+        "UPDATE chat_sessions SET title = ?, title_attempt_count = ? WHERE id = ?",
+        [newTitle, TITLE_FINALIZED, sessionId]
       )
       await userDb().save()
     } catch (err) {
@@ -265,6 +287,50 @@ export const useChatStore = defineStore("chat", () => {
       const next = [...sessions.value]
       next[idx] = { ...next[idx], title: newTitle }
       sessions.value = next
+    }
+  }
+
+  /**
+   * Foreground retry worker. Looks for sessions whose `/title` call
+   * never produced a rephrase (LLM hiccup, transient network) and tries
+   * once more per call. Capped at TITLE_MAX_ATTEMPTS retries and a
+   * 7-day window — older sessions stay with their deriveTitle()
+   * truncation forever.
+   *
+   * Called by ChatView on mount + appStateChange→active.
+   */
+  async function retryPendingTitles(lang: "ru" | "en"): Promise<void> {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    let candidates: Array<{ id: string }>
+    try {
+      candidates = await userDb().query<{ id: string }>(
+        `SELECT id FROM chat_sessions
+          WHERE title_attempt_count BETWEEN 1 AND ?
+            AND created_at > ?
+          ORDER BY created_at DESC
+          LIMIT 10`,
+        [TITLE_MAX_ATTEMPTS, sevenDaysAgo]
+      )
+    } catch (err) {
+      console.warn("chat: retryPendingTitles query failed", err)
+      return
+    }
+    for (const { id: sessionId } of candidates) {
+      let rows: Array<{ role: string; content: string }>
+      try {
+        rows = await userDb().query<{ role: string; content: string }>(
+          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC LIMIT 4",
+          [sessionId]
+        )
+      } catch (err) {
+        console.warn("chat: retryPendingTitles message-load failed", { sessionId, err })
+        continue
+      }
+      const turns: ChatTurn[] = rows
+        .filter((r) => r.role === "user" || r.role === "assistant")
+        .map((r) => ({ role: r.role as ChatTurn["role"], content: r.content }))
+      if (turns.length === 0) continue
+      await refreshSessionTitle(sessionId, turns, lang)
     }
   }
 
@@ -410,7 +476,11 @@ export const useChatStore = defineStore("chat", () => {
         if (
           messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 1
         ) {
-          void refreshSessionTitle(sessionId, [userMsg, finalised], lang)
+          const initialTurns: ChatTurn[] = [
+            { role: userMsg.role, content: userMsg.content },
+            { role: finalised.role, content: finalised.content },
+          ]
+          void refreshSessionTitle(sessionId, initialTurns, lang)
         }
       } else if (!lastError.value) {
         // No text and no error means an empty done — drop the empty bubble.
@@ -614,5 +684,6 @@ export const useChatStore = defineStore("chat", () => {
     deleteSession,
     clearAll,
     searchSessions,
+    retryPendingTitles,
   }
 })

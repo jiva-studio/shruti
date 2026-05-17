@@ -1,6 +1,7 @@
 import {
   computed,
   nextTick,
+  onBeforeUnmount,
   onMounted,
   ref,
   watch,
@@ -10,8 +11,10 @@ import {
 import { useRoute, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
+import { App, type AppState } from "@capacitor/app"
 import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores/useChatStore.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 
 export interface ChatControllerReturn {
@@ -199,11 +202,38 @@ export function useChatController(): ChatControllerReturn {
     }
   )
 
+  const appLanguage = useAppLanguage()
+
+  /** Re-poke `/title` for sessions whose initial call failed. Capped to
+   *  3 retries per session and a 7-day age window — see useChatStore. */
+  function retryTitles(): void {
+    const lang = appLanguage.value.startsWith("en") ? "en" : "ru"
+    void store.retryPendingTitles(lang)
+  }
+
+  let resumeHandle: { remove(): Promise<void> } | null = null
+
   onMounted(() => {
     void (async () => {
       await store.refreshSessions()
       await ensureSessionFromRoute()
+      retryTitles()
     })()
+    void (async () => {
+      resumeHandle = await App.addListener(
+        "appStateChange",
+        (state: AppState) => {
+          if (state.isActive) retryTitles()
+        }
+      )
+    })()
+  })
+
+  onBeforeUnmount(() => {
+    if (resumeHandle) {
+      void resumeHandle.remove()
+      resumeHandle = null
+    }
   })
 
   return {
