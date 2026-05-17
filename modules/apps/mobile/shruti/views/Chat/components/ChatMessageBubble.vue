@@ -41,6 +41,11 @@
               @confirm="onConfirmAction"
             />
           </template>
+          <span
+            v-if="errorSuffix && !message.streaming"
+            class="truncated-suffix"
+            >{{ errorSuffix }}</span
+          >
         </template>
       </template>
     </div>
@@ -49,6 +54,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
+import { useI18n } from "vue-i18n"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import {
   useChatStore,
@@ -64,10 +70,26 @@ import ActionCardNote from "./ActionCardNote.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
 const chat = useChatStore()
+const { t } = useI18n()
 
 const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
   return parseChatMarkers(props.message.content)
+})
+
+const errorSuffix = computed(() => {
+  const e = props.message.error
+  if (!e) return ""
+  // Pattern-match on discriminator. Unknown kinds fall through to "" so
+  // older clients reading newer rows don't render a confusing label.
+  // UI doesn't expose a retry button yet — that needs Last-Event-ID
+  // resume on the SSE channel.
+  if (e.kind === "truncated") {
+    return e.reason === "turns"
+      ? t("chat.truncatedTurns")
+      : t("chat.truncatedStream")
+  }
+  return ""
 })
 
 function actionState(actionId: string): ActionState {
@@ -225,5 +247,15 @@ async function onConfirmAction(actionId: string): Promise<void> {
 .bubble.assistant :deep(a) {
   color: var(--ion-color-primary);
   text-decoration: underline;
+}
+
+/* Trailing "(прервано)" / "(cut off)" suffix on a message that ended
+ * without a clean `done`. Inline, lower-key colour, so it reads as a
+ * note rather than competing with the bubble text. */
+.bubble.assistant .truncated-suffix {
+  color: var(--ion-color-medium);
+  font-style: italic;
+  font-size: 0.85em;
+  white-space: pre;
 }
 </style>

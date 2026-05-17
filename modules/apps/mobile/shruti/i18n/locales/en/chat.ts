@@ -30,6 +30,10 @@ export default {
   errRate: "Too many requests. Try again in a minute.",
   errNetwork: "Couldn't reach the chat service. Check your connection.",
   errServiceNotReady: "Chat service is warming up. Try again shortly.",
+  /** Appended to an assistant bubble whose stream ended without `done`. */
+  truncatedStream: " (cut off — connection dropped)",
+  /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
+  truncatedTurns: " (stopped — too many tool calls)",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",

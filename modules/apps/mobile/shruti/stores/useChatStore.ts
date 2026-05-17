@@ -34,6 +34,13 @@ export interface ChatSession {
 
 export type ActionState = "pending" | "executing" | "done" | "error" | "dismissed"
 
+/** JSON envelope persisted in `chat_messages.error` for messages that
+ *  didn't end cleanly. Discriminated on `kind` so we can grow new error
+ *  shapes (rate_limited, blocked, …) later without a schema migration —
+ *  the bubble renderer pattern-matches on `kind` and falls back to a
+ *  generic suffix on unknowns. Today only `truncated` is used. */
+export type ChatMessageError = { kind: "truncated"; reason: "stream" | "turns" }
+
 export interface ChatMessage {
   readonly id: string
   readonly sessionId: string
@@ -55,6 +62,9 @@ export interface ChatMessage {
   /** Per-action user-confirmation state. Defaults to "pending" for any
    *  action present in `actions` but not here. */
   actionStates?: Record<string, ActionState>
+  /** Set when the message ended abnormally — UI renders a corresponding
+   *  affordance (e.g. "(прервано)" suffix for `kind: "truncated"`). */
+  error?: ChatMessageError
 }
 
 /* -------------------------------------------------------------------------- */
@@ -168,6 +178,25 @@ export const useChatStore = defineStore("chat", () => {
     return JSON.stringify({ _v: CURRENT_PAYLOAD_V, data })
   }
 
+  /** Parse the persisted `chat_messages.error` JSON. Returns `undefined`
+   *  for null / malformed / unrecognized shapes — those messages render
+   *  as if they ended cleanly (no suffix). */
+  function parseMessageError(raw: unknown): ChatMessageError | undefined {
+    if (typeof raw !== "string" || raw === "") return undefined
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return undefined
+    }
+    if (!parsed || typeof parsed !== "object") return undefined
+    const obj = parsed as Record<string, unknown>
+    if (obj.kind === "truncated" && (obj.reason === "stream" || obj.reason === "turns")) {
+      return { kind: "truncated", reason: obj.reason }
+    }
+    return undefined
+  }
+
   async function refreshSessions(): Promise<void> {
     const rows = await userDb().query<{
       id: string
@@ -196,9 +225,11 @@ export const useChatStore = defineStore("chat", () => {
       actions_json: string | null
       outlines_json: string | null
       action_states_json: string | null
+      error: string | null
     }>(
       `SELECT id, session_id, role, content, created_at,
-              actions_json, outlines_json, action_states_json
+              actions_json, outlines_json, action_states_json,
+              error
          FROM chat_messages
         WHERE session_id = ?
         ORDER BY created_at ASC`,
@@ -213,6 +244,7 @@ export const useChatStore = defineStore("chat", () => {
       actions: parseVersionedRecord<ActionPayload>(r.actions_json),
       outlines: parseVersionedRecord<OutlinePayload>(r.outlines_json),
       actionStates: parseVersionedRecord<ActionState>(r.action_states_json),
+      error: parseMessageError(r.error),
     }))
   }
 
@@ -339,8 +371,9 @@ export const useChatStore = defineStore("chat", () => {
     await db.execute(
       `INSERT INTO chat_messages
          (id, session_id, role, content, created_at,
-          actions_json, outlines_json, action_states_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          actions_json, outlines_json, action_states_json,
+          error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         msg.id,
         msg.sessionId,
@@ -350,6 +383,7 @@ export const useChatStore = defineStore("chat", () => {
         wrapVersionedRecord(msg.actions ?? {}),
         wrapVersionedRecord(msg.outlines ?? {}),
         wrapVersionedRecord(msg.actionStates ?? {}),
+        msg.error ? JSON.stringify(msg.error) : null,
       ]
     )
     await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
@@ -424,11 +458,17 @@ export const useChatStore = defineStore("chat", () => {
     }
 
     let acc = ""
+    let sawDone = false
+    let sawTurnsLimit = false
     try {
       for await (const event of streamChat(turns, lang, {
         signal: abort.signal,
         userContext,
       })) {
+        if (event.type === "done") sawDone = true
+        if (event.type === "error" && event.code === "max_turns_exceeded") {
+          sawTurnsLimit = true
+        }
         const finished = applyEvent(
           event,
           assistantMsg,
@@ -454,11 +494,27 @@ export const useChatStore = defineStore("chat", () => {
     } finally {
       abort = null
       sending.value = false
+      // Build the abnormal-termination marker BEFORE finalising — drives
+      // the "(прервано)" suffix and gets persisted in chat_messages.error.
+      const errorMeta: ChatMessageError | undefined =
+        !sawDone && acc.length > 0
+          ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
+          : undefined
       // Snapshot the bubble: drop the streaming flag and freeze content.
       const idx = messages.value.findIndex((m) => m.id === assistantMsg.id)
-      const finalised = idx >= 0
-        ? { ...messages.value[idx], content: acc, streaming: false }
-        : { ...assistantMsg, content: acc, streaming: false }
+      const finalised: ChatMessage = idx >= 0
+        ? {
+            ...messages.value[idx],
+            content: acc,
+            streaming: false,
+            error: errorMeta,
+          }
+        : {
+            ...assistantMsg,
+            content: acc,
+            streaming: false,
+            error: errorMeta,
+          }
       if (idx >= 0) {
         const next = [...messages.value]
         next[idx] = finalised
