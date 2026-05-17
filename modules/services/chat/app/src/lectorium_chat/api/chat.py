@@ -13,13 +13,13 @@ from sse_starlette.sse import EventSourceResponse
 
 from lectorium_chat.agent.loop import run_agent
 from lectorium_chat.config import get_settings
-from lectorium_chat.domain import FocusFragment, UserContext, UserContextTrack, UserNote
+from lectorium_chat.domain import FocusFragment, UserContext, UserContextTrack
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.ratelimit import check_and_increment
 
 # Re-exports — pre-existing callers (and tests) import these names from
 # `api.chat`; the types themselves now live in `domain.user_context`.
-__all__ = ["FocusFragment", "UserContext", "UserContextTrack", "UserNote"]
+__all__ = ["FocusFragment", "UserContext", "UserContextTrack"]
 
 log = get_logger(__name__)
 

@@ -12,7 +12,6 @@ export type {
   FocusFragmentPayload,
   UserContextPayload,
   UserContextTrackPayload,
-  UserNotePayload,
 } from "@lib/application"
 
 /**
@@ -48,7 +47,6 @@ export function useTrackUserState() {
       {
         listeningSessions: repos.listeningSessions,
         tracks: repos.tracks,
-        notes: repos.notes,
       }
     )
   }

@@ -7,7 +7,6 @@ from lectorium_chat.domain.user_context import (
     FocusFragment,
     UserContext,
     UserContextTrack,
-    UserNote,
 )
 
-__all__ = ["FocusFragment", "UserContext", "UserContextTrack", "UserNote"]
+__all__ = ["FocusFragment", "UserContext", "UserContextTrack"]

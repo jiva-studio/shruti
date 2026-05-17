@@ -1,20 +1,23 @@
 """Personalization tools — read from `user_context` injected via closure.
 
-`user_context` is a pydantic `api.chat.UserContext` instance (or None). It
-carries:
+`user_context` is a pydantic `UserContext` instance (or None). It carries:
 - recent_tracks: list of (track_id, last_played_at, percent, ...)
-- in_progress: subset of recent with 0.05 < percent < 0.95
 - current_track_id: what user is listening to right now (or just stopped)
-- recent_notes: last ~30 user notes (with track_id, time range, text)
+- now: device wall-clock ISO with offset
+- focus: optional pinned span (outline-chapter tap, citation re-ask)
 
 These tools are exposed to the LLM with NO `user_context` parameter in
 their JSON-Schema — the loop binds it via `build_personalized_tools`.
+
+Notes are intentionally not in `user_context`: chat only writes notes
+via the `propose_save_note` action; there is no read/search direction
+in the current UX. When that changes, add `recent_notes` back + the
+matching tool synchronously with the consumer UI.
 """
 
 from __future__ import annotations
 
-import math
-from typing import Any, Iterable
+from typing import Any
 
 from lectorium_chat.db.client import get_pool
 from lectorium_chat.domain import UserContext
@@ -106,57 +109,6 @@ async def search_my_history(
         }
         for r in rows
     ]
-
-
-def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
-    al = list(a); bl = list(b)
-    if not al or not bl or len(al) != len(bl):
-        return 0.0
-    dot = sum(x * y for x, y in zip(al, bl))
-    na = math.sqrt(sum(x * x for x in al))
-    nb = math.sqrt(sum(y * y for y in bl))
-    if na == 0 or nb == 0:
-        return 0.0
-    return dot / (na * nb)
-
-
-async def search_my_notes(
-    query: str,
-    *,
-    user_context: UserContext | None = None,
-    top_k: int = 8,
-) -> dict[str, Any] | list[dict[str, Any]]:
-    """Semantic ranking over notes the user already wrote.
-
-    Note text is in the request body — we embed query + each note once and
-    sort. With <=30 notes this is microseconds.
-    """
-    if user_context is None:
-        return _ok_or_empty([], False)
-    notes = user_context.recent_notes
-    if not notes:
-        return []
-    embedder = get_embedder()
-    q_vec = await embedder.embed_query(query)
-    note_vecs = await embedder.embed_documents([n.text for n in notes])
-    scored = sorted(
-        (
-            (
-                _cosine(q_vec, v),
-                {
-                    "track_id": n.track_id,
-                    "time_start_ms": n.time_start_ms,
-                    "time_end_ms": n.time_end_ms,
-                    "text": n.text,
-                    "created_at": n.created_at,
-                },
-            )
-            for v, n in zip(note_vecs, notes)
-        ),
-        key=lambda p: p[0],
-        reverse=True,
-    )
-    return [{"score": s, **payload} for s, payload in scored[: max(1, min(top_k, 16))]]
 
 
 async def recommend_next(
@@ -280,23 +232,6 @@ TOOL_REGISTRY = [
             "properties": {
                 "query": {"type": "string"},
                 "lang": {"type": "string", "enum": ["ru", "en"]},
-                "top_k": {"type": "integer", "default": 8},
-            },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "search_my_notes",
-        "fn": search_my_notes,
-        "personalized": True,
-        "description": (
-            "Semantic ranking over notes the user has saved. Use for 'what "
-            "did I write about X'."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"},
                 "top_k": {"type": "integer", "default": 8},
             },
             "required": ["query"],

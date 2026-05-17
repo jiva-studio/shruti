@@ -47,7 +47,6 @@ export default {
     "Where did I stop?",          // continue_listening
     "Playlist on Gita ch. 2",     // propose_playlist
     "What I heard this week",     // search_my_history + now
-    "Search my notes",            // search_my_notes
     "What to listen next?",       // recommend_next
     "About varnashrama",          // search_transcripts (classic)
     "Bombay morning walks 1973",  // list_tracks (classic)
