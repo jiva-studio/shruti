@@ -28,7 +28,14 @@ def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
 
 
 def _new_action_id() -> str:
-    return secrets.token_urlsafe(6).replace("-", "_").replace("_", "x")[:8] or secrets.token_hex(4)
+    """8-char hex token, used as the inline marker id (`[action:...|id=...]`).
+
+    Hex (no -, _, /, +) keeps it safe in URL fragments and marker grammar
+    without any post-processing. 8 chars = 32 bits of entropy — collision
+    probability across a session is negligible (we emit ≤ a few cards per
+    turn).
+    """
+    return secrets.token_hex(4)
 
 
 def _validate_track_ids_sync(track_ids: list[str]) -> list[str]:
