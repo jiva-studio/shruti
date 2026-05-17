@@ -52,7 +52,6 @@ export default {
     "Где остановился?",            // continue_listening
     "Собери плейлист по Гите 2",  // propose_playlist
     "Что слушал на неделе?",       // search_my_history + now
-    "Поищи в моих заметках",       // search_my_notes
     "Что послушать ещё?",          // recommend_next
     "Найди про варнашраму",        // search_transcripts (classic)
     "Утренние прогулки 1973",      // list_tracks (classic)

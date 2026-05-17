@@ -13,13 +13,13 @@ from sse_starlette.sse import EventSourceResponse
 
 from shruti_chat.agent.loop import run_agent
 from shruti_chat.config import get_settings
-from shruti_chat.domain import FocusFragment, UserContext, UserContextTrack, UserNote
+from shruti_chat.domain import FocusFragment, UserContext, UserContextTrack
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.ratelimit import check_and_increment
 
 # Re-exports — pre-existing callers (and tests) import these names from
 # `api.chat`; the types themselves now live in `domain.user_context`.
-__all__ = ["FocusFragment", "UserContext", "UserContextTrack", "UserNote"]
+__all__ = ["FocusFragment", "UserContext", "UserContextTrack"]
 
 log = get_logger(__name__)
 
