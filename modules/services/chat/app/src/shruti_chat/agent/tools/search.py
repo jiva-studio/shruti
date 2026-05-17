@@ -54,6 +54,14 @@ def _filter_track_ids_sync(
         return [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
 
 
+_DESCRIPTION = (
+    "Semantic search over lecture transcripts. Use for "
+    "conceptual / thematic questions: 'what did he say about X', "
+    "'where does he explain Y'. Returns chunks with timestamps "
+    "you must cite via [cite:track_id@start_ms-end_ms]."
+)
+
+
 async def search_transcripts(
     query: str,
     author_id: str | None = None,
@@ -110,3 +118,28 @@ async def search_transcripts(
         }
         for r in rows
     ]
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "search_transcripts",
+        "fn": search_transcripts,
+        "personalized": False,
+        "description": _DESCRIPTION,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "author_id": {"type": "string"},
+                "source_id": {"type": "string"},
+                "location_id": {"type": "string"},
+                "tag_ids": {"type": "array", "items": {"type": "string"}},
+                "date_from": {"type": "string", "description": "YYYY-MM-DD"},
+                "date_to": {"type": "string", "description": "YYYY-MM-DD"},
+                "lang": {"type": "string", "enum": ["ru", "en"]},
+                "top_k": {"type": "integer", "default": 8},
+            },
+            "required": ["query"],
+        },
+    },
+]

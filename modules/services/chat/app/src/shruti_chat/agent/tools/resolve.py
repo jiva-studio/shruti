@@ -134,3 +134,57 @@ async def resolve_location(text: str, lang: str | None = None) -> list[dict[str,
 async def resolve_tag(text: str, lang: str | None = None) -> list[dict[str, Any]]:
     raw = await asyncio.to_thread(_resolve_sync, "tags", text, lang)
     return [{"tag_id": rid, **payload} for (rid, payload) in raw]
+
+
+_RESOLVE_PARAMS = {
+    "type": "object",
+    "properties": {
+        "text": {"type": "string"},
+        "lang": {"type": "string"},
+    },
+    "required": ["text"],
+}
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "resolve_author",
+        "fn": resolve_author,
+        "personalized": False,
+        "description": (
+            "Translate a human author name into author_id. Call BEFORE "
+            "list_tracks/search_transcripts when filtering by author."
+        ),
+        "parameters": _RESOLVE_PARAMS,
+    },
+    {
+        "name": "resolve_source",
+        "fn": resolve_source,
+        "personalized": False,
+        "description": (
+            "Translate a book/source name (e.g. 'Bhagavad-gita', "
+            "'Шримад-Бхагаватам') into source_id."
+        ),
+        "parameters": _RESOLVE_PARAMS,
+    },
+    {
+        "name": "resolve_location",
+        "fn": resolve_location,
+        "personalized": False,
+        "description": "Translate a location name (city, place) into location_id.",
+        "parameters": _RESOLVE_PARAMS,
+    },
+    {
+        "name": "resolve_tag",
+        "fn": resolve_tag,
+        "personalized": False,
+        "description": (
+            "Translate a tag name into tag_id. Includes kind-tags: "
+            "'tag_morning_walk', 'tag_conversation', 'tag_lecture', "
+            "'tag_initiation', 'tag_address', 'tag_festival', "
+            "'tag_interview', 'tag_press_conf', 'tag_bhajan', "
+            "'tag_vyasa_puja', 'tag_wedding', 'tag_other'."
+        ),
+        "parameters": _RESOLVE_PARAMS,
+    },
+]

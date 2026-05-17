@@ -207,3 +207,28 @@ async def get_track_outline(
             {"type": "outline", "data": {"track_id": track_id, "items": items}},
         ],
     }
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "get_track_outline",
+        "fn": get_track_outline,
+        "personalized": False,
+        "description": (
+            "Generate (or fetch cached) outline for a track: 5-8 chapter-like "
+            "items with timecodes (start_ms) and titles. Use when the user asks "
+            "for a summary, the contents of a lecture, or 'recap what I just "
+            "listened to'. After calling, embed the marker '[outline:<track_id>]' "
+            "in your reply where the outline card should render — the client "
+            "mounts an interactive list at that position."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string"},
+                "lang": {"type": "string", "enum": ["ru", "en"]},
+            },
+            "required": ["track_id"],
+        },
+    },
+]

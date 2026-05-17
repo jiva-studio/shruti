@@ -72,3 +72,28 @@ async def find_similar_chunks(
         }
         for r in rows
     ]
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "find_similar_chunks",
+        "fn": find_similar_chunks,
+        "personalized": False,
+        "description": (
+            "Find passages in OTHER tracks semantically similar to a given "
+            "(track_id, start_ms-end_ms) fragment. Use for 'where else did he "
+            "say something similar'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string"},
+                "start_ms": {"type": "integer"},
+                "end_ms": {"type": "integer"},
+                "top_k": {"type": "integer", "default": 6},
+                "lang": {"type": "string", "enum": ["ru", "en"]},
+            },
+            "required": ["track_id", "start_ms", "end_ms"],
+        },
+    },
+]
