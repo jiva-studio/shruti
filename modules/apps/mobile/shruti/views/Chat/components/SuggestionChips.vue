@@ -1,12 +1,6 @@
 <template>
   <div v-if="chips.length" class="suggestions">
-    <button
-      v-for="(s, i) in chips"
-      :key="i"
-      type="button"
-      class="chip"
-      @click="onPick(s)"
-    >
+    <button v-for="(s, i) in chips" :key="i" type="button" class="chip" @click="onPick(s)">
       {{ s }}
     </button>
   </div>

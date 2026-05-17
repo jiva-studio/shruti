@@ -49,12 +49,12 @@ export default {
   suggestionRecapCurrent: "Перескажи текущую лекцию",
   suggestionRecapRecent: "Перескажи последнюю лекцию",
   suggestions: [
-    "Где остановился?",            // continue_listening
-    "Собери плейлист по Гите 2",  // propose_playlist
-    "Что слушал на неделе?",       // search_my_history + now
-    "Что послушать ещё?",          // recommend_next
-    "Найди про варнашраму",        // search_transcripts (classic)
-    "Утренние прогулки 1973",      // list_tracks (classic)
+    "Где остановился?", // continue_listening
+    "Собери плейлист по Гите 2", // propose_playlist
+    "Что слушал на неделе?", // search_my_history + now
+    "Что послушать ещё?", // recommend_next
+    "Найди про варнашраму", // search_transcripts (classic)
+    "Утренние прогулки 1973", // list_tracks (classic)
   ],
 
   // Outline card

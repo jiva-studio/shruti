@@ -1,7 +1,31 @@
-import type {
-  ChatActionPayload,
-  ChatOutlinePayload,
-} from "@lib/domain/chatMessage.js"
+/**
+ * Wire payloads emitted by the chat agent as SSE side-events. These
+ * types are duplicated (intentionally) on the domain side as
+ * `ChatActionPayload` / `ChatOutlinePayload` on `ChatMessage`. Ports
+ * must not import `@lib/domain` (clean-architecture rule), and domain
+ * must not import ports either — both layers redeclare the wire
+ * contract independently and the composition root reconciles them.
+ */
+export type ChatActionPayload =
+  | {
+      readonly kind: "create_playlist"
+      readonly id: string
+      readonly name: string
+      readonly trackIds: readonly string[]
+    }
+  | {
+      readonly kind: "save_note"
+      readonly id: string
+      readonly trackId: string
+      readonly startMs: number
+      readonly endMs: number
+      readonly text: string
+    }
+
+export interface ChatOutlinePayload {
+  readonly trackId: string
+  readonly items: readonly { readonly startMs: number; readonly title: string }[]
+}
 
 export type ChatRole = "user" | "assistant"
 

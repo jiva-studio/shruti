@@ -4,7 +4,7 @@ import type {
   IChatStreamClient,
   StreamChatOptions,
 } from "@ports/app/index.js"
-import { streamChat } from "@shruti/services/chatClient.js"
+import { streamChat } from "../chatClient.js"
 
 /**
  * Adapts the existing fetch+SSE `streamChat` generator (under

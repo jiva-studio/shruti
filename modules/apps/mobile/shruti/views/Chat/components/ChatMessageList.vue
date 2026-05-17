@@ -15,11 +15,13 @@ import ChatMessageBubble from "./ChatMessageBubble.vue"
 
 defineProps<{ messages: readonly ChatMessage[] }>()
 defineEmits<{
-  "pick-chapter": [args: {
-    trackId: string
-    item: { startMs: number; title: string }
-    nextItem: { startMs: number; title: string } | null
-  }]
+  "pick-chapter": [
+    args: {
+      trackId: string
+      item: { startMs: number; title: string }
+      nextItem: { startMs: number; title: string } | null
+    },
+  ]
 }>()
 </script>
 

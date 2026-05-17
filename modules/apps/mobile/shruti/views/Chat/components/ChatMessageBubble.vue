@@ -53,11 +53,9 @@
               @confirm="onConfirmAction"
             />
           </template>
-          <span
-            v-if="errorSuffix && !message.streaming"
-            class="truncated-suffix"
-            >{{ errorSuffix }}</span
-          >
+          <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
+            errorSuffix
+          }}</span>
         </template>
       </template>
     </div>
@@ -68,11 +66,7 @@
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
-import {
-  useChatStore,
-  type ActionState,
-  type ChatMessage,
-} from "@shruti/stores/useChatStore.js"
+import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ActionPayload } from "@shruti/services/chatClient.js"
 import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
@@ -84,11 +78,13 @@ const props = defineProps<{ message: ChatMessage }>()
 defineEmits<{
   /** Forwarded from the inline OutlineCard. The view-level controller
    *  owns prompt assembly + chat.sendMessage. */
-  "pick-chapter": [args: {
-    trackId: string
-    item: { startMs: number; title: string }
-    nextItem: { startMs: number; title: string } | null
-  }]
+  "pick-chapter": [
+    args: {
+      trackId: string
+      item: { startMs: number; title: string }
+      nextItem: { startMs: number; title: string } | null
+    },
+  ]
 }>()
 const chat = useChatStore()
 const { t } = useI18n()
@@ -106,9 +102,7 @@ const errorSuffix = computed(() => {
   // UI doesn't expose a retry button yet — that needs Last-Event-ID
   // resume on the SSE channel.
   if (e.kind === "truncated") {
-    return e.reason === "turns"
-      ? t("chat.errTruncatedTurns")
-      : t("chat.errTruncatedStream")
+    return e.reason === "turns" ? t("chat.errTruncatedTurns") : t("chat.errTruncatedStream")
   }
   return ""
 })
@@ -132,9 +126,7 @@ function playlistPayload(
   return a && a.kind === "create_playlist" ? a : undefined
 }
 
-function notePayload(
-  actionId: string
-): Extract<ActionPayload, { kind: "save_note" }> | undefined {
+function notePayload(actionId: string): Extract<ActionPayload, { kind: "save_note" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "save_note" ? a : undefined
 }

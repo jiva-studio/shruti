@@ -10,25 +10,13 @@
       <span v-if="state === 'error'" class="done-text error">
         {{ $t("chat.actionNoteError") }}
       </span>
-      <button
-        v-if="state === 'pending'"
-        class="btn primary"
-        @click="onConfirm"
-      >
+      <button v-if="state === 'pending'" class="btn primary" @click="onConfirm">
         {{ $t("chat.actionNoteConfirm") }}
       </button>
-      <button
-        v-else-if="state === 'executing'"
-        class="btn primary"
-        disabled
-      >
+      <button v-else-if="state === 'executing'" class="btn primary" disabled>
         <IonSpinner name="dots" class="spinner" />
       </button>
-      <button
-        v-else-if="state === 'error'"
-        class="btn primary"
-        @click="onConfirm"
-      >
+      <button v-else-if="state === 'error'" class="btn primary" @click="onConfirm">
         {{ $t("chat.actionRetry") }}
       </button>
     </footer>
@@ -61,7 +49,9 @@ const metaLine = computed(() => {
   return formatTimestamp(props.payload.startMs)
 })
 
-function onConfirm() { emit("confirm", props.actionId) }
+function onConfirm() {
+  emit("confirm", props.actionId)
+}
 </script>
 
 <style scoped>
@@ -133,7 +123,8 @@ function onConfirm() { emit("confirm", props.actionId) }
   background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.04);
 }
 
-.actions, .status {
+.actions,
+.status {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -187,5 +178,8 @@ function onConfirm() { emit("confirm", props.actionId) }
   flex-shrink: 0;
 }
 
-.status.error { color: var(--ion-color-danger, #eb445a); flex-wrap: wrap; }
+.status.error {
+  color: var(--ion-color-danger, #eb445a);
+  flex-wrap: wrap;
+}
 </style>

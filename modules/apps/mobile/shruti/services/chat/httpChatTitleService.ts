@@ -1,9 +1,5 @@
-import type {
-  ChatTurn,
-  FetchSessionTitleOptions,
-  IChatTitleService,
-} from "@ports/app/index.js"
-import { fetchSessionTitle } from "@shruti/services/chatClient.js"
+import type { ChatTurn, FetchSessionTitleOptions, IChatTitleService } from "@ports/app/index.js"
+import { fetchSessionTitle } from "../chatClient.js"
 
 /**
  * `IChatTitleService` adapter over the existing `fetchSessionTitle`
