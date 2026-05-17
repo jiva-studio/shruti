@@ -86,10 +86,13 @@ async def title(
     body: TitleRequest,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
+    idempotency_key: str | None = Header(default=None),
 ) -> TitleResponse:
     _check_app_token(x_app_token)
     device_id = _check_device_id(x_device_id)
     settings = get_settings()
+    if idempotency_key:
+        log.info("title_request", device_id=device_id, idempotency_key=idempotency_key)
 
     # Separate quota bucket from /chat so heavy title traffic from a flaky
     # client retrying many fresh sessions can't drain the main chat quota,

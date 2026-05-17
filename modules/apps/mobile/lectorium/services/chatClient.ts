@@ -92,6 +92,7 @@ export async function fetchSessionTitle(
         Accept: "application/json",
         "X-Device-Id": clientId,
         "X-App-Token": appToken,
+        "Idempotency-Key": newIdempotencyKey(),
       },
       body: JSON.stringify({ messages, lang }),
       signal: opts.signal,
@@ -138,9 +139,17 @@ export async function* streamChat(
   const clientId = opts.clientId ?? (await resolveClientId())
 
   // Transient errors (network blip, 502/503/504 during a server redeploy)
-  // get up to 3 retries with exponential backoff. Non-transient (400/401/403/
-  // 429) bail out immediately. SSE streaming itself is NOT retried — once
-  // bytes start flowing we commit to that connection.
+  // get up to 3 retries with exponential backoff, but only as a *fallback*
+  // — if the server set `Retry-After` we honour it instead. Non-transient
+  // (400/401/403/429) bail out immediately. SSE streaming itself is NOT
+  // retried — once bytes start flowing we commit to that connection.
+  //
+  // `Idempotency-Key` is generated per turn so a retried POST can be
+  // server-side dedup'd in the future (Redis dedup is followup-PR
+  // territory; today the server just logs the key). Without it, two
+  // attempts after a 502 from a proxy that sat in front of a backend
+  // that already started work would both bill the LLM.
+  const idempotencyKey = newIdempotencyKey()
   const url = joinUrl(baseUrl, "/chat")
   const requestInit: RequestInit = {
     method: "POST",
@@ -149,6 +158,7 @@ export async function* streamChat(
       Accept: "text/event-stream",
       "X-Device-Id": clientId,
       "X-App-Token": appToken,
+      "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify(
       opts.userContext !== undefined
@@ -171,8 +181,12 @@ export async function* streamChat(
     }
     if (response && response.ok) break
     if (response && !isTransientStatus(response.status)) break
-    // back off: 250ms, 750ms, 2250ms
-    const delay = 250 * Math.pow(3, attempt)
+    // Prefer the server's Retry-After (clamped). Fallback to fixed
+    // exponential 250ms / 750ms / 2250ms.
+    const fallback = 250 * Math.pow(3, attempt)
+    const delay = response
+      ? parseRetryAfterMs(response.headers.get("Retry-After"), fallback)
+      : fallback
     await sleep(delay, opts.signal)
   }
 
@@ -275,8 +289,30 @@ function joinUrl(base: string, path: string): string {
 }
 
 function isTransientStatus(code: number): boolean {
-  // 502/503/504 cover redeploy downtime; 408 = client/server idle timeout.
-  return code === 408 || code === 502 || code === 503 || code === 504
+  // 502/503/504 cover redeploy and gateway downtime — retrying typically
+  // succeeds once the next instance comes up. 408 (Request Timeout) is
+  // intentionally NOT retried: it's almost always "the server is too
+  // busy / IDLE'd out the request", and retrying compounds the load
+  // without actually changing whether the server can answer.
+  return code === 502 || code === 503 || code === 504
+}
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+/** Parse a `Retry-After` header value. Returns seconds, capped to 60s
+ *  so a server bug or proxy can't pin the client to a multi-hour wait. */
+function parseRetryAfterMs(raw: string | null, fallbackMs: number): number {
+  if (!raw) return fallbackMs
+  const n = Number(raw)
+  if (Number.isFinite(n) && n > 0) return Math.min(60_000, n * 1000)
+  // HTTP-date form is allowed by the spec but neither our backend nor
+  // the relevant proxies emit it; falling back is the right move.
+  return fallbackMs
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
