@@ -91,6 +91,7 @@ async def chat(
                 lang=body.lang,
                 request_id=request_id,
                 user_context=body.user_context,
+                is_disconnected=request.is_disconnected,
             ):
                 yield {"event": ev.type, "data": json.dumps(ev.data, ensure_ascii=False)}
         finally:

@@ -151,11 +151,18 @@ async def run_agent(
     lang: str = "ru",
     request_id: str | None = None,
     user_context: UserContext | None = None,
+    is_disconnected: Callable[[], Awaitable[bool]] | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Run the agent and yield AgentEvents.
 
     `user_context` is injected into personalize tools via per-request
     wrappers (see `build_personalized_tools`).
+
+    `is_disconnected`, when supplied, is awaited between LLM turns and on
+    every streamed chunk to detect a client that closed the connection
+    mid-response. The loop then raises CancelledError so any in-flight
+    LLM stream tears down — saves both Gemini cost and the user-side
+    "still spinning" UI on partial network drops.
     """
     settings = get_settings()
     rid = request_id or uuid.uuid4().hex[:8]
@@ -167,8 +174,14 @@ async def run_agent(
     tool_calls_made = 0
     started = time.monotonic()
 
+    async def _client_gone() -> bool:
+        return bool(is_disconnected and await is_disconnected())
+
     try:
         for turn in range(MAX_TOOL_TURNS):
+            if await _client_gone():
+                log.info("agent_cancelled_pre_turn", request_id=rid, turn=turn)
+                return
             t0 = time.monotonic()
             content_buf: list[str] = []
             tool_calls_by_index: dict[int, dict[str, Any]] = {}
@@ -179,6 +192,9 @@ async def run_agent(
                 messages=messages,
                 tools=TOOL_SCHEMAS,
             ):
+                if await _client_gone():
+                    log.info("agent_cancelled_mid_stream", request_id=rid, turn=turn)
+                    return
                 if not getattr(chunk, "choices", None):
                     continue
                 delta = chunk.choices[0].delta
