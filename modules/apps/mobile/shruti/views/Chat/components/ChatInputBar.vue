@@ -97,8 +97,8 @@ function onKeydown(event: KeyboardEvent): void {
   border-radius: 24px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   pointer-events: auto;
-  padding-right: 4px;
-  min-height: 44px;
+  padding: 14px 4px 14px 0;
+  min-height: 49px;
   transition: padding-right 180ms cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
@@ -116,9 +116,9 @@ function onKeydown(event: KeyboardEvent): void {
   color: var(--ion-text-color);
   font: inherit;
   font-size: 15px;
-  line-height: 1.4;
-  padding: 10px 8px 10px 16px;
-  max-height: 140px;
+  line-height: 21px;
+  padding: 0 8px 0 16px;
+  max-height: 126px;
   overflow-y: auto;
   scrollbar-width: none;
   caret-color: var(--ion-color-primary);
