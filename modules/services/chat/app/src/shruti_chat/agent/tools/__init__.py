@@ -27,6 +27,8 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any, Awaitable, Callable
 
+from shruti_chat.domain import UserContext
+
 ToolFn = Callable[..., Awaitable[Any]]
 
 
@@ -79,7 +81,7 @@ _register()
 
 
 def build_personalized_tools(
-    base: dict[str, ToolFn], user_context: Any
+    base: dict[str, ToolFn], user_context: UserContext | None
 ) -> dict[str, ToolFn]:
     """Bind `user_context` into personalize tools via closure.
 
