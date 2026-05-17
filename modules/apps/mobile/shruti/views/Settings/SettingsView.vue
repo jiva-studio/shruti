@@ -48,10 +48,7 @@
       @reset="smartLibrary.reset"
     />
 
-    <SettingsChatGroup
-      v-model:show-chat-tab="showChatTab"
-      @clear-chat-history="onClearChatHistory"
-    />
+    <SettingsChatGroup v-model:show-chat-tab="showChatTab" />
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
@@ -122,7 +119,6 @@ const {
   languageItems,
   onClearCache,
   onClearUserData,
-  onClearChatHistory,
   onExportDatabase,
   onImportFileSelected,
   subscription,

@@ -8,6 +8,8 @@ export default {
   newSession: "New chat",
   history: "Chat history",
   historyEmpty: "No previous chats yet.",
+  searchPlaceholder: "Search history",
+  searchEmpty: "No matches",
   untitledSession: "Untitled chat",
   clearHistory: "Clear chat history",
   clearHistoryConfirm: "Delete every chat session and message? This cannot be undone.",

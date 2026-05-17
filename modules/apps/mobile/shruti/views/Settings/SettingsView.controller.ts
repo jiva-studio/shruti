@@ -1,5 +1,4 @@
 import { computed, watch, type ComputedRef, type Ref } from "vue"
-import { alertController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import {
@@ -8,8 +7,6 @@ import {
 } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
-import { useChatStore } from "@shruti/stores/useChatStore.js"
-import { useToast } from "@shruti/services/useToast.js"
 import type { CdnServer } from "@lib/domain/servers.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
@@ -56,8 +53,6 @@ export interface SettingsControllerReturn {
   /* Danger handlers */
   onClearCache: () => Promise<void>
   onClearUserData: () => Promise<void>
-  /* Chat handlers */
-  onClearChatHistory: () => Promise<void>
   /* Data export/import handlers */
   onExportDatabase: () => Promise<void>
   onImportFileSelected: (file: File) => Promise<void>
@@ -141,33 +136,6 @@ export function useSettingsController(): SettingsControllerReturn {
   const { onClearCache, onClearUserData } = useDangerActions(app)
   const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
 
-  const chatStore = useChatStore()
-  const toast = useToast()
-
-  async function onClearChatHistory(): Promise<void> {
-    const dialog = await alertController.create({
-      header: t("chat.clearHistory"),
-      message: t("chat.clearHistoryConfirm"),
-      buttons: [
-        { text: t("app.cancel"), role: "cancel" },
-        {
-          text: t("app.delete"),
-          role: "destructive",
-          handler: () => {
-            void chatStore
-              .clearAll()
-              .then(() => toast.info(t("chat.clearedToast")))
-              .catch((err) => {
-                console.warn("settings: failed to clear chat history", err)
-                void toast.error(t("chat.errNetwork"))
-              })
-          },
-        },
-      ],
-    })
-    await dialog.present()
-  }
-
   return {
     version,
     buildId,
@@ -194,7 +162,6 @@ export function useSettingsController(): SettingsControllerReturn {
     languageItems,
     onClearCache,
     onClearUserData,
-    onClearChatHistory,
     onExportDatabase,
     onImportFileSelected,
     subscription,
