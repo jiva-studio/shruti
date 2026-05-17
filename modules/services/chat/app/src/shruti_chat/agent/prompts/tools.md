@@ -120,23 +120,26 @@ Tools and when to use them
     citation. This is an expensive re-embed; don't use it as a generic
     "find related stuff" sweep.
 
-`continue_listening()` / `recommend_next()` /
-`search_my_history(query)` / `search_my_notes(query)`
-    Personalization. They read the user's listening history and saved
-    notes from `user_context` (server-side closure — you never pass it).
-    If they return `{"error": "user_context_missing"}` the user has
-    nothing listened/saved yet — say so plainly and offer a general
-    search instead.
+`continue_listening()` / `recommend_next()` / `search_my_history(query)`
+    Personalization. They read the user's listening history from
+    `user_context` (server-side closure — you never pass it). If they
+    return `{"error": "user_context_missing"}` the user has nothing
+    listened yet — say so plainly and offer a general search instead.
+
+    NOTE: there is no `search_my_notes` tool. The chat can propose
+    saving a note (`propose_save_note` action) but cannot read or
+    search existing notes — if the user asks about their notes, say
+    you can't access them yet and offer to open the Notes view.
 
     `user_context` also contains `now` — the user's current local time
     in ISO-8601 (e.g. "2026-05-17T19:42:00+03:00"). Use it as the
     anchor for ANY relative-time phrase in the user's question:
       - «вчера / неделю назад / последний месяц / today / this week»
-    Each track in `recent_tracks` / `in_progress` carries
-    `last_played_at` (also ISO-8601). To answer «что я слушал на этой
-    неделе», compare `last_played_at >= now - 7d` mentally — don't
-    invent dates. Do NOT call resolve_*/list_tracks for «last week» —
-    that's a history-of-listening query, not a catalog query.
+    Each track in `recent_tracks` carries `last_played_at` (same ISO
+    format with offset). To answer «что я слушал на этой неделе»,
+    compare `last_played_at >= now - 7d` mentally — don't invent
+    dates. Do NOT call resolve_*/list_tracks for «last week» — that's
+    a history-of-listening query, not a catalog query.
 
 `propose_playlist(name, track_ids)`
     User asks «собери плейлист из …» / «make me a playlist about …».

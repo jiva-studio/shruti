@@ -3,7 +3,6 @@ import type {
   IListeningSessionRepository,
   RecentTrackProgress,
 } from "@lib/domain/ports/listeningSessionRepository.js"
-import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 
 /** Server wire-format for one track in `recent_tracks`. Mirrors
@@ -17,14 +16,6 @@ export interface UserContextTrackPayload {
   readonly last_played_at: string | null
 }
 
-export interface UserNotePayload {
-  readonly track_id: string | null
-  readonly time_start_ms: number | null
-  readonly time_end_ms: number | null
-  readonly text: string
-  readonly created_at: string | null
-}
-
 export interface FocusFragmentPayload {
   readonly track_id: string
   readonly start_ms: number
@@ -32,21 +23,23 @@ export interface FocusFragmentPayload {
   readonly title?: string
 }
 
-/** Every timestamp in this payload (`now`, `recent_tracks[].last_played_at`,
- *  `recent_notes[].created_at`) is ISO-8601 with the device's UTC offset
- *  — e.g. `"2026-05-17T19:42:00+03:00"`. Uniform format so the LLM can
- *  compare them without inferring a separate timezone field. The offset
- *  suffix replaces what would otherwise be a `tz_offset_minutes` field. */
+/** Every timestamp in this payload (`now`, `recent_tracks[].last_played_at`)
+ *  is ISO-8601 with the device's UTC offset — e.g.
+ *  `"2026-05-17T19:42:00+03:00"`. Uniform format so the LLM can compare
+ *  them without inferring a separate timezone field. The offset suffix
+ *  replaces what would otherwise be a `tz_offset_minutes` field.
+ *
+ *  Notes are NOT sent. Chat can write notes (via `propose_save_note`
+ *  action) but not read or search them — the field would be dead bytes
+ *  in every request until a search-my-notes UI flow lands. */
 export interface UserContextPayload {
   readonly current_track_id: string | null
   readonly now: string
   readonly recent_tracks: readonly UserContextTrackPayload[]
-  readonly recent_notes: readonly UserNotePayload[]
   readonly focus?: FocusFragmentPayload
 }
 
 const RECENT_LIMIT = 20
-const NOTES_LIMIT = 30
 
 export interface BuildChatUserContextInput {
   /** Track id the user is currently engaged with (player open + recent
@@ -59,7 +52,6 @@ export interface BuildChatUserContextInput {
 export interface BuildChatUserContextDeps {
   readonly listeningSessions: IListeningSessionRepository
   readonly tracks: ITrackRepository
-  readonly notes: INoteRepository
 }
 
 /**
@@ -79,7 +71,6 @@ export async function buildChatUserContext(
   const recentRows: readonly RecentTrackProgress[] = await deps.listeningSessions
     .listRecentTracksWithProgress(RECENT_LIMIT)
     .catch(() => [])
-  const notes = await deps.notes.listRecent(NOTES_LIMIT).catch(() => [])
 
   const trackIds = recentRows.map((r) => r.trackId)
   const durations = await deps.tracks
@@ -101,19 +92,10 @@ export async function buildChatUserContext(
     }
   })
 
-  const recentNotes: UserNotePayload[] = notes.map((n) => ({
-    track_id: n.trackId,
-    time_start_ms: Math.max(0, Math.floor(n.timeStart)),
-    time_end_ms: Math.max(0, Math.floor(n.timeEnd)),
-    text: n.text,
-    created_at: localIsoFromMs(n.createdAt),
-  }))
-
   return {
     current_track_id: input.currentTrackId,
     now: localIsoNow(),
     recent_tracks: recent,
-    recent_notes: recentNotes,
     ...(input.focus ? { focus: input.focus } : {}),
   }
 }

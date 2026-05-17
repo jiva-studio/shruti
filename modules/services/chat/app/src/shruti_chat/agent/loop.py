@@ -137,7 +137,7 @@ def _format_user_context(uc: UserContext | None) -> str:
     )
     lines.append(
         f"history_size: recent={len(uc.recent_tracks)} "
-        f"in_progress={in_progress_n} notes={len(uc.recent_notes)}"
+        f"in_progress={in_progress_n}"
     )
     if not lines:
         return ""
