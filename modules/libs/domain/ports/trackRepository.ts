@@ -62,4 +62,13 @@ export interface ITrackRepository {
    * Languages for which the track has a transcript advertised.
    */
   listTranscriptLanguages(trackId: TrackId): Promise<readonly LanguageCode[]>
+
+  /**
+   * Batch fetch max audio duration (ms) per track. Used by the chat
+   * `UserContext` builder to express "I'm 73% through track X" as a
+   * percent. Empty input returns an empty map. Tracks without any
+   * variant duration are simply absent from the result map (caller
+   * treats absent as "unknown").
+   */
+  getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>>
 }
