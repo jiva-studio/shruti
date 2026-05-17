@@ -1,25 +1,26 @@
+import type { PluginListenerHandle } from "@capacitor/core"
 import { Directory, Filesystem } from "@capacitor/filesystem"
+import { MediaDownloader } from "@shruti/plugin-media-downloader"
 import type { IExcerptCache } from "@ports/app/excerptCache.js"
 
 const DEFAULT_PROBE_TIMEOUT_MS = 1500
 
 /**
- * `IExcerptCache` backed by `@capacitor/filesystem` + `fetch` HEAD.
+ * `IExcerptCache` backed by `@capacitor/filesystem` for lookups +
+ * `@shruti/plugin-media-downloader` for the actual download.
  *
- * Cache layout: `Directory.Cache` root, flat — no subdirectories. The
- * legacy `Filesystem.downloadFile` on Android does NOT create
- * intermediate directories (iOS does), so a subdir would make the first
- * share fail with `FileNotFoundException`.
+ * `findLocal` uses `stat → catch → null` because Capacitor's stat throws
+ * on missing files rather than returning a flag.
  *
- * `findLocal` uses `stat → catch → null` because Capacitor's stat
- * throws on missing files rather than returning a flag.
- *
- * `download` is followed by `getUri` to normalize the returned shape:
- * Android's downloadFile returns a raw absolute path
- * (`/data/user/0/.../cache/...`) without a scheme, which
- * `@capacitor/share` can't pipe through FileProvider — the share sheet
- * silently no-ops. `getUri` wraps it in `file://...`, which iOS
- * already returns from downloadFile so both platforms align.
+ * `download` delegates to `MediaDownloader` rather than
+ * `Filesystem.downloadFile` (deprecated since v7.1.0 of
+ * `@capacitor/filesystem`): the deprecated path runs on a legacy
+ * `HttpURLConnection` impl that silently no-ops on a number of
+ * Android-only edge cases and ignores `recursive: true`. The plugin's
+ * native side (WorkManager + OkHttp on Android, `URLSession` on iOS)
+ * `mkdirs()` the parent on Android, surfaces failures as a `failed`
+ * event with a real error string, and returns a `file://`-prefixed
+ * local URI ready for `@capacitor/share`.
  */
 export function useCapacitorExcerptCache(): IExcerptCache {
   return {
@@ -49,17 +50,32 @@ export function useCapacitorExcerptCache(): IExcerptCache {
     },
 
     async download({ url, filename }: { url: string; filename: string }): Promise<string> {
-      await Filesystem.downloadFile({
-        url,
-        path: filename,
-        directory: Directory.Cache,
-        recursive: true,
+      // `id = filename` keys the download for `completed`/`failed` event
+      // matching. Excerpt filenames are slashless (`share-*-note-{id}.{mp3,mp4}`)
+      // so they never collide with the tracks adapter's `id = URL.pathname`.
+      const id = filename
+      const handles: PluginListenerHandle[] = []
+      const result = new Promise<string>((resolve, reject) => {
+        MediaDownloader.addListener("completed", (e) => {
+          if (e.id !== id) return
+          resolve(e.localUrl)
+        }).then((h) => handles.push(h))
+        MediaDownloader.addListener("failed", (e) => {
+          if (e.id !== id) return
+          reject(new Error(e.error || "Download failed"))
+        }).then((h) => handles.push(h))
       })
-      const { uri } = await Filesystem.getUri({
-        path: filename,
-        directory: Directory.Cache,
-      })
-      return uri
+
+      try {
+        await MediaDownloader.download({
+          id,
+          url,
+          destination: { directory: "cache", subdir: "", filename },
+        })
+        return await result
+      } finally {
+        for (const h of handles) await h.remove()
+      }
     },
   }
 }
