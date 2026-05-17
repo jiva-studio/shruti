@@ -9,9 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from shruti_chat.config import Settings
 from shruti_chat.indexer.s3 import fetch_transcript
 
 
 class S3TranscriptStorage:
+    def __init__(self, *, settings: Settings) -> None:
+        self._settings = settings
+
     async def fetch(self, path: str) -> dict[str, Any]:
-        return await fetch_transcript(path)
+        return await fetch_transcript(path, self._settings)

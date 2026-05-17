@@ -28,16 +28,16 @@ from typing import Any, Iterator
 from rapidfuzz import fuzz, process, utils
 
 from shruti_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
-from shruti_chat.config import get_settings
 from shruti_chat.domain.entities import Reference, ResolvedEntity, Track
 from shruti_chat.domain.ports.catalog_repository import ResolveKind
 
 
-# --- read-only sqlite connection -------------------------------------------
+# Each sync helper takes `db_path` explicitly so they can be tested in
+# isolation. The repository instance below holds the path and threads
+# it through.
 
 @contextmanager
-def _catalog_conn() -> Iterator[sqlite3.Connection]:
-    path: Path = get_settings().catalog_db_path
+def _catalog_conn(path: Path) -> Iterator[sqlite3.Connection]:
     if not path.exists():
         raise RuntimeError(
             f"catalog DB not found at {path}; indexer not bootstrapped"
@@ -84,7 +84,12 @@ _RESOLVE_TABLES = {
 }
 
 
-def _load_dict(table: str, lang: str | None, extra_fields: list[str]) -> list[_DictRow]:
+def _load_dict(
+    db_path: Path,
+    table: str,
+    lang: str | None,
+    extra_fields: list[str],
+) -> list[_DictRow]:
     key = _CacheKey(table, lang)
     with _lock:
         cached = _cache.get(key)
@@ -96,7 +101,7 @@ def _load_dict(table: str, lang: str | None, extra_fields: list[str]) -> list[_D
     if lang:
         sql += " WHERE language = ?"
         params = (lang,)
-    with _catalog_conn() as conn:
+    with _catalog_conn(db_path) as conn:
         rows = conn.execute(sql, params).fetchall()
     out = [
         _DictRow(
@@ -129,6 +134,7 @@ def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_Dict
 # --- sync SQL bodies (moved from agent/tools/*) -----------------------------
 
 def _filter_track_ids_sync(
+    db_path: Path,
     *,
     author_id: str | None,
     source_id: str | None,
@@ -162,12 +168,12 @@ def _filter_track_ids_sync(
             "WHERE track_id = t.id AND source_id = ?)"
         )
         params.append(source_id)
-    with _catalog_conn() as conn:
+    with _catalog_conn(db_path) as conn:
         return [r["id"] for r in conn.execute("\n".join(sql), params).fetchall()]
 
 
-def _get_track_sync(track_id: str, lang: str) -> Track | None:
-    with _catalog_conn() as conn:
+def _get_track_sync(db_path: Path, track_id: str, lang: str) -> Track | None:
+    with _catalog_conn(db_path) as conn:
         track = conn.execute(
             "SELECT id, author_id, location_id, date, hidden FROM tracks WHERE id = ?",
             (track_id,),
@@ -254,6 +260,7 @@ def _get_track_sync(track_id: str, lang: str) -> Track | None:
 
 
 def _list_tracks_sync(
+    db_path: Path,
     *,
     author_id: str | None,
     source_id: str | None,
@@ -269,7 +276,7 @@ def _list_tracks_sync(
     # When lang is None, fall back to "en" for the title-lookup join, but
     # skip the EXISTS-filter so all languages remain visible.
     title_lang = lang or "en"
-    with _catalog_conn() as conn:
+    with _catalog_conn(db_path) as conn:
         params: list[Any] = []
         sql = [
             "SELECT t.id AS track_id, t.date, t.author_id, t.location_id,",
@@ -440,11 +447,11 @@ def _list_tracks_sync(
         return out
 
 
-def _filter_existing_track_ids_sync(track_ids: list[str]) -> list[str]:
+def _filter_existing_track_ids_sync(db_path: Path, track_ids: list[str]) -> list[str]:
     if not track_ids:
         return []
     placeholders = ",".join("?" * len(track_ids))
-    with _catalog_conn() as conn:
+    with _catalog_conn(db_path) as conn:
         rows = conn.execute(
             f"SELECT id FROM tracks WHERE hidden = 0 AND id IN ({placeholders})",
             list(track_ids),
@@ -453,9 +460,9 @@ def _filter_existing_track_ids_sync(track_ids: list[str]) -> list[str]:
 
 
 def _resolve_transcript_path_sync(
-    track_id: str, requested_lang: str,
+    db_path: Path, track_id: str, requested_lang: str,
 ) -> tuple[str | None, str]:
-    with _catalog_conn() as conn:
+    with _catalog_conn(db_path) as conn:
         row = conn.execute(
             "SELECT transcript_path FROM track_variants "
             "WHERE track_id = ? AND language = ? "
@@ -477,13 +484,14 @@ def _resolve_transcript_path_sync(
 
 
 def _resolve_sync(
+    db_path: Path,
     kind: ResolveKind,
     text: str,
     lang: str | None,
     limit: int,
 ) -> list[ResolvedEntity]:
     table, extra_fields = _RESOLVE_TABLES[kind]
-    rows = _load_dict(table, lang, extra_fields)
+    rows = _load_dict(db_path, table, lang, extra_fields)
     return [
         ResolvedEntity(
             id=row.id,
@@ -498,17 +506,24 @@ def _resolve_sync(
 # --- repository -------------------------------------------------------------
 
 class SqliteCatalogRepository:
+    def __init__(self, *, catalog_db_path: Path) -> None:
+        self._db_path = catalog_db_path
+
     async def get_track(self, track_id: str, *, lang: str) -> Track | None:
-        return await asyncio.to_thread(_get_track_sync, track_id, lang)
+        return await asyncio.to_thread(
+            _get_track_sync, self._db_path, track_id, lang,
+        )
 
     async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:
-        return await asyncio.to_thread(_filter_existing_track_ids_sync, track_ids)
+        return await asyncio.to_thread(
+            _filter_existing_track_ids_sync, self._db_path, track_ids,
+        )
 
     async def resolve_transcript_path(
         self, track_id: str, *, requested_lang: str,
     ) -> tuple[str | None, str]:
         return await asyncio.to_thread(
-            _resolve_transcript_path_sync, track_id, requested_lang,
+            _resolve_transcript_path_sync, self._db_path, track_id, requested_lang,
         )
 
     async def list_tracks(
@@ -527,6 +542,7 @@ class SqliteCatalogRepository:
     ) -> list[Track]:
         return await asyncio.to_thread(
             _list_tracks_sync,
+            self._db_path,
             author_id=author_id,
             source_id=source_id,
             location_id=location_id,
@@ -551,6 +567,7 @@ class SqliteCatalogRepository:
     ) -> list[str] | None:
         return await asyncio.to_thread(
             _filter_track_ids_sync,
+            self._db_path,
             author_id=author_id,
             source_id=source_id,
             location_id=location_id,
@@ -567,7 +584,9 @@ class SqliteCatalogRepository:
         lang: str | None,
         limit: int,
     ) -> list[ResolvedEntity]:
-        return await asyncio.to_thread(_resolve_sync, kind, text, lang, limit)
+        return await asyncio.to_thread(
+            _resolve_sync, self._db_path, kind, text, lang, limit,
+        )
 
     def invalidate_cache(self) -> None:
         invalidate_dict_cache()

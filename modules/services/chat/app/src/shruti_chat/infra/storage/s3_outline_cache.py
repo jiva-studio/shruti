@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from shruti_chat.config import Settings
 from shruti_chat.domain.ports.outline_cache import OutlineCacheConflict
 from shruti_chat.indexer.s3 import (
     OutlineAlreadyExists,
@@ -25,11 +26,18 @@ from shruti_chat.indexer.s3 import (
 
 
 class S3OutlineCache:
+    def __init__(self, *, settings: Settings) -> None:
+        self._settings = settings
+
     async def head(self, track_id: str, lang: str) -> bool:
-        return await asyncio.to_thread(outline_exists_sync, track_id, lang)
+        return await asyncio.to_thread(
+            outline_exists_sync, track_id, lang, self._settings,
+        )
 
     async def get(self, track_id: str, lang: str) -> dict[str, Any]:
-        return await asyncio.to_thread(get_outline_sync, track_id, lang)
+        return await asyncio.to_thread(
+            get_outline_sync, track_id, lang, self._settings,
+        )
 
     async def put(
         self,
@@ -41,7 +49,7 @@ class S3OutlineCache:
     ) -> None:
         try:
             await asyncio.to_thread(
-                put_outline_sync, track_id, lang, payload, None,
+                put_outline_sync, track_id, lang, payload, self._settings,
                 if_none_match=if_none_match,
             )
         except OutlineAlreadyExists as exc:
