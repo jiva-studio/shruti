@@ -2,11 +2,10 @@
 
 These don't execute anything server-side. They:
 1. Validate the proposal (track_ids exist, name non-empty, ...).
-2. Return a small dict containing:
-   - a `marker` string the LLM should embed inline in its reply
-     (e.g. `[action:create-playlist|id=abc12345]`)
-   - a `_side_events` list — the loop strips this key and yields each as
-     an `AgentEvent(type=event['type'], data=event['data'])` over SSE.
+2. Call the loop-supplied `yield_event` callable to emit the SSE
+   `action` side-event with the full payload (kind, id, name, tracks…).
+3. Return a small dict containing the `marker` string the LLM should
+   embed inline in its reply (e.g. `[action:create-playlist|id=abc12345]`).
 
 The client picks up the SSE event, stores the payload by `id`, finds the
 inline marker in the rendered text, and mounts the corresponding card.
@@ -16,9 +15,16 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from typing import Any
+from typing import Any, Callable
 
 from shruti_chat.agent.tools._sqlite import catalog_conn
+
+
+YieldEvent = Callable[[str, dict[str, Any]], None]
+
+
+def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
+    """Fallback when a tool is invoked outside the agent loop (e.g. tests)."""
 
 
 def _new_action_id() -> str:
@@ -44,6 +50,8 @@ async def propose_playlist(
     name: str,
     track_ids: list[str],
     rationale: str | None = None,
+    *,
+    yield_event: YieldEvent = _noop_yield,
 ) -> dict[str, Any]:
     """Ask the client to create a playlist (after user confirmation)."""
     name = (name or "").strip()
@@ -57,23 +65,21 @@ async def propose_playlist(
     if not valid:
         return {"error": "no_valid_tracks"}
     action_id = _new_action_id()
+    yield_event(
+        "action",
+        {
+            "kind": "create_playlist",
+            "id": action_id,
+            "name": name,
+            "track_ids": valid,
+            "rationale": rationale or "",
+        },
+    )
     return {
         "ok": True,
         "action_id": action_id,
         "marker": f"[action:create-playlist|id={action_id}]",
         "validated_track_ids": valid,
-        "_side_events": [
-            {
-                "type": "action",
-                "data": {
-                    "kind": "create_playlist",
-                    "id": action_id,
-                    "name": name,
-                    "track_ids": valid,
-                    "rationale": rationale or "",
-                },
-            },
-        ],
     }
 
 
@@ -83,6 +89,8 @@ async def propose_save_note(
     end_ms: int,
     text: str,
     suggested_caption: str | None = None,
+    *,
+    yield_event: YieldEvent = _noop_yield,
 ) -> dict[str, Any]:
     """Ask the client to save a note (after user confirmation)."""
     text = (text or "").strip()
@@ -93,24 +101,22 @@ async def propose_save_note(
     if end_ms < start_ms:
         end_ms = start_ms
     action_id = _new_action_id()
+    yield_event(
+        "action",
+        {
+            "kind": "save_note",
+            "id": action_id,
+            "track_id": track_id,
+            "start_ms": int(start_ms),
+            "end_ms": int(end_ms),
+            "text": text,
+            "suggested_caption": (suggested_caption or "").strip(),
+        },
+    )
     return {
         "ok": True,
         "action_id": action_id,
         "marker": f"[action:save-note|id={action_id}]",
-        "_side_events": [
-            {
-                "type": "action",
-                "data": {
-                    "kind": "save_note",
-                    "id": action_id,
-                    "track_id": track_id,
-                    "start_ms": int(start_ms),
-                    "end_ms": int(end_ms),
-                    "text": text,
-                    "suggested_caption": (suggested_caption or "").strip(),
-                },
-            },
-        ],
     }
 
 
@@ -119,6 +125,7 @@ TOOL_REGISTRY = [
         "name": "propose_playlist",
         "fn": propose_playlist,
         "personalized": False,
+        "emits_events": True,
         "description": (
             "Propose creating a playlist for the user — DOES NOT create it. "
             "The client will render a card with a confirm button. After "
@@ -142,6 +149,7 @@ TOOL_REGISTRY = [
         "name": "propose_save_note",
         "fn": propose_save_note,
         "personalized": False,
+        "emits_events": True,
         "description": (
             "Propose saving a quote as a user note — DOES NOT save it. "
             "The client will render a card with a confirm button. Embed "

@@ -7,6 +7,7 @@ entry has shape::
         "name": "search_transcripts",
         "fn": search_transcripts,        # async callable
         "personalized": False,           # bind user_context via closure?
+        "emits_events": False,           # receive yield_event callable?
         "description": "...",            # LLM-visible
         "parameters": {...},             # JSON-Schema for arg validation
     }
@@ -14,6 +15,9 @@ entry has shape::
 This module walks the listed sub-modules, collects entries, and exposes:
 - `TOOLS: dict[str, ToolFn]` — name → callable, used by the agent loop dispatcher
 - `TOOL_SCHEMAS: list[dict]` — function-calling schemas passed to the LLM
+- `EMITS_EVENTS: frozenset[str]` — tool names that accept a `yield_event`
+  callable. The loop creates one per dispatch and the tool may invoke it
+  zero or more times to emit SSE side-events (action / outline payloads).
 - `build_personalized_tools(base, user_context)` — wraps personalize tools
   so each call has `user_context` injected via closure and any LLM-supplied
   `user_context` argument is silently dropped (defense against injection).
@@ -30,6 +34,7 @@ from typing import Any, Awaitable, Callable
 from shruti_chat.domain import UserContext
 
 ToolFn = Callable[..., Awaitable[Any]]
+YieldEvent = Callable[[str, dict[str, Any]], None]
 
 
 _TOOL_MODULES = (
@@ -48,6 +53,7 @@ _TOOL_MODULES = (
 TOOLS: dict[str, ToolFn] = {}
 TOOL_SCHEMAS: list[dict] = []
 _PERSONALIZED: set[str] = set()
+_EMITS_EVENTS: set[str] = set()
 
 
 def _register() -> None:
@@ -75,9 +81,14 @@ def _register() -> None:
             )
             if entry.get("personalized"):
                 _PERSONALIZED.add(name)
+            if entry.get("emits_events"):
+                _EMITS_EVENTS.add(name)
 
 
 _register()
+
+
+EMITS_EVENTS: frozenset[str] = frozenset(_EMITS_EVENTS)
 
 
 def build_personalized_tools(

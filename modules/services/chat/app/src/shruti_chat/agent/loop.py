@@ -23,7 +23,12 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 from shruti_chat.agent import llm
 from shruti_chat.agent.prompts import SYSTEM_PROMPT
-from shruti_chat.agent.tools import TOOL_SCHEMAS, TOOLS, build_personalized_tools
+from shruti_chat.agent.tools import (
+    EMITS_EVENTS,
+    TOOL_SCHEMAS,
+    TOOLS,
+    build_personalized_tools,
+)
 from shruti_chat.config import get_settings
 from shruti_chat.domain import UserContext
 from shruti_chat.observability.logging import get_logger
@@ -274,15 +279,30 @@ async def run_agent(
                 if name in ("search_transcripts", "list_tracks") and "lang" not in args:
                     args["lang"] = lang
                 fn = tools.get(name)
+                # Per-call buffer for side-events the tool may emit via the
+                # injected `yield_event` callable. Drained after the tool
+                # returns; yielded BEFORE the canonical `tool` event so the
+                # client can mount the action/outline card by the time the
+                # tool-completion bookkeeping arrives.
                 side_events: list[AgentEvent] = []
+
+                def yield_event(
+                    ev_type: str, data: dict[str, Any],
+                    _buf: list[AgentEvent] = side_events,
+                ) -> None:
+                    _buf.append(AgentEvent(type=ev_type, data=data))
+
                 if fn is None:
                     result: Any = {"error": f"unknown tool {name!r}"}
                     result_count = 0
                     duration_ms = 0
                 else:
                     t1 = time.monotonic()
+                    call_kwargs = dict(args)
+                    if name in EMITS_EVENTS:
+                        call_kwargs["yield_event"] = yield_event
                     try:
-                        result = await fn(**args)
+                        result = await fn(**call_kwargs)
                     except TypeError as exc:
                         result = {"error": f"bad args: {exc}"}
                         result_count = 0
@@ -291,16 +311,6 @@ async def run_agent(
                         result = {"error": str(exc)}
                         result_count = 0
                     else:
-                        # Tools may emit side events (action/outline) by
-                        # returning a dict with `_side_events: [{type, data}]`.
-                        # We strip the key from the LLM-visible result and
-                        # yield each event before the canonical `tool` event.
-                        if isinstance(result, dict) and "_side_events" in result:
-                            raw = result.pop("_side_events") or []
-                            for se in raw:
-                                if isinstance(se, dict) and "type" in se and "data" in se:
-                                    side_events.append(AgentEvent(
-                                        type=se["type"], data=se["data"]))
                         result_count = len(result) if isinstance(result, list) else 1
                     duration_ms = int((time.monotonic() - t1) * 1000)
                     log.info(
