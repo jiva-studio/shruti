@@ -105,24 +105,10 @@ function playlistPayload(
   actionId: string
 ): Extract<ActionPayload, { kind: "create_playlist" }> | undefined {
   const a = props.message.actions?.[actionId]
-  if (a && a.kind === "create_playlist") return a
-  // Recovery fallback: the LLM emitted `[action:create-playlist|id=X]`
-  // without actually calling propose_playlist (a known DeepSeek failure
-  // mode despite prompt rules). Salvage the action by collecting the
-  // sibling [card:track_id] markers in the same message — they're the
-  // very list the user expects in their playlist. Without this we'd
-  // render a useless "card is broken" placeholder.
-  const trackIds = tokens.value
-    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
-    .map((t) => t.trackId)
-  if (trackIds.length === 0) return undefined
-  return {
-    kind: "create_playlist",
-    id: actionId,
-    name: defaultPlaylistName(),
-    trackIds,
-    rationale: "",
-  }
+  // No salvage here — useChatStore.sendMessage's finalisation already
+  // rebuilt orphan create_playlist actions from sibling [card:...]
+  // markers before persisting. The bubble is presentation-only.
+  return a && a.kind === "create_playlist" ? a : undefined
 }
 
 function notePayload(
@@ -130,16 +116,6 @@ function notePayload(
 ): Extract<ActionPayload, { kind: "save_note" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "save_note" ? a : undefined
-}
-
-function defaultPlaylistName(): string {
-  // Crude — use the first user message if available; else generic label.
-  // Better than an empty title when the LLM skipped propose_playlist.
-  const fallback = "Подборка"
-  // Walk up the chat history: the user message right before this assistant
-  // turn is usually the request — but Bubble doesn't see the full store,
-  // so just use a generic name. The user can rename in the playlist view.
-  return fallback
 }
 
 async function onConfirmAction(actionId: string): Promise<void> {
