@@ -34,7 +34,13 @@ class TitleRequest(BaseModel):
 
 
 class TitleResponse(BaseModel):
-    title: str
+    # Nullable on purpose — `/title` is called fire-and-forget by the
+    # mobile client. An LLM failure is not an error from the client's
+    # POV: it falls back to the truncated-first-message title and
+    # schedules a foreground retry. Returning 200 with null is more
+    # honest than 502, and avoids the toast-on-startup that 5xx would
+    # trigger through the generic error path.
+    title: str | None = None
 
 
 _SYSTEM = {
@@ -124,9 +130,10 @@ async def title(
         raw = resp.choices[0].message.content or ""
     except Exception as exc:
         log.warning("title_llm_failed", error=str(exc))
-        raise HTTPException(status_code=502, detail="title generation failed")
+        return TitleResponse(title=None)
 
     cleaned = _clean(raw)
     if not cleaned:
-        raise HTTPException(status_code=502, detail="empty title")
+        log.warning("title_llm_empty")
+        return TitleResponse(title=None)
     return TitleResponse(title=cleaned)
