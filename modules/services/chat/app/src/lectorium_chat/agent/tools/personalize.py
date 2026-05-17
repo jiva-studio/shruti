@@ -1,6 +1,6 @@
 """Personalization tools — read from `user_context` injected via closure.
 
-`user_context` is a pydantic `UserContext` instance (or None). It carries:
+`user_context` is a frozen-dataclass `UserContext` instance (or None). It carries:
 - recent_tracks: list of (track_id, last_played_at, percent, ...)
 - current_track_id: what user is listening to right now (or just stopped)
 - now: device wall-clock ISO with offset
@@ -55,26 +55,22 @@ async def continue_listening(
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Top-3 unfinished tracks from `recent_tracks`, recency-ordered.
 
-    "Unfinished" = past the «accidentally tapped» threshold but not near
-    the end: 5% < percent < 95%. The policy lives here so the wire
-    format stays slim — clients send the full recent_tracks list and
-    the server derives the in-progress slice on demand.
+    The 5%<percent<95% filter + recency sort lives on `UserContext` as
+    `in_progress_tracks()`; this tool just picks the head and reshapes
+    into the wire format.
     """
     if user_context is None:
         return _ok_or_empty([], False)
-    filtered = [
-        t for t in user_context.recent_tracks
-        if t.percent is not None and 0.05 < t.percent < 0.95
-    ]
-    filtered.sort(key=lambda t: t.last_played_at or "", reverse=True)
     return [
         {
             "track_id": t.track_id,
             "position_ms": t.position_ms,
             "percent": t.percent,
-            "last_played_at": t.last_played_at,
+            "last_played_at": (
+                t.last_played_at.isoformat() if t.last_played_at else None
+            ),
         }
-        for t in filtered[:3]
+        for t in user_context.in_progress_tracks()[:3]
     ]
 
 

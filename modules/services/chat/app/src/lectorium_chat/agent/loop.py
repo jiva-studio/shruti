@@ -111,11 +111,11 @@ def _format_user_context(uc: UserContext | None) -> str:
     if uc is None:
         return ""
     lines: list[str] = []
-    if uc.now:
-        # `now` carries its own UTC offset (e.g. "+03:00"); no separate
-        # tz field needed — parse the offset out of this string if you
-        # ever want it as minutes.
-        lines.append(f"now: {uc.now}")
+    if uc.now is not None:
+        # `now` carries its own UTC offset (e.g. "+03:00"); render via
+        # isoformat() so the LLM sees the canonical wire form rather
+        # than Python's default `"YYYY-MM-DD HH:MM:SS+TZ"` repr.
+        lines.append(f"now: {uc.now.isoformat()}")
     if uc.current_track_id:
         lines.append(f"current_track_id: {uc.current_track_id}")
     if uc.focus is not None:
@@ -126,15 +126,9 @@ def _format_user_context(uc: UserContext | None) -> str:
             f"end_ms={uc.focus.end_ms} "
             f"title={ftitle!r}"
         )
-    # In-progress count is derived from recent_tracks (5%<percent<95%);
-    # see continue_listening for the canonical filter. Surface a count
-    # here only so the LLM knows whether the personalize tools have
-    # anything to return.
-    in_progress_n = sum(
-        1
-        for t in uc.recent_tracks
-        if t.percent is not None and 0.05 < t.percent < 0.95
-    )
+    # In-progress count surfaced so the LLM knows whether the
+    # personalize tools have anything to return.
+    in_progress_n = len(uc.in_progress_tracks())
     lines.append(
         f"history_size: recent={len(uc.recent_tracks)} "
         f"in_progress={in_progress_n}"

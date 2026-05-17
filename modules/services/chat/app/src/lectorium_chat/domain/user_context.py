@@ -1,36 +1,51 @@
 """Snapshot of on-device state sent with each /chat request.
 
-`UserContext` is built mobile-side from the user DB (recent listening,
-in-progress tracks) and the player state (current track, focus
-fragment). The server hands it to personalize tools via closure binding
-in `agent.tools.build_personalized_tools` — the LLM never sees its
-contents directly.
+This is the DOMAIN representation — frozen dataclasses with explicit
+types and behaviour. The wire (HTTP) representation lives in
+`lectorium_chat.api.schemas.chat` as Pydantic DTOs; the API endpoint
+converts from one to the other at the request boundary.
 
-Defined in `domain/` rather than `api/` because both API and agent code
-read it; keeping it in `api/` would force `agent/` to import `api/`,
-which inverts the layering.
+The user listens to lectures; `recent_tracks` records that history with
+position + percent. Derived slices ("in-progress now", "completed this
+week") are queries against the listening history — they live as
+methods on `UserContext` rather than ad-hoc filters scattered across
+the tool layer.
+
+`now` is the device's local wall-clock with the device's UTC offset
+preserved (e.g. `datetime(2026, 5, 17, 19, 42, tzinfo=tz(+03:00))`).
+Comparing `last_played_at` against `now` answers "yesterday" / "this
+week" without an extra timezone field.
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 
-class UserContextTrack(BaseModel):
+# Sentinel for sorting tracks with a missing `last_played_at` to the
+# back. Must be tz-aware because `last_played_at` always is (the wire
+# format carries the device's UTC offset).
+_DT_MIN: datetime = datetime.min.replace(tzinfo=timezone.utc)
+
+
+@dataclass(frozen=True, slots=True)
+class UserContextTrack:
     track_id: str
     position_ms: int | None = None
     percent: float | None = None
-    last_played_at: str | None = None
+    last_played_at: datetime | None = None
 
 
-class FocusFragment(BaseModel):
+@dataclass(frozen=True, slots=True)
+class FocusFragment:
     """User just tapped a specific span (e.g. an outline chapter) and the
     next message implicitly targets it. The agent should pull
     `get_transcript_window` around this range instead of guessing.
 
-    `title` is informational for the LLM (rendered into the system prompt
-    anchors block); tools receive only `track_id`, `start_ms`, `end_ms`.
-    """
+    `title` is informational for the LLM (rendered into the system
+    prompt anchors block); tools receive only `track_id`, `start_ms`,
+    `end_ms`."""
 
     track_id: str
     start_ms: int
@@ -38,26 +53,30 @@ class FocusFragment(BaseModel):
     title: str | None = None
 
 
-class UserContext(BaseModel):
-    """`now` is the device's wall-clock as ISO-8601 *with offset* (e.g.
-    `2026-05-17T22:05:00+03:00`) — the offset suffix carries the
-    timezone, so a separate `tz_offset_minutes` field would just
-    duplicate it. `last_played_at` on each track is comparable to `now`
-    for relative-time filtering ("yesterday", "this week").
-
-    Listening history lives in `recent_tracks` — each entry carries
-    `percent` (0..1 fraction listened) and the server derives any
-    further slice on demand: "in-progress" = 0.05 < percent < 0.95,
-    "completed" = percent >= 0.95. Wire format stays minimal; the
-    derivation policy lives in one place (whichever tool reads it).
-
-    Notes are NOT sent. Chat only writes notes (via `propose_save_note`
-    action) — there is no read/search direction in the current UX, so
-    we don't pay the bytes to ship them. When/if a "search my notes"
-    flow lands, add the field back synchronously with the UI.
-    """
+@dataclass(frozen=True, slots=True)
+class UserContext:
+    """Listening history lives in `recent_tracks` — each entry carries
+    `percent` (0..1 fraction listened) and derivation lives on this
+    class (`in_progress_tracks`, `completed_tracks`) rather than being
+    re-implemented in each consumer."""
 
     current_track_id: str | None = None
-    now: str | None = None  # ISO-8601 with offset, device local time
-    recent_tracks: list[UserContextTrack] = Field(default_factory=list, max_length=20)
+    now: datetime | None = None
+    recent_tracks: tuple[UserContextTrack, ...] = field(default_factory=tuple)
     focus: FocusFragment | None = None
+
+    def in_progress_tracks(self) -> list[UserContextTrack]:
+        """Recently-listened tracks that are neither just-tapped nor near
+        the end (0.05 < percent < 0.95), ordered by recency. Used by
+        `continue_listening` and surfaced as a count in the system
+        prompt so the LLM knows whether the personalize tools have
+        anything to return."""
+        filtered = [
+            t for t in self.recent_tracks
+            if t.percent is not None and 0.05 < t.percent < 0.95
+        ]
+        filtered.sort(
+            key=lambda t: t.last_played_at or _DT_MIN,
+            reverse=True,
+        )
+        return filtered
