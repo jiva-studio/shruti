@@ -21,6 +21,25 @@
               :caption="token.caption"
             />
             <LectureCard v-else-if="token.kind === 'card'" :track-id="token.trackId" />
+            <OutlineCard
+              v-else-if="token.kind === 'outline'"
+              :track-id="token.trackId"
+              :items="message.outlines?.[token.trackId]?.items ?? []"
+            />
+            <ActionCardPlaylist
+              v-else-if="token.kind === 'action' && token.actionKind === 'create_playlist'"
+              :action-id="token.actionId"
+              :payload="playlistPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
+            <ActionCardNote
+              v-else-if="token.kind === 'action' && token.actionKind === 'save_note'"
+              :action-id="token.actionId"
+              :payload="notePayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
           </template>
         </template>
       </template>
@@ -31,16 +50,79 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
-import type { ChatMessage } from "@shruti/stores/useChatStore.js"
+import {
+  useChatStore,
+  type ActionState,
+  type ChatMessage,
+} from "@shruti/stores/useChatStore.js"
+import type { ActionPayload } from "@shruti/services/chatClient.js"
 import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
+import OutlineCard from "./OutlineCard.vue"
+import ActionCardPlaylist from "./ActionCardPlaylist.vue"
+import ActionCardNote from "./ActionCardNote.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
+const chat = useChatStore()
 
 const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
   return parseChatMarkers(props.message.content)
 })
+
+function actionState(actionId: string): ActionState {
+  const raw = props.message.actionStates?.[actionId]
+  // Only surface the four states the UI actually renders. Anything else
+  // (legacy "dismissed" from earlier sessions, missing key, garbage)
+  // collapses to "pending" so the Create button is always reachable.
+  if (raw === "executing" || raw === "done" || raw === "error") return raw
+  return "pending"
+}
+
+function playlistPayload(
+  actionId: string
+): Extract<ActionPayload, { kind: "create_playlist" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  if (a && a.kind === "create_playlist") return a
+  // Recovery fallback: the LLM emitted `[action:create-playlist|id=X]`
+  // without actually calling propose_playlist (a known DeepSeek failure
+  // mode despite prompt rules). Salvage the action by collecting the
+  // sibling [card:track_id] markers in the same message — they're the
+  // very list the user expects in their playlist. Without this we'd
+  // render a useless "card is broken" placeholder.
+  const trackIds = tokens.value
+    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
+    .map((t) => t.trackId)
+  if (trackIds.length === 0) return undefined
+  return {
+    kind: "create_playlist",
+    id: actionId,
+    name: defaultPlaylistName(),
+    trackIds,
+    rationale: "",
+  }
+}
+
+function notePayload(
+  actionId: string
+): Extract<ActionPayload, { kind: "save_note" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "save_note" ? a : undefined
+}
+
+function defaultPlaylistName(): string {
+  // Crude — use the first user message if available; else generic label.
+  // Better than an empty title when the LLM skipped propose_playlist.
+  const fallback = "Подборка"
+  // Walk up the chat history: the user message right before this assistant
+  // turn is usually the request — but Bubble doesn't see the full store,
+  // so just use a generic name. The user can rename in the playlist view.
+  return fallback
+}
+
+async function onConfirmAction(actionId: string): Promise<void> {
+  await chat.executeAction(props.message.id, actionId)
+}
 </script>
 
 <style scoped>

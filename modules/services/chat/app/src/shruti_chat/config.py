@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     llm_default: str = "openrouter/deepseek/deepseek-chat"
     llm_fallback: str = "openrouter/anthropic/claude-3-haiku"
     llm_premium: str = "openrouter/anthropic/claude-3.5-sonnet"
+    # Outline generation is a one-shot JSON-mode call, not the chat agent
+    # itself — picked separately for cost (~$0.0007 per lecture, see
+    # /tmp/outline_bench.py).
+    llm_outline: str = "openrouter/google/gemini-2.0-flash-001"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

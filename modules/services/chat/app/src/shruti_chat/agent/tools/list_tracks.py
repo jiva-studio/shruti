@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from shruti_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
 from shruti_chat.agent.tools._sqlite import catalog_conn
 
 
@@ -18,6 +19,7 @@ def _list_tracks_sync(
     source_id: str | None,
     location_id: str | None,
     tag_ids: list[str] | None,
+    title_query: str | None,
     date_from: str | None,
     date_to: str | None,
     lang: str | None,
@@ -72,6 +74,24 @@ def _list_tracks_sync(
                 "WHERE track_id = t.id AND source_id = ?)"
             )
             params.append(source_id)
+        if title_query:
+            qtoks = _title_tokens(title_query)
+            if qtoks:
+                # In-memory fold + prefix match over all track_variants
+                # titles. Catalog is small (~10-20K variant rows) so this
+                # is microseconds; FTS4's `remove_diacritics=2` would skip
+                # Cyrillic ё/й folding and break ё↔е symmetry, so we don't
+                # use it.
+                rows_by_title = conn.execute(
+                    "SELECT DISTINCT track_id, title FROM track_variants"
+                ).fetchall()
+                matched_ids = {r["track_id"] for r in rows_by_title
+                               if _title_matches(r["title"], qtoks)}
+                if not matched_ids:
+                    return []
+                ph_m = ",".join("?" * len(matched_ids))
+                sql.append(f"AND t.id IN ({ph_m})")
+                params.extend(matched_ids)
         sql.append("ORDER BY t.date DESC NULLS LAST")
         sql.append("LIMIT ? OFFSET ?")
         params.extend([limit, offset])
@@ -189,6 +209,7 @@ async def list_tracks(
     source_id: str | None = None,
     location_id: str | None = None,
     tag_ids: list[str] | None = None,
+    title_query: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     lang: str | None = "ru",
@@ -198,6 +219,7 @@ async def list_tracks(
     return await asyncio.to_thread(
         _list_tracks_sync,
         author_id=author_id, source_id=source_id, location_id=location_id,
-        tag_ids=tag_ids, date_from=date_from, date_to=date_to,
+        tag_ids=tag_ids, title_query=title_query,
+        date_from=date_from, date_to=date_to,
         lang=lang, limit=limit, offset=offset,
     )

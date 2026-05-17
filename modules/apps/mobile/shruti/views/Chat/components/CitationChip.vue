@@ -41,6 +41,7 @@
     />
     <IonActionSheet
       :is-open="actionSheetOpen"
+      :header="actionSheetHeader"
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
@@ -56,7 +57,10 @@ import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
+import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { createNote } from "@lib/application/createNote.js"
+import { loadTranscript } from "@lib/application/loadTranscript.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
@@ -95,6 +99,7 @@ const app = useShruti()
 const appLanguage = useAppLanguage()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
+const notes = useNotesStore()
 
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
@@ -102,6 +107,9 @@ const isPlaying = ref(false)
 const isPreparing = ref(false)
 const cachedUrl = ref<string | null>(null)
 const actionSheetOpen = ref(false)
+/** Guard so a second tap on "Save as note" while the transcript is still
+ *  loading does NOT create a duplicate note. */
+const savingNote = ref(false)
 const progressPct = ref(0)
 
 const chipStyle = computed(() => ({
@@ -158,9 +166,19 @@ interface ChipActionSheetButton {
   readonly handler: () => void
 }
 
+/** Header — lecture title only. The chip's caption already sits in the
+ *  message body above, so duplicating it here was visual noise. */
+const actionSheetHeader = computed(() => lectureTitle.value)
+
 const actionSheetButtons = computed<readonly ChipActionSheetButton[]>(() => [
   {
-    text: t("search.actions.addToPlaylist"),
+    text: t("chat.citationSaveAsNote"),
+    handler: (): void => {
+      void onSaveAsNote()
+    },
+  },
+  {
+    text: t("chat.citationAddLectureToPlaylist"),
     handler: (): void => {
       void onAddToPlaylist()
     },
@@ -179,6 +197,70 @@ async function onAddToPlaylist(): Promise<void> {
   } catch (err) {
     console.warn("[citation-chip] add to playlist failed", err)
     await toast.error(t("chat.citationAddFailed"))
+  }
+}
+
+async function onSaveAsNote(): Promise<void> {
+  // Drop reentrancy: if a previous tap is still fetching the transcript,
+  // a second tap (the user thought the first was lost) MUST NOT create
+  // a duplicate note.
+  if (savingNote.value) return
+  savingNote.value = true
+  // Immediate feedback while the transcript loads — first-time fetch
+  // can take 1-2s, and silence makes the action look broken.
+  void toast.info(t("chat.noteSaving"))
+
+  // The note body should be the WORDS spoken in this span — not the
+  // chip's short caption. Pull the transcript, pick every sentence
+  // block overlapping [startMs; endMs], join them. Fall back to the
+  // caption only if the transcript fetch fails outright.
+  const tStart = Math.max(0, props.startMs)
+  const tEnd = Math.max(tStart, props.endMs)
+  let text = ""
+  try {
+    const result = await loadTranscript(
+      { trackId: props.trackId as TrackId, preferredLanguage: appLanguage.value },
+      { transcripts: app.repositories().transcripts }
+    )
+    if (result.ok) {
+      const parts: string[] = []
+      for (const b of result.value.transcript.blocks) {
+        if (b.type !== "sentence") continue
+        // Overlap test: block intersects [tStart; tEnd] when block.end
+        // is past tStart AND block.start is before tEnd.
+        if (b.end >= tStart && b.start <= tEnd && b.text.trim()) {
+          parts.push(b.text.trim())
+        }
+      }
+      text = parts.join(" ")
+    }
+  } catch (err) {
+    console.warn("[citation-chip] transcript fetch failed for note", err)
+  }
+  if (!text) text = (props.caption || "").trim()
+  if (!text) {
+    savingNote.value = false
+    await toast.error(t("chat.actionNoteError"))
+    return
+  }
+  try {
+    const result = await createNote(
+      {
+        trackId: props.trackId as TrackId,
+        text,
+        timeStart: tStart,
+        timeEnd: tEnd,
+      },
+      { notes: app.repositories().notes }
+    )
+    if (!result.ok) throw new Error(`createNote failed: ${result.error}`)
+    await notes.refresh()
+    await toast.info(t("chat.noteSaved"))
+  } catch (err) {
+    console.warn("[citation-chip] save as note failed", err)
+    await toast.error(t("chat.actionNoteError"))
+  } finally {
+    savingNote.value = false
   }
 }
 

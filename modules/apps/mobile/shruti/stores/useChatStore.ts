@@ -2,7 +2,24 @@ import { defineStore } from "pinia"
 import { ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { streamChat, type ChatStreamEvent, type ChatTurn } from "@shruti/services/chatClient.js"
+import {
+  useTrackUserState,
+  type FocusFragmentPayload,
+} from "@shruti/composables/useTrackUserState.js"
+import {
+  fetchSessionTitle,
+  streamChat,
+  type ActionPayload,
+  type ChatStreamEvent,
+  type ChatTurn,
+  type OutlinePayload,
+} from "@shruti/services/chatClient.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useNotesStore } from "@shruti/stores/useNotesStore.js"
+import { useToast } from "@shruti/services/useToast.js"
+import { useI18n } from "vue-i18n"
+import { createNote } from "@lib/application/createNote.js"
+import type { TrackId } from "@lib/domain/core.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -15,17 +32,29 @@ export interface ChatSession {
   readonly updatedAt: number
 }
 
+export type ActionState = "pending" | "executing" | "done" | "error" | "dismissed"
+
 export interface ChatMessage {
   readonly id: string
   readonly sessionId: string
   readonly role: "user" | "assistant"
-  /** Raw markdown — assistant content can contain [cite:...] / [card:...]. */
+  /** Raw markdown — assistant content can contain [cite:...] / [card:...] /
+   *  [action:...|id=...] / [outline:track_id] markers. */
   content: string
   readonly createdAt: number
   /** Local-only flag so the UI can show a "thinking…" indicator on the
    *  currently-streaming assistant bubble without leaking that state
    *  into SQLite (we persist final content only). */
   streaming?: boolean
+  /** Server-emitted action payloads keyed by `action.id`. The inline
+   *  marker `[action:<kind>|id=<id>]` references this map. */
+  actions?: Record<string, ActionPayload>
+  /** Outline payloads keyed by `track_id`. The inline marker
+   *  `[outline:<track_id>]` references this map. */
+  outlines?: Record<string, OutlinePayload>
+  /** Per-action user-confirmation state. Defaults to "pending" for any
+   *  action present in `actions` but not here. */
+  actionStates?: Record<string, ActionState>
 }
 
 /* -------------------------------------------------------------------------- */
@@ -63,6 +92,11 @@ function deriveTitle(text: string, max = 48): string {
 export const useChatStore = defineStore("chat", () => {
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const trackUserState = useTrackUserState()
+  const playlist = usePlaylistStore()
+  const notes = useNotesStore()
+  const toast = useToast()
+  const { t } = useI18n()
 
   const sessions = ref<ChatSession[]>([])
   const activeSessionId = ref<string | null>(null)
@@ -76,6 +110,18 @@ export const useChatStore = defineStore("chat", () => {
     const db = app.databases.user
     if (!db) throw new Error("chat-store: user DB is not open yet")
     return db
+  }
+
+  function parseJsonRecord<T>(s: unknown): Record<string, T> {
+    if (typeof s !== "string" || s === "") return {}
+    try {
+      const parsed = JSON.parse(s)
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, T>)
+        : {}
+    } catch {
+      return {}
+    }
   }
 
   async function refreshSessions(): Promise<void> {
@@ -103,8 +149,15 @@ export const useChatStore = defineStore("chat", () => {
       role: string
       content: string
       created_at: number
+      actions_json: string | null
+      outlines_json: string | null
+      action_states_json: string | null
     }>(
-      "SELECT id, session_id, role, content, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC",
+      `SELECT id, session_id, role, content, created_at,
+              actions_json, outlines_json, action_states_json
+         FROM chat_messages
+        WHERE session_id = ?
+        ORDER BY created_at ASC`,
       [id]
     )
     messages.value = rows.map((r) => ({
@@ -113,6 +166,9 @@ export const useChatStore = defineStore("chat", () => {
       role: r.role === "assistant" ? "assistant" : "user",
       content: r.content,
       createdAt: Number(r.created_at),
+      actions: parseJsonRecord<ActionPayload>(r.actions_json),
+      outlines: parseJsonRecord<OutlinePayload>(r.outlines_json),
+      actionStates: parseJsonRecord<ActionState>(r.action_states_json),
     }))
   }
 
@@ -144,11 +200,57 @@ export const useChatStore = defineStore("chat", () => {
     return id
   }
 
+  /**
+   * Replace the session's auto-derived title (truncated user prompt) with
+   * a 3-5 word LLM-generated title. Runs in the background — failures are
+   * silent and leave the original title in place.
+   */
+  async function refreshSessionTitle(
+    sessionId: string,
+    forMessages: readonly ChatMessage[],
+    lang: "ru" | "en"
+  ): Promise<void> {
+    const turns: ChatTurn[] = forMessages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }))
+    const newTitle = await fetchSessionTitle(turns, lang)
+    if (!newTitle) return
+    try {
+      await userDb().execute(
+        "UPDATE chat_sessions SET title = ? WHERE id = ?",
+        [newTitle, sessionId]
+      )
+      await userDb().save()
+    } catch (err) {
+      console.warn("chat: failed to persist new title", err)
+      return
+    }
+    const idx = sessions.value.findIndex((s) => s.id === sessionId)
+    if (idx >= 0) {
+      const next = [...sessions.value]
+      next[idx] = { ...next[idx], title: newTitle }
+      sessions.value = next
+    }
+  }
+
   async function persistMessage(msg: ChatMessage): Promise<void> {
     const db = userDb()
     await db.execute(
-      "INSERT INTO chat_messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
-      [msg.id, msg.sessionId, msg.role, msg.content, msg.createdAt]
+      `INSERT INTO chat_messages
+         (id, session_id, role, content, created_at,
+          actions_json, outlines_json, action_states_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        msg.id,
+        msg.sessionId,
+        msg.role,
+        msg.content,
+        msg.createdAt,
+        JSON.stringify(msg.actions ?? {}),
+        JSON.stringify(msg.outlines ?? {}),
+        JSON.stringify(msg.actionStates ?? {}),
+      ]
     )
     await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
       msg.createdAt,
@@ -164,7 +266,10 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  async function sendMessage(text: string): Promise<void> {
+  async function sendMessage(
+    text: string,
+    options?: { focus?: FocusFragmentPayload }
+  ): Promise<void> {
     const clean = text.trim()
     if (!clean || sending.value) return
     lastError.value = null
@@ -195,6 +300,9 @@ export const useChatStore = defineStore("chat", () => {
       content: "",
       createdAt: Date.now(),
       streaming: true,
+      actions: {},
+      outlines: {},
+      actionStates: {},
     }
     messages.value = [...messages.value, assistantMsg]
 
@@ -204,9 +312,23 @@ export const useChatStore = defineStore("chat", () => {
       .filter((m) => !m.streaming || m.id !== assistantMsg.id)
       .map((m) => ({ role: m.role, content: m.content }))
 
+    // Snapshot user state for personalization tools. Failures degrade
+    // gracefully — server tolerates missing `user_context`.
+    // `options?.focus` tags this one request with a span the agent
+    // should retell (outline chapter tap, citation re-ask, ...).
+    let userContext: unknown = undefined
+    try {
+      userContext = await trackUserState.buildUserContext(options?.focus)
+    } catch (err) {
+      console.warn("chat: failed to build user_context", err)
+    }
+
     let acc = ""
     try {
-      for await (const event of streamChat(turns, lang, { signal: abort.signal })) {
+      for await (const event of streamChat(turns, lang, {
+        signal: abort.signal,
+        userContext,
+      })) {
         const finished = applyEvent(
           event,
           assistantMsg,
@@ -234,16 +356,27 @@ export const useChatStore = defineStore("chat", () => {
       sending.value = false
       // Snapshot the bubble: drop the streaming flag and freeze content.
       const idx = messages.value.findIndex((m) => m.id === assistantMsg.id)
+      const finalised = idx >= 0
+        ? { ...messages.value[idx], content: acc, streaming: false }
+        : { ...assistantMsg, content: acc, streaming: false }
       if (idx >= 0) {
         const next = [...messages.value]
-        next[idx] = { ...next[idx], content: acc, streaming: false }
+        next[idx] = finalised
         messages.value = next
       }
       if (acc.length > 0) {
         try {
-          await persistMessage({ ...assistantMsg, content: acc, streaming: false })
+          await persistMessage(finalised)
         } catch (err) {
           console.warn("chat: failed to persist assistant message", err)
+        }
+        // Background title refresh — only on the very first round-trip
+        // (one user + one assistant turn). Subsequent turns keep the
+        // generated title. Fire-and-forget — failures are silent.
+        if (
+          messages.value.filter((m) => m.role === "assistant" && !m.streaming).length === 1
+        ) {
+          void refreshSessionTitle(sessionId, [userMsg, finalised], lang)
         }
       } else if (!lastError.value) {
         // No text and no error means an empty done — drop the empty bubble.
@@ -269,6 +402,12 @@ export const useChatStore = defineStore("chat", () => {
       case "tool":
         onTool()
         return false
+      case "action":
+        mergeActionInto(assistantMsg.id, event.payload)
+        return false
+      case "outline":
+        mergeOutlineInto(assistantMsg.id, event.payload)
+        return false
       case "done":
         return true
       case "error":
@@ -279,9 +418,29 @@ export const useChatStore = defineStore("chat", () => {
         }
         return true
     }
-    // exhaustiveness check — keep TS happy if new events are added
-    void assistantMsg
     return false
+  }
+
+  function mergeActionInto(messageId: string, payload: ActionPayload): void {
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+    const prev = messages.value[idx]
+    const actions = { ...(prev.actions ?? {}), [payload.id]: payload }
+    const actionStates = { ...(prev.actionStates ?? {}) }
+    if (!actionStates[payload.id]) actionStates[payload.id] = "pending"
+    const next = [...messages.value]
+    next[idx] = { ...prev, actions, actionStates }
+    messages.value = next
+  }
+
+  function mergeOutlineInto(messageId: string, payload: OutlinePayload): void {
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+    const prev = messages.value[idx]
+    const outlines = { ...(prev.outlines ?? {}), [payload.trackId]: payload }
+    const next = [...messages.value]
+    next[idx] = { ...prev, outlines }
+    messages.value = next
   }
 
   function updateAssistantContent(messageId: string, content: string): void {
@@ -296,6 +455,70 @@ export const useChatStore = defineStore("chat", () => {
     if (abort) {
       abort.abort()
       abort = null
+    }
+  }
+
+  async function setActionState(
+    messageId: string,
+    actionId: string,
+    state: ActionState
+  ): Promise<void> {
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+    const prev = messages.value[idx]
+    const actionStates = { ...(prev.actionStates ?? {}), [actionId]: state }
+    const next = [...messages.value]
+    next[idx] = { ...prev, actionStates }
+    messages.value = next
+    // Persist the new state map only (small write).
+    try {
+      await userDb().execute(
+        "UPDATE chat_messages SET action_states_json = ? WHERE id = ?",
+        [JSON.stringify(actionStates), messageId]
+      )
+      await userDb().save()
+    } catch (err) {
+      console.warn("chat: failed to persist action state", err)
+    }
+  }
+
+  /** Execute the action the user just confirmed. Idempotent on `done`. */
+  async function executeAction(messageId: string, actionId: string): Promise<void> {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg) return
+    const action = msg.actions?.[actionId]
+    if (!action) return
+    const currentState = msg.actionStates?.[actionId] ?? "pending"
+    if (currentState === "executing" || currentState === "done") return
+
+    await setActionState(messageId, actionId, "executing")
+    try {
+      if (action.kind === "create_playlist") {
+        // `playlist.add` returns a Result — `not-ok` here means "already in
+        // playlist" (or another business rule), NOT a thrown failure. We
+        // treat those as success: the trackId IS in the playlist after.
+        for (const trackId of action.trackIds) {
+          await playlist.add(trackId as TrackId)
+        }
+        // No toast — the card's own "done" hint is the confirmation.
+      } else if (action.kind === "save_note") {
+        const result = await createNote(
+          {
+            trackId: action.trackId as TrackId,
+            text: action.text,
+            timeStart: Math.max(0, action.startMs),
+            timeEnd: Math.max(action.startMs, action.endMs),
+          },
+          { notes: app.repositories().notes }
+        )
+        if (!result.ok) throw new Error(`createNote failed: ${result.error}`)
+        await notes.refresh()
+        await toast.info(t("chat.noteSaved"))
+      }
+      await setActionState(messageId, actionId, "done")
+    } catch (err) {
+      console.warn("chat: action execution failed", err)
+      await setActionState(messageId, actionId, "error")
     }
   }
 
@@ -353,6 +576,7 @@ export const useChatStore = defineStore("chat", () => {
     startNewSession,
     sendMessage,
     cancelStream,
+    executeAction,
     deleteSession,
     clearAll,
     searchSessions,
