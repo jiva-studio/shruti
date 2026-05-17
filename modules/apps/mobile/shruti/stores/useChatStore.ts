@@ -18,6 +18,7 @@ import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useI18n } from "vue-i18n"
+import { parseChatMarkers } from "@shruti/views/Chat/composables/useMarkerParser.js"
 import { createNote } from "@lib/application/createNote.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 
@@ -195,6 +196,57 @@ export const useChatStore = defineStore("chat", () => {
       return { kind: "truncated", reason: obj.reason }
     }
     return undefined
+  }
+
+  /**
+   * Workaround for a known LLM failure mode (especially DeepSeek): the
+   * model writes `[action:create-playlist|id=ABC]` inline in its reply
+   * without actually calling `propose_playlist`. The marker references
+   * an `id` that never arrived as a server-side `action` event, so
+   * `msg.actions[ABC]` is undefined → the bubble would render an empty
+   * card placeholder.
+   *
+   * Salvage: scan the assistant content for orphan action markers and
+   * synthesize a `create_playlist` payload from the sibling
+   * `[card:track_id]` markers in the same message. The user-facing
+   * intent ("collect these lectures into a playlist") IS preserved by
+   * the marker neighborhood — we just rebuild the wire payload.
+   *
+   * Runs once at message finalisation (in `sendMessage`'s finally) so
+   * the bubble itself stays pure-render and the persisted row already
+   * has the synthesized payload — re-reading the message from SQLite
+   * doesn't need to re-run the salvage.
+   */
+  function salvageOrphanActions(
+    content: string,
+    existing: Record<string, ActionPayload>,
+    fallbackName: string
+  ): Record<string, ActionPayload> {
+    const tokens = parseChatMarkers(content)
+    const orphanIds = tokens
+      .filter(
+        (t): t is Extract<typeof t, { kind: "action" }> =>
+          t.kind === "action" &&
+          t.actionKind === "create_playlist" &&
+          !existing[t.actionId]
+      )
+      .map((t) => t.actionId)
+    if (orphanIds.length === 0) return existing
+    const trackIds = tokens
+      .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
+      .map((t) => t.trackId)
+    if (trackIds.length === 0) return existing  // nothing to salvage with
+    const out = { ...existing }
+    for (const id of orphanIds) {
+      out[id] = {
+        kind: "create_playlist",
+        id,
+        name: fallbackName,
+        trackIds,
+        rationale: "",
+      }
+    }
+    return out
   }
 
   async function refreshSessions(): Promise<void> {
@@ -502,19 +554,23 @@ export const useChatStore = defineStore("chat", () => {
           : undefined
       // Snapshot the bubble: drop the streaming flag and freeze content.
       const idx = messages.value.findIndex((m) => m.id === assistantMsg.id)
-      const finalised: ChatMessage = idx >= 0
-        ? {
-            ...messages.value[idx],
-            content: acc,
-            streaming: false,
-            error: errorMeta,
-          }
-        : {
-            ...assistantMsg,
-            content: acc,
-            streaming: false,
-            error: errorMeta,
-          }
+      const existing = idx >= 0 ? messages.value[idx] : assistantMsg
+      // Salvage any `[action:create-playlist|id=X]` markers the LLM
+      // emitted without calling propose_playlist (see helper docstring).
+      // Use the user's request as the synthesized playlist name — it's
+      // a better default than a generic localized label.
+      const salvagedActions = salvageOrphanActions(
+        acc,
+        existing.actions ?? {},
+        userMsg.content.slice(0, 60) || t("chat.fallbackPlaylistName")
+      )
+      const finalised: ChatMessage = {
+        ...existing,
+        content: acc,
+        streaming: false,
+        error: errorMeta,
+        actions: salvagedActions,
+      }
       if (idx >= 0) {
         const next = [...messages.value]
         next[idx] = finalised

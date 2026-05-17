@@ -34,6 +34,9 @@ export default {
   errTruncatedStream: " (прервано — связь оборвалась)",
   /** Дописывается, когда агент уперся в лимит вызовов инструментов. */
   errTruncatedTurns: " (прервано — слишком много вызовов инструментов)",
+  /** Последний резерв для названия спасенного плейлиста, если запрос
+   *  пользователя не годится как заголовок (пустой / пробелы). */
+  fallbackPlaylistName: "Плейлист",
 
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.
   // Keep them 2-4 words so they fit one line.
