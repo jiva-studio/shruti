@@ -110,7 +110,6 @@ function salvageOrphanActions(
       id,
       name: fallbackName,
       trackIds,
-      rationale: "",
     }
   }
   return out

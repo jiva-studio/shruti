@@ -15,7 +15,6 @@ export type ChatActionPayload =
       readonly id: string
       readonly name: string
       readonly trackIds: readonly string[]
-      readonly rationale: string
     }
   | {
       readonly kind: "save_note"
@@ -24,7 +23,6 @@ export type ChatActionPayload =
       readonly startMs: number
       readonly endMs: number
       readonly text: string
-      readonly suggestedCaption: string
     }
 
 /** Outline payload for a `[outline:<track_id>]` marker. */
