@@ -13,36 +13,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
+import { computed } from "vue"
 import { useI18n } from "vue-i18n"
-import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
 
 const props = withDefaults(
   defineProps<{
     /** Player is open / paused with engagement — outline targets that track. */
     hasCurrentTrack?: boolean
+    /** True when the user DB has ≥1 listening_sessions row. Drives the
+     *  "recap last lecture" chip when there's no active player. The
+     *  controller fetches this once on mount; the chip is now pure
+     *  presentation and doesn't reach into composables itself. */
+    hasRecentListening?: boolean
     limit?: number
   }>(),
-  { hasCurrentTrack: false, limit: 4 }
+  { hasCurrentTrack: false, hasRecentListening: false, limit: 4 }
 )
 
 const emit = defineEmits<{ (e: "pick", text: string): void }>()
 
 const { tm, t } = useI18n()
-const trackUserState = useTrackUserState()
-
-// Whether the user has ANY listening_sessions row — picks the
-// "recap last lecture" chip when there's no active player.
-const hasRecentListening = ref(false)
-
-onMounted(async () => {
-  try {
-    const recent = await trackUserState.listRecent(1)
-    hasRecentListening.value = recent.length > 0
-  } catch {
-    hasRecentListening.value = false
-  }
-})
 
 /** First-chip text — picks the most specific phrasing the user can read:
  *   current → "Перескажи текущую лекцию"
@@ -50,7 +40,7 @@ onMounted(async () => {
  *   none    → omit (no "what lecture?" recap chip when there's nothing). */
 const recapChip = computed<string | null>(() => {
   if (props.hasCurrentTrack) return t("chat.suggestionRecapCurrent")
-  if (hasRecentListening.value) return t("chat.suggestionRecapRecent")
+  if (props.hasRecentListening) return t("chat.suggestionRecapRecent")
   return null
 })
 
