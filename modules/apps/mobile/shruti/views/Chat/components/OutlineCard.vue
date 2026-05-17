@@ -6,7 +6,7 @@
     <ul class="list">
       <li v-for="(it, i) in visibleItems" :key="`${it.startMs}-${i}`">
         <button type="button" class="chapter" @click="onPickChapter(i)">
-          <span class="ts">{{ formatTs(it.startMs) }}</span>
+          <span class="ts">{{ formatTimestamp(it.startMs) }}</span>
           <span class="cap">{{ it.title }}</span>
         </button>
       </li>
@@ -22,6 +22,7 @@ import { computed, onMounted, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
 import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import type { TrackId } from "@lib/domain/core.js"
 
@@ -87,18 +88,6 @@ function onPickChapter(i: number): void {
   if (!it) return
   const next = props.items[i + 1] ?? null
   emit("pick-chapter", { trackId: props.trackId, item: it, nextItem: next })
-}
-
-/** Always zero-pad MM and SS so every timestamp has the same width
- *  (e.g. "05:47" not "5:47"). Combined with `tabular-nums` in CSS,
- *  the column stays perfectly aligned. */
-function formatTs(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const h = Math.floor(s / 3600)
-  const m = (s % 3600) / 60
-  const sec = s % 60
-  const pad = (n: number) => (n < 10 ? `0${Math.floor(n)}` : String(Math.floor(n)))
-  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`
 }
 
 onMounted(loadTitle)

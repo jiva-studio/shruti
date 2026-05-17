@@ -91,5 +91,14 @@ export default {
   citationSaveAsNote: "Сохранить как заметку",
   citationAddLectureToPlaylist: "Добавить лекцию в плейлист",
   recentSessionsLabel: "Недавние чаты",
+  /** Короткие относительно-временные суффиксы для RecentSessions.
+   *  Число рендерится компонентом (`5м`, `2ч`, `3д`). */
   timeJustNow: "только что",
+  timeYesterday: "вчера",
+  timeUnitMinute: "м",
+  timeUnitHour: "ч",
+  timeUnitDay: "д",
+  timeUnitWeek: "нед",
+  timeUnitMonth: "мес",
+  timeUnitYear: "г",
 }
