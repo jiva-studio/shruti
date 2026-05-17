@@ -16,6 +16,7 @@ from __future__ import annotations
 import secrets
 from typing import Any, Callable
 
+from shruti_chat.agent.tools._registry import ToolDef, register_tool
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 
 
@@ -109,51 +110,48 @@ async def propose_save_note(
     }
 
 
-TOOL_REGISTRY = [
-    {
-        "name": "propose_playlist",
-        "fn": propose_playlist,
-        "personalized": False,
-        "emits_events": True,
-        "description": (
-            "Propose creating a playlist for the user — DOES NOT create it. "
-            "The client will render a card with a confirm button. After "
-            "calling, embed the marker `[action:create_playlist|id=<action_id>]` "
-            "inline in your reply where the card should render (construct it "
-            "from the returned `action_id`). Never claim the playlist exists — "
-            "say 'предлагаю собрать плейлист'. Pick at most 20 track_ids "
-            "(server hard-caps at 30). DO NOT also emit `[card:...]` for the "
-            "same tracks — the action card shows them itself."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Short playlist name (3-6 words)"},
-                "track_ids": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": ["name", "track_ids"],
+register_tool(ToolDef(
+    name="propose_playlist",
+    fn=propose_playlist,
+    emits_events=True,
+    description=(
+        "Propose creating a playlist for the user — DOES NOT create it. "
+        "The client will render a card with a confirm button. After "
+        "calling, embed the marker `[action:create_playlist|id=<action_id>]` "
+        "inline in your reply where the card should render (construct it "
+        "from the returned `action_id`). Never claim the playlist exists — "
+        "say 'предлагаю собрать плейлист'. Pick at most 20 track_ids "
+        "(server hard-caps at 30). DO NOT also emit `[card:...]` for the "
+        "same tracks — the action card shows them itself."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Short playlist name (3-6 words)"},
+            "track_ids": {"type": "array", "items": {"type": "string"}},
         },
+        "required": ["name", "track_ids"],
     },
-    {
-        "name": "propose_save_note",
-        "fn": propose_save_note,
-        "personalized": False,
-        "emits_events": True,
-        "description": (
-            "Propose saving a quote as a user note — DOES NOT save it. "
-            "The client will render a card with a confirm button. Embed "
-            "`[action:save_note|id=<action_id>]` inline (construct from the "
-            "returned action_id). Never claim the note is saved."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "track_id": {"type": "string"},
-                "start_ms": {"type": "integer"},
-                "end_ms": {"type": "integer"},
-                "text": {"type": "string"},
-            },
-            "required": ["track_id", "start_ms", "end_ms", "text"],
+))
+
+register_tool(ToolDef(
+    name="propose_save_note",
+    fn=propose_save_note,
+    emits_events=True,
+    description=(
+        "Propose saving a quote as a user note — DOES NOT save it. "
+        "The client will render a card with a confirm button. Embed "
+        "`[action:save_note|id=<action_id>]` inline (construct from the "
+        "returned action_id). Never claim the note is saved."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "track_id": {"type": "string"},
+            "start_ms": {"type": "integer"},
+            "end_ms": {"type": "integer"},
+            "text": {"type": "string"},
         },
+        "required": ["track_id", "start_ms", "end_ms", "text"],
     },
-]
+))
