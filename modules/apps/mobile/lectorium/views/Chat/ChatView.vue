@@ -25,7 +25,7 @@
       <div ref="contentRef" class="chat-scroll">
         <ChatMessageList v-if="hasMessages" :messages="messages" />
         <div v-else class="empty-state">
-          <img src="/app-icon.png" class="empty-icon" alt="" aria-hidden="true" />
+          <img src="/agent.png" class="empty-icon" alt="" aria-hidden="true" />
           <h2 class="empty-title">{{ $t("chat.emptyStateTitle") }}</h2>
           <p class="empty-message">{{ $t("chat.emptyState") }}</p>
         </div>
@@ -184,9 +184,8 @@ const headerTitle = computed<string>(() => {
 }
 
 .empty-icon {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
+  width: 60vw;
+  height: auto;
   margin-bottom: 20px;
   opacity: 0.95;
 }
