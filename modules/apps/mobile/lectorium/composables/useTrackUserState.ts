@@ -38,9 +38,7 @@ export function useTrackUserState() {
     return null
   }
 
-  function buildUserContext(
-    focus?: FocusFragmentPayload
-  ): Promise<UserContextPayload> {
+  function buildUserContext(focus?: FocusFragmentPayload): Promise<UserContextPayload> {
     const repos = app.repositories()
     return buildChatUserContext(
       { currentTrackId: currentTrackId(), focus },
@@ -56,9 +54,7 @@ export function useTrackUserState() {
    *  with a small `limit` (1 is enough). Implemented on top of the
    *  same repo method the use-case uses, so the suggestion chip and
    *  the chat UserContext share the source of truth. */
-  async function listRecent(
-    limit: number
-  ): Promise<readonly { trackId: string }[]> {
+  async function listRecent(limit: number): Promise<readonly { trackId: string }[]> {
     const repos = app.repositories()
     const rows = await repos.listeningSessions.listRecentTracksWithProgress(limit)
     return rows.map((r) => ({ trackId: r.trackId }))

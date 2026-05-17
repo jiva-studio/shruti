@@ -25,17 +25,9 @@ import type {
   ChatOutlinePayload,
   ChatSession as DomainChatSession,
 } from "@lib/domain"
-import type {
-  ChatMessageId,
-  ChatSessionId,
-  TrackId,
-} from "@lib/domain/core.js"
-import {
-  createHttpChatStreamClient,
-} from "@infra/chat/httpChatStreamClient.js"
-import {
-  createHttpChatTitleService,
-} from "@infra/chat/httpChatTitleService.js"
+import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
+import { createHttpChatStreamClient } from "@lectorium/services/chat/httpChatStreamClient.js"
+import { createHttpChatTitleService } from "@lectorium/services/chat/httpChatTitleService.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
@@ -93,9 +85,7 @@ function salvageOrphanActions(
   const orphans = tokens
     .filter(
       (t): t is Extract<typeof t, { kind: "action" }> =>
-        t.kind === "action" &&
-        t.actionKind === "create_playlist" &&
-        !existing[t.actionId]
+        t.kind === "action" && t.actionKind === "create_playlist" && !existing[t.actionId]
     )
     .map((t) => t.actionId)
   if (orphans.length === 0) return existing
@@ -415,8 +405,7 @@ export const useChatStore = defineStore("chat", () => {
           { trackIds: action.trackIds as readonly TrackId[] },
           {
             playlist: {
-              add: (id) =>
-                playlist.add(id as TrackId) as unknown as Promise<unknown>,
+              add: (id) => playlist.add(id as TrackId) as unknown as Promise<unknown>,
             },
           }
         )

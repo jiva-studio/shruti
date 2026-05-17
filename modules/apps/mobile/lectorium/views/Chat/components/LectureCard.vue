@@ -80,9 +80,7 @@ async function onAddToPlaylist(): Promise<void> {
   }
 }
 
-const { track, location, sourcesById, loading, error } = useTrackRowAsync(
-  () => props.trackId
-)
+const { track, location, sourcesById, loading, error } = useTrackRowAsync(() => props.trackId)
 
 const title = computed(() => {
   if (!track.value) return ""

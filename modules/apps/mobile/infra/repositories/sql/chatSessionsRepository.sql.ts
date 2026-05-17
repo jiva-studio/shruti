@@ -69,18 +69,16 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
     },
 
     async updateTitle(id: ChatSessionId, title: string): Promise<void> {
-      await db.execute(
-        "UPDATE chat_sessions SET title = ?, title_attempt_count = ? WHERE id = ?",
-        [title, TITLE_FINALIZED, id]
-      )
+      await db.execute("UPDATE chat_sessions SET title = ?, title_attempt_count = ? WHERE id = ?", [
+        title,
+        TITLE_FINALIZED,
+        id,
+      ])
       await db.save()
     },
 
     async touch(id: ChatSessionId, updatedAtMs: number): Promise<void> {
-      await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
-        updatedAtMs,
-        id,
-      ])
+      await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [updatedAtMs, id])
       await db.save()
     },
 

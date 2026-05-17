@@ -514,9 +514,7 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       return rows.map((r) => r.language)
     },
 
-    async getDurationsMs(
-      trackIds: readonly TrackId[]
-    ): Promise<ReadonlyMap<TrackId, number>> {
+    async getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
       const out = new Map<TrackId, number>()
       if (trackIds.length === 0) return out
       // GROUP BY + MAX picks the longest variant per track. Variants

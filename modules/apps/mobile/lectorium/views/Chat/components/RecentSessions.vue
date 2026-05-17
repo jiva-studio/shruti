@@ -97,7 +97,9 @@ function relativeTime(epochMs: number): string {
   transition: background 120ms ease;
 }
 
-.recent:active { background: rgba(var(--ion-color-primary-rgb), 0.13); }
+.recent:active {
+  background: rgba(var(--ion-color-primary-rgb), 0.13);
+}
 
 .title {
   flex: 1 1 auto;

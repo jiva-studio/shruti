@@ -61,7 +61,9 @@ interface SheetButton {
 const actionSheetButtons = computed<readonly SheetButton[]>(() => [
   {
     text: t("search.actions.addToPlaylist"),
-    handler: () => { void onAddOne() },
+    handler: () => {
+      void onAddOne()
+    },
   },
   {
     text: t("app.cancel"),
@@ -76,11 +78,7 @@ const title = computed(() =>
 
 const references = computed<string[]>(() => {
   if (!track.value) return []
-  return groupReferences(
-    track.value.references,
-    sourcesById.value,
-    appLanguage.value
-  )
+  return groupReferences(track.value.references, sourcesById.value, appLanguage.value)
 })
 
 const primaryRef = computed(() => references.value[0] ?? "")
@@ -213,7 +211,12 @@ async function onAddOne(): Promise<void> {
 }
 
 .mini-row.skeleton .placeholder {
-  background: linear-gradient(90deg, rgba(120,120,120,0.12), rgba(120,120,120,0.06), rgba(120,120,120,0.12));
+  background: linear-gradient(
+    90deg,
+    rgba(120, 120, 120, 0.12),
+    rgba(120, 120, 120, 0.06),
+    rgba(120, 120, 120, 0.12)
+  );
   border-radius: 6px;
   min-height: 12px;
   width: 60%;
@@ -224,5 +227,4 @@ async function onAddOne(): Promise<void> {
   opacity: 0.55;
   pointer-events: none;
 }
-
 </style>

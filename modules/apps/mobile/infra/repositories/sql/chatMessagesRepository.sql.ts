@@ -139,10 +139,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       id: ChatMessageId,
       actionStates: Record<string, ChatActionState>
     ): Promise<void> {
-      await db.execute(
-        "UPDATE chat_messages SET action_states_json = ? WHERE id = ?",
-        [wrapVersionedRecord(actionStates), id]
-      )
+      await db.execute("UPDATE chat_messages SET action_states_json = ? WHERE id = ?", [
+        wrapVersionedRecord(actionStates),
+        id,
+      ])
       await db.save()
     },
 

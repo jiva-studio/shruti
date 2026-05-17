@@ -280,12 +280,9 @@ export function useChatController(): ChatControllerReturn {
       }
     })()
     void (async () => {
-      resumeHandle = await App.addListener(
-        "appStateChange",
-        (state: AppState) => {
-          if (state.isActive) retryTitles()
-        }
-      )
+      resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
+        if (state.isActive) retryTitles()
+      })
     })()
   })
 

@@ -408,7 +408,7 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       // client (new event type added in a later release); log it so a
       // silent feature-drop shows up in dev consoles and crash logs,
       // and return null so the rest of the stream still flows.
-      // eslint-disable-next-line no-console
+
       console.warn("[chat] unknown sse event:", name)
       return null
   }

@@ -1,12 +1,7 @@
 import { onMounted, ref, watch, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { Author } from "@lib/domain/author.js"
-import type {
-  AuthorId,
-  LocationId,
-  SourceId,
-  TrackId,
-} from "@lib/domain/core.js"
+import type { AuthorId, LocationId, SourceId, TrackId } from "@lib/domain/core.js"
 import type { Location } from "@lib/domain/location.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
@@ -71,16 +66,10 @@ export function useTrackRowAsync(getTrackId: () => string): TrackRowAsyncRefs {
       }
       track.value = trk
       const sourceIds = Array.from(
-        new Set(
-          trk.references
-            .map((r) => r.sourceId)
-            .filter((id): id is string => Boolean(id))
-        )
+        new Set(trk.references.map((r) => r.sourceId).filter((id): id is string => Boolean(id)))
       )
       const [au, loc, sources] = await Promise.all([
-        trk.authorId
-          ? repos.authors.getById(trk.authorId as AuthorId)
-          : Promise.resolve(null),
+        trk.authorId ? repos.authors.getById(trk.authorId as AuthorId) : Promise.resolve(null),
         trk.locationId
           ? repos.locations.getById(trk.locationId as LocationId)
           : Promise.resolve(null),

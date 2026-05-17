@@ -157,9 +157,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       return rows.map((r) => ({ date: r.date, listenedSeconds: Number(r.listened_seconds) }))
     },
 
-    async listRecentTracksWithProgress(
-      limit: number
-    ): Promise<readonly RecentTrackProgress[]> {
+    async listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]> {
       // GROUP BY playlist item collapses many sessions per track to one
       // row carrying the latest session's end time + to_position. JOIN
       // to playlist_items resolves the track_id (listening_sessions only
