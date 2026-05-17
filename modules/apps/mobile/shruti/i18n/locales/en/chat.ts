@@ -34,6 +34,9 @@ export default {
   errTruncatedStream: " (cut off — connection dropped)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (stopped — too many tool calls)",
+  /** Last-resort name for a salvaged playlist when the user's prompt
+   *  isn't usable as a title (empty, whitespace-only). */
+  fallbackPlaylistName: "Playlist",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
