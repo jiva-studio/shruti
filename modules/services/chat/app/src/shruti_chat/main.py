@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
         catalog_repo=SqliteCatalogRepository(),
         transcript_storage=S3TranscriptStorage(),
         outline_cache=S3OutlineCache(),
+        embedder=get_embedder(s),
     )
 
     if s.indexer_bootstrap_on_start:
