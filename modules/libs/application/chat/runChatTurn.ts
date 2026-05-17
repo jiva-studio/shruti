@@ -140,9 +140,19 @@ export async function* runChatTurn(
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
 
+  // The history passed by the caller is the conversation BEFORE this
+  // turn (caller has no clean way to splice the new user message in
+  // without a race against the store's reactive update). Append the
+  // just-persisted user prompt here so the wire payload always has
+  // ≥ 1 message — the server's ChatRequest.messages has min_length=1.
+  const turnsForServer: readonly ChatTurn[] = [
+    ...input.history,
+    { role: "user", content: input.text },
+  ]
+
   try {
     for await (const event of deps.stream.streamChat(
-      input.history,
+      turnsForServer,
       input.lang,
       { signal: input.signal, userContext }
     )) {
