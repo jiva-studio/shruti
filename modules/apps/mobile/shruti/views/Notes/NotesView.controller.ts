@@ -18,7 +18,6 @@ import {
 } from "@shruti/composables/resolveLocalized.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { useConfig } from "@shruti/composables/useConfig.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
@@ -62,8 +61,6 @@ export function useNotesController(): NotesControllerReturn {
   const shareJob = useShareJobStore()
   const purchases = usePurchasesStore()
   const paywall = usePaywallStore()
-  // Studio entry visibility — default ON; matches the toggle in Settings.
-  const studioEnabled = useConfig<boolean>("settings.notes.studioEnabled", true)
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -421,20 +418,17 @@ export function useNotesController(): NotesControllerReturn {
         },
       },
     ]
-    // Studio entry — toggle in Settings hides it. Non-subscribers still
-    // see the row (with the PRO suffix) so the feature is discoverable;
-    // tapping opens the paywall rather than the editor. Action sheets
-    // can't render rich children, so the PRO marker is part of the
-    // label text.
-    if (studioEnabled.value) {
-      const proSuffix = purchases.isSubscribed ? "" : ` · ${t("app.proBadge")}`
-      buttons.push({
-        text: t("studio.openInStudio") + proSuffix,
-        handler: () => {
-          onOpenInStudioClicked()
-        },
-      })
-    }
+    // Non-subscribers still see the row (with the PRO suffix) so the
+    // feature is discoverable; tapping opens the paywall rather than the
+    // editor. Action sheets can't render rich children, so the PRO marker
+    // is part of the label text.
+    const proSuffix = purchases.isSubscribed ? "" : ` · ${t("app.proBadge")}`
+    buttons.push({
+      text: t("studio.openInStudio") + proSuffix,
+      handler: () => {
+        onOpenInStudioClicked()
+      },
+    })
     buttons.push(
       {
         text: t("app.copy"),
