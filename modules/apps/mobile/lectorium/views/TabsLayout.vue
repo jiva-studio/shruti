@@ -12,7 +12,7 @@
         </IonTabButton>
 
         <IonTabButton tab="chat" href="/tabs/chat" class="chat-tab-button">
-          <IconAppSadhu :size="42" />
+          <IconAppSadhu :size="48" />
         </IonTabButton>
 
         <IonTabButton tab="notes" href="/tabs/notes">
@@ -60,14 +60,6 @@ ion-tab-bar {
 
 ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
-}
-
-/* Chat tab is a regular flex item at DOM position 3 of 5 (home, search,
- * chat, notes, settings) — that's the geometric center under Ionic's
- * `flex: 1` per-tab layout. Just lift it ~6 px above the baseline so the
- * disc reads as the primary action. */
-ion-tab-button.chat-tab-button {
-  transform: translateY(-6px);
 }
 
 /* When the chat tab is active, just bump the disc behind the Sadhu icon
