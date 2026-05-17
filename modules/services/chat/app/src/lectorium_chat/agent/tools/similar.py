@@ -1,8 +1,14 @@
 """find_similar_chunks — ANN over pgvector excluding the source track.
 
-Use when the user asks "where else did he say something similar" given an
-existing citation (track_id @ start_ms-end_ms). The source chunks' text
-gets re-embedded as one query, then matched against the corpus.
+Two modes:
+- Fragment mode: caller supplies `track_id + start_ms + end_ms`. The
+  chunks inside that window are re-embedded as one query and matched
+  against the rest of the corpus. Use for "where else did he say
+  something similar" given an existing citation.
+- Whole-track mode: caller supplies just `track_id`. The first ~5
+  chunks of the track are used as the seed instead — same query
+  shape, broader anchor. Use for "find lectures like this one"
+  without a specific timecode.
 """
 
 from __future__ import annotations
@@ -15,16 +21,23 @@ from lectorium_chat.indexer.embed import get_embedder
 
 async def find_similar_chunks(
     track_id: str,
-    start_ms: int,
-    end_ms: int,
+    start_ms: int | None = None,
+    end_ms: int | None = None,
     top_k: int = 6,
     lang: str | None = None,
 ) -> list[dict[str, Any]]:
     pool = get_pool()
 
-    # Fetch text of source chunks (one or more if window spans several).
-    where_src = ["track_id = $1", "end_ms >= $2", "start_ms <= $3"]
-    params_src: list[Any] = [track_id, int(start_ms), int(end_ms)]
+    # Fetch source chunks. With a (start_ms, end_ms) window we anchor on
+    # that fragment; without one we take the first 5 chunks of the track
+    # as a "what's this track about" centroid.
+    where_src: list[str] = ["track_id = $1"]
+    params_src: list[Any] = [track_id]
+    if start_ms is not None and end_ms is not None:
+        where_src.append(f"end_ms >= ${len(params_src) + 1}")
+        params_src.append(int(start_ms))
+        where_src.append(f"start_ms <= ${len(params_src) + 1}")
+        params_src.append(int(end_ms))
     if lang:
         where_src.append(f"lang = ${len(params_src) + 1}")
         params_src.append(lang)
@@ -80,9 +93,14 @@ TOOL_REGISTRY = [
         "fn": find_similar_chunks,
         "personalized": False,
         "description": (
-            "Find passages in OTHER tracks semantically similar to a given "
-            "(track_id, start_ms-end_ms) fragment. Use for 'where else did he "
-            "say something similar'."
+            "Find passages in OTHER tracks semantically similar to either a "
+            "fragment or a whole track. Two call shapes:\n"
+            "- Fragment: pass `track_id + start_ms + end_ms`. Returns chunks "
+            "similar to the audio inside that window. Use for "
+            "'where else did he say something similar' on a specific citation.\n"
+            "- Whole track: pass just `track_id` (omit start_ms/end_ms). "
+            "Returns chunks similar to the start of that lecture. Use for "
+            "'recommend something like this lecture' without a timecode."
         ),
         "parameters": {
             "type": "object",
@@ -93,7 +111,7 @@ TOOL_REGISTRY = [
                 "top_k": {"type": "integer", "default": 6},
                 "lang": {"type": "string", "enum": ["ru", "en"]},
             },
-            "required": ["track_id", "start_ms", "end_ms"],
+            "required": ["track_id"],
         },
     },
 ]

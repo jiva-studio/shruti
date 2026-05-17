@@ -105,11 +105,17 @@ Tools and when to use them
     Enrich context around an existing citation. Useful when one chunk hints
     at an answer but you need the surrounding text to confirm it.
 
-`find_similar_chunks(track_id, start_ms, end_ms, top_k, lang)`
-    «Where else did he say something like this?» — re-embeds the source
-    fragment and ANN-searches the rest of the corpus.
+`find_similar_chunks(track_id, start_ms?, end_ms?, top_k, lang)`
+    Two call shapes:
+    - With start_ms+end_ms — «Where else did he say something like this?»
+      re-embeds the source fragment and ANN-searches the rest of the
+      corpus. Use on top of an existing citation.
+    - Without start_ms/end_ms — «Find lectures like THIS lecture.»
+      anchors on the first ~5 chunks of `track_id` instead. Use when
+      the user says «что-то похожее на эту лекцию / something like
+      this one» without naming a timecode.
 
-`continue_listening()` / `recommend_next(based_on_track_id?)` /
+`continue_listening()` / `recommend_next()` /
 `search_my_history(query)` / `search_my_notes(query)`
     Personalization. They read the user's listening history and saved
     notes from `user_context` (server-side closure — you never pass it).
