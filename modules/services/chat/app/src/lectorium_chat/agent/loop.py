@@ -25,6 +25,7 @@ from lectorium_chat.agent import llm
 from lectorium_chat.agent.prompts import SYSTEM_PROMPT
 from lectorium_chat.agent.tools import TOOL_SCHEMAS, TOOLS, build_personalized_tools
 from lectorium_chat.config import get_settings
+from lectorium_chat.domain import UserContext
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -58,7 +59,7 @@ _LANG_EXAMPLE = {
 def _make_messages(
     history: list[dict[str, Any]],
     lang: str,
-    user_context: Any = None,
+    user_context: UserContext | None = None,
 ) -> list[dict[str, Any]]:
     lang_name = _LANG_NAME.get(lang, lang)
     lang_directive = (
@@ -82,7 +83,7 @@ def _make_messages(
     return [sys, *clean]
 
 
-def _format_user_context(uc: Any) -> str:
+def _format_user_context(uc: UserContext | None) -> str:
     """Render the small temporal anchors into the system prompt.
 
     Big lists (recent_tracks/notes) stay accessible only via personalize
@@ -92,30 +93,24 @@ def _format_user_context(uc: Any) -> str:
     """
     if uc is None:
         return ""
-    now = getattr(uc, "now", None)
-    tz = getattr(uc, "tz_offset_minutes", None)
-    cur = getattr(uc, "current_track_id", None)
-    recent = getattr(uc, "recent_tracks", None) or []
-    in_progress = getattr(uc, "in_progress", None) or []
-    notes = getattr(uc, "recent_notes", None) or []
-    focus = getattr(uc, "focus", None)
     lines: list[str] = []
-    if now:
-        lines.append(f"now: {now}")
-    if tz is not None:
-        lines.append(f"tz_offset_minutes: {tz}")
-    if cur:
-        lines.append(f"current_track_id: {cur}")
-    if focus is not None:
-        ftitle = getattr(focus, "title", None) or ""
+    if uc.now:
+        lines.append(f"now: {uc.now}")
+    if uc.tz_offset_minutes is not None:
+        lines.append(f"tz_offset_minutes: {uc.tz_offset_minutes}")
+    if uc.current_track_id:
+        lines.append(f"current_track_id: {uc.current_track_id}")
+    if uc.focus is not None:
+        ftitle = uc.focus.title or ""
         lines.append(
-            f"focus: track_id={getattr(focus, 'track_id', '')} "
-            f"start_ms={getattr(focus, 'start_ms', 0)} "
-            f"end_ms={getattr(focus, 'end_ms', 0)} "
+            f"focus: track_id={uc.focus.track_id} "
+            f"start_ms={uc.focus.start_ms} "
+            f"end_ms={uc.focus.end_ms} "
             f"title={ftitle!r}"
         )
     lines.append(
-        f"history_size: recent={len(recent)} in_progress={len(in_progress)} notes={len(notes)}"
+        f"history_size: recent={len(uc.recent_tracks)} "
+        f"in_progress={len(uc.in_progress)} notes={len(uc.recent_notes)}"
     )
     if not lines:
         return ""
@@ -150,12 +145,12 @@ async def run_agent(
     history: list[dict[str, Any]],
     lang: str = "ru",
     request_id: str | None = None,
-    user_context: Any = None,
+    user_context: UserContext | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Run the agent and yield AgentEvents.
 
-    `user_context` is a pydantic `UserContext` (or None). It is injected into
-    personalize tools via per-request wrappers (see `build_personalized_tools`).
+    `user_context` is injected into personalize tools via per-request
+    wrappers (see `build_personalized_tools`).
     """
     settings = get_settings()
     rid = request_id or uuid.uuid4().hex[:8]

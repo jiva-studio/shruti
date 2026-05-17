@@ -16,8 +16,8 @@ from __future__ import annotations
 import math
 from typing import Any, Iterable
 
-from lectorium_chat.agent.tools.search import search_transcripts
 from lectorium_chat.db.client import get_pool
+from lectorium_chat.domain import UserContext
 from lectorium_chat.indexer.embed import get_embedder
 
 
@@ -33,19 +33,18 @@ def _ok_or_empty(items: list, has_ctx: bool) -> dict[str, Any] | list:
     return items
 
 
-async def continue_listening(*, user_context: Any = None) -> dict[str, Any] | list[dict[str, Any]]:
+async def continue_listening(
+    *, user_context: UserContext | None = None,
+) -> dict[str, Any] | list[dict[str, Any]]:
     """Top-3 unfinished tracks from `in_progress`, ordered by recency."""
     if user_context is None:
         return _ok_or_empty([], False)
-    items = list(getattr(user_context, "in_progress", []) or [])
     # Filter to a reasonable mid-progress window.
     filtered = [
-        t for t in items
+        t for t in user_context.in_progress
         if (t.percent is None) or (0.05 < (t.percent or 0) < 0.95)
     ]
-    filtered.sort(
-        key=lambda t: getattr(t, "last_played_at", "") or "", reverse=True,
-    )
+    filtered.sort(key=lambda t: t.last_played_at or "", reverse=True)
     return [
         {
             "track_id": t.track_id,
@@ -60,15 +59,14 @@ async def continue_listening(*, user_context: Any = None) -> dict[str, Any] | li
 async def search_my_history(
     query: str,
     *,
-    user_context: Any = None,
+    user_context: UserContext | None = None,
     lang: str | None = None,
     top_k: int = 8,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Semantic search restricted to recent_tracks."""
     if user_context is None:
         return _ok_or_empty([], False)
-    recent = list(getattr(user_context, "recent_tracks", []) or [])
-    ids = [t.track_id for t in recent]
+    ids = [t.track_id for t in user_context.recent_tracks]
     if not ids:
         return []
     embedder = get_embedder()
@@ -120,7 +118,7 @@ def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
 async def search_my_notes(
     query: str,
     *,
-    user_context: Any = None,
+    user_context: UserContext | None = None,
     top_k: int = 8,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """Semantic ranking over notes the user already wrote.
@@ -130,7 +128,7 @@ async def search_my_notes(
     """
     if user_context is None:
         return _ok_or_empty([], False)
-    notes = list(getattr(user_context, "recent_notes", []) or [])
+    notes = user_context.recent_notes
     if not notes:
         return []
     embedder = get_embedder()
@@ -158,7 +156,7 @@ async def search_my_notes(
 
 async def recommend_next(
     *,
-    user_context: Any = None,
+    user_context: UserContext | None = None,
     based_on_track_id: str | None = None,
     lang: str | None = None,
     top_k: int = 6,
@@ -177,9 +175,8 @@ async def recommend_next(
     seed_ids: list[str] = []
     if based_on_track_id:
         seed_ids = [based_on_track_id]
-    else:
-        recent = list(getattr(user_context, "recent_tracks", []) or [])[:5]
-        seed_ids = [t.track_id for t in recent]
+    elif user_context is not None:
+        seed_ids = [t.track_id for t in user_context.recent_tracks[:5]]
     if not seed_ids:
         return []
 
