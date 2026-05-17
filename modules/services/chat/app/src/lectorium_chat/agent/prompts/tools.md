@@ -114,6 +114,10 @@ Tools and when to use them
       anchors on the first ~5 chunks of `track_id` instead. Use when
       the user says «что-то похожее на эту лекцию / something like
       this one» without naming a timecode.
+    Call AT MOST once per turn. Never call as the FIRST tool — start
+    with `search_transcripts` or `list_tracks` so you have an anchor
+    citation. This is an expensive re-embed; don't use it as a generic
+    "find related stuff" sweep.
 
 `continue_listening()` / `recommend_next()` /
 `search_my_history(query)` / `search_my_notes(query)`

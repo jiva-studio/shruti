@@ -56,16 +56,34 @@ _OUTLINE_LOCKS: defaultdict[tuple[str, str], asyncio.Lock] = defaultdict(
 )
 
 
-SYSTEM_PROMPT = """Ты помощник, который составляет краткое оглавление лекции по таймкодированному транскрипту.
+_OUTLINE_PROMPT_RU = """Ты помощник, который составляет краткое оглавление лекции по таймкодированному транскрипту.
 
 Правила:
 1. Верни JSON-массив из 5-8 объектов: {"start": "MM:SS" или "HH:MM:SS", "title": "..."}.
-2. title — 3-7 слов на языке транскрипта, описывает ТЕМУ фрагмента, не цитата.
+2. title — 3-6 слов на русском, в регистре предложения, описывает ТЕМУ фрагмента, не цитата.
 3. start — реальный таймкод из транскрипта (копируй из меток [MM:SS] / [HH:MM:SS] в начале строк, не выдумывай).
 4. Темы должны логически делить лекцию на содержательные части по ходу повествования.
 5. Не дублируй смысл между пунктами.
+6. ЗАПРЕЩЕНО: кавычки, эмодзи, восклицательные/вопросительные знаки в заголовках, кликбейт ("Шокирующая правда о...", "Ты не поверишь..."), префиксы вроде "Прабхупада объясняет" — пиши тему как есть.
 
 Верни ТОЛЬКО валидный JSON-массив, без обёртки, без markdown, без комментариев."""
+
+
+_OUTLINE_PROMPT_EN = """You generate a chapter outline for one lecture from its time-coded transcript.
+
+Rules:
+1. Return a JSON array of 5-8 objects: {"start": "MM:SS" or "HH:MM:SS", "title": "..."}.
+2. title is 3-6 words in English, sentence case, describing the TOPIC discussed in that segment. Not a quotation.
+3. start is a real timecode from the transcript (copy from the [MM:SS] / [HH:MM:SS] markers at the start of lines — don't invent).
+4. Topics must split the lecture into coherent narrative parts in order.
+5. Don't restate the same topic across items.
+6. FORBIDDEN: quote marks, emoji, exclamation/question marks in titles, clickbait phrasing ("Shocking truth about..."), "Prabhupada explains" / "The lecture about" prefixes — write the topic itself.
+
+Return ONLY a valid JSON array. No wrapper object, no markdown, no commentary."""
+
+
+def _outline_system_prompt(lang: str) -> str:
+    return _OUTLINE_PROMPT_EN if lang == "en" else _OUTLINE_PROMPT_RU
 
 
 def _fmt_ts(ms: int) -> str:
@@ -163,7 +181,7 @@ async def _generate_outline(
     resp = await llm.acompletion(
         model=s.llm_outline,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _outline_system_prompt(lang)},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.2,
