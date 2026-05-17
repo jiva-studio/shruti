@@ -112,16 +112,50 @@ export const useChatStore = defineStore("chat", () => {
     return db
   }
 
-  function parseJsonRecord<T>(s: unknown): Record<string, T> {
+  /**
+   * Versioned payload codec for `actions_json` / `outlines_json` /
+   * `action_states_json`. We wrap each record in `{ _v, data }` so we can
+   * evolve the payload shape without lockstep migrations:
+   *   - reader sees `_v <= CURRENT` → returns `data`
+   *   - reader sees `_v > CURRENT`  → returns `{}` (forward-compat: a
+   *     newer app wrote this row; rendering an empty card is safer than
+   *     crashing on missing fields)
+   *   - reader sees no `_v`         → legacy raw record, returned as-is
+   *
+   * Bump `CURRENT_PAYLOAD_V` whenever the in-record shape changes in a
+   * non-additive way, and add a migration arm here that up-converts old
+   * versions instead of returning `{}`.
+   */
+  const CURRENT_PAYLOAD_V = 1
+
+  function parseVersionedRecord<T>(s: unknown): Record<string, T> {
     if (typeof s !== "string" || s === "") return {}
+    let parsed: unknown
     try {
-      const parsed = JSON.parse(s)
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, T>)
-        : {}
+      parsed = JSON.parse(s)
     } catch {
       return {}
     }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
+    const obj = parsed as Record<string, unknown>
+    if (typeof obj._v === "number") {
+      if (obj._v > CURRENT_PAYLOAD_V) {
+        console.warn(
+          `[chat] payload schema v${obj._v} > known v${CURRENT_PAYLOAD_V}; rendering empty`
+        )
+        return {}
+      }
+      const data = obj.data
+      return data && typeof data === "object" && !Array.isArray(data)
+        ? (data as Record<string, T>)
+        : {}
+    }
+    // Legacy format (pre-_v): the parsed object IS the record.
+    return obj as Record<string, T>
+  }
+
+  function wrapVersionedRecord<T>(data: Record<string, T>): string {
+    return JSON.stringify({ _v: CURRENT_PAYLOAD_V, data })
   }
 
   async function refreshSessions(): Promise<void> {
@@ -166,9 +200,9 @@ export const useChatStore = defineStore("chat", () => {
       role: r.role === "assistant" ? "assistant" : "user",
       content: r.content,
       createdAt: Number(r.created_at),
-      actions: parseJsonRecord<ActionPayload>(r.actions_json),
-      outlines: parseJsonRecord<OutlinePayload>(r.outlines_json),
-      actionStates: parseJsonRecord<ActionState>(r.action_states_json),
+      actions: parseVersionedRecord<ActionPayload>(r.actions_json),
+      outlines: parseVersionedRecord<OutlinePayload>(r.outlines_json),
+      actionStates: parseVersionedRecord<ActionState>(r.action_states_json),
     }))
   }
 
@@ -247,9 +281,9 @@ export const useChatStore = defineStore("chat", () => {
         msg.role,
         msg.content,
         msg.createdAt,
-        JSON.stringify(msg.actions ?? {}),
-        JSON.stringify(msg.outlines ?? {}),
-        JSON.stringify(msg.actionStates ?? {}),
+        wrapVersionedRecord(msg.actions ?? {}),
+        wrapVersionedRecord(msg.outlines ?? {}),
+        wrapVersionedRecord(msg.actionStates ?? {}),
       ]
     )
     await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [
@@ -474,7 +508,7 @@ export const useChatStore = defineStore("chat", () => {
     try {
       await userDb().execute(
         "UPDATE chat_messages SET action_states_json = ? WHERE id = ?",
-        [JSON.stringify(actionStates), messageId]
+        [wrapVersionedRecord(actionStates), messageId]
       )
       await userDb().save()
     } catch (err) {
