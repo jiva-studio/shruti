@@ -5,12 +5,17 @@ client gets a typing-effect render, while tool_call fragments are buffered
 and dispatched only once the stream completes. Up to MAX_TOOL_TURNS rounds.
 
 AgentEvent types:
-    - 'delta'   : text fragment of assistant response
-    - 'tool'    : tool call dispatched ({name, duration_ms, result_count})
-    - 'action'  : client-side action proposed by a tool ({kind, id, ...payload})
-    - 'outline' : track outline payload ({track_id, items: [...]})
-    - 'done'    : final summary
-    - 'error'   : error payload
+    - 'delta'      : text fragment of assistant response
+    - 'tool_start' : about to dispatch a tool ({name}). Client should
+                     drop any preamble text streamed so far.
+    - 'tool'       : tool call completed ({name, duration_ms,
+                     result_count}). Informational; no state mutation
+                     expected on the client. Alias for backward compat
+                     with the initial-chat ship — keep emitting it.
+    - 'action'     : client-side action proposed by a tool ({kind, id, ...})
+    - 'outline'    : track outline payload ({track_id, items: [...]})
+    - 'done'       : final summary
+    - 'error'      : error payload
 """
 
 from __future__ import annotations
@@ -294,6 +299,14 @@ async def run_agent(
                 # lang=null explicitly or lang="en".
                 if name in ("search_transcripts", "list_tracks") and "lang" not in args:
                     args["lang"] = lang
+                # Signal the client to drop any preamble text the LLM
+                # streamed during this turn before it decided to call a
+                # tool ("Я сделаю это через search_transcripts…"). The
+                # post-tool `tool` event used to do this implicitly; now
+                # the responsibility is explicit and lives BEFORE the
+                # dispatch so the UI clears immediately, not after the
+                # tool finishes (which can take seconds).
+                yield AgentEvent(type="tool_start", data={"name": name})
                 fn = tools.get(name)
                 # Per-call buffer for side-events the tool may emit via the
                 # injected `yield_event` callable. Drained after the tool
