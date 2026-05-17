@@ -104,7 +104,7 @@ initLectorium({
   // invoked inside `initLectorium` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
     isNative
-      ? useCapacitorDatabaseTransfer(getUserDb)
+      ? useCapacitorDatabaseTransfer(config.database.userLocalPath, getUserDb)
       : useWebDatabaseTransfer(config.database.userLocalPath, getUserDb),
   platform,
   initialServer: SERVERS[0],
