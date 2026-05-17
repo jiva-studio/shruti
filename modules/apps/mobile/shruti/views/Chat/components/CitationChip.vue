@@ -57,10 +57,8 @@ import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
-import { useNotesStore } from "@shruti/stores/useNotesStore.js"
+import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useToast } from "@shruti/services/useToast.js"
-import { createNote } from "@lib/application/createNote.js"
-import { loadTranscript } from "@lib/application/loadTranscript.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
@@ -99,7 +97,7 @@ const app = useShruti()
 const appLanguage = useAppLanguage()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
-const notes = useNotesStore()
+const { saveCitation } = useChatActions()
 
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
@@ -201,64 +199,18 @@ async function onAddToPlaylist(): Promise<void> {
 }
 
 async function onSaveAsNote(): Promise<void> {
-  // Drop reentrancy: if a previous tap is still fetching the transcript,
-  // a second tap (the user thought the first was lost) MUST NOT create
-  // a duplicate note.
+  // Local reentrancy guard — local because it controls THIS chip's
+  // disabled state, not a global "saving" notion. The transcript fetch
+  // + overlap + createNote pipeline itself lives in saveCitation.
   if (savingNote.value) return
   savingNote.value = true
-  // Immediate feedback while the transcript loads — first-time fetch
-  // can take 1-2s, and silence makes the action look broken.
-  void toast.info(t("chat.noteSaving"))
-
-  // The note body should be the WORDS spoken in this span — not the
-  // chip's short caption. Pull the transcript, pick every sentence
-  // block overlapping [startMs; endMs], join them. Fall back to the
-  // caption only if the transcript fetch fails outright.
-  const tStart = Math.max(0, props.startMs)
-  const tEnd = Math.max(tStart, props.endMs)
-  let text = ""
   try {
-    const result = await loadTranscript(
-      { trackId: props.trackId as TrackId, preferredLanguage: appLanguage.value },
-      { transcripts: app.repositories().transcripts }
-    )
-    if (result.ok) {
-      const parts: string[] = []
-      for (const b of result.value.transcript.blocks) {
-        if (b.type !== "sentence") continue
-        // Overlap test: block intersects [tStart; tEnd] when block.end
-        // is past tStart AND block.start is before tEnd.
-        if (b.end >= tStart && b.start <= tEnd && b.text.trim()) {
-          parts.push(b.text.trim())
-        }
-      }
-      text = parts.join(" ")
-    }
-  } catch (err) {
-    console.warn("[citation-chip] transcript fetch failed for note", err)
-  }
-  if (!text) text = (props.caption || "").trim()
-  if (!text) {
-    savingNote.value = false
-    await toast.error(t("chat.actionNoteError"))
-    return
-  }
-  try {
-    const result = await createNote(
-      {
-        trackId: props.trackId as TrackId,
-        text,
-        timeStart: tStart,
-        timeEnd: tEnd,
-      },
-      { notes: app.repositories().notes }
-    )
-    if (!result.ok) throw new Error(`createNote failed: ${result.error}`)
-    await notes.refresh()
-    await toast.info(t("chat.noteSaved"))
-  } catch (err) {
-    console.warn("[citation-chip] save as note failed", err)
-    await toast.error(t("chat.actionNoteError"))
+    await saveCitation({
+      trackId: props.trackId,
+      startMs: props.startMs,
+      endMs: props.endMs,
+      caption: props.caption ?? "",
+    })
   } finally {
     savingNote.value = false
   }
