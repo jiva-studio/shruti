@@ -31,9 +31,9 @@ export default {
   errNetwork: "Не удалось связаться с чатом. Проверьте подключение.",
   errServiceNotReady: "Сервис чата запускается. Попробуйте позже.",
   /** Дописывается в конец пузыря ассистента, если стрим оборвался без `done`. */
-  truncatedStream: " (прервано — связь оборвалась)",
+  errTruncatedStream: " (прервано — связь оборвалась)",
   /** Дописывается, когда агент уперся в лимит вызовов инструментов. */
-  truncatedTurns: " (прервано — слишком много вызовов инструментов)",
+  errTruncatedTurns: " (прервано — слишком много вызовов инструментов)",
 
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.
   // Keep them 2-4 words so they fit one line.

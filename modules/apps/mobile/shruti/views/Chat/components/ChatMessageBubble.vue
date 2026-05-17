@@ -86,8 +86,8 @@ const errorSuffix = computed(() => {
   // resume on the SSE channel.
   if (e.kind === "truncated") {
     return e.reason === "turns"
-      ? t("chat.truncatedTurns")
-      : t("chat.truncatedStream")
+      ? t("chat.errTruncatedTurns")
+      : t("chat.errTruncatedStream")
   }
   return ""
 })
