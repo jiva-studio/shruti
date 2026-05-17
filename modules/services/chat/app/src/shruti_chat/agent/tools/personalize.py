@@ -238,3 +238,70 @@ async def recommend_next(
         }
         for r in rows
     ]
+
+
+TOOL_REGISTRY = [
+    {
+        "name": "continue_listening",
+        "fn": continue_listening,
+        "personalized": True,
+        "description": (
+            "Return the user's in-progress tracks (top 3, recency-ordered). "
+            "Use when user asks 'where did I stop', 'continue listening'."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "recommend_next",
+        "fn": recommend_next,
+        "personalized": True,
+        "description": (
+            "Recommend tracks similar to what the user recently listened to. "
+            "Pass `based_on_track_id` to anchor on one specific track; "
+            "otherwise uses centroid of last 5 recent tracks."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "based_on_track_id": {"type": "string"},
+                "lang": {"type": "string", "enum": ["ru", "en"]},
+                "top_k": {"type": "integer", "default": 6},
+            },
+        },
+    },
+    {
+        "name": "search_my_history",
+        "fn": search_my_history,
+        "personalized": True,
+        "description": (
+            "Semantic search restricted to the user's recent_tracks. Use for "
+            "'I heard something about X recently, find it'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "lang": {"type": "string", "enum": ["ru", "en"]},
+                "top_k": {"type": "integer", "default": 8},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_my_notes",
+        "fn": search_my_notes,
+        "personalized": True,
+        "description": (
+            "Semantic ranking over notes the user has saved. Use for 'what "
+            "did I write about X'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "top_k": {"type": "integer", "default": 8},
+            },
+            "required": ["query"],
+        },
+    },
+]
