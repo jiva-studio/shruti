@@ -20,12 +20,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from lectorium_chat.agent import llm
+from lectorium_chat.agent.tools import bind_repositories
 from lectorium_chat.api import admin, chat, title
 from lectorium_chat.config import get_settings
 from lectorium_chat.db.client import close_pool, init_pool
 from lectorium_chat.db.migrate import apply_schema
 from lectorium_chat.indexer import run as indexer_run
 from lectorium_chat.indexer.embed import get_embedder
+from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from lectorium_chat.observability.logging import get_logger, setup_logging
 
 
@@ -42,6 +44,9 @@ async def lifespan(app: FastAPI):
     llm.configure_providers(s)
     # Load embedder synchronously — heavy but only once.
     get_embedder(s)
+    # Wire concrete repositories into the agent's tool registry now
+    # that the pg pool and embedder are live.
+    bind_repositories(chunk_repo=PgChunkRepository())
 
     if s.indexer_bootstrap_on_start:
         try:

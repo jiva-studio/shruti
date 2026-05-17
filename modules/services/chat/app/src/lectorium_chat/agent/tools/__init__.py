@@ -28,10 +28,12 @@ add the module name to `_TOOL_MODULES` below. No edits to dispatch logic.
 
 from __future__ import annotations
 
+from functools import partial
 from importlib import import_module
 from typing import Any, Awaitable, Callable
 
 from lectorium_chat.domain import UserContext
+from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 
 ToolFn = Callable[..., Awaitable[Any]]
 YieldEvent = Callable[[str, dict[str, Any]], None]
@@ -89,6 +91,26 @@ _register()
 
 
 EMITS_EVENTS: frozenset[str] = frozenset(_EMITS_EVENTS)
+
+
+def bind_repositories(*, chunk_repo: ChunkRepository) -> None:
+    """Inject infrastructure adapters into the registered tool callables.
+
+    Tool modules register bare functions at import time. They declare
+    repository parameters as keyword-only (e.g.
+    `search_transcripts(..., *, chunk_repo)`), then the composition root
+    calls this once at startup to replace each `TOOLS[name]` with a
+    `functools.partial` that supplies the actual adapter.
+
+    Grows phase-by-phase as more ports come online (catalog_repo,
+    transcript_storage, ...). Phase 2 binds the two ChunkRepository
+    consumers; later phases extend the signature.
+    """
+    for name in ("search_transcripts", "get_transcript_window"):
+        fn = TOOLS.get(name)
+        if fn is None:
+            continue
+        TOOLS[name] = partial(fn, chunk_repo=chunk_repo)
 
 
 def build_personalized_tools(

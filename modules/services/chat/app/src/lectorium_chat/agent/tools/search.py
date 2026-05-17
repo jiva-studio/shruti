@@ -4,7 +4,10 @@ Flow:
 1. If any catalog-side filter is set (author/source/location/tag/date),
    compute the eligible track_id set from SQLite first.
 2. Embed the query via the active embedder.
-3. ANN over pgvector, optionally constrained to track_id IN (...) and lang.
+3. Delegate to `ChunkRepository.search_by_embedding` for the ANN call.
+
+Postgres access is encapsulated by the repository — this module no
+longer imports `db.client`.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import asyncio
 from typing import Any
 
 from lectorium_chat.agent.tools._sqlite import catalog_conn
-from lectorium_chat.db.client import get_pool
+from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.indexer.embed import get_embedder
 
 
@@ -72,6 +75,8 @@ async def search_transcripts(
     date_to: str | None = None,
     lang: str | None = None,
     top_k: int = 8,
+    *,
+    chunk_repo: ChunkRepository,
 ) -> list[dict[str, Any]]:
     eligible_ids = await asyncio.to_thread(
         _filter_track_ids_sync,
@@ -82,42 +87,26 @@ async def search_transcripts(
         # Filter matched no tracks → no semantic search needed.
         return []
 
-    embedder = get_embedder()
-    q_vec = await embedder.embed_query(query)
-    pool = get_pool()
+    q_vec = await get_embedder().embed_query(query)
 
     async def _run(use_lang: str | None) -> list[dict[str, Any]]:
-        where = ["embed_model = $1"]
-        params: list[Any] = [embedder.name]
-        if use_lang:
-            where.append(f"lang = ${len(params) + 1}")
-            params.append(use_lang)
-        if eligible_ids is not None:
-            where.append(f"track_id = ANY(${len(params) + 1}::text[])")
-            params.append(eligible_ids)
-        params.append(q_vec)
-        params.append(top_k)
-        sql = f"""
-          SELECT track_id, lang, start_ms, end_ms, text, reference_source_id,
-                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks
-          WHERE {' AND '.join(where)}
-          ORDER BY embedding <=> ${len(params) - 1}::vector
-          LIMIT ${len(params)}
-        """
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
+        scored = await chunk_repo.search_by_embedding(
+            q_vec,
+            eligible_track_ids=eligible_ids,
+            lang=use_lang,
+            top_k=top_k,
+        )
         return [
             {
-                "track_id": r["track_id"],
-                "lang": r["lang"],
-                "start_ms": r["start_ms"],
-                "end_ms": r["end_ms"],
-                "text": r["text"],
-                "reference_source_id": r["reference_source_id"],
-                "score": float(r["score"]),
+                "track_id": s.chunk.track_id,
+                "lang": s.chunk.lang,
+                "start_ms": s.chunk.start_ms,
+                "end_ms": s.chunk.end_ms,
+                "text": s.chunk.text,
+                "reference_source_id": s.chunk.reference_source_id,
+                "score": s.score,
             }
-            for r in rows
+            for s in scored
         ]
 
     # Prefer the requested language; if nothing matches, transparently
