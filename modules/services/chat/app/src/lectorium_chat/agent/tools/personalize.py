@@ -36,13 +36,18 @@ def _ok_or_empty(items: list, has_ctx: bool) -> dict[str, Any] | list:
 async def continue_listening(
     *, user_context: UserContext | None = None,
 ) -> dict[str, Any] | list[dict[str, Any]]:
-    """Top-3 unfinished tracks from `in_progress`, ordered by recency."""
+    """Top-3 unfinished tracks from `recent_tracks`, recency-ordered.
+
+    "Unfinished" = past the «accidentally tapped» threshold but not near
+    the end: 5% < percent < 95%. The policy lives here so the wire
+    format stays slim — clients send the full recent_tracks list and
+    the server derives the in-progress slice on demand.
+    """
     if user_context is None:
         return _ok_or_empty([], False)
-    # Filter to a reasonable mid-progress window.
     filtered = [
-        t for t in user_context.in_progress
-        if (t.percent is None) or (0.05 < (t.percent or 0) < 0.95)
+        t for t in user_context.recent_tracks
+        if t.percent is not None and 0.05 < t.percent < 0.95
     ]
     filtered.sort(key=lambda t: t.last_played_at or "", reverse=True)
     return [

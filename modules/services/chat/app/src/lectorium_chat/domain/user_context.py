@@ -21,7 +21,6 @@ class UserContextTrack(BaseModel):
     position_ms: int | None = None
     percent: float | None = None
     last_played_at: str | None = None
-    completed: bool = False
 
 
 class UserNote(BaseModel):
@@ -44,16 +43,21 @@ class FocusFragment(BaseModel):
 
 
 class UserContext(BaseModel):
-    """`now` and `tz_offset_minutes` let temporal queries ("yesterday",
-    "a week ago") resolve against the user's wall clock, not the
-    server's UTC. `last_played_at` on each track / note is then
-    comparable to `now` for relative-time filtering.
+    """`now` is the device's wall-clock as ISO-8601 *with offset* (e.g.
+    `2026-05-17T22:05:00+03:00`) — the offset suffix carries the
+    timezone, so a separate `tz_offset_minutes` field would just
+    duplicate it. `last_played_at` on each track / note is comparable
+    to `now` for relative-time filtering ("yesterday", "this week").
+
+    Listening history lives in `recent_tracks` — each entry carries
+    `percent` (0..1 fraction listened) and the server derives any
+    further slice on demand: "in-progress" = 0.05 < percent < 0.95,
+    "completed" = percent >= 0.95. Wire format stays minimal; the
+    derivation policy lives in one place (whichever tool reads it).
     """
 
     current_track_id: str | None = None
     now: str | None = None  # ISO-8601 with offset, device local time
-    tz_offset_minutes: int | None = None
     recent_tracks: list[UserContextTrack] = Field(default_factory=list, max_length=20)
-    in_progress: list[UserContextTrack] = Field(default_factory=list, max_length=10)
     recent_notes: list[UserNote] = Field(default_factory=list, max_length=30)
     focus: FocusFragment | None = None
