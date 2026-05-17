@@ -45,16 +45,38 @@ class TitleResponse(BaseModel):
 
 _SYSTEM = {
     "ru": (
-        "Ты задаёшь короткий заголовок для чата (3-5 слов, без кавычек, "
-        "без точки в конце, регистр предложения). Дай суть запроса "
-        "пользователя, без воды. Ответь ТОЛЬКО заголовком — без объяснений."
+        "Сформулируй заголовок чата на основе ВОПРОСА ПОЛЬЗОВАТЕЛЯ "
+        "(строки начинаются с 'USER:'). Ответ ассистента (ASSISTANT:) — "
+        "только контекст для уточнения темы, его суммировать НЕ нужно.\n\n"
+        "Требования:\n"
+        "- 3-5 слов, регистр предложения\n"
+        "- без кавычек, эмодзи, точки/!/? в конце\n"
+        "- без слов 'лекция', 'Прабхупада', 'запрос', 'поиск' "
+        "(это и так чат о лекциях)\n"
+        "- нейтрально, без кликбейта\n"
+        "- если в переписке нет содержательной темы (приветствие, "
+        "тест, односложное сообщение) — верни ровно: Новый чат\n\n"
+        "Ответ — ТОЛЬКО заголовок, без пояснений."
     ),
     "en": (
-        "Generate a short chat title (3-5 words, no quotes, no trailing "
-        "period, sentence case). Capture the gist of the user's request. "
+        "Generate a chat title based on the USER's QUESTION (lines "
+        "starting with 'USER:'). The assistant reply (ASSISTANT:) is "
+        "context only — do NOT summarise it.\n\n"
+        "Requirements:\n"
+        "- 3-5 words, sentence case\n"
+        "- no quotes, no emoji, no trailing period / ! / ?\n"
+        "- avoid the words 'lecture', 'Prabhupada', 'about', 'search' "
+        "(it's already a chat about lectures)\n"
+        "- neutral, no clickbait\n"
+        "- if the conversation has no substantive topic (greeting, test, "
+        "one-word message), return exactly: New chat\n\n"
         "Reply with the title ONLY."
     ),
 }
+
+
+def _fallback_title(lang: str) -> str:
+    return "New chat" if lang == "en" else "Новый чат"
 
 
 def _check_app_token(token: str | None) -> None:
@@ -127,8 +149,12 @@ async def title(
                 {"role": "system", "content": sys_msg},
                 {"role": "user", "content": convo},
             ],
-            temperature=0.3,
-            max_tokens=40,
+            # 0.1 — titles want determinism, not creativity. 3-5 words
+            # have no useful variance.
+            temperature=0.1,
+            # ~24 tokens covers 5 RU/EN words with comfortable headroom;
+            # any LLM that runs longer is hallucinating decoration.
+            max_tokens=24,
         )
         raw = resp.choices[0].message.content or ""
     except Exception as exc:
