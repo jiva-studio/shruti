@@ -28,6 +28,7 @@ from shruti_chat.db.migrate import apply_schema
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.embed import get_embedder
 from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
+from shruti_chat.infra.repositories.sqlite_catalog_repository import SqliteCatalogRepository
 from shruti_chat.observability.logging import get_logger, setup_logging
 
 
@@ -46,7 +47,10 @@ async def lifespan(app: FastAPI):
     get_embedder(s)
     # Wire concrete repositories into the agent's tool registry now
     # that the pg pool and embedder are live.
-    bind_repositories(chunk_repo=PgChunkRepository())
+    bind_repositories(
+        chunk_repo=PgChunkRepository(),
+        catalog_repo=SqliteCatalogRepository(),
+    )
 
     if s.indexer_bootstrap_on_start:
         try:
