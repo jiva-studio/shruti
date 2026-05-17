@@ -30,6 +30,8 @@ export default {
   errRate: "Too many requests. Try again in a minute.",
   errNetwork: "Couldn't reach the chat service. Check your connection.",
   errServiceNotReady: "Chat service is warming up. Try again shortly.",
+  /** Agent hit MAX_TOOL_TURNS without producing a final answer. */
+  errMaxTurns: "Couldn't put an answer together. Try a more focused query.",
   /** Appended to an assistant bubble whose stream ended without `done`. */
   errTruncatedStream: " (cut off — connection dropped)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
