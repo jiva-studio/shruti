@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from lectorium_chat.agent import llm
-from lectorium_chat.api import admin, chat
+from lectorium_chat.api import admin, chat, title
 from lectorium_chat.config import get_settings
 from lectorium_chat.db.client import close_pool, init_pool
 from lectorium_chat.db.migrate import apply_schema
@@ -94,3 +94,4 @@ app.add_middleware(
 
 app.include_router(chat.router)
 app.include_router(admin.router)
+app.include_router(title.router)

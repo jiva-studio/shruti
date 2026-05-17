@@ -26,9 +26,55 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class UserContextTrack(BaseModel):
+    track_id: str
+    position_ms: int | None = None
+    percent: float | None = None
+    last_played_at: str | None = None
+    completed: bool = False
+
+
+class UserNote(BaseModel):
+    track_id: str | None = None
+    time_start_ms: int | None = None
+    time_end_ms: int | None = None
+    text: str
+    created_at: str | None = None
+
+
+class FocusFragment(BaseModel):
+    """User just tapped a specific span (e.g. an outline chapter) and the
+    next message implicitly targets it. The agent should pull
+    `get_transcript_window` around this range instead of guessing."""
+
+    track_id: str
+    start_ms: int
+    end_ms: int
+    title: str | None = None
+
+
+class UserContext(BaseModel):
+    """Snapshot of on-device state sent with each /chat request.
+
+    `now` and `tz_offset_minutes` let temporal queries ("yesterday",
+    "a week ago") resolve against the user's wall clock, not the
+    server's UTC. `last_played_at` on each track / note is then
+    comparable to `now` for relative-time filtering.
+    """
+
+    current_track_id: str | None = None
+    now: str | None = None  # ISO-8601 with offset, device local time
+    tz_offset_minutes: int | None = None
+    recent_tracks: list[UserContextTrack] = Field(default_factory=list, max_length=20)
+    in_progress: list[UserContextTrack] = Field(default_factory=list, max_length=10)
+    recent_notes: list[UserNote] = Field(default_factory=list, max_length=30)
+    focus: FocusFragment | None = None
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
     lang: Literal["ru", "en"] = "ru"
+    user_context: UserContext | None = None
 
 
 def _check_app_token(token: str | None) -> None:
@@ -84,6 +130,7 @@ async def chat(
                 [m.model_dump() for m in body.messages],
                 lang=body.lang,
                 request_id=request_id,
+                user_context=body.user_context,
             ):
                 yield {"event": ev.type, "data": json.dumps(ev.data, ensure_ascii=False)}
         finally:

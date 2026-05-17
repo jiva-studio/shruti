@@ -11,6 +11,34 @@ export interface ChatTurn {
   readonly content: string
 }
 
+export interface OutlineItemPayload {
+  readonly startMs: number
+  readonly title: string
+}
+
+export interface OutlinePayload {
+  readonly trackId: string
+  readonly items: readonly OutlineItemPayload[]
+}
+
+export type ActionPayload =
+  | {
+      readonly kind: "create_playlist"
+      readonly id: string
+      readonly name: string
+      readonly trackIds: readonly string[]
+      readonly rationale: string
+    }
+  | {
+      readonly kind: "save_note"
+      readonly id: string
+      readonly trackId: string
+      readonly startMs: number
+      readonly endMs: number
+      readonly text: string
+      readonly suggestedCaption: string
+    }
+
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
   | {
@@ -19,6 +47,8 @@ export type ChatStreamEvent =
       readonly durationMs?: number
       readonly resultCount?: number
     }
+  | { readonly type: "action"; readonly payload: ActionPayload }
+  | { readonly type: "outline"; readonly payload: OutlinePayload }
   | {
       readonly type: "done"
       readonly requestId?: string
@@ -32,12 +62,56 @@ export type ChatStreamEvent =
       readonly retryAfter?: number
     }
 
+/* -------------------------------------------------------------------------- */
+/*                               Title generator                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * POST /title — quick LLM-rephrased chat session title (3-5 words).
+ * Called fire-and-forget after the first assistant reply to replace the
+ * crude `deriveTitle(text)` truncation. Returns the trimmed title on
+ * success, or `null` on any failure (HTTP error, network, parse). The
+ * caller MUST treat a null return as "keep the current title".
+ */
+export async function fetchSessionTitle(
+  messages: readonly ChatTurn[],
+  lang: "ru" | "en",
+  opts: { baseUrl?: string; appToken?: string; clientId?: string; signal?: AbortSignal } = {}
+): Promise<string | null> {
+  if (messages.length === 0) return null
+  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
+  const clientId = opts.clientId ?? (await resolveClientId())
+
+  try {
+    const response = await fetch(joinUrl(baseUrl, "/title"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Device-Id": clientId,
+        "X-App-Token": appToken,
+      },
+      body: JSON.stringify({ messages, lang }),
+      signal: opts.signal,
+    })
+    if (!response.ok) return null
+    const body = (await response.json()) as { title?: unknown }
+    const title = typeof body.title === "string" ? body.title.trim() : ""
+    return title.length > 0 ? title : null
+  } catch {
+    return null
+  }
+}
+
 export interface StreamChatOptions {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
   readonly appToken?: string
   /** Override for tests; in production we read from IPreferences. */
   readonly clientId?: string
+  /** Snapshot of recent listening + notes for personalization tools. */
+  readonly userContext?: unknown
 }
 
 /* -------------------------------------------------------------------------- */
@@ -62,25 +136,50 @@ export async function* streamChat(
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
   const clientId = opts.clientId ?? (await resolveClientId())
 
-  let response: Response
-  try {
-    response = await fetch(joinUrl(baseUrl, "/chat"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-        "X-Device-Id": clientId,
-        "X-App-Token": appToken,
-      },
-      body: JSON.stringify({ messages, lang }),
-      signal: opts.signal,
-    })
-  } catch (err) {
-    if ((err as { name?: string })?.name === "AbortError") return
+  // Transient errors (network blip, 502/503/504 during a server redeploy)
+  // get up to 3 retries with exponential backoff. Non-transient (400/401/403/
+  // 429) bail out immediately. SSE streaming itself is NOT retried — once
+  // bytes start flowing we commit to that connection.
+  const url = joinUrl(baseUrl, "/chat")
+  const requestInit: RequestInit = {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "X-Device-Id": clientId,
+      "X-App-Token": appToken,
+    },
+    body: JSON.stringify(
+      opts.userContext !== undefined
+        ? { messages, lang, user_context: opts.userContext }
+        : { messages, lang }
+    ),
+    signal: opts.signal,
+  }
+
+  let response: Response | null = null
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (opts.signal?.aborted) return
+    try {
+      response = await fetch(url, requestInit)
+    } catch (err) {
+      if ((err as { name?: string })?.name === "AbortError") return
+      lastErr = err
+      response = null
+    }
+    if (response && response.ok) break
+    if (response && !isTransientStatus(response.status)) break
+    // back off: 250ms, 750ms, 2250ms
+    const delay = 250 * Math.pow(3, attempt)
+    await sleep(delay, opts.signal)
+  }
+
+  if (!response) {
     yield {
       type: "error",
       code: "network",
-      message: err instanceof Error ? err.message : "Network error",
+      message: lastErr instanceof Error ? lastErr.message : "Network error",
     }
     return
   }
@@ -174,6 +273,29 @@ function joinUrl(base: string, path: string): string {
   return base + path
 }
 
+function isTransientStatus(code: number): boolean {
+  // 502/503/504 cover redeploy downtime; 408 = client/server idle timeout.
+  return code === 408 || code === 502 || code === 503 || code === 504
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve()
+      return
+    }
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true }
+    )
+  })
+}
+
 async function safeReadText(response: Response): Promise<string> {
   try {
     return await response.text()
@@ -263,6 +385,14 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
               ? payload.toolCalls
               : undefined,
       }
+    case "action": {
+      const ap = parseActionPayload(payload)
+      return ap ? { type: "action", payload: ap } : null
+    }
+    case "outline": {
+      const op = parseOutlinePayload(payload)
+      return op ? { type: "outline", payload: op } : null
+    }
     case "error":
       return {
         type: "error",
@@ -278,4 +408,55 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     default:
       return null
   }
+}
+
+function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
+  const trackId = typeof p.track_id === "string" ? p.track_id : null
+  const itemsRaw = Array.isArray(p.items) ? p.items : null
+  if (!trackId || !itemsRaw) return null
+  const items: OutlineItemPayload[] = []
+  for (const it of itemsRaw) {
+    if (it && typeof it === "object") {
+      const obj = it as Record<string, unknown>
+      const startMs = typeof obj.start_ms === "number" ? obj.start_ms : null
+      const title = typeof obj.title === "string" ? obj.title.trim() : ""
+      if (startMs !== null && title) items.push({ startMs, title })
+    }
+  }
+  if (items.length === 0) return null
+  return { trackId, items }
+}
+
+function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
+  const kind = typeof p.kind === "string" ? p.kind : ""
+  const id = typeof p.id === "string" ? p.id : ""
+  if (!kind || !id) return null
+  if (kind === "create_playlist") {
+    const name = typeof p.name === "string" ? p.name : ""
+    const trackIdsRaw = Array.isArray(p.track_ids) ? p.track_ids : []
+    const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
+    if (!name || trackIds.length === 0) return null
+    return {
+      kind: "create_playlist",
+      id,
+      name,
+      trackIds,
+      rationale: typeof p.rationale === "string" ? p.rationale : "",
+    }
+  }
+  if (kind === "save_note") {
+    const trackId = typeof p.track_id === "string" ? p.track_id : ""
+    const text = typeof p.text === "string" ? p.text : ""
+    if (!trackId || !text) return null
+    return {
+      kind: "save_note",
+      id,
+      trackId,
+      startMs: typeof p.start_ms === "number" ? p.start_ms : 0,
+      endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
+      text,
+      suggestedCaption: typeof p.suggested_caption === "string" ? p.suggested_caption : "",
+    }
+  }
+  return null
 }

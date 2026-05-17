@@ -26,12 +26,15 @@
         <ChatMessageList v-if="hasMessages" :messages="messages" />
         <div v-else class="empty-state">
           <img src="/agent.png" class="empty-icon" alt="" aria-hidden="true" />
-          <h2 class="empty-title">{{ $t("chat.emptyStateTitle") }}</h2>
-          <p class="empty-message">{{ $t("chat.emptyState") }}</p>
+          <SuggestionChips
+            :has-current-track="hasCurrentTrack"
+            @pick="onPickSuggestion"
+          />
+          <RecentSessions :sessions="sessions" @pick="onPickSession" />
         </div>
       </div>
     </IonContent>
-    <ChatInputBar :sending="sending" @send="onSend" />
+    <ChatInputBar ref="inputBarRef" :sending="sending" @send="onSend" />
     <ChatSessionList
       :open="isHistoryOpen"
       :sessions="filteredSessions"
@@ -47,14 +50,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
 import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
 import ChatSessionList from "./components/ChatSessionList.vue"
+import RecentSessions from "./components/RecentSessions.vue"
+import SuggestionChips from "./components/SuggestionChips.vue"
 import { useChatController } from "./ChatView.controller.js"
+
+const inputBarRef = ref<InstanceType<typeof ChatInputBar> | null>(null)
 
 const { t } = useI18n()
 
@@ -65,6 +72,7 @@ const {
   sending,
   isHistoryOpen,
   hasMessages,
+  hasCurrentTrack,
   contentRef,
   searchQuery,
   filteredSessions,
@@ -76,6 +84,10 @@ const {
   onDeleteSession,
   onDeleteAllSessions,
 } = useChatController()
+
+function onPickSuggestion(text: string): void {
+  inputBarRef.value?.setText(text)
+}
 
 const headerTitle = computed<string>(() => {
   const active = sessions.value.find((s) => s.id === activeSessionId.value)
@@ -180,19 +192,23 @@ const headerTitle = computed<string>(() => {
  * title + message land in the geometric middle of the chat viewport,
  * regardless of header / input-bar padding. */
 .empty-state {
-  flex: 1;
+  /* Fill the full IonContent so `justify-content:center` actually has
+   * vertical space to push the contents into — without the explicit
+   * height the column hugs its children at the top. */
+  flex: 1 1 auto;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 24px 16px;
   text-align: center;
 }
 
 .empty-icon {
   width: 60vw;
   height: auto;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   opacity: 0.95;
 }
 

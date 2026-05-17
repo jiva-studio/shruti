@@ -70,6 +70,22 @@ function onKeydown(event: KeyboardEvent): void {
   event.preventDefault()
   if (canSend.value) onSendClick()
 }
+
+/** Programmatically fill the input — used by SuggestionChips to seed a
+ *  prompt onto the empty composer. Focuses + grows the textarea so the
+ *  user can tweak before sending. */
+function setText(next: string): void {
+  text.value = next
+  void nextTick(() => {
+    resize()
+    textareaRef.value?.focus()
+    // Move caret to end so further typing appends.
+    const el = textareaRef.value
+    if (el) el.setSelectionRange(el.value.length, el.value.length)
+  })
+}
+
+defineExpose({ setText })
 </script>
 
 <style scoped>

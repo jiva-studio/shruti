@@ -3,6 +3,14 @@
 Every LLM call is streamed: text deltas are yielded immediately so the
 client gets a typing-effect render, while tool_call fragments are buffered
 and dispatched only once the stream completes. Up to MAX_TOOL_TURNS rounds.
+
+AgentEvent types:
+    - 'delta'   : text fragment of assistant response
+    - 'tool'    : tool call dispatched ({name, duration_ms, result_count})
+    - 'action'  : client-side action proposed by a tool ({kind, id, ...payload})
+    - 'outline' : track outline payload ({track_id, items: [...]})
+    - 'done'    : final summary
+    - 'error'   : error payload
 """
 
 from __future__ import annotations
@@ -11,11 +19,11 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 from lectorium_chat.agent import llm
 from lectorium_chat.agent.prompts import SYSTEM_PROMPT
-from lectorium_chat.agent.tools import TOOL_SCHEMAS, TOOLS
+from lectorium_chat.agent.tools import TOOL_SCHEMAS, TOOLS, build_personalized_tools
 from lectorium_chat.config import get_settings
 from lectorium_chat.observability.logging import get_logger
 
@@ -47,7 +55,11 @@ _LANG_EXAMPLE = {
 }
 
 
-def _make_messages(history: list[dict[str, Any]], lang: str) -> list[dict[str, Any]]:
+def _make_messages(
+    history: list[dict[str, Any]],
+    lang: str,
+    user_context: Any = None,
+) -> list[dict[str, Any]]:
     lang_name = _LANG_NAME.get(lang, lang)
     lang_directive = (
         "\n\n"
@@ -62,22 +74,93 @@ def _make_messages(history: list[dict[str, Any]], lang: str) -> list[dict[str, A
         f"{lang_name}-only.\n\n"
         f"{_LANG_EXAMPLE.get(lang, '')}\n"
     )
-    sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive}
+    ctx_directive = _format_user_context(user_context)
+    sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
     # Strip any non-standard fields from history (defensive)
     clean = [{"role": m["role"], "content": m["content"]} for m in history
              if m.get("role") in ("user", "assistant") and m.get("content")]
     return [sys, *clean]
 
 
+def _format_user_context(uc: Any) -> str:
+    """Render the small temporal anchors into the system prompt.
+
+    Big lists (recent_tracks/notes) stay accessible only via personalize
+    tools — pasting them into the prompt would explode the token bill on
+    every turn. But `now` and `current_track_id` are tiny and load-bearing
+    for relative-time and "this lecture" phrases — those go inline.
+    """
+    if uc is None:
+        return ""
+    now = getattr(uc, "now", None)
+    tz = getattr(uc, "tz_offset_minutes", None)
+    cur = getattr(uc, "current_track_id", None)
+    recent = getattr(uc, "recent_tracks", None) or []
+    in_progress = getattr(uc, "in_progress", None) or []
+    notes = getattr(uc, "recent_notes", None) or []
+    focus = getattr(uc, "focus", None)
+    lines: list[str] = []
+    if now:
+        lines.append(f"now: {now}")
+    if tz is not None:
+        lines.append(f"tz_offset_minutes: {tz}")
+    if cur:
+        lines.append(f"current_track_id: {cur}")
+    if focus is not None:
+        ftitle = getattr(focus, "title", None) or ""
+        lines.append(
+            f"focus: track_id={getattr(focus, 'track_id', '')} "
+            f"start_ms={getattr(focus, 'start_ms', 0)} "
+            f"end_ms={getattr(focus, 'end_ms', 0)} "
+            f"title={ftitle!r}"
+        )
+    lines.append(
+        f"history_size: recent={len(recent)} in_progress={len(in_progress)} notes={len(notes)}"
+    )
+    if not lines:
+        return ""
+    return (
+        "\n\n"
+        "═══════════════════════════════════════════════════════════════════════\n"
+        "USER CONTEXT (anchors for relative-time and 'this lecture' phrases)\n"
+        "═══════════════════════════════════════════════════════════════════════\n\n"
+        + "\n".join(lines)
+        + "\n\n"
+        "Use `now` to resolve «вчера / на этой неделе / a week ago» queries\n"
+        "against `last_played_at` returned by personalize tools.\n\n"
+        "When the user says «эту / текущую / только что слушал / this / current»\n"
+        "lecture OR doesn't name any lecture — and `current_track_id` is set —\n"
+        "use it directly as the track_id for `get_track_outline` /\n"
+        "`get_transcript_window` etc. NEVER outline a random track when the\n"
+        "user means 'this one' — that's the worst kind of hallucination here.\n"
+        "If `current_track_id` is NOT set and the user didn't name a track,\n"
+        "ask which lecture they mean instead of guessing.\n\n"
+        "If `focus` is set, the user has tapped a specific span (an outline\n"
+        "chapter or a citation) and the request implicitly targets it.\n"
+        "Always start with `get_transcript_window(track_id=focus.track_id,\n"
+        "around_ms=(focus.start_ms + focus.end_ms)/2,\n"
+        "window_seconds=ceil((focus.end_ms - focus.start_ms) / 1000) + 30)`\n"
+        "and base your retelling on those chunks. Cite individual lines\n"
+        "with [cite:track_id@start_ms-end_ms|caption]. Do NOT call\n"
+        "get_track_outline — the user already saw it.\n"
+    )
+
+
 async def run_agent(
     history: list[dict[str, Any]],
     lang: str = "ru",
     request_id: str | None = None,
+    user_context: Any = None,
 ) -> AsyncIterator[AgentEvent]:
-    """Run the agent and yield AgentEvents."""
+    """Run the agent and yield AgentEvents.
+
+    `user_context` is a pydantic `UserContext` (or None). It is injected into
+    personalize tools via per-request wrappers (see `build_personalized_tools`).
+    """
     settings = get_settings()
     rid = request_id or uuid.uuid4().hex[:8]
-    messages = _make_messages(history, lang)
+    messages = _make_messages(history, lang, user_context)
+    tools = build_personalized_tools(TOOLS, user_context)
 
     total_input_tokens = 0
     total_output_tokens = 0
@@ -195,7 +278,8 @@ async def run_agent(
                 # lang=null explicitly or lang="en".
                 if name in ("search_transcripts", "list_tracks") and "lang" not in args:
                     args["lang"] = lang
-                fn = TOOLS.get(name)
+                fn = tools.get(name)
+                side_events: list[AgentEvent] = []
                 if fn is None:
                     result: Any = {"error": f"unknown tool {name!r}"}
                     result_count = 0
@@ -212,6 +296,16 @@ async def run_agent(
                         result = {"error": str(exc)}
                         result_count = 0
                     else:
+                        # Tools may emit side events (action/outline) by
+                        # returning a dict with `_side_events: [{type, data}]`.
+                        # We strip the key from the LLM-visible result and
+                        # yield each event before the canonical `tool` event.
+                        if isinstance(result, dict) and "_side_events" in result:
+                            raw = result.pop("_side_events") or []
+                            for se in raw:
+                                if isinstance(se, dict) and "type" in se and "data" in se:
+                                    side_events.append(AgentEvent(
+                                        type=se["type"], data=se["data"]))
                         result_count = len(result) if isinstance(result, list) else 1
                     duration_ms = int((time.monotonic() - t1) * 1000)
                     log.info(
@@ -221,8 +315,11 @@ async def run_agent(
                         args=args,
                         duration_ms=duration_ms,
                         result_count=result_count,
+                        side_events=len(side_events),
                     )
 
+                for se in side_events:
+                    yield se
                 yield AgentEvent(
                     type="tool",
                     data={
