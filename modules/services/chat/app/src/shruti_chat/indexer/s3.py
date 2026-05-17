@@ -119,3 +119,56 @@ async def fetch_transcript(key: str, settings: Settings | None = None) -> dict:
         r = await client.get(url)
         r.raise_for_status()
         return json.loads(r.text)
+
+
+# -----------------------------------------------------------------------------
+# Internal-artifact helpers (chat-agent writes outlines into `artifacts/`).
+# Unlike `public/`, this prefix isn't anonymously readable — go via the IAM
+# client (boto3) for both HEAD and GET. PUT requires `s3:PutObject` on
+# `artifacts/tracks/*/outlines/*`.
+# -----------------------------------------------------------------------------
+
+
+def _outline_key(track_id: str, lang: str) -> str:
+    return f"artifacts/tracks/{track_id}/outlines/{lang}.json"
+
+
+def outline_exists_sync(track_id: str, lang: str, settings: Settings | None = None) -> bool:
+    """HEAD artifacts/tracks/.../outlines/{lang}.json (sync — call from worker)."""
+    s = settings or get_settings()
+    client = _make_s3_client(s)
+    key = _outline_key(track_id, lang)
+    try:
+        client.head_object(Bucket=s.s3_bucket, Key=key)
+        return True
+    except Exception as exc:
+        code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}) or {}
+        # botocore raises ClientError; treat 404 as absent, anything else as
+        # an error we surface to the caller (transient → retry-able).
+        status = getattr(exc, "response", {}).get("ResponseMetadata", {}).get("HTTPStatusCode") \
+            if hasattr(exc, "response") else None
+        if status == 404 or code.get("Code") in ("404", "NoSuchKey", "NotFound"):
+            return False
+        raise
+
+
+def get_outline_sync(track_id: str, lang: str, settings: Settings | None = None) -> dict:
+    """GET artifacts/tracks/.../outlines/{lang}.json → parsed JSON."""
+    s = settings or get_settings()
+    client = _make_s3_client(s)
+    key = _outline_key(track_id, lang)
+    obj = client.get_object(Bucket=s.s3_bucket, Key=key)
+    return json.loads(obj["Body"].read())
+
+
+def put_outline_sync(track_id: str, lang: str, payload: dict, settings: Settings | None = None) -> None:
+    """PUT artifacts/tracks/.../outlines/{lang}.json (overwrite)."""
+    s = settings or get_settings()
+    client = _make_s3_client(s)
+    key = _outline_key(track_id, lang)
+    client.put_object(
+        Bucket=s.s3_bucket,
+        Key=key,
+        Body=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
+    )

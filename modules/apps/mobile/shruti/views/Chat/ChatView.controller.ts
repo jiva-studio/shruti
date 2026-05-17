@@ -1,17 +1,27 @@
-import { computed, nextTick, onMounted, ref, watch, type Ref } from "vue"
+import {
+  computed,
+  nextTick,
+  onMounted,
+  ref,
+  watch,
+  type ComputedRef,
+  type Ref,
+} from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
 import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores/useChatStore.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 
 export interface ChatControllerReturn {
-  messages: Ref<ChatMessage[]>
-  sessions: Ref<ChatSession[]>
-  activeSessionId: Ref<string | null>
-  sending: Ref<boolean>
+  messages: ComputedRef<ChatMessage[]>
+  sessions: ComputedRef<ChatSession[]>
+  activeSessionId: ComputedRef<string | null>
+  sending: ComputedRef<boolean>
   isHistoryOpen: Ref<boolean>
-  hasMessages: Ref<boolean>
+  hasMessages: ComputedRef<boolean>
+  hasCurrentTrack: ComputedRef<boolean>
   contentRef: Ref<HTMLElement | null>
   searchQuery: Ref<string>
   filteredSessions: Ref<ChatSession[]>
@@ -32,6 +42,7 @@ export interface ChatControllerReturn {
  */
 export function useChatController(): ChatControllerReturn {
   const store = useChatStore()
+  const player = usePlayerStore()
   const route = useRoute()
   const router = useRouter()
   const { t } = useI18n()
@@ -43,6 +54,8 @@ export function useChatController(): ChatControllerReturn {
   const contentRef = ref<HTMLElement | null>(null)
 
   const hasMessages = computed(() => store.messages.length > 0)
+  /** Drives the "Recap what I just listened to" suggestion chip. */
+  const hasCurrentTrack = computed(() => player.open && !!player.trackId)
 
   const searchQuery = ref<string>("")
   // Filter runs in JS against `store.sessions` (capped at 200) so it
@@ -194,12 +207,13 @@ export function useChatController(): ChatControllerReturn {
   })
 
   return {
-    messages: computed(() => [...store.messages]) as unknown as Ref<ChatMessage[]>,
-    sessions: computed(() => [...store.sessions]) as unknown as Ref<ChatSession[]>,
-    activeSessionId: computed(() => store.activeSessionId) as unknown as Ref<string | null>,
-    sending: computed(() => store.sending) as unknown as Ref<boolean>,
+    messages: computed(() => [...store.messages]),
+    sessions: computed(() => [...store.sessions]),
+    activeSessionId: computed(() => store.activeSessionId),
+    sending: computed(() => store.sending),
     isHistoryOpen,
     hasMessages,
+    hasCurrentTrack,
     contentRef,
     searchQuery,
     filteredSessions,
