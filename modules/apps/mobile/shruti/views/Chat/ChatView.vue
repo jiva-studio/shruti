@@ -34,11 +34,14 @@
     <ChatInputBar :sending="sending" @send="onSend" />
     <ChatSessionList
       :open="isHistoryOpen"
-      :sessions="sessions"
+      :sessions="filteredSessions"
       :active-session-id="activeSessionId"
+      :search-query="searchQuery"
       @update:open="(v) => (v ? null : onCloseHistory())"
+      @update:search-query="searchQuery = $event"
       @pick="onPickSession"
       @delete="onDeleteSession"
+      @delete-all="onDeleteAllSessions"
     />
   </IonPage>
 </template>
@@ -63,12 +66,15 @@ const {
   isHistoryOpen,
   hasMessages,
   contentRef,
+  searchQuery,
+  filteredSessions,
   onSend,
   onNewSession,
   onOpenHistory,
   onCloseHistory,
   onPickSession,
   onDeleteSession,
+  onDeleteAllSessions,
 } = useChatController()
 
 const headerTitle = computed<string>(() => {

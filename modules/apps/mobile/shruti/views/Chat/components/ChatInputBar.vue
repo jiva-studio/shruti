@@ -92,7 +92,10 @@ function onKeydown(event: KeyboardEvent): void {
   position: relative;
   display: flex;
   align-items: flex-end;
-  background: #ffffff;
+  /* Theme-aware surface — cream in light, espresso in dark.
+   * Was hardcoded #ffffff which made the capsule a stark white slab in
+   * dark mode and washed out the typed text. */
+  background: var(--ion-card-background);
   border: 1px solid var(--ion-color-step-200);
   border-radius: 24px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);

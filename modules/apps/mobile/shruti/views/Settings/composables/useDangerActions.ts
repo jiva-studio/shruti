@@ -1,6 +1,7 @@
 import { alertController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import type { Shruti } from "@shruti/shruti.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -36,6 +37,7 @@ export function useDangerActions(app: Shruti): UseDangerActionsReturn {
   const notes = useNotesStore()
   const downloads = useDownloadStore()
   const searchFilters = useSearchFiltersStore()
+  const chat = useChatStore()
 
   async function onClearCache(): Promise<void> {
     await app.filesStorage.clearAll()
@@ -64,6 +66,10 @@ export function useDangerActions(app: Shruti): UseDangerActionsReturn {
     await repos.notes.clearAll()
     await repos.playlistItems.clearAll()
     await repos.mediaItems.clearAll()
+    // Chat sessions + messages live in the user DB; `chat.clearAll()`
+    // also aborts any in-flight SSE stream and resets the in-memory
+    // store, so no separate refresh is needed below.
+    await chat.clearAll()
     await app.preferences.remove("search.filters.v3")
     // Legacy key from before #411; harmless if it doesn't exist.
     await app.preferences.remove("search.filters.v2")
@@ -78,6 +84,7 @@ export function useDangerActions(app: Shruti): UseDangerActionsReturn {
     //      access.
     //    - searchFilters: clear in-memory selection without re-writing
     //      preferences (we just removed the key on disk).
+    //    - chat: already reset by chat.clearAll() above.
     await Promise.all([playlist.refresh(), notes.refresh()])
     downloads.reset()
     searchFilters.reset()
