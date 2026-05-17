@@ -32,6 +32,7 @@
           <img src="/agent.png" class="empty-icon" alt="" aria-hidden="true" />
           <SuggestionChips
             :has-current-track="hasCurrentTrack"
+            :has-recent-listening="hasRecentListening"
             @pick="onPickSuggestion"
           />
           <RecentSessions :sessions="sessions" @pick="onPickSession" />
@@ -77,6 +78,7 @@ const {
   isHistoryOpen,
   hasMessages,
   hasCurrentTrack,
+  hasRecentListening,
   contentRef,
   searchQuery,
   filteredSessions,
