@@ -157,26 +157,24 @@ async def search_my_notes(
 async def recommend_next(
     *,
     user_context: UserContext | None = None,
-    based_on_track_id: str | None = None,
     lang: str | None = None,
     top_k: int = 6,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     """ANN from a centroid of the user's recent listening.
 
-    If `based_on_track_id` is given, use chunks from that track only.
-    Otherwise take centroid of last 5 recent tracks' first chunks.
+    Pure user-history call: takes the centroid of the first chunk of
+    each of the last 5 `recent_tracks` and ANN-searches the rest of the
+    corpus, excluding those seed tracks.
+
+    For "recommend something like THIS lecture" (no user context, or a
+    specific anchor), use `find_similar_chunks(track_id=...)` instead.
     """
-    if user_context is None and not based_on_track_id:
+    if user_context is None:
         return _ok_or_empty([], False)
     embedder = get_embedder()
     pool = get_pool()
 
-    # Decide seed track_ids.
-    seed_ids: list[str] = []
-    if based_on_track_id:
-        seed_ids = [based_on_track_id]
-    elif user_context is not None:
-        seed_ids = [t.track_id for t in user_context.recent_tracks[:5]]
+    seed_ids = [t.track_id for t in user_context.recent_tracks[:5]]
     if not seed_ids:
         return []
 
@@ -253,14 +251,15 @@ TOOL_REGISTRY = [
         "fn": recommend_next,
         "personalized": True,
         "description": (
-            "Recommend tracks similar to what the user recently listened to. "
-            "Pass `based_on_track_id` to anchor on one specific track; "
-            "otherwise uses centroid of last 5 recent tracks."
+            "Recommend tracks similar to what the user recently listened to "
+            "(centroid of last 5 recent_tracks). Requires user_context with "
+            "non-empty recent listening. For 'recommend something like THIS "
+            "lecture' (no user history needed) use `find_similar_chunks` "
+            "with just `track_id`."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "based_on_track_id": {"type": "string"},
                 "lang": {"type": "string", "enum": ["ru", "en"]},
                 "top_k": {"type": "integer", "default": 6},
             },
