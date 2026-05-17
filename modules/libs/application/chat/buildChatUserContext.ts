@@ -32,9 +32,11 @@ export interface FocusFragmentPayload {
   readonly title?: string
 }
 
-/** `now` is ISO-8601 with the device's UTC offset (e.g. ".../+03:00").
- *  The offset suffix carries the timezone — no separate
- *  `tz_offset_minutes` field needed. */
+/** Every timestamp in this payload (`now`, `recent_tracks[].last_played_at`,
+ *  `recent_notes[].created_at`) is ISO-8601 with the device's UTC offset
+ *  — e.g. `"2026-05-17T19:42:00+03:00"`. Uniform format so the LLM can
+ *  compare them without inferring a separate timezone field. The offset
+ *  suffix replaces what would otherwise be a `tz_offset_minutes` field. */
 export interface UserContextPayload {
   readonly current_track_id: string | null
   readonly now: string
@@ -95,7 +97,7 @@ export async function buildChatUserContext(
       track_id: r.trackId,
       position_ms: positionMs,
       percent,
-      last_played_at: new Date(r.endedAtMs).toISOString(),
+      last_played_at: localIsoFromMs(r.endedAtMs),
     }
   })
 
@@ -104,7 +106,7 @@ export async function buildChatUserContext(
     time_start_ms: Math.max(0, Math.floor(n.timeStart)),
     time_end_ms: Math.max(0, Math.floor(n.timeEnd)),
     text: n.text,
-    created_at: new Date(n.createdAt).toISOString(),
+    created_at: localIsoFromMs(n.createdAt),
   }))
 
   return {
@@ -120,10 +122,12 @@ export async function buildChatUserContext(
  * ISO-8601 with the device's UTC offset (e.g. "2026-05-17T19:42:00+03:00").
  * `Date.toISOString()` always emits Z (UTC) and loses the offset, which
  * is exactly what we need to preserve so the LLM can reason about
- * "yesterday" in the user's local wall-clock.
+ * "yesterday" in the user's local wall-clock. Every timestamp in
+ * UserContextPayload (`now`, `last_played_at`, `created_at`) goes
+ * through this formatter — single uniform shape on the wire.
  */
-function localIsoNow(): string {
-  const d = new Date()
+function localIsoFromMs(ms: number): string {
+  const d = new Date(ms)
   const offMin = -d.getTimezoneOffset() // sign-flipped: east-of-UTC positive
   const sign = offMin >= 0 ? "+" : "-"
   const abs = Math.abs(offMin)
@@ -135,4 +139,8 @@ function localIsoNow(): string {
     `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
     `${sign}${offH}:${offM}`
   )
+}
+
+function localIsoNow(): string {
+  return localIsoFromMs(Date.now())
 }
