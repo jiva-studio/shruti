@@ -6,14 +6,15 @@ import type {
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 
-/** Server wire-format for one track in the `recent_tracks` / `in_progress`
- *  arrays. Mirrors `api/chat.UserContextTrack` server-side. */
+/** Server wire-format for one track in `recent_tracks`. Mirrors
+ *  `api/chat.UserContextTrack` server-side. `percent` is the source of
+ *  truth for progress — "completed" (percent >= 0.95) and "in-progress"
+ *  (0.05 < percent < 0.95) are derived server-side, no separate flags. */
 export interface UserContextTrackPayload {
   readonly track_id: string
   readonly position_ms: number | null
   readonly percent: number | null
   readonly last_played_at: string | null
-  readonly completed: boolean
 }
 
 export interface UserNotePayload {
@@ -31,18 +32,18 @@ export interface FocusFragmentPayload {
   readonly title?: string
 }
 
+/** `now` is ISO-8601 with the device's UTC offset (e.g. ".../+03:00").
+ *  The offset suffix carries the timezone — no separate
+ *  `tz_offset_minutes` field needed. */
 export interface UserContextPayload {
   readonly current_track_id: string | null
   readonly now: string
-  readonly tz_offset_minutes: number
   readonly recent_tracks: readonly UserContextTrackPayload[]
-  readonly in_progress: readonly UserContextTrackPayload[]
   readonly recent_notes: readonly UserNotePayload[]
   readonly focus?: FocusFragmentPayload
 }
 
 const RECENT_LIMIT = 20
-const IN_PROGRESS_LIMIT = 10
 const NOTES_LIMIT = 30
 
 export interface BuildChatUserContextInput {
@@ -95,13 +96,8 @@ export async function buildChatUserContext(
       position_ms: positionMs,
       percent,
       last_played_at: new Date(r.endedAtMs).toISOString(),
-      completed: percent !== null && percent >= 0.95,
     }
   })
-
-  const inProgress = recent
-    .filter((t) => t.percent !== null && t.percent > 0.05 && t.percent < 0.95)
-    .slice(0, IN_PROGRESS_LIMIT)
 
   const recentNotes: UserNotePayload[] = notes.map((n) => ({
     track_id: n.trackId,
@@ -114,9 +110,7 @@ export async function buildChatUserContext(
   return {
     current_track_id: input.currentTrackId,
     now: localIsoNow(),
-    tz_offset_minutes: new Date().getTimezoneOffset(),
     recent_tracks: recent,
-    in_progress: inProgress,
     recent_notes: recentNotes,
     ...(input.focus ? { focus: input.focus } : {}),
   }
