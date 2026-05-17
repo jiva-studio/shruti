@@ -440,6 +440,42 @@ def _list_tracks_sync(
         return out
 
 
+def _filter_existing_track_ids_sync(track_ids: list[str]) -> list[str]:
+    if not track_ids:
+        return []
+    placeholders = ",".join("?" * len(track_ids))
+    with _catalog_conn() as conn:
+        rows = conn.execute(
+            f"SELECT id FROM tracks WHERE hidden = 0 AND id IN ({placeholders})",
+            list(track_ids),
+        ).fetchall()
+    return [r["id"] for r in rows]
+
+
+def _resolve_transcript_path_sync(
+    track_id: str, requested_lang: str,
+) -> tuple[str | None, str]:
+    with _catalog_conn() as conn:
+        row = conn.execute(
+            "SELECT transcript_path FROM track_variants "
+            "WHERE track_id = ? AND language = ? "
+            "  AND transcript_path IS NOT NULL AND transcript_path <> ''",
+            (track_id, requested_lang),
+        ).fetchone()
+        if row and row["transcript_path"]:
+            return row["transcript_path"], requested_lang
+        row = conn.execute(
+            "SELECT language, transcript_path FROM track_variants "
+            "WHERE track_id = ? "
+            "  AND transcript_path IS NOT NULL AND transcript_path <> '' "
+            "LIMIT 1",
+            (track_id,),
+        ).fetchone()
+        if row and row["transcript_path"]:
+            return row["transcript_path"], str(row["language"])
+    return None, requested_lang
+
+
 def _resolve_sync(
     kind: ResolveKind,
     text: str,
@@ -464,6 +500,16 @@ def _resolve_sync(
 class SqliteCatalogRepository:
     async def get_track(self, track_id: str, *, lang: str) -> Track | None:
         return await asyncio.to_thread(_get_track_sync, track_id, lang)
+
+    async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:
+        return await asyncio.to_thread(_filter_existing_track_ids_sync, track_ids)
+
+    async def resolve_transcript_path(
+        self, track_id: str, *, requested_lang: str,
+    ) -> tuple[str | None, str]:
+        return await asyncio.to_thread(
+            _resolve_transcript_path_sync, track_id, requested_lang,
+        )
 
     async def list_tracks(
         self,

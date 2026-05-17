@@ -1,16 +1,15 @@
-"""get_track_outline — lazy outline generation + S3 cache.
+"""get_track_outline — lazy outline generation + cache.
 
 Flow per (track_id, lang):
-1. HEAD artifacts/tracks/{id}/outlines/{lang}.json  → if 200, GET and return.
-2. Otherwise: fetch transcript from public/, generate via gemini-flash,
-   PUT to S3, return.
+1. Catalog → resolve transcript path + effective lang (lang fallback).
+2. OutlineCache → HEAD; if hit, GET and return.
+3. TranscriptStorage → fetch transcript; LLM → generate outline.
+4. OutlineCache → PUT (conditional); on race, refetch.
 
-Outline is an INTERNAL artifact — the mobile app does not read it from CDN.
-The chat-agent reads (and writes) it; payload is delivered to the client
-inline via SSE event `outline` plus a `[outline:track_id]` marker emitted
-by the LLM.
-
-Returns: list of `{start_ms, title}` items.
+Outline is an INTERNAL artifact — the mobile app does not read it from
+CDN. The chat-agent reads and writes it; payload is delivered to the
+client inline via the SSE `outline` event plus an `[outline:track_id]`
+marker emitted by the LLM.
 """
 
 from __future__ import annotations
@@ -23,15 +22,10 @@ from typing import Any, Callable
 
 from shruti_chat.agent import llm
 from shruti_chat.config import get_settings
-from shruti_chat.indexer.s3 import (
-    OutlineAlreadyExists,
-    fetch_transcript,
-    get_outline_sync,
-    outline_exists_sync,
-    put_outline_sync,
-)
+from shruti_chat.domain.ports.catalog_repository import CatalogRepository
+from shruti_chat.domain.ports.outline_cache import OutlineCache, OutlineCacheConflict
+from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
 from shruti_chat.observability.logging import get_logger
-from shruti_chat.agent.tools._sqlite import catalog_conn
 
 log = get_logger(__name__)
 
@@ -45,12 +39,12 @@ def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
 
 # Per-(track_id, lang) async locks. Two concurrent /chat requests in the
 # same worker process that both ask for an outline of the same track will
-# now serialize through this lock — the second one re-HEADs S3 inside the
+# serialize through this lock — the second one re-HEADs cache inside the
 # critical section and reads the freshly-written artifact rather than
 # paying for a redundant gemini-flash call.
 #
 # Cross-process races (two workers, two pods) are caught by the
-# conditional PUT below (If-None-Match: *).
+# conditional PUT below (`if_none_match=True`).
 _OUTLINE_LOCKS: defaultdict[tuple[str, str], asyncio.Lock] = defaultdict(
     asyncio.Lock
 )
@@ -124,7 +118,6 @@ def _strip_json_fence(s: str) -> str:
     t = s.strip()
     if t.startswith("```"):
         t = t.lstrip("`")
-        # leading 'json' or other lang tag, then \n
         if t.lower().startswith("json"):
             t = t[4:]
         t = t.lstrip("\n")
@@ -155,54 +148,19 @@ def _items_from_llm_json(raw: str) -> list[dict[str, Any]]:
     return out
 
 
-def _resolve_transcript_sync(
-    track_id: str, requested_lang: str
-) -> tuple[str | None, str]:
-    """Pick the best available transcript for a track.
-
-    Returns `(transcript_path, effective_lang)`. Tries the requested
-    language first; if the track has no transcript in that language,
-    falls back to ANY language that does have one (English lecture
-    asked for in a Russian session, etc.) — better than 'unavailable'
-    when an outline can still be produced from an alternate variant.
-
-    `(None, requested_lang)` when the track has no transcripts at all.
-    """
-    with catalog_conn() as conn:
-        # Preferred language first.
-        row = conn.execute(
-            "SELECT transcript_path FROM track_variants "
-            "WHERE track_id = ? AND language = ? "
-            "  AND transcript_path IS NOT NULL AND transcript_path <> ''",
-            (track_id, requested_lang),
-        ).fetchone()
-        if row and row["transcript_path"]:
-            return row["transcript_path"], requested_lang
-        # Fall back to any transcript the catalog has.
-        row = conn.execute(
-            "SELECT language, transcript_path FROM track_variants "
-            "WHERE track_id = ? "
-            "  AND transcript_path IS NOT NULL AND transcript_path <> '' "
-            "LIMIT 1",
-            (track_id,),
-        ).fetchone()
-        if row and row["transcript_path"]:
-            return row["transcript_path"], str(row["language"])
-    return None, requested_lang
-
-
 async def _generate_outline(
     track_id: str,
     transcript_path: str,
     effective_lang: str,
-    settings_=None,
+    transcript_storage: TranscriptStorage,
 ) -> dict[str, Any]:
     """Run the LLM on a resolved transcript. Caller passes the
     transcript path + the language of THAT transcript (which may differ
-    from the originally requested lang — see `_resolve_transcript_sync`)
-    so the outline prompt is paired with the right language."""
-    s = settings_ or get_settings()
-    transcript = await fetch_transcript(transcript_path, s)
+    from the originally requested lang — see
+    CatalogRepository.resolve_transcript_path) so the outline prompt is
+    paired with the right language."""
+    s = get_settings()
+    transcript = await transcript_storage.fetch(transcript_path)
     user_prompt = _build_user_prompt(transcript)
 
     resp = await llm.acompletion(
@@ -226,11 +184,34 @@ async def _generate_outline(
     }
 
 
+async def _cache_get_silent(
+    cache: OutlineCache, track_id: str, lang: str, where: str,
+) -> dict[str, Any] | None:
+    try:
+        return await cache.get(track_id, lang)
+    except Exception as exc:
+        log.warning(where, track_id=track_id, lang=lang, error=str(exc))
+        return None
+
+
+async def _cache_head_silent(
+    cache: OutlineCache, track_id: str, lang: str, where: str,
+) -> bool:
+    try:
+        return await cache.head(track_id, lang)
+    except Exception as exc:
+        log.warning(where, track_id=track_id, lang=lang, error=str(exc))
+        return False
+
+
 async def get_track_outline(
     track_id: str,
     lang: str = "ru",
     *,
     yield_event: YieldEvent = _noop_yield,
+    catalog_repo: CatalogRepository,
+    transcript_storage: TranscriptStorage,
+    outline_cache: OutlineCache,
 ) -> dict[str, Any]:
     """Return outline items + emit `outline` side-event for the client.
 
@@ -241,14 +222,10 @@ async def get_track_outline(
     effective transcript language so subsequent requests in either
     language land on the same artifact.
     """
-    s = get_settings()
-
-    # 1. Resolve which transcript we can actually read. Done first so the
-    # rest of the pipeline (HEAD cache key, LLM prompt language, S3 PUT
-    # key) all use the same effective language. Empty result = the track
-    # has no transcripts at all → unambiguous failure.
-    transcript_path, effective_lang = await asyncio.to_thread(
-        _resolve_transcript_sync, track_id, lang
+    # 1. Resolve which transcript we can actually read. Empty result =
+    # the track has no transcripts at all → unambiguous failure.
+    transcript_path, effective_lang = await catalog_repo.resolve_transcript_path(
+        track_id, requested_lang=lang,
     )
     if not transcript_path:
         return {
@@ -257,61 +234,31 @@ async def get_track_outline(
             "lang": lang,
         }
 
-    # 2. Warm path — S3 HEAD/GET under the effective lang's cache key.
-    try:
-        exists = await asyncio.to_thread(
-            outline_exists_sync, track_id, effective_lang, s
-        )
-    except Exception as exc:
-        log.warning(
-            "outline_head_failed",
-            track_id=track_id, lang=effective_lang, error=str(exc),
-        )
-        exists = False
-
+    # 2. Warm path — cache HEAD/GET under the effective lang's key.
     payload: dict[str, Any] | None = None
-    if exists:
-        try:
-            payload = await asyncio.to_thread(
-                get_outline_sync, track_id, effective_lang, s
-            )
-        except Exception as exc:
-            log.warning(
-                "outline_get_failed",
-                track_id=track_id, lang=effective_lang, error=str(exc),
-            )
-            payload = None
+    if await _cache_head_silent(
+        outline_cache, track_id, effective_lang, "outline_head_failed",
+    ):
+        payload = await _cache_get_silent(
+            outline_cache, track_id, effective_lang, "outline_get_failed",
+        )
 
     # 3. Cold path — generate + persist.
     if payload is None:
         async with _OUTLINE_LOCKS[(track_id, effective_lang)]:
-            # Re-check inside the lock — another coroutine in this process
-            # may have just written it while we were queued.
-            try:
-                exists_after_lock = await asyncio.to_thread(
-                    outline_exists_sync, track_id, effective_lang, s,
+            if await _cache_head_silent(
+                outline_cache, track_id, effective_lang,
+                "outline_head_failed_in_lock",
+            ):
+                payload = await _cache_get_silent(
+                    outline_cache, track_id, effective_lang,
+                    "outline_get_failed_in_lock",
                 )
-            except Exception as exc:
-                log.warning(
-                    "outline_head_failed_in_lock",
-                    track_id=track_id, lang=effective_lang, error=str(exc),
-                )
-                exists_after_lock = False
-            if exists_after_lock:
-                try:
-                    payload = await asyncio.to_thread(
-                        get_outline_sync, track_id, effective_lang, s
-                    )
-                except Exception as exc:
-                    log.warning(
-                        "outline_get_failed_in_lock",
-                        track_id=track_id, lang=effective_lang, error=str(exc),
-                    )
 
             if payload is None:
                 try:
                     payload = await _generate_outline(
-                        track_id, transcript_path, effective_lang, settings_=s
+                        track_id, transcript_path, effective_lang, transcript_storage,
                     )
                 except RuntimeError as exc:
                     return {
@@ -323,24 +270,20 @@ async def get_track_outline(
                 # (different pod / process) wrote the artifact while we
                 # were running gemini-flash. On loss, refetch theirs.
                 try:
-                    await asyncio.to_thread(
-                        put_outline_sync, track_id, effective_lang, payload, s,
-                        if_none_match=True,
+                    await outline_cache.put(
+                        track_id, effective_lang, payload, if_none_match=True,
                     )
-                except OutlineAlreadyExists:
+                except OutlineCacheConflict:
                     log.info(
                         "outline_put_lost_race",
                         track_id=track_id, lang=effective_lang,
                     )
-                    try:
-                        payload = await asyncio.to_thread(
-                            get_outline_sync, track_id, effective_lang, s,
-                        )
-                    except Exception as exc:
-                        log.warning(
-                            "outline_get_after_race_failed",
-                            track_id=track_id, lang=effective_lang, error=str(exc),
-                        )
+                    refreshed = await _cache_get_silent(
+                        outline_cache, track_id, effective_lang,
+                        "outline_get_after_race_failed",
+                    )
+                    if refreshed is not None:
+                        payload = refreshed
                 except Exception as exc:
                     # Persist failure isn't fatal — the user still gets the outline.
                     log.warning(

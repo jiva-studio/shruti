@@ -13,11 +13,10 @@ inline marker in the rendered text, and mounts the corresponding card.
 
 from __future__ import annotations
 
-import asyncio
 import secrets
 from typing import Any, Callable
 
-from shruti_chat.agent.tools._sqlite import catalog_conn
+from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 
 
 YieldEvent = Callable[[str, dict[str, Any]], None]
@@ -38,18 +37,6 @@ def _new_action_id() -> str:
     return secrets.token_hex(4)
 
 
-def _validate_track_ids_sync(track_ids: list[str]) -> list[str]:
-    if not track_ids:
-        return []
-    placeholders = ",".join("?" * len(track_ids))
-    with catalog_conn() as conn:
-        rows = conn.execute(
-            f"SELECT id FROM tracks WHERE hidden = 0 AND id IN ({placeholders})",
-            list(track_ids),
-        ).fetchall()
-    return [r["id"] for r in rows]
-
-
 MAX_PLAYLIST_TRACKS = 30
 
 
@@ -58,6 +45,7 @@ async def propose_playlist(
     track_ids: list[str],
     *,
     yield_event: YieldEvent = _noop_yield,
+    catalog_repo: CatalogRepository,
 ) -> dict[str, Any]:
     """Ask the client to create a playlist (after user confirmation)."""
     name = (name or "").strip()
@@ -67,7 +55,7 @@ async def propose_playlist(
     # confirmation card sane on small screens. The LLM is told ≤20 in the
     # prompt; 30 is the hard ceiling.
     requested = list(track_ids or [])[:MAX_PLAYLIST_TRACKS]
-    valid = await asyncio.to_thread(_validate_track_ids_sync, requested)
+    valid = await catalog_repo.filter_existing_track_ids(requested)
     if not valid:
         return {"error": "no_valid_tracks"}
     action_id = _new_action_id()

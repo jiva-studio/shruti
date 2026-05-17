@@ -35,6 +35,8 @@ from typing import Any, Awaitable, Callable
 from shruti_chat.domain import UserContext
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
+from shruti_chat.domain.ports.outline_cache import OutlineCache
+from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
 
 ToolFn = Callable[..., Awaitable[Any]]
 YieldEvent = Callable[[str, dict[str, Any]], None]
@@ -98,6 +100,8 @@ def bind_repositories(
     *,
     chunk_repo: ChunkRepository,
     catalog_repo: CatalogRepository,
+    transcript_storage: TranscriptStorage,
+    outline_cache: OutlineCache,
 ) -> None:
     """Inject infrastructure adapters into the registered tool callables.
 
@@ -121,6 +125,12 @@ def bind_repositories(
         "resolve_source":         {"catalog_repo": catalog_repo},
         "resolve_location":       {"catalog_repo": catalog_repo},
         "resolve_tag":            {"catalog_repo": catalog_repo},
+        "get_track_outline":      {
+            "catalog_repo": catalog_repo,
+            "transcript_storage": transcript_storage,
+            "outline_cache": outline_cache,
+        },
+        "propose_playlist":       {"catalog_repo": catalog_repo},
     }
     for name, kwargs in bindings.items():
         fn = TOOLS.get(name)
