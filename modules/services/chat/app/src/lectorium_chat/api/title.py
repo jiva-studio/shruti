@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from lectorium_chat.agent import llm
+from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.ratelimit import check_and_increment
 
 log = get_logger(__name__)
 
@@ -109,6 +109,7 @@ async def title(
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
 ) -> TitleResponse:
     _check_app_token(x_app_token)
     device_id = _check_device_id(x_device_id)
@@ -121,7 +122,7 @@ async def title(
     # and a leaked app_shared_token (it ships in every APK) can't be used
     # to bill unlimited /title calls.
     ip = request.client.host if request.client else "unknown"
-    rl = await check_and_increment(device_id, ip, scope="title")
+    rl = await deps.rate_limiter.check_and_increment(device_id, ip, scope="title")
     if not rl.allowed:
         raise HTTPException(
             status_code=429,

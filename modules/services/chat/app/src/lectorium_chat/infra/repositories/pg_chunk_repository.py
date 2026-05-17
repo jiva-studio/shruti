@@ -1,25 +1,26 @@
 """Postgres-backed `ChunkRepository`.
 
-Reads from the `chunks` table via the asyncpg pool registered in
-`lectorium_chat.db.client`. SQL mirrors what `agent/tools/*.py` ran
-inline before the refactor — same indexes, same predicates, same
-ordering.
-
-The `embed_model` filter is applied here rather than left to callers
-so the port's surface stays narrow: callers pass embeddings, the
-adapter picks the matching model.
+Reads from the `chunks` table via an injected asyncpg pool. The
+`embed_model` name is injected too — the adapter applies it as a SQL
+filter so callers don't need to know which embedder produced the
+vector. Composition root in `main.py:lifespan` builds the pool and the
+embedder, then wires them in.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from lectorium_chat.db.client import get_pool
+import asyncpg
+
 from lectorium_chat.domain.entities import Chunk, ScoredChunk
-from lectorium_chat.indexer.embed import get_embedder
 
 
 class PgChunkRepository:
+    def __init__(self, *, pool: asyncpg.Pool, embed_model: str) -> None:
+        self._pool = pool
+        self._embed_model = embed_model
+
     async def search_by_embedding(
         self,
         embedding: list[float],
@@ -29,9 +30,8 @@ class PgChunkRepository:
         lang: str | None,
         top_k: int,
     ) -> list[ScoredChunk]:
-        embedder_name = get_embedder().name
         where = ["embed_model = $1"]
-        params: list[Any] = [embedder_name]
+        params: list[Any] = [self._embed_model]
         if lang:
             where.append(f"lang = ${len(params) + 1}")
             params.append(lang)
@@ -63,7 +63,7 @@ class PgChunkRepository:
           {order_clause}
           LIMIT ${len(params)}
         """
-        pool = get_pool()
+        pool = self._pool
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
         return [
@@ -105,7 +105,7 @@ class PgChunkRepository:
           ORDER BY start_ms
           LIMIT ${len(params)}
         """
-        pool = get_pool()
+        pool = self._pool
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
         return [
@@ -146,7 +146,7 @@ class PgChunkRepository:
           ORDER BY start_ms
           LIMIT ${len(params)}
         """
-        pool = get_pool()
+        pool = self._pool
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
         return [r["text"] for r in rows]
@@ -159,9 +159,8 @@ class PgChunkRepository:
     ) -> list[list[float]]:
         if not track_ids:
             return []
-        embedder_name = get_embedder().name
         where = ["embed_model = $1", "track_id = ANY($2::text[])"]
-        params: list[Any] = [embedder_name, track_ids]
+        params: list[Any] = [self._embed_model, track_ids]
         if lang:
             where.append(f"lang = ${len(params) + 1}")
             params.append(lang)
@@ -171,7 +170,7 @@ class PgChunkRepository:
           WHERE {' AND '.join(where)}
           ORDER BY track_id, start_ms
         """
-        pool = get_pool()
+        pool = self._pool
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
         # pgvector's asyncpg codec gives us list[float] / numpy directly;
