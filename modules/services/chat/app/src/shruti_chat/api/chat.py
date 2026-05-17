@@ -7,14 +7,14 @@ import uuid
 from typing import Any, AsyncIterator
 
 import structlog
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.chat_turn import run_chat_turn
+from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.config import get_settings
 from shruti_chat.observability.logging import get_logger
-from shruti_chat.ratelimit import check_and_increment
 
 
 log = get_logger(__name__)
@@ -41,6 +41,7 @@ async def chat(
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    deps: AppDeps = Depends(get_deps),
 ):
     _check_app_token(x_app_token)
     device_id = _check_device_id(x_device_id)
@@ -48,7 +49,7 @@ async def chat(
 
     # Rate-limit gate (per-day per device + per-IP)
     ip = request.client.host if request.client else "unknown"
-    rl = await check_and_increment(device_id, ip)
+    rl = await deps.rate_limiter.check_and_increment(device_id, ip)
     if not rl.allowed:
         raise HTTPException(
             status_code=429,
