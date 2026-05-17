@@ -10,8 +10,8 @@ import structlog
 from fastapi import APIRouter, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
-from shruti_chat.agent.loop import run_agent
 from shruti_chat.api.schemas.chat import ChatRequestDto
+from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.config import get_settings
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.ratelimit import check_and_increment
@@ -80,7 +80,7 @@ async def chat(
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         try:
-            async for ev in run_agent(
+            async for ev in run_chat_turn(
                 [m.model_dump() for m in body.messages],
                 lang=body.lang,
                 request_id=request_id,
