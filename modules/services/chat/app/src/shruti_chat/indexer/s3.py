@@ -130,15 +130,28 @@ async def fetch_transcript(key: str, settings: Settings | None = None) -> dict:
 # -----------------------------------------------------------------------------
 
 
-def _outline_key(track_id: str, lang: str) -> str:
-    return f"artifacts/tracks/{track_id}/outlines/{lang}.json"
+def outline_model_tag(model: str) -> str:
+    """S3-safe filename segment derived from the litellm/openrouter model id.
+
+    `openrouter/google/gemini-2.0-flash-001` → `openrouter_google_gemini-2.0-flash-001`.
+    Slashes become underscores; everything else passes through. The tag
+    is embedded in the artifact key so a model upgrade (config change to
+    `llm_outline`) starts a fresh cache — old outlines stay reachable
+    under the old key for rollback, but no read path touches them.
+    """
+    return model.replace("/", "_")
+
+
+def _outline_key(track_id: str, lang: str, settings: Settings) -> str:
+    tag = outline_model_tag(settings.llm_outline)
+    return f"artifacts/tracks/{track_id}/outlines/{lang}.{tag}.json"
 
 
 _S3_ABSENT_CODES = frozenset({"404", "NoSuchKey", "NotFound"})
 
 
 def outline_exists_sync(track_id: str, lang: str, settings: Settings | None = None) -> bool:
-    """HEAD artifacts/tracks/.../outlines/{lang}.json (sync — call from worker).
+    """HEAD the outline artifact for the current `llm_outline` model.
 
     Returns False on a true 404 / NoSuchKey; re-raises on every other
     error (network blip, signature error, etc.) so the caller can decide
@@ -147,7 +160,7 @@ def outline_exists_sync(track_id: str, lang: str, settings: Settings | None = No
     """
     s = settings or get_settings()
     client = _make_s3_client(s)
-    key = _outline_key(track_id, lang)
+    key = _outline_key(track_id, lang, s)
     try:
         client.head_object(Bucket=s.s3_bucket, Key=key)
         return True
@@ -159,10 +172,10 @@ def outline_exists_sync(track_id: str, lang: str, settings: Settings | None = No
 
 
 def get_outline_sync(track_id: str, lang: str, settings: Settings | None = None) -> dict:
-    """GET artifacts/tracks/.../outlines/{lang}.json → parsed JSON."""
+    """GET the outline artifact for the current `llm_outline` model."""
     s = settings or get_settings()
     client = _make_s3_client(s)
-    key = _outline_key(track_id, lang)
+    key = _outline_key(track_id, lang, s)
     obj = client.get_object(Bucket=s.s3_bucket, Key=key)
     return json.loads(obj["Body"].read())
 
@@ -180,7 +193,7 @@ def put_outline_sync(
     *,
     if_none_match: bool = False,
 ) -> None:
-    """PUT artifacts/tracks/.../outlines/{lang}.json.
+    """PUT the outline artifact under the current `llm_outline` model tag.
 
     With `if_none_match=True`, sends `If-None-Match: *` so the PUT is
     rejected with 412 PreconditionFailed if the key already exists. We
@@ -189,7 +202,7 @@ def put_outline_sync(
     """
     s = settings or get_settings()
     client = _make_s3_client(s)
-    key = _outline_key(track_id, lang)
+    key = _outline_key(track_id, lang, s)
     kwargs: dict = {
         "Bucket": s.s3_bucket,
         "Key": key,
