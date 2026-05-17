@@ -27,10 +27,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet } from "@ionic/vue"
-import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { groupReferences } from "@shruti/composables/groupReferences.js"
 import {
@@ -38,27 +37,19 @@ import {
   resolveTrackTitle,
 } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
+import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
 import { useToast } from "@shruti/services/useToast.js"
-import type { AuthorId, LocationId, SourceId, TrackId } from "@lib/domain/core.js"
-import type { Author } from "@lib/domain/author.js"
-import type { Track } from "@lib/domain/track.js"
-import type { Location } from "@lib/domain/location.js"
-import type { Source } from "@lib/domain/source.js"
 
 const props = defineProps<{ trackId: string }>()
 
 const { t } = useI18n()
-const app = useShruti()
 const appLanguage = useAppLanguage()
 const { addToPlaylist } = useAddToPlaylist()
 const toast = useToast()
 
-const loading = ref(true)
-const error = ref(false)
-const track = ref<Track | null>(null)
-const author = ref<Author | null>(null)
-const location = ref<Location | null>(null)
-const sourcesById = ref<Map<string, Source>>(new Map())
+const { track, author, location, sourcesById, loading, error } = useTrackRowAsync(
+  () => props.trackId
+)
 const actionSheetOpen = ref(false)
 
 interface SheetButton {
@@ -121,44 +112,6 @@ function monthEn(mo: string): string {
   return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i]
 }
 
-async function load(): Promise<void> {
-  loading.value = true
-  error.value = false
-  try {
-    const repos = app.repositories()
-    const trk = await repos.tracks.getById(props.trackId as TrackId)
-    if (!trk) {
-      error.value = true
-      return
-    }
-    track.value = trk
-    const sourceIds = Array.from(
-      new Set(trk.references.map((r) => r.sourceId).filter((id): id is string => !!id))
-    )
-    const [au, loc, sources] = await Promise.all([
-      trk.authorId
-        ? repos.authors.getById(trk.authorId as AuthorId)
-        : Promise.resolve(null),
-      trk.locationId
-        ? repos.locations.getById(trk.locationId as LocationId)
-        : Promise.resolve(null),
-      Promise.all(sourceIds.map((id) => repos.sources.getById(id as SourceId))),
-    ])
-    author.value = (au as Author | null) ?? null
-    location.value = (loc as Location | null) ?? null
-    const sourceMap = new Map<string, Source>()
-    for (const s of sources) {
-      if (s) sourceMap.set(s.id, s as Source)
-    }
-    sourcesById.value = sourceMap
-  } catch (err) {
-    console.warn("TrackMiniRow: failed to load track", err)
-    error.value = true
-  } finally {
-    loading.value = false
-  }
-}
-
 function onOpen(): void {
   if (!track.value) return
   actionSheetOpen.value = true
@@ -173,9 +126,6 @@ async function onAddOne(): Promise<void> {
     await toast.error(t("chat.citationAddFailed"))
   }
 }
-
-onMounted(() => { void load() })
-watch(() => props.trackId, () => { void load() })
 </script>
 
 <style scoped>
