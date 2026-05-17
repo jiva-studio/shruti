@@ -216,13 +216,25 @@ async def list_tracks(
     limit: int = 20,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    return await asyncio.to_thread(
+    rows = await asyncio.to_thread(
         _list_tracks_sync,
         author_id=author_id, source_id=source_id, location_id=location_id,
         tag_ids=tag_ids, title_query=title_query,
         date_from=date_from, date_to=date_to,
         lang=lang, limit=limit, offset=offset,
     )
+    # Prefer tracks that have a transcript in the requested language; if
+    # there are none, broaden — the per-row `lang` already reflects the
+    # actual variant returned, so the LLM can warn the user accordingly.
+    if not rows and lang is not None:
+        rows = await asyncio.to_thread(
+            _list_tracks_sync,
+            author_id=author_id, source_id=source_id, location_id=location_id,
+            tag_ids=tag_ids, title_query=title_query,
+            date_from=date_from, date_to=date_to,
+            lang=None, limit=limit, offset=offset,
+        )
+    return rows
 
 
 TOOL_REGISTRY = [
