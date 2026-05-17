@@ -195,13 +195,10 @@ async def recommend_next(
     if not seed_rows:
         return []
 
-    # Centroid (average of vectors). pgvector returns string repr; cast via float list.
-    vecs: list[list[float]] = []
-    for r in seed_rows:
-        v = r["embedding"]
-        if isinstance(v, str):
-            v = [float(x) for x in v.strip("[]").split(",")]
-        vecs.append(list(v))
+    # Centroid (average of vectors). pgvector's asyncpg codec is registered
+    # in `_init_connection` (db/client.py), so `embedding` arrives as a
+    # list[float] / numpy array directly — no string-repr parsing needed.
+    vecs: list[list[float]] = [list(r["embedding"]) for r in seed_rows]
     dim = len(vecs[0])
     centroid = [sum(v[i] for v in vecs) / len(vecs) for i in range(dim)]
 
