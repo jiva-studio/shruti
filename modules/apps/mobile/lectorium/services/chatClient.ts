@@ -21,6 +21,15 @@ export interface OutlinePayload {
   readonly items: readonly OutlineItemPayload[]
 }
 
+export interface SharePdfItemPayload {
+  readonly trackId: string
+  readonly lang: string
+  readonly title: string
+  readonly author: string | null
+  readonly date: string | null
+  readonly pdfUrl: string
+}
+
 export type ActionPayload =
   | {
       readonly kind: "create_playlist"
@@ -35,6 +44,11 @@ export type ActionPayload =
       readonly startMs: number
       readonly endMs: number
       readonly text: string
+    }
+  | {
+      readonly kind: "share_pdf"
+      readonly id: string
+      readonly items: readonly SharePdfItemPayload[]
     }
 
 /**
@@ -454,6 +468,27 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
       endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
       text,
     }
+  }
+  if (kind === "share_pdf") {
+    const itemsRaw = Array.isArray(p.items) ? p.items : []
+    const items: SharePdfItemPayload[] = []
+    for (const raw of itemsRaw) {
+      if (!raw || typeof raw !== "object") continue
+      const it = raw as Record<string, unknown>
+      const trackId = typeof it.track_id === "string" ? it.track_id : ""
+      const pdfUrl = typeof it.pdf_url === "string" ? it.pdf_url : ""
+      if (!trackId || !pdfUrl) continue
+      items.push({
+        trackId,
+        lang: typeof it.lang === "string" ? it.lang : "",
+        title: typeof it.title === "string" ? it.title : trackId,
+        author: typeof it.author === "string" ? it.author : null,
+        date: typeof it.date === "string" ? it.date : null,
+        pdfUrl,
+      })
+    }
+    if (items.length === 0) return null
+    return { kind: "share_pdf", id, items }
   }
   return null
 }

@@ -52,6 +52,11 @@
               :state="actionState(token.actionId)"
               @confirm="onConfirmAction"
             />
+            <ActionCardSharePdf
+              v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
+              :action-id="token.actionId"
+              :payload="sharePdfPayload(token.actionId)"
+            />
           </template>
           <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
             errorSuffix
@@ -73,6 +78,7 @@ import LectureCard from "./LectureCard.vue"
 import OutlineCard from "./OutlineCard.vue"
 import ActionCardPlaylist from "./ActionCardPlaylist.vue"
 import ActionCardNote from "./ActionCardNote.vue"
+import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
 defineEmits<{
@@ -129,6 +135,13 @@ function playlistPayload(
 function notePayload(actionId: string): Extract<ActionPayload, { kind: "save_note" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "save_note" ? a : undefined
+}
+
+function sharePdfPayload(
+  actionId: string
+): Extract<ActionPayload, { kind: "share_pdf" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "share_pdf" ? a : undefined
 }
 
 async function onConfirmAction(actionId: string): Promise<void> {

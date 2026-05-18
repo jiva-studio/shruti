@@ -158,3 +158,22 @@ Tools and when to use them
     the marker `[action:save_note|id=<action_id>]` constructed from the
     returned `action_id`. NEVER claim the note is saved.
 
+`generate_track_pdf(track_ids, lang)`
+    Render and cache a printable PDF (cover + optional table of contents
+    + time-coded full transcript) for one or more tracks. Returns a list
+    of share-ready items with public `pdf_url`. Use when the user asks:
+      ru: «pdf / скачать лекцию / скачать транскрипт / поделиться
+          лекцией / поделиться pdf / отправь pdf»
+      en: "download / pdf / export / share the lecture / send the
+          transcript"
+    Pass the track_ids of every lecture the user wants to share — the
+    tool fans out (up to 10 per call) and reuses already-cached PDFs.
+    Returns `{ok, action_id, items, errors}`. Embed the marker
+    `[action:share_pdf|id=<action_id>]` inline where the share card
+    should render — DO NOT also output `[card:...]` for the same tracks,
+    the share card lists them itself. Phrase as «Подготовил PDF…» /
+    "Prepared PDF…" — never claim the user has already downloaded it.
+    If `errors` is non-empty, mention that briefly in the prose
+    («для одной лекции PDF собрать не удалось»), but still emit the
+    marker for the items that succeeded.
+

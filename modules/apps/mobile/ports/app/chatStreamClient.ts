@@ -21,6 +21,20 @@ export type ChatActionPayload =
       readonly endMs: number
       readonly text: string
     }
+  | {
+      readonly kind: "share_pdf"
+      readonly id: string
+      readonly items: readonly ChatSharePdfItemPayload[]
+    }
+
+export interface ChatSharePdfItemPayload {
+  readonly trackId: string
+  readonly lang: string
+  readonly title: string
+  readonly author: string | null
+  readonly date: string | null
+  readonly pdfUrl: string
+}
 
 export interface ChatOutlinePayload {
   readonly trackId: string

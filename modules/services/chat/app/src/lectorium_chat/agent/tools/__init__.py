@@ -37,6 +37,7 @@ from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
 from lectorium_chat.domain.ports.outline_cache import OutlineCache
+from lectorium_chat.domain.ports.pdf_storage import PdfStorage
 from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 
 # Side-effect imports — each module calls `register_tool(...)` at the
@@ -46,6 +47,7 @@ from lectorium_chat.agent.tools import (  # noqa: F401 — side-effect imports
     actions,
     list_tracks,
     outline,
+    pdf,
     personalize,
     resolve,
     search,
@@ -102,6 +104,7 @@ def bind_repositories(
     catalog_repo: CatalogRepository,
     transcript_storage: TranscriptStorage,
     outline_cache: OutlineCache,
+    pdf_storage: PdfStorage,
     embedder: EmbedderPort,
 ) -> None:
     """Inject infrastructure adapters into the registered tool callables.
@@ -136,6 +139,12 @@ def bind_repositories(
             "catalog_repo": catalog_repo,
             "transcript_storage": transcript_storage,
             "outline_cache": outline_cache,
+        },
+        "generate_track_pdf":    {
+            "catalog_repo": catalog_repo,
+            "transcript_storage": transcript_storage,
+            "outline_cache": outline_cache,
+            "pdf_storage": pdf_storage,
         },
         "propose_playlist":      {"catalog_repo": catalog_repo},
     }
