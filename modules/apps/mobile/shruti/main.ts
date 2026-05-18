@@ -104,7 +104,7 @@ initShruti({
   // invoked inside `initShruti` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
     isNative
-      ? useCapacitorDatabaseTransfer(config.database.userLocalPath, getUserDb)
+      ? useCapacitorDatabaseTransfer(getUserDb)
       : useWebDatabaseTransfer(config.database.userLocalPath, getUserDb),
   platform,
   initialServer: SERVERS[0],
