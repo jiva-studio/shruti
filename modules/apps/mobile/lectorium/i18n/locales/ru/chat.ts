@@ -95,6 +95,46 @@ export default {
   actionRetry: "Повторить",
   actionDegraded: "Карточка действия повреждена.",
 
+  // Заголовки автономных tutorial-сессий, которые scheduler создаёт
+  // когда правило срабатывает первый раз для пользователя.
+  proactiveSessionTitleEnableReminder: "Ежедневное напоминание",
+  proactiveSessionTitleSmartLibrary: "Умная библиотека",
+
+  proactiveSmartLibraryHintBody:
+    "Хочу показать тебе умную библиотеку — это Pro-функция, которая держит твою библиотеку всегда наполненной свежими лекциями, без необходимости вручную их добавлять.\n\nТы выбираешь критерии — любимые авторы, темы, источники, длительность — и умная библиотека сама подтягивает подходящие лекции до целевого объёма очереди (например, 2 часа, 8 часов, 10 часов). Когда лекция дослушана — она автоматически уходит в архив, очередь остаётся свежей.\n\nХорошо для дороги и прогулок, когда не хочется тратить время на выбор того что слушать дальше.",
+  proactiveEnableNotificationsBody:
+    "Ты слушаешь несколько дней подряд — хороший ритм. Предлагаю настроить ежедневное напоминание, чтобы не сбить его.\n\nЭто одно мягкое локальное уведомление в выбранное тобой время (поставлю 07:00 по умолчанию, можно изменить в настройках). Сеть не задействована — уведомление живёт на устройстве и срабатывает только когда наступает время.\n\nПолезно как ежедневный якорь — короткое напоминание, что лекция ждёт, когда у тебя будет время.",
+
+  actionEnableReminderTitle: "Ежедневное напоминание",
+  actionEnableReminderBody:
+    "Выбери время — буду присылать напоминание послушать лекцию. Можно поменять или выключить в настройках.",
+  actionEnableReminderConfirm: "Включить",
+  actionEnableReminderDone: "Напоминание включено.",
+  actionEnableReminderError: "Не удалось включить уведомления.",
+
+  actionConfigureSmartLibraryTitle: "Умная библиотека",
+  actionConfigureSmartLibraryBody:
+    "Держи свежие лекции по своим темам в офлайне. Я могу заранее настроить фильтры под тебя.",
+  actionConfigureSmartLibraryConfirm: "Настроить",
+  actionConfigureSmartLibraryDone: "Открыто в настройках.",
+  actionConfigureSmartLibraryError: "Не удалось открыть умную библиотеку.",
+  actionConfigureSmartLibraryChipAuthors: "{n} авторов",
+  actionConfigureSmartLibraryChipTopics: "{n} тем",
+  actionConfigureSmartLibraryChipSources: "{n} источников",
+  actionConfigureSmartLibraryChipLocations: "{n} мест",
+  actionConfigureSmartLibraryChipLanguages: "{n} языков",
+
+  actionUpgradeToProTitle: "Lectorium Pro",
+  actionUpgradeToProBody: "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
+  actionUpgradeToProConfirm: "Посмотреть Pro",
+  actionUpgradeToProDone: "Окно подписки открыто.",
+  actionUpgradeToProError: "Не удалось открыть подписку.",
+
+  actionQueueNextTrackTitle: "Добавить в библиотеку",
+  actionQueueNextTrackConfirm: "Добавить",
+  actionQueueNextTrackDone: "Добавлено в библиотеку.",
+  actionQueueNextTrackError: "Не удалось добавить лекцию.",
+
   // CitationChip three-dot menu
   citationSaveAsNote: "Сохранить как заметку",
   citationOpenInStudio: "Открыть в Студии",

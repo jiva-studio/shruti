@@ -82,6 +82,46 @@ export default {
   actionRetry: "Retry",
   actionDegraded: "Action card data is missing.",
 
+  // Session titles for autonomous tutorial-style proactive sessions.
+  proactiveSessionTitleEnableReminder: "Daily reminder",
+  proactiveSessionTitleSmartLibrary: "Smart Library",
+
+  proactiveSmartLibraryHintBody:
+    "I'd like to show you Smart Library — a Pro feature that keeps your library full of fresh lectures without your having to queue anything by hand.\n\nYou pick the criteria — favourite authors, topics, sources, lecture length — and Smart Library quietly pulls matching lectures into your library to a target queue duration (e.g. 2 hours, 8 hours, 10 hours). When something is finished it gets archived automatically so the queue stays fresh.\n\nGood for commutes and walks where you don't want to spend time choosing what to listen to next.",
+  proactiveEnableNotificationsBody:
+    "You've been listening a few days in a row — nice rhythm. I'd like to suggest setting up a daily reminder so you don't lose it.\n\nIt's one gentle local notification at the time you choose (I'll start with 07:00, you can change it any time in Settings). No noise on the network — it lives on your device and only fires when the time comes.\n\nUseful as a daily anchor: a small nudge that the lecture is waiting whenever your day allows.",
+
+  actionEnableReminderTitle: "Daily reminder",
+  actionEnableReminderBody:
+    "Pick a time each day and I'll nudge you to come listen. You can change or turn it off later in Settings.",
+  actionEnableReminderConfirm: "Turn on",
+  actionEnableReminderDone: "Daily reminder is set.",
+  actionEnableReminderError: "Couldn't enable notifications.",
+
+  actionConfigureSmartLibraryTitle: "Smart Library",
+  actionConfigureSmartLibraryBody:
+    "Keep fresh lectures on your topics queued offline. I can pre-fill these filters for you.",
+  actionConfigureSmartLibraryConfirm: "Set up",
+  actionConfigureSmartLibraryDone: "Opened in Settings.",
+  actionConfigureSmartLibraryError: "Couldn't open Smart Library.",
+  actionConfigureSmartLibraryChipAuthors: "{n} authors",
+  actionConfigureSmartLibraryChipTopics: "{n} topics",
+  actionConfigureSmartLibraryChipSources: "{n} sources",
+  actionConfigureSmartLibraryChipLocations: "{n} locations",
+  actionConfigureSmartLibraryChipLanguages: "{n} languages",
+
+  actionUpgradeToProTitle: "Lectorium Pro",
+  actionUpgradeToProBody:
+    "Unlock Smart Library, the Notes Studio, and the rest of Pro to get the most out of Lectorium.",
+  actionUpgradeToProConfirm: "See Pro",
+  actionUpgradeToProDone: "Paywall opened.",
+  actionUpgradeToProError: "Couldn't open the upgrade screen.",
+
+  actionQueueNextTrackTitle: "Add to library",
+  actionQueueNextTrackConfirm: "Add",
+  actionQueueNextTrackDone: "Added to library.",
+  actionQueueNextTrackError: "Couldn't add this lecture.",
+
   citationSaveAsNote: "Save as note",
   citationOpenInStudio: "Open in Studio",
   citationAddLectureToPlaylist: "Add lecture to playlist",

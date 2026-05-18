@@ -12,7 +12,10 @@
         </IonTabButton>
 
         <IonTabButton tab="chat" href="/tabs/chat" class="chat-tab-button">
-          <IconAppSadhu :size="48" />
+          <div class="chat-icon-wrap">
+            <IconAppSadhu :size="48" />
+            <span v-if="proactiveBadge.count.value > 0" class="proactive-dot" />
+          </div>
         </IonTabButton>
 
         <IonTabButton tab="notes" href="/tabs/notes">
@@ -34,9 +37,12 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from "vue"
+import { useRoute } from "vue-router"
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
+import { useProactiveInboxBadge } from "@lectorium/composables/useProactiveInboxBadge.js"
 import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 
 // Tracks the current share job (audio or video). When isRunning flips to
@@ -44,6 +50,42 @@ import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 // flow has handed off to background and the user knows something's still
 // in flight.
 const shareJob = useShareJobStore()
+
+const proactiveBadge = useProactiveInboxBadge()
+const route = useRoute()
+// `useRoute()` is a reactive accessor — during the initial setup pass
+// the underlying ref can be undefined until the router finalises the
+// current location. Guard with `route?.name` everywhere, otherwise the
+// `immediate: true` callback below dereferences null on first run.
+function isChatRoute(): boolean {
+  const name = route?.name
+  return name === "chat" || name === "chat-session"
+}
+// Clear the proactive badge when the user enters any chat route — the
+// landing chat tab counts as "seen". Watch by name so deep links into
+// a specific session ("chat-session") also reset the badge.
+watch(
+  () => route?.name,
+  (name) => {
+    if (name === "chat" || name === "chat-session") {
+      void proactiveBadge.markSeen()
+    }
+  },
+  { immediate: true }
+)
+// Companion path: the user is already on the chat tab when the
+// scheduler creates a new proactive row. The route doesn't change, so
+// the watcher above never fires — without this, the dot appears and
+// stays until the user navigates away and back. Advance the watermark
+// as soon as the count goes positive while we are on chat.
+watch(
+  () => proactiveBadge.count.value,
+  (next) => {
+    if (next > 0 && isChatRoute()) {
+      void proactiveBadge.markSeen()
+    }
+  }
+)
 </script>
 
 <style scoped>
@@ -66,6 +108,26 @@ ion-tab-button {
  * a bit brighter — same colour family, no ring, no halo. */
 ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
   background: rgba(var(--ion-color-primary-rgb), 0.28);
+}
+
+.chat-icon-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+/* Tiny "unread" dot on the Sadhu icon. No count — a single dot reads
+ * cleaner with the round chat-tab disc and avoids tail behaviour when
+ * the count overflows two digits. */
+.proactive-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ion-color-warning, #ffc409);
+  border: 2px solid var(--ion-background-color, #fff);
+  pointer-events: none;
 }
 
 .tab-bar-safe-area-fill {

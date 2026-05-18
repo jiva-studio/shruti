@@ -8,7 +8,8 @@ import {
   type ComputedRef,
   type Ref,
 } from "vue"
-import { useRoute, useRouter } from "vue-router"
+import { useRoute } from "vue-router"
+import router from "@lectorium/router/index.js"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
 import { App, type AppState } from "@capacitor/app"
@@ -58,8 +59,12 @@ export interface ChatControllerReturn {
 export function useChatController(): ChatControllerReturn {
   const store = useChatStore()
   const player = usePlayerStore()
+  // `useRoute()` is reactive (needed for the chat-session watcher
+  //  below), but we add optional chains everywhere because the
+  //  Vite-dev DI race + IonRouterOutlet quirks occasionally surface
+  //  `undefined` here on first render. `router` uses the singleton
+  //  import to avoid the same race for navigations.
   const route = useRoute()
-  const router = useRouter()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -85,7 +90,7 @@ export function useChatController(): ChatControllerReturn {
   const filteredSessions = computed<ChatSession[]>(() => store.searchSessions(searchQuery.value))
 
   async function ensureSessionFromRoute(): Promise<void> {
-    const param = route.params.sessionId
+    const param = route?.params?.sessionId
     const sessionId = Array.isArray(param) ? param[0] : param
     if (typeof sessionId === "string" && sessionId.length > 0) {
       try {
@@ -113,7 +118,7 @@ export function useChatController(): ChatControllerReturn {
 
   function onNewSession(): void {
     store.startNewSession()
-    if (route.name === "chat-session") {
+    if (route?.name === "chat-session") {
       void router.replace({ name: "chat" })
     }
   }
@@ -139,7 +144,7 @@ export function useChatController(): ChatControllerReturn {
   async function onDeleteSession(id: string): Promise<void> {
     const wasActive = store.activeSessionId === id
     await store.deleteSession(id)
-    if (wasActive && route.name === "chat-session") {
+    if (wasActive && route?.name === "chat-session") {
       void router.replace({ name: "chat" })
     }
   }
@@ -158,7 +163,7 @@ export function useChatController(): ChatControllerReturn {
               try {
                 await store.clearAll()
                 searchQuery.value = ""
-                if (route.name === "chat-session") {
+                if (route?.name === "chat-session") {
                   void router.replace({ name: "chat" })
                 }
                 toast.info(t("chat.clearedToast"))
@@ -248,7 +253,7 @@ export function useChatController(): ChatControllerReturn {
   )
 
   watch(
-    () => route.params.sessionId,
+    () => route?.params?.sessionId,
     () => {
       void ensureSessionFromRoute()
     }

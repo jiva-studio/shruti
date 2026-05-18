@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
-import { useRouter } from "vue-router"
+import router from "@lectorium/router/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
@@ -50,7 +50,7 @@ const emit = defineEmits<{
   ]
 }>()
 
-const router = useRouter()
+// Singleton import — see NotesView.controller for the why.
 const app = useLectorium()
 const appLanguage = useAppLanguage()
 
