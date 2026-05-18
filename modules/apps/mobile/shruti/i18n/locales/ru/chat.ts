@@ -49,10 +49,14 @@ export default {
   suggestions: [
     "Где остановился?", // list_my_tracks(status='in_progress')
     "Собери плейлист по Гите 2", // propose_playlist
+    "Лекции по Гите 2.11–20", // list_tracks(ref_prefix='2', ref_from=11, ref_to=20)
     "Что слушал на неделе?", // list_my_tracks(since=now-7d)
     "Что послушать ещё?", // recommend_next
-    "Найди про варнашраму", // search_transcripts (classic)
-    "Утренние прогулки 1973", // list_tracks (classic)
+    "Расскажи про бхакти", // search_transcripts (semantic)
+    "Что такое душа?", // search_transcripts (semantic)
+    "Утренние прогулки в Бомбее", // list_tracks(location=Bombay, tag=morning_walk)
+    "Беседы во Вриндаване", // list_tracks(location=Vrindavan, tag=conversation)
+    "PDF последней лекции", // generate_track_pdf
   ],
 
   // Outline card
