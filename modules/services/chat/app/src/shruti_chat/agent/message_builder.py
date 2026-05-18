@@ -101,8 +101,9 @@ def _format_user_context(uc: UserContext | None) -> str:
         "═══════════════════════════════════════════════════════════════════════\n\n"
         + "\n".join(lines)
         + "\n\n"
-        "Use `now` to resolve «вчера / на этой неделе / a week ago» queries\n"
-        "against `last_played_at` returned by personalize tools.\n\n"
+        "Use `now` to compute `since` / `until` bounds for `list_my_tracks`\n"
+        "when the user asks «вчера / на этой неделе / a week ago». Pass\n"
+        "ISO-8601 strings with the same offset as `now`.\n\n"
         "When the user says «эту / текущую / только что слушал / this / current»\n"
         "lecture OR doesn't name any lecture — and `current_track_id` is set —\n"
         "use it directly as the track_id for `get_track_outline` /\n"
