@@ -79,11 +79,6 @@ export default {
   actionOpenNotes: "Открыть",
   miniRowOpen: "Открыть лекцию",
 
-  // Action cards — note
-  actionNoteKind: "Сохранить как заметку",
-  actionNoteConfirm: "Сохранить",
-  actionNoteDone: "Заметка сохранена",
-  actionNoteError: "Не удалось сохранить заметку.",
   noteSaved: "Заметка сохранена",
   noteSaving: "Сохраняю заметку…",
 

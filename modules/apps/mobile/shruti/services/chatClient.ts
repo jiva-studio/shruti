@@ -38,14 +38,6 @@ export type ActionPayload =
       readonly trackIds: readonly string[]
     }
   | {
-      readonly kind: "save_note"
-      readonly id: string
-      readonly trackId: string
-      readonly startMs: number
-      readonly endMs: number
-      readonly text: string
-    }
-  | {
       readonly kind: "share_pdf"
       readonly id: string
       readonly items: readonly SharePdfItemPayload[]
@@ -507,19 +499,6 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
     if (!name || trackIds.length === 0) return null
     return { kind: "create_playlist", id, name, trackIds }
-  }
-  if (kind === "save_note") {
-    const trackId = typeof p.track_id === "string" ? p.track_id : ""
-    const text = typeof p.text === "string" ? p.text : ""
-    if (!trackId || !text) return null
-    return {
-      kind: "save_note",
-      id,
-      trackId,
-      startMs: typeof p.start_ms === "number" ? p.start_ms : 0,
-      endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
-      text,
-    }
   }
   if (kind === "share_pdf") {
     const itemsRaw = Array.isArray(p.items) ? p.items : []
