@@ -2,6 +2,8 @@ export default {
   title: "Studio",
   hint: "Tweak the quote before rendering the video.",
   placeholder: "Quote text",
+  titleLabel: "Title",
+  titlePlaceholder: "Optional title",
   download: "Download",
   preparing: "Preparing…",
   rendering: "Rendering reel…",

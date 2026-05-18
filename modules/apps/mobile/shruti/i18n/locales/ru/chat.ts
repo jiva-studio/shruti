@@ -97,6 +97,7 @@ export default {
 
   // CitationChip three-dot menu
   citationSaveAsNote: "Сохранить как заметку",
+  citationOpenInStudio: "Открыть в Студии",
   citationAddLectureToPlaylist: "Добавить лекцию в плейлист",
   recentSessionsLabel: "Недавние чаты",
   /** Короткие относительно-временные суффиксы для RecentSessions.

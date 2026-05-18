@@ -5,6 +5,7 @@
 
 const MAX_DURATION_MS = 120_000;
 const MAX_TEXT_CHARS = 5_000;
+const MAX_TITLE_CHARS = 120;
 const SOURCE_KEY_RE = /^public\/(tracks|shares)\/[^\s]+\.mp3$/;
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const THEME_RE = /^[a-z0-9_-]{1,32}$/;
@@ -18,6 +19,7 @@ export interface RenderRequest {
   lang: string;
   theme: string;
   videoId: string | null; // null → handler generates UUID
+  title: string | null;   // null → no title-card overlay at the start
 }
 
 export function parseRequest(event: any): RenderRequest {
@@ -61,7 +63,21 @@ export function parseRequest(event: any): RenderRequest {
     videoId = v;
   }
 
-  return { sourceKey, startMs, endMs, text, lang, theme, videoId };
+  let title: string | null = null;
+  if (payload.title != null) {
+    if (typeof payload.title !== 'string') {
+      throw err('title must be a string');
+    }
+    const t = payload.title.trim();
+    if (t.length > 0) {
+      if (t.length > MAX_TITLE_CHARS) {
+        throw err(`title exceeds ${MAX_TITLE_CHARS} chars`);
+      }
+      title = t;
+    }
+  }
+
+  return { sourceKey, startMs, endMs, text, lang, theme, videoId, title };
 }
 
 function extractPayload(event: any): Record<string, any> {
