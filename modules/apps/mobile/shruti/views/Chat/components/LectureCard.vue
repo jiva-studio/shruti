@@ -18,9 +18,10 @@
     </template>
     <template v-else>
       <header class="title">{{ title }}</header>
-      <div v-if="metaLine" class="meta-row">{{ metaLine }}</div>
-      <div v-if="references.length" class="references">
-        <span v-for="ref in references" :key="ref.key" class="ref">{{ ref.label }}</span>
+      <div class="details-line">
+        <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
+        <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
+        <span v-if="metaLine" class="details">{{ metaLine }}</span>
       </div>
     </template>
     <IonActionSheet
@@ -36,6 +37,7 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { groupReferences } from "@shruti/composables/groupReferences.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
@@ -115,29 +117,13 @@ const metaLine = computed<string>(() => {
   return parts.join(" · ")
 })
 
-const references = computed<readonly { key: string; label: string }[]>(() => {
+const references = computed<string[]>(() => {
   if (!track.value) return []
-  const out: { key: string; label: string }[] = []
-  for (const r of track.value.references) {
-    if (!r.tokens || r.tokens.length === 0) continue
-    const tail = r.tokens.join(".")
-    const source = r.sourceId ? sourcesById.value.get(r.sourceId) : null
-    // Localised short name (e.g. "БГ", "БГ", "ШБ") with fallback through the
-    // by-language map. Falls back to raw source_id stripped of "source_"
-    // prefix if no dict row was loaded yet.
-    let shortName: string | null = null
-    if (source) {
-      const preferred = source.names.get(appLanguage.value)
-      const en = source.names.get("en")
-      const anyName = preferred ?? en ?? source.names.values().next().value
-      shortName = anyName?.shortName ?? anyName?.fullName ?? null
-    }
-    const label = shortName ? `${shortName} ${tail}` : tail
-    out.push({ key: `${r.sourceId ?? ""}-${tail}`, label })
-    if (out.length >= 4) break
-  }
-  return out
+  return groupReferences(track.value.references, sourcesById.value, appLanguage.value)
 })
+
+const primaryRef = computed(() => references.value[0] ?? "")
+const extraRefCount = computed(() => Math.max(0, references.value.length - 1))
 
 function onOpen() {
   if (!track.value) return
@@ -175,32 +161,42 @@ function onOpen() {
   /* No wrapping pathology — title can wrap normally but stays compact. */
 }
 
-.meta-row {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--ion-color-step-650, #6f6f6f);
-  /* One line, ellipsis if overflows — eliminates the "orphan dot on new
-   * line" issue we had with flex-wrap + ::before separators. */
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.references {
+/* One physical line: ref chip first, then `location · date · duration`.
+ * Same layout as TrackMiniRow inside playlist cards. */
+.details-line {
   display: flex;
-  flex-wrap: wrap;
+  align-items: baseline;
+  flex-wrap: nowrap;
   gap: 6px;
-  margin-top: 8px;
+  min-width: 0;
 }
 
 .ref {
+  flex: 0 0 auto;
+  background: var(--ion-color-light-shade);
+  color: var(--ion-color-medium);
   font-size: 11px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 999px; /* full pill */
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  font-weight: 700;
+  font-stretch: condensed;
+  line-height: 1.4;
+  padding: 0 5px;
+  border-radius: 5px;
   white-space: nowrap;
+}
+
+.ref.extra {
+  opacity: 0.55;
+}
+
+.details {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--ion-color-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .placeholder {
