@@ -38,15 +38,9 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
       { predicate: "is_subscribed", value: false },
     ],
   },
-  {
-    id: "next_shloka",
-    enabled: true,
-    mode: "pre_baked",
-    prep_window_hours: 0,
-    refresh_if_older_than_hours: 9999,
-    session_strategy: "append_current",
-    cooldown_hours: 1,
-  },
+  // `next_shloka` is planned but deferred — it needs a
+  // `ITrackRepository.findByReference()` query that doesn't exist yet.
+  // Bundled default re-added in a follow-up commit once that lands.
   {
     id: "weekly_digest",
     enabled: true,
