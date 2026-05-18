@@ -52,6 +52,25 @@ WRONG — putting quote text or a track_id into save_note's id slot:
     [action:save_note|id=BG_1972_01.05]
     [action:save_note|id=Krishna_says_arjuna_fight]
 
+WRONG — emitting a HINT-action marker without calling its propose_*
+tool first (PRODUCTION BUG: invented short hex id, no SSE action
+event was emitted, the client renders nothing because the payload
+lookup fails):
+    Reply text: «Подписка Pro открывает доступ...
+                  [action:upgrade_to_pro|id=66bba78c]»
+    (No `propose_upgrade_to_pro` was called in the same turn. `66bba78c`
+    is a token-shaped string the model invented to look plausible. The
+    user sees a broken card.)
+
+For the THREE hint actions (`enable_daily_reminder`,
+`configure_smart_library`, `upgrade_to_pro`) the pre-flight rule is
+the same as for playlist / note / pdf: you MUST call the matching
+`propose_*` tool, wait for its response, then write the marker with
+the returned `action_id`. NEVER write the marker first and improvise
+an id afterwards. If you cannot call the tool (e.g., you forgot, or
+the user's question didn't warrant it), omit the marker entirely and
+just answer in prose.
+
 RIGHT (uniform across all six):
     [search_transcripts] → [propose_playlist] returns action_id=ab12cd34 →
         reply contains `[action:create_playlist|id=ab12cd34]`

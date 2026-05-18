@@ -2,7 +2,13 @@
   <section v-if="payload" class="action-card reminder">
     <header class="head">
       <span class="name">{{ $t("chat.actionEnableReminderTitle") }}</span>
-      <span class="time-chip">{{ payload.time }}</span>
+      <input
+        v-model="chosenTime"
+        type="time"
+        class="time-input"
+        :disabled="state === 'executing' || state === 'done'"
+        :aria-label="$t('chat.actionEnableReminderTitle')"
+      />
     </header>
     <p class="body">{{ $t("chat.actionEnableReminderBody") }}</p>
     <footer class="footer">
@@ -28,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionState } from "@lectorium/stores/useChatStore.js"
@@ -39,11 +46,24 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: "confirm", actionId: string): void
+  // Second arg overrides fields the action originally carried — for
+  // this card the user can change `time` before confirming. The store
+  // reads it via `executeAction(messageId, actionId, { time })`.
+  (e: "confirm", actionId: string, override?: { time?: string }): void
 }>()
 
+const chosenTime = ref<string>(props.payload?.time ?? "07:00")
+// Keep the picker in sync if the underlying payload changes (e.g.
+// the card was re-rendered with a fresh tool-issued payload).
+watch(
+  () => props.payload?.time,
+  (next) => {
+    if (next && next !== chosenTime.value) chosenTime.value = next
+  }
+)
+
 function onConfirm() {
-  emit("confirm", props.actionId)
+  emit("confirm", props.actionId, { time: chosenTime.value })
 }
 </script>
 
@@ -90,14 +110,22 @@ function onConfirm() {
   flex: 1 1 auto;
 }
 
-.time-chip {
+.time-input {
   flex: 0 0 auto;
-  padding: 2px 8px;
+  padding: 4px 8px;
   border-radius: 8px;
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 14px;
   background: rgba(var(--ion-color-primary-rgb), 0.12);
   color: var(--ion-color-primary);
+  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);
+  appearance: none;
+  /* iOS / Android both render a native time picker via the input;
+   * styling here just gives the field a consistent chip-like surface. */
+}
+
+.time-input:disabled {
+  opacity: 0.6;
 }
 
 .body {
