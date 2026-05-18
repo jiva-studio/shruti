@@ -115,6 +115,36 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       }
     },
 
+    async attach(
+      chatMessageId,
+      ruleKind,
+      ruleDate,
+      prepState,
+      preparedAt
+    ): Promise<void> {
+      // Best-effort attach. Both UNIQUE(rule_kind, rule_date) and the
+      // PK on chat_message_id can collide; either way it's a benign
+      // no-op for the inline-hint channel — we don't need to bump
+      // prep_state on the existing row.
+      const dup = await db.query<{ chat_message_id: string }>(
+        "SELECT chat_message_id FROM chat_messages_proactive_state WHERE rule_kind = ? AND rule_date = ?",
+        [ruleKind, ruleDate]
+      )
+      if (dup.length > 0) return
+      const exists = await db.query<{ chat_message_id: string }>(
+        "SELECT chat_message_id FROM chat_messages_proactive_state WHERE chat_message_id = ?",
+        [chatMessageId]
+      )
+      if (exists.length > 0) return
+      await db.execute(
+        `INSERT INTO chat_messages_proactive_state
+           (chat_message_id, rule_kind, rule_date, prep_state, prepared_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [chatMessageId, ruleKind, ruleDate, prepState, preparedAt ?? null]
+      )
+      await db.save()
+    },
+
     async listByPrepStates(
       states: readonly ProactivePrepState[]
     ): Promise<readonly ProactiveStateEntry[]> {

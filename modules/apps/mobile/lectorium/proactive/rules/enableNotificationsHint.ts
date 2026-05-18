@@ -9,17 +9,14 @@ const ACTION_ID = "main"
 const DEFAULT_REMINDER_TIME = "07:00"
 
 /**
- * "Hey, you've been here three days running — want a nudge each
- * morning so you don't lose the rhythm?"
+ * Tutorial-style introduction to the daily reminder feature. The
+ * card shows up in its own chat session titled "Ежедневное
+ * напоминание" — multi-paragraph body explaining what the reminder
+ * does, then the action button to turn it on.
  *
- * Eligibility is gated entirely by predicates in the bundled config
- * (`current_streak_at_least: 3`, `has_notifications_permission: false`).
- * The detector only needs to decide whether to fire today; the cooldown
- * (30 days) keeps us from nagging the user repeatedly.
- *
- * Visibility is immediate (`visible_on: null`) and notification is
- * silent (`notify_at: null`) — the card surfaces inline in the user's
- * current chat session with a badge bump, not as a system push.
+ * Eligibility (predicates in bundled config): streak ≥ 3 days and
+ * notification permission still off. Cooldown 30 days. Notification
+ * is silent (`notify_at: null`) — the chat-icon badge is the cue.
  */
 const handler: ProactiveRuleHandler = {
   id: "enable_notifications_hint",
@@ -30,6 +27,9 @@ const handler: ProactiveRuleHandler = {
         ruleDate: ctx.localDate,
         visibleOn: null,
         notifyAt: null,
+        // Localised session title resolved at detect time so the
+        // bundled config stays free of i18n-key indirection.
+        sessionTitleOverride: ctx.t("chat.proactiveSessionTitleEnableReminder"),
         templateContext: {},
       },
     ]

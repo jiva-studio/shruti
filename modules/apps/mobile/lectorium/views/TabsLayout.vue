@@ -65,6 +65,19 @@ watch(
   },
   { immediate: true }
 )
+// Companion path: the user is already on the chat tab when the
+// scheduler creates a new proactive row. The route doesn't change, so
+// the watcher above never fires — without this, the dot appears and
+// stays until the user navigates away and back. Advance the watermark
+// as soon as the count goes positive while we are on chat.
+watch(
+  () => proactiveBadge.count.value,
+  (next) => {
+    if (next > 0 && (route.name === "chat" || route.name === "chat-session")) {
+      void proactiveBadge.markSeen()
+    }
+  }
+)
 </script>
 
 <style scoped>
