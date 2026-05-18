@@ -6,12 +6,7 @@ import type { ProactiveRuleId } from "@lib/domain/config.js"
  * leaves the device. Surfaced through a dev-only Settings panel for
  * sanity-checking which rules actually fire in real usage.
  */
-export type ProactiveTelemetryEvent =
-  | "detected"
-  | "ready"
-  | "degraded"
-  | "superseded"
-  | "notified"
+export type ProactiveTelemetryEvent = "detected" | "ready" | "degraded" | "superseded" | "notified"
 
 function key(rule: ProactiveRuleId, event: ProactiveTelemetryEvent): string {
   return `proactive.telemetry.${rule}.${event}`

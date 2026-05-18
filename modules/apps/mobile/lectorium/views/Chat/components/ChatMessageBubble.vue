@@ -209,10 +209,7 @@ function queueNextTrackPayload(
   return a && a.kind === "queue_next_track" ? a : undefined
 }
 
-async function onConfirmAction(
-  actionId: string,
-  override?: { time?: string }
-): Promise<void> {
+async function onConfirmAction(actionId: string, override?: { time?: string }): Promise<void> {
   // Snapshot the kind BEFORE executeAction — the store may mutate
   // actionStates and the action payload reference can disappear from
   // an aborted/replaced message later.

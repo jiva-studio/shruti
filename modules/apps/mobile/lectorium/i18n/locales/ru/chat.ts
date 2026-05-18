@@ -120,8 +120,7 @@ export default {
   actionConfigureSmartLibraryError: "Не удалось открыть умную библиотеку.",
 
   actionUpgradeToProTitle: "Lectorium Pro",
-  actionUpgradeToProBody:
-    "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
+  actionUpgradeToProBody: "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
   actionUpgradeToProConfirm: "Посмотреть Pro",
   actionUpgradeToProDone: "Окно подписки открыто.",
   actionUpgradeToProError: "Не удалось открыть подписку.",

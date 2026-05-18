@@ -64,11 +64,7 @@ const handler: ProactiveRuleHandler = {
         visibleOn: formatYmd(sunday),
         notifyAt: Math.floor(notifyAtMs / 1000),
         templateContext: {
-          week_label: weekLabel(
-            new Date(sunday.getTime() - 6 * 86_400_000),
-            sunday,
-            ctx.locale
-          ),
+          week_label: weekLabel(new Date(sunday.getTime() - 6 * 86_400_000), sunday, ctx.locale),
         },
       },
     ]
@@ -93,10 +89,7 @@ const handler: ProactiveRuleHandler = {
       repos.listeningSessions.getDailyTotals(fromMs, toMs),
       repos.listeningSessions.listRecentTracksWithProgress(20),
     ])
-    const totalListenedSeconds = dailyTotals.reduce(
-      (acc, d) => acc + d.listenedSeconds,
-      0
-    )
+    const totalListenedSeconds = dailyTotals.reduce((acc, d) => acc + d.listenedSeconds, 0)
     const completedTrackIds = recent
       .filter((r) => r.endedAtMs >= fromMs && r.endedAtMs < toMs)
       .map((r) => r.trackId)

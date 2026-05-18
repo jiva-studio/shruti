@@ -108,9 +108,7 @@ const handler: ProactiveRuleHandler = {
     const repos = app.repositories()
     const recent = await repos.listeningSessions.listRecentTracksWithProgress(10)
     const trackIds = recent.map((r) => r.trackId)
-    const tracksById = trackIds.length > 0
-      ? await repos.tracks.getByIds(trackIds)
-      : new Map()
+    const tracksById = trackIds.length > 0 ? await repos.tracks.getByIds(trackIds) : new Map()
 
     const lastTopicTags: string[] = []
     const lastAuthors: string[] = []

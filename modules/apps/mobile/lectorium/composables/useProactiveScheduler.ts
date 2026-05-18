@@ -21,10 +21,7 @@ import { recordEvent } from "@lectorium/proactive/telemetry.js"
 // disables every rule.
 import "@lectorium/proactive/rules/index.js"
 import { resolveSessionId } from "@lectorium/proactive/sessions.js"
-import type {
-  ProactiveContext,
-  ResolvedProactiveRule,
-} from "@lectorium/proactive/types.js"
+import type { ProactiveContext, ResolvedProactiveRule } from "@lectorium/proactive/types.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 
 /** Foreground tick cadence — every 30 minutes while the app is open. */
@@ -86,9 +83,7 @@ export function useProactiveScheduler(): void {
     const now = new Date(nowMs)
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    const permission = await app.notifications
-      .checkPermission()
-      .catch(() => "unknown" as const)
+    const permission = await app.notifications.checkPermission().catch(() => "unknown" as const)
 
     // Activity stats — best-effort. If repos are not ready yet (cold
     // boot, content DB still downloading) we fall back to zeros, which
@@ -135,8 +130,7 @@ export function useProactiveScheduler(): void {
       currentStreak,
       completedTracks,
       firstSeenAtMs: firstSeenAt.value,
-      t: (key: string, params?: Record<string, unknown>) =>
-        params ? t(key, params) : t(key),
+      t: (key: string, params?: Record<string, unknown>) => (params ? t(key, params) : t(key)),
     }
   }
 
@@ -198,8 +192,7 @@ export function useProactiveScheduler(): void {
     repo: IProactiveStateRepository
   ): Promise<void> {
     const refreshMs = rule.config.refresh_if_older_than_hours * 3_600_000
-    const isStale =
-      entry.preparedAt === null || ctx.nowMs - entry.preparedAt > refreshMs
+    const isStale = entry.preparedAt === null || ctx.nowMs - entry.preparedAt > refreshMs
     if (!isStale && entry.prepState === "ready") return
 
     const key = mutexKey(entry.ruleKind, entry.ruleDate)
@@ -219,16 +212,10 @@ export function useProactiveScheduler(): void {
         scrubbed.degraded ? "degraded" : "ready",
         ctx.nowMs
       )
-      void recordEvent(
-        app.preferences,
-        rule.config.id,
-        scrubbed.degraded ? "degraded" : "ready"
-      )
+      void recordEvent(app.preferences, rule.config.id, scrubbed.degraded ? "degraded" : "ready")
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
-      await repo
-        .updatePrepState(entry.chatMessageId, "degraded", ctx.nowMs)
-        .catch(() => undefined)
+      await repo.updatePrepState(entry.chatMessageId, "degraded", ctx.nowMs).catch(() => undefined)
     } finally {
       inFlight.delete(key)
     }
