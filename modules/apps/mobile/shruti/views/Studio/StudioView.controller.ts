@@ -1,6 +1,7 @@
-import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
+import { computed, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
+import { onIonViewWillEnter } from "@ionic/vue"
 import { loadTranscript } from "@lib/application"
 import type { LanguageCode, NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
@@ -340,7 +341,12 @@ export function useStudioController(): StudioControllerReturn {
     }
   }
 
-  onMounted(async () => {
+  // `onIonViewWillEnter` instead of `onMounted` — Ionic's IonRouterOutlet
+  // caches the page component, so `onMounted` fires only on the FIRST
+  // visit. A user who opens Studio for note A, goes back, then opens
+  // Studio for citation B would see note A still loaded. WillEnter
+  // fires every time the page becomes the active route.
+  onIonViewWillEnter(async () => {
     if (!guardPro()) return
     // Single source of truth: every Studio entry point writes here
     // before pushing /tabs/studio. Empty slot → deep-link or stale
