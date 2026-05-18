@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue"
-import { useRouter } from "vue-router"
+import router from "@shruti/router/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
@@ -50,7 +50,7 @@ const emit = defineEmits<{
   ]
 }>()
 
-const router = useRouter()
+// Singleton import — see NotesView.controller for the why.
 const app = useShruti()
 const appLanguage = useAppLanguage()
 
