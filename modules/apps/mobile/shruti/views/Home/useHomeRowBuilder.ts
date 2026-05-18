@@ -34,7 +34,13 @@ export function useHomeRowBuilder(): HomeRowBuilderReturn {
       // checkmark (checkmark belongs on Library / Search).
       const state = row.state === "added" ? "queued" : row.state
       const disabled = state === "downloading"
-      const dimmed = state === "downloading" || state === "failed"
+      // Dim any row whose audio isn't actually on disk yet — "downloading"
+      // and "failed" obviously, but also "idle" rows that carry a saved
+      // listening percentage from a previous session. Without this, a
+      // queued track with progress > 0 renders at full opacity even
+      // though the file hasn't been downloaded yet, contradicting the
+      // "ready to play" cue the user reads from a vivid row.
+      const dimmed = downloads.getState(track.id) !== "completed"
       return { ...row, state, disabled, dimmed }
     })
   })

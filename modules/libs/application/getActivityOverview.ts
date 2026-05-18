@@ -48,20 +48,27 @@ export async function getActivityOverview(
   input: GetActivityOverviewInput,
   deps: GetActivityOverviewDeps
 ): Promise<ActivityOverview> {
-  const [totals, totalSec, activeItems] = await Promise.all([
+  const [totals, totalSec, activeItems, archivedItems] = await Promise.all([
     getDailyListeningHeatmap(
       { fromMs: input.fromMs, toMs: input.toMs },
       { listeningSessions: deps.listeningSessions }
     ),
     deps.listeningSessions.getTotalListenedSeconds(),
     deps.playlistItems.listActive(),
+    // Archive only flips `archived_at`; `listening_sessions` is untouched,
+    // so a completed lecture the user archived must still contribute to
+    // the Activity tab's completedCount. Issue #470 fixed the per-row
+    // badge by unioning the two lists in usePlaylistStore; this counter
+    // was missed in that pass.
+    deps.playlistItems.listArchived(),
   ])
 
-  const itemIds: PlaylistItemId[] = activeItems.map((i) => i.id)
-  const trackIds = activeItems.map((i) => i.trackId)
+  const allItems = [...activeItems, ...archivedItems]
+  const itemIds: PlaylistItemId[] = allItems.map((i) => i.id)
+  const trackIds = allItems.map((i) => i.trackId)
   const tracksById = await deps.tracks.getByIds(trackIds)
   const durations = new Map<PlaylistItemId, number>()
-  for (const item of activeItems) {
+  for (const item of allItems) {
     const track = tracksById.get(item.trackId)
     if (!track) continue
     const ms = maxAudioDurationMs(track)
