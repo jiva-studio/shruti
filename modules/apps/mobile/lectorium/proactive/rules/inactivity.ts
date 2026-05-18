@@ -1,5 +1,6 @@
 import { useLectorium } from "@lectorium/lectorium.js"
 import { runProactiveTurn } from "../proactiveChat.js"
+import { resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -48,7 +49,6 @@ const handler: ProactiveRuleHandler = {
     if (existing !== null) return
 
     const sessions = app.repositories().chatSessions
-    const { resolveSessionId } = await import("@lectorium/proactive/sessions.js")
     const sessionId = await resolveSessionId(
       {
         config: {
