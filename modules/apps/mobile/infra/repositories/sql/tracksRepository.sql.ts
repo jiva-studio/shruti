@@ -1,5 +1,5 @@
 import type { IDatabase, QueryValue } from "@ports/app/index.js"
-import type { LanguageCode, TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
 import type {
   ITrackRepository,
   TrackListFilters,
@@ -395,6 +395,22 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       const hydrated = await hydrate(contentDb, rows)
       for (const track of hydrated) result.set(track.id, track)
       return result
+    },
+
+    async findByReference(sourceId: SourceId, tokens: readonly string[]): Promise<Track | null> {
+      // Tokens are stored as the dot-joined string in `track_references.tokens`
+      // (see TrackReferenceRow). Reconstruct that representation here so the
+      // SQL stays an indexed equality lookup rather than a substring scan.
+      const tokenKey = tokens.join(".")
+      const rows = await contentDb.query<TrackRow>(
+        `SELECT t.* FROM tracks t
+           JOIN track_references r ON r.track_id = t.id
+          WHERE r.source_id = ? AND r.tokens = ? AND t.hidden = 0
+          LIMIT 1`,
+        [sourceId, tokenKey]
+      )
+      const hydrated = await hydrate(contentDb, rows)
+      return hydrated[0] ?? null
     },
 
     async list(query: TrackListQuery): Promise<readonly Track[]> {

@@ -31,11 +31,28 @@ export function useWebRemoteFilesStorage({
       return URL.createObjectURL(blob)
     },
     async getJson<T = unknown>(url: string): Promise<T> {
+      // Stale-while-revalidate. Mirrors `checkForUpdatesInBackground`
+      // for the DB: serve cached body now (fast cold-start) and refresh
+      // in the background so the next session sees the new content.
+      // `cache: 'no-store'` on every fetch keeps the browser's HTTP
+      // cache out of the loop — staleness is governed solely by our
+      // CacheStorage entry, not heuristic freshness rules.
       const cache = await caches.open(cacheName)
       const cacheKey = urlToCacheKey(url)
       const cached = await cache.match(cacheKey)
-      if (cached) return (await cached.json()) as T
-      const response = await fetch(url)
+      if (cached) {
+        void (async () => {
+          try {
+            const fresh = await fetch(url, { cache: "no-store" })
+            if (fresh.ok) await cache.put(cacheKey, fresh.clone())
+          } catch {
+            // Offline OK — leave the cached body in place.
+          }
+        })()
+        return (await cached.json()) as T
+      }
+      // First-ever fetch — we have to block.
+      const response = await fetch(url, { cache: "no-store" })
       if (!response.ok) {
         throw new Error(
           `Remote file fetch failed: ${response.status} ${response.statusText} (${url})`

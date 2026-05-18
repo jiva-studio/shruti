@@ -85,6 +85,13 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Daily reminder",
   proactiveSessionTitleSmartLibrary: "Smart Library",
+  proactiveSessionTitleNextShloka: "Next verse",
+
+  // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
+  // label (e.g. "2.14"); `{title}` is the localised catalog title. The
+  // follow-up action card lives below as a marker.
+  proactiveNextShlokaBody:
+    "You were on the previous verse — keep going in order. The next one is here: {ref} “{title}”. Add it to your library?",
 
   proactiveSmartLibraryHintBody:
     "I'd like to show you Smart Library — a Pro feature that keeps your library full of fresh lectures without your having to queue anything by hand.\n\nYou pick the criteria — favourite authors, topics, sources, lecture length — and Smart Library quietly pulls matching lectures into your library to a target queue duration (e.g. 2 hours, 8 hours, 10 hours). When something is finished it gets archived automatically so the queue stays fresh.\n\nGood for commutes and walks where you don't want to spend time choosing what to listen to next.",

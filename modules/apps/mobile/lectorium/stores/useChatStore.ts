@@ -135,6 +135,12 @@ export const useChatStore = defineStore("chat", () => {
   const messages = ref<ChatMessage[]>([])
   const sending = ref<boolean>(false)
   const lastError = ref<{ code: string; message: string; retryAfter?: number } | null>(null)
+  /** Session ids that have a proactive_state row in ready/degraded AND
+   *  haven't been replied to yet. Drives the per-session "needs
+   *  attention" dot in RecentSessions / history list. Refreshed alongside
+   *  the sessions list and after every send (a reply drops the session
+   *  from this set automatically). */
+  const unrepliedProactiveSessionIds = ref<ReadonlySet<string>>(new Set())
 
   let abort: AbortController | null = null
 
@@ -169,6 +175,16 @@ export const useChatStore = defineStore("chat", () => {
       updatedAt: s.updatedAt,
       titleAttemptCount: s.titleAttemptCount,
     }))
+    // Repopulate the per-session "needs attention" set. Best-effort —
+    // the proactive repo lives in the same DB so a successful sessions
+    // list pretty much guarantees this works, but if it fails we just
+    // leave the previous set in place rather than throw.
+    try {
+      const ids = await app.repositories().proactiveState.listUnrepliedSessionIds()
+      unrepliedProactiveSessionIds.value = new Set(ids)
+    } catch {
+      // proactiveState repo not ready — leave previous set.
+    }
   }
 
   async function openSession(id: string): Promise<void> {
@@ -249,6 +265,14 @@ export const useChatStore = defineStore("chat", () => {
           if (idx >= 0) {
             const updated = { ...sessions.value[idx], updatedAt: Date.now() }
             sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
+          }
+          // The user just replied — drop the session from the "unread"
+          // set so the per-session dot disappears immediately, before the
+          // next refreshSessions roundtrip would catch up.
+          if (unrepliedProactiveSessionIds.value.has(sessionId)) {
+            const next = new Set(unrepliedProactiveSessionIds.value)
+            next.delete(sessionId)
+            unrepliedProactiveSessionIds.value = next
           }
         }
         if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
@@ -631,6 +655,7 @@ export const useChatStore = defineStore("chat", () => {
     messages,
     sending,
     lastError,
+    unrepliedProactiveSessionIds,
     refreshSessions,
     openSession,
     startNewSession,

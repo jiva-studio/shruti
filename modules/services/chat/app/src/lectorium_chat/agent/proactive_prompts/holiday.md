@@ -8,22 +8,22 @@ An ISKCON / Vaishnava holiday is approaching. JSON dump fields:
 - `holiday_name` — localised display name in the user's locale.
 - `holiday_date` — 'YYYY-MM-DD' date of the holiday.
 - `days_until` — integer days from today to `holiday_date` (0 if today).
-- `topic_tags` — catalog tag ids that index lectures about this
-  holiday's theme (e.g., Krishna's appearance for Janmashtami).
 
 Write a short warm message in the user's locale:
 
 1. Open with the holiday name and a one-sentence reminder of what
    is being celebrated. Pull the framing from the lectures
    themselves — call `search_transcripts` or `list_tracks` with a
-   topic-aligned query first if the holiday's theme isn't covered
-   by `topic_tags` alone.
+   topic-aligned query first so the framing comes from actual
+   recordings rather than your own paraphrase.
 2. Note when it falls: "tomorrow" / "in 2 days" / "today",
    localised. Do not invent the date — use `holiday_date`.
 
 Then curate 3–5 relevant lectures:
 
-3. Call `list_tracks` filtered by `topic_tags` (`tag_ids=` param).
+3. Call `search_transcripts` / `list_tracks` with a topic-aligned
+   query (the holiday's theme — e.g. Krishna's appearance for
+   Janmashtami, Mahaprabhu's appearance for Gaura Purnima).
 4. Prefer shorter recordings (≤ 45 min) when sort options allow.
 5. Mix authors and decades if possible.
 6. Wrap the chosen track ids in `[action:create_playlist|id=holiday]`

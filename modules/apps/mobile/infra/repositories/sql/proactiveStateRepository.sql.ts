@@ -151,6 +151,23 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       return rows.map(rowToEntry)
     },
 
+    async listUnrepliedSessionIds(): Promise<readonly ChatSessionId[]> {
+      // A session is "unreplied" when it has at least one proactive
+      // message in ready/degraded AND no user-authored row. As soon as
+      // the user replies, the session drops out of the set — the per-
+      // session dot in the chat list disappears organically.
+      const rows = await db.query<{ session_id: string }>(
+        `SELECT DISTINCT m.session_id
+           FROM chat_messages_proactive_state p
+           JOIN chat_messages m ON m.id = p.chat_message_id
+          WHERE p.prep_state IN ('ready', 'degraded')
+            AND m.session_id NOT IN (
+              SELECT session_id FROM chat_messages WHERE role = 'user'
+            )`
+      )
+      return rows.map((r) => r.session_id as ChatSessionId)
+    },
+
     async findByRuleAndDate(
       ruleKind: ProactiveRuleId,
       ruleDate: string
