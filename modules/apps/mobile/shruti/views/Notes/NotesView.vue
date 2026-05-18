@@ -59,5 +59,5 @@ const { rows, isEmpty, query, isActionSheetOpen, actionSheetButtons, onQuery, on
   useNotesController()
 const showPlayerOnNotes = useConfig<boolean>("settings.showPlayerOnNotes", true)
 
-const emptyImage = "/empty.png"
+const emptyImage = "/notes-empty.png"
 </script>
