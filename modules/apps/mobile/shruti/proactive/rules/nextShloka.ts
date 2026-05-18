@@ -56,8 +56,10 @@ const handler: ProactiveRuleHandler = {
           // The next track's id doubles as the dedup key so the rule
           // never suggests the same shloka twice.
           ruleDate: nextTrack.id,
-          visibleOn: ctx.localDate,
-          notifyAt: null,
+          // Silent suggestion: visible immediately (no future gate),
+          // no OS push — the chat badge is enough.
+          visibleAt: null,
+          notify: false,
           sessionTitleOverride: ctx.t("chat.proactiveSessionTitleNextShloka"),
           templateContext: {},
         },

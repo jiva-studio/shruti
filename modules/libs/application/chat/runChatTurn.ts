@@ -261,8 +261,9 @@ export async function* runChatTurn(
   }
 
   // 7. Background title refresh — first turn only, only when we got an
-  // assistant reply. Failures bump the attempt counter so the
-  // foreground retry worker can pick the session up.
+  // assistant reply. If `/title` returns null or throws, the session
+  // keeps its locally-derived (or null) title — no retry mechanism,
+  // the UI falls back to a generic header.
   if (input.isFirstAssistantTurn && acc.length > 0) {
     const turns: readonly ChatTurn[] = [
       { role: "user", content: input.text },
@@ -275,16 +276,10 @@ export async function* runChatTurn(
       if (newTitle) {
         await deps.sessions.updateTitle(input.sessionId, newTitle)
         yield { kind: "title-updated", title: newTitle }
-      } else {
-        await deps.sessions.incrementTitleAttempt(input.sessionId)
       }
     } catch {
-      try {
-        await deps.sessions.incrementTitleAttempt(input.sessionId)
-      } catch {
-        // Persist failure on the counter is benign — retry worker picks
-        // up the next opportunity anyway.
-      }
+      // /title backend is broken or call aborted — accept the null
+      // title and move on. Generic header is fine.
     }
   }
 

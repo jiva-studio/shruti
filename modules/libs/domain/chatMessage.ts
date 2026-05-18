@@ -110,7 +110,8 @@ export interface ChatMessage {
   readonly sessionId: ChatSessionId
   readonly role: "user" | "assistant"
   /** Raw markdown — assistant content can contain inline markers
-   *  `[cite:...]`, `[card:...]`, `[action:...|id=...]`, `[outline:...]`. */
+   *  `[cite:...]`, `[card:...]`, `[action:...|id=...]`, `[outline:...]`,
+   *  `[followup:<text>]`. */
   content: string
   readonly createdAt: UnixMs
   /** Action payloads keyed by the marker's `id`. */
@@ -122,18 +123,6 @@ export interface ChatMessage {
   actionStates?: Record<string, ChatActionState>
   /** Set when the message ended abnormally (see ChatMessageError). */
   error?: ChatMessageError
-  /** When set, the row is hidden from the UI until the user's local date
-   *  reaches this `'YYYY-MM-DD'`. Used by the proactive scheduler to
-   *  pre-bake messages that should surface on a future day. */
-  visibleOn?: string
-  /** When set, a `LocalNotification` is scheduled at this unix-seconds
-   *  moment, with `extra: { chatSessionId, chatMessageId }` so tapping
-   *  deep-links into this session. */
-  notifyAt?: number
-  /** Set when the scheduled notification actually fired (or was
-   *  delivered into the system tray). Prevents re-scheduling on the
-   *  next tick. */
-  notifiedAt?: number
   /** Tappable follow-up chips the assistant emitted via
    *  `[followup:<text>]` markers at the end of `content`. Each entry
    *  is the literal chip text; tapping sends it verbatim as the next

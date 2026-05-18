@@ -36,19 +36,19 @@ export interface ProactiveStateEntry {
   readonly sessionId: ChatSessionId
   readonly ruleKind: ProactiveRuleId
   /** `'YYYY-MM-DD'` (local TZ); also used as the dedup key with
-   *  `ruleKind`. */
+   *  `ruleKind`. Pure idempotency key — NOT a visibility gate. */
   readonly ruleDate: string
   readonly prepState: ProactivePrepState
   readonly preparedAt: number | null
   /** chat_messages.content — the rendered markdown body. Empty string
    *  while `prepState === 'pending'`. */
   readonly bodyMd: string
-  /** chat_messages.visible_on. */
-  readonly visibleOn: string | null
-  /** chat_messages.notify_at. */
-  readonly notifyAt: number | null
-  /** chat_messages.notified_at. */
-  readonly notifiedAt: number | null
+  /** unix seconds — moment the row becomes visible in chat AND (if
+   *  `notify=true`) the moment a LocalNotification fires in the OS.
+   *  ONE unified moment. NULL = no visibility gate (real-time only). */
+  readonly visibleAt: number | null
+  /** Whether to register a LocalNotification at `visibleAt`. */
+  readonly notify: boolean
   /** chat_messages.created_at (unix ms). */
   readonly createdAt: number
   /** unix seconds — the moment the user first opened the chat session
@@ -64,8 +64,11 @@ export interface CreateProactiveMessageInput {
   readonly role: "assistant"
   readonly content: string
   readonly createdAt: number
-  readonly visibleOn: string | null
-  readonly notifyAt: number | null
+  /** Unified visible-and-push moment in unix-seconds. NULL allowed only
+   *  for `notify=false` (real-time / immediate visibility). When
+   *  `notify=true`, `visibleAt` must be non-null. */
+  readonly visibleAt: number | null
+  readonly notify: boolean
   readonly ruleKind: ProactiveRuleId
   readonly ruleDate: string
   readonly prepState: ProactivePrepState
@@ -144,19 +147,15 @@ export interface IProactiveStateRepository {
     preparedAt?: number
   ): Promise<void>
 
-  /** Overwrite the body markdown — and optionally the `actions_json`
-   *  payload map — on the underlying chat_messages row. Called after
-   *  a content builder returns. When `actions` is omitted the existing
-   *  payload map is left untouched. */
+  /** Overwrite the body markdown — and optionally the `actions` map
+   *  inside the meta envelope — on the underlying chat_messages row.
+   *  Called after a content builder returns. When `actions` is omitted
+   *  the existing payload map is left untouched. */
   updateContent(
     chatMessageId: ChatMessageId,
     content: string,
     actions?: Record<string, ChatActionPayload>
   ): Promise<void>
-
-  /** Stamp `notified_at` so the next tick doesn't re-schedule the same
-   *  LocalNotification. */
-  markNotified(chatMessageId: ChatMessageId, notifiedAt: number): Promise<void>
 
   /**
    * Garbage-collect rows in terminal states older than
