@@ -45,6 +45,7 @@ type Deps struct {
 	Runner           *runner.Runner
 	DictCRUD         DictCRUDDeps
 	Catalog          CatalogDeps
+	Proactive        ProactiveDeps
 	Find       FindDeps
 	InDir      string
 	OutDir     string

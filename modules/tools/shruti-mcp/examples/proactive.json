@@ -72,14 +72,12 @@
       {
         "id": "janmashtami_2026",
         "name": { "en": "Janmashtami", "ru": "Джанмаштами" },
-        "date": "2026-08-26",
-        "topic_tags": ["krishna_appearance"]
+        "date": "2026-08-26"
       },
       {
         "id": "gaura_purnima_2026",
         "name": { "en": "Gaura Purnima", "ru": "Гаура-пурнима" },
-        "date": "2026-03-13",
-        "topic_tags": ["mahaprabhu_appearance"]
+        "date": "2026-03-13"
       }
     ]
   }

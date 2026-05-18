@@ -8,7 +8,10 @@
       class="recent"
       @click="$emit('pick', s.id)"
     >
-      <span class="title">{{ s.title || $t("chat.untitledSession") }}</span>
+      <span class="title">
+        <span v-if="unreadIds?.has(s.id)" class="unread-dot" aria-hidden="true" />
+        {{ s.title || $t("chat.untitledSession") }}
+      </span>
       <span class="when">{{ relativeTime(s.updatedAt) }}</span>
     </button>
   </div>
@@ -22,6 +25,11 @@ import type { ChatSession } from "@shruti/stores/useChatStore.js"
 const props = withDefaults(
   defineProps<{
     sessions: readonly ChatSession[]
+    /** Session ids that received an agent-initiated message and haven't
+     *  been replied to yet — driven by `chatStore.unrepliedProactiveSessionIds`.
+     *  The session row shows a small dot before the title so the user can see
+     *  which one is the new proactive nudge without opening every entry. */
+    unreadIds?: ReadonlySet<string>
     limit?: number
   }>(),
   { limit: 4 }
@@ -109,6 +117,17 @@ function relativeTime(epochMs: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unread-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-primary, #3880ff);
 }
 
 .when {

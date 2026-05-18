@@ -105,6 +105,12 @@ export interface IProactiveStateRepository {
     states: readonly ProactivePrepState[]
   ): Promise<readonly ProactiveStateEntry[]>
 
+  /** Session ids that have at least one proactive message in `ready` or
+   *  `degraded` AND no user-authored message yet. Drives the per-session
+   *  "needs attention" dot in the chat session list — once the user
+   *  replies, the session falls out of the set. */
+  listUnrepliedSessionIds(): Promise<readonly ChatSessionId[]>
+
   /** Lookup by the dedup key. Used by detectors to skip already-fired
    *  instances. */
   findByRuleAndDate(

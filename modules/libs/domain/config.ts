@@ -87,6 +87,4 @@ export interface HolidayEntry {
   readonly name: Record<string, string>
   /** Local date the holiday falls on, `'YYYY-MM-DD'`. */
   readonly date: string
-  /** Catalog tag slugs used by the LLM to curate lectures for this holiday. */
-  readonly topic_tags: readonly string[]
 }

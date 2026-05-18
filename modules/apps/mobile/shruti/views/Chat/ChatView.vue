@@ -31,7 +31,11 @@
             :has-recent-listening="hasRecentListening"
             @pick="onPickSuggestion"
           />
-          <RecentSessions :sessions="sessions" @pick="onPickSession" />
+          <RecentSessions
+            :sessions="sessions"
+            :unread-ids="unrepliedProactiveSessionIds"
+            @pick="onPickSession"
+          />
         </div>
       </div>
     </IonContent>
@@ -41,6 +45,7 @@
       :sessions="filteredSessions"
       :active-session-id="activeSessionId"
       :search-query="searchQuery"
+      :unread-ids="unrepliedProactiveSessionIds"
       @update:open="(v) => (v ? null : onCloseHistory())"
       @update:search-query="searchQuery = $event"
       @pick="onPickSession"
@@ -78,6 +83,7 @@ const {
   contentRef,
   searchQuery,
   filteredSessions,
+  unrepliedProactiveSessionIds,
   onSend,
   onNewSession,
   onOpenHistory,
