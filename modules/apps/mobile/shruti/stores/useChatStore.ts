@@ -399,7 +399,11 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  async function executeAction(messageId: string, actionId: string): Promise<void> {
+  async function executeAction(
+    messageId: string,
+    actionId: string,
+    override?: { time?: string }
+  ): Promise<void> {
     const msg = messages.value.find((m) => m.id === messageId)
     if (!msg) return
     const action = msg.actions?.[actionId]
@@ -434,7 +438,9 @@ export const useChatStore = defineStore("chat", () => {
         await notes.refresh()
         await toast.info(t("chat.noteSaved"))
       } else if (action.kind === "enable_daily_reminder") {
-        await applyProactiveDailyReminder(action.time)
+        // Card lets the user pick a time before tapping Confirm; if
+        // they did, the chosen value rides in via `override.time`.
+        await applyProactiveDailyReminder(override?.time ?? action.time)
       } else if (action.kind === "configure_smart_library") {
         await applyProactiveSmartLibrary(action.filters, action.id)
       } else if (action.kind === "upgrade_to_pro") {

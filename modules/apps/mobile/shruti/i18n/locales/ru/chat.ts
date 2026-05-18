@@ -116,8 +116,8 @@ export default {
   actionConfigureSmartLibraryBody:
     "Держи свежие лекции по своим темам в офлайне. Я могу заранее настроить фильтры под тебя.",
   actionConfigureSmartLibraryConfirm: "Настроить",
-  actionConfigureSmartLibraryDone: "Фильтры применены.",
-  actionConfigureSmartLibraryError: "Не удалось применить фильтры.",
+  actionConfigureSmartLibraryDone: "Открыто в настройках.",
+  actionConfigureSmartLibraryError: "Не удалось открыть умную библиотеку.",
 
   actionUpgradeToProTitle: "Shruti Pro",
   actionUpgradeToProBody:

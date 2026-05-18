@@ -102,8 +102,8 @@ export default {
   actionConfigureSmartLibraryBody:
     "Keep fresh lectures on your topics queued offline. I can pre-fill these filters for you.",
   actionConfigureSmartLibraryConfirm: "Set up",
-  actionConfigureSmartLibraryDone: "Filters applied.",
-  actionConfigureSmartLibraryError: "Couldn't apply filters.",
+  actionConfigureSmartLibraryDone: "Opened in Settings.",
+  actionConfigureSmartLibraryError: "Couldn't open Smart Library.",
 
   actionUpgradeToProTitle: "Shruti Pro",
   actionUpgradeToProBody:
