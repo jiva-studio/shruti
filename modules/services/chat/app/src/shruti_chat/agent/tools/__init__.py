@@ -49,7 +49,6 @@ from shruti_chat.agent.tools import (  # noqa: F401 — side-effect imports
     outline,
     pdf,
     personalize,
-    propose_cite,
     propose_hints,
     resolve,
     search,
@@ -150,9 +149,6 @@ def bind_repositories(
             "pdf_storage": pdf_storage,
         },
         "propose_playlist":      {"catalog_repo": catalog_repo},
-        "propose_cite":          {"catalog_repo": catalog_repo},
-        "propose_card":          {"catalog_repo": catalog_repo},
-        "propose_outline":       {"catalog_repo": catalog_repo},
     }
     for name, kwargs in bindings.items():
         fn = TOOLS.get(name)

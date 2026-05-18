@@ -8,6 +8,7 @@ are imported here; the endpoint stays thin.
 
 from __future__ import annotations
 
+import re
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from shruti_chat.agent.events import AgentEvent
@@ -19,8 +20,66 @@ from shruti_chat.agent.tools import (
     TOOLS,
     build_personalized_tools,
 )
+from shruti_chat.composition import AppDeps
 from shruti_chat.config import get_settings
 from shruti_chat.domain import UserContext
+from shruti_chat.observability.logging import get_logger
+
+
+log = get_logger(__name__)
+
+
+# Inline chip-class markers the LLM is FORBIDDEN to write directly —
+# it must call propose_cite / propose_card / propose_outline so the
+# agent can validate the track_id before injecting the marker into
+# the stream. Anything matching these regexes in the LLM-typed prose
+# is a bypass: log it, optionally cross-reference against the catalog
+# to flag fabricated ids.
+_CITE_MARKER_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
+_CARD_MARKER_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
+_OUTLINE_MARKER_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
+
+
+async def _audit_bypass_markers(
+    llm_prose: str,
+    *,
+    deps: AppDeps,
+    request_id: str | None,
+) -> None:
+    """Log every chip-class marker the LLM typed in prose. With
+    `propose_cite` / `propose_card` / `propose_outline` in place, the
+    correct path injects markers via tool side-events that bypass
+    `content_buf` — so anything that DOES appear in the LLM-prose
+    buffer is an instruction-following slip we want visible in
+    metrics, never silently stripped."""
+    findings: list[tuple[str, str]] = []  # (kind, track_id)
+    for m in _CITE_MARKER_RE.finditer(llm_prose):
+        findings.append(("cite", m.group(1)))
+    for m in _CARD_MARKER_RE.finditer(llm_prose):
+        findings.append(("card", m.group(1)))
+    for m in _OUTLINE_MARKER_RE.finditer(llm_prose):
+        findings.append(("outline", m.group(1)))
+    if not findings:
+        return
+
+    all_ids = list({tid for _kind, tid in findings})
+    try:
+        valid = set(await deps.catalog_repo.filter_existing_track_ids(all_ids))
+    except Exception as exc:
+        log.warning(
+            "bypass_audit_validation_failed",
+            request_id=request_id,
+            error=str(exc),
+        )
+        valid = set()
+    for kind, tid in findings:
+        log.info(
+            "chat_marker_bypassed_tool",
+            request_id=request_id,
+            kind=kind,
+            track_id=tid,
+            in_catalog=tid in valid,
+        )
 
 
 async def run_chat_turn(
@@ -30,11 +89,20 @@ async def run_chat_turn(
     request_id: str | None = None,
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
+    deps: AppDeps | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Run one chat turn end-to-end, yielding agent events as they stream."""
     settings = get_settings()
     messages = build_messages(history, lang, user_context)
     tools = build_personalized_tools(TOOLS, user_context)
+
+    async def _on_done(llm_prose: str) -> None:
+        if deps is None:
+            return
+        await _audit_bypass_markers(
+            llm_prose, deps=deps, request_id=request_id,
+        )
+
     async for ev in run_llm_loop(
         messages,
         tools=tools,
@@ -44,5 +112,6 @@ async def run_chat_turn(
         model=settings.llm_default,
         request_id=request_id,
         is_disconnected=is_disconnected,
+        on_done=_on_done,
     ):
         yield ev
