@@ -57,6 +57,11 @@ type configManifest struct {
 		Version int64 `json:"version"`
 		Scheme  int   `json:"scheme"`
 	} `json:"databases"`
+	// Proactive config (rules + holiday calendar) is opaque to the
+	// publisher — we read it from disk as raw JSON and pass it through
+	// to every target. Lets the mobile schema for proactive evolve
+	// without touching this Go code.
+	Proactive json.RawMessage `json:"proactive,omitempty"`
 }
 
 func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
@@ -90,6 +95,19 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	currentDB := filepath.Join(uc.OutDir, "artifacts", "catalog", "current.db")
 	if _, err := os.Stat(currentDB); err != nil {
 		return Result{}, fmt.Errorf("current.db missing — refresh first: %w", err)
+	}
+
+	// Optional proactive block. Edit this JSON to ship new holidays or
+	// retune rule cooldowns without an app release; absence is fine and
+	// reverts the published config to "no proactive" (clients fall back
+	// to bundled defaults).
+	proactivePath := filepath.Join(uc.OutDir, "artifacts", "catalog", "proactive.json")
+	var proactiveBlock json.RawMessage
+	if data, readErr := os.ReadFile(proactivePath); readErr == nil {
+		if !json.Valid(data) {
+			return Result{}, fmt.Errorf("proactive.json is not valid JSON")
+		}
+		proactiveBlock = json.RawMessage(data)
 	}
 	dbKey := fmt.Sprintf("public/db/lectorium.%d.db", cur)
 
@@ -159,6 +177,10 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 			filtered = filtered[:5]
 		}
 		cfg.Databases = filtered
+		// Always write the latest proactive block from disk — never
+		// merge with whatever existed on the bucket. The on-disk file
+		// is the source of truth (under git, reviewed in PRs).
+		cfg.Proactive = proactiveBlock
 		body, _ := json.MarshalIndent(cfg, "", "  ")
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)

@@ -12,6 +12,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from lectorium_chat.api.schemas.chat import ChatRequestDto
 from lectorium_chat.application.chat_turn import run_chat_turn
+from lectorium_chat.application.proactive_turn import run_proactive_turn
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
 from lectorium_chat.observability.logging import get_logger
@@ -75,19 +76,35 @@ async def chat(
         # whether the mobile client is sending it after a retry, which
         # is the dataset that decides whether dedup is worth building.
         idempotency_key=idempotency_key,
+        proactive_rule=body.proactive.rule_kind if body.proactive else None,
     )
 
     user_ctx = body.user_context.to_domain() if body.user_context else None
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         try:
-            async for ev in run_chat_turn(
-                [m.model_dump() for m in body.messages],
-                lang=body.lang,
-                request_id=request_id,
-                user_context=user_ctx,
-                is_disconnected=request.is_disconnected,
-            ):
+            if body.proactive is not None:
+                # Proactive turn — rule-specific prompt swap. Same tool
+                # registry, same SSE response shape; the client doesn't
+                # render the stream live, it collects it into a single
+                # `chat_messages.body_md` row for later display.
+                stream = run_proactive_turn(
+                    body.proactive.rule_kind,
+                    body.proactive.rule_context,
+                    lang=body.lang,
+                    request_id=request_id,
+                    user_context=user_ctx,
+                    is_disconnected=request.is_disconnected,
+                )
+            else:
+                stream = run_chat_turn(
+                    [m.model_dump() for m in body.messages],
+                    lang=body.lang,
+                    request_id=request_id,
+                    user_context=user_ctx,
+                    is_disconnected=request.is_disconnected,
+                )
+            async for ev in stream:
                 yield {
                     "event": ev.type,
                     "data": json.dumps(ev.data, ensure_ascii=False),

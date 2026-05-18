@@ -1,0 +1,86 @@
+{
+  "_comment": "Example proactive block — copy to <OutDir>/artifacts/catalog/proactive.json before running `catalog.publish` to enable. Absence of the file disables remote overrides; the mobile app then uses its bundled defaults. Each rule's `enabled: false` disables that single rule without touching the bundle. `master_enabled: false` hard-disables the whole subsystem with no app release.",
+  "master_enabled": true,
+  "rules": [
+    {
+      "id": "holiday",
+      "enabled": true,
+      "mode": "pre_baked",
+      "prep_window_hours": 48,
+      "refresh_if_older_than_hours": 24,
+      "session_strategy": "new_session",
+      "session_title_template": "{holiday_name}",
+      "cooldown_hours": 24
+    },
+    {
+      "id": "weekly_digest",
+      "enabled": true,
+      "mode": "pre_baked",
+      "prep_window_hours": 12,
+      "refresh_if_older_than_hours": 6,
+      "session_strategy": "new_session",
+      "session_title_template": "Прогресс за неделю {week_label}",
+      "cooldown_hours": 144,
+      "eligibility": [
+        { "predicate": "total_listened_seconds_at_least", "value": 1800 },
+        { "predicate": "completed_tracks_at_least", "value": 2 }
+      ]
+    },
+    {
+      "id": "inactivity",
+      "enabled": true,
+      "mode": "pre_baked",
+      "prep_window_hours": 0,
+      "refresh_if_older_than_hours": 24,
+      "session_strategy": "new_session",
+      "cooldown_hours": 336,
+      "eligibility": [
+        { "predicate": "completed_tracks_at_least", "value": 3 },
+        { "predicate": "days_since_install_at_least", "value": 14 }
+      ]
+    },
+    {
+      "id": "enable_notifications_hint",
+      "enabled": true,
+      "mode": "pre_baked",
+      "prep_window_hours": 0,
+      "refresh_if_older_than_hours": 9999,
+      "session_strategy": "append_current",
+      "cooldown_hours": 720,
+      "eligibility": [
+        { "predicate": "current_streak_at_least", "value": 3 },
+        { "predicate": "has_notifications_permission", "value": false }
+      ]
+    },
+    {
+      "id": "smart_library_hint",
+      "enabled": true,
+      "mode": "pre_baked",
+      "prep_window_hours": 0,
+      "refresh_if_older_than_hours": 9999,
+      "session_strategy": "append_current",
+      "cooldown_hours": 720,
+      "dismiss_resets_after_hours": 2160,
+      "eligibility": [
+        { "predicate": "completed_tracks_at_least", "value": 3 },
+        { "predicate": "is_subscribed", "value": false }
+      ]
+    }
+  ],
+  "calendars": {
+    "holidays": [
+      {
+        "id": "janmashtami_2026",
+        "name": { "en": "Janmashtami", "ru": "Джанмаштами" },
+        "date": "2026-08-26",
+        "topic_tags": ["krishna_appearance"]
+      },
+      {
+        "id": "gaura_purnima_2026",
+        "name": { "en": "Gaura Purnima", "ru": "Гаура-пурнима" },
+        "date": "2026-03-13",
+        "topic_tags": ["mahaprabhu_appearance"]
+      }
+    ]
+  }
+}
