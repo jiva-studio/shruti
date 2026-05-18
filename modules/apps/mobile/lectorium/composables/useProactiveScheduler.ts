@@ -1,6 +1,8 @@
 import { onBeforeUnmount, onMounted } from "vue"
+import { useI18n } from "vue-i18n"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
+import type { ChatMessageId } from "@lib/domain/core.js"
 import type {
   IProactiveStateRepository,
   ProactiveStateEntry,
@@ -11,6 +13,11 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
+// Side-effect import: each rule module calls `registerRule()` at load
+// time so the registry knows about it. Removing this line silently
+// disables every rule.
+import "@lectorium/proactive/rules/index.js"
+import { resolveSessionId } from "@lectorium/proactive/sessions.js"
 import type {
   ProactiveContext,
   ResolvedProactiveRule,
@@ -39,6 +46,7 @@ export function useProactiveScheduler(): void {
   const app = useLectorium()
   const language = useAppLanguage()
   const purchases = usePurchasesStore()
+  const { t } = useI18n()
   // First time the scheduler runs we stamp "install age" — the device
   // never sees a fresh install on the same DB twice, so a single config
   // key is enough. days_since_install_at_least reads this.
@@ -122,6 +130,8 @@ export function useProactiveScheduler(): void {
       currentStreak,
       completedTracks,
       firstSeenAtMs: firstSeenAt.value,
+      t: (key: string, params?: Record<string, unknown>) =>
+        params ? t(key, params) : t(key),
     }
   }
 
@@ -192,7 +202,7 @@ export function useProactiveScheduler(): void {
     try {
       const result = await rule.handler.buildContent(entry, ctx)
       if (result === null) return
-      await repo.updateContent(entry.chatMessageId, result.bodyMd)
+      await repo.updateContent(entry.chatMessageId, result.bodyMd, result.actions)
       await repo.updatePrepState(entry.chatMessageId, "ready", ctx.nowMs)
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
@@ -239,21 +249,43 @@ export function useProactiveScheduler(): void {
     if (rules.length === 0) return
 
     // 1. Detect new instances.
+    const sessions = app.repositories().chatSessions
     for (const rule of rules) {
       if (!isEligible(rule.config.eligibility, ctx)) continue
       if (await isOnCooldown(rule, ctx.nowMs, repo)) continue
 
-      let detected: readonly { ruleDate: string }[] = []
+      let detected: readonly Awaited<ReturnType<typeof rule.handler.detect>>[number][] = []
       try {
-        detected = await rule.handler.detect(ctx)
+        detected = [...(await rule.handler.detect(ctx))]
       } catch (err) {
         console.warn("[proactive] detect threw", rule.config.id, err)
         continue
       }
-      // Phase 2 ships no handlers, so this is a no-op for now. INSERT
-      // wiring lives in the handler's content builder + the create()
-      // call it makes against the repo — Phase 4 fleshes this out.
-      void detected
+      for (const det of detected) {
+        // UNIQUE(rule_kind, rule_date) idempotency check before we
+        // create a fresh chat_session — otherwise re-detection on a
+        // 30-minute tick would litter the history with empty sessions.
+        const existing = await repo.findByRuleAndDate(rule.config.id, det.ruleDate)
+        if (existing !== null) continue
+        try {
+          const sessionId = await resolveSessionId(rule, det, ctx.nowMs, sessions)
+          const chatMessageId = randomChatMessageId()
+          await repo.create({
+            chatMessageId,
+            sessionId,
+            role: "assistant",
+            content: "",
+            createdAt: ctx.nowMs,
+            visibleOn: det.visibleOn,
+            notifyAt: det.notifyAt,
+            ruleKind: rule.config.id,
+            ruleDate: det.ruleDate,
+            prepState: "pending",
+          })
+        } catch (err) {
+          console.warn("[proactive] create threw", rule.config.id, err)
+        }
+      }
     }
 
     // 2. Re-validate and prep existing rows.
@@ -311,6 +343,13 @@ export function useProactiveScheduler(): void {
     void pauseHandle?.remove()
     pauseHandle = null
   })
+}
+
+function randomChatMessageId(): ChatMessageId {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID() as ChatMessageId
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}` as ChatMessageId
 }
 
 /**

@@ -82,6 +82,9 @@ export default {
   actionRetry: "Retry",
   actionDegraded: "Action card data is missing.",
 
+  proactiveEnableNotificationsBody:
+    "You've been listening for a few days in a row — want a daily reminder so you don't lose the rhythm? I'll pick a time you can change later in Settings.",
+
   actionEnableReminderTitle: "Daily reminder",
   actionEnableReminderBody:
     "Pick a time each day and I'll nudge you to come listen. You can change or turn it off later in Settings.",

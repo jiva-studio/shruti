@@ -1,4 +1,5 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 
 /**
@@ -17,8 +18,11 @@ export interface ProactiveContext {
   readonly totalListenedSeconds: number
   readonly currentStreak: number
   readonly completedTracks: number
-  /** Unix-ms of the oldest listening session, used as install-age proxy. */
+  /** Unix-ms of when the device first ran the scheduler. */
   readonly firstSeenAtMs: number | null
+  /** Bound vue-i18n translator. Handlers use this to compose body_md
+   *  in the user's locale without pulling in a Vue dependency. */
+  readonly t: (key: string, params?: Record<string, unknown>) => string
 }
 
 /**
@@ -68,11 +72,18 @@ export interface ProactiveRuleHandler {
    * row that needs prep. Returning `null` keeps the row in `pending`
    * for the next tick. Throwing falls back to `degraded` with whatever
    * body was already there.
+   *
+   * `actions` is keyed by the marker's `id=` value; the scheduler
+   * writes both `body_md` and the action payload map to the
+   * underlying `chat_messages` row in one transaction.
    */
   buildContent(
     entry: ProactiveStateEntry,
     ctx: ProactiveContext
-  ): Promise<{ readonly bodyMd: string } | null>
+  ): Promise<{
+    readonly bodyMd: string
+    readonly actions?: Record<string, ChatActionPayload>
+  } | null>
 
   /**
    * Optional pre-pause hook for rules that schedule future
