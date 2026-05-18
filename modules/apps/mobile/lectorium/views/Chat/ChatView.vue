@@ -23,7 +23,12 @@
     </div>
     <IonContent class="chat-content" :fullscreen="true">
       <div ref="contentRef" class="chat-scroll">
-        <ChatMessageList v-if="hasMessages" :messages="messages" @pick-chapter="onPickChapter" />
+        <ChatMessageList
+          v-if="hasMessages"
+          :messages="messages"
+          @pick-chapter="onPickChapter"
+          @pick-followup="onSend"
+        />
         <div v-else class="empty-state">
           <img src="/chat-empty.png" class="empty-icon" alt="" aria-hidden="true" />
           <SuggestionChips

@@ -87,6 +87,10 @@ export interface RunChatTurnDeps {
   /** Localised fallback name when the salvage can't infer one from the
    *  user prompt. */
   readonly fallbackPlaylistName: string
+  /** Pull `[followup:<text>]` chip texts out of the final assistant
+   *  content. Strict parser — malformed markers leak into prose and
+   *  return no chip (fix lives in the prompt, not here). */
+  readonly extractFollowups: (content: string) => readonly string[]
 }
 
 /**
@@ -226,6 +230,7 @@ export async function* runChatTurn(
   )
 
   if (acc.length > 0) {
+    const followups = deps.extractFollowups(acc)
     const finalised = await deps.messages.create({
       id: assistantId,
       sessionId: input.sessionId,
@@ -235,6 +240,7 @@ export async function* runChatTurn(
       actions: mergedActions,
       outlines,
       error: errorMeta,
+      followups: followups.length > 0 ? followups : undefined,
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }

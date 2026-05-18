@@ -46,6 +46,7 @@ export default {
   // clear *which* lecture the agent will summarise.
   suggestionRecapCurrent: "Перескажи текущую лекцию",
   suggestionRecapRecent: "Перескажи последнюю лекцию",
+  followupAriaLabel: "Подсказка: {text}",
   suggestions: [
     "Где остановился?", // list_my_tracks(status='in_progress')
     "Собери плейлист по Гите 2", // propose_playlist

@@ -41,6 +41,7 @@ export default {
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
+  followupAriaLabel: "Suggested follow-up: {text}",
   suggestions: [
     "Where did I stop?", // list_my_tracks(status='in_progress')
     "Playlist on Gita ch. 2", // propose_playlist

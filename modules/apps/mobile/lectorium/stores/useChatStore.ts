@@ -11,7 +11,10 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { parseChatMarkers } from "@lectorium/views/Chat/composables/useMarkerParser.js"
+import {
+  extractFollowups,
+  parseChatMarkers,
+} from "@lectorium/views/Chat/composables/useMarkerParser.js"
 import {
   addTracksToPlaylist,
   runChatTurn,
@@ -273,6 +276,7 @@ export const useChatStore = defineStore("chat", () => {
           buildUserContext: (focus) => trackUserState.buildUserContext(focus),
           salvageOrphanActions,
           fallbackPlaylistName: t("chat.fallbackPlaylistName"),
+          extractFollowups,
         }
       )) {
         applyTurnEvent(event)

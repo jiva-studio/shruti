@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseChatMarkers } from "../useMarkerParser.js"
+import { extractFollowups, parseChatMarkers } from "../useMarkerParser.js"
 
 /**
  * Marker grammar coverage. The parser is the bridge between LLM-emitted
@@ -64,5 +64,77 @@ describe("parseChatMarkers — action markers", () => {
       expect(action.actionKind).toBe("share_pdf")
       expect(action.actionId).toBe("ab12cd34")
     }
+  })
+})
+
+describe("parseChatMarkers — followup markers (strip from prose)", () => {
+  it("strips [followup:..] markers from the rendered token stream", () => {
+    const tokens = parseChatMarkers(
+      "Глава 2 раскрывает санкхья-йогу.\n[followup:А что в главе 3?]\n[followup:Сделай PDF]"
+    )
+    // No token for the followup itself.
+    expect(tokens.every((t) => t.kind !== "action")).toBe(true)
+    const textHtml = tokens
+      .filter((t): t is Extract<typeof t, { kind: "text" }> => t.kind === "text")
+      .map((t) => t.html)
+      .join(" ")
+    expect(textHtml).not.toContain("[followup:")
+    expect(textHtml).toContain("санкхья-йогу")
+  })
+
+  it("leaves malformed followup markers in prose (strict parser)", () => {
+    // `]` inside text — the regex matches "Глава 2.20" and the trailing
+    // `]` leaks; that's the documented strict-parser behaviour.
+    const tokens = parseChatMarkers("ок [followup:Узнай про [Глава 2.20]]")
+    const html = tokens
+      .filter((t): t is Extract<typeof t, { kind: "text" }> => t.kind === "text")
+      .map((t) => t.html)
+      .join("")
+    // Trailing `]` leaks into prose since the parser stops at the inner `]`.
+    expect(html).toContain("]")
+  })
+})
+
+describe("extractFollowups", () => {
+  it("returns chip texts in order", () => {
+    const chips = extractFollowups(
+      "Some prose.\n[followup:Сделай PDF]\n[followup:А что в главе 3?]"
+    )
+    expect(chips).toEqual(["Сделай PDF", "А что в главе 3?"])
+  })
+
+  it("caps at 3 even if more markers are present", () => {
+    const chips = extractFollowups(
+      "[followup:one][followup:two][followup:three][followup:four][followup:five]"
+    )
+    expect(chips).toHaveLength(3)
+    expect(chips).toEqual(["one", "two", "three"])
+  })
+
+  it("rejects empty text (no chip emitted)", () => {
+    const chips = extractFollowups("[followup:]")
+    expect(chips).toEqual([])
+  })
+
+  it("rejects text containing pipe (drops the chip)", () => {
+    // Pipe is the marker field separator elsewhere; tolerating it
+    // inside followup text would force the LLM to escape and create
+    // grammar bleed with `[action:..|id=..]`.
+    const chips = extractFollowups("[followup:Сделай PDF | плейлист]")
+    expect(chips).toEqual([])
+  })
+
+  it("does not break on `]` inside text — strict stop on first `]`", () => {
+    const chips = extractFollowups("[followup:Глава [2.20]]")
+    expect(chips).toEqual(["Глава [2.20"])
+  })
+
+  it("trims surrounding whitespace from the chip text", () => {
+    const chips = extractFollowups("[followup:   Сделай PDF   ]")
+    expect(chips).toEqual(["Сделай PDF"])
+  })
+
+  it("returns empty array on empty / non-string input", () => {
+    expect(extractFollowups("")).toEqual([])
   })
 })

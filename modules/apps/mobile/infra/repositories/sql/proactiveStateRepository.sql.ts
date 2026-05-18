@@ -81,8 +81,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
           `INSERT INTO chat_messages
              (id, session_id, role, content, created_at,
               actions_json, outlines_json, action_states_json, error,
-              visible_on, notify_at, notified_at)
-           VALUES (?, ?, ?, ?, ?, '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', NULL, ?, ?, NULL)`,
+              visible_on, notify_at, notified_at, followups_json)
+           VALUES (?, ?, ?, ?, ?, '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', NULL, ?, ?, NULL, '[]')`,
           [
             input.chatMessageId,
             input.sessionId,
