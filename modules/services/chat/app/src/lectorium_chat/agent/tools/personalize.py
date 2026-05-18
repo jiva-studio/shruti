@@ -17,12 +17,15 @@ matching tool synchronously with the consumer UI.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.domain import UserContext
+from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
+from lectorium_chat.domain.user_context import TrackStatus, UserContextTrack
 
 
 _NO_CTX_HINT = (
@@ -51,28 +54,63 @@ def _chunk_to_wire(s, *, include_ref: bool) -> dict[str, Any]:
     return row
 
 
-async def continue_listening(
-    *, user_context: UserContext | None = None,
-) -> dict[str, Any] | list[dict[str, Any]]:
-    """Top-3 unfinished tracks from `recent_tracks`, recency-ordered.
+def _track_to_wire(t: UserContextTrack) -> dict[str, Any]:
+    return {
+        "track_id": t.track_id,
+        "position_ms": t.position_ms,
+        "percent": t.percent,
+        "last_played_at": (
+            t.last_played_at.isoformat() if t.last_played_at else None
+        ),
+    }
 
-    The 5%<percent<95% filter + recency sort lives on `UserContext` as
-    `in_progress_tracks()`; this tool just picks the head and reshapes
-    into the wire format.
+
+def _parse_iso(value: str | None, *, field: str) -> datetime | None:
+    if value is None or value == "":
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be ISO-8601 (got {value!r})") from exc
+
+
+async def list_my_tracks(
+    *,
+    user_context: UserContext | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    status: TrackStatus = "any",
+    limit: int = 20,
+    catalog_repo: CatalogRepository,
+) -> dict[str, Any] | list[dict[str, Any]]:
+    """Recently-played tracks from the user's history, optionally
+    filtered by time window and completion status. Returns wire rows
+    `{track_id, position_ms, percent, last_played_at}` for cards.
+
+    Stale `track_id`s — present in user history but missing from the
+    current catalog (post-import drift, renames) — are dropped before
+    returning so the LLM doesn't emit `[card:X]` markers the client
+    can't resolve.
     """
     if user_context is None:
         return _ok_or_empty([], False)
-    return [
-        {
-            "track_id": t.track_id,
-            "position_ms": t.position_ms,
-            "percent": t.percent,
-            "last_played_at": (
-                t.last_played_at.isoformat() if t.last_played_at else None
-            ),
-        }
-        for t in user_context.in_progress_tracks()[:3]
-    ]
+
+    try:
+        since_dt = _parse_iso(since, field="since")
+        until_dt = _parse_iso(until, field="until")
+    except ValueError as exc:
+        return {"error": "bad_argument", "hint": str(exc)}
+
+    rows = user_context.tracks_in_window(
+        since=since_dt, until=until_dt, status=status,
+    )
+    if not rows:
+        return []
+
+    capped = rows[: max(1, min(limit, 50))]
+    track_ids = [t.track_id for t in capped]
+    live = set(await catalog_repo.filter_existing_track_ids(track_ids))
+    return [_track_to_wire(t) for t in capped if t.track_id in live]
 
 
 async def search_my_history(
@@ -152,14 +190,55 @@ async def recommend_next(
 
 
 register_tool(ToolDef(
-    name="continue_listening",
-    fn=continue_listening,
+    name="list_my_tracks",
+    fn=list_my_tracks,
     personalized=True,
     description=(
-        "Return the user's in-progress tracks (top 3, recency-ordered). "
-        "Use when user asks 'where did I stop', 'continue listening'."
+        "List tracks from the user's listening history, optionally "
+        "filtered by `last_played_at` window and completion status. "
+        "Returns track rows for `[card:track_id]` markers.\n\n"
+        "Use whenever the user asks about HISTORY (what / when / how "
+        "long ago they listened):\n"
+        "  • «что я слушал на этой неделе» → "
+        "    `list_my_tracks(since=<start-of-week>, until=<now>)`\n"
+        "  • «продолжить / где я остановился» → "
+        "    `list_my_tracks(status='in_progress', limit=3)`\n"
+        "  • «что я дослушал в прошлом месяце» → "
+        "    `list_my_tracks(status='completed', since=…, until=…)`\n\n"
+        "Compute `since` / `until` from `user_context.now` yourself "
+        "(it's in the system prompt). Pass ISO-8601 strings with the "
+        "same offset as `now`. Do NOT call `list_tracks` for history — "
+        "that tool filters by LECTURE date, not listen date."
     ),
-    parameters={"type": "object", "properties": {}},
+    parameters={
+        "type": "object",
+        "properties": {
+            "since": {
+                "type": "string",
+                "description": (
+                    "Inclusive lower bound on `last_played_at`, ISO-8601 "
+                    "with offset (e.g. '2026-05-12T00:00:00+03:00')."
+                ),
+            },
+            "until": {
+                "type": "string",
+                "description": (
+                    "Inclusive upper bound on `last_played_at`, ISO-8601 "
+                    "with offset."
+                ),
+            },
+            "status": {
+                "type": "string",
+                "enum": ["any", "in_progress", "completed"],
+                "default": "any",
+                "description": (
+                    "Completion filter. `in_progress`: 5%-95% listened. "
+                    "`completed`: >=95% listened. `any`: no filter."
+                ),
+            },
+            "limit": {"type": "integer", "default": 20},
+        },
+    },
 ))
 
 register_tool(ToolDef(

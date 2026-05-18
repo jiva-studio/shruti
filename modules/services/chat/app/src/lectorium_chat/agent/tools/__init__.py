@@ -129,6 +129,7 @@ def bind_repositories(
         "find_similar_chunks":   {"chunk_repo": chunk_repo, "embedder": embedder},
         "search_my_history":     {"chunk_repo": chunk_repo, "embedder": embedder},
         "recommend_next":        {"chunk_repo": chunk_repo},
+        "list_my_tracks":        {"catalog_repo": catalog_repo},
         "get_track":             {"catalog_repo": catalog_repo},
         "list_tracks":           {"catalog_repo": catalog_repo},
         "resolve_author":        {"catalog_repo": catalog_repo},
