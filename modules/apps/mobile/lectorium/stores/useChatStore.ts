@@ -8,7 +8,6 @@ import {
   type FocusFragmentPayload,
 } from "@lectorium/composables/useTrackUserState.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import {
@@ -18,7 +17,6 @@ import {
 import {
   addTracksToPlaylist,
   runChatTurn,
-  saveChatNote,
   type RunChatTurnEvent,
 } from "@lib/application"
 import type {
@@ -124,7 +122,6 @@ export const useChatStore = defineStore("chat", () => {
   const appLanguage = useAppLanguage()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
-  const notes = useNotesStore()
   const toast = useToast()
   const { t } = useI18n()
 
@@ -461,20 +458,6 @@ export const useChatStore = defineStore("chat", () => {
           }
         )
         if (!r.ok) throw new Error(`add to playlist failed: ${r.error}`)
-      } else if (action.kind === "save_note") {
-        const r = await saveChatNote(
-          {
-            trackId: action.trackId as TrackId,
-            text: action.text,
-            startMs: action.startMs,
-            endMs: action.endMs,
-            chatActionId: actionId,
-          },
-          { notes: app.repositories().notes }
-        )
-        if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
-        await notes.refresh()
-        await toast.info(t("chat.noteSaved"))
       } else if (action.kind === "enable_daily_reminder") {
         // Card lets the user pick a time before tapping Confirm; if
         // they did, the chosen value rides in via `override.time`.

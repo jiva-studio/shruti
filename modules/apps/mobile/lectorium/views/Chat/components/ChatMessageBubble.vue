@@ -45,13 +45,6 @@
               :state="actionState(token.actionId)"
               @confirm="onConfirmAction"
             />
-            <ActionCardNote
-              v-else-if="token.kind === 'action' && token.actionKind === 'save_note'"
-              :action-id="token.actionId"
-              :payload="notePayload(token.actionId)"
-              :state="actionState(token.actionId)"
-              @confirm="onConfirmAction"
-            />
             <ActionCardSharePdf
               v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
               :action-id="token.actionId"
@@ -109,7 +102,6 @@ import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
 import OutlineCard from "./OutlineCard.vue"
 import ActionCardPlaylist from "./ActionCardPlaylist.vue"
-import ActionCardNote from "./ActionCardNote.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
@@ -167,11 +159,6 @@ function playlistPayload(
   // rebuilt orphan create_playlist actions from sibling [card:...]
   // markers before persisting. The bubble is presentation-only.
   return a && a.kind === "create_playlist" ? a : undefined
-}
-
-function notePayload(actionId: string): Extract<ActionPayload, { kind: "save_note" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "save_note" ? a : undefined
 }
 
 function sharePdfPayload(

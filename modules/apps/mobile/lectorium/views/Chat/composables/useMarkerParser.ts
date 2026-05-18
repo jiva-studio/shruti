@@ -6,7 +6,6 @@ import { marked } from "marked"
 
 export type ActionKind =
   | "create_playlist"
-  | "save_note"
   | "share_pdf"
   | "enable_daily_reminder"
   | "configure_smart_library"
@@ -220,7 +219,6 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
 function parseActionKind(raw: string): ActionKind | null {
   if (
     raw === "create_playlist" ||
-    raw === "save_note" ||
     raw === "share_pdf" ||
     raw === "enable_daily_reminder" ||
     raw === "configure_smart_library" ||

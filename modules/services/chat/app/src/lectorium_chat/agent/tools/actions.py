@@ -76,40 +76,6 @@ async def propose_playlist(
     }
 
 
-async def propose_save_note(
-    track_id: str,
-    start_ms: int,
-    end_ms: int,
-    text: str,
-    *,
-    yield_event: YieldEvent = _noop_yield,
-) -> dict[str, Any]:
-    """Ask the client to save a note (after user confirmation)."""
-    text = (text or "").strip()
-    if not text:
-        return {"error": "text_required"}
-    if not track_id:
-        return {"error": "track_id_required"}
-    if end_ms < start_ms:
-        end_ms = start_ms
-    action_id = _new_action_id()
-    yield_event(
-        "action",
-        {
-            "kind": "save_note",
-            "id": action_id,
-            "track_id": track_id,
-            "start_ms": int(start_ms),
-            "end_ms": int(end_ms),
-            "text": text,
-        },
-    )
-    return {
-        "ok": True,
-        "action_id": action_id,
-    }
-
-
 register_tool(ToolDef(
     name="propose_playlist",
     fn=propose_playlist,
@@ -134,24 +100,3 @@ register_tool(ToolDef(
     },
 ))
 
-register_tool(ToolDef(
-    name="propose_save_note",
-    fn=propose_save_note,
-    emits_events=True,
-    description=(
-        "Propose saving a quote as a user note — DOES NOT save it. "
-        "The client will render a card with a confirm button. Embed "
-        "`[action:save_note|id=<action_id>]` inline (construct from the "
-        "returned action_id). Never claim the note is saved."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "track_id": {"type": "string"},
-            "start_ms": {"type": "integer"},
-            "end_ms": {"type": "integer"},
-            "text": {"type": "string"},
-        },
-        "required": ["track_id", "start_ms", "end_ms", "text"],
-    },
-))

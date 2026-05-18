@@ -7,7 +7,7 @@ features inline when the user's conversation naturally invites it —
 e.g., they ask about scheduling, auto-download, or premium features
 without specifically requesting the corresponding UI.
 
-Same contract as `propose_playlist` / `propose_save_note`:
+Same contract as `propose_playlist`:
   1. Tool returns an `action_id`.
   2. Tool emits the SSE `action` event with the full payload.
   3. The LLM embeds `[action:<kind>|id=<action_id>]` inline.

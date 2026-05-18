@@ -69,10 +69,6 @@ export default {
   actionOpenNotes: "Open",
   miniRowOpen: "Open lecture",
 
-  actionNoteKind: "Save as note",
-  actionNoteConfirm: "Save",
-  actionNoteDone: "Note saved",
-  actionNoteError: "Couldn't save the note.",
   noteSaved: "Note saved",
   noteSaving: "Saving note…",
 
