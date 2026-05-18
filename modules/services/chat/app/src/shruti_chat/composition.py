@@ -19,6 +19,7 @@ from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
 from shruti_chat.domain.ports.outline_cache import OutlineCache
+from shruti_chat.domain.ports.pdf_storage import PdfStorage
 from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
 
 
@@ -31,6 +32,7 @@ class AppDeps:
     catalog_repo: CatalogRepository
     transcript_storage: TranscriptStorage
     outline_cache: OutlineCache
+    pdf_storage: PdfStorage
     rate_limiter: RateLimiter
 
 

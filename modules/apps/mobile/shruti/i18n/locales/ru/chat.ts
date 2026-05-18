@@ -82,6 +82,13 @@ export default {
   noteSaved: "Заметка сохранена",
   noteSaving: "Сохраняю заметку…",
 
+  // Action cards — share PDF
+  actionPdfKind: "Транскрипт лекции",
+  actionPdfShare: "Поделиться",
+  actionPdfShared: "Отправлено",
+  actionPdfError: "Не удалось подготовить PDF.",
+  actionPdfDialog: "Поделиться транскриптом",
+
   // Action cards — common
   actionDismiss: "Не нужно",
   actionDismissed: "Действие отменено",

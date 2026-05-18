@@ -205,6 +205,86 @@ async def _cache_head_silent(
         return False
 
 
+async def ensure_outline_payload(
+    track_id: str,
+    transcript_path: str,
+    effective_lang: str,
+    *,
+    transcript_storage: TranscriptStorage,
+    outline_cache: OutlineCache,
+) -> dict[str, Any] | None:
+    """Resolve the outline payload for one track — cache or cold-path.
+
+    Inputs are pre-resolved by the caller (so a caller that already
+    looked up `transcript_path` / `effective_lang` doesn't pay for a
+    second catalog lookup). On any failure the function returns `None`
+    so the caller can render its artifact without an outline rather
+    than fail loudly. Concurrent generation for the same key is
+    serialised by `_OUTLINE_LOCKS`; cross-process races are caught by
+    the conditional PUT.
+    """
+    payload: dict[str, Any] | None = None
+    if await _cache_head_silent(
+        outline_cache, track_id, effective_lang, "outline_head_failed",
+    ):
+        payload = await _cache_get_silent(
+            outline_cache, track_id, effective_lang, "outline_get_failed",
+        )
+    if payload is not None:
+        return payload
+
+    async with _OUTLINE_LOCKS[(track_id, effective_lang)]:
+        if await _cache_head_silent(
+            outline_cache, track_id, effective_lang,
+            "outline_head_failed_in_lock",
+        ):
+            payload = await _cache_get_silent(
+                outline_cache, track_id, effective_lang,
+                "outline_get_failed_in_lock",
+            )
+        if payload is not None:
+            return payload
+
+        try:
+            payload = await _generate_outline(
+                track_id, transcript_path, effective_lang, transcript_storage,
+            )
+        except Exception as exc:
+            log.warning(
+                "outline_generate_failed",
+                track_id=track_id, lang=effective_lang, error=str(exc),
+            )
+            return None
+
+        # Conditional PUT — refuses to overwrite if another worker
+        # (different pod / process) wrote the artifact while we were
+        # running gemini-flash. On loss, refetch theirs.
+        try:
+            await outline_cache.put(
+                track_id, effective_lang, payload, if_none_match=True,
+            )
+        except OutlineCacheConflict:
+            log.info(
+                "outline_put_lost_race",
+                track_id=track_id, lang=effective_lang,
+            )
+            refreshed = await _cache_get_silent(
+                outline_cache, track_id, effective_lang,
+                "outline_get_after_race_failed",
+            )
+            if refreshed is not None:
+                payload = refreshed
+        except Exception as exc:
+            # Persist failure isn't fatal — return the freshly-generated
+            # payload anyway, so the caller's hot artifact gets the
+            # outline even if the next request has to regenerate.
+            log.warning(
+                "outline_put_failed",
+                track_id=track_id, lang=effective_lang, error=str(exc),
+            )
+        return payload
+
+
 async def get_track_outline(
     track_id: str,
     lang: str = "ru",
@@ -223,8 +303,6 @@ async def get_track_outline(
     effective transcript language so subsequent requests in either
     language land on the same artifact.
     """
-    # 1. Resolve which transcript we can actually read. Empty result =
-    # the track has no transcripts at all → unambiguous failure.
     transcript_path, effective_lang = await catalog_repo.resolve_transcript_path(
         track_id, requested_lang=lang,
     )
@@ -235,62 +313,16 @@ async def get_track_outline(
             "lang": lang,
         }
 
-    # 2. Warm path — cache HEAD/GET under the effective lang's key.
-    payload: dict[str, Any] | None = None
-    if await _cache_head_silent(
-        outline_cache, track_id, effective_lang, "outline_head_failed",
-    ):
-        payload = await _cache_get_silent(
-            outline_cache, track_id, effective_lang, "outline_get_failed",
-        )
-
-    # 3. Cold path — generate + persist.
+    payload = await ensure_outline_payload(
+        track_id, transcript_path, effective_lang,
+        transcript_storage=transcript_storage, outline_cache=outline_cache,
+    )
     if payload is None:
-        async with _OUTLINE_LOCKS[(track_id, effective_lang)]:
-            if await _cache_head_silent(
-                outline_cache, track_id, effective_lang,
-                "outline_head_failed_in_lock",
-            ):
-                payload = await _cache_get_silent(
-                    outline_cache, track_id, effective_lang,
-                    "outline_get_failed_in_lock",
-                )
-
-            if payload is None:
-                try:
-                    payload = await _generate_outline(
-                        track_id, transcript_path, effective_lang, transcript_storage,
-                    )
-                except RuntimeError as exc:
-                    return {
-                        "error": str(exc),
-                        "track_id": track_id,
-                        "lang": effective_lang,
-                    }
-                # Conditional PUT — refuses to overwrite if another worker
-                # (different pod / process) wrote the artifact while we
-                # were running gemini-flash. On loss, refetch theirs.
-                try:
-                    await outline_cache.put(
-                        track_id, effective_lang, payload, if_none_match=True,
-                    )
-                except OutlineCacheConflict:
-                    log.info(
-                        "outline_put_lost_race",
-                        track_id=track_id, lang=effective_lang,
-                    )
-                    refreshed = await _cache_get_silent(
-                        outline_cache, track_id, effective_lang,
-                        "outline_get_after_race_failed",
-                    )
-                    if refreshed is not None:
-                        payload = refreshed
-                except Exception as exc:
-                    # Persist failure isn't fatal — the user still gets the outline.
-                    log.warning(
-                        "outline_put_failed",
-                        track_id=track_id, lang=effective_lang, error=str(exc),
-                    )
+        return {
+            "error": "outline_empty",
+            "track_id": track_id,
+            "lang": effective_lang,
+        }
 
     items = payload.get("items") or []
     yield_event("outline", {"track_id": track_id, "items": items})
