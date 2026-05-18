@@ -284,8 +284,8 @@ function renderTextWithWordHighlight(
 }
 
 /**
- * Render the title-card frame: opaque cream background, icon centered near
- * the top, multi-line title centered vertically. Used as a fixed overlay
+ * Render the title-card frame: opaque cream background, icon and multi-line
+ * title stacked as a single group centered vertically. Used as a fixed overlay
  * during the first ~0.5s of the reel.
  */
 export async function generateTitleFrame(
@@ -302,17 +302,6 @@ export async function generateTitleFrame(
   ctx.fillStyle = TITLE_BG_COLOR;
   ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
 
-  // Icon: square, ~25% of the slide width, anchored near the top.
-  const iconSize = Math.round(options.slideWidth * 0.25);
-  const iconX = (options.slideWidth - iconSize) / 2;
-  const iconY = Math.round(options.slideHeight * 0.12);
-  try {
-    const img = await loadImage(iconPath);
-    ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
-  } catch (e: any) {
-    console.warn(`[share-video] title icon load failed (${iconPath}): ${e?.message}`);
-  }
-
   const titleFontSize = Math.round(options.fontSize * 0.9);
   ctx.font = `bold ${titleFontSize}px ${FONT_FAMILY}, sans-serif`;
   ctx.fillStyle = TITLE_TEXT_COLOR;
@@ -322,12 +311,24 @@ export async function generateTitleFrame(
   const maxTextWidth = options.slideWidth * 0.85;
   const lines = wrapText(ctx, title, maxTextWidth);
   const lineHeight = titleFontSize * 1.25;
-  const totalHeight = lines.length * lineHeight;
-  const centerY = options.slideHeight * 0.55;
-  const startY = centerY - totalHeight / 2;
+  const totalTextHeight = lines.length * lineHeight;
 
+  const iconSize = Math.round(options.slideWidth * 0.35);
+  const iconTitleGap = Math.round(options.slideHeight * 0.047);
+  const groupHeight = iconSize + iconTitleGap + totalTextHeight;
+  const iconX = (options.slideWidth - iconSize) / 2;
+  const iconY = Math.round((options.slideHeight - groupHeight) / 2);
+
+  try {
+    const img = await loadImage(iconPath);
+    ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
+  } catch (e: any) {
+    console.warn(`[share-video] title icon load failed (${iconPath}): ${e?.message}`);
+  }
+
+  const titleStartY = iconY + iconSize + iconTitleGap;
   lines.forEach((line, index) => {
-    const y = startY + (index + 0.5) * lineHeight;
+    const y = titleStartY + (index + 0.5) * lineHeight;
     ctx.fillText(line, options.slideWidth / 2, y);
   });
 
