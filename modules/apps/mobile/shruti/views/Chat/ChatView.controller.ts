@@ -60,10 +60,10 @@ export function useChatController(): ChatControllerReturn {
   const store = useChatStore()
   const player = usePlayerStore()
   // `useRoute()` is reactive (needed for the chat-session watcher
-   //  below), but we add optional chains everywhere because the
-   //  Vite-dev DI race + IonRouterOutlet quirks occasionally surface
-   //  `undefined` here on first render. `router` uses the singleton
-   //  import to avoid the same race for navigations.
+  //  below), but we add optional chains everywhere because the
+  //  Vite-dev DI race + IonRouterOutlet quirks occasionally surface
+  //  `undefined` here on first render. `router` uses the singleton
+  //  import to avoid the same race for navigations.
   const route = useRoute()
   const { t } = useI18n()
   const toast = useToast()
