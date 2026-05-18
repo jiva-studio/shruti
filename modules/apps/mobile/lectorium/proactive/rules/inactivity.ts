@@ -1,4 +1,5 @@
 import { useLectorium } from "@lectorium/lectorium.js"
+import { notificationIdFor } from "../hash.js"
 import { runProactiveTurn } from "../proactiveChat.js"
 import { resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
@@ -77,18 +78,39 @@ const handler: ProactiveRuleHandler = {
       typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-    await repo.create({
+    const fireAtMs = fireAt.getTime()
+    const created = await repo.create({
       chatMessageId: chatMessageId as never,
       sessionId,
       role: "assistant",
       content: "",
       createdAt: ctx.nowMs,
       visibleOn: ruleDate,
-      notifyAt: Math.floor(fireAt.getTime() / 1000),
+      notifyAt: Math.floor(fireAtMs / 1000),
       ruleKind: "inactivity",
       ruleDate,
       prepState: "pending",
     })
+    if (created === null) return
+    // **Schedule the LocalNotification right here** instead of waiting
+    // for the next scheduler tick. The whole point of `inactivity` is
+    // that the user is GONE — the next foreground tick may be days
+    // away or never. Capacitor's exact alarms survive process death;
+    // we set it now and the OS fires it 7 days from `fireAtMs`.
+    try {
+      await app.notifications.schedule({
+        id: notificationIdFor(chatMessageId),
+        title: "",
+        body: "",
+        at: fireAtMs,
+        extra: { chatSessionId: sessionId, chatMessageId },
+      })
+      // Mark notified so the scheduler's tick doesn't try to schedule
+      // a second alarm with the same id once the app returns.
+      await repo.markNotified(chatMessageId as never, Math.floor(Date.now() / 1000))
+    } catch (err) {
+      console.warn("[proactive/inactivity] schedule notification failed", err)
+    }
   },
 
   async validate(entry, ctx) {

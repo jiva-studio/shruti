@@ -104,6 +104,11 @@ export default {
   actionConfigureSmartLibraryConfirm: "Set up",
   actionConfigureSmartLibraryDone: "Opened in Settings.",
   actionConfigureSmartLibraryError: "Couldn't open Smart Library.",
+  actionConfigureSmartLibraryChipAuthors: "{n} authors",
+  actionConfigureSmartLibraryChipTopics: "{n} topics",
+  actionConfigureSmartLibraryChipSources: "{n} sources",
+  actionConfigureSmartLibraryChipLocations: "{n} locations",
+  actionConfigureSmartLibraryChipLanguages: "{n} languages",
 
   actionUpgradeToProTitle: "Lectorium Pro",
   actionUpgradeToProBody:

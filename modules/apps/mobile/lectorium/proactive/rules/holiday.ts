@@ -99,13 +99,29 @@ const handler: ProactiveRuleHandler = {
   },
 }
 
+// Module-level TTL cache for the holiday calendar. The scheduler
+// calls detect/validate/buildContent for the rule in the same tick,
+// so without this we'd re-parse the cached config.json three times
+// per tick. 60s is conservative — the calendar is content-published
+// (catalog.publish), so the only way it changes mid-session is via a
+// background refresh that fires no more than once per hour.
+const CALENDAR_TTL_MS = 60_000
+let calendarCache: { at: number; data: readonly HolidayEntry[] } | null = null
+
 async function readHolidayCalendar(): Promise<readonly HolidayEntry[]> {
+  const now = Date.now()
+  if (calendarCache && now - calendarCache.at < CALENDAR_TTL_MS) {
+    return calendarCache.data
+  }
   const app = useLectorium()
   try {
     const configUrl = app.storagePublicUrl.get(app.appConfig.publicRemoteConfigPath)
     const raw = await app.filesStorage.getJson<RemoteAppConfig>(configUrl)
-    return raw.proactive?.calendars?.holidays ?? []
+    const data = raw.proactive?.calendars?.holidays ?? []
+    calendarCache = { at: now, data }
+    return data
   } catch {
+    // Don't cache failures — let the next call retry.
     return []
   }
 }

@@ -319,13 +319,6 @@ export const useChatStore = defineStore("chat", () => {
           actions: { ...(cur.actions ?? {}), [event.actionId]: event.payload },
         }
         messages.value = next
-        // Cross-channel cooldown: when the LLM emits a hint-class
-        // action inline (during a normal user turn), record it as a
-        // firing of the matching autonomous rule. The scheduler's
-        // `isOnCooldown` then sees this and skips the autonomous
-        // tutorial for 30 days. No proactive_state row for
-        // `upgrade_to_pro` — it has no autonomous rule today.
-        void recordInlineHintCooldown(cur.id, event.payload)
         return
       }
       case "outline": {
@@ -345,11 +338,22 @@ export const useChatStore = defineStore("chat", () => {
         const idx = messages.value.findIndex((m) => m.streaming)
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
-          return
+        } else {
+          const next = [...messages.value]
+          next[idx] = { ...event.message }
+          messages.value = next
         }
-        const next = [...messages.value]
-        next[idx] = { ...event.message }
-        messages.value = next
+        // Cross-channel cooldown: only AFTER the chat_message has been
+        // persisted do we attach the proactive_state sidecar for any
+        // hint-class action the LLM emitted inline. Recording earlier
+        // (on the `action` SSE event) creates a row whose FK points
+        // to a not-yet-existing chat_messages.id — if the stream
+        // aborts before `finalised`, the row becomes a permanent
+        // orphan. `upgrade_to_pro` has no autonomous-rule counterpart,
+        // so it's skipped by `inlineHintToRuleKind`.
+        for (const action of Object.values(event.message.actions ?? {})) {
+          void recordInlineHintCooldown(event.message.id, action)
+        }
         return
       }
       case "title-updated": {
@@ -502,7 +506,10 @@ export const useChatStore = defineStore("chat", () => {
     // from, then re-arm the alarm via the shared composable. The
     // controller's watch picks this up too so opening Settings later
     // shows the same on/time state.
-    const m = /^(\d{1,2}):(\d{2})$/.exec(time)
+    // Bounded HH:mm — 00..23 hours, 00..59 minutes. The earlier
+    // `\d{1,2}:\d{2}` form accepted nonsense like `25:99` and threw
+    // downstream when `setHours(25, 99)` ran.
+    const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(time)
     if (!m) throw new Error(`enable_daily_reminder: invalid time '${time}'`)
     const hour = Number(m[1])
     const minute = Number(m[2])

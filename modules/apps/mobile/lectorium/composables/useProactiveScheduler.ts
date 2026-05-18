@@ -13,6 +13,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
+import { notificationIdFor } from "@lectorium/proactive/hash.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
 import { recordEvent } from "@lectorium/proactive/telemetry.js"
@@ -160,7 +161,15 @@ export function useProactiveScheduler(): void {
     if (recent.length === 0) return false
     const last = recent[0]
     if (last.prepState === "pending" || last.prepState === "superseded") return false
-    return nowMs - last.createdAt < cooldownMs
+    // `dismiss_resets_after_hours` overrides the default cooldown for
+    // rows the user explicitly dismissed — a soft upsell can come back
+    // sooner than the "user already saw and accepted" path.
+    const effectiveCooldownMs =
+      last.prepState === "dismissed" &&
+      rule.config.dismiss_resets_after_hours !== undefined
+        ? rule.config.dismiss_resets_after_hours * 3_600_000
+        : cooldownMs
+    return nowMs - last.createdAt < effectiveCooldownMs
   }
 
   async function reValidateRow(
@@ -173,6 +182,17 @@ export function useProactiveScheduler(): void {
       const stillValid = await rule.handler.validate(entry, ctx)
       if (!stillValid) {
         await repo.updatePrepState(entry.chatMessageId, "superseded")
+        // If a LocalNotification was already scheduled for this entry
+        // (inactivity rule is the canonical case), cancel it — without
+        // this the OS will still fire the alarm and the deep-link will
+        // land on a hidden chat message.
+        if (entry.notifiedAt !== null) {
+          try {
+            await app.notifications.cancel(notificationIdFor(entry.chatMessageId))
+          } catch (err) {
+            console.warn("[proactive] cancel notification failed", entry.chatMessageId, err)
+          }
+        }
         void recordEvent(app.preferences, rule.config.id, "superseded")
         return false
       }
@@ -229,7 +249,7 @@ export function useProactiveScheduler(): void {
     // Capacitor LocalNotifications.id is a 32-bit integer; chat_message
     // ids are random text. We hash to keep cancel-safety while staying
     // in-bounds.
-    const id = hashStringToInt32(entry.chatMessageId)
+    const id = notificationIdFor(entry.chatMessageId)
     try {
       await app.notifications.schedule({
         id,
@@ -403,11 +423,3 @@ function randomChatMessageId(): ChatMessageId {
  * id. djb2 — same on every platform/version, so cancel(id) and
  * schedule(id) line up across app restarts.
  */
-function hashStringToInt32(s: string): number {
-  let h = 5381
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) + h + s.charCodeAt(i)) | 0
-  }
-  // Map into the positive int32 range — Capacitor requires positive.
-  return Math.abs(h) || 1
-}
