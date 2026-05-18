@@ -1,6 +1,8 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
+import type { IProactiveChatService } from "@ports/app/index.js"
+import type { AppRepositories } from "@shruti/repositories.js"
 
 /**
  * Snapshot of device-side state every rule's detector / validator /
@@ -23,6 +25,13 @@ export interface ProactiveContext {
   /** Bound vue-i18n translator. Handlers use this to compose body_md
    *  in the user's locale without pulling in a Vue dependency. */
   readonly t: (key: string, params?: Record<string, unknown>) => string
+  /** Repositories bundle resolved once per tick. Passed to rules so
+   *  they don't have to reach into the composition root via
+   *  `useShruti()` — keeps handlers framework-free. */
+  readonly repos: AppRepositories
+  /** Backend HTTP client for `kind=proactive` SSE turns. Bound via
+   *  port so rules don't import infra directly. */
+  readonly proactiveChat: IProactiveChatService
 }
 
 /**
@@ -82,7 +91,11 @@ export interface ProactiveRuleHandler {
     ctx: ProactiveContext
   ): Promise<{
     readonly bodyMd: string
-    readonly actions?: Record<string, ChatActionPayload>
+    /** Either typed `ChatActionPayload` (for pre-baked rules that build
+     *  their own action map locally) or `unknown` payloads bubbling up
+     *  from `IProactiveChatService` (LLM-emitted markers). The scheduler
+     *  runs `validateAndScrubActions` to narrow before persistence. */
+    readonly actions?: Record<string, ChatActionPayload | unknown>
   } | null>
 
   /**

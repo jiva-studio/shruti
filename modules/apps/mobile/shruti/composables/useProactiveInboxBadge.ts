@@ -1,77 +1,34 @@
-import { ref, onBeforeUnmount, onMounted, type Ref } from "vue"
-import { useShruti } from "@shruti/shruti.js"
-import { useConfig } from "@shruti/composables/useConfig.js"
-
-const POLL_INTERVAL_MS = 30 * 1000
+import { computed, onMounted, type ComputedRef } from "vue"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 
 export interface UseProactiveInboxBadgeReturn {
-  /** Unread count surfaced as a chat-tab badge dot. Reactive. */
-  readonly count: Ref<number>
-  /** Recompute the count from `chat_messages_proactive_state`. Cheap
-   *  enough to call from a 30s timer or on every route change. */
-  refresh(): Promise<void>
-  /** Mark every currently-visible proactive message as seen. Sets a
-   *  watermark in user-config and zeroes the badge. */
-  markSeen(): Promise<void>
+  /** Unread count surfaced as the chat-tab Sadhu dot. Derived from
+   *  `chatStore.unseenProactiveSessionIds.size` — the same set that
+   *  drives the per-session dots, so the two indicators can never
+   *  drift apart. The dot lights up iff there's at least one session
+   *  whose proactive content hasn't been opened. */
+  readonly count: ComputedRef<number>
 }
 
 /**
- * Reactive unread count of agent-initiated chat messages. "Unread" is
- * defined as any proactive message in `ready`/`degraded` whose
- * `created_at` is newer than the watermark — the watermark advances
- * each time the user enters the chat tab (`markSeen()` from
- * `TabsLayout.vue`).
+ * Tab-bar Sadhu badge. Pure derivation from `useChatStore`'s unseen
+ * set — no watermark, no polling, no separate `markSeen` to keep in
+ * sync. Opening a session via `chatStore.openSession` is what clears
+ * the underlying SQL `seen_at`, which propagates here on the next
+ * `refreshSessions`.
  *
- * Polling every 30 s is overkill but tiny — the scheduler's own tick
- * is far less frequent, and a watch on the proactive repo is awkward
- * because the rows live in user.db (one IndexedDB / SQLite file across
- * adapters).
+ * On mount we kick a refreshSessions so the badge populates ASAP —
+ * without this, the user has to wait for the scheduler's first tick
+ * (≤5s retry cadence) before the dot appears. TabsLayout mounts after
+ * Welcome finishes (so both DBs are open by then), and Ionic keeps the
+ * layout alive across tab switches — so this fires exactly once per
+ * cold-start, which is what we want.
  */
 export function useProactiveInboxBadge(): UseProactiveInboxBadgeReturn {
-  const app = useShruti()
-  const watermark = useConfig<number>("proactive.inboxLastSeenAtMs", 0)
-  const count = ref<number>(0)
-  let timer: ReturnType<typeof setInterval> | null = null
-
-  async function refresh(): Promise<void> {
-    try {
-      const repo = app.repositories().proactiveState
-      const live = await repo.listByPrepStates(["ready", "degraded"])
-      const todayLocal = todayLocalDate()
-      let next = 0
-      for (const e of live) {
-        if (e.visibleOn !== null && e.visibleOn > todayLocal) continue
-        if (e.createdAt <= watermark.value) continue
-        next += 1
-      }
-      count.value = next
-    } catch {
-      // Repos not ready yet — leave count untouched.
-    }
-  }
-
-  async function markSeen(): Promise<void> {
-    watermark.value = Date.now()
-    count.value = 0
-  }
-
+  const chatStore = useChatStore()
+  const count = computed(() => chatStore.unseenProactiveSessionIds.size)
   onMounted(() => {
-    void refresh()
-    timer = setInterval(() => void refresh(), POLL_INTERVAL_MS)
+    void chatStore.refreshSessions().catch(() => undefined)
   })
-
-  onBeforeUnmount(() => {
-    if (timer !== null) {
-      clearInterval(timer)
-      timer = null
-    }
-  })
-
-  return { count, refresh, markSeen }
-}
-
-function todayLocalDate(): string {
-  const d = new Date()
-  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  return { count }
 }

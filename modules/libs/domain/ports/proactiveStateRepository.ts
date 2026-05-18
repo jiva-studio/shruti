@@ -51,6 +51,11 @@ export interface ProactiveStateEntry {
   readonly notifiedAt: number | null
   /** chat_messages.created_at (unix ms). */
   readonly createdAt: number
+  /** unix seconds — the moment the user first opened the chat session
+   *  containing this proactive message. `null` means it's still
+   *  showing as unseen (per-session dot lit, contributes to the tab
+   *  badge). */
+  readonly seenAt: number | null
 }
 
 export interface CreateProactiveMessageInput {
@@ -106,10 +111,17 @@ export interface IProactiveStateRepository {
   ): Promise<readonly ProactiveStateEntry[]>
 
   /** Session ids that have at least one proactive message in `ready` or
-   *  `degraded` AND no user-authored message yet. Drives the per-session
-   *  "needs attention" dot in the chat session list — once the user
-   *  replies, the session falls out of the set. */
-  listUnrepliedSessionIds(): Promise<readonly ChatSessionId[]>
+   *  `degraded` with `seen_at IS NULL`. Drives both the per-session dot
+   *  in the chat list and the tab-level Sadhu badge (badge = count > 0).
+   *  Opening the session via `markSeen` clears every row in that session
+   *  and drops it out of this set. */
+  listUnseenSessionIds(): Promise<readonly ChatSessionId[]>
+
+  /** Stamp `seen_at = atSec` on every proactive row in this session
+   *  whose `seen_at` is currently NULL. Called from
+   *  `chatStore.openSession` — opening the session is what counts as
+   *  "the user saw it". Idempotent. */
+  markSeen(sessionId: ChatSessionId, atSec: number): Promise<void>
 
   /** Lookup by the dedup key. Used by detectors to skip already-fired
    *  instances. */

@@ -40,3 +40,8 @@ export type {
   StreamChatOptions,
 } from "./chatStreamClient.js"
 export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"
+export type {
+  IProactiveChatService,
+  ProactiveTurnRequest,
+  ProactiveTurnResult,
+} from "./proactiveChat.js"

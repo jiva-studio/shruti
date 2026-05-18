@@ -135,12 +135,12 @@ export const useChatStore = defineStore("chat", () => {
   const messages = ref<ChatMessage[]>([])
   const sending = ref<boolean>(false)
   const lastError = ref<{ code: string; message: string; retryAfter?: number } | null>(null)
-  /** Session ids that have a proactive_state row in ready/degraded AND
-   *  haven't been replied to yet. Drives the per-session "needs
-   *  attention" dot in RecentSessions / history list. Refreshed alongside
-   *  the sessions list and after every send (a reply drops the session
-   *  from this set automatically). */
-  const unrepliedProactiveSessionIds = ref<ReadonlySet<string>>(new Set())
+  /** Session ids holding at least one proactive_state row in
+   *  ready/degraded with `seen_at IS NULL`. Drives both the per-session
+   *  dot in RecentSessions / history list AND the tab-level Sadhu badge
+   *  (badge lights up iff this set is non-empty). Cleared per-session
+   *  when `openSession(id)` stamps `seen_at`. */
+  const unseenProactiveSessionIds = ref<ReadonlySet<string>>(new Set())
 
   let abort: AbortController | null = null
 
@@ -175,13 +175,13 @@ export const useChatStore = defineStore("chat", () => {
       updatedAt: s.updatedAt,
       titleAttemptCount: s.titleAttemptCount,
     }))
-    // Repopulate the per-session "needs attention" set. Best-effort —
-    // the proactive repo lives in the same DB so a successful sessions
-    // list pretty much guarantees this works, but if it fails we just
-    // leave the previous set in place rather than throw.
+    // Repopulate the per-session "unseen" set. Best-effort — the
+    // proactive repo lives in the same DB so a successful sessions list
+    // pretty much guarantees this works, but if it fails we leave the
+    // previous set in place rather than throw.
     try {
-      const ids = await app.repositories().proactiveState.listUnrepliedSessionIds()
-      unrepliedProactiveSessionIds.value = new Set(ids)
+      const ids = await app.repositories().proactiveState.listUnseenSessionIds()
+      unseenProactiveSessionIds.value = new Set(ids)
     } catch {
       // proactiveState repo not ready — leave previous set.
     }
@@ -192,6 +192,23 @@ export const useChatStore = defineStore("chat", () => {
     const repos = chatRepos()
     const rows = await repos.messages.listBySession(id as ChatSessionId)
     messages.value = rows.map((m) => ({ ...m }))
+    // Opening a session counts as "the user saw any proactive messages
+    // in it". Drop the session from the in-memory unseen set first
+    // (so the dot disappears immediately, no roundtrip wait) and stamp
+    // seen_at in SQL best-effort so the next refreshSessions agrees.
+    if (unseenProactiveSessionIds.value.has(id)) {
+      const next = new Set(unseenProactiveSessionIds.value)
+      next.delete(id)
+      unseenProactiveSessionIds.value = next
+    }
+    try {
+      await app
+        .repositories()
+        .proactiveState.markSeen(id as ChatSessionId, Math.floor(Date.now() / 1000))
+    } catch {
+      // proactiveState repo not ready — fine, refreshSessions will
+      // catch up later. Worst case the dot reappears briefly.
+    }
   }
 
   function startNewSession(): void {
@@ -266,14 +283,9 @@ export const useChatStore = defineStore("chat", () => {
             const updated = { ...sessions.value[idx], updatedAt: Date.now() }
             sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
           }
-          // The user just replied — drop the session from the "unread"
-          // set so the per-session dot disappears immediately, before the
-          // next refreshSessions roundtrip would catch up.
-          if (unrepliedProactiveSessionIds.value.has(sessionId)) {
-            const next = new Set(unrepliedProactiveSessionIds.value)
-            next.delete(sessionId)
-            unrepliedProactiveSessionIds.value = next
-          }
+          // No need to touch the unseen set here — sending a message
+          // implies the user has the session open, and `openSession`
+          // already cleared seen_at. Replying is no longer the trigger.
         }
         if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
         if (event.kind === "delta") acc += event.text
@@ -655,7 +667,7 @@ export const useChatStore = defineStore("chat", () => {
     messages,
     sending,
     lastError,
-    unrepliedProactiveSessionIds,
+    unseenProactiveSessionIds,
     refreshSessions,
     openSession,
     startNewSession,

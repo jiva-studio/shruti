@@ -1,6 +1,5 @@
 import { useShruti } from "@shruti/shruti.js"
 import { notificationIdFor } from "../hash.js"
-import { runProactiveTurn } from "../proactiveChat.js"
 import { resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
@@ -38,8 +37,12 @@ const handler: ProactiveRuleHandler = {
   },
 
   async onAppPause(ctx) {
+    // `app.notifications` is the only thing this method still pulls
+    // off the Shruti singleton — repos come from `ctx.repos`. The
+    // notifications port could move to ctx too but isn't worth the
+    // schema churn for one call site.
     const app = useShruti()
-    const repo = app.repositories().proactiveState
+    const repo = ctx.repos.proactiveState
     const recent = await repo.listRecentByRule("inactivity", 1)
     const cooldownMs = 14 * DAY_MS
     if (recent.length > 0 && ctx.nowMs - recent[0].createdAt < cooldownMs) return
@@ -49,7 +52,7 @@ const handler: ProactiveRuleHandler = {
     const existing = await repo.findByRuleAndDate("inactivity", ruleDate)
     if (existing !== null) return
 
-    const sessions = app.repositories().chatSessions
+    const sessions = ctx.repos.chatSessions
     const sessionId = await resolveSessionId(
       {
         config: {
@@ -125,9 +128,8 @@ const handler: ProactiveRuleHandler = {
     return true
   },
 
-  async buildContent(_entry, ctx) {
-    const app = useShruti()
-    const repos = app.repositories()
+  async buildContent(entry, ctx) {
+    const repos = ctx.repos
     const recent = await repos.listeningSessions.listRecentTracksWithProgress(10)
     const trackIds = recent.map((r) => r.trackId)
     const tracksById = trackIds.length > 0 ? await repos.tracks.getByIds(trackIds) : new Map()
@@ -153,13 +155,13 @@ const handler: ProactiveRuleHandler = {
       last_completed_track_id: recent.length > 0 ? recent[0].trackId : null,
     }
 
-    return runProactiveTurn(
+    return ctx.proactiveChat.run(
       {
         ruleKind: "inactivity",
-        ruleDate: _entry.ruleDate,
+        ruleDate: entry.ruleDate,
         ruleContext,
       },
-      ctx.locale.startsWith("en") ? "en" : "ru"
+      ctx.locale
     )
   },
 }

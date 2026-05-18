@@ -84,6 +84,7 @@ import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
+import { useChatStoreProactiveSync } from "@shruti/composables/useChatStoreProactiveSync.js"
 import { useProactiveDeepLink } from "@shruti/composables/useProactiveDeepLink.js"
 import { useProactiveScheduler } from "@shruti/composables/useProactiveScheduler.js"
 import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudio.js"
@@ -144,6 +145,7 @@ const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
 useProactiveScheduler()
 useProactiveDeepLink()
+useChatStoreProactiveSync()
 
 // When a Notes inline excerpt starts playing, pause the main lecture so
 // the user never hears two streams at once. The notes coordinator owns
