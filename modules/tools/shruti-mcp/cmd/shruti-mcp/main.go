@@ -20,6 +20,7 @@ import (
 	titleuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/title"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
+	catalogproactive "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/commit"
@@ -550,6 +551,12 @@ func main() {
 		SupportedScheme: catalog.SupportedDBScheme,
 		Targets:         publishTargets,
 		OpMutex:         catalogOpMutex,
+	}
+	deps.Proactive = tools.ProactiveDeps{
+		UseCase: catalogproactive.UseCase{
+			OutDir: cfg.Out,
+			Mu:     catalogOpMutex,
+		},
 	}
 
 	// Auto-refresh on first start if current.db is missing.

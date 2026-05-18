@@ -99,6 +99,13 @@ export default {
   // когда правило срабатывает первый раз для пользователя.
   proactiveSessionTitleEnableReminder: "Ежедневное напоминание",
   proactiveSessionTitleSmartLibrary: "Умная библиотека",
+  proactiveSessionTitleNextShloka: "Следующий шлок",
+
+  // Pre-baked body for the `next_shloka` rule. `{ref}` is the canonical
+  // verse label (e.g. "2.14"); `{title}` is the catalog title in the
+  // user's locale. The follow-up action card lives below as a marker.
+  proactiveNextShlokaBody:
+    "Ты недавно слушал лекцию по предыдущему стиху — продолжай по порядку. Следующий уже есть: {ref} «{title}». Добавить в библиотеку?",
 
   proactiveSmartLibraryHintBody:
     "Хочу показать тебе умную библиотеку — это Pro-функция, которая держит твою библиотеку всегда наполненной свежими лекциями, без необходимости вручную их добавлять.\n\nТы выбираешь критерии — любимые авторы, темы, источники, длительность — и умная библиотека сама подтягивает подходящие лекции до целевого объёма очереди (например, 2 часа, 8 часов, 10 часов). Когда лекция дослушана — она автоматически уходит в архив, очередь остаётся свежей.\n\nХорошо для дороги и прогулок, когда не хочется тратить время на выбор того что слушать дальше.",

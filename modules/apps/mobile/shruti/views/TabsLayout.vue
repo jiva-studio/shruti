@@ -38,7 +38,7 @@
 
 <script setup lang="ts">
 import { watch } from "vue"
-import { useRoute } from "vue-router"
+import router from "@shruti/router/index.js"
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
@@ -52,20 +52,20 @@ import IconAppSadhu from "@shruti/views/Chat/components/IconAppSadhu.vue"
 const shareJob = useShareJobStore()
 
 const proactiveBadge = useProactiveInboxBadge()
-const route = useRoute()
-// `useRoute()` is a reactive accessor — during the initial setup pass
-// the underlying ref can be undefined until the router finalises the
-// current location. Guard with `route?.name` everywhere, otherwise the
-// `immediate: true` callback below dereferences null on first run.
+
+// `useRoute()` is unreliable here: during initial setup the underlying
+// Vue Router DI ref can be `undefined`, which freezes the badge watcher
+// (it reads `undefined?.name` forever). Same fix as the action-handler
+// composables — use the singleton `router.currentRoute` and read `.value`.
 function isChatRoute(): boolean {
-  const name = route?.name
+  const name = router.currentRoute.value?.name
   return name === "chat" || name === "chat-session"
 }
 // Clear the proactive badge when the user enters any chat route — the
 // landing chat tab counts as "seen". Watch by name so deep links into
 // a specific session ("chat-session") also reset the badge.
 watch(
-  () => route?.name,
+  () => router.currentRoute.value?.name,
   (name) => {
     if (name === "chat" || name === "chat-session") {
       void proactiveBadge.markSeen()

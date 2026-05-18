@@ -29,7 +29,10 @@
             @click="onPick(session.id)"
           >
             <IonLabel>
-              <h3 class="title">{{ session.title || $t("chat.untitledSession") }}</h3>
+              <h3 class="title">
+                <span v-if="unreadIds?.has(session.id)" class="unread-dot" aria-hidden="true" />
+                {{ session.title || $t("chat.untitledSession") }}
+              </h3>
               <p class="meta">{{ formatTimestamp(session.updatedAt) }}</p>
             </IonLabel>
           </IonItem>
@@ -74,6 +77,9 @@ const props = defineProps<{
   sessions: readonly ChatSession[]
   activeSessionId: string | null
   searchQuery: string
+  /** Session ids that have an unreplied agent-initiated message —
+   *  rendered as a small dot before the title. */
+  unreadIds?: ReadonlySet<string>
 }>()
 
 const emit = defineEmits<{
@@ -122,6 +128,17 @@ function formatTimestamp(ms: number): string {
 <style scoped>
 .title {
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unread-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-primary, #3880ff);
 }
 
 .meta {

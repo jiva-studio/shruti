@@ -322,6 +322,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterCatalogRefresh(s, deps.Catalog)
 	RegisterCatalogStatus(s, deps.Catalog)
 	RegisterCatalogPublish(s, deps)
+	RegisterCatalogProactive(s, deps.Proactive)
 	RegisterCatalogReadTools(s, deps.Catalog)
 	RegisterDictFinds(s, deps.Find)
 	RegisterAdminConfigGet(s, deps)

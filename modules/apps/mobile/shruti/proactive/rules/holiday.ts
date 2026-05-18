@@ -57,7 +57,6 @@ const handler: ProactiveRuleHandler = {
             holiday_id: h.id,
             holiday_name: localizedName(h, ctx.locale),
             holiday_date: h.date,
-            topic_tags: h.topic_tags,
           },
         }
       })
@@ -86,7 +85,6 @@ const handler: ProactiveRuleHandler = {
           holiday_name: localizedName(match, ctx.locale),
           holiday_date: entry.ruleDate,
           days_until: daysUntil,
-          topic_tags: match.topic_tags,
         },
       },
       ctx.locale.startsWith("en") ? "en" : "ru"

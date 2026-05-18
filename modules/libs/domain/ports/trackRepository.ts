@@ -50,6 +50,18 @@ export interface ITrackRepository {
   search(query: TrackSearchQuery): Promise<readonly Track[]>
 
   /**
+   * Lookup by an exact scripture reference — sourceId + dot-joined
+   * tokens. Used by `proactive/rules/nextShloka.ts` to detect the
+   * "next verse" track when the user just finished BG 2.13. Returns
+   * the first track that has a `track_references` row matching the
+   * pair, or `null` if no such track exists in the catalog.
+   */
+  findByReference(
+    sourceId: SourceId,
+    tokens: readonly string[]
+  ): Promise<Track | null>
+
+  /**
    * Returns the stored path (full bucket key, e.g.
    * `"public/tracks/xxx/transcripts/ru.json"`) of the transcript for a
    * given (track, language), or `null` when no transcript is advertised.

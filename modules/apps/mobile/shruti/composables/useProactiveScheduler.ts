@@ -23,6 +23,7 @@ import { recordEvent } from "@shruti/proactive/telemetry.js"
 import "@shruti/proactive/rules/index.js"
 import { resolveSessionId } from "@shruti/proactive/sessions.js"
 import type { ProactiveContext, ResolvedProactiveRule } from "@shruti/proactive/types.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 
 /** Foreground tick cadence — every 30 minutes while the app is open. */
@@ -49,6 +50,7 @@ export function useProactiveScheduler(): void {
   const app = useShruti()
   const language = useAppLanguage()
   const purchases = usePurchasesStore()
+  const chatStore = useChatStore()
   const { t } = useI18n()
   // First time the scheduler runs we stamp "install age" — the device
   // never sees a fresh install on the same DB twice, so a single config
@@ -58,6 +60,12 @@ export function useProactiveScheduler(): void {
   /** Mutex keyed by `ruleKind|ruleDate`. Holds during prep/build so the
    *  next tick doesn't double-call an in-flight LLM/template build. */
   const inFlight = new Set<string>()
+
+  /** Fast-retry counter for the "repos not open yet" path. App.vue mounts
+   *  this composable before Welcome finishes opening the content DB, so the
+   *  first few ticks bail; without this, the next legitimate tick wouldn't
+   *  fire for 30 minutes. Capped at 60 (~5 minutes of polling). */
+  let repoRetries = 0
 
   let interval: ReturnType<typeof setInterval> | null = null
   let resumeHandle: PluginListenerHandle | null = null
@@ -243,7 +251,24 @@ export function useProactiveScheduler(): void {
   async function scheduleNotificationIfNeeded(entry: ProactiveStateEntry): Promise<void> {
     if (entry.notifyAt === null) return
     if (entry.notifiedAt !== null) return
-    if (entry.notifyAt * 1000 <= Date.now()) return
+
+    // Past `notify_at` used to silently skip the schedule. That's fine
+    // for events whose visible_on already rolled off (we don't want a
+    // late notification two weeks after a holiday), but for today's
+    // event whose notify hour already passed we want to surface it now
+    // — otherwise the user only ever sees notifications for holidays
+    // detected ≥48h in advance. Fire ~5s out so the OS has time to
+    // accept the schedule and the user lands on the chat without the
+    // notification racing the row's prep_state transition.
+    const notifyAtMs = entry.notifyAt * 1000
+    let fireAtMs = notifyAtMs
+    if (fireAtMs <= Date.now()) {
+      if (entry.visibleOn !== todayLocalDate()) {
+        // Event isn't for today — let it stay silently expired.
+        return
+      }
+      fireAtMs = Date.now() + 5_000
+    }
 
     // Capacitor LocalNotifications.id is a 32-bit integer; chat_message
     // ids are random text. We hash to keep cancel-safety while staying
@@ -254,7 +279,7 @@ export function useProactiveScheduler(): void {
         id,
         title: "",
         body: "",
-        at: entry.notifyAt * 1000,
+        at: fireAtMs,
         extra: {
           chatSessionId: entry.sessionId,
           chatMessageId: entry.chatMessageId,
@@ -266,6 +291,11 @@ export function useProactiveScheduler(): void {
     } catch (err) {
       console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
     }
+  }
+
+  function todayLocalDate(): string {
+    const now = new Date()
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
   }
 
   async function readRemoteProactiveConfig(): Promise<ProactiveConfig | null> {
@@ -283,7 +313,20 @@ export function useProactiveScheduler(): void {
 
   async function tick(): Promise<void> {
     const repo = proactiveRepo()
-    if (!repo) return
+    if (!repo) {
+      // App.vue mounts this composable BEFORE Welcome finishes opening
+      // the content/user DB, so the first few ticks hit a "DB not open"
+      // throw from app.repositories(). Without this retry, the next
+      // legitimate tick wouldn't fire for 30 minutes (or until an
+      // appStateChange resume — never fires while a browser tab stays
+      // in focus). Cap iterations so a real outage doesn't spin forever.
+      if (repoRetries < 60) {
+        repoRetries++
+        setTimeout(() => void tick(), 5000)
+      }
+      return
+    }
+    repoRetries = 0
     // Master kill switch — `config.proactive.master_enabled === false`
     // in the published config.json hard-disables the subsystem so we
     // can pull it from production without an app release.
@@ -328,6 +371,14 @@ export function useProactiveScheduler(): void {
             prepState: "pending",
           })
           void recordEvent(app.preferences, rule.config.id, "detected")
+          // Scheduler writes the chat_sessions/chat_messages rows directly
+          // through repos, so the Pinia chat store's in-memory `sessions`
+          // list doesn't know about the new entry until something forces a
+          // refresh. Without this, the new proactive session only appears
+          // when the user navigates away and back. Best-effort — if the
+          // store throws (e.g. user repo not ready in some edge case) we
+          // swallow to keep the scheduler resilient.
+          void chatStore.refreshSessions().catch(() => undefined)
         } catch (err) {
           console.warn("[proactive] create threw", rule.config.id, err)
         }

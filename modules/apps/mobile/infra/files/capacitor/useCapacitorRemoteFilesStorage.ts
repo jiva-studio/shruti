@@ -70,23 +70,45 @@ export function useCapacitorRemoteFilesStorage({
     },
 
     async getJson<T = unknown>(url: string): Promise<T> {
-      // Ensure the file is cached locally, then read its bytes via the
-      // Filesystem plugin. Going through `fetch(localUrl)` would work in
-      // the WebView too but couples the caller to a particular runtime
-      // capability; keep the IO inside the port.
-      let { localUrl } = await MediaDownloader.resolveLocalUrl({ url })
-      if (!localUrl) {
-        const id = idFor(url)
-        const completion = awaitCompletion(id)
-        await MediaDownloader.download({
-          id,
-          url,
-          destination: destinationFor(url),
+      // Stale-while-revalidate. Mirrors `checkForUpdatesInBackground`
+      // for the DB: read the cached file immediately (fast cold-start)
+      // and refresh in the background so the NEXT cold-start sees the
+      // new content. The refresh fetches over the WebView (`fetch`) and
+      // overwrites the cached file with `Filesystem.writeFile` — one
+      // atomic write, no MediaDownloader delete-then-redownload gap.
+      const cached = await MediaDownloader.resolveLocalUrl({ url })
+      if (cached.localUrl) {
+        void (async () => {
+          try {
+            const fresh = await fetch(url, { cache: "no-store" })
+            if (!fresh.ok) return
+            const text = await fresh.text()
+            await Filesystem.writeFile({
+              path: cached.localUrl as string,
+              data: text,
+              encoding: Encoding.UTF8,
+            })
+          } catch {
+            // Offline OK — leave the cached file in place.
+          }
+        })()
+        const result = await Filesystem.readFile({
+          path: cached.localUrl,
+          encoding: Encoding.UTF8,
         })
-        localUrl = await completion
+        const text = typeof result.data === "string" ? result.data : ""
+        return JSON.parse(text) as T
       }
-      // `localUrl` is an absolute file:// path; `Filesystem.readFile`
-      // accepts that form directly when no `directory` is supplied.
+      // First-ever fetch — we have to block. Route through MediaDownloader
+      // so the file lands at the canonical cache path other readers expect.
+      const id = idFor(url)
+      const completion = awaitCompletion(id)
+      await MediaDownloader.download({
+        id,
+        url,
+        destination: destinationFor(url),
+      })
+      const localUrl = await completion
       const result = await Filesystem.readFile({
         path: localUrl,
         encoding: Encoding.UTF8,
