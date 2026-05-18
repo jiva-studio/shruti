@@ -13,6 +13,7 @@ import { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 import { createSqlTagRepository } from "./tagsRepository.sql.js"
 import { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
+import { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -28,6 +29,7 @@ export { createSqlLanguageRepository } from "./languagesRepository.sql.js"
 export { createSqlTagRepository } from "./tagsRepository.sql.js"
 export { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 export { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
+export { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
 
 export interface SqlAppRepositories {
   readonly tracks: ReturnType<typeof createSqlTrackRepository>
@@ -43,6 +45,7 @@ export interface SqlAppRepositories {
   readonly unitOfWork: ReturnType<typeof createSqlUnitOfWork>
   readonly chatSessions: ReturnType<typeof createSqlChatSessionRepository>
   readonly chatMessages: ReturnType<typeof createSqlChatMessageRepository>
+  readonly proactiveState: ReturnType<typeof createSqlProactiveStateRepository>
 }
 
 export interface CreateSqlAppRepositoriesDeps {
@@ -79,5 +82,6 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     unitOfWork: createSqlUnitOfWork(deps.userDb),
     chatSessions: createSqlChatSessionRepository(deps.userDb),
     chatMessages: createSqlChatMessageRepository(deps.userDb),
+    proactiveState: createSqlProactiveStateRepository(deps.userDb),
   }
 }

@@ -84,6 +84,7 @@ import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@lectorium/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@lectorium/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@lectorium/composables/useAutoDownloadLoop.js"
+import { useProactiveScheduler } from "@lectorium/composables/useProactiveScheduler.js"
 import { registerMainPlayerPauser } from "@lectorium/composables/useNotesInlineAudio.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 
@@ -134,6 +135,7 @@ usePlayerProgressFlush()
 useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
+useProactiveScheduler()
 
 // When a Notes inline excerpt starts playing, pause the main lecture so
 // the user never hears two streams at once. The notes coordinator owns
