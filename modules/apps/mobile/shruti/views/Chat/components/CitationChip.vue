@@ -51,7 +51,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { useRouter } from "vue-router"
+import router from "@shruti/router/index.js"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useShruti } from "@shruti/shruti.js"
@@ -96,7 +96,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const router = useRouter()
+// Singleton import — see NotesView.controller for the why.
 const toast = useToast()
 const app = useShruti()
 const appLanguage = useAppLanguage()

@@ -1,7 +1,7 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { loadingController, onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
-import { useRouter } from "vue-router"
+import router from "@shruti/router/index.js"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Location } from "@lib/domain/location.js"
@@ -52,7 +52,11 @@ export interface NotesControllerReturn {
 
 export function useNotesController(): NotesControllerReturn {
   const { t } = useI18n()
-  const router = useRouter()
+  // Direct singleton import (not `useRouter()`): IonActionSheet handlers
+  // sometimes fire from a Vue tree context where the router injection
+  // is no longer reachable (the sheet portals its content), and Vite
+  // dev exposes this fragility too. The singleton from `@shruti/router`
+  // is the same instance and is always defined.
   const app = useShruti()
   const store = useNotesStore()
   const dictionaries = useDictionariesStore()
