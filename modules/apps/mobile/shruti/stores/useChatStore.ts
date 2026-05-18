@@ -69,38 +69,28 @@ function deriveTitle(text: string, max = 48): string {
 }
 
 /**
- * LLM occasionally writes `[action:create-playlist|id=X]` inline without
- * calling propose_playlist (a known DeepSeek failure mode). Salvage:
- * scan content for orphan markers and synthesize from sibling
- * `[card:track_id]` markers. Runs once on message finalisation.
+ * Log a structured warning for every `[action:<kind>|id=X]` marker the
+ * LLM emitted whose id has no matching payload in `message.actions`. The
+ * card renders the broken-state placeholder anyway; we surface the
+ * mismatch so residual marker/payload-id drift is greppable in logs
+ * after the agent-side tool-call validation lands.
+ *
+ * Doesn't throw, doesn't mutate the message — pure observability.
  */
-function salvageOrphanActions(
-  content: string,
-  existing: Record<string, ActionPayload>,
-  fallbackName: string
-): Record<string, ActionPayload> {
-  const tokens = parseChatMarkers(content)
-  const orphans = tokens
-    .filter(
-      (t): t is Extract<typeof t, { kind: "action" }> =>
-        t.kind === "action" && t.actionKind === "create_playlist" && !existing[t.actionId]
-    )
-    .map((t) => t.actionId)
-  if (orphans.length === 0) return existing
-  const trackIds = tokens
-    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
-    .map((t) => t.trackId)
-  if (trackIds.length === 0) return existing
-  const out = { ...existing }
-  for (const id of orphans) {
-    out[id] = {
-      kind: "create_playlist",
-      id,
-      name: fallbackName,
-      trackIds,
-    }
+function warnOrphanActionMarkers(message: ChatMessage): void {
+  if (message.role !== "assistant") return
+  const tokens = parseChatMarkers(message.content)
+  const actions = message.actions ?? {}
+  for (const t of tokens) {
+    if (t.kind !== "action") continue
+    if (actions[t.actionId]) continue
+    console.warn("[chat] orphan action marker — no matching payload", {
+      messageId: message.id,
+      sessionId: message.sessionId,
+      actionKind: t.actionKind,
+      actionId: t.actionId,
+    })
   }
-  return out
 }
 
 /* -------------------------------------------------------------------------- */
@@ -265,8 +255,6 @@ export const useChatStore = defineStore("chat", () => {
           stream: streamClient(),
           title: titleService(),
           buildUserContext: (focus) => trackUserState.buildUserContext(focus),
-          salvageOrphanActions,
-          fallbackPlaylistName: t("chat.fallbackPlaylistName"),
           extractFollowups,
         }
       )) {
@@ -385,6 +373,12 @@ export const useChatStore = defineStore("chat", () => {
         for (const action of Object.values(event.message.actions ?? {})) {
           void recordInlineHintCooldown(event.message.id, action)
         }
+        // Visibility for orphan action markers: any `[action:...|id=X]`
+        // in the finalised prose whose id has no matching payload will
+        // render the broken-card placeholder. Log so we can grep for
+        // residual LLM marker/payload-id drift after the agent-side
+        // tool-call validation lands.
+        warnOrphanActionMarkers(event.message)
         return
       }
       case "title-updated": {
