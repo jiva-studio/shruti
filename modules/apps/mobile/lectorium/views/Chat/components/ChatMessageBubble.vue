@@ -100,7 +100,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
-import { useRouter } from "vue-router"
+import router from "@lectorium/router/index.js"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
@@ -129,7 +129,7 @@ defineEmits<{
   ]
 }>()
 const chat = useChatStore()
-const router = useRouter()
+// Singleton import — see NotesView.controller for the why.
 const { t } = useI18n()
 
 const tokens = computed(() => {
