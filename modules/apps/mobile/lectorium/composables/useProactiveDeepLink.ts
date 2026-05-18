@@ -1,5 +1,5 @@
 import { onBeforeUnmount, onMounted } from "vue"
-import { useRouter } from "vue-router"
+import router from "@lectorium/router/index.js"
 import { LocalNotifications } from "@capacitor/local-notifications"
 import type { PluginListenerHandle } from "@capacitor/core"
 
@@ -31,7 +31,9 @@ function readChatSessionId(extra: unknown): string | null {
  * or launched by the tap.
  */
 export function useProactiveDeepLink(): void {
-  const router = useRouter()
+  // Singleton import — the LocalNotification handler fires at arbitrary
+  // app states (cold start, background → foreground) so the Vue
+  // provide chain may not be reachable at call time.
   let handle: PluginListenerHandle | null = null
 
   onMounted(() => {

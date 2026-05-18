@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useRouter } from "vue-router"
 import { onIonViewWillEnter } from "@ionic/vue"
+import router from "@lectorium/router/index.js"
 import { loadTranscript } from "@lib/application"
 import type { LanguageCode, NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
@@ -50,7 +50,7 @@ export interface StudioControllerReturn {
 
 export function useStudioController(): StudioControllerReturn {
   const { t } = useI18n()
-  const router = useRouter()
+  // Singleton import — see NotesView.controller for the why.
   const app = useLectorium()
   const appLanguage = useAppLanguage()
   const purchases = usePurchasesStore()
