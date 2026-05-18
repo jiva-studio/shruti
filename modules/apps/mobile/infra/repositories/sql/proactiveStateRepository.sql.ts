@@ -1,5 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ProactiveRuleId } from "@lib/domain/config.js"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type {
   CreateProactiveMessageInput,
@@ -167,11 +168,27 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       await db.save()
     },
 
-    async updateContent(chatMessageId: ChatMessageId, content: string): Promise<void> {
-      await db.execute("UPDATE chat_messages SET content = ? WHERE id = ?", [
-        content,
-        chatMessageId,
-      ])
+    async updateContent(
+      chatMessageId: ChatMessageId,
+      content: string,
+      actions?: Record<string, ChatActionPayload>
+    ): Promise<void> {
+      if (actions !== undefined) {
+        // Versioned-record envelope mirrors the format the regular
+        // chat_messages writer uses (`{ _v: 1, data: {...} }`), so the
+        // existing `parseVersionedRecord` reader picks it up without
+        // a separate code path.
+        const actionsJson = JSON.stringify({ _v: 1, data: actions })
+        await db.execute(
+          "UPDATE chat_messages SET content = ?, actions_json = ? WHERE id = ?",
+          [content, actionsJson, chatMessageId]
+        )
+      } else {
+        await db.execute("UPDATE chat_messages SET content = ? WHERE id = ?", [
+          content,
+          chatMessageId,
+        ])
+      }
       await db.save()
     },
 

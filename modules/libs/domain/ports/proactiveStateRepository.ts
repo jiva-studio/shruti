@@ -1,3 +1,4 @@
+import type { ChatActionPayload } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
 import type { ProactiveRuleId } from "../config.js"
 
@@ -106,9 +107,15 @@ export interface IProactiveStateRepository {
     preparedAt?: number
   ): Promise<void>
 
-  /** Overwrite the body markdown on the underlying chat_messages row.
-   *  Called after a content builder returns. */
-  updateContent(chatMessageId: ChatMessageId, content: string): Promise<void>
+  /** Overwrite the body markdown — and optionally the `actions_json`
+   *  payload map — on the underlying chat_messages row. Called after
+   *  a content builder returns. When `actions` is omitted the existing
+   *  payload map is left untouched. */
+  updateContent(
+    chatMessageId: ChatMessageId,
+    content: string,
+    actions?: Record<string, ChatActionPayload>
+  ): Promise<void>
 
   /** Stamp `notified_at` so the next tick doesn't re-schedule the same
    *  LocalNotification. */
