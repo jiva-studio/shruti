@@ -25,6 +25,7 @@ import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { useShareJobStore, type ShareJobKind } from "@shruti/stores/useShareJobStore.js"
+import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
 
 /**
  * Minimum query length that triggers `<mark>` injection in the notes
@@ -61,6 +62,7 @@ export function useNotesController(): NotesControllerReturn {
   const shareJob = useShareJobStore()
   const purchases = usePurchasesStore()
   const paywall = usePaywallStore()
+  const studioHandoff = useStudioHandoffStore()
 
   const selectedNoteId = ref<NoteId | null>(null)
   const isActionSheetOpen = ref(false)
@@ -394,7 +396,8 @@ export function useNotesController(): NotesControllerReturn {
       paywall.requestOpen()
       return
     }
-    void router.push(`/tabs/studio/${id}`)
+    studioHandoff.setPending({ kind: "note", noteId: id })
+    void router.push("/tabs/studio")
   }
 
   async function onDeleteNoteClicked(): Promise<void> {

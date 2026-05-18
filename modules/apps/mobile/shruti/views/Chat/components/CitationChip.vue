@@ -62,6 +62,7 @@ import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
+import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
@@ -101,6 +102,7 @@ const app = useShruti()
 const appLanguage = useAppLanguage()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
+const studioHandoff = useStudioHandoffStore()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
@@ -212,26 +214,24 @@ async function onAddToPlaylist(): Promise<void> {
 
 /**
  * Open this citation in Studio (transient mode — no Note is created).
- * Studio loads the transcript itself and prefills the editor with the
- * sentence-overlap text. Routed via `state.citation` so the long
- * transcript body doesn't end up in the URL.
+ * The citation payload is parked in `useStudioHandoffStore` and the
+ * receiving controller consumes it on mount; Ionic's IonRouterOutlet
+ * drops `history.state` when navigating out of a dismissing
+ * IonActionSheet, so the store is the only reliable channel here.
  */
 function onOpenInStudio(): void {
   if (!purchases.isSubscribed) {
     paywall.requestOpen()
     return
   }
-  void router.push({
-    path: "/tabs/studio/citation",
-    state: {
-      citation: {
-        trackId: props.trackId,
-        startMs: props.startMs,
-        endMs: props.endMs,
-        caption: props.caption ?? "",
-      },
-    },
+  studioHandoff.setPending({
+    kind: "citation",
+    trackId: props.trackId,
+    startMs: props.startMs,
+    endMs: props.endMs,
+    caption: props.caption ?? "",
   })
+  void router.push("/tabs/studio")
 }
 
 async function onSaveAsNote(): Promise<void> {
