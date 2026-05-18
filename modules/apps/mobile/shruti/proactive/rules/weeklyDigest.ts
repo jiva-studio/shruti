@@ -70,7 +70,7 @@ const handler: ProactiveRuleHandler = {
     ]
   },
 
-  async validate(_entry, _ctx) {
+  async validate() {
     // Weekly digests are always relevant — even an empty week is worth
     // noting ("you didn't listen this week, here's something fresh").
     return true

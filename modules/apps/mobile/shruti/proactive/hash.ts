@@ -14,5 +14,5 @@ export function notificationIdFor(chatMessageId: string): number {
   for (let i = 0; i < chatMessageId.length; i++) {
     h = ((h << 5) + h + chatMessageId.charCodeAt(i)) | 0
   }
-  return (h & 0x7fffffff) || 1
+  return h & 0x7fffffff || 1
 }
