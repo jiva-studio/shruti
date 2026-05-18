@@ -71,10 +71,29 @@ class ChatMessageDto(BaseModel):
     content: str
 
 
+# Proactive-rule context — opaque JSON dict. Each rule kind has its own
+# expected shape (weekly_digest, inactivity, holiday); the per-rule
+# prompt builder is responsible for asserting required keys. Keeping
+# the wire shape loose lets us add new rules without a schema bump.
+ProactiveRuleKind = Literal["weekly_digest", "inactivity", "holiday"]
+
+
+class ProactiveRequestDto(BaseModel):
+    """When set, the chat endpoint swaps the system prompt for a
+    rule-specific builder. `messages` is ignored apart from optional
+    trailing assistant placeholders — the builder synthesises the
+    user message from `rule_context`."""
+
+    rule_kind: ProactiveRuleKind
+    rule_date: str  # 'YYYY-MM-DD' — for logging / dedup at the edge
+    rule_context: dict = Field(default_factory=dict)
+
+
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1)
     lang: Literal["ru", "en"] = "ru"
     user_context: UserContextDto | None = None
+    proactive: ProactiveRequestDto | None = None
 
 
 def _parse_iso(s: str | None) -> datetime | None:
