@@ -52,6 +52,9 @@ async def list_tracks(
     lang: str | None = "ru",
     limit: int = 20,
     offset: int = 0,
+    ref_prefix: str | None = None,
+    ref_from: int | None = None,
+    ref_to: int | None = None,
     *,
     catalog_repo: CatalogRepository,
 ) -> list[dict[str, Any]]:
@@ -60,6 +63,7 @@ async def list_tracks(
         tag_ids=tag_ids, title_query=title_query,
         date_from=date_from, date_to=date_to,
         lang=lang, limit=limit, offset=offset,
+        ref_prefix=ref_prefix, ref_from=ref_from, ref_to=ref_to,
     )
     # Prefer tracks that have a transcript in the requested language; if
     # there are none, broaden — each Track carries its actual variant
@@ -70,6 +74,7 @@ async def list_tracks(
             tag_ids=tag_ids, title_query=title_query,
             date_from=date_from, date_to=date_to,
             lang=None, limit=limit, offset=offset,
+            ref_prefix=ref_prefix, ref_from=ref_from, ref_to=ref_to,
         )
     return [_to_wire(t) for t in rows]
 
@@ -88,7 +93,14 @@ register_tool(ToolDef(
         "pass the bare phrase (no quotes) as `title_query` — it runs "
         "FTS against the actual lecture titles (with prefix matching, "
         "accent-insensitive). search_transcripts searches the SPOKEN "
-        "TEXT, not titles — don't use it for 'find lecture named X'."
+        "TEXT, not titles — don't use it for 'find lecture named X'.\n\n"
+        "**Scripture chapter/verse — use `ref_prefix` + optional "
+        "`ref_from`/`ref_to`.** «Гита 2» → source_id=<BG>, "
+        "ref_prefix='2'. «Гита 2 стихи 10–30» → ref_prefix='2', "
+        "ref_from=10, ref_to=30. «ШБ 2 песнь 3 глава» → source_id=<SB>, "
+        "ref_prefix='2.3'. The format is dot-separated numbers; the "
+        "filter ignores tracks whose reference has no verse data (intro "
+        "lectures), so don't worry about them sneaking in."
     ),
     parameters={
         "type": "object",
@@ -106,6 +118,27 @@ register_tool(ToolDef(
             "lang": {"type": "string", "enum": ["ru", "en"], "default": "ru"},
             "limit": {"type": "integer", "default": 20},
             "offset": {"type": "integer", "default": 0},
+            "ref_prefix": {
+                "type": "string",
+                "description": (
+                    "Scripture reference prefix as dot-separated numbers. "
+                    "BG (2-level): '2' = chapter 2. SB/CC (3-level): '2.3' "
+                    "= canto 2, chapter 3; '2' = canto 2 (all chapters). "
+                    "Pair with source_id (BG/SB/etc.)."
+                ),
+            },
+            "ref_from": {
+                "type": "integer",
+                "description": (
+                    "Lower bound of the verse (last) number, inclusive. "
+                    "Applies to the slot AFTER ref_prefix — i.e. the verse "
+                    "within the chapter."
+                ),
+            },
+            "ref_to": {
+                "type": "integer",
+                "description": "Upper bound of the verse number, inclusive.",
+            },
         },
     },
 ))

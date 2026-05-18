@@ -30,6 +30,11 @@ from rapidfuzz import fuzz, process, utils
 from shruti_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
 from shruti_chat.domain.entities import Reference, ResolvedEntity, Track
 from shruti_chat.domain.ports.catalog_repository import ResolveKind
+from shruti_chat.infra.repositories._ref_filter import (
+    matches_ref as _matches_ref,
+    parse_tokens as _parse_tokens,
+    parse_user_prefix as _parse_user_prefix,
+)
 
 
 # Each sync helper takes `db_path` explicitly so they can be tested in
@@ -259,6 +264,39 @@ def _get_track_sync(db_path: Path, track_id: str, lang: str) -> Track | None:
         )
 
 
+def _filter_track_ids_by_ref(
+    conn: sqlite3.Connection,
+    *,
+    source_id: str | None,
+    ref_prefix: str | None,
+    ref_from: int | None,
+    ref_to: int | None,
+) -> set[str]:
+    """Scan `track_references` and return matching track_ids.
+
+    The full set has ~5k rows in production — Python-side filtering is
+    sub-millisecond, and the dot-separated `tokens` format isn't
+    practical to filter from SQL. Parser + matcher live in
+    `_ref_filter` so they can be unit-tested without the agent stack.
+    """
+    sql = "SELECT track_id, tokens FROM track_references WHERE tokens IS NOT NULL"
+    params: list[Any] = []
+    if source_id:
+        sql += " AND source_id = ?"
+        params.append(source_id)
+    user_prefix = _parse_user_prefix(ref_prefix)
+    if user_prefix is None:
+        return set()
+    out: set[str] = set()
+    for row in conn.execute(sql, params):
+        parsed = _parse_tokens(row["tokens"])
+        if parsed is None:
+            continue
+        if _matches_ref(parsed, user_prefix, ref_from, ref_to):
+            out.add(row["track_id"])
+    return out
+
+
 def _list_tracks_sync(
     db_path: Path,
     *,
@@ -272,6 +310,9 @@ def _list_tracks_sync(
     lang: str | None,
     limit: int,
     offset: int,
+    ref_prefix: str | None = None,
+    ref_from: int | None = None,
+    ref_to: int | None = None,
 ) -> list[Track]:
     # When lang is None, fall back to "en" for the title-lookup join, but
     # skip the EXISTS-filter so all languages remain visible.
@@ -315,6 +356,19 @@ def _list_tracks_sync(
                 "WHERE track_id = t.id AND source_id = ?)"
             )
             params.append(source_id)
+        if ref_prefix is not None or ref_from is not None or ref_to is not None:
+            ref_ids = _filter_track_ids_by_ref(
+                conn,
+                source_id=source_id,
+                ref_prefix=ref_prefix,
+                ref_from=ref_from,
+                ref_to=ref_to,
+            )
+            if not ref_ids:
+                return []
+            ph_r = ",".join("?" * len(ref_ids))
+            sql.append(f"AND t.id IN ({ph_r})")
+            params.extend(ref_ids)
         if title_query:
             qtoks = _title_tokens(title_query)
             if qtoks:
@@ -539,6 +593,9 @@ class SqliteCatalogRepository:
         lang: str | None,
         limit: int,
         offset: int,
+        ref_prefix: str | None = None,
+        ref_from: int | None = None,
+        ref_to: int | None = None,
     ) -> list[Track]:
         return await asyncio.to_thread(
             _list_tracks_sync,
@@ -553,6 +610,9 @@ class SqliteCatalogRepository:
             lang=lang,
             limit=limit,
             offset=offset,
+            ref_prefix=ref_prefix,
+            ref_from=ref_from,
+            ref_to=ref_to,
         )
 
     async def filter_track_ids(
