@@ -113,10 +113,6 @@ export function useChatController(): ChatControllerReturn {
     if (store.lastError) {
       surfaceError()
     }
-    // After both the user echo and the streamed assistant reply settle,
-    // pin the view to the bottom so the latest delta is in sight.
-    await nextTick()
-    scrollToBottom()
   }
 
   function onNewSession(): void {
@@ -140,8 +136,6 @@ export function useChatController(): ChatControllerReturn {
     isHistoryOpen.value = false
     await store.openSession(id)
     void router.replace({ name: "chat-session", params: { sessionId: id } })
-    await nextTick()
-    scrollToBottom()
   }
 
   async function onDeleteSession(id: string): Promise<void> {
@@ -207,8 +201,6 @@ export function useChatController(): ChatControllerReturn {
         title: item.title,
       },
     })
-    await nextTick()
-    scrollToBottom()
   }
 
   function surfaceError(): void {
@@ -228,31 +220,62 @@ export function useChatController(): ChatControllerReturn {
     }
   }
 
-  function scrollToBottom(): void {
+  /**
+   * Scroll a specific message's bubble to the top of the viewport. Used
+   * to pin a freshly-sent user message in sight while the assistant
+   * streams its reply below — the user wrote that question, so seeing
+   * the question stay anchored is what they'd expect. We do NOT chase
+   * the streaming reply downward; the user reads at their own pace.
+   *
+   * Uses IonContent's `scrollToPoint` (the inner shadow-DOM scroller is
+   * what actually moves); falls back to direct `scrollTop` on the
+   * wrapper if IonContent isn't reachable.
+   */
+  function scrollMessageToTop(messageId: string): void {
     const el = contentRef.value
     if (!el) return
-    // Find the nearest scrollable ancestor — IonContent's shadow DOM
-    // owns the actual scroller; we target the wrapper div whose
-    // overflow we control directly via CSS, so a simple scrollTo on
-    // the parent IonContent host suffices via Ionic's auto-shim.
+    const target = el.querySelector(
+      `[data-message-id="${CSS.escape(messageId)}"]`
+    ) as HTMLElement | null
+    if (!target) return
+    // The fixed-top fade gradient eats ~44px of the safe area. Offset
+    // the scroll target so the bubble sits below it, not under it.
+    const TOP_PAD = 56
+    const y = Math.max(0, target.offsetTop - TOP_PAD)
     const host = el.closest("ion-content") as
       | (HTMLElement & {
-          scrollToBottom?: (durationMs: number) => Promise<void>
+          scrollToPoint?: (x: number, y: number, durationMs: number) => Promise<void>
         })
       | null
-    if (host && typeof host.scrollToBottom === "function") {
-      void host.scrollToBottom(180)
+    if (host && typeof host.scrollToPoint === "function") {
+      void host.scrollToPoint(0, y, 220)
     } else {
-      el.scrollTop = el.scrollHeight
+      el.scrollTop = y
     }
   }
 
+  /**
+   * Pin the just-sent user message to the top of the viewport when its
+   * bubble first appears as the *last* element of the list. Subsequent
+   * events on the same turn — the assistant placeholder being appended,
+   * streamed deltas, the finalised replacement, follow-up chips — keep
+   * `messages[last].id` either the same (deltas / finalise) or shift it
+   * to an assistant id (placeholder); neither path re-triggers a scroll.
+   * Session open / switch lands on an assistant message as the last
+   * element, so it's also a no-op. The user, not the controller, owns
+   * scroll position from there.
+   */
   watch(
-    () => store.messages.length,
-    async () => {
+    () => {
+      const last = store.messages[store.messages.length - 1]
+      return last ? { id: last.id, role: last.role } : null
+    },
+    async (snapshot) => {
+      if (!snapshot || snapshot.role !== "user") return
       await nextTick()
-      scrollToBottom()
-    }
+      scrollMessageToTop(snapshot.id)
+    },
+    { deep: false }
   )
 
   watch(

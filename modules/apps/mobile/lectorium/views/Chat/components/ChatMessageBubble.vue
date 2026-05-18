@@ -1,5 +1,5 @@
 <template>
-  <div :class="['bubble-row', message.role]">
+  <div :class="['bubble-row', message.role]" :data-message-id="message.id">
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
       <template v-if="message.role === 'user'">
         <span class="user-text">{{ message.content }}</span>
