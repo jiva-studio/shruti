@@ -26,7 +26,16 @@ from shruti_chat.agent.tools._registry import ToolDef, register_tool
 from shruti_chat.agent.tools.actions import YieldEvent, _new_action_id, _noop_yield
 
 
-_TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
+# Bounded HH:mm — 00..23 hours, 00..59 minutes. The earlier loose
+# pattern accepted nonsense like "25:99" / "99:99" that would survive
+# the wire trip and crash `setHours(...)` on the device.
+_TIME_RE = re.compile(r"^(?:[01]?\d|2[0-3]):[0-5]\d$")
+
+# Per-list cap for `propose_configure_smart_library`. A hallucinating
+# LLM could otherwise emit hundreds of ids that the mobile filter
+# store would dutifully apply. Smart Library doesn't need more than
+# this for any practical configuration.
+MAX_FILTER_LEN = 50
 
 
 async def propose_enable_reminder(
@@ -68,7 +77,7 @@ async def propose_configure_smart_library(
     filters: dict[str, list[str]] = {}
 
     def _clean(xs: list[str] | None) -> list[str]:
-        return [x for x in (xs or []) if isinstance(x, str) and x]
+        return [x for x in (xs or []) if isinstance(x, str) and x][:MAX_FILTER_LEN]
 
     if (vals := _clean(author_ids)):
         filters["author_ids"] = vals

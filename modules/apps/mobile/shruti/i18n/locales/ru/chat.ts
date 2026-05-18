@@ -118,6 +118,11 @@ export default {
   actionConfigureSmartLibraryConfirm: "Настроить",
   actionConfigureSmartLibraryDone: "Открыто в настройках.",
   actionConfigureSmartLibraryError: "Не удалось открыть умную библиотеку.",
+  actionConfigureSmartLibraryChipAuthors: "{n} авторов",
+  actionConfigureSmartLibraryChipTopics: "{n} тем",
+  actionConfigureSmartLibraryChipSources: "{n} источников",
+  actionConfigureSmartLibraryChipLocations: "{n} мест",
+  actionConfigureSmartLibraryChipLanguages: "{n} языков",
 
   actionUpgradeToProTitle: "Shruti Pro",
   actionUpgradeToProBody: "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
