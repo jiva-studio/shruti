@@ -10,6 +10,7 @@ import {
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
+import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { parseChatMarkers } from "@lectorium/views/Chat/composables/useMarkerParser.js"
 import {
   addTracksToPlaylist,
@@ -24,6 +25,7 @@ import type {
   ChatMessageError,
   ChatOutlinePayload,
   ChatSession as DomainChatSession,
+  SmartLibraryFiltersPayload,
 } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@lectorium/services/chat/httpChatStreamClient.js"
@@ -424,12 +426,81 @@ export const useChatStore = defineStore("chat", () => {
         if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
         await notes.refresh()
         await toast.info(t("chat.noteSaved"))
+      } else if (action.kind === "enable_daily_reminder") {
+        await applyProactiveDailyReminder(action.time)
+      } else if (action.kind === "configure_smart_library") {
+        await applyProactiveSmartLibrary(action.filters, action.id)
+      } else if (action.kind === "upgrade_to_pro") {
+        // The paywall store handles its own dialog mounting; we just
+        // request open and pretend the action completed (the user will
+        // engage or dismiss the paywall separately).
+        const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
+        usePaywallStore().requestOpen()
+      } else if (action.kind === "queue_next_track") {
+        const r = await playlist.add(action.trackId as TrackId)
+        if (!r.ok && r.error !== "already-in-playlist") {
+          throw new Error(`queue next failed: ${r.error}`)
+        }
       }
       await setActionState(messageId, actionId, "done")
     } catch (err) {
       console.warn("chat: action execution failed", err)
       await setActionState(messageId, actionId, "error")
     }
+  }
+
+  async function applyProactiveDailyReminder(time: string): Promise<void> {
+    // Mirrors the Settings binding (`SettingsView.controller.ts`):
+    // persist the enabled + time prefs the user-facing toggle reads
+    // from, then re-arm the alarm via the shared composable. The
+    // controller's watch picks this up too so opening Settings later
+    // shows the same on/time state.
+    const m = /^(\d{1,2}):(\d{2})$/.exec(time)
+    if (!m) throw new Error(`enable_daily_reminder: invalid time '${time}'`)
+    const hour = Number(m[1])
+    const minute = Number(m[2])
+    const { useConfig } = await import("@lectorium/composables/useConfig.js")
+    const enabled = useConfig<boolean>("settings.notificationsEnabled", false)
+    const timeRef = useConfig<[number, number] | undefined>(
+      "settings.notificationsTime",
+      undefined
+    )
+    enabled.value = true
+    timeRef.value = [hour, minute]
+    await applyDailyReminder(
+      {
+        enabled: true,
+        time,
+        title: t("app.title"),
+        body: t("notifications.timeToListen"),
+      },
+      { notifications: app.notifications }
+    )
+  }
+
+  async function applyProactiveSmartLibrary(
+    filters: SmartLibraryFiltersPayload,
+    _actionId: string
+  ): Promise<void> {
+    const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
+    const purchases = usePurchasesStore()
+    if (!purchases.isSubscribed) {
+      // Not subscribed → bounce through the paywall. The user can
+      // re-tap the same card after they upgrade.
+      const { usePaywallStore } = await import("@lectorium/stores/usePaywallStore.js")
+      usePaywallStore().requestOpen()
+      return
+    }
+    const { useAutoDownloadFiltersStore } = await import(
+      "@lectorium/stores/useAutoDownloadFiltersStore.js"
+    )
+    const store = useAutoDownloadFiltersStore()
+    await store.load()
+    if (filters.authorIds) await store.setAuthors(filters.authorIds)
+    if (filters.tagIds) await store.setTags(filters.tagIds)
+    if (filters.sourceIds) await store.setSources(filters.sourceIds)
+    if (filters.locationIds) await store.setLocations(filters.locationIds)
+    if (filters.languageCodes) await store.setLanguages(filters.languageCodes)
   }
 
   async function deleteSession(id: string): Promise<void> {

@@ -56,6 +56,36 @@
               v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
               :action-id="token.actionId"
               :payload="sharePdfPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
+            <ActionCardEnableReminder
+              v-else-if="token.kind === 'action' && token.actionKind === 'enable_daily_reminder'"
+              :action-id="token.actionId"
+              :payload="enableReminderPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
+            <ActionCardConfigureSmartLibrary
+              v-else-if="token.kind === 'action' && token.actionKind === 'configure_smart_library'"
+              :action-id="token.actionId"
+              :payload="configureSmartLibraryPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
+            <ActionCardUpgradeToPro
+              v-else-if="token.kind === 'action' && token.actionKind === 'upgrade_to_pro'"
+              :action-id="token.actionId"
+              :payload="upgradeToProPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
+            />
+            <ActionCardQueueNextTrack
+              v-else-if="token.kind === 'action' && token.actionKind === 'queue_next_track'"
+              :action-id="token.actionId"
+              :payload="queueNextTrackPayload(token.actionId)"
+              :state="actionState(token.actionId)"
+              @confirm="onConfirmAction"
             />
           </template>
           <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
@@ -72,6 +102,7 @@ import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionPayload } from "@lectorium/services/chatClient.js"
 import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
@@ -79,6 +110,10 @@ import OutlineCard from "./OutlineCard.vue"
 import ActionCardPlaylist from "./ActionCardPlaylist.vue"
 import ActionCardNote from "./ActionCardNote.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
+import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
+import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
+import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
+import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
 defineEmits<{
@@ -142,6 +177,34 @@ function sharePdfPayload(
 ): Extract<ActionPayload, { kind: "share_pdf" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "share_pdf" ? a : undefined
+}
+
+function enableReminderPayload(
+  actionId: string
+): Extract<ChatActionPayload, { kind: "enable_daily_reminder" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "enable_daily_reminder" ? a : undefined
+}
+
+function configureSmartLibraryPayload(
+  actionId: string
+): Extract<ChatActionPayload, { kind: "configure_smart_library" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "configure_smart_library" ? a : undefined
+}
+
+function upgradeToProPayload(
+  actionId: string
+): Extract<ChatActionPayload, { kind: "upgrade_to_pro" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "upgrade_to_pro" ? a : undefined
+}
+
+function queueNextTrackPayload(
+  actionId: string
+): Extract<ChatActionPayload, { kind: "queue_next_track" }> | undefined {
+  const a = props.message.actions?.[actionId]
+  return a && a.kind === "queue_next_track" ? a : undefined
 }
 
 async function onConfirmAction(actionId: string): Promise<void> {

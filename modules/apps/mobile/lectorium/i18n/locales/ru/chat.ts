@@ -95,6 +95,32 @@ export default {
   actionRetry: "Повторить",
   actionDegraded: "Карточка действия повреждена.",
 
+  actionEnableReminderTitle: "Ежедневное напоминание",
+  actionEnableReminderBody:
+    "Выбери время — буду присылать напоминание послушать лекцию. Можно поменять или выключить в настройках.",
+  actionEnableReminderConfirm: "Включить",
+  actionEnableReminderDone: "Напоминание включено.",
+  actionEnableReminderError: "Не удалось включить уведомления.",
+
+  actionConfigureSmartLibraryTitle: "Умная библиотека",
+  actionConfigureSmartLibraryBody:
+    "Держи свежие лекции по своим темам в офлайне. Я могу заранее настроить фильтры под тебя.",
+  actionConfigureSmartLibraryConfirm: "Настроить",
+  actionConfigureSmartLibraryDone: "Фильтры применены.",
+  actionConfigureSmartLibraryError: "Не удалось применить фильтры.",
+
+  actionUpgradeToProTitle: "Lectorium Pro",
+  actionUpgradeToProBody:
+    "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
+  actionUpgradeToProConfirm: "Посмотреть Pro",
+  actionUpgradeToProDone: "Окно подписки открыто.",
+  actionUpgradeToProError: "Не удалось открыть подписку.",
+
+  actionQueueNextTrackTitle: "Добавить в библиотеку",
+  actionQueueNextTrackConfirm: "Добавить",
+  actionQueueNextTrackDone: "Добавлено в библиотеку.",
+  actionQueueNextTrackError: "Не удалось добавить лекцию.",
+
   // CitationChip three-dot menu
   citationSaveAsNote: "Сохранить как заметку",
   citationOpenInStudio: "Открыть в Студии",
