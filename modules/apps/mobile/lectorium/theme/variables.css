@@ -279,4 +279,17 @@
   :root.md {
     --ion-item-background: transparent;
   }
+
+  /* Ionic's dark.system.css overrides --ion-background-color per platform
+   * at higher specificity than our :root block, so the actual visible
+   * page bg in dark mode is #000 (iOS) / #121212 (MD), not our #1a130d.
+   * Match --lectorium-fade-bg-rgb to the platform value so header/tab-bar
+   * fade gradients land on the real page bg rather than a warm-brown
+   * seam over the near-black content. */
+  :root.ios {
+    --lectorium-fade-bg-rgb: 0, 0, 0;
+  }
+  :root.md {
+    --lectorium-fade-bg-rgb: 18, 18, 18;
+  }
 }
