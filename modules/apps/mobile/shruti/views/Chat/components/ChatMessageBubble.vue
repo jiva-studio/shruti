@@ -155,9 +155,6 @@ function playlistPayload(
   actionId: string
 ): Extract<ActionPayload, { kind: "create_playlist" }> | undefined {
   const a = props.message.actions?.[actionId]
-  // No salvage here — useChatStore.sendMessage's finalisation already
-  // rebuilt orphan create_playlist actions from sibling [card:...]
-  // markers before persisting. The bubble is presentation-only.
   return a && a.kind === "create_playlist" ? a : undefined
 }
 
