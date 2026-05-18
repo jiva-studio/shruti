@@ -165,8 +165,7 @@ export function useProactiveScheduler(): void {
     // rows the user explicitly dismissed — a soft upsell can come back
     // sooner than the "user already saw and accepted" path.
     const effectiveCooldownMs =
-      last.prepState === "dismissed" &&
-      rule.config.dismiss_resets_after_hours !== undefined
+      last.prepState === "dismissed" && rule.config.dismiss_resets_after_hours !== undefined
         ? rule.config.dismiss_resets_after_hours * 3_600_000
         : cooldownMs
     return nowMs - last.createdAt < effectiveCooldownMs
@@ -300,7 +299,7 @@ export function useProactiveScheduler(): void {
       if (!isEligible(rule.config.eligibility, ctx)) continue
       if (await isOnCooldown(rule, ctx.nowMs, repo)) continue
 
-      let detected: readonly Awaited<ReturnType<typeof rule.handler.detect>>[number][] = []
+      let detected: readonly Awaited<ReturnType<typeof rule.handler.detect>>[number][]
       try {
         detected = [...(await rule.handler.detect(ctx))]
       } catch (err) {

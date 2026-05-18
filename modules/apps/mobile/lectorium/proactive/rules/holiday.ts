@@ -7,11 +7,6 @@ import { registerRule } from "../registry.js"
 const HOLIDAY_NOTIFY_HOUR = 8
 const DAY_MS = 86_400_000
 
-function localDate(d: Date): string {
-  const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
 function parseLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number)
   return new Date(y, m - 1, d)
@@ -68,7 +63,7 @@ const handler: ProactiveRuleHandler = {
       })
   },
 
-  async validate(entry, ctx) {
+  async validate(entry) {
     // The holiday hasn't moved; the row remains valid until visible_on
     // passes. Only superseded if the calendar entry was removed
     // (catalog.publish without that holiday).

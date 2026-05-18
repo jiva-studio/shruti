@@ -30,7 +30,7 @@ function formatYmd(d: Date): string {
 const handler: ProactiveRuleHandler = {
   id: "inactivity",
 
-  async detect(_ctx) {
+  async detect() {
     // No foreground detection — only `onAppPause` (below) emits new
     // instances. Foreground ticks would always see "user is here, no
     // inactivity to nudge about".

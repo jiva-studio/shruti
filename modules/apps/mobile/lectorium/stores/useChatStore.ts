@@ -446,7 +446,7 @@ export const useChatStore = defineStore("chat", () => {
         // they did, the chosen value rides in via `override.time`.
         await applyProactiveDailyReminder(override?.time ?? action.time)
       } else if (action.kind === "configure_smart_library") {
-        await applyProactiveSmartLibrary(action.filters, action.id)
+        await applyProactiveSmartLibrary(action.filters)
       } else if (action.kind === "upgrade_to_pro") {
         // The paywall store handles its own dialog mounting; we just
         // request open and pretend the action completed (the user will
@@ -529,10 +529,7 @@ export const useChatStore = defineStore("chat", () => {
     )
   }
 
-  async function applyProactiveSmartLibrary(
-    filters: SmartLibraryFiltersPayload,
-    _actionId: string
-  ): Promise<void> {
+  async function applyProactiveSmartLibrary(filters: SmartLibraryFiltersPayload): Promise<void> {
     const { usePurchasesStore } = await import("@lectorium/stores/usePurchasesStore.js")
     const purchases = usePurchasesStore()
     if (!purchases.isSubscribed) {
