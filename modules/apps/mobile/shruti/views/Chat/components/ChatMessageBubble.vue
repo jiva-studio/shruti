@@ -100,6 +100,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
+import { useRouter } from "vue-router"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
@@ -128,6 +129,7 @@ defineEmits<{
   ]
 }>()
 const chat = useChatStore()
+const router = useRouter()
 const { t } = useI18n()
 
 const tokens = computed(() => {
@@ -207,8 +209,23 @@ function queueNextTrackPayload(
   return a && a.kind === "queue_next_track" ? a : undefined
 }
 
-async function onConfirmAction(actionId: string): Promise<void> {
-  await chat.executeAction(props.message.id, actionId)
+async function onConfirmAction(
+  actionId: string,
+  override?: { time?: string }
+): Promise<void> {
+  // Snapshot the kind BEFORE executeAction — the store may mutate
+  // actionStates and the action payload reference can disappear from
+  // an aborted/replaced message later.
+  const kind = props.message.actions?.[actionId]?.kind
+  await chat.executeAction(props.message.id, actionId, override)
+  // Smart Library: the chat-side handler set the auto-download filters
+  // we received, but the user has no UI feedback in the chat surface.
+  // Land them on the Settings tab where the Smart Library section
+  // reflects whatever was just applied (empty payload from the LLM →
+  // they see the regular Settings card and can configure manually).
+  if (kind === "configure_smart_library") {
+    void router.push("/tabs/settings")
+  }
 }
 </script>
 
