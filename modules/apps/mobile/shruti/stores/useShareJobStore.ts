@@ -1,10 +1,12 @@
 import { computed, ref } from "vue"
 import { defineStore } from "pinia"
 
-export type ShareJobKind = "audio" | "video"
+export type ShareJobKind = "audio" | "video" | "pdf"
 
 export interface ShareJob {
   readonly kind: ShareJobKind
+  /** Caller-scoped identifier — noteId for the audio/video flows,
+   * `<trackId>:<lang>` for the chat PDF flow. */
   readonly noteId: string
   readonly startedAt: number
 }

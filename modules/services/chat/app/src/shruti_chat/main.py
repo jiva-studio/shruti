@@ -35,7 +35,9 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
+from shruti_chat.infra.pdf import register_fonts
 from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
+from shruti_chat.infra.storage.s3_pdf_storage import S3PdfStorage
 from shruti_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
 from shruti_chat.observability.logging import get_logger, setup_logging
 
@@ -53,12 +55,17 @@ async def lifespan(app: FastAPI):
     llm.configure_providers(s)
     embedder = get_embedder(s)
 
+    # PDF export uses bundled TTFs — register once at startup so the
+    # first request doesn't pay the cost on the hot path.
+    register_fonts()
+
     # Build the composition: each adapter takes only the dependencies
     # it needs, the use-cases take ports.
     chunk_repo = PgChunkRepository(pool=pool, embed_model=embedder.name)
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     transcript_storage = S3TranscriptStorage(settings=s)
     outline_cache = S3OutlineCache(settings=s)
+    pdf_storage = S3PdfStorage(settings=s)
     rate_limiter = RateLimiter(
         store=PgRateLimitStore(pool=pool), settings=s,
     )
@@ -71,6 +78,7 @@ async def lifespan(app: FastAPI):
         catalog_repo=catalog_repo,
         transcript_storage=transcript_storage,
         outline_cache=outline_cache,
+        pdf_storage=pdf_storage,
         rate_limiter=rate_limiter,
     )
 
@@ -80,6 +88,7 @@ async def lifespan(app: FastAPI):
         catalog_repo=catalog_repo,
         transcript_storage=transcript_storage,
         outline_cache=outline_cache,
+        pdf_storage=pdf_storage,
         embedder=embedder,
     )
 

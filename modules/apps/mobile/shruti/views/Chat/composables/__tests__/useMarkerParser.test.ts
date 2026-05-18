@@ -55,4 +55,14 @@ describe("parseChatMarkers — action markers", () => {
     const actions = tokens.filter((t) => t.kind === "action")
     expect(actions).toHaveLength(2)
   })
+
+  it("recognises share_pdf (PDF download / share card)", () => {
+    const tokens = parseChatMarkers("Готово [action:share_pdf|id=ab12cd34]")
+    const action = tokens.find((t) => t.kind === "action")
+    expect(action).toBeTruthy()
+    if (action && action.kind === "action") {
+      expect(action.actionKind).toBe("share_pdf")
+      expect(action.actionId).toBe("ab12cd34")
+    }
+  })
 })

@@ -71,6 +71,12 @@ export default {
   noteSaved: "Note saved",
   noteSaving: "Saving note…",
 
+  actionPdfKind: "Lecture transcript",
+  actionPdfShare: "Share",
+  actionPdfShared: "Sent",
+  actionPdfError: "Couldn't prepare the PDF.",
+  actionPdfDialog: "Share transcript",
+
   actionDismiss: "Skip",
   actionDismissed: "Dismissed",
   actionRetry: "Retry",

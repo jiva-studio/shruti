@@ -4,7 +4,7 @@ import { marked } from "marked"
 /*                                  Types                                     */
 /* -------------------------------------------------------------------------- */
 
-export type ActionKind = "create_playlist" | "save_note"
+export type ActionKind = "create_playlist" | "save_note" | "share_pdf"
 
 export type ChatToken =
   | { readonly kind: "text"; readonly html: string }
@@ -157,11 +157,11 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   return out
 }
 
-/** Strict whitelist — only the two known action kinds are accepted.
+/** Strict whitelist — only the known action kinds are accepted.
  *  Anything else (including legacy kebab `create-playlist`) returns null
  *  so the marker is silently dropped from the parsed token stream. */
 function parseActionKind(raw: string): ActionKind | null {
-  if (raw === "create_playlist" || raw === "save_note") return raw
+  if (raw === "create_playlist" || raw === "save_note" || raw === "share_pdf") return raw
   return null
 }
 
