@@ -37,9 +37,9 @@ function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
     sessionId: r.session_id as ChatSessionId,
     ruleKind: r.rule_kind as ProactiveRuleId,
     ruleDate: r.rule_date,
-    prepState: (PREP_STATES.has(r.prep_state as ProactivePrepState)
+    prepState: PREP_STATES.has(r.prep_state as ProactivePrepState)
       ? (r.prep_state as ProactivePrepState)
-      : "pending"),
+      : "pending",
     preparedAt: r.prepared_at != null ? Number(r.prepared_at) : null,
     bodyMd: r.content,
     visibleOn: r.visible_on,
@@ -115,13 +115,7 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       }
     },
 
-    async attach(
-      chatMessageId,
-      ruleKind,
-      ruleDate,
-      prepState,
-      preparedAt
-    ): Promise<void> {
+    async attach(chatMessageId, ruleKind, ruleDate, prepState, preparedAt): Promise<void> {
       // Best-effort attach. Both UNIQUE(rule_kind, rule_date) and the
       // PK on chat_message_id can collide; either way it's a benign
       // no-op for the inline-hint channel — we don't need to bump
@@ -209,10 +203,11 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         // existing `parseVersionedRecord` reader picks it up without
         // a separate code path.
         const actionsJson = JSON.stringify({ _v: 1, data: actions })
-        await db.execute(
-          "UPDATE chat_messages SET content = ?, actions_json = ? WHERE id = ?",
-          [content, actionsJson, chatMessageId]
-        )
+        await db.execute("UPDATE chat_messages SET content = ?, actions_json = ? WHERE id = ?", [
+          content,
+          actionsJson,
+          chatMessageId,
+        ])
       } else {
         await db.execute("UPDATE chat_messages SET content = ? WHERE id = ?", [
           content,

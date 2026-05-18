@@ -35,9 +35,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // `smart_library_hint` won't hold on dev builds, so the autonomous
   // tutorial for it won't fire on dev devices. That's the trade-off —
   // pick "Pro is unlocked" over "non-Pro flows are reproducible".
-  const isSubscribed = computed(
-    () => __BUILD_ID__ === "dev" || activePackageId.value !== undefined
-  )
+  const isSubscribed = computed(() => __BUILD_ID__ === "dev" || activePackageId.value !== undefined)
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId

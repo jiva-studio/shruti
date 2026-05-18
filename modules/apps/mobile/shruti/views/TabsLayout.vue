@@ -53,11 +53,19 @@ const shareJob = useShareJobStore()
 
 const proactiveBadge = useProactiveInboxBadge()
 const route = useRoute()
+// `useRoute()` is a reactive accessor — during the initial setup pass
+// the underlying ref can be undefined until the router finalises the
+// current location. Guard with `route?.name` everywhere, otherwise the
+// `immediate: true` callback below dereferences null on first run.
+function isChatRoute(): boolean {
+  const name = route?.name
+  return name === "chat" || name === "chat-session"
+}
 // Clear the proactive badge when the user enters any chat route — the
 // landing chat tab counts as "seen". Watch by name so deep links into
 // a specific session ("chat-session") also reset the badge.
 watch(
-  () => route.name,
+  () => route?.name,
   (name) => {
     if (name === "chat" || name === "chat-session") {
       void proactiveBadge.markSeen()
@@ -73,7 +81,7 @@ watch(
 watch(
   () => proactiveBadge.count.value,
   (next) => {
-    if (next > 0 && (route.name === "chat" || route.name === "chat-session")) {
+    if (next > 0 && isChatRoute()) {
       void proactiveBadge.markSeen()
     }
   }

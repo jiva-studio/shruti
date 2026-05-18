@@ -547,7 +547,8 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     return { kind: "enable_daily_reminder", id, time }
   }
   if (kind === "configure_smart_library") {
-    const f = (p.filters && typeof p.filters === "object") ? (p.filters as Record<string, unknown>) : {}
+    const f =
+      p.filters && typeof p.filters === "object" ? (p.filters as Record<string, unknown>) : {}
     const pickStringArray = (v: unknown): readonly string[] | undefined => {
       if (!Array.isArray(v)) return undefined
       const xs = v.filter((x): x is string => typeof x === "string")
