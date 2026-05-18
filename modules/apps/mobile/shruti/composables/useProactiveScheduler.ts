@@ -67,6 +67,17 @@ export function useProactiveScheduler(): void {
    *  fire for 30 minutes. Capped at 60 (~5 minutes of polling). */
   let repoRetries = 0
 
+  /** Single-flight guard for `tick()`. Without it, the onMounted call,
+   *  the appStateChange resume callback and the setInterval can all
+   *  fire within milliseconds of each other on cold-start (Capacitor
+   *  emits an active state right after mount). Concurrent ticks both
+   *  pass `findByRuleAndDate=null`, both call `resolveSessionId` (which
+   *  for `new_session` always mints a fresh chat_sessions row), then
+   *  only the first `repo.create` wins on the UNIQUE constraint — the
+   *  second returns null and leaves an orphan empty session in the
+   *  history list. The mutex prevents the race entirely. */
+  let tickInFlight = false
+
   let interval: ReturnType<typeof setInterval> | null = null
   let resumeHandle: PluginListenerHandle | null = null
   let pauseHandle: PluginListenerHandle | null = null
@@ -312,6 +323,16 @@ export function useProactiveScheduler(): void {
   }
 
   async function tick(): Promise<void> {
+    if (tickInFlight) return
+    tickInFlight = true
+    try {
+      await tickInner()
+    } finally {
+      tickInFlight = false
+    }
+  }
+
+  async function tickInner(): Promise<void> {
     const repo = proactiveRepo()
     if (!repo) {
       // App.vue mounts this composable BEFORE Welcome finishes opening
@@ -356,9 +377,14 @@ export function useProactiveScheduler(): void {
         const existing = await repo.findByRuleAndDate(rule.config.id, det.ruleDate)
         if (existing !== null) continue
         try {
+          // Belt-and-braces: even with `tickInFlight` guarding re-entry,
+          // a previous APK install / hot-reload could leave a row that
+          // our findByRuleAndDate above missed because of a transient
+          // DB issue. Capture the sessionId before we mint the chat
+          // session so we can roll it back if repo.create dedups.
           const sessionId = await resolveSessionId(rule, det, ctx.nowMs, sessions)
           const chatMessageId = randomChatMessageId()
-          await repo.create({
+          const created = await repo.create({
             chatMessageId,
             sessionId,
             role: "assistant",
@@ -370,6 +396,13 @@ export function useProactiveScheduler(): void {
             ruleDate: det.ruleDate,
             prepState: "pending",
           })
+          if (created === null) {
+            // The proactive_state row for (ruleKind, ruleDate) already
+            // exists — the chat_session we just minted is an orphan.
+            // Delete it so the history list stays clean.
+            await sessions.delete(sessionId).catch(() => undefined)
+            continue
+          }
           void recordEvent(app.preferences, rule.config.id, "detected")
           // Scheduler writes the chat_sessions/chat_messages rows directly
           // through repos, so the Pinia chat store's in-memory `sessions`
