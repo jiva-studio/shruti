@@ -122,7 +122,13 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
-  const routeName = route.name
+  // Defensive `?.` — in Vite dev the route injection can briefly be
+  // undefined on first render (router.isReady() fires before App's
+  // setup completes injection lookup, somehow). Without this, the
+  // computed throws, the FloatingPlayer never renders, and the
+  // browser-dev pane looks dead. Mobile (Capacitor) doesn't hit
+  // this — provide chain is synchronous through to mount.
+  const routeName = route?.name
   if (routeName === "chat" || routeName === "chat-session") return true
   return false
 })
