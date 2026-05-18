@@ -82,6 +82,32 @@ export default {
   actionRetry: "Retry",
   actionDegraded: "Action card data is missing.",
 
+  actionEnableReminderTitle: "Daily reminder",
+  actionEnableReminderBody:
+    "Pick a time each day and I'll nudge you to come listen. You can change or turn it off later in Settings.",
+  actionEnableReminderConfirm: "Turn on",
+  actionEnableReminderDone: "Daily reminder is set.",
+  actionEnableReminderError: "Couldn't enable notifications.",
+
+  actionConfigureSmartLibraryTitle: "Smart Library",
+  actionConfigureSmartLibraryBody:
+    "Keep fresh lectures on your topics queued offline. I can pre-fill these filters for you.",
+  actionConfigureSmartLibraryConfirm: "Set up",
+  actionConfigureSmartLibraryDone: "Filters applied.",
+  actionConfigureSmartLibraryError: "Couldn't apply filters.",
+
+  actionUpgradeToProTitle: "Shruti Pro",
+  actionUpgradeToProBody:
+    "Unlock Smart Library, the Notes Studio, and the rest of Pro to get the most out of Shruti.",
+  actionUpgradeToProConfirm: "See Pro",
+  actionUpgradeToProDone: "Paywall opened.",
+  actionUpgradeToProError: "Couldn't open the upgrade screen.",
+
+  actionQueueNextTrackTitle: "Add to library",
+  actionQueueNextTrackConfirm: "Add",
+  actionQueueNextTrackDone: "Added to library.",
+  actionQueueNextTrackError: "Couldn't add this lecture.",
+
   citationSaveAsNote: "Save as note",
   citationOpenInStudio: "Open in Studio",
   citationAddLectureToPlaylist: "Add lecture to playlist",
