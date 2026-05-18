@@ -33,6 +33,7 @@ async function setupSchema(db: IDatabase): Promise<void> {
        visible_on  TEXT,
        notify_at   INTEGER,
        notified_at INTEGER,
+       followups_json TEXT NOT NULL DEFAULT '[]',
        FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
      )`
   )

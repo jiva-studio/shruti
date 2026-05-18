@@ -23,6 +23,11 @@ export interface CreateChatMessageInput {
   readonly notifyAt?: number | null
   /** Stamp once the LocalNotification has been registered with the OS. */
   readonly notifiedAt?: number | null
+  /** Ordered list of follow-up chip texts emitted by the LLM via
+   *  `[followup:<text>]` markers. Persisted alongside the message; the
+   *  bubble renders chips only under the latest assistant message of
+   *  the session. Empty / undefined → no chips. */
+  readonly followups?: readonly string[]
 }
 
 /**

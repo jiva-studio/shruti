@@ -30,6 +30,21 @@ interface ChatMessageRow {
   readonly visible_on: string | null
   readonly notify_at: number | null
   readonly notified_at: number | null
+  readonly followups_json: string | null
+}
+
+function parseFollowups(s: unknown): readonly string[] {
+  if (typeof s !== "string" || s === "") return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(s)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  // Defensive filter: ignore non-string / empty entries left by older
+  // shapes or hand-edited rows.
+  return parsed.filter((x): x is string => typeof x === "string" && x.length > 0)
 }
 
 function parseVersionedRecord<T>(s: unknown): Record<string, T> {
@@ -79,6 +94,7 @@ function parseError(raw: unknown): ChatMessageError | undefined {
 }
 
 function rowToMessage(r: ChatMessageRow): ChatMessage {
+  const followups = parseFollowups(r.followups_json)
   return {
     id: r.id as ChatMessageId,
     sessionId: r.session_id as ChatSessionId,
@@ -92,6 +108,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     visibleOn: r.visible_on ?? undefined,
     notifyAt: r.notify_at != null ? Number(r.notify_at) : undefined,
     notifiedAt: r.notified_at != null ? Number(r.notified_at) : undefined,
+    followups: followups.length > 0 ? followups : undefined,
   }
 }
 
@@ -105,7 +122,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       const rows = await db.query<ChatMessageRow>(
         `SELECT m.id, m.session_id, m.role, m.content, m.created_at,
                 m.actions_json, m.outlines_json, m.action_states_json, m.error,
-                m.visible_on, m.notify_at, m.notified_at
+                m.visible_on, m.notify_at, m.notified_at, m.followups_json
            FROM chat_messages m
            LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
           WHERE m.session_id = ?
@@ -118,12 +135,13 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
     },
 
     async create(input: CreateChatMessageInput): Promise<ChatMessage> {
+      const followups = input.followups ?? []
       await db.execute(
         `INSERT INTO chat_messages
            (id, session_id, role, content, created_at,
             actions_json, outlines_json, action_states_json, error,
-            visible_on, notify_at, notified_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            visible_on, notify_at, notified_at, followups_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.id,
           input.sessionId,
@@ -137,6 +155,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
           input.visibleOn ?? null,
           input.notifyAt ?? null,
           input.notifiedAt ?? null,
+          JSON.stringify(followups),
         ]
       )
       await db.save()
@@ -153,6 +172,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         visibleOn: input.visibleOn ?? undefined,
         notifyAt: input.notifyAt ?? undefined,
         notifiedAt: input.notifiedAt ?? undefined,
+        followups: followups.length > 0 ? followups : undefined,
       }
     },
 

@@ -48,11 +48,25 @@ const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
 // so a malformed marker with a stray dash is still captured by the
 // outer pattern and then rejected by `parseActionKind` below.
 const ACTION_RE = /\[action:([a-z][a-z0-9_]*)\|id=([A-Za-z0-9_-]+)\]/g
+// Follow-up chips are TEXT markers (no id, no payload). `text` is any
+// run of non-`]`/`|`/newline chars — strict on purpose so the LLM
+// cannot accidentally swallow neighbouring prose by forgetting the
+// closing bracket. Empty text is rejected (`+` not `*`). Cap on chip
+// count is applied in `extractFollowups`, not in the regex.
+const FOLLOWUP_RE = /\[followup:([^\]|\n]+)\]/g
+/** Max chips surfaced under one bubble. The prompt asks the LLM for
+ *  ≤3, but the parser enforces it so a misbehaving turn never floods
+ *  the UI. */
+const FOLLOWUP_MAX = 3
 
 interface MarkerHit {
   readonly start: number
   readonly end: number
   readonly token: ChatToken
+  /** When true, the hit's range is excised from the prose but no
+   *  token is pushed (used for `[followup:..]` which renders outside
+   *  the bubble). */
+  readonly drop?: boolean
 }
 
 /* -------------------------------------------------------------------------- */
@@ -116,6 +130,20 @@ export function parseChatMarkers(input: string): ChatToken[] {
       token: { kind: "action", actionKind, actionId },
     })
   }
+  // Followup markers are stripped from the prose (chips render outside
+  // the bubble), so we record their spans in `hits` to drop them from
+  // the text segments — but never push a renderable token for them.
+  for (const match of input.matchAll(FOLLOWUP_RE)) {
+    const [full] = match
+    const start = match.index ?? 0
+    hits.push({
+      start,
+      end: start + full.length,
+      // Sentinel token kind: never emitted into the output stream.
+      token: { kind: "text", html: "" },
+      drop: true,
+    })
+  }
   hits.sort((a, b) => a.start - b.start)
 
   const out: ChatToken[] = []
@@ -125,13 +153,35 @@ export function parseChatMarkers(input: string): ChatToken[] {
     if (hit.start > cursor) {
       pushTextToken(out, input.slice(cursor, hit.start))
     }
-    out.push(hit.token)
+    if (!hit.drop) out.push(hit.token)
     cursor = hit.end
   }
   if (cursor < input.length) {
     pushTextToken(out, input.slice(cursor))
   }
   return collapseBlanksAroundCards(out)
+}
+
+/**
+ * Extract `[followup:<text>]` chips from raw assistant content.
+ * Strict parser (no regex fallback): malformed markers (`]` inside the
+ * text, embedded `|`, empty text) are not recognised and leak into
+ * prose — fixing them is the prompt's responsibility, never this
+ * function's. Trims each chip text and caps at FOLLOWUP_MAX entries.
+ *
+ * Returns an empty array when `input` is empty or contains no valid
+ * markers. The order matches the message: first marker = first chip.
+ */
+export function extractFollowups(input: string): string[] {
+  if (!input) return []
+  const out: string[] = []
+  for (const match of input.matchAll(FOLLOWUP_RE)) {
+    if (out.length >= FOLLOWUP_MAX) break
+    const text = (match[1] ?? "").trim()
+    if (text.length === 0) continue
+    out.push(text)
+  }
+  return out
 }
 
 /**
