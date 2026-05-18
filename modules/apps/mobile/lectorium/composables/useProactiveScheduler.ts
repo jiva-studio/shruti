@@ -219,6 +219,10 @@ export function useProactiveScheduler(): void {
         title: "",
         body: "",
         at: entry.notifyAt * 1000,
+        extra: {
+          chatSessionId: entry.sessionId,
+          chatMessageId: entry.chatMessageId,
+        },
       })
       const repo = proactiveRepo()
       if (repo) await repo.markNotified(entry.chatMessageId, Math.floor(Date.now() / 1000))
