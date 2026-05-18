@@ -12,10 +12,22 @@
     <IonContent :fullscreen="true" class="ion-padding">
       <IonSpinner v-if="loading" class="loading" name="dots" />
 
-      <template v-else-if="note">
+      <template v-else>
         <IonText color="medium">
           <p class="hint">{{ $t("studio.hint") }}</p>
         </IonText>
+
+        <IonItem lines="none" class="editor-item">
+          <IonInput
+            v-model="editedTitle"
+            :placeholder="$t('studio.titlePlaceholder')"
+            :label="$t('studio.titleLabel')"
+            label-placement="stacked"
+            :disabled="busy"
+            :maxlength="120"
+            class="title-input"
+          />
+        </IonItem>
 
         <IonItem lines="none" class="editor-item">
           <IonTextarea
@@ -55,6 +67,7 @@ import {
   IonButtons,
   IonContent,
   IonHeader,
+  IonInput,
   IonItem,
   IonPage,
   IonSpinner,
@@ -66,7 +79,7 @@ import {
 import { IconDownload } from "@ui/icons/index.js"
 import { useStudioController } from "./StudioView.controller.js"
 
-const { loading, note, editedText, busy, status, onDownload } = useStudioController()
+const { loading, editedText, editedTitle, busy, status, onDownload } = useStudioController()
 </script>
 
 <style scoped>
@@ -89,6 +102,10 @@ const { loading, note, editedText, busy, status, onDownload } = useStudioControl
 }
 
 .editor {
+  font-size: 0.95rem;
+}
+
+.title-input {
   font-size: 0.95rem;
 }
 

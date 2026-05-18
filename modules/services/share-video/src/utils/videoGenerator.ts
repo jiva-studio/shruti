@@ -1,8 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { createCanvas, SKRSContext2D } from '@napi-rs/canvas';
+import { createCanvas, loadImage, SKRSContext2D } from '@napi-rs/canvas';
 import { Slide, ReelGeneratorOptions, WordTiming } from '../types';
 import { registerFonts, FONT_FAMILY } from './fontManager';
+
+/**
+ * Cream background for the title-card frame. Chosen to read as warm/neutral
+ * paper colour against the dark text and the icon's transparent edges.
+ */
+const TITLE_BG_COLOR = '#F5EBDC';
+const TITLE_TEXT_COLOR = '#2A2A2A';
 
 function wrapText(
   ctx: SKRSContext2D,
@@ -274,6 +281,58 @@ function renderTextWithWordHighlight(
       wordIndex++;
     }
   }
+}
+
+/**
+ * Render the title-card frame: opaque cream background, icon centered near
+ * the top, multi-line title centered vertically. Used as a fixed overlay
+ * during the first ~0.5s of the reel.
+ */
+export async function generateTitleFrame(
+  title: string,
+  iconPath: string,
+  options: ReelGeneratorOptions,
+  outputPath: string,
+): Promise<string> {
+  registerFonts();
+
+  const canvas = createCanvas(options.slideWidth, options.slideHeight);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = TITLE_BG_COLOR;
+  ctx.fillRect(0, 0, options.slideWidth, options.slideHeight);
+
+  // Icon: square, ~25% of the slide width, anchored near the top.
+  const iconSize = Math.round(options.slideWidth * 0.25);
+  const iconX = (options.slideWidth - iconSize) / 2;
+  const iconY = Math.round(options.slideHeight * 0.12);
+  try {
+    const img = await loadImage(iconPath);
+    ctx.drawImage(img, iconX, iconY, iconSize, iconSize);
+  } catch (e: any) {
+    console.warn(`[share-video] title icon load failed (${iconPath}): ${e?.message}`);
+  }
+
+  const titleFontSize = Math.round(options.fontSize * 0.9);
+  ctx.font = `bold ${titleFontSize}px ${FONT_FAMILY}, sans-serif`;
+  ctx.fillStyle = TITLE_TEXT_COLOR;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const maxTextWidth = options.slideWidth * 0.85;
+  const lines = wrapText(ctx, title, maxTextWidth);
+  const lineHeight = titleFontSize * 1.25;
+  const totalHeight = lines.length * lineHeight;
+  const centerY = options.slideHeight * 0.55;
+  const startY = centerY - totalHeight / 2;
+
+  lines.forEach((line, index) => {
+    const y = startY + (index + 0.5) * lineHeight;
+    ctx.fillText(line, options.slideWidth / 2, y);
+  });
+
+  await fs.promises.writeFile(outputPath, await canvas.encode('png'));
+  return outputPath;
 }
 
 /** Removes the listed files. The handler-level cleanup wipes the whole tempDir. */

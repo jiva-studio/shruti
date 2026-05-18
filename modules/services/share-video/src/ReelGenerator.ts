@@ -4,9 +4,15 @@ import ffmpeg from 'fluent-ffmpeg';
 import { ReelConfig, ReelGeneratorOptions } from './types';
 import {
   generateSlideImages,
+  generateTitleFrame,
   generateWordHighlightFrames,
 } from './utils/videoGenerator';
 import { getVideoDuration } from './utils/videoBackgrounds';
+
+// How long the cream title-card overlay covers the reel at the start when
+// `config.title` is set. Audio is NOT shifted — the title sits on top of
+// the first TITLE_DURATION_S seconds of audio.
+const TITLE_DURATION_S = 0.5;
 
 if (process.env.FFMPEG_BIN) {
   ffmpeg.setFfmpegPath(process.env.FFMPEG_BIN);
@@ -128,6 +134,28 @@ export class ReelGenerator {
         duration: slide.duration,
         startTime: slide.startTime || 0,
       }));
+    }
+
+    // Title-card overlay (optional). Render an opaque cream frame and
+    // prepend it to the text-overlay frame list so it covers the first
+    // TITLE_DURATION_S seconds. Subsequent frames are filtered/clipped to
+    // resume right when the title ends, keeping word-highlight alignment.
+    if (config.title && config.titleIconPath && fs.existsSync(config.titleIconPath)) {
+      const titleFramePath = path.join(config.tempDir, 'title_frame.png');
+      await generateTitleFrame(config.title, config.titleIconPath, opts, titleFramePath);
+      const surviving = frameData.filter(
+        (f) => f.startTime + f.duration > TITLE_DURATION_S,
+      );
+      if (surviving.length > 0) {
+        surviving[0] = {
+          ...surviving[0],
+          startTime: Math.max(surviving[0].startTime, TITLE_DURATION_S),
+        };
+      }
+      frameData = [
+        { path: titleFramePath, duration: TITLE_DURATION_S, startTime: 0 },
+        ...surviving,
+      ];
     }
 
     // Step 1: composite text frames onto a transparent QuickTime track,

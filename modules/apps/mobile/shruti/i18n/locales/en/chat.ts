@@ -83,6 +83,7 @@ export default {
   actionDegraded: "Action card data is missing.",
 
   citationSaveAsNote: "Save as note",
+  citationOpenInStudio: "Open in Studio",
   citationAddLectureToPlaylist: "Add lecture to playlist",
   recentSessionsLabel: "Recent chats",
   /** Short relative-time labels for RecentSessions. Localise the suffix

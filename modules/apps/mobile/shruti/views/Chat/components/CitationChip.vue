@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
 import { useI18n } from "vue-i18n"
+import { useRouter } from "vue-router"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useShruti } from "@shruti/shruti.js"
@@ -59,6 +60,8 @@ import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
+import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
@@ -92,9 +95,12 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
+const router = useRouter()
 const toast = useToast()
 const app = useShruti()
 const appLanguage = useAppLanguage()
+const purchases = usePurchasesStore()
+const paywall = usePaywallStore()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
@@ -176,6 +182,12 @@ const actionSheetButtons = computed<readonly ChipActionSheetButton[]>(() => [
     },
   },
   {
+    text: t("chat.citationOpenInStudio"),
+    handler: (): void => {
+      void onOpenInStudio()
+    },
+  },
+  {
     text: t("chat.citationAddLectureToPlaylist"),
     handler: (): void => {
       void onAddToPlaylist()
@@ -196,6 +208,30 @@ async function onAddToPlaylist(): Promise<void> {
     console.warn("[citation-chip] add to playlist failed", err)
     await toast.error(t("chat.citationAddFailed"))
   }
+}
+
+/**
+ * Open this citation in Studio (transient mode — no Note is created).
+ * Studio loads the transcript itself and prefills the editor with the
+ * sentence-overlap text. Routed via `state.citation` so the long
+ * transcript body doesn't end up in the URL.
+ */
+function onOpenInStudio(): void {
+  if (!purchases.isSubscribed) {
+    paywall.requestOpen()
+    return
+  }
+  void router.push({
+    path: "/tabs/studio/citation",
+    state: {
+      citation: {
+        trackId: props.trackId,
+        startMs: props.startMs,
+        endMs: props.endMs,
+        caption: props.caption ?? "",
+      },
+    },
+  })
 }
 
 async function onSaveAsNote(): Promise<void> {
