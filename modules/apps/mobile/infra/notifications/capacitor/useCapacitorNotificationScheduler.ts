@@ -8,6 +8,13 @@ import type { INotificationScheduler, ScheduledNotification } from "@ports/app/n
  */
 export function useCapacitorNotificationScheduler(): INotificationScheduler {
   return {
+    async checkPermission() {
+      const result = await LocalNotifications.checkPermissions()
+      if (result.display === "granted") return "granted"
+      if (result.display === "denied") return "denied"
+      return "unknown"
+    },
+
     async requestPermission() {
       const result = await LocalNotifications.requestPermissions()
       // Capacitor returns "granted" | "denied" | "prompt" | "default" —
@@ -36,6 +43,7 @@ export function useCapacitorNotificationScheduler(): INotificationScheduler {
                 on: { hour: date.getHours(), minute: date.getMinutes() },
                 allowWhileIdle: true,
               },
+              extra: n.extra ?? null,
             },
           ],
         })
@@ -48,6 +56,7 @@ export function useCapacitorNotificationScheduler(): INotificationScheduler {
             title: n.title,
             body: n.body,
             schedule: { at: new Date(n.at) },
+            extra: n.extra ?? null,
           },
         ],
       })

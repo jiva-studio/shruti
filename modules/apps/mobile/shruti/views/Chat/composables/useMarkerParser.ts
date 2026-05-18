@@ -4,7 +4,14 @@ import { marked } from "marked"
 /*                                  Types                                     */
 /* -------------------------------------------------------------------------- */
 
-export type ActionKind = "create_playlist" | "save_note" | "share_pdf"
+export type ActionKind =
+  | "create_playlist"
+  | "save_note"
+  | "share_pdf"
+  | "enable_daily_reminder"
+  | "configure_smart_library"
+  | "upgrade_to_pro"
+  | "queue_next_track"
 
 export type ChatToken =
   | { readonly kind: "text"; readonly html: string }
@@ -157,11 +164,21 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   return out
 }
 
-/** Strict whitelist — only the known action kinds are accepted.
- *  Anything else (including legacy kebab `create-playlist`) returns null
- *  so the marker is silently dropped from the parsed token stream. */
+/** Strict whitelist — only known action kinds are accepted. Anything
+ *  else (including legacy kebab `create-playlist`) returns null so the
+ *  marker is silently dropped from the parsed token stream. */
 function parseActionKind(raw: string): ActionKind | null {
-  if (raw === "create_playlist" || raw === "save_note" || raw === "share_pdf") return raw
+  if (
+    raw === "create_playlist" ||
+    raw === "save_note" ||
+    raw === "share_pdf" ||
+    raw === "enable_daily_reminder" ||
+    raw === "configure_smart_library" ||
+    raw === "upgrade_to_pro" ||
+    raw === "queue_next_track"
+  ) {
+    return raw
+  }
   return null
 }
 

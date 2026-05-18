@@ -49,6 +49,7 @@ from shruti_chat.agent.tools import (  # noqa: F401 — side-effect imports
     outline,
     pdf,
     personalize,
+    propose_hints,
     resolve,
     search,
     similar,

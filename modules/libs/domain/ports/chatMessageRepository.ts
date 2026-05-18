@@ -17,6 +17,12 @@ export interface CreateChatMessageInput {
   readonly outlines?: Record<string, ChatOutlinePayload>
   readonly actionStates?: Record<string, ChatActionState>
   readonly error?: ChatMessageError
+  /** Hide row until user's local date reaches this `'YYYY-MM-DD'`. */
+  readonly visibleOn?: string | null
+  /** Unix-seconds moment to fire a LocalNotification for this message. */
+  readonly notifyAt?: number | null
+  /** Stamp once the LocalNotification has been registered with the OS. */
+  readonly notifiedAt?: number | null
 }
 
 /**

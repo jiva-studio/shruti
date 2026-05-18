@@ -84,6 +84,8 @@ import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
+import { useProactiveDeepLink } from "@shruti/composables/useProactiveDeepLink.js"
+import { useProactiveScheduler } from "@shruti/composables/useProactiveScheduler.js"
 import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudio.js"
 import { useShruti } from "@shruti/shruti.js"
 
@@ -120,7 +122,13 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
-  const routeName = route.name
+  // Defensive `?.` — in Vite dev the route injection can briefly be
+  // undefined on first render (router.isReady() fires before App's
+  // setup completes injection lookup, somehow). Without this, the
+  // computed throws, the FloatingPlayer never renders, and the
+  // browser-dev pane looks dead. Mobile (Capacitor) doesn't hit
+  // this — provide chain is synchronous through to mount.
+  const routeName = route?.name
   if (routeName === "chat" || routeName === "chat-session") return true
   return false
 })
@@ -134,6 +142,8 @@ usePlayerProgressFlush()
 useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
+useProactiveScheduler()
+useProactiveDeepLink()
 
 // When a Notes inline excerpt starts playing, pause the main lecture so
 // the user never hears two streams at once. The notes coordinator owns

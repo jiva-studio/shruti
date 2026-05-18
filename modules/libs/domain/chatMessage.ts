@@ -9,6 +9,17 @@ import type { ChatMessageId, ChatSessionId, UnixMs } from "./core.js"
  * The action types track 1:1 to the chat tool side-events the agent
  * emits via `yield_event` (`actions.py`).
  */
+/** Subset of `useAutoDownloadFiltersStore`'s shape used by the
+ *  `configure_smart_library` action card. Open list of filter ids the
+ *  user can drop into the auto-download settings with one tap. */
+export interface SmartLibraryFiltersPayload {
+  readonly authorIds?: readonly string[]
+  readonly tagIds?: readonly string[]
+  readonly sourceIds?: readonly string[]
+  readonly locationIds?: readonly string[]
+  readonly languageCodes?: readonly string[]
+}
+
 export type ChatActionPayload =
   | {
       readonly kind: "create_playlist"
@@ -28,6 +39,30 @@ export type ChatActionPayload =
       readonly kind: "share_pdf"
       readonly id: string
       readonly items: readonly ChatSharePdfItemPayload[]
+    }
+  | {
+      readonly kind: "enable_daily_reminder"
+      readonly id: string
+      /** `'HH:mm'` 24h local time the reminder should fire at. */
+      readonly time: string
+    }
+  | {
+      readonly kind: "configure_smart_library"
+      readonly id: string
+      readonly filters: SmartLibraryFiltersPayload
+    }
+  | {
+      readonly kind: "upgrade_to_pro"
+      readonly id: string
+      /** Short tag explaining why the upsell card surfaced (e.g.
+       *  "smart_library", "weekly_digest"). Plumbed into the paywall
+       *  analytics context. */
+      readonly reason: string
+    }
+  | {
+      readonly kind: "queue_next_track"
+      readonly id: string
+      readonly trackId: string
     }
 
 /** One downloadable PDF inside a `share_pdf` action card. */
@@ -87,4 +122,16 @@ export interface ChatMessage {
   actionStates?: Record<string, ChatActionState>
   /** Set when the message ended abnormally (see ChatMessageError). */
   error?: ChatMessageError
+  /** When set, the row is hidden from the UI until the user's local date
+   *  reaches this `'YYYY-MM-DD'`. Used by the proactive scheduler to
+   *  pre-bake messages that should surface on a future day. */
+  visibleOn?: string
+  /** When set, a `LocalNotification` is scheduled at this unix-seconds
+   *  moment, with `extra: { chatSessionId, chatMessageId }` so tapping
+   *  deep-links into this session. */
+  notifyAt?: number
+  /** Set when the scheduled notification actually fired (or was
+   *  delivered into the system tray). Prevents re-scheduling on the
+   *  next tick. */
+  notifiedAt?: number
 }

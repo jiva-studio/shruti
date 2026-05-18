@@ -10,6 +10,7 @@ import {
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { parseChatMarkers } from "@shruti/views/Chat/composables/useMarkerParser.js"
 import {
   addTracksToPlaylist,
@@ -24,6 +25,7 @@ import type {
   ChatMessageError,
   ChatOutlinePayload,
   ChatSession as DomainChatSession,
+  SmartLibraryFiltersPayload,
 } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@shruti/services/chat/httpChatStreamClient.js"
@@ -336,11 +338,22 @@ export const useChatStore = defineStore("chat", () => {
         const idx = messages.value.findIndex((m) => m.streaming)
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
-          return
+        } else {
+          const next = [...messages.value]
+          next[idx] = { ...event.message }
+          messages.value = next
         }
-        const next = [...messages.value]
-        next[idx] = { ...event.message }
-        messages.value = next
+        // Cross-channel cooldown: only AFTER the chat_message has been
+        // persisted do we attach the proactive_state sidecar for any
+        // hint-class action the LLM emitted inline. Recording earlier
+        // (on the `action` SSE event) creates a row whose FK points
+        // to a not-yet-existing chat_messages.id — if the stream
+        // aborts before `finalised`, the row becomes a permanent
+        // orphan. `upgrade_to_pro` has no autonomous-rule counterpart,
+        // so it's skipped by `inlineHintToRuleKind`.
+        for (const action of Object.values(event.message.actions ?? {})) {
+          void recordInlineHintCooldown(event.message.id, action)
+        }
         return
       }
       case "title-updated": {
@@ -390,7 +403,11 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  async function executeAction(messageId: string, actionId: string): Promise<void> {
+  async function executeAction(
+    messageId: string,
+    actionId: string,
+    override?: { time?: string }
+  ): Promise<void> {
     const msg = messages.value.find((m) => m.id === messageId)
     if (!msg) return
     const action = msg.actions?.[actionId]
@@ -424,12 +441,113 @@ export const useChatStore = defineStore("chat", () => {
         if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
         await notes.refresh()
         await toast.info(t("chat.noteSaved"))
+      } else if (action.kind === "enable_daily_reminder") {
+        // Card lets the user pick a time before tapping Confirm; if
+        // they did, the chosen value rides in via `override.time`.
+        await applyProactiveDailyReminder(override?.time ?? action.time)
+      } else if (action.kind === "configure_smart_library") {
+        await applyProactiveSmartLibrary(action.filters)
+      } else if (action.kind === "upgrade_to_pro") {
+        // The paywall store handles its own dialog mounting; we just
+        // request open and pretend the action completed (the user will
+        // engage or dismiss the paywall separately).
+        const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
+        usePaywallStore().requestOpen()
+      } else if (action.kind === "queue_next_track") {
+        const r = await playlist.add(action.trackId as TrackId)
+        if (!r.ok && r.error !== "already-in-playlist") {
+          throw new Error(`queue next failed: ${r.error}`)
+        }
       }
       await setActionState(messageId, actionId, "done")
     } catch (err) {
       console.warn("chat: action execution failed", err)
       await setActionState(messageId, actionId, "error")
     }
+  }
+
+  async function recordInlineHintCooldown(
+    chatMessageId: string,
+    payload: ChatActionPayload
+  ): Promise<void> {
+    const ruleKind = inlineHintToRuleKind(payload.kind)
+    if (ruleKind === null) return
+    try {
+      const repo = app.repositories().proactiveState
+      const today = new Date()
+      const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
+      const ruleDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+      await repo.attach(
+        chatMessageId as ChatMessageId,
+        ruleKind,
+        ruleDate,
+        "ready",
+        Math.floor(Date.now() / 1000)
+      )
+    } catch (err) {
+      // Best-effort — if attach fails the user still sees the inline
+      // card, just the autonomous tutorial may double up next month.
+      console.debug("[proactive] inline hint attach failed:", err)
+    }
+  }
+
+  function inlineHintToRuleKind(
+    kind: ChatActionPayload["kind"]
+  ): "enable_notifications_hint" | "smart_library_hint" | null {
+    if (kind === "enable_daily_reminder") return "enable_notifications_hint"
+    if (kind === "configure_smart_library") return "smart_library_hint"
+    // `upgrade_to_pro` has no autonomous-rule counterpart today.
+    return null
+  }
+
+  async function applyProactiveDailyReminder(time: string): Promise<void> {
+    // Mirrors the Settings binding (`SettingsView.controller.ts`):
+    // persist the enabled + time prefs the user-facing toggle reads
+    // from, then re-arm the alarm via the shared composable. The
+    // controller's watch picks this up too so opening Settings later
+    // shows the same on/time state.
+    // Bounded HH:mm — 00..23 hours, 00..59 minutes. The earlier
+    // `\d{1,2}:\d{2}` form accepted nonsense like `25:99` and threw
+    // downstream when `setHours(25, 99)` ran.
+    const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(time)
+    if (!m) throw new Error(`enable_daily_reminder: invalid time '${time}'`)
+    const hour = Number(m[1])
+    const minute = Number(m[2])
+    const { useConfig } = await import("@shruti/composables/useConfig.js")
+    const enabled = useConfig<boolean>("settings.notificationsEnabled", false)
+    const timeRef = useConfig<[number, number] | undefined>("settings.notificationsTime", undefined)
+    enabled.value = true
+    timeRef.value = [hour, minute]
+    await applyDailyReminder(
+      {
+        enabled: true,
+        time,
+        title: t("app.title"),
+        body: t("notifications.timeToListen"),
+      },
+      { notifications: app.notifications }
+    )
+  }
+
+  async function applyProactiveSmartLibrary(filters: SmartLibraryFiltersPayload): Promise<void> {
+    const { usePurchasesStore } = await import("@shruti/stores/usePurchasesStore.js")
+    const purchases = usePurchasesStore()
+    if (!purchases.isSubscribed) {
+      // Not subscribed → bounce through the paywall. The user can
+      // re-tap the same card after they upgrade.
+      const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
+      usePaywallStore().requestOpen()
+      return
+    }
+    const { useAutoDownloadFiltersStore } =
+      await import("@shruti/stores/useAutoDownloadFiltersStore.js")
+    const store = useAutoDownloadFiltersStore()
+    await store.load()
+    if (filters.authorIds) await store.setAuthors(filters.authorIds)
+    if (filters.tagIds) await store.setTags(filters.tagIds)
+    if (filters.sourceIds) await store.setSources(filters.sourceIds)
+    if (filters.locationIds) await store.setLocations(filters.locationIds)
+    if (filters.languageCodes) await store.setLanguages(filters.languageCodes)
   }
 
   async function deleteSession(id: string): Promise<void> {
