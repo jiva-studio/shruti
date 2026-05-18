@@ -39,14 +39,20 @@ export interface ProactiveContext {
  * is the dedup key — `(ruleKind, ruleDate)` is UNIQUE so emitting the
  * same instance again is a safe no-op.
  *
+ * `visibleAt` is the unified unix-seconds moment: the row appears in
+ * chat at that instant AND (if `notify=true`) the OS fires a
+ * LocalNotification at the same instant. `null` means real-time / no
+ * gate (currently only used by silent attachments — autonomous rules
+ * always pin a future moment).
+ *
  * `templateContext` flows through to the session-title template and to
  * the content builder unchanged (e.g., `{ holiday_name, holiday_date,
  * topic_tags }` for holiday).
  */
 export interface DetectResult {
   readonly ruleDate: string
-  readonly visibleOn: string | null
-  readonly notifyAt: number | null
+  readonly visibleAt: number | null
+  readonly notify: boolean
   readonly sessionTitleOverride?: string
   readonly templateContext: Record<string, unknown>
 }

@@ -6,8 +6,8 @@ import { createInMemoryTestDatabase } from "./testDb.js"
 
 /**
  * Apply the minimum schema this repo touches: chat_sessions /
- * chat_messages (cols proactive cares about) + the sidecar with the
- * new `seen_at` column from migration 010.
+ * chat_messages (cols proactive cares about) + the sidecar holding
+ * the proactive bookkeeping (`visible_at`, `notify`, `seen_at`).
  */
 async function setupSchema(db: IDatabase): Promise<void> {
   await db.execute(
@@ -15,25 +15,17 @@ async function setupSchema(db: IDatabase): Promise<void> {
        id          TEXT PRIMARY KEY,
        title       TEXT,
        created_at  INTEGER NOT NULL,
-       updated_at  INTEGER NOT NULL,
-       title_attempt_count INTEGER NOT NULL DEFAULT 0
+       updated_at  INTEGER NOT NULL
      )`
   )
   await db.execute(
     `CREATE TABLE chat_messages (
        id          TEXT PRIMARY KEY,
        session_id  TEXT NOT NULL,
-       role        TEXT NOT NULL,
+       role        TEXT NOT NULL CHECK(role IN ('user','assistant')),
        content     TEXT NOT NULL,
        created_at  INTEGER NOT NULL,
-       actions_json       TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}',
-       outlines_json      TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}',
-       action_states_json TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}',
-       error       TEXT,
-       visible_on  TEXT,
-       notify_at   INTEGER,
-       notified_at INTEGER,
-       followups_json TEXT NOT NULL DEFAULT '[]',
+       meta        TEXT NOT NULL DEFAULT '{"_v":1,"data":{}}',
        FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
      )`
   )
@@ -44,6 +36,8 @@ async function setupSchema(db: IDatabase): Promise<void> {
        rule_date        TEXT    NOT NULL,
        prep_state       TEXT    NOT NULL,
        prepared_at      INTEGER,
+       visible_at       INTEGER,
+       notify           INTEGER NOT NULL DEFAULT 0,
        seen_at          INTEGER,
        UNIQUE(rule_kind, rule_date),
        FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE
@@ -81,8 +75,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: "2026-05-18",
-      notifyAt: null,
+      visibleAt: 1700000000,
+      notify: false,
       ruleKind: "holiday",
       ruleDate: "2026-05-18",
       prepState: "pending",
@@ -124,8 +118,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "holiday",
       ruleDate: "2026-05-18",
       prepState: "ready",
@@ -138,8 +132,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "weekly_digest",
       ruleDate: "2026-05-18",
       prepState: "pending",
@@ -152,8 +146,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "inactivity",
       ruleDate: "2026-05-18",
       prepState: "ready",
@@ -172,8 +166,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "holiday",
       ruleDate: "2026-05-18",
       prepState: "ready",
@@ -196,8 +190,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "holiday",
       ruleDate: "2026-05-18",
       prepState: "ready",
@@ -208,8 +202,8 @@ describe("proactiveStateRepository — seen_at semantics", () => {
       role: "assistant",
       content: "",
       createdAt: 1700000000000,
-      visibleOn: null,
-      notifyAt: null,
+      visibleAt: null,
+      notify: false,
       ruleKind: "weekly_digest",
       ruleDate: "2026-05-18",
       prepState: "ready",

@@ -15,8 +15,8 @@ const DEFAULT_REMINDER_TIME = "07:00"
  * does, then the action button to turn it on.
  *
  * Eligibility (predicates in bundled config): streak ≥ 3 days and
- * notification permission still off. Cooldown 30 days. Notification
- * is silent (`notify_at: null`) — the chat-icon badge is the cue.
+ * notification permission still off. Cooldown 30 days. Silent
+ * (`notify: false`) — the chat-icon badge is the cue, no OS push.
  */
 const handler: ProactiveRuleHandler = {
   id: "enable_notifications_hint",
@@ -25,8 +25,8 @@ const handler: ProactiveRuleHandler = {
     return [
       {
         ruleDate: ctx.localDate,
-        visibleOn: null,
-        notifyAt: null,
+        visibleAt: null,
+        notify: false,
         // Localised session title resolved at detect time so the
         // bundled config stays free of i18n-key indirection.
         sessionTitleOverride: ctx.t("chat.proactiveSessionTitleEnableReminder"),

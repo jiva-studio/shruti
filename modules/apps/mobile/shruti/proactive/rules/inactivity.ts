@@ -52,6 +52,7 @@ const handler: ProactiveRuleHandler = {
     const existing = await repo.findByRuleAndDate("inactivity", ruleDate)
     if (existing !== null) return
 
+    const visibleAtSec = Math.floor(fireAt.getTime() / 1000)
     const sessions = ctx.repos.chatSessions
     const sessionId = await resolveSessionId(
       {
@@ -68,8 +69,8 @@ const handler: ProactiveRuleHandler = {
       },
       {
         ruleDate,
-        visibleOn: ruleDate,
-        notifyAt: Math.floor(fireAt.getTime() / 1000),
+        visibleAt: visibleAtSec,
+        notify: true,
         templateContext: {},
       },
       ctx.nowMs,
@@ -81,15 +82,14 @@ const handler: ProactiveRuleHandler = {
       typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
-    const fireAtMs = fireAt.getTime()
     const created = await repo.create({
       chatMessageId: chatMessageId as never,
       sessionId,
       role: "assistant",
       content: "",
       createdAt: ctx.nowMs,
-      visibleOn: ruleDate,
-      notifyAt: Math.floor(fireAtMs / 1000),
+      visibleAt: visibleAtSec,
+      notify: true,
       ruleKind: "inactivity",
       ruleDate,
       prepState: "pending",
@@ -99,18 +99,17 @@ const handler: ProactiveRuleHandler = {
     // for the next scheduler tick. The whole point of `inactivity` is
     // that the user is GONE — the next foreground tick may be days
     // away or never. Capacitor's exact alarms survive process death;
-    // we set it now and the OS fires it 7 days from `fireAtMs`.
+    // we set it now and the OS fires it at fireAtMs. Re-calls with the
+    // same id are idempotent at the Capacitor layer — no DB flag
+    // needed to track "already scheduled".
     try {
       await app.notifications.schedule({
         id: notificationIdFor(chatMessageId),
         title: "",
         body: "",
-        at: fireAtMs,
+        at: fireAt.getTime(),
         extra: { chatSessionId: sessionId, chatMessageId },
       })
-      // Mark notified so the scheduler's tick doesn't try to schedule
-      // a second alarm with the same id once the app returns.
-      await repo.markNotified(chatMessageId as never, Math.floor(Date.now() / 1000))
     } catch (err) {
       console.warn("[proactive/inactivity] schedule notification failed", err)
     }
@@ -119,7 +118,7 @@ const handler: ProactiveRuleHandler = {
   async validate(entry, ctx) {
     // If the user came back BEFORE the speculative fire, the entry is
     // moot — kill it and let the scheduler skip the LocalNotification.
-    const fireAtMs = entry.notifyAt !== null ? entry.notifyAt * 1000 : 0
+    const fireAtMs = entry.visibleAt !== null ? entry.visibleAt * 1000 : 0
     if (ctx.nowMs < fireAtMs) {
       // We're still in foreground (this fn only runs from a tick) —
       // by definition the user came back, supersede.

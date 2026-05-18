@@ -13,9 +13,9 @@ import type {
 } from "@lib/domain/ports/chatMessageRepository.js"
 
 /** Schema version of the JSON-blob envelope. Bump when payload shapes
- *  evolve non-additively; parseVersionedRecord handles _v > known by
- *  rendering empty (forward-compat with newer apps writing the row). */
-const CURRENT_PAYLOAD_V = 1
+ *  evolve non-additively; `parseMeta` handles `_v > known` by rendering
+ *  empty (forward-compat with newer apps writing the row). */
+const CURRENT_META_V = 1
 
 interface ChatMessageRow {
   readonly id: string
@@ -23,69 +23,66 @@ interface ChatMessageRow {
   readonly role: string
   readonly content: string
   readonly created_at: number
-  readonly actions_json: string | null
-  readonly outlines_json: string | null
-  readonly action_states_json: string | null
-  readonly error: string | null
-  readonly visible_on: string | null
-  readonly notify_at: number | null
-  readonly notified_at: number | null
-  readonly followups_json: string | null
+  readonly meta: string | null
 }
 
-function parseFollowups(s: unknown): readonly string[] {
-  if (typeof s !== "string" || s === "") return []
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(s)
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed)) return []
-  // Defensive filter: ignore non-string / empty entries left by older
-  // shapes or hand-edited rows.
-  return parsed.filter((x): x is string => typeof x === "string" && x.length > 0)
+interface ParsedMeta {
+  readonly actions: Record<string, ChatActionPayload>
+  readonly outlines: Record<string, ChatOutlinePayload>
+  readonly actionStates: Record<string, ChatActionState>
+  readonly followups: readonly string[]
+  readonly error: ChatMessageError | undefined
 }
 
-function parseVersionedRecord<T>(s: unknown): Record<string, T> {
-  if (typeof s !== "string" || s === "") return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(s)
-  } catch {
-    return {}
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {}
-  const obj = parsed as Record<string, unknown>
-  if (typeof obj._v === "number") {
-    if (obj._v > CURRENT_PAYLOAD_V) {
-      // Newer schema — bubble renderer falls back to empty rather than
-      // crashing on missing fields.
-      return {}
-    }
-    const data = obj.data
-    return data && typeof data === "object" && !Array.isArray(data)
-      ? (data as Record<string, T>)
-      : {}
-  }
-  // Legacy (pre-_v) format: parsed object IS the record.
-  return obj as Record<string, T>
-}
+const EMPTY_META: ParsedMeta = Object.freeze({
+  actions: {},
+  outlines: {},
+  actionStates: {},
+  followups: [],
+  error: undefined,
+})
 
-function wrapVersionedRecord<T>(data: Record<string, T>): string {
-  return JSON.stringify({ _v: CURRENT_PAYLOAD_V, data })
-}
-
-function parseError(raw: unknown): ChatMessageError | undefined {
-  if (typeof raw !== "string" || raw === "") return undefined
+function parseMeta(raw: unknown): ParsedMeta {
+  if (typeof raw !== "string" || raw === "") return EMPTY_META
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return undefined
+    return EMPTY_META
   }
-  if (!parsed || typeof parsed !== "object") return undefined
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return EMPTY_META
   const obj = parsed as Record<string, unknown>
+  if (typeof obj._v !== "number" || obj._v > CURRENT_META_V) {
+    // Newer schema — bubble renderer falls back to empty rather than
+    // crashing on missing fields.
+    return EMPTY_META
+  }
+  const data =
+    obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)
+      ? (obj.data as Record<string, unknown>)
+      : {}
+  return {
+    actions: extractRecord<ChatActionPayload>(data.actions),
+    outlines: extractRecord<ChatOutlinePayload>(data.outlines),
+    actionStates: extractRecord<ChatActionState>(data.actionStates),
+    followups: extractFollowups(data.followups),
+    error: parseError(data.error),
+  }
+}
+
+function extractRecord<T>(raw: unknown): Record<string, T> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {}
+  return raw as Record<string, T>
+}
+
+function extractFollowups(raw: unknown): readonly string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((x): x is string => typeof x === "string" && x.length > 0)
+}
+
+function parseError(raw: unknown): ChatMessageError | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const obj = raw as Record<string, unknown>
   if (obj.kind === "truncated" && (obj.reason === "stream" || obj.reason === "turns")) {
     return { kind: "truncated", reason: obj.reason }
   }
@@ -93,40 +90,54 @@ function parseError(raw: unknown): ChatMessageError | undefined {
   return undefined
 }
 
+function wrapMeta(payload: {
+  actions?: Record<string, ChatActionPayload>
+  outlines?: Record<string, ChatOutlinePayload>
+  actionStates?: Record<string, ChatActionState>
+  followups?: readonly string[]
+  error?: ChatMessageError | undefined
+}): string {
+  const data: Record<string, unknown> = {}
+  if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
+  if (payload.outlines && Object.keys(payload.outlines).length > 0) data.outlines = payload.outlines
+  if (payload.actionStates && Object.keys(payload.actionStates).length > 0)
+    data.actionStates = payload.actionStates
+  if (payload.followups && payload.followups.length > 0) data.followups = payload.followups
+  if (payload.error) data.error = payload.error
+  return JSON.stringify({ _v: CURRENT_META_V, data })
+}
+
 function rowToMessage(r: ChatMessageRow): ChatMessage {
-  const followups = parseFollowups(r.followups_json)
+  const meta = parseMeta(r.meta)
+  // CHECK(role IN ('user','assistant')) on the DB side guarantees a
+  // valid value here — cast directly without a silent fallback.
   return {
     id: r.id as ChatMessageId,
     sessionId: r.session_id as ChatSessionId,
-    role: r.role === "assistant" ? "assistant" : "user",
+    role: r.role as "user" | "assistant",
     content: r.content,
     createdAt: Number(r.created_at),
-    actions: parseVersionedRecord<ChatActionPayload>(r.actions_json),
-    outlines: parseVersionedRecord<ChatOutlinePayload>(r.outlines_json),
-    actionStates: parseVersionedRecord<ChatActionState>(r.action_states_json),
-    error: parseError(r.error),
-    visibleOn: r.visible_on ?? undefined,
-    notifyAt: r.notify_at != null ? Number(r.notify_at) : undefined,
-    notifiedAt: r.notified_at != null ? Number(r.notified_at) : undefined,
-    followups: followups.length > 0 ? followups : undefined,
+    actions: meta.actions,
+    outlines: meta.outlines,
+    actionStates: meta.actionStates,
+    error: meta.error,
+    followups: meta.followups.length > 0 ? meta.followups : undefined,
   }
 }
 
 export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepository {
   return {
     async listBySession(sessionId: ChatSessionId): Promise<readonly ChatMessage[]> {
-      // The `visible_on` filter hides proactive rows that are pre-baked
-      // but not due yet — `chat_messages_proactive_state` rows in
-      // `dismissed` / `superseded` are filtered via a LEFT JOIN so we
-      // don't render messages the scheduler has retracted.
+      // Visibility gate now lives on the proactive sidecar
+      // (`p.visible_at`). Regular messages have no sidecar row, so the
+      // LEFT JOIN's `p.*` come back NULL and the OR-branch admits them.
+      // `dismissed` / `superseded` prep_state rows stay hidden as before.
       const rows = await db.query<ChatMessageRow>(
-        `SELECT m.id, m.session_id, m.role, m.content, m.created_at,
-                m.actions_json, m.outlines_json, m.action_states_json, m.error,
-                m.visible_on, m.notify_at, m.notified_at, m.followups_json
+        `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta
            FROM chat_messages m
            LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
           WHERE m.session_id = ?
-            AND (m.visible_on IS NULL OR m.visible_on <= date('now','localtime'))
+            AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
             AND (p.prep_state IS NULL OR p.prep_state NOT IN ('dismissed','superseded'))
           ORDER BY m.created_at ASC`,
         [sessionId]
@@ -135,28 +146,18 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
     },
 
     async create(input: CreateChatMessageInput): Promise<ChatMessage> {
-      const followups = input.followups ?? []
+      const meta = wrapMeta({
+        actions: input.actions,
+        outlines: input.outlines,
+        actionStates: input.actionStates,
+        followups: input.followups,
+        error: input.error,
+      })
       await db.execute(
         `INSERT INTO chat_messages
-           (id, session_id, role, content, created_at,
-            actions_json, outlines_json, action_states_json, error,
-            visible_on, notify_at, notified_at, followups_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          input.id,
-          input.sessionId,
-          input.role,
-          input.content,
-          input.createdAt,
-          wrapVersionedRecord(input.actions ?? {}),
-          wrapVersionedRecord(input.outlines ?? {}),
-          wrapVersionedRecord(input.actionStates ?? {}),
-          input.error ? JSON.stringify(input.error) : null,
-          input.visibleOn ?? null,
-          input.notifyAt ?? null,
-          input.notifiedAt ?? null,
-          JSON.stringify(followups),
-        ]
+           (id, session_id, role, content, created_at, meta)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [input.id, input.sessionId, input.role, input.content, input.createdAt, meta]
       )
       await db.save()
       return {
@@ -169,10 +170,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         outlines: input.outlines ?? {},
         actionStates: input.actionStates ?? {},
         error: input.error,
-        visibleOn: input.visibleOn ?? undefined,
-        notifyAt: input.notifyAt ?? undefined,
-        notifiedAt: input.notifiedAt ?? undefined,
-        followups: followups.length > 0 ? followups : undefined,
+        followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
       }
     },
 
@@ -180,10 +178,20 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       id: ChatMessageId,
       actionStates: Record<string, ChatActionState>
     ): Promise<void> {
-      await db.execute("UPDATE chat_messages SET action_states_json = ? WHERE id = ?", [
-        wrapVersionedRecord(actionStates),
-        id,
-      ])
+      const rows = await db.query<{ meta: string | null }>(
+        "SELECT meta FROM chat_messages WHERE id = ?",
+        [id]
+      )
+      if (rows.length === 0) return
+      const current = parseMeta(rows[0].meta)
+      const next = wrapMeta({
+        actions: current.actions,
+        outlines: current.outlines,
+        actionStates,
+        followups: current.followups,
+        error: current.error,
+      })
+      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       await db.save()
     },
 
@@ -198,3 +206,8 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
     },
   }
 }
+
+/** Exported for use by the proactive repository's `updateContent` —
+ *  same read-modify-write pattern as `updateActionStates` but for the
+ *  `actions` field. Keeps both repos using the same envelope helpers. */
+export const __META_INTERNAL = { parseMeta, wrapMeta }
