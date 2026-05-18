@@ -1,0 +1,131 @@
+"""Parser + matcher for `track_references.tokens`.
+
+`tokens` is a dot-separated numeric ladder ("2.13", "1.2.6"), optionally
+ending in a range ("2.51-54", "7.91-2" short-form). Two-level for БГ
+(chapter.verse), three-level for ШБ/ЧЧ (canto.chapter.verse), one-level
+for ИШО (mantra).
+
+Kept in its own module so the unit tests don't drag in
+`agent.tools.__init__` (which side-effect-imports litellm).
+"""
+
+from __future__ import annotations
+
+
+def parse_tokens(tokens: str | None) -> tuple[list[int], int, int] | None:
+    """Parse a token string into `(prefix_parts, last_from, last_to)`.
+
+    The token's full numeric ladder is `[*prefix_parts, last_from..last_to]`;
+    the last slot is always a range (collapsed to from==to for a scalar).
+
+    Examples (real shapes from current.db):
+      "2.13"          -> ([2], 13, 13)
+      "1.2.6"         -> ([1, 2], 6, 6)
+      "10"            -> ([], 10, 10)
+      "2.51-54"       -> ([2], 51, 54)
+      "7.91-2"        -> ([7], 91, 92)       # short-form
+      "6.149-50"      -> ([6], 149, 150)
+      "7.28-8.6"      -> ([7], 28, 99999)    # cross-prefix; widen "to"
+      "7.6.29-7.7.9"  -> ([7, 6], 29, 99999)
+    Returns None for empty / unparseable (e.g. "Dictation", "").
+    """
+    if not tokens:
+        return None
+    s = tokens.strip().replace("–", "-").replace("—", "-")
+    if not s:
+        return None
+    if "-" in s:
+        left, right = s.rsplit("-", 1)
+        left = left.strip()
+        right = right.strip()
+    else:
+        left = s
+        right = None
+    try:
+        left_ints = [int(p) for p in left.split(".") if p]
+    except ValueError:
+        return None
+    if not left_ints:
+        return None
+    prefix = left_ints[:-1]
+    from_v = left_ints[-1]
+    if right is None:
+        return (prefix, from_v, from_v)
+    if "." in right:
+        # Range crosses a prefix boundary (e.g. "7.28-8.6"); approximate
+        # as "from from_v onwards within this prefix". A handful of rows.
+        return (prefix, from_v, 99999)
+    try:
+        right_int = int(right)
+    except ValueError:
+        return None
+    # Short-form right side ("91-2" → 91..92, "149-50" → 149..150): if
+    # the right value has fewer digits than the left, pad with left's
+    # leading digits.
+    if right_int < from_v:
+        ls, rs = str(from_v), str(right_int)
+        if len(rs) < len(ls):
+            padded = ls[: len(ls) - len(rs)] + rs
+            try:
+                to_v = int(padded)
+                if to_v < from_v:
+                    to_v = right_int
+            except ValueError:
+                to_v = right_int
+        else:
+            to_v = right_int
+    else:
+        to_v = right_int
+    return (prefix, from_v, to_v)
+
+
+def matches_ref(
+    parsed: tuple[list[int], int, int],
+    user_prefix: list[int],
+    user_from: int | None,
+    user_to: int | None,
+) -> bool:
+    """True if `parsed` matches `user_prefix` + optional `[user_from, user_to]`.
+
+    Token's ladder must START WITH `user_prefix` (each user element
+    matches the corresponding ladder slot — either a scalar prefix part
+    or a value inside the last range). When `user_from`/`user_to` is
+    given, the slot immediately after `user_prefix` must overlap
+    `[user_from, user_to]`.
+    """
+    prefix_parts, from_v, to_v = parsed
+    if len(user_prefix) > len(prefix_parts) + 1:
+        return False
+    for i, u in enumerate(user_prefix):
+        if i < len(prefix_parts):
+            if prefix_parts[i] != u:
+                return False
+        else:
+            if not (from_v <= u <= to_v):
+                return False
+    if user_from is None and user_to is None:
+        return True
+    f = user_from if user_from is not None else -10**9
+    t = user_to if user_to is not None else 10**9
+    target_idx = len(user_prefix)
+    if target_idx == len(prefix_parts):
+        return not (to_v < f or from_v > t)
+    if target_idx < len(prefix_parts):
+        v = prefix_parts[target_idx]
+        return f <= v <= t
+    return False
+
+
+def parse_user_prefix(ref_prefix: str | None) -> list[int] | None:
+    """Convert the user-facing dot-string into a list of ints.
+
+    Returns `[]` when the prefix is None/empty (the "any prefix" case
+    used for ИШО). Returns `None` on parse failure so the caller can
+    short-circuit to an empty result.
+    """
+    if not ref_prefix:
+        return []
+    try:
+        return [int(p) for p in ref_prefix.split(".") if p]
+    except ValueError:
+        return None

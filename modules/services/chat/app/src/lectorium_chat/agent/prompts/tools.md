@@ -50,6 +50,32 @@ Tools and when to use them
     back in each row's `lang` field. Override with explicit `lang="en"`
     etc. only when the user asks for a specific other language.
 
+    **Scripture chapter/verse: `ref_prefix` + optional `ref_from`/`ref_to`.**
+    When the user mentions a scripture chapter or verse — even implicitly
+    («Гита 2», «по второй главе Бхагавад-гиты», «ШБ 1.2», «Шримад-Бхагаватам
+    песнь 2 глава 3») — you MUST use these arguments, NOT title_query.
+    `source_id` alone returns every lecture mentioning that scripture
+    (intros, other chapters, the lot) — that's how playlist requests get
+    contaminated. Use `resolve_source` to get the source_id, then:
+
+      - «Гита 2» / «вторая глава Гиты» →
+        source_id=<БГ>, ref_prefix="2"
+      - «Гита 2 стихи 10–30» →
+        source_id=<БГ>, ref_prefix="2", ref_from=10, ref_to=30
+      - «ШБ 1.2.6» / «Бхагаватам 1.2.6» →
+        source_id=<ШБ>, ref_prefix="1.2", ref_from=6, ref_to=6
+      - «вторая песнь, третья глава Шримад-Бхагаватам» →
+        source_id=<ШБ>, ref_prefix="2.3"
+      - «ИШО мантра 10» →
+        source_id=<ИШО>, ref_from=10, ref_to=10
+
+    Format: dot-separated numbers. BG has 2 levels (chapter.verse), SB/CC
+    have 3 (canto.chapter.verse). `ref_from`/`ref_to` always bound the
+    LAST number (the verse). Intro / general references (tokens=NULL) are
+    excluded automatically when you filter by ref. Do NOT pass the verse
+    number inside `ref_prefix` (e.g. "2.13") — use ref_from=13, ref_to=13
+    so single-verse and range queries take the same code path.
+
 `resolve_author / resolve_source / resolve_location / resolve_tag(text)`
     Fuzzy dictionary lookup. Returns up to 8 candidates ranked by similarity
     (each item has `confidence` in 0..1). Use these tools liberally and

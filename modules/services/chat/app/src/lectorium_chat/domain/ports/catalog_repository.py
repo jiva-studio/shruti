@@ -55,6 +55,9 @@ class CatalogRepository(Protocol):
         lang: str | None,
         limit: int,
         offset: int,
+        ref_prefix: str | None = None,
+        ref_from: int | None = None,
+        ref_to: int | None = None,
     ) -> list[Track]:
         ...
 
