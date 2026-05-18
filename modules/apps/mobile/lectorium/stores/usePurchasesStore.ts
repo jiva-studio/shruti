@@ -25,7 +25,19 @@ export const usePurchasesStore = defineStore("purchases", () => {
   let resumeHandle: { remove(): Promise<void> } | undefined
 
   const available = computed(() => useLectorium().purchases.available)
-  const isSubscribed = computed(() => activePackageId.value !== undefined)
+  // Dev-build override: treat every dev build as Pro so we can test
+  // paywalled surfaces (Smart Library, Notes Studio, etc.) without a
+  // real RevenueCat purchase. `__BUILD_ID__` is "dev" only when the
+  // CI doesn't set `BUILD_ID` env var — production builds always
+  // override it with the version+hash.
+  //
+  // Side effect: the `is_subscribed: false` eligibility predicate in
+  // `smart_library_hint` won't hold on dev builds, so the autonomous
+  // tutorial for it won't fire on dev devices. That's the trade-off —
+  // pick "Pro is unlocked" over "non-Pro flows are reproducible".
+  const isSubscribed = computed(
+    () => __BUILD_ID__ === "dev" || activePackageId.value !== undefined
+  )
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId
