@@ -33,6 +33,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
+import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ActionState } from "@shruti/stores/useChatStore.js"
@@ -47,18 +48,24 @@ const emit = defineEmits<{
   (e: "confirm", actionId: string): void
 }>()
 
+const { t } = useI18n()
+
 const filterChips = computed(() => {
   const f = props.payload?.filters
   if (!f) return [] as string[]
   // Render counts rather than ids — the id-to-name resolution lives in
   // Settings; the card is a teaser, not the configuration UI itself.
   const chips: string[] = []
-  if (f.authorIds && f.authorIds.length > 0) chips.push(`${f.authorIds.length} authors`)
-  if (f.tagIds && f.tagIds.length > 0) chips.push(`${f.tagIds.length} topics`)
-  if (f.sourceIds && f.sourceIds.length > 0) chips.push(`${f.sourceIds.length} sources`)
-  if (f.locationIds && f.locationIds.length > 0) chips.push(`${f.locationIds.length} locations`)
+  if (f.authorIds && f.authorIds.length > 0)
+    chips.push(t("chat.actionConfigureSmartLibraryChipAuthors", { n: f.authorIds.length }))
+  if (f.tagIds && f.tagIds.length > 0)
+    chips.push(t("chat.actionConfigureSmartLibraryChipTopics", { n: f.tagIds.length }))
+  if (f.sourceIds && f.sourceIds.length > 0)
+    chips.push(t("chat.actionConfigureSmartLibraryChipSources", { n: f.sourceIds.length }))
+  if (f.locationIds && f.locationIds.length > 0)
+    chips.push(t("chat.actionConfigureSmartLibraryChipLocations", { n: f.locationIds.length }))
   if (f.languageCodes && f.languageCodes.length > 0)
-    chips.push(`${f.languageCodes.length} languages`)
+    chips.push(t("chat.actionConfigureSmartLibraryChipLanguages", { n: f.languageCodes.length }))
   return chips
 })
 
