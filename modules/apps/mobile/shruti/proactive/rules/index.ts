@@ -5,3 +5,4 @@
  */
 
 import "./enableNotificationsHint.js"
+import "./smartLibraryHint.js"

@@ -82,6 +82,8 @@ export default {
   actionRetry: "Retry",
   actionDegraded: "Action card data is missing.",
 
+  proactiveSmartLibraryHintBody:
+    "I notice you've been finishing lectures — Smart Library can keep a queue of fresh ones on your topics topped up offline. Want to try it?",
   proactiveEnableNotificationsBody:
     "You've been listening for a few days in a row — want a daily reminder so you don't lose the rhythm? I'll pick a time you can change later in Settings.",
 
