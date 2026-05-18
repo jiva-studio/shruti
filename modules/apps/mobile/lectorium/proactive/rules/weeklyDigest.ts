@@ -51,16 +51,16 @@ const handler: ProactiveRuleHandler = {
   async detect(ctx) {
     const now = new Date(ctx.nowMs)
     const sunday = nextSundayFrom(now)
-    const notifyAtMs = sunday.getTime() + SUNDAY_NOTIFY_HOUR * 3_600_000
-    const msUntil = notifyAtMs - ctx.nowMs
+    const visibleAtMs = sunday.getTime() + SUNDAY_NOTIFY_HOUR * 3_600_000
+    const msUntil = visibleAtMs - ctx.nowMs
     if (msUntil > PREP_WINDOW_HOURS * 3_600_000) return []
     if (msUntil < -3_600_000) return [] // already past — don't backfill
 
     return [
       {
         ruleDate: formatYmd(sunday),
-        visibleOn: formatYmd(sunday),
-        notifyAt: Math.floor(notifyAtMs / 1000),
+        visibleAt: Math.floor(visibleAtMs / 1000),
+        notify: true,
         templateContext: {
           week_label: weekLabel(new Date(sunday.getTime() - 6 * 86_400_000), sunday, ctx.locale),
         },

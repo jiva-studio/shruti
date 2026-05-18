@@ -1,21 +1,10 @@
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-  type ComputedRef,
-  type Ref,
-} from "vue"
+import { computed, nextTick, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
 import { useRoute } from "vue-router"
 import router from "@lectorium/router/index.js"
 import { useI18n } from "vue-i18n"
 import { alertController } from "@ionic/vue"
-import { App, type AppState } from "@capacitor/app"
 import { useChatStore, type ChatMessage, type ChatSession } from "@lectorium/stores/useChatStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
-import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useTrackUserState } from "@lectorium/composables/useTrackUserState.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -285,22 +274,10 @@ export function useChatController(): ChatControllerReturn {
     }
   )
 
-  const appLanguage = useAppLanguage()
-
-  /** Re-poke `/title` for sessions whose initial call failed. Capped to
-   *  3 retries per session and a 7-day age window — see useChatStore. */
-  function retryTitles(): void {
-    const lang = appLanguage.value.startsWith("en") ? "en" : "ru"
-    void store.retryPendingTitles(lang)
-  }
-
-  let resumeHandle: { remove(): Promise<void> } | null = null
-
   onMounted(() => {
     void (async () => {
       await store.refreshSessions()
       await ensureSessionFromRoute()
-      retryTitles()
     })()
     void (async () => {
       try {
@@ -310,18 +287,6 @@ export function useChatController(): ChatControllerReturn {
         hasRecentListening.value = false
       }
     })()
-    void (async () => {
-      resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
-        if (state.isActive) retryTitles()
-      })
-    })()
-  })
-
-  onBeforeUnmount(() => {
-    if (resumeHandle) {
-      void resumeHandle.remove()
-      resumeHandle = null
-    }
   })
 
   return {

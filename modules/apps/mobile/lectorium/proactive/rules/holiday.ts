@@ -45,12 +45,16 @@ const handler: ProactiveRuleHandler = {
         return delta >= 0 && delta <= prepWindowDays
       })
       .map((h) => {
+        // `visibleAt` is the unified moment for both UI appearance and
+        // OS push — pin it to 08:00 local on the holiday. We don't show
+        // the row at midnight and then push at 08:00; both happen at
+        // the same moment.
         const holidayLocal = parseLocalDate(h.date)
-        const notifyAt = holidayLocal.getTime() + HOLIDAY_NOTIFY_HOUR * 3_600_000
+        const visibleAtMs = holidayLocal.getTime() + HOLIDAY_NOTIFY_HOUR * 3_600_000
         return {
           ruleDate: h.date,
-          visibleOn: h.date,
-          notifyAt: Math.floor(notifyAt / 1000),
+          visibleAt: Math.floor(visibleAtMs / 1000),
+          notify: true,
           sessionTitleOverride: localizedName(h, ctx.locale),
           templateContext: {
             holiday_id: h.id,
@@ -62,7 +66,7 @@ const handler: ProactiveRuleHandler = {
   },
 
   async validate(entry) {
-    // The holiday hasn't moved; the row remains valid until visible_on
+    // The holiday hasn't moved; the row remains valid until visible_at
     // passes. Only superseded if the calendar entry was removed
     // (catalog.publish without that holiday).
     const calendars = await readHolidayCalendar()

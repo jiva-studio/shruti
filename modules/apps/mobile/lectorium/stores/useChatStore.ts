@@ -37,7 +37,6 @@ import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
 } from "@infra/repositories/sql/index.js"
-import { fetchSessionTitle } from "@lectorium/services/chatClient.js"
 import type { ChatTurn } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
@@ -70,10 +69,6 @@ function deriveTitle(text: string, max = 48): string {
   if (trimmed.length <= max) return trimmed
   return trimmed.slice(0, max - 1).trimEnd() + "…"
 }
-
-/** chat_sessions.title_attempt_count semantics — see ChatSession docs.
- *  0 / 1..MAX: retry-eligible; MAX+1 = success or exhausted. */
-const TITLE_MAX_ATTEMPTS = 3
 
 /**
  * LLM occasionally writes `[action:create-playlist|id=X]` inline without
@@ -176,7 +171,6 @@ export const useChatStore = defineStore("chat", () => {
       title: s.title,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
-      titleAttemptCount: s.titleAttemptCount,
     }))
     // Repopulate the per-session "unseen" set. Best-effort — the
     // proactive repo lives in the same DB so a successful sessions list
@@ -627,44 +621,6 @@ export const useChatStore = defineStore("chat", () => {
     return sessions.value.filter((s) => (s.title ?? "").toLowerCase().includes(needle))
   }
 
-  /**
-   * Foreground worker — re-attempts `/title` for sessions whose initial
-   * call returned null. Bounded by attempt-count and a 7-day window.
-   * The chat client's null-on-failure semantics (added in 3.6) make
-   * this safe to call freely on app resume / view mount.
-   */
-  async function retryPendingTitles(lang: "ru" | "en"): Promise<void> {
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const repos = chatRepos()
-    const all = await repos.sessions.list(200)
-    const candidates = all.filter(
-      (s) =>
-        s.titleAttemptCount >= 1 &&
-        s.titleAttemptCount <= TITLE_MAX_ATTEMPTS &&
-        s.createdAt > sevenDaysAgo
-    )
-    for (const session of candidates.slice(0, 10)) {
-      const rows = await repos.messages.listBySession(session.id)
-      const turns: ChatTurn[] = rows
-        .filter((r) => r.role === "user" || r.role === "assistant")
-        .slice(0, 4)
-        .map((r) => ({ role: r.role, content: r.content }))
-      if (turns.length === 0) continue
-      const newTitle = await fetchSessionTitle(turns, lang)
-      if (newTitle) {
-        await repos.sessions.updateTitle(session.id, newTitle)
-        const idx = sessions.value.findIndex((s) => s.id === session.id)
-        if (idx >= 0) {
-          const next = [...sessions.value]
-          next[idx] = { ...next[idx], title: newTitle }
-          sessions.value = next
-        }
-      } else {
-        await repos.sessions.incrementTitleAttempt(session.id)
-      }
-    }
-  }
-
   return {
     sessions,
     activeSessionId,
@@ -681,6 +637,5 @@ export const useChatStore = defineStore("chat", () => {
     deleteSession,
     clearAll,
     searchSessions,
-    retryPendingTitles,
   }
 })

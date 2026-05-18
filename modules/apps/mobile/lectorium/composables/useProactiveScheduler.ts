@@ -206,11 +206,11 @@ export function useProactiveScheduler(): void {
       const stillValid = await rule.handler.validate(entry, ctx)
       if (!stillValid) {
         await repo.updatePrepState(entry.chatMessageId, "superseded")
-        // If a LocalNotification was already scheduled for this entry
-        // (inactivity rule is the canonical case), cancel it — without
-        // this the OS will still fire the alarm and the deep-link will
-        // land on a hidden chat message.
-        if (entry.notifiedAt !== null) {
+        // If a LocalNotification was scheduled for this entry (any row
+        // with notify=true), cancel it — without this the OS will still
+        // fire the alarm and the deep-link will land on a hidden chat
+        // message. Idempotent: cancelling a non-existent id is a no-op.
+        if (entry.notify) {
           try {
             await app.notifications.cancel(notificationIdFor(entry.chatMessageId))
           } catch (err) {
@@ -275,21 +275,28 @@ export function useProactiveScheduler(): void {
   }
 
   async function scheduleNotificationIfNeeded(entry: ProactiveStateEntry): Promise<void> {
-    if (entry.notifyAt === null) return
-    if (entry.notifiedAt !== null) return
+    if (!entry.notify || entry.visibleAt === null) return
 
-    // Past `notify_at` used to silently skip the schedule. That's fine
-    // for events whose visible_on already rolled off (we don't want a
-    // late notification two weeks after a holiday), but for today's
-    // event whose notify hour already passed we want to surface it now
-    // — otherwise the user only ever sees notifications for holidays
-    // detected ≥48h in advance. Fire ~5s out so the OS has time to
-    // accept the schedule and the user lands on the chat without the
-    // notification racing the row's prep_state transition.
-    const notifyAtMs = entry.notifyAt * 1000
-    let fireAtMs = notifyAtMs
+    // Past `visible_at` used to silently skip the schedule. That's fine
+    // for events whose moment already rolled off (we don't want a late
+    // notification two weeks after a holiday), but for today's event
+    // whose hour already passed we want to surface it now — otherwise
+    // the user only ever sees notifications for holidays detected
+    // ≥48h in advance. Fire ~5s out so the OS has time to accept the
+    // schedule and the user lands on the chat without the notification
+    // racing the row's prep_state transition.
+    const visibleAtMs = entry.visibleAt * 1000
+    let fireAtMs = visibleAtMs
     if (fireAtMs <= Date.now()) {
-      if (entry.visibleOn !== todayLocalDate()) {
+      // Only fire-now if the event was for today (local TZ).
+      const today = new Date()
+      const todayMidnight = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      ).getTime()
+      const tomorrowMidnight = todayMidnight + 86_400_000
+      if (visibleAtMs < todayMidnight || visibleAtMs >= tomorrowMidnight) {
         // Event isn't for today — let it stay silently expired.
         return
       }
@@ -298,7 +305,9 @@ export function useProactiveScheduler(): void {
 
     // Capacitor LocalNotifications.id is a 32-bit integer; chat_message
     // ids are random text. We hash to keep cancel-safety while staying
-    // in-bounds.
+    // in-bounds. `schedule()` is idempotent on `id` — re-calling on
+    // every tick with the same id replaces, doesn't duplicate. So we
+    // don't need a "notified_at" flag to gate re-scheduling.
     const id = notificationIdFor(entry.chatMessageId)
     try {
       await app.notifications.schedule({
@@ -311,16 +320,9 @@ export function useProactiveScheduler(): void {
           chatMessageId: entry.chatMessageId,
         },
       })
-      const repo = proactiveRepo()
-      if (repo) await repo.markNotified(entry.chatMessageId, Math.floor(Date.now() / 1000))
     } catch (err) {
       console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
     }
-  }
-
-  function todayLocalDate(): string {
-    const now = new Date()
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
   }
 
   async function readRemoteProactiveConfig(): Promise<ProactiveConfig | null> {
@@ -408,8 +410,8 @@ export function useProactiveScheduler(): void {
             role: "assistant",
             content: "",
             createdAt: ctx.nowMs,
-            visibleOn: det.visibleOn,
-            notifyAt: det.notifyAt,
+            visibleAt: det.visibleAt,
+            notify: det.notify,
             ruleKind: rule.config.id,
             ruleDate: det.ruleDate,
             prepState: "pending",

@@ -17,24 +17,16 @@ export interface CreateChatMessageInput {
   readonly outlines?: Record<string, ChatOutlinePayload>
   readonly actionStates?: Record<string, ChatActionState>
   readonly error?: ChatMessageError
-  /** Hide row until user's local date reaches this `'YYYY-MM-DD'`. */
-  readonly visibleOn?: string | null
-  /** Unix-seconds moment to fire a LocalNotification for this message. */
-  readonly notifyAt?: number | null
-  /** Stamp once the LocalNotification has been registered with the OS. */
-  readonly notifiedAt?: number | null
   /** Ordered list of follow-up chip texts emitted by the LLM via
-   *  `[followup:<text>]` markers. Persisted alongside the message; the
-   *  bubble renders chips only under the latest assistant message of
-   *  the session. Empty / undefined → no chips. */
+   *  `[followup:<text>]` markers. */
   readonly followups?: readonly string[]
 }
 
 /**
- * Persistence boundary for chat messages. The JSON-blob columns
- * (`actions_json`, `outlines_json`, `action_states_json`) are versioned
- * via the `{ _v: 1, data }` envelope inside the SQL adapter — consumers
- * only see the discriminated-union domain types.
+ * Persistence boundary for chat messages. The single `meta` column on
+ * `chat_messages` holds a versioned JSON envelope `{ _v: 1, data: {
+ * actions, outlines, actionStates, followups, error? } }` — consumers
+ * see the unpacked discriminated-union domain types via this port.
  */
 export interface IChatMessageRepository {
   /** All messages in a session, oldest-first. */
@@ -43,8 +35,8 @@ export interface IChatMessageRepository {
   /** Append one message. Returns the persisted entity. */
   create(input: CreateChatMessageInput): Promise<ChatMessage>
 
-  /** Replace the action-state map (small write). Used when the user
-   *  confirms / dismisses an action card. */
+  /** Replace the action-state map. Used when the user confirms /
+   *  dismisses an action card; read-modify-writes the `meta` envelope. */
   updateActionStates(
     id: ChatMessageId,
     actionStates: Record<string, ChatActionState>

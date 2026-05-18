@@ -6,18 +6,11 @@ import type {
   IChatSessionRepository,
 } from "@lib/domain/ports/chatSessionRepository.js"
 
-/** title_attempt_count semantics — see ChatSession docstring + the chat
- *  store's foreground-retry worker for the rationale. Kept in sync with
- *  the constants in useChatStore.ts. */
-const TITLE_MAX_ATTEMPTS = 3
-const TITLE_FINALIZED = TITLE_MAX_ATTEMPTS + 1
-
 interface ChatSessionRow {
   readonly id: string
   readonly title: string | null
   readonly created_at: number
   readonly updated_at: number
-  readonly title_attempt_count: number | null
 }
 
 function rowToSession(r: ChatSessionRow): ChatSession {
@@ -26,7 +19,6 @@ function rowToSession(r: ChatSessionRow): ChatSession {
     title: r.title,
     createdAt: Number(r.created_at),
     updatedAt: Number(r.updated_at),
-    titleAttemptCount: Number(r.title_attempt_count ?? 0),
   }
 }
 
@@ -34,7 +26,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
   return {
     async list(limit = 200): Promise<readonly ChatSession[]> {
       const rows = await db.query<ChatSessionRow>(
-        `SELECT id, title, created_at, updated_at, title_attempt_count
+        `SELECT id, title, created_at, updated_at
            FROM chat_sessions
           ORDER BY updated_at DESC
           LIMIT ?`,
@@ -45,7 +37,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
 
     async getById(id: ChatSessionId): Promise<ChatSession | null> {
       const rows = await db.query<ChatSessionRow>(
-        `SELECT id, title, created_at, updated_at, title_attempt_count
+        `SELECT id, title, created_at, updated_at
            FROM chat_sessions WHERE id = ? LIMIT 1`,
         [id]
       )
@@ -64,29 +56,16 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
         title: input.title,
         createdAt: now,
         updatedAt: now,
-        titleAttemptCount: 0,
       }
     },
 
     async updateTitle(id: ChatSessionId, title: string): Promise<void> {
-      await db.execute("UPDATE chat_sessions SET title = ?, title_attempt_count = ? WHERE id = ?", [
-        title,
-        TITLE_FINALIZED,
-        id,
-      ])
+      await db.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, id])
       await db.save()
     },
 
     async touch(id: ChatSessionId, updatedAtMs: number): Promise<void> {
       await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [updatedAtMs, id])
-      await db.save()
-    },
-
-    async incrementTitleAttempt(id: ChatSessionId): Promise<void> {
-      await db.execute(
-        "UPDATE chat_sessions SET title_attempt_count = title_attempt_count + 1 WHERE id = ?",
-        [id]
-      )
       await db.save()
     },
 

@@ -8,6 +8,9 @@ import type {
   ProactivePrepState,
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
+import { __META_INTERNAL } from "./chatMessagesRepository.sql.js"
+
+const { parseMeta, wrapMeta } = __META_INTERNAL
 
 interface ProactiveStateJoinRow {
   readonly chat_message_id: string
@@ -17,9 +20,8 @@ interface ProactiveStateJoinRow {
   readonly prep_state: string
   readonly prepared_at: number | null
   readonly content: string
-  readonly visible_on: string | null
-  readonly notify_at: number | null
-  readonly notified_at: number | null
+  readonly visible_at: number | null
+  readonly notify: number
   readonly created_at: number
   readonly seen_at: number | null
 }
@@ -43,9 +45,8 @@ function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
       : "pending",
     preparedAt: r.prepared_at != null ? Number(r.prepared_at) : null,
     bodyMd: r.content,
-    visibleOn: r.visible_on,
-    notifyAt: r.notify_at != null ? Number(r.notify_at) : null,
-    notifiedAt: r.notified_at != null ? Number(r.notified_at) : null,
+    visibleAt: r.visible_at != null ? Number(r.visible_at) : null,
+    notify: r.notify === 1,
     createdAt: Number(r.created_at),
     seenAt: r.seen_at != null ? Number(r.seen_at) : null,
   }
@@ -53,8 +54,8 @@ function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
 
 const SELECT_JOIN = `
   SELECT p.chat_message_id, m.session_id, p.rule_kind, p.rule_date,
-         p.prep_state, p.prepared_at, p.seen_at,
-         m.content, m.visible_on, m.notify_at, m.notified_at, m.created_at
+         p.prep_state, p.prepared_at, p.visible_at, p.notify, p.seen_at,
+         m.content, m.created_at
     FROM chat_messages_proactive_state p
     JOIN chat_messages m ON m.id = p.chat_message_id
 `
@@ -62,6 +63,9 @@ const SELECT_JOIN = `
 export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStateRepository {
   return {
     async create(input: CreateProactiveMessageInput): Promise<ProactiveStateEntry | null> {
+      if (input.notify && input.visibleAt === null) {
+        throw new Error("proactiveState.create: notify=true requires non-null visibleAt")
+      }
       // Detect dedup up front to avoid a thrown UNIQUE violation inside
       // a transaction (sqlite drivers vary on whether that rolls back
       // the in-flight tx). If a row already exists for this (ruleKind,
@@ -74,30 +78,28 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
 
       await db.transaction(async () => {
         // chat_messages insert mirrors the regular chat_messages writer
-        // (empty action/outline blobs, no error). Body is whatever the
-        // caller passed — usually a fallback template; the real body is
-        // written on the next tick via `updateContent`.
+        // (empty meta envelope). Body is whatever the caller passed —
+        // usually a fallback template; the real body is written on the
+        // next tick via `updateContent`.
         await db.execute(
           `INSERT INTO chat_messages
-             (id, session_id, role, content, created_at,
-              actions_json, outlines_json, action_states_json, error,
-              visible_on, notify_at, notified_at, followups_json)
-           VALUES (?, ?, ?, ?, ?, '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', '{"_v":1,"data":{}}', NULL, ?, ?, NULL, '[]')`,
-          [
-            input.chatMessageId,
-            input.sessionId,
-            input.role,
-            input.content,
-            input.createdAt,
-            input.visibleOn,
-            input.notifyAt,
-          ]
+             (id, session_id, role, content, created_at, meta)
+           VALUES (?, ?, ?, ?, ?, '{"_v":1,"data":{}}')`,
+          [input.chatMessageId, input.sessionId, input.role, input.content, input.createdAt]
         )
         await db.execute(
           `INSERT INTO chat_messages_proactive_state
-             (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, seen_at)
-           VALUES (?, ?, ?, ?, NULL, NULL)`,
-          [input.chatMessageId, input.ruleKind, input.ruleDate, input.prepState]
+             (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
+              visible_at, notify, seen_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL)`,
+          [
+            input.chatMessageId,
+            input.ruleKind,
+            input.ruleDate,
+            input.prepState,
+            input.visibleAt,
+            input.notify ? 1 : 0,
+          ]
         )
       })
       await db.save()
@@ -110,9 +112,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         prepState: input.prepState,
         preparedAt: null,
         bodyMd: input.content,
-        visibleOn: input.visibleOn,
-        notifyAt: input.notifyAt,
-        notifiedAt: null,
+        visibleAt: input.visibleAt,
+        notify: input.notify,
         createdAt: input.createdAt,
         seenAt: null,
       }
@@ -137,11 +138,14 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       // reply in the open session — there's nothing to flag as unread.
       // Stamp `seen_at = now` so the per-session dot stays dark and the
       // tab badge doesn't light up. Autonomous proactives go through
-      // `create()` above and start with `seen_at = NULL`.
+      // `create()` above and start with `seen_at = NULL`. Inline-hint
+      // rows also have no future-visibility (already visible) and no
+      // OS push (the user is already in the conversation).
       await db.execute(
         `INSERT INTO chat_messages_proactive_state
-           (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, seen_at)
-         VALUES (?, ?, ?, ?, ?, strftime('%s','now'))`,
+           (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
+            visible_at, notify, seen_at)
+         VALUES (?, ?, ?, ?, ?, NULL, 0, strftime('%s','now'))`,
         [chatMessageId, ruleKind, ruleDate, prepState, preparedAt ?? null]
       )
       await db.save()
@@ -239,14 +243,23 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       actions?: Record<string, ChatActionPayload>
     ): Promise<void> {
       if (actions !== undefined) {
-        // Versioned-record envelope mirrors the format the regular
-        // chat_messages writer uses (`{ _v: 1, data: {...} }`), so the
-        // existing `parseVersionedRecord` reader picks it up without
-        // a separate code path.
-        const actionsJson = JSON.stringify({ _v: 1, data: actions })
-        await db.execute("UPDATE chat_messages SET content = ?, actions_json = ? WHERE id = ?", [
+        // Read-modify-write the meta envelope so we keep
+        // outlines / actionStates / followups / error untouched.
+        const rows = await db.query<{ meta: string | null }>(
+          "SELECT meta FROM chat_messages WHERE id = ?",
+          [chatMessageId]
+        )
+        const current = rows.length > 0 ? parseMeta(rows[0].meta) : parseMeta(null)
+        const next = wrapMeta({
+          actions,
+          outlines: current.outlines,
+          actionStates: current.actionStates,
+          followups: current.followups,
+          error: current.error,
+        })
+        await db.execute("UPDATE chat_messages SET content = ?, meta = ? WHERE id = ?", [
           content,
-          actionsJson,
+          next,
           chatMessageId,
         ])
       } else {
@@ -255,14 +268,6 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
           chatMessageId,
         ])
       }
-      await db.save()
-    },
-
-    async markNotified(chatMessageId: ChatMessageId, notifiedAt: number): Promise<void> {
-      await db.execute("UPDATE chat_messages SET notified_at = ? WHERE id = ?", [
-        notifiedAt,
-        chatMessageId,
-      ])
       await db.save()
     },
 

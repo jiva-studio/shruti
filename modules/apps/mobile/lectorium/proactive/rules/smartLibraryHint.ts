@@ -21,8 +21,8 @@ const handler: ProactiveRuleHandler = {
     return [
       {
         ruleDate: ctx.localDate,
-        visibleOn: null,
-        notifyAt: null,
+        visibleAt: null,
+        notify: false,
         sessionTitleOverride: ctx.t("chat.proactiveSessionTitleSmartLibrary"),
         templateContext: {},
       },
