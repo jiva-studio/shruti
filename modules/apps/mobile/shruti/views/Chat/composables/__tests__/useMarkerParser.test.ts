@@ -17,23 +17,18 @@ describe("parseChatMarkers — action markers", () => {
     }
   })
 
-  it("recognises save_note with underscore id", () => {
-    const tokens = parseChatMarkers("[action:save_note|id=note_ABC_1]")
-    const action = tokens.find((t) => t.kind === "action")
-    expect(action).toBeTruthy()
-    if (action && action.kind === "action") {
-      expect(action.actionKind).toBe("save_note")
-      expect(action.actionId).toBe("note_ABC_1")
-    }
-  })
-
-  it("rejects legacy kebab-case form (create-playlist / save-note)", () => {
+  it("rejects legacy kebab-case form (create-playlist)", () => {
     // Snake-only since Etap «protocol cleanup». Kebab-form markers from
     // older persisted messages parse to no action token (text only).
     const t1 = parseChatMarkers("[action:create-playlist|id=abc12345]")
-    const t2 = parseChatMarkers("[action:save-note|id=abc]")
     expect(t1.find((t) => t.kind === "action")).toBeUndefined()
-    expect(t2.find((t) => t.kind === "action")).toBeUndefined()
+  })
+
+  it("ignores the removed save_note action kind", () => {
+    // save_note was removed in favour of the CitationChip action-sheet
+    // path. Old persisted messages with the marker render as plain text.
+    const tokens = parseChatMarkers("[action:save_note|id=note_ABC_1]")
+    expect(tokens.find((t) => t.kind === "action")).toBeUndefined()
   })
 
   it("rejects malformed markers — wrong delimiter, spaces inside id", () => {
@@ -50,7 +45,7 @@ describe("parseChatMarkers — action markers", () => {
 
   it("finds multiple action markers in one message", () => {
     const tokens = parseChatMarkers(
-      "first [action:create_playlist|id=aaa] then [action:save_note|id=bbb]"
+      "first [action:create_playlist|id=aaa] then [action:share_pdf|id=bbb]"
     )
     const actions = tokens.filter((t) => t.kind === "action")
     expect(actions).toHaveLength(2)

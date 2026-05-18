@@ -14,14 +14,6 @@ export type ChatActionPayload =
       readonly trackIds: readonly string[]
     }
   | {
-      readonly kind: "save_note"
-      readonly id: string
-      readonly trackId: string
-      readonly startMs: number
-      readonly endMs: number
-      readonly text: string
-    }
-  | {
       readonly kind: "share_pdf"
       readonly id: string
       readonly items: readonly ChatSharePdfItemPayload[]
