@@ -19,6 +19,13 @@ export interface ScheduledNotification {
 }
 
 export interface INotificationScheduler {
+  /**
+   * Inspect the current permission state without prompting. Returns the
+   * same shape as `requestPermission`. Use this when you need to gate
+   * behaviour on permission (e.g., proactive scheduler eligibility)
+   * without surfacing the OS dialog.
+   */
+  checkPermission(): Promise<"granted" | "denied" | "unknown">
   requestPermission(): Promise<"granted" | "denied" | "unknown">
   schedule(n: ScheduledNotification): Promise<void>
   cancel(id: number): Promise<void>

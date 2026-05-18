@@ -27,6 +27,9 @@ interface ChatMessageRow {
   readonly outlines_json: string | null
   readonly action_states_json: string | null
   readonly error: string | null
+  readonly visible_on: string | null
+  readonly notify_at: number | null
+  readonly notified_at: number | null
 }
 
 function parseVersionedRecord<T>(s: unknown): Record<string, T> {
@@ -86,18 +89,29 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     outlines: parseVersionedRecord<ChatOutlinePayload>(r.outlines_json),
     actionStates: parseVersionedRecord<ChatActionState>(r.action_states_json),
     error: parseError(r.error),
+    visibleOn: r.visible_on ?? undefined,
+    notifyAt: r.notify_at != null ? Number(r.notify_at) : undefined,
+    notifiedAt: r.notified_at != null ? Number(r.notified_at) : undefined,
   }
 }
 
 export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepository {
   return {
     async listBySession(sessionId: ChatSessionId): Promise<readonly ChatMessage[]> {
+      // The `visible_on` filter hides proactive rows that are pre-baked
+      // but not due yet — `chat_messages_proactive_state` rows in
+      // `dismissed` / `superseded` are filtered via a LEFT JOIN so we
+      // don't render messages the scheduler has retracted.
       const rows = await db.query<ChatMessageRow>(
-        `SELECT id, session_id, role, content, created_at,
-                actions_json, outlines_json, action_states_json, error
-           FROM chat_messages
-          WHERE session_id = ?
-          ORDER BY created_at ASC`,
+        `SELECT m.id, m.session_id, m.role, m.content, m.created_at,
+                m.actions_json, m.outlines_json, m.action_states_json, m.error,
+                m.visible_on, m.notify_at, m.notified_at
+           FROM chat_messages m
+           LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
+          WHERE m.session_id = ?
+            AND (m.visible_on IS NULL OR m.visible_on <= date('now','localtime'))
+            AND (p.prep_state IS NULL OR p.prep_state NOT IN ('dismissed','superseded'))
+          ORDER BY m.created_at ASC`,
         [sessionId]
       )
       return rows.map(rowToMessage)
@@ -107,8 +121,9 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       await db.execute(
         `INSERT INTO chat_messages
            (id, session_id, role, content, created_at,
-            actions_json, outlines_json, action_states_json, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            actions_json, outlines_json, action_states_json, error,
+            visible_on, notify_at, notified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           input.id,
           input.sessionId,
@@ -119,6 +134,9 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
           wrapVersionedRecord(input.outlines ?? {}),
           wrapVersionedRecord(input.actionStates ?? {}),
           input.error ? JSON.stringify(input.error) : null,
+          input.visibleOn ?? null,
+          input.notifyAt ?? null,
+          input.notifiedAt ?? null,
         ]
       )
       await db.save()
@@ -132,6 +150,9 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         outlines: input.outlines ?? {},
         actionStates: input.actionStates ?? {},
         error: input.error,
+        visibleOn: input.visibleOn ?? undefined,
+        notifyAt: input.notifyAt ?? undefined,
+        notifiedAt: input.notifiedAt ?? undefined,
       }
     },
 

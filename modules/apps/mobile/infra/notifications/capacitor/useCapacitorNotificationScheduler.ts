@@ -8,6 +8,13 @@ import type { INotificationScheduler, ScheduledNotification } from "@ports/app/n
  */
 export function useCapacitorNotificationScheduler(): INotificationScheduler {
   return {
+    async checkPermission() {
+      const result = await LocalNotifications.checkPermissions()
+      if (result.display === "granted") return "granted"
+      if (result.display === "denied") return "denied"
+      return "unknown"
+    },
+
     async requestPermission() {
       const result = await LocalNotifications.requestPermissions()
       // Capacitor returns "granted" | "denied" | "prompt" | "default" —
