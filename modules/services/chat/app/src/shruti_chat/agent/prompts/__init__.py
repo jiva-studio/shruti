@@ -15,6 +15,7 @@ _SECTIONS = (
     "header",
     "tools",
     "actions",
+    "followups",
     "no_narration",
     "citations",
     "quoting",

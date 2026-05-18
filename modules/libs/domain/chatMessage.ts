@@ -134,4 +134,10 @@ export interface ChatMessage {
    *  delivered into the system tray). Prevents re-scheduling on the
    *  next tick. */
   notifiedAt?: number
+  /** Tappable follow-up chips the assistant emitted via
+   *  `[followup:<text>]` markers at the end of `content`. Each entry
+   *  is the literal chip text; tapping sends it verbatim as the next
+   *  user message. Capped at 3 by the parser. Rendered only under the
+   *  last assistant message of the session. */
+  followups?: readonly string[]
 }

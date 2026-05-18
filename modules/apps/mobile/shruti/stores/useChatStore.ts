@@ -11,7 +11,10 @@ import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
-import { parseChatMarkers } from "@shruti/views/Chat/composables/useMarkerParser.js"
+import {
+  extractFollowups,
+  parseChatMarkers,
+} from "@shruti/views/Chat/composables/useMarkerParser.js"
 import {
   addTracksToPlaylist,
   runChatTurn,
@@ -273,6 +276,7 @@ export const useChatStore = defineStore("chat", () => {
           buildUserContext: (focus) => trackUserState.buildUserContext(focus),
           salvageOrphanActions,
           fallbackPlaylistName: t("chat.fallbackPlaylistName"),
+          extractFollowups,
         }
       )) {
         applyTurnEvent(event)
