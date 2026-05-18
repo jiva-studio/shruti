@@ -26,6 +26,7 @@ export function useHttpShareVideoService(getEndpointUrl: () => string): IShareVi
         theme: req.theme,
       }
       if (req.videoId) body.video_id = req.videoId
+      if (req.title && req.title.trim().length > 0) body.title = req.title.trim()
 
       // The cut is "tell the server to start rendering". On AWS the response
       // comes back in ~1 s with `ready: false`; on YC the server holds the

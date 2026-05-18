@@ -39,6 +39,7 @@ export interface RenderArgs {
   backgroundsPrefix: string;
   outputPrefix: string;
   logoPath?: string;
+  titleIconPath?: string;
   s3: S3Client;
   tempDir: string;
 }
@@ -55,7 +56,7 @@ export interface RenderResult {
  * a `finally` block).
  */
 export async function renderReel(args: RenderArgs): Promise<RenderResult> {
-  const { req, videoId, bucket, backgroundsPrefix, outputPrefix, logoPath, s3, tempDir } = args;
+  const { req, videoId, bucket, backgroundsPrefix, outputPrefix, logoPath, titleIconPath, s3, tempDir } = args;
   const t0 = Date.now();
   fs.mkdirSync(tempDir, { recursive: true });
   logPhase('render-start', {
@@ -147,6 +148,8 @@ export async function renderReel(args: RenderArgs): Promise<RenderResult> {
     slides,
     backgroundVideoPath,
     ...(logoPath && fs.existsSync(logoPath) ? { logoVideoPath: logoPath } : {}),
+    ...(req.title ? { title: req.title } : {}),
+    ...(titleIconPath && fs.existsSync(titleIconPath) ? { titleIconPath } : {}),
     slideWidth: SLIDE_WIDTH,
     slideHeight: SLIDE_HEIGHT,
     maxCharsPerSlide: MAX_CHARS_PER_SLIDE,

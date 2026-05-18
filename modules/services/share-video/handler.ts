@@ -48,6 +48,7 @@ const RENDER_DISPATCH = process.env.RENDER_DISPATCH || 'inline';
 // lives at <pkg>/dist/handler.js, so the package root is one level up.
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const LOGO_PATH = path.join(PACKAGE_ROOT, 'assets', 'logo.mp4');
+const TITLE_ICON_PATH = path.join(PACKAGE_ROOT, 'assets', 'icon.png');
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -155,6 +156,7 @@ async function doRender(req: RenderRequest, videoId: string): Promise<any> {
       backgroundsPrefix: BACKGROUNDS_PREFIX,
       outputPrefix: OUTPUT_PREFIX,
       logoPath: LOGO_PATH,
+      titleIconPath: TITLE_ICON_PATH,
       s3: getS3(),
       tempDir,
     });

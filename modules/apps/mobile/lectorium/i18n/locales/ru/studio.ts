@@ -2,6 +2,8 @@ export default {
   title: "Студия",
   hint: "Можно подправить цитату перед сборкой видео.",
   placeholder: "Текст цитаты",
+  titleLabel: "Заголовок",
+  titlePlaceholder: "Необязательный заголовок",
   download: "Скачать",
   preparing: "Подготовка…",
   rendering: "Создаём ролик…",

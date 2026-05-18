@@ -5,6 +5,14 @@ export interface ReelConfig {
   slides: Slide[]; // Preassembled slides with word timings
   backgroundVideoPath: string; // Preconcatenated background MP4
   logoVideoPath?: string; // Optional logo clip to append at the end
+  /**
+   * Optional title-card overlay. When provided, the first ~0.5s of the reel
+   * shows a cream-coloured static frame with the icon and centered title
+   * instead of the normal text overlay. Audio is NOT shifted.
+   */
+  title?: string;
+  /** PNG used by the title-card overlay. Required if `title` is set. */
+  titleIconPath?: string;
   slideWidth?: number;
   slideHeight?: number;
   textColor?: string;

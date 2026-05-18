@@ -1,7 +1,8 @@
 import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRoute, useRouter } from "vue-router"
-import type { NoteId, TrackId } from "@lib/domain/core.js"
+import { loadTranscript } from "@lib/application"
+import type { LanguageCode, NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Track } from "@lib/domain/track.js"
@@ -17,13 +18,37 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
 
+/**
+ * Sentinel value used in the route param when Studio is entered in
+ * transient (citation) mode — see `/tabs/studio/citation` with citation
+ * data passed via `router.push({ state: { citation } })`. The router was
+ * intentionally left with a single `studio/:noteId` route to avoid
+ * duplicating route config; the sentinel keeps the path human-readable.
+ */
+const CITATION_SENTINEL = "citation"
+
+interface CitationState {
+  trackId: string
+  startMs: number
+  endMs: number
+  /** Optional pre-computed transcript-overlap text. If absent, the
+   *  controller loads the transcript and extracts the overlap itself. */
+  text?: string
+  /** LLM-emitted chip caption — used as a fallback when transcript
+   *  extraction fails or returns nothing. */
+  caption?: string
+}
+
 export interface StudioControllerReturn {
-  /** True until the note + track have been resolved (or failed). */
+  /** True until the note/track or citation has been resolved. */
   loading: Ref<boolean>
-  /** Current note; null until loaded / on missing id. */
+  /** Current note; null in citation (transient) mode. */
   note: Ref<Note | null>
   /** Editable quote text — two-way bound to the textarea. */
   editedText: Ref<string>
+  /** Editable title — two-way bound to the title input. Optional;
+   *  empty string means "don't render a title-card overlay". */
+  editedTitle: Ref<string>
   /** True while we're rendering / downloading / sharing. */
   busy: Ref<boolean>
   /** User-visible status under the button while `busy` is true. */
@@ -46,11 +71,15 @@ export function useStudioController(): StudioControllerReturn {
   const shareJob = useShareJobStore()
   const notes = useNotesStore()
 
-  const noteId = computed<NoteId>(() => String(route.params.noteId) as NoteId)
+  const routeParam = computed<string>(() => String(route.params.noteId))
+  const isCitationMode = computed<boolean>(() => routeParam.value === CITATION_SENTINEL)
+  const noteId = computed<NoteId>(() => routeParam.value as NoteId)
 
   const note = ref<Note | null>(null)
+  const citation = ref<CitationState | null>(null)
   const track = ref<Track | null>(null)
   const editedText = ref<string>("")
+  const editedTitle = ref<string>("")
   const loading = ref<boolean>(true)
   const busy = ref<boolean>(false)
   const status = ref<string>("")
@@ -72,9 +101,81 @@ export function useStudioController(): StudioControllerReturn {
     return false
   }
 
+  function readCitationFromHistory(): CitationState | null {
+    if (typeof window === "undefined") return null
+    const raw = (window.history.state as { citation?: unknown } | null)?.citation
+    if (!raw || typeof raw !== "object") return null
+    const c = raw as Partial<CitationState>
+    if (
+      typeof c.trackId !== "string" ||
+      typeof c.startMs !== "number" ||
+      typeof c.endMs !== "number"
+    ) {
+      return null
+    }
+    return {
+      trackId: c.trackId,
+      startMs: c.startMs,
+      endMs: c.endMs,
+      text: typeof c.text === "string" ? c.text : undefined,
+      caption: typeof c.caption === "string" ? c.caption : undefined,
+    }
+  }
+
+  /**
+   * Pull the transcript-overlap text for the citation, mirroring
+   * `saveCitationAsNote`'s extraction so Studio + Save-as-Note seed the
+   * editor with the same words. Returns empty string when the transcript
+   * can't be loaded or there's no overlap — caller falls back to the
+   * chip caption.
+   */
+  async function extractCitationText(c: CitationState): Promise<string> {
+    try {
+      const result = await loadTranscript(
+        {
+          trackId: c.trackId as TrackId,
+          preferredLanguage: appLanguage.value as LanguageCode,
+        },
+        { transcripts: app.repositories().transcripts }
+      )
+      if (!result.ok) return ""
+      const parts: string[] = []
+      for (const b of result.value.transcript.blocks) {
+        if (b.type !== "sentence") continue
+        if (b.end >= c.startMs && b.start <= c.endMs) {
+          const trimmed = b.text.trim()
+          if (trimmed) parts.push(trimmed)
+        }
+      }
+      return parts.join(" ")
+    } catch (e) {
+      console.warn("[studio] citation transcript extract failed:", e)
+      return ""
+    }
+  }
+
   async function load(): Promise<void> {
     loading.value = true
     try {
+      if (isCitationMode.value) {
+        const c = readCitationFromHistory()
+        if (!c) {
+          void router.replace("/tabs/notes")
+          return
+        }
+        citation.value = c
+        const tracksById = await app.repositories().tracks.getByIds([c.trackId as TrackId])
+        track.value = tracksById.get(c.trackId as TrackId) ?? null
+
+        const seeded =
+          c.text && c.text.trim().length > 0
+            ? c.text
+            : (await extractCitationText(c)) || (c.caption ?? "")
+        editedText.value = seeded
+        editedTitle.value = ""
+        return
+      }
+
       const n = await app.repositories().notes.getById(noteId.value)
       if (!n) {
         void router.replace("/tabs/notes")
@@ -84,8 +185,9 @@ export function useStudioController(): StudioControllerReturn {
       // Pre-fill the editor with the previously-saved Studio edit (if any),
       // otherwise the original quote. Stays in sync between sessions
       // because we write back to meta on every render.
-      const savedStudio = readStudioMeta(n.meta)?.text
-      editedText.value = savedStudio ?? n.text
+      const savedStudio = readStudioMeta(n.meta)
+      editedText.value = savedStudio?.text ?? n.text
+      editedTitle.value = savedStudio?.title ?? ""
 
       const tracksById = await app.repositories().tracks.getByIds([n.trackId as TrackId])
       track.value = tracksById.get(n.trackId as TrackId) ?? null
@@ -94,11 +196,13 @@ export function useStudioController(): StudioControllerReturn {
     }
   }
 
-  function readStudioMeta(meta: NoteMeta | null | undefined): { text?: string } | null {
+  function readStudioMeta(
+    meta: NoteMeta | null | undefined
+  ): { text?: string; title?: string } | null {
     if (!meta || typeof meta !== "object") return null
     const studio = (meta as Record<string, unknown>).studio
     if (!studio || typeof studio !== "object") return null
-    return studio as { text?: string }
+    return studio as { text?: string; title?: string }
   }
 
   /**
@@ -111,22 +215,49 @@ export function useStudioController(): StudioControllerReturn {
     return t.variants.find((v) => v.audio !== null) ?? null
   }
 
-  function localVideoFilename(id: NoteId): string {
+  function localVideoFilename(id: string): string {
     return `share-video-note-${id}.mp4`
   }
 
+  function citationVideoFilename(videoId: string): string {
+    return `share-video-cit-${videoId}.mp4`
+  }
+
   /**
-   * Persist the editor text into `note.meta.studio.text`. Only writes
-   * when the value actually changed — saves a needless round-trip
-   * (and a notes-store refresh) on a "tap Download with no edits" path.
-   * Returns the updated note so the caller can re-read its meta.
+   * Stable opaque idempotency key for a citation-mode render. The service
+   * uses it as both S3-cache key and request dedupe key, so it must be
+   * deterministic in (trackId, startMs, endMs). SHA-256 → 32 hex chars
+   * fits the server's 64-char alphanumeric/`-`/`_` regex.
    */
-  async function persistEditIfChanged(current: Note, nextText: string): Promise<Note> {
+  async function citationVideoId(c: CitationState): Promise<string> {
+    const input = `${c.trackId}|${c.startMs}|${c.endMs}`
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input))
+    const bytes = Array.from(new Uint8Array(buf))
+    const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("")
+    return `cit_${hex.slice(0, 28)}` // 4 + 28 = 32 chars, well under 64
+  }
+
+  /**
+   * Persist editor text + title into `note.meta.studio`. Only writes
+   * when at least one value actually changed — saves a needless round-trip
+   * on a "tap Download with no edits" path. No-op in citation mode.
+   */
+  async function persistEditIfChanged(
+    current: Note,
+    nextText: string,
+    nextTitle: string
+  ): Promise<Note> {
     const existing = readStudioMeta(current.meta)
-    if ((existing?.text ?? null) === nextText) return current
+    const existingTitle = existing?.title ?? ""
+    if ((existing?.text ?? null) === nextText && existingTitle === nextTitle) {
+      return current
+    }
 
     const baseMeta: NoteMeta = (current.meta ?? {}) as NoteMeta
-    const nextMeta: NoteMeta = { ...baseMeta, studio: { ...(existing ?? {}), text: nextText } }
+    const nextStudio: { text?: string; title?: string } = { ...(existing ?? {}), text: nextText }
+    if (nextTitle.length > 0) nextStudio.title = nextTitle
+    else delete nextStudio.title
+    const nextMeta: NoteMeta = { ...baseMeta, studio: nextStudio }
     const updated = await notes.update({ id: current.id, meta: nextMeta })
     if (!updated.ok) {
       // Not fatal — the share can still proceed using the local text —
@@ -139,20 +270,44 @@ export function useStudioController(): StudioControllerReturn {
   }
 
   async function onDownload(): Promise<void> {
-    if (!note.value || !track.value || busy.value) return
+    if (!track.value || busy.value) return
+    if (!isCitationMode.value && !note.value) return
+    if (isCitationMode.value && !citation.value) return
 
     const trimmed = editedText.value.trim()
     if (trimmed.length === 0) {
       await toast.error(t("studio.errorEmpty"))
       return
     }
+    const trimmedTitle = editedTitle.value.trim()
     const variant = pickAudioVariant(track.value)
     if (!variant?.audio) {
       await toast.error(t("studio.errorNoAudio"))
       return
     }
 
-    if (!shareJob.tryStart("video", note.value.id)) {
+    // Resolve the (trackId, range, videoId, filename) tuple for whichever
+    // mode we're in. Citation mode derives a deterministic videoId from
+    // the citation params so re-opening the same citation hits the CDN.
+    let videoId: string
+    let filename: string
+    let startMs: number
+    let endMs: number
+    if (isCitationMode.value && citation.value) {
+      videoId = await citationVideoId(citation.value)
+      filename = citationVideoFilename(videoId)
+      startMs = citation.value.startMs
+      endMs = citation.value.endMs
+    } else if (note.value) {
+      videoId = note.value.id
+      filename = localVideoFilename(note.value.id)
+      startMs = note.value.timeStart
+      endMs = note.value.timeEnd
+    } else {
+      return
+    }
+
+    if (!shareJob.tryStart("video", videoId)) {
       await toast.info(t("notes.shareAlreadyInProgress"))
       return
     }
@@ -160,16 +315,20 @@ export function useStudioController(): StudioControllerReturn {
     busy.value = true
     status.value = t("studio.preparing")
     try {
-      note.value = await persistEditIfChanged(note.value, trimmed)
+      // Note-mode only: persist the edit before rendering so a re-open
+      // shows the same text + title. Citation mode has no persistent
+      // store — edits are session-local.
+      if (!isCitationMode.value && note.value) {
+        note.value = await persistEditIfChanged(note.value, trimmed, trimmedTitle)
+      }
 
-      const filename = localVideoFilename(note.value.id)
       // 1. Local cache hit — re-share immediately.
       let localUri = await app.excerptCache.findLocal(filename)
       if (!localUri) {
         // 2. CDN warm hit (prior render still on the bucket).
         const predictedUrl = buildServerUrl(
           app.activeServer.value,
-          `public/share/video/${note.value.id}.mp4`
+          `public/share/video/${videoId}.mp4`
         )
         let publicUrl = (await app.excerptCache.probeRemote(predictedUrl)) ? predictedUrl : null
 
@@ -184,12 +343,13 @@ export function useStudioController(): StudioControllerReturn {
             (async () => {
               await app.shareVideoService.cut({
                 sourceKey: variant.audio!.path,
-                startMs: note.value!.timeStart,
-                endMs: note.value!.timeEnd,
+                startMs,
+                endMs,
                 text: trimmed,
                 lang: variant.language,
                 theme: "prabhupada",
-                videoId: note.value!.id,
+                videoId,
+                title: trimmedTitle.length > 0 ? trimmedTitle : undefined,
               })
               await pollUntilReady(predictedUrl)
             })(),
@@ -230,6 +390,7 @@ export function useStudioController(): StudioControllerReturn {
     loading,
     note,
     editedText,
+    editedTitle,
     busy,
     status,
     trackTitle,

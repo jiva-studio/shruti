@@ -22,6 +22,11 @@ export interface CutVideoRequest {
   readonly theme: string
   /** Stable id for idempotency. If omitted, the service generates one. */
   readonly videoId?: string
+  /**
+   * Optional title shown as a cream-coloured title-card overlay during the
+   * first ~0.5s of the reel. Empty / undefined → no title card.
+   */
+  readonly title?: string
 }
 
 export interface CutVideoResponse {
