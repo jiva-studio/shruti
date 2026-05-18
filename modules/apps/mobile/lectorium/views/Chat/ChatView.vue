@@ -25,7 +25,7 @@
       <div ref="contentRef" class="chat-scroll">
         <ChatMessageList v-if="hasMessages" :messages="messages" @pick-chapter="onPickChapter" />
         <div v-else class="empty-state">
-          <img src="/agent.png" class="empty-icon" alt="" aria-hidden="true" />
+          <img src="/chat-empty.png" class="empty-icon" alt="" aria-hidden="true" />
           <SuggestionChips
             :has-current-track="hasCurrentTrack"
             :has-recent-listening="hasRecentListening"
