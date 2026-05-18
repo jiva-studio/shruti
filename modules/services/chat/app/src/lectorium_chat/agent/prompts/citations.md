@@ -2,21 +2,13 @@
 Citation and rendering format
 ═══════════════════════════════════════════════════════════════════════
 
-You CANNOT type citation/card/outline markers in prose — they will not
-render. To insert one, call the corresponding tool:
+Place these markers inline in your text — the client parses them into UI:
 
-    propose_cite(track_id, start_ms, end_ms, caption)   → quotation chip
-    propose_card(track_id)                              → lecture card
-    propose_outline(track_id)                           → outline card
+    [cite:track_id@start_ms-end_ms|caption] — quotation chip (taps open the player)
+    [card:track_id] — lecture card (taps open the lecture)
 
-The agent validates the `track_id` against the catalog and, on
-success, injects the rendered marker into your reply stream at the
-position the tool was called from. If the validation fails (fabricated
-or stale id) you get `{error: "track_not_in_catalog", hint}` and
-should either retry with a real id or skip the marker.
-
-**The caption is mandatory** for cite and describes the SNIPPET (what
-is said in this specific audio fragment) — not the lecture title.
+**The caption is mandatory** and describes the SNIPPET (what is said in
+this specific audio fragment) — not the lecture title.
 
 CAPTION RULES — read every one of these, they are all enforced:
 
@@ -52,29 +44,30 @@ Do NOT reuse the lecture title as the caption — the chip already opens
 the lecture, so repeating the title there is useless.
 
 **Citation placement vs punctuation.** Cites are footnote pointers.
-They live OUTSIDE the sentence they cite — call `propose_cite` AFTER
-the closing `.` / `!` / `?` / `…` / `,` is in the stream, not in the
-middle of a clause.
+They live OUTSIDE the sentence they cite — meaning AFTER the closing
+`.` / `!` / `?` / `…` / `,`. Never insert a chip mid-clause or between
+the last word of a sentence and its punctuation.
 
-WRONG (call before the period — chip appears between the word and the dot):
-    streams: "Имя должно быть авторитетным"
-    tool_use: propose_cite(...)     ← chip will render here
-    streams: " ."                   ← orphan dot
+WRONG (chip before the period, period dangling after the chip):
+    Имя должно быть авторитетным [cite:X@1-2|авторитетное имя] .
 
-WRONG (call mid-clause):
-    streams: "Прабхупада объясняет это"
-    tool_use: propose_cite(...)     ← chip splits the clause
-    streams: " так."
+WRONG (chip splits the clause):
+    Прабхупада объясняет это [cite:X@1-2|причина страданий] так.
 
-RIGHT (call after the closing punctuation):
-    streams: "Имя должно быть авторитетным."
-    tool_use: propose_cite(track_id=..., caption="авторитетное имя")
-    streams: ""                     ← (or continue with the next idea)
+RIGHT (chip after the closing punctuation, no orphan dot):
+    Имя должно быть авторитетным. [cite:X@1-2|авторитетное имя]
 
-RIGHT (call after the comma in a longer paragraph):
-    streams: "Прабхупада объясняет, почему мы страдаем,"
-    tool_use: propose_cite(track_id=..., caption="причина страданий")
-    streams: " и затем переходит к решению."
+RIGHT (chip closes a clause inside a longer paragraph, after the comma):
+    Прабхупада объясняет, почему мы страдаем, [cite:X@1-2|причина страданий]
+    и затем переходит к решению.
+
+**track_id must come from a recent tool result.** Every `[cite:...]`
+and `[card:...]` track_id MUST be one that appeared in the most recent
+`search_transcripts` / `list_tracks` / `get_track` output of THIS turn.
+Never reuse ids from past chats, never synthesise plausible-looking
+ones. The server logs every emitted marker against the catalog (see
+`chat_marker_bypassed_tool` event) — fabricated ids surface in
+metrics, and the user sees "Не удалось загрузить аудио" on tap.
 
 **Don't describe what the card already shows.** A `[card:track_id]`
 renders title, date, location, duration, and scripture references on its
@@ -85,18 +78,18 @@ in the card itself (e.g. one-sentence reason this lecture is relevant
 to the question, or a thematic note tying it to the next card).
 
 WRONG (echoing card fields + blank line padding between cards):
-    tool_use: propose_card(track_id="track_X")
-    streams: "— Лекция \"Учения Кришны\" (29 января 1977, Бхубанешвар).\n\n"
-    tool_use: propose_card(track_id="track_Y")
-    streams: "— Лекция о медитации (10 мая 1972, Бомбей)."
+    [card:track_X]
+    — Лекция "Учения Кришны" (29 января 1977 года, Бхубанешвар).
 
-RIGHT (cards stacked adjacent, no prose between):
-    tool_use: propose_card(track_id="track_X")
-    tool_use: propose_card(track_id="track_Y")
+    [card:track_Y]
+    — Лекция о медитации (10 мая 1972, Бомбей).
+
+RIGHT (cards stacked adjacent, no blank line between):
+    [card:track_X]
+    [card:track_Y]
 
 RIGHT (commentary adds something the card doesn't show):
-    tool_use: propose_card(track_id="track_X")
-    streams: "Здесь Прабхупада связывает преданность с практикой йоги.\n"
-    tool_use: propose_card(track_id="track_Y")
-    streams: "Та же тема, но с акцентом на роль гуру."
-
+    [card:track_X]
+    Здесь Прабхупада связывает преданность с практикой йоги.
+    [card:track_Y]
+    Та же тема, но с акцентом на роль гуру.

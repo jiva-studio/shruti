@@ -56,18 +56,31 @@ async def run_llm_loop(
     request_id: str | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
     max_tool_turns: int = MAX_TOOL_TURNS,
+    on_done: Callable[[str], Awaitable[None]] | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Stream tokens, buffer tool calls, dispatch, repeat.
 
     `messages` is mutated in place across tool turns — the loop appends
     the assistant's tool-call turn and each tool's result. Callers that
     care about the final state can inspect `messages` after iteration.
+
+    `on_done` (optional) is awaited once the loop converges (just
+    before yielding the `done` event), with the FULL LLM-authored
+    prose accumulated across all tool turns. This is the content the
+    LLM typed verbatim — it does NOT include text injected by tools
+    (`propose_cite`/`card`/`outline` emit their markers via
+    `yield_event` side-channels that bypass `content_buf`). Use the
+    hook to log bypass markers without entangling `llm_loop` with
+    catalog access.
     """
     rid = request_id or uuid.uuid4().hex[:8]
     total_input_tokens = 0
     total_output_tokens = 0
     tool_calls_made = 0
     started = time.monotonic()
+    # LLM prose accumulated across ALL tool turns (per-turn content_buf
+    # only holds the current round). The `on_done` hook sees this.
+    llm_prose_full: list[str] = []
 
     async def _client_gone() -> bool:
         return bool(is_disconnected and await is_disconnected())
@@ -98,6 +111,7 @@ async def run_llm_loop(
                 text_delta = getattr(delta, "content", None)
                 if text_delta:
                     content_buf.append(text_delta)
+                    llm_prose_full.append(text_delta)
                     yield AgentEvent(type="delta", data={"text": text_delta})
 
                 tc_fragments = getattr(delta, "tool_calls", None) or []
@@ -140,6 +154,11 @@ async def run_llm_loop(
                     tool_calls=tool_calls_made,
                     duration_ms=int((time.monotonic() - started) * 1000),
                 )
+                if on_done is not None:
+                    try:
+                        await on_done("".join(llm_prose_full))
+                    except Exception as exc:
+                        log.warning("on_done_hook_failed", request_id=rid, error=str(exc))
                 yield AgentEvent(type="done", data={})
                 return
 

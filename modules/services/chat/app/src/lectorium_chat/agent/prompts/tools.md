@@ -5,11 +5,10 @@ Tools and when to use them
 `search_transcripts(query, ...filters)`
     For thematic / conceptual questions: "what did Prabhupada say about X",
     "how did he explain Y", "find a quote on Z".
-    Returns chunks: {track_id, start_ms, end_ms, text, score}. To cite a
-    chunk, call `propose_cite(track_id, start_ms, end_ms, caption)`
-    (described below) — the agent injects the validated chip into your
-    reply at the call point. You CANNOT type `[cite:...]` markers in
-    prose; they will not render.
+    Returns chunks: {track_id, start_ms, end_ms, text, score}. Cite each
+    claim you make with [cite:track_id@start_ms-end_ms|caption]. The
+    `caption` is a 3–6 word phrase summarising WHAT IS DISCUSSED in this
+    specific snippet — see the Citation section below.
 
     **Query formulation matters.** Embeddings work poorly on a single bare
     keyword — expand it into a short descriptive phrase in the same language
@@ -39,10 +38,8 @@ Tools and when to use them
 `list_tracks(...filters)`
     For list-style questions: "lectures by X from Y in 1972", "all morning
     walks in Bombay". Returns track cards: {track_id, title, date, author,
-    location, kind, duration, references}. To surface a lecture as a
-    card, call `propose_card(track_id)` (described below) — the agent
-    injects the validated marker into your reply. You CANNOT type
-    `[card:...]` markers in prose; they will not render.
+    location, kind, duration, references}. Emit [card:track_id] markers in
+    your reply; the UI renders them as cards.
     'Kind' (morning walk / lecture / conversation / etc.) is a TAG. Pass it
     via tag_ids, e.g. ['tag_morning_walk'].
 
@@ -128,10 +125,10 @@ Tools and when to use them
 
     After the tool returns, write a 2-4 sentence prose summary based on
     the `items[].title` ONLY — do NOT make up topics the outline doesn't
-    cover. Then call `propose_outline(track_id)` to inject the card
-    marker at the cursor — you CANNOT type `[outline:...]` markers in
-    prose, they will not render. Do NOT enumerate items in text — the
-    card shows them.
+    cover. Then embed the marker `[outline:<track_id>]` at the position
+    where the card should render — construct it from the same `track_id`
+    you called the tool with. Do NOT enumerate items in text — the card
+    shows them.
 
 `get_transcript_window(track_id, around_ms, window_seconds=60, lang)`
     Enrich context around an existing citation. Useful when one chunk hints
@@ -199,45 +196,9 @@ Tools and when to use them
 
     Note: when the user asks «сохрани цитату / добавь в заметки», do
     NOT emit a separate action card. Just include the relevant
-    citation chip in your reply (via `propose_cite`) and tell the user
-    they can tap the chip's three-dot menu → «Сохранить как заметку».
-
-`propose_cite(track_id, start_ms, end_ms, caption)`
-    Inject a `[cite:...]` chip into your reply at the current cursor.
-    Call this INSTEAD of typing the marker in prose — typed markers
-    will not render. `track_id` MUST come from a recent
-    `search_transcripts` / `list_tracks` / `get_track` result; fabricated
-    ids are rejected with `{error: "track_not_in_catalog", hint}` and
-    you should either pick a real id or skip the citation. `caption`
-    is the 3–6 word phrase summarising WHAT IS DISCUSSED in this
-    snippet (see Citation section below).
-
-    Worked example — interleaved tool use in a single turn:
-
-        [user] Что такое бхакти?
-        [model] streams:  "Бхакти — это путь любовного служения Кришне..."
-        [model] tool_use: search_transcripts(query="бхакти преданное служение")
-        [tool_result] [{track_id: track_OkPV..., text: "...", start_ms: 630560, end_ms: 684400}, ...]
-        [model] streams:  "Прабхупада объясняет, что это совершенство жизни"
-        [model] tool_use: propose_cite(track_id="track_OkPV...", start_ms=630560,
-                                       end_ms=684400, caption="совершенство жизни")
-        [tool_result] {ok: true}
-        [model] streams:  ", доступное каждому через слушание и повторение."
-
-    The agent injects the validated `[cite:...]` between the two streaming
-    chunks, so the chip appears in-position in the bubble.
-
-`propose_card(track_id)`
-    Inject a `[card:...]` (LectureCard) chip into your reply at the
-    current cursor. Use INSTEAD of typing the marker in prose. Same
-    validation rules as `propose_cite`. Typical pattern: call
-    `list_tracks(...)` → for each result you want to surface, call
-    `propose_card(track_id=...)`.
-
-`propose_outline(track_id)`
-    Inject an `[outline:...]` (OutlineCard) chip into your reply. Call
-    AFTER `get_track_outline(track_id, lang)` has fetched and emitted
-    the outline payload. Same `track_id` for both calls.
+    `[cite:track_id@start-end|caption]` chip in your reply and tell
+    the user they can tap the chip's three-dot menu → «Сохранить как
+    заметку».
 
 `generate_track_pdf(track_ids, lang)`
     Render and cache a printable PDF (cover + optional table of contents
