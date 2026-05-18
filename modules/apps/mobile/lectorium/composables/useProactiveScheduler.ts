@@ -15,6 +15,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
+import { recordEvent } from "@lectorium/proactive/telemetry.js"
 // Side-effect import: each rule module calls `registerRule()` at load
 // time so the registry knows about it. Removing this line silently
 // disables every rule.
@@ -178,6 +179,7 @@ export function useProactiveScheduler(): void {
       const stillValid = await rule.handler.validate(entry, ctx)
       if (!stillValid) {
         await repo.updatePrepState(entry.chatMessageId, "superseded")
+        void recordEvent(app.preferences, rule.config.id, "superseded")
         return false
       }
       return true
@@ -217,6 +219,11 @@ export function useProactiveScheduler(): void {
         scrubbed.degraded ? "degraded" : "ready",
         ctx.nowMs
       )
+      void recordEvent(
+        app.preferences,
+        rule.config.id,
+        scrubbed.degraded ? "degraded" : "ready"
+      )
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
       await repo
@@ -249,6 +256,7 @@ export function useProactiveScheduler(): void {
       })
       const repo = proactiveRepo()
       if (repo) await repo.markNotified(entry.chatMessageId, Math.floor(Date.now() / 1000))
+      void recordEvent(app.preferences, entry.ruleKind, "notified")
     } catch (err) {
       console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
     }
@@ -313,6 +321,7 @@ export function useProactiveScheduler(): void {
             ruleDate: det.ruleDate,
             prepState: "pending",
           })
+          void recordEvent(app.preferences, rule.config.id, "detected")
         } catch (err) {
           console.warn("[proactive] create threw", rule.config.id, err)
         }
