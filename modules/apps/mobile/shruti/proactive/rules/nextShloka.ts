@@ -1,5 +1,4 @@
 import type { TrackId } from "@lib/domain/core.js"
-import { useShruti } from "@shruti/shruti.js"
 import { registerRule } from "../registry.js"
 import type { ProactiveRuleHandler } from "../types.js"
 
@@ -33,8 +32,7 @@ const handler: ProactiveRuleHandler = {
   id: "next_shloka",
 
   async detect(ctx) {
-    const app = useShruti()
-    const repos = app.repositories()
+    const repos = ctx.repos
     const recent = await repos.listeningSessions.listRecentTracksWithProgress(RECENT_LIMIT)
     if (recent.length === 0) return []
 
@@ -68,18 +66,16 @@ const handler: ProactiveRuleHandler = {
     return []
   },
 
-  async validate(entry) {
+  async validate(entry, ctx) {
     // Verify the suggested track still exists. catalog.publish can drop
     // tracks (hide=1) — in that case we supersede the row rather than
     // ship a broken card.
-    const app = useShruti()
-    const track = await app.repositories().tracks.getById(entry.ruleDate as TrackId)
+    const track = await ctx.repos.tracks.getById(entry.ruleDate as TrackId)
     return track !== null
   },
 
   async buildContent(entry, ctx) {
-    const app = useShruti()
-    const track = await app.repositories().tracks.getById(entry.ruleDate as TrackId)
+    const track = await ctx.repos.tracks.getById(entry.ruleDate as TrackId)
     if (track === null || track.references.length === 0) return null
     const ref = track.references[track.references.length - 1]
     const refLabel = ref.tokens.join(".")

@@ -26,7 +26,7 @@ const props = withDefaults(
   defineProps<{
     sessions: readonly ChatSession[]
     /** Session ids that received an agent-initiated message and haven't
-     *  been replied to yet — driven by `chatStore.unrepliedProactiveSessionIds`.
+     *  been opened yet — driven by `chatStore.unseenProactiveSessionIds`.
      *  The session row shows a small dot before the title so the user can see
      *  which one is the new proactive nudge without opening every entry. */
     unreadIds?: ReadonlySet<string>

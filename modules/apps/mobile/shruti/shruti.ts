@@ -11,6 +11,7 @@ import type {
   INotificationScheduler,
   IPersistence,
   IPreferences,
+  IProactiveChatService,
   IPurchases,
   IRemoteFilesStorage,
   IServerProber,
@@ -79,6 +80,10 @@ export interface Shruti {
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
+  /** HTTP/SSE adapter for `kind=proactive` chat turns. Used by the
+   *  scheduler's content builders for `holiday`, `weekly_digest` and
+   *  `inactivity` rules. */
+  readonly proactiveChat: IProactiveChatService
   /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
    * the user database. Wired with a `() => databases.user` closure so the
    * user DB doesn't have to be open at app-bootstrap time. */
@@ -142,6 +147,7 @@ export interface InitShrutiSeed {
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
   readonly excerptCache: IExcerptCache
+  readonly proactiveChat: IProactiveChatService
   /** Factory invoked inside `initShruti` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
    * adapter would otherwise need to close over a not-yet-built `Shruti`. */
@@ -190,6 +196,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     mediaDownloader: seed.mediaDownloader,
     purchases: seed.purchases,
     serverProber: seed.serverProber,
+    proactiveChat: seed.proactiveChat,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
     activeServer,

@@ -49,6 +49,7 @@ import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
+import { useHttpProactiveChatService } from "@shruti/services/chat/httpProactiveChatService.js"
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
@@ -109,6 +110,7 @@ initShruti({
   platform,
   initialServer: SERVERS[0],
   serverProber: useHttpServerProber(),
+  proactiveChat: useHttpProactiveChatService(),
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)

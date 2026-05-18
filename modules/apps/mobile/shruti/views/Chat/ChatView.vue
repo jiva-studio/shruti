@@ -33,7 +33,7 @@
           />
           <RecentSessions
             :sessions="sessions"
-            :unread-ids="unrepliedProactiveSessionIds"
+            :unread-ids="unseenProactiveSessionIds"
             @pick="onPickSession"
           />
         </div>
@@ -45,7 +45,7 @@
       :sessions="filteredSessions"
       :active-session-id="activeSessionId"
       :search-query="searchQuery"
-      :unread-ids="unrepliedProactiveSessionIds"
+      :unread-ids="unseenProactiveSessionIds"
       @update:open="(v) => (v ? null : onCloseHistory())"
       @update:search-query="searchQuery = $event"
       @pick="onPickSession"
@@ -83,7 +83,7 @@ const {
   contentRef,
   searchQuery,
   filteredSessions,
-  unrepliedProactiveSessionIds,
+  unseenProactiveSessionIds,
   onSend,
   onNewSession,
   onOpenHistory,
