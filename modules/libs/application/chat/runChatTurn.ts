@@ -75,18 +75,6 @@ export interface RunChatTurnDeps {
   readonly buildUserContext: (
     focus?: FocusFragmentPayload
   ) => Promise<UserContextPayload>
-  /** Synthesize a playlist payload when the LLM emitted
-   *  `[action:create-playlist|id=X]` without calling propose_playlist
-   *  (a known DeepSeek failure mode). Returns the merged action map
-   *  or `existing` unchanged if salvage isn't applicable. */
-  readonly salvageOrphanActions: (
-    content: string,
-    existing: Record<string, ChatActionPayload>,
-    fallbackName: string
-  ) => Record<string, ChatActionPayload>
-  /** Localised fallback name when the salvage can't infer one from the
-   *  user prompt. */
-  readonly fallbackPlaylistName: string
   /** Pull `[followup:<text>]` chip texts out of the final assistant
    *  content. Strict parser — malformed markers leak into prose and
    *  return no chip (fix lives in the prompt, not here). */
@@ -220,15 +208,6 @@ export async function* runChatTurn(
       ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
       : undefined
 
-  // 6. Salvage orphan actions from the final content (LLM may have
-  // emitted `[action:create-playlist|id=X]` without calling
-  // propose_playlist; the salvage walker rebuilds from sibling cards).
-  const mergedActions = deps.salvageOrphanActions(
-    acc,
-    actions,
-    input.text.slice(0, 60) || deps.fallbackPlaylistName
-  )
-
   if (acc.length > 0) {
     const followups = deps.extractFollowups(acc)
     const finalised = await deps.messages.create({
@@ -237,7 +216,7 @@ export async function* runChatTurn(
       role: "assistant",
       content: acc,
       createdAt: Date.now(),
-      actions: mergedActions,
+      actions,
       outlines,
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
