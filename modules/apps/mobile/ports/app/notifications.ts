@@ -16,6 +16,16 @@ export interface ScheduledNotification {
    * notification is one-shot.
    */
   every?: "day"
+  /**
+   * Opaque payload echoed back via the
+   * `localNotificationActionPerformed` event when the user taps the
+   * notification. The proactive scheduler stuffs
+   * `{ chatSessionId, chatMessageId }` here so the tap can deep-link
+   * into the originating chat session. Callers with no need to receive
+   * a callback (e.g., the daily reminder) leave this empty and are
+   * filtered out by the tap listener.
+   */
+  extra?: Record<string, unknown>
 }
 
 export interface INotificationScheduler {

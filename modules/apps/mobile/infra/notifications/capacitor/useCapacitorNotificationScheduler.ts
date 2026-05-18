@@ -43,6 +43,7 @@ export function useCapacitorNotificationScheduler(): INotificationScheduler {
                 on: { hour: date.getHours(), minute: date.getMinutes() },
                 allowWhileIdle: true,
               },
+              extra: n.extra ?? null,
             },
           ],
         })
@@ -55,6 +56,7 @@ export function useCapacitorNotificationScheduler(): INotificationScheduler {
             title: n.title,
             body: n.body,
             schedule: { at: new Date(n.at) },
+            extra: n.extra ?? null,
           },
         ],
       })
