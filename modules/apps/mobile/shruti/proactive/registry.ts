@@ -17,7 +17,11 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
     mode: "pre_baked",
     prep_window_hours: 0,
     refresh_if_older_than_hours: 9999,
-    session_strategy: "append_current",
+    // `new_session`: the autonomous tutorial gets its own chat session
+    // (titled after the feature) so the introduction doesn't crash a
+    // pre-existing user conversation. The handler emits
+    // `sessionTitleOverride` with the localised feature name.
+    session_strategy: "new_session",
     cooldown_hours: 720,
     eligibility: [
       { predicate: "current_streak_at_least", value: 3 },
@@ -30,7 +34,7 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
     mode: "pre_baked",
     prep_window_hours: 0,
     refresh_if_older_than_hours: 9999,
-    session_strategy: "append_current",
+    session_strategy: "new_session",
     cooldown_hours: 720,
     dismiss_resets_after_hours: 2160,
     eligibility: [
