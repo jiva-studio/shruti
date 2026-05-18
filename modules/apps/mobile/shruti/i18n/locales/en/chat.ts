@@ -42,9 +42,9 @@ export default {
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
   suggestions: [
-    "Where did I stop?", // continue_listening
+    "Where did I stop?", // list_my_tracks(status='in_progress')
     "Playlist on Gita ch. 2", // propose_playlist
-    "What I heard this week", // search_my_history + now
+    "What I heard this week", // list_my_tracks(since=now-7d)
     "What to listen next?", // recommend_next
     "About varnashrama", // search_transcripts (classic)
     "Bombay morning walks 1973", // list_tracks (classic)

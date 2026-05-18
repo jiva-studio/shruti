@@ -47,9 +47,9 @@ export default {
   suggestionRecapCurrent: "Перескажи текущую лекцию",
   suggestionRecapRecent: "Перескажи последнюю лекцию",
   suggestions: [
-    "Где остановился?", // continue_listening
+    "Где остановился?", // list_my_tracks(status='in_progress')
     "Собери плейлист по Гите 2", // propose_playlist
-    "Что слушал на неделе?", // search_my_history + now
+    "Что слушал на неделе?", // list_my_tracks(since=now-7d)
     "Что послушать ещё?", // recommend_next
     "Найди про варнашраму", // search_transcripts (classic)
     "Утренние прогулки 1973", // list_tracks (classic)
