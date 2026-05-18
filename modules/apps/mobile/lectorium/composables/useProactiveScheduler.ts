@@ -3,6 +3,7 @@ import { useI18n } from "vue-i18n"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
 import type { ProactiveConfig, RemoteAppConfig } from "@lib/domain/config.js"
+import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId } from "@lib/domain/core.js"
 import type {
   IProactiveStateRepository,
@@ -16,14 +17,13 @@ import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { notificationIdFor } from "@lectorium/proactive/hash.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
-import { recordEvent } from "@lectorium/proactive/telemetry.js"
 // Side-effect import: each rule module calls `registerRule()` at load
 // time so the registry knows about it. Removing this line silently
 // disables every rule.
 import "@lectorium/proactive/rules/index.js"
 import { resolveSessionId } from "@lectorium/proactive/sessions.js"
 import type { ProactiveContext, ResolvedProactiveRule } from "@lectorium/proactive/types.js"
-import { useChatStore } from "@lectorium/stores/useChatStore.js"
+import { emit as emitProactive } from "@lectorium/proactive/events.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 
 /** Foreground tick cadence — every 30 minutes while the app is open. */
@@ -50,7 +50,6 @@ export function useProactiveScheduler(): void {
   const app = useLectorium()
   const language = useAppLanguage()
   const purchases = usePurchasesStore()
-  const chatStore = useChatStore()
   const { t } = useI18n()
   // First time the scheduler runs we stamp "install age" — the device
   // never sees a fresh install on the same DB twice, so a single config
@@ -151,6 +150,13 @@ export function useProactiveScheduler(): void {
       completedTracks,
       firstSeenAtMs: firstSeenAt.value,
       t: (key: string, params?: Record<string, unknown>) => (params ? t(key, params) : t(key)),
+      // Repos + proactiveChat live on ctx so rule handlers never call
+      // `useLectorium()` themselves — they stay framework-free and
+      // testable. `app.repositories()` is safe to call here because
+      // proactiveRepo() already gated us on both DBs being open at the
+      // top of tick().
+      repos: app.repositories(),
+      proactiveChat: app.proactiveChat,
     }
   }
 
@@ -211,7 +217,6 @@ export function useProactiveScheduler(): void {
             console.warn("[proactive] cancel notification failed", entry.chatMessageId, err)
           }
         }
-        void recordEvent(app.preferences, rule.config.id, "superseded")
         return false
       }
       return true
@@ -239,9 +244,14 @@ export function useProactiveScheduler(): void {
     try {
       const result = await rule.handler.buildContent(entry, ctx)
       if (result === null) return
+      // `buildContent` returns actions typed as `ChatActionPayload | unknown`
+      // because LLM-emitted markers (via the proactive port) come through
+      // as `unknown`. The validator narrows + drops anything that doesn't
+      // match the discriminated union, so the cast is safe here — bad
+      // payloads end up scrubbed, not crashed-on.
       const scrubbed = await validateAndScrubActions(
         result.bodyMd,
-        result.actions ?? {},
+        (result.actions ?? {}) as Record<string, ChatActionPayload>,
         app.repositories().tracks
       )
       await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions)
@@ -250,10 +260,15 @@ export function useProactiveScheduler(): void {
         scrubbed.degraded ? "degraded" : "ready",
         ctx.nowMs
       )
-      void recordEvent(app.preferences, rule.config.id, scrubbed.degraded ? "degraded" : "ready")
+      // The row just flipped to ready/degraded — listUnseenSessionIds
+      // filters out `pending` rows, so without this emit the badge
+      // would stay dark until something else (next 30-min tick, app
+      // resume, user nav to chat) triggers a refresh.
+      emitProactive("row-prepped")
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
       await repo.updatePrepState(entry.chatMessageId, "degraded", ctx.nowMs).catch(() => undefined)
+      emitProactive("row-prepped")
     } finally {
       inFlight.delete(key)
     }
@@ -298,7 +313,6 @@ export function useProactiveScheduler(): void {
       })
       const repo = proactiveRepo()
       if (repo) await repo.markNotified(entry.chatMessageId, Math.floor(Date.now() / 1000))
-      void recordEvent(app.preferences, entry.ruleKind, "notified")
     } catch (err) {
       console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
     }
@@ -348,6 +362,10 @@ export function useProactiveScheduler(): void {
       return
     }
     repoRetries = 0
+    // Tell subscribers (chat store via useChatStoreProactiveSync) that
+    // a tick is happening so they can refresh derived state. Decoupled
+    // via the event bus — the scheduler doesn't import any UI store.
+    emitProactive("tick-ready")
     // Master kill switch — `config.proactive.master_enabled === false`
     // in the published config.json hard-disables the subsystem so we
     // can pull it from production without an app release.
@@ -403,15 +421,11 @@ export function useProactiveScheduler(): void {
             await sessions.delete(sessionId).catch(() => undefined)
             continue
           }
-          void recordEvent(app.preferences, rule.config.id, "detected")
-          // Scheduler writes the chat_sessions/chat_messages rows directly
-          // through repos, so the Pinia chat store's in-memory `sessions`
-          // list doesn't know about the new entry until something forces a
-          // refresh. Without this, the new proactive session only appears
-          // when the user navigates away and back. Best-effort — if the
-          // store throws (e.g. user repo not ready in some edge case) we
-          // swallow to keep the scheduler resilient.
-          void chatStore.refreshSessions().catch(() => undefined)
+          // Tell subscribers a row was just persisted. The chat store
+          // listens via useChatStoreProactiveSync and refreshes its
+          // sessions list so the new entry appears without a tab
+          // switch. Scheduler stays oblivious to who reacts.
+          emitProactive("row-created")
         } catch (err) {
           console.warn("[proactive] create threw", rule.config.id, err)
         }

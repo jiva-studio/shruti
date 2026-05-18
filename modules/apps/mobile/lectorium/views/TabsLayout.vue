@@ -37,8 +37,6 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from "vue"
-import router from "@lectorium/router/index.js"
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
@@ -51,41 +49,11 @@ import IconAppSadhu from "@lectorium/views/Chat/components/IconAppSadhu.vue"
 // in flight.
 const shareJob = useShareJobStore()
 
+// Sadhu-icon dot. Pure-derived count from chatStore.unseenProactiveSessionIds;
+// no watchers needed — opening a session calls `chatStore.openSession`
+// which clears the underlying SQL `seen_at` and the derived count
+// updates automatically.
 const proactiveBadge = useProactiveInboxBadge()
-
-// `useRoute()` is unreliable here: during initial setup the underlying
-// Vue Router DI ref can be `undefined`, which freezes the badge watcher
-// (it reads `undefined?.name` forever). Same fix as the action-handler
-// composables — use the singleton `router.currentRoute` and read `.value`.
-function isChatRoute(): boolean {
-  const name = router.currentRoute.value?.name
-  return name === "chat" || name === "chat-session"
-}
-// Clear the proactive badge when the user enters any chat route — the
-// landing chat tab counts as "seen". Watch by name so deep links into
-// a specific session ("chat-session") also reset the badge.
-watch(
-  () => router.currentRoute.value?.name,
-  (name) => {
-    if (name === "chat" || name === "chat-session") {
-      void proactiveBadge.markSeen()
-    }
-  },
-  { immediate: true }
-)
-// Companion path: the user is already on the chat tab when the
-// scheduler creates a new proactive row. The route doesn't change, so
-// the watcher above never fires — without this, the dot appears and
-// stays until the user navigates away and back. Advance the watermark
-// as soon as the count goes positive while we are on chat.
-watch(
-  () => proactiveBadge.count.value,
-  (next) => {
-    if (next > 0 && isChatRoute()) {
-      void proactiveBadge.markSeen()
-    }
-  }
-)
 </script>
 
 <style scoped>

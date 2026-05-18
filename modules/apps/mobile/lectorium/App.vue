@@ -84,6 +84,7 @@ import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@lectorium/composables/usePlayerProgressFlush.js"
 import { usePlayerTutorialPulse } from "@lectorium/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@lectorium/composables/useAutoDownloadLoop.js"
+import { useChatStoreProactiveSync } from "@lectorium/composables/useChatStoreProactiveSync.js"
 import { useProactiveDeepLink } from "@lectorium/composables/useProactiveDeepLink.js"
 import { useProactiveScheduler } from "@lectorium/composables/useProactiveScheduler.js"
 import { registerMainPlayerPauser } from "@lectorium/composables/useNotesInlineAudio.js"
@@ -144,6 +145,7 @@ const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
 useProactiveScheduler()
 useProactiveDeepLink()
+useChatStoreProactiveSync()
 
 // When a Notes inline excerpt starts playing, pause the main lecture so
 // the user never hears two streams at once. The notes coordinator owns

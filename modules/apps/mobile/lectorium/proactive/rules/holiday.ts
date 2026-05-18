@@ -1,6 +1,5 @@
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { HolidayEntry, RemoteAppConfig } from "@lib/domain/config.js"
-import { runProactiveTurn } from "../proactiveChat.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -76,7 +75,7 @@ const handler: ProactiveRuleHandler = {
     if (!match) return null
     const daysUntil = daysBetween(ctx.localDate, entry.ruleDate)
 
-    return runProactiveTurn(
+    return ctx.proactiveChat.run(
       {
         ruleKind: "holiday",
         ruleDate: entry.ruleDate,
@@ -87,7 +86,7 @@ const handler: ProactiveRuleHandler = {
           days_until: daysUntil,
         },
       },
-      ctx.locale.startsWith("en") ? "en" : "ru"
+      ctx.locale
     )
   },
 }

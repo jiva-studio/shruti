@@ -42,7 +42,7 @@ export interface ChatControllerReturn {
   filteredSessions: Ref<ChatSession[]>
   /** Session ids with an unreplied agent-initiated message — passed to
    *  RecentSessions and ChatSessionList for the per-session dot marker. */
-  unrepliedProactiveSessionIds: ComputedRef<ReadonlySet<string>>
+  unseenProactiveSessionIds: ComputedRef<ReadonlySet<string>>
   onSend: (text: string) => Promise<void>
   onNewSession: () => void
   onOpenHistory: () => Promise<void>
@@ -313,7 +313,7 @@ export function useChatController(): ChatControllerReturn {
     contentRef,
     searchQuery,
     filteredSessions,
-    unrepliedProactiveSessionIds: computed(() => store.unrepliedProactiveSessionIds),
+    unseenProactiveSessionIds: computed(() => store.unseenProactiveSessionIds),
     onSend,
     onNewSession,
     onOpenHistory,

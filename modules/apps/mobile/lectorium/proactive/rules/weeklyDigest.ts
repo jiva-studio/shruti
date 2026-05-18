@@ -1,5 +1,3 @@
-import { useLectorium } from "@lectorium/lectorium.js"
-import { runProactiveTurn } from "../proactiveChat.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -77,8 +75,7 @@ const handler: ProactiveRuleHandler = {
   },
 
   async buildContent(entry, ctx) {
-    const app = useLectorium()
-    const repos = app.repositories()
+    const repos = ctx.repos
 
     // 7-day window ending at the proactive message's rule_date.
     const sundayUtc = new Date(`${entry.ruleDate}T00:00:00`).getTime()
@@ -106,13 +103,13 @@ const handler: ProactiveRuleHandler = {
       top_authors: [],
     }
 
-    const result = await runProactiveTurn(
+    const result = await ctx.proactiveChat.run(
       {
         ruleKind: "weekly_digest",
         ruleDate: entry.ruleDate,
         ruleContext,
       },
-      ctx.locale.startsWith("en") ? "en" : "ru"
+      ctx.locale
     )
     return result
   },

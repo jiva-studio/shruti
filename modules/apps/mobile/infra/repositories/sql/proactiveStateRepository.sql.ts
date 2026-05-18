@@ -21,6 +21,7 @@ interface ProactiveStateJoinRow {
   readonly notify_at: number | null
   readonly notified_at: number | null
   readonly created_at: number
+  readonly seen_at: number | null
 }
 
 const PREP_STATES: ReadonlySet<ProactivePrepState> = new Set([
@@ -46,12 +47,13 @@ function rowToEntry(r: ProactiveStateJoinRow): ProactiveStateEntry {
     notifyAt: r.notify_at != null ? Number(r.notify_at) : null,
     notifiedAt: r.notified_at != null ? Number(r.notified_at) : null,
     createdAt: Number(r.created_at),
+    seenAt: r.seen_at != null ? Number(r.seen_at) : null,
   }
 }
 
 const SELECT_JOIN = `
   SELECT p.chat_message_id, m.session_id, p.rule_kind, p.rule_date,
-         p.prep_state, p.prepared_at,
+         p.prep_state, p.prepared_at, p.seen_at,
          m.content, m.visible_on, m.notify_at, m.notified_at, m.created_at
     FROM chat_messages_proactive_state p
     JOIN chat_messages m ON m.id = p.chat_message_id
@@ -93,8 +95,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         )
         await db.execute(
           `INSERT INTO chat_messages_proactive_state
-             (chat_message_id, rule_kind, rule_date, prep_state, prepared_at)
-           VALUES (?, ?, ?, ?, NULL)`,
+             (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, seen_at)
+           VALUES (?, ?, ?, ?, NULL, NULL)`,
           [input.chatMessageId, input.ruleKind, input.ruleDate, input.prepState]
         )
       })
@@ -112,6 +114,7 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         notifyAt: input.notifyAt,
         notifiedAt: null,
         createdAt: input.createdAt,
+        seenAt: null,
       }
     },
 
@@ -130,10 +133,15 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
         [chatMessageId]
       )
       if (exists.length > 0) return
+      // Inline-hint markers arrive WHILE the user is reading the agent's
+      // reply in the open session — there's nothing to flag as unread.
+      // Stamp `seen_at = now` so the per-session dot stays dark and the
+      // tab badge doesn't light up. Autonomous proactives go through
+      // `create()` above and start with `seen_at = NULL`.
       await db.execute(
         `INSERT INTO chat_messages_proactive_state
-           (chat_message_id, rule_kind, rule_date, prep_state, prepared_at)
-         VALUES (?, ?, ?, ?, ?)`,
+           (chat_message_id, rule_kind, rule_date, prep_state, prepared_at, seen_at)
+         VALUES (?, ?, ?, ?, ?, strftime('%s','now'))`,
         [chatMessageId, ruleKind, ruleDate, prepState, preparedAt ?? null]
       )
       await db.save()
@@ -151,21 +159,37 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       return rows.map(rowToEntry)
     },
 
-    async listUnrepliedSessionIds(): Promise<readonly ChatSessionId[]> {
-      // A session is "unreplied" when it has at least one proactive
-      // message in ready/degraded AND no user-authored row. As soon as
-      // the user replies, the session drops out of the set — the per-
-      // session dot in the chat list disappears organically.
+    async listUnseenSessionIds(): Promise<readonly ChatSessionId[]> {
+      // A session is "unseen" while at least one proactive_state row
+      // tied to it has `seen_at IS NULL` AND its prep_state is
+      // ready/degraded (pending rows are still being prepped — we
+      // don't want the dot to flash before the body is even written).
+      // `chatStore.openSession` calls `markSeen` to clear the flag.
       const rows = await db.query<{ session_id: string }>(
         `SELECT DISTINCT m.session_id
            FROM chat_messages_proactive_state p
            JOIN chat_messages m ON m.id = p.chat_message_id
           WHERE p.prep_state IN ('ready', 'degraded')
-            AND m.session_id NOT IN (
-              SELECT session_id FROM chat_messages WHERE role = 'user'
-            )`
+            AND p.seen_at IS NULL`
       )
       return rows.map((r) => r.session_id as ChatSessionId)
+    },
+
+    async markSeen(sessionId: ChatSessionId, atSec: number): Promise<void> {
+      // Stamp every NULL-seen row in this session. Subquery on
+      // chat_messages.session_id is the bridge — proactive_state
+      // doesn't carry session_id directly. Idempotent: rows whose
+      // seen_at is already set stay put.
+      await db.execute(
+        `UPDATE chat_messages_proactive_state
+            SET seen_at = ?
+          WHERE seen_at IS NULL
+            AND chat_message_id IN (
+              SELECT id FROM chat_messages WHERE session_id = ?
+            )`,
+        [atSec, sessionId]
+      )
+      await db.save()
     },
 
     async findByRuleAndDate(
