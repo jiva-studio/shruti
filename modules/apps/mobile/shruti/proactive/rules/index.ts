@@ -6,3 +6,6 @@
 
 import "./enableNotificationsHint.js"
 import "./smartLibraryHint.js"
+import "./weeklyDigest.js"
+import "./inactivity.js"
+import "./holiday.js"

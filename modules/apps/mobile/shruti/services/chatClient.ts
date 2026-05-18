@@ -114,6 +114,12 @@ export async function fetchSessionTitle(
   }
 }
 
+export interface ProactiveTurnOptions {
+  readonly ruleKind: "weekly_digest" | "inactivity" | "holiday"
+  readonly ruleDate: string // 'YYYY-MM-DD'
+  readonly ruleContext: Record<string, unknown>
+}
+
 export interface StreamChatOptions {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
@@ -122,6 +128,11 @@ export interface StreamChatOptions {
   readonly clientId?: string
   /** Snapshot of recent listening + notes for personalization tools. */
   readonly userContext?: unknown
+  /** When present, the backend swaps the system prompt for a
+   *  rule-specific builder and `messages` is ignored. The client
+   *  still sends a single placeholder turn so the existing
+   *  `min_length=1` validator passes. */
+  readonly proactive?: ProactiveTurnOptions
 }
 
 /* -------------------------------------------------------------------------- */
@@ -168,11 +179,7 @@ export async function* streamChat(
       "X-App-Token": appToken,
       "Idempotency-Key": idempotencyKey,
     },
-    body: JSON.stringify(
-      opts.userContext !== undefined
-        ? { messages, lang, user_context: opts.userContext }
-        : { messages, lang }
-    ),
+    body: JSON.stringify(buildRequestBody(messages, lang, opts)),
     signal: opts.signal,
   }
 
@@ -275,6 +282,23 @@ export async function* streamChat(
 /* -------------------------------------------------------------------------- */
 /*                                  Helpers                                   */
 /* -------------------------------------------------------------------------- */
+
+function buildRequestBody(
+  messages: readonly ChatTurn[],
+  lang: "ru" | "en",
+  opts: StreamChatOptions
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { messages, lang }
+  if (opts.userContext !== undefined) body.user_context = opts.userContext
+  if (opts.proactive !== undefined) {
+    body.proactive = {
+      rule_kind: opts.proactive.ruleKind,
+      rule_date: opts.proactive.ruleDate,
+      rule_context: opts.proactive.ruleContext,
+    }
+  }
+  return body
+}
 
 async function resolveClientId(): Promise<string> {
   const app = useShruti()
