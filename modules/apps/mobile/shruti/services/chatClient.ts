@@ -50,6 +50,34 @@ export type ActionPayload =
       readonly id: string
       readonly items: readonly SharePdfItemPayload[]
     }
+  // Hint-class actions the LLM can emit inline during normal user
+  // conversations. The mobile cards (ActionCardEnableReminder /
+  // ActionCardConfigureSmartLibrary / ActionCardUpgradeToPro) handle
+  // rendering; the chat store also writes a `chat_messages_proactive_state`
+  // row when one of these arrives so the autonomous tutorial scheduler
+  // sees a recent firing and respects the 30-day cooldown.
+  | {
+      readonly kind: "enable_daily_reminder"
+      readonly id: string
+      /** `'HH:mm'` 24h local time. */
+      readonly time: string
+    }
+  | {
+      readonly kind: "configure_smart_library"
+      readonly id: string
+      readonly filters: {
+        readonly authorIds?: readonly string[]
+        readonly tagIds?: readonly string[]
+        readonly sourceIds?: readonly string[]
+        readonly locationIds?: readonly string[]
+        readonly languageCodes?: readonly string[]
+      }
+    }
+  | {
+      readonly kind: "upgrade_to_pro"
+      readonly id: string
+      readonly reason: string
+    }
 
 /**
  * Decoded SSE events. `tool_start`, `tool`, `done` carry no payload —
@@ -513,6 +541,33 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     }
     if (items.length === 0) return null
     return { kind: "share_pdf", id, items }
+  }
+  if (kind === "enable_daily_reminder") {
+    const time = typeof p.time === "string" && /^\d{1,2}:\d{2}$/.test(p.time) ? p.time : "07:00"
+    return { kind: "enable_daily_reminder", id, time }
+  }
+  if (kind === "configure_smart_library") {
+    const f = (p.filters && typeof p.filters === "object") ? (p.filters as Record<string, unknown>) : {}
+    const pickStringArray = (v: unknown): readonly string[] | undefined => {
+      if (!Array.isArray(v)) return undefined
+      const xs = v.filter((x): x is string => typeof x === "string")
+      return xs.length > 0 ? xs : undefined
+    }
+    return {
+      kind: "configure_smart_library",
+      id,
+      filters: {
+        authorIds: pickStringArray(f.author_ids),
+        tagIds: pickStringArray(f.tag_ids),
+        sourceIds: pickStringArray(f.source_ids),
+        locationIds: pickStringArray(f.location_ids),
+        languageCodes: pickStringArray(f.language_codes),
+      },
+    }
+  }
+  if (kind === "upgrade_to_pro") {
+    const reason = typeof p.reason === "string" && p.reason.length > 0 ? p.reason : "generic"
+    return { kind: "upgrade_to_pro", id, reason }
   }
   return null
 }

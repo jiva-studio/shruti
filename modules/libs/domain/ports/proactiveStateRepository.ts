@@ -80,6 +80,25 @@ export interface IProactiveStateRepository {
    */
   create(input: CreateProactiveMessageInput): Promise<ProactiveStateEntry | null>
 
+  /**
+   * Attach a proactive_state row to a chat_message that was created by
+   * the regular (non-proactive) chat flow. Used by the inline-hint
+   * channel: the LLM emits an `[action:enable_daily_reminder|id=...]`
+   * marker during a normal user turn, and we record it as a firing of
+   * the matching autonomous rule so the scheduler's cooldown sees it.
+   *
+   * Returns `null` if `(ruleKind, ruleDate)` already exists OR the
+   * `chat_message_id` already has a sidecar row — both are no-ops at
+   * this level.
+   */
+  attach(
+    chatMessageId: ChatMessageId,
+    ruleKind: ProactiveRuleId,
+    ruleDate: string,
+    prepState: ProactivePrepState,
+    preparedAt?: number
+  ): Promise<void>
+
   /** All sidecar rows in the listed prep states, joined with the
    *  visible chat_messages columns. */
   listByPrepStates(
