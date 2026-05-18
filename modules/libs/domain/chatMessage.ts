@@ -87,4 +87,16 @@ export interface ChatMessage {
   actionStates?: Record<string, ChatActionState>
   /** Set when the message ended abnormally (see ChatMessageError). */
   error?: ChatMessageError
+  /** When set, the row is hidden from the UI until the user's local date
+   *  reaches this `'YYYY-MM-DD'`. Used by the proactive scheduler to
+   *  pre-bake messages that should surface on a future day. */
+  visibleOn?: string
+  /** When set, a `LocalNotification` is scheduled at this unix-seconds
+   *  moment, with `extra: { chatSessionId, chatMessageId }` so tapping
+   *  deep-links into this session. */
+  notifyAt?: number
+  /** Set when the scheduled notification actually fired (or was
+   *  delivered into the system tray). Prevents re-scheduling on the
+   *  next tick. */
+  notifiedAt?: number
 }
