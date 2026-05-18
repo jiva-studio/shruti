@@ -508,10 +508,7 @@ export const useChatStore = defineStore("chat", () => {
     const minute = Number(m[2])
     const { useConfig } = await import("@shruti/composables/useConfig.js")
     const enabled = useConfig<boolean>("settings.notificationsEnabled", false)
-    const timeRef = useConfig<[number, number] | undefined>(
-      "settings.notificationsTime",
-      undefined
-    )
+    const timeRef = useConfig<[number, number] | undefined>("settings.notificationsTime", undefined)
     enabled.value = true
     timeRef.value = [hour, minute]
     await applyDailyReminder(
@@ -538,9 +535,8 @@ export const useChatStore = defineStore("chat", () => {
       usePaywallStore().requestOpen()
       return
     }
-    const { useAutoDownloadFiltersStore } = await import(
-      "@shruti/stores/useAutoDownloadFiltersStore.js"
-    )
+    const { useAutoDownloadFiltersStore } =
+      await import("@shruti/stores/useAutoDownloadFiltersStore.js")
     const store = useAutoDownloadFiltersStore()
     await store.load()
     if (filters.authorIds) await store.setAuthors(filters.authorIds)

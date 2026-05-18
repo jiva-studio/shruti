@@ -6,10 +6,7 @@ import type { DetectResult, ResolvedProactiveRule } from "./types.js"
  *  `session_strategy: "system_session"`. Created lazily on first use. */
 const SYSTEM_SESSION_ID = "sadhu-system" as ChatSessionId
 
-function renderTitleTemplate(
-  template: string,
-  context: Record<string, unknown>
-): string {
+function renderTitleTemplate(template: string, context: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, key) => {
     const value = context[key]
     return value === undefined || value === null ? "" : String(value)

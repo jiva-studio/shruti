@@ -9,10 +9,10 @@ import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateReposi
  */
 export interface ProactiveContext {
   readonly nowMs: number
-  readonly localDate: string                  // 'YYYY-MM-DD'
-  readonly localTime: string                  // 'HH:mm'
-  readonly timezone: string                   // IANA, e.g. 'Europe/Moscow'
-  readonly locale: string                     // app language code, e.g. 'ru'
+  readonly localDate: string // 'YYYY-MM-DD'
+  readonly localTime: string // 'HH:mm'
+  readonly timezone: string // IANA, e.g. 'Europe/Moscow'
+  readonly locale: string // app language code, e.g. 'ru'
   readonly hasNotificationsPermission: boolean
   readonly isSubscribed: boolean
   readonly totalListenedSeconds: number
