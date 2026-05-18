@@ -3,29 +3,39 @@ import { Share } from "@capacitor/share"
 import type { IDatabase, IDatabaseTransfer } from "@ports/app/index.js"
 
 /**
- * Native adapter: exports the user database via SQLite's `VACUUM INTO` to
- * a cache-dir copy and hands it to `@capacitor/share` so the user can save
- * or send the file via the OS share-sheet. Imports close the live
- * connection, swap the SQLite file on disk, and hard-reload so bootstrap
- * re-opens the imported file and `runUserMigrations` brings any older
- * schema up to the current app version.
+ * Native adapter for the user database transfer port.
+ *
+ * Export: `VACUUM INTO` a cache-dir copy and hand it to `@capacitor/share`.
+ *
+ * Import: replace the live DB's contents with the imported file's
+ * contents in a single SQL transaction, then hard-reload so
+ * `runUserMigrations` brings any older schema forward to current.
+ *
+ * Why SQL replace instead of a literal file swap: the
+ * `@capacitor-community/sqlite` plugin stores the user DB under
+ * `context.getDatabasePath("userSQLite.db")` (Android) /
+ * `Documents/userSQLite.db` (iOS) — a sandboxed location that no
+ * `Directory.*` enum in `@capacitor/filesystem` v8 can reach (see
+ * `LegacyFilesystemImplementation.kt:54`). The plugin's NC mode
+ * (path-based connections) is read-only on both platforms
+ * (`CapacitorSQLite.java:391`, `CapacitorSQLite.swift:315`), and
+ * `getFromHTTPRequest` works on Android with `file://` URLs but not
+ * on iOS (`URLSession.downloadTask` rejects `file://`). So we do the
+ * swap at the SQL layer: ATTACH the imported file, drop everything
+ * in `main`, re-create every schema object from `imported.sqlite_master`
+ * (verbatim CREATE statements), and copy data 1:1. The
+ * `migrations` table comes along, so after reload
+ * `runUserMigrations` reads the imported migration history and
+ * applies the missing versions (e.g. 006_notes_meta,
+ * 007_chat_messages, 008_chat_message_actions for a pre-2026-05-16
+ * backup) on top. End-state is bit-identical to file-swap +
+ * migrate.
  */
-export function useCapacitorDatabaseTransfer(
-  userDbPath: string,
-  getUserDb: () => IDatabase | null
-): IDatabaseTransfer {
+export function useCapacitorDatabaseTransfer(getUserDb: () => IDatabase | null): IDatabaseTransfer {
   function requireDb(): IDatabase {
     const db = getUserDb()
     if (!db) throw new Error("User database is not open")
     return db
-  }
-
-  async function safeDelete(path: string): Promise<void> {
-    try {
-      await Filesystem.deleteFile({ path, directory: Directory.Data })
-    } catch {
-      // Sidecar/main file may not exist (fresh install, WAL disabled, …).
-    }
   }
 
   return {
@@ -52,8 +62,9 @@ export function useCapacitorDatabaseTransfer(
       const bytes = new Uint8Array(arrayBuffer)
 
       // SQLite files start with the 16-byte magic header "SQLite format 3\0".
-      // Reject early so a garbage file (e.g. wrong attachment) can't nuke
-      // the live user.db at the file-swap step below.
+      // Reject early so a garbage file (wrong attachment, half-downloaded
+      // archive, …) can't be ATTACHed and end up silently destroying the
+      // live DB inside the replace transaction.
       const header = "SQLite format 3\0"
       if (bytes.length < header.length) {
         throw new Error("Selected file is too small to be a SQLite database")
@@ -64,7 +75,9 @@ export function useCapacitorDatabaseTransfer(
         }
       }
 
-      // Convert to base64 for Filesystem.writeFile (Capacitor's text-oriented API).
+      // Stage to the cache dir as base64 — Filesystem.writeFile is
+      // text-oriented; we'll feed SQLite the resolved absolute path
+      // via ATTACH below.
       let binary = ""
       for (let i = 0; i < bytes.length; i++) {
         binary += String.fromCharCode(bytes[i])
@@ -78,42 +91,92 @@ export function useCapacitorDatabaseTransfer(
         data: base64,
       })
 
-      // Release the live connection so the SQLite file lock drops before
-      // we replace the file on disk. `IDatabase.close()` closes the
-      // underlying NC connection (see useCapacitorSqlPersistence).
-      const liveDb = getUserDb()
-      if (liveDb) await liveDb.close()
-
-      // Drop any sidecars left over from the previous DB; a stale `-wal`
-      // / `-journal` paired with a fresh `user.db` would confuse SQLite
-      // on the next open.
-      await safeDelete(userDbPath)
-      await safeDelete(`${userDbPath}-journal`)
-      await safeDelete(`${userDbPath}-wal`)
-      await safeDelete(`${userDbPath}-shm`)
-
-      // Copy the imported file into place. `Directory.Data` is the same
-      // root the persistence layer uses for `Filesystem.mkdir`, and the
-      // SQLite plugin resolves NC paths under the same root, so the
-      // bootstrap on reload will open this exact file.
-      await Filesystem.copy({
-        from: importName,
+      const cacheUri = await Filesystem.getUri({
+        path: importName,
         directory: Directory.Cache,
-        to: userDbPath,
-        toDirectory: Directory.Data,
       })
+      const importPath = cacheUri.uri.replace("file://", "")
+
+      const db = requireDb()
+
+      // ATTACH and PRAGMA must run outside a transaction.
+      await db.execute(`ATTACH DATABASE '${importPath}' AS imported`)
+      try {
+        await db.execute("PRAGMA foreign_keys = OFF")
+        try {
+          await db.transaction(async () => {
+            // Drop every schema object in `main`. Order matters: triggers
+            // and views can reference tables, indices need their target
+            // table to exist (so they go before tables). `sqlite_%` is
+            // SQLite-internal — never touched.
+            const mainObjects = await db.query<{ type: string; name: string }>(
+              `SELECT type, name
+                 FROM main.sqlite_master
+                 WHERE name NOT LIKE 'sqlite_%'
+                 ORDER BY CASE type
+                   WHEN 'trigger' THEN 1
+                   WHEN 'view'    THEN 2
+                   WHEN 'index'   THEN 3
+                   WHEN 'table'   THEN 4
+                   ELSE 5
+                 END`
+            )
+            for (const { type, name } of mainObjects) {
+              await db.execute(`DROP ${type.toUpperCase()} IF EXISTS main."${name}"`)
+            }
+
+            // Re-create tables from imported.sqlite_master. The stored
+            // CREATE statement is unqualified ("CREATE TABLE notes (…)")
+            // and runs against `main` (the default schema), so the live
+            // DB ends up with imported's exact schema — including the
+            // `migrations` table with its old version history.
+            const importedTables = await db.query<{ name: string; sql: string }>(
+              `SELECT name, sql FROM imported.sqlite_master
+                 WHERE type = 'table'
+                   AND sql IS NOT NULL
+                   AND name NOT LIKE 'sqlite_%'`
+            )
+            for (const { name, sql } of importedTables) {
+              await db.execute(sql)
+              await db.execute(`INSERT INTO main."${name}" SELECT * FROM imported."${name}"`)
+            }
+
+            // Then non-table objects in dependency order (indices need
+            // tables; views may reference tables; triggers can reference
+            // either). Autogenerated `sqlite_autoindex_*` rows have NULL
+            // sql and reappear automatically on table create.
+            for (const objectType of ["index", "view", "trigger"] as const) {
+              const objects = await db.query<{ sql: string }>(
+                `SELECT sql FROM imported.sqlite_master
+                   WHERE type = ?
+                     AND sql IS NOT NULL
+                     AND name NOT LIKE 'sqlite_%'`,
+                [objectType]
+              )
+              for (const { sql } of objects) {
+                await db.execute(sql)
+              }
+            }
+          })
+        } finally {
+          await db.execute("PRAGMA foreign_keys = ON")
+        }
+      } finally {
+        await db.execute("DETACH DATABASE imported")
+      }
+      await db.save()
 
       // Best-effort cleanup of the cache staging file.
       try {
         await Filesystem.deleteFile({ path: importName, directory: Directory.Cache })
       } catch {
-        // Cache eviction is acceptable; we'll let the OS reclaim it.
+        // Cache eviction is acceptable; OS will reclaim it.
       }
 
-      // Hard reload: bootstrap re-opens the freshly-written user.db and
-      // `runUserMigrations` applies whatever migrations the imported DB
-      // is missing (e.g. 006_notes_meta, 007_chat_messages for a backup
-      // taken before 2026-05-16).
+      // Hard reload: bootstrap re-opens the user DB and calls
+      // `runUserMigrations`, which reads the imported `migrations`
+      // table and applies anything missing (e.g. 006/007/008 on a
+      // pre-2026-05-16 backup) on top.
       window.location.href = "/welcome"
     },
   }
