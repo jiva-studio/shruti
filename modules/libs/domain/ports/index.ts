@@ -27,3 +27,9 @@ export type {
   IChatMessageRepository,
   CreateChatMessageInput,
 } from "./chatMessageRepository.js"
+export type {
+  IProactiveStateRepository,
+  ProactivePrepState,
+  ProactiveStateEntry,
+  CreateProactiveMessageInput,
+} from "./proactiveStateRepository.js"

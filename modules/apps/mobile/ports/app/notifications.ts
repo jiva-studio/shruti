@@ -16,9 +16,26 @@ export interface ScheduledNotification {
    * notification is one-shot.
    */
   every?: "day"
+  /**
+   * Opaque payload echoed back via the
+   * `localNotificationActionPerformed` event when the user taps the
+   * notification. The proactive scheduler stuffs
+   * `{ chatSessionId, chatMessageId }` here so the tap can deep-link
+   * into the originating chat session. Callers with no need to receive
+   * a callback (e.g., the daily reminder) leave this empty and are
+   * filtered out by the tap listener.
+   */
+  extra?: Record<string, unknown>
 }
 
 export interface INotificationScheduler {
+  /**
+   * Inspect the current permission state without prompting. Returns the
+   * same shape as `requestPermission`. Use this when you need to gate
+   * behaviour on permission (e.g., proactive scheduler eligibility)
+   * without surfacing the OS dialog.
+   */
+  checkPermission(): Promise<"granted" | "denied" | "unknown">
   requestPermission(): Promise<"granted" | "denied" | "unknown">
   schedule(n: ScheduledNotification): Promise<void>
   cancel(id: number): Promise<void>
