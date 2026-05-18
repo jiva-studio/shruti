@@ -45,7 +45,7 @@
       "mode": "pre_baked",
       "prep_window_hours": 0,
       "refresh_if_older_than_hours": 9999,
-      "session_strategy": "append_current",
+      "session_strategy": "new_session",
       "cooldown_hours": 720,
       "eligibility": [
         { "predicate": "current_streak_at_least", "value": 3 },
@@ -58,7 +58,7 @@
       "mode": "pre_baked",
       "prep_window_hours": 0,
       "refresh_if_older_than_hours": 9999,
-      "session_strategy": "append_current",
+      "session_strategy": "new_session",
       "cooldown_hours": 720,
       "dismiss_resets_after_hours": 2160,
       "eligibility": [
