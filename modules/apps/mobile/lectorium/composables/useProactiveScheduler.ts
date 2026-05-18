@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted } from "vue"
 import { useI18n } from "vue-i18n"
 import { App as CapApp } from "@capacitor/app"
 import type { PluginListenerHandle } from "@capacitor/core"
+import type { ProactiveConfig, RemoteAppConfig } from "@lib/domain/config.js"
 import type { ChatMessageId } from "@lib/domain/core.js"
 import type {
   IProactiveStateRepository,
@@ -12,6 +13,7 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
+import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
 // Side-effect import: each rule module calls `registerRule()` at load
 // time so the registry knows about it. Removing this line silently
@@ -29,6 +31,8 @@ const TICK_INTERVAL_MS = 30 * 60 * 1000
 /** Trailing window for the listening-stats predicates. Matches what
  *  the activity heatmap uses elsewhere. */
 const ACTIVITY_WINDOW_DAYS = 224
+/** Garbage-collect terminal-state rows older than 90 days. */
+const PROACTIVE_GC_RETENTION_DAYS = 90
 
 /**
  * Mobile-driven scheduler for agent-initiated chat messages. Mounted
@@ -202,8 +206,17 @@ export function useProactiveScheduler(): void {
     try {
       const result = await rule.handler.buildContent(entry, ctx)
       if (result === null) return
-      await repo.updateContent(entry.chatMessageId, result.bodyMd, result.actions)
-      await repo.updatePrepState(entry.chatMessageId, "ready", ctx.nowMs)
+      const scrubbed = await validateAndScrubActions(
+        result.bodyMd,
+        result.actions ?? {},
+        app.repositories().tracks
+      )
+      await repo.updateContent(entry.chatMessageId, scrubbed.bodyMd, scrubbed.actions)
+      await repo.updatePrepState(
+        entry.chatMessageId,
+        scrubbed.degraded ? "degraded" : "ready",
+        ctx.nowMs
+      )
     } catch (err) {
       console.warn("[proactive] buildContent threw", rule.config.id, err)
       await repo
@@ -241,11 +254,29 @@ export function useProactiveScheduler(): void {
     }
   }
 
+  async function readRemoteProactiveConfig(): Promise<ProactiveConfig | null> {
+    try {
+      const configUrl = app.storagePublicUrl.get(app.appConfig.publicRemoteConfigPath)
+      const raw = await app.filesStorage.getJson<RemoteAppConfig>(configUrl)
+      return raw.proactive ?? null
+    } catch {
+      // No remote config cached / network unavailable — fall back to
+      // bundled defaults. Master kill switch can still flip "off" via
+      // the next successful fetch.
+      return null
+    }
+  }
+
   async function tick(): Promise<void> {
     const repo = proactiveRepo()
     if (!repo) return
+    // Master kill switch — `config.proactive.master_enabled === false`
+    // in the published config.json hard-disables the subsystem so we
+    // can pull it from production without an app release.
+    const remoteConfig = await readRemoteProactiveConfig()
+    if (remoteConfig?.master_enabled === false) return
     const ctx = await gatherContext()
-    const rules = resolveRules(/* remote overrides arrive via config.json — Phase 7+ */ [])
+    const rules = resolveRules(remoteConfig?.rules ?? [])
     if (rules.length === 0) return
 
     // 1. Detect new instances.
@@ -306,8 +337,10 @@ export function useProactiveScheduler(): void {
   async function onPause(): Promise<void> {
     const repo = proactiveRepo()
     if (!repo) return
+    const remoteConfig = await readRemoteProactiveConfig()
+    if (remoteConfig?.master_enabled === false) return
     const ctx = await gatherContext()
-    const rules = resolveRules([])
+    const rules = resolveRules(remoteConfig?.rules ?? [])
     for (const rule of rules) {
       if (!rule.handler.onAppPause) continue
       if (!isEligible(rule.config.eligibility, ctx)) continue
@@ -319,8 +352,25 @@ export function useProactiveScheduler(): void {
     }
   }
 
+  async function sweepOldRows(): Promise<void> {
+    const repo = proactiveRepo()
+    if (!repo) return
+    const cutoffSec = Math.floor(Date.now() / 1000) - PROACTIVE_GC_RETENTION_DAYS * 86_400
+    try {
+      const n = await repo.sweepTerminal(cutoffSec)
+      if (n > 0 && typeof console !== "undefined") {
+        console.debug(`[proactive] swept ${n} dismissed/superseded rows`)
+      }
+    } catch (err) {
+      console.warn("[proactive] sweep failed:", err)
+    }
+  }
+
   onMounted(() => {
     void tick()
+    // GC once per cold start — running it on every tick would be
+    // wasteful and dismissed rows aren't time-sensitive.
+    void sweepOldRows()
     interval = setInterval(() => void tick(), TICK_INTERVAL_MS)
     void CapApp.addListener("appStateChange", (state) => {
       if (state.isActive) {
