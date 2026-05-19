@@ -50,6 +50,24 @@ export default {
     "Bombay morning walks", // list_tracks(location=Bombay, tag=morning_walk)
     "Vrindavan conversations", // list_tracks(location=Vrindavan, tag=conversation)
     "PDF of last lecture", // generate_track_pdf
+    // Beginner-friendly philosophy questions — all route to search_transcripts.
+    "Who is Krishna?",
+    "Why do we suffer?",
+    "What is karma?",
+    "What is reincarnation?",
+    "Why chant the mantra?",
+    "What is bhakti?",
+    "Who is a guru?",
+    "Why read the Bhagavad-gītā?",
+    "Why vegetarianism?",
+    "What is the meaning of life?",
+    "What happens after death?",
+    "What is dharma?",
+    "Who is Śrīla Prabhupāda?",
+    "Where do I start the practice?",
+    "How to develop love for God?",
+    "What is the holy name?",
+    "How to meditate on Krishna?",
   ],
 
   outlineTitle: "Outline",
