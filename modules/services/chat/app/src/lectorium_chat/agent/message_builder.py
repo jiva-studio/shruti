@@ -47,9 +47,19 @@ from lectorium_chat.domain import UserContext
 # This is server-side only and doesn't affect what's stored or
 # rendered for the user — the client keeps the full marker text.
 
-_CITE_RE = re.compile(r"\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|([^\]]*))?\]")
-_CARD_RE = re.compile(r"\[card:[A-Za-z0-9_.-]+\]")
-_OUTLINE_RE = re.compile(r"\[outline:[A-Za-z0-9_.-]+\]")
+# Captures EVERY cite-shaped marker the LLM might emit — with or
+# without `@start-end` timestamps, with or without a caption. The wide
+# match matters because the model sometimes invents non-canonical
+# track_id formats (e.g. `BG_1972_03.05` from its pre-training on
+# Vedabase) and writes them without timestamps. If we only matched the
+# canonical `track_X@1-2|caption` shape, the invented ids would leak
+# through the strip untouched, prime the next turn, and the model
+# would happily continue fabricating in that format.
+_CITE_RE = re.compile(
+    r"\[cite:[^\]\s|@]+(?:@\d+-\d+)?(?:\|([^\]]*))?\]"
+)
+_CARD_RE = re.compile(r"\[card:[^\]\s]+\]")
+_OUTLINE_RE = re.compile(r"\[outline:[^\]\s]+\]")
 _FOLLOWUP_RE = re.compile(r"\[followup:[^\]\n|]+\]")
 _WS_COLLAPSE = re.compile(r"[ \t]{2,}")
 
