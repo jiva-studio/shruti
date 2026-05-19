@@ -35,6 +35,7 @@ export interface TranscriptDialogState {
   readonly hasNoTranscripts: ComputedRef<boolean>
   readonly allowMultipleLanguages: Ref<boolean>
   readonly highlightCurrentSentence: Ref<boolean>
+  readonly autoScrollCfg: Ref<boolean>
   /**
    * True when the dialog mirrors the track currently loaded in the
    * player. Drives both seek and the prompter scaling effect — both
@@ -64,6 +65,7 @@ export function useTranscriptDialogController(
   const appLanguage = useAppLanguage()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
+  const autoScrollCfg = useConfig<boolean>("settings.autoScroll", false)
   /**
    * Saved notes for the currently open transcript, refreshed whenever the
    * track changes or a new bookmark is created. Drives the `bookmarked`
@@ -252,6 +254,7 @@ export function useTranscriptDialogController(
     hasNoTranscripts,
     allowMultipleLanguages,
     highlightCurrentSentence,
+    autoScrollCfg,
     mirrorsActivePlayer,
     onClose,
     onSeek,
