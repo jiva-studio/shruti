@@ -9,6 +9,13 @@ export type ChatRole = "user" | "assistant"
 export interface ChatTurn {
   readonly role: ChatRole
   readonly content: string
+  /** Round-tripped from a prior turn's `aliases` SSE event. Only
+   *  present on assistant turns whose `meta.aliases` was persisted.
+   *  Domain stays camelCase; `buildRequestBody` converts to the wire
+   *  snake_case shape before sending. */
+  readonly aliases?: Readonly<
+    Record<string, { readonly trackId: string; readonly startMs?: number; readonly endMs?: number }>
+  >
 }
 
 export interface OutlineItemPayload {
