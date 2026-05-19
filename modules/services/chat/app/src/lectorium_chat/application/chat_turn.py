@@ -11,8 +11,10 @@ from __future__ import annotations
 import re
 from typing import Any, AsyncIterator, Awaitable, Callable
 
+from lectorium_chat.agent.aliased_tools import build_aliased_tools
 from lectorium_chat.agent.events import AgentEvent
 from lectorium_chat.agent.llm_loop import run_llm_loop
+from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.message_builder import build_messages
 from lectorium_chat.agent.tools import (
     EMITS_EVENTS,
@@ -20,6 +22,7 @@ from lectorium_chat.agent.tools import (
     TOOLS,
     build_personalized_tools,
 )
+from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain import UserContext
@@ -91,10 +94,21 @@ async def run_chat_turn(
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
     deps: AppDeps | None = None,
 ) -> AsyncIterator[AgentEvent]:
-    """Run one chat turn end-to-end, yielding agent events as they stream."""
+    """Run one chat turn end-to-end, yielding agent events as they stream.
+
+    Numbered-refs protocol: the LLM never sees real `track_id`s. Tool
+    results are post-processed to expose only integer refs the LLM
+    cites by (`[cite:N|caption]`, `[card:N]`, `[outline:N]`). The
+    `MarkerExpander` filter expands those integers back to real
+    catalog ids before the marker hits the client. Action tools that
+    take track_ids accept the same integer refs from the LLM and the
+    wrapper translates back."""
     settings = get_settings()
+    aliases = TurnAliasMap()
     messages = build_messages(history, lang, user_context)
     tools = build_personalized_tools(TOOLS, user_context)
+    tools = build_aliased_tools(tools, aliases)
+    expander = MarkerExpander(aliases, request_id=request_id)
 
     async def _on_done(llm_prose: str) -> None:
         if deps is None:
@@ -114,4 +128,21 @@ async def run_chat_turn(
         is_disconnected=is_disconnected,
         on_done=_on_done,
     ):
+        if ev.type == "delta":
+            cleaned = await expander.feed(ev.data.get("text", ""))
+            if cleaned:
+                yield AgentEvent(type="delta", data={"text": cleaned})
+            continue
+        # Stream-terminating or stream-resetting events: flush any
+        # partial-marker tail FIRST so the client sees its last text
+        # before the terminator. `tool_start` wipes the client-side
+        # accumulator (the "thinking out loud" prelude), so we drop
+        # the buffered tail entirely for it — there's nothing to
+        # forward downstream of a wiped bubble.
+        if ev.type in ("done", "error"):
+            tail = await expander.flush()
+            if tail:
+                yield AgentEvent(type="delta", data={"text": tail})
+        elif ev.type == "tool_start":
+            await expander.flush()
         yield ev
