@@ -38,6 +38,7 @@ export interface SettingsControllerReturn {
   showActivityTracker: Ref<boolean>
   autoArchiveDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
+  autoScroll: Ref<boolean>
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
@@ -79,6 +80,7 @@ export function useSettingsController(): SettingsControllerReturn {
   /* Config v-models */
   const appLanguage = useConfig<string>("settings.appLanguage", "en")
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
+  const autoScroll = useConfig<boolean>("settings.autoScroll", false)
   const openTranscriptAutomatically = useConfig<boolean>(
     "settings.openTranscriptAutomatically",
     false
@@ -143,6 +145,7 @@ export function useSettingsController(): SettingsControllerReturn {
     showActivityTracker,
     autoArchiveDelay,
     highlightCurrentSentence,
+    autoScroll,
     openTranscriptAutomatically,
     notificationsEnabled,
     notificationsTime,

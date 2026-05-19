@@ -1,3 +1,4 @@
+export { default as AutomaticScrollSettingsItem } from "./AutomaticScrollSettingsItem.vue"
 export { default as HighlightCurrentSentenceSettingsItem } from "./HighlightCurrentSentenceSettingsItem.vue"
 export { default as OpenTranscriptAutomaticallySettingsItem } from "./OpenTranscriptAutomaticallySettingsItem.vue"
 export { default as ShowPlayerProgressSettingsItem } from "./ShowPlayerProgressSettingsItem.vue"

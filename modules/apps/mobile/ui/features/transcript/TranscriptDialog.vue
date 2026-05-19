@@ -10,6 +10,7 @@
         class="close-button"
         fill="clear"
         size="small"
+        tabindex="-1"
         :aria-label="$t('app.close')"
         @click="emit('close')"
       >
@@ -93,6 +94,15 @@ const props = defineProps<{
   duration: number
   allowMultipleLanguages: boolean
   shouldHighlightCurrentSentence: boolean
+  /**
+   * Pro-gated continuous-follow flag. When true, the dialog scrolls to
+   * the active paragraph on cold-open AND keeps it in view during
+   * playback (lazy-follow: scrolls only when the active block is about
+   * to leave the viewport). When false, no auto-scroll happens — the
+   * user scrolls manually. The parent AND-gates this on subscription
+   * status and `mirrorsActivePlayer` (no live position → no follow).
+   */
+  autoScroll?: boolean
   /** True while the transcript is being fetched. Shows a spinner. */
   isLoading?: boolean
   /** Non-null when the transcript fetch failed. Shows the error text. */
@@ -144,83 +154,248 @@ const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcrip
 const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
 
 /**
- * Has the user manually scrolled since the auto-scroll attempted to
- * land on the active paragraph? Set on the first touchstart/wheel after
- * `onModalPresented` so a smooth animation in-flight stops fighting the
- * user, and the retry watcher below stays out of the way.
+ * Auto-scroll machinery for the Pro "Automatic scroll" feature.
  *
- * Reset when the modal closes so the next open is a fresh attempt.
+ * Model: **visibility-derived engagement**, no input listeners.
+ *
+ *  - **Cold-open** + **seek/jump** (non-adjacent active change):
+ *    force-scroll to the new active block. The user has explicitly
+ *    asked to be there — either by opening the transcript or by
+ *    pressing skip — so we move them.
+ *
+ *  - **Natural playback advance** (active block became the
+ *    next-sibling block of the previous one): scroll only if the
+ *    user is **engaged**, i.e. the active block is currently visible
+ *    in the scroll viewport. If it's off-screen, the user is reading
+ *    elsewhere — don't yank them back. Engagement is rechecked at
+ *    every active-block change, so the moment the user scrolls back
+ *    to where playback is, follow re-engages automatically on the
+ *    next block transition.
+ *
+ *  - **Seek-transient guard**: native players sometimes emit
+ *    `progress ≈ 0` mid-seek between the old position and the real
+ *    target. We skip such position changes entirely so the active
+ *    class never flips to the first block.
+ *
+ * No `wheel`/`touchmove` listeners. They were the source of repeated
+ * pause-on-trackpad-inertia bugs: macOS trackpads fire a long tail of
+ * small `deltaY` wheel events after the user stops, which is
+ * indistinguishable from real scroll input. Deriving engagement from
+ * the active block's DOM-visibility at active-change time sidesteps
+ * the whole class of input-event noise.
+ *
+ * No `IntersectionObserver`. Visibility is computed synchronously
+ * from `getBoundingClientRect()` at each active-block change — that
+ * single sample is all the engagement signal we need.
+ *
+ * All scrolls target `scrollEl` (the inner-scroll element returned by
+ * `IonContent.getScrollElement()`) directly via `scrollTo` with a
+ * computed target. `Element.scrollIntoView` was scrolling two
+ * ancestor scroll contexts in tandem on this layout, which the user
+ * saw as a double motion.
  */
-const userScrolled = ref<boolean>(false)
-const autoScrollSettled = ref<boolean>(false)
 
-function attachUserScrollListeners(host: HTMLElement): () => void {
-  const onUserScroll = (): void => {
-    userScrolled.value = true
-  }
-  host.addEventListener("touchstart", onUserScroll, { passive: true, once: true })
-  host.addEventListener("wheel", onUserScroll, { passive: true, once: true })
-  return () => {
-    host.removeEventListener("touchstart", onUserScroll)
-    host.removeEventListener("wheel", onUserScroll)
-  }
+// ---- Constants --------------------------------------------------------
+
+// Smooth-scroll throttle (iOS WebKit fights queued animations).
+const SCROLL_THROTTLE_MS = 400
+// Bottom comfort band as a fraction of host height. On natural
+// block-to-block transitions we scroll only when the active block's
+// bottom drifts past this line — until then it's still comfortably
+// in the upper portion of the viewport.
+const BOTTOM_BAND = 0.75
+// Where the block lands when we *do* scroll — just a small gap from
+// the top of the visible area so the reader sees mostly upcoming
+// content, not previously-read context. Teleprompter style.
+const UPPER_OFFSET_FRACTION = 0.1
+// Position-drop heuristic for the seek-transient guard.
+const TRANSIENT_NEAR_ZERO_MS = 500
+const TRANSIENT_PREV_MIN_MS = 1000
+
+// ---- State ------------------------------------------------------------
+
+let scrollHost: HTMLElement | null = null
+let scrollEl: HTMLElement | null = null
+let lastActiveEl: HTMLElement | null = null
+let lastScrollAt = 0
+let lastSeenPosition = 0
+let detachWindowFocus: (() => void) | null = null
+
+// ---- Helpers ----------------------------------------------------------
+
+function isInViewport(el: HTMLElement): boolean {
+  if (!scrollEl) return false
+  const hostRect = scrollEl.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  return elRect.bottom > hostRect.top && elRect.top < hostRect.bottom
 }
 
-let detachUserScroll: (() => void) | null = null
-
-function tryScrollToActive(host: HTMLElement): boolean {
-  const active = host.querySelector(".transcript-text .paragraph") as HTMLElement | null
-  if (!active) return false
-  // Smooth scroll so the jump from "top of doc" to the current paragraph
-  // reads as a deliberate animation rather than an instant jolt — matches
-  // how the prompter scaling already eases in around the same paragraph.
-  active.scrollIntoView({ behavior: "smooth", block: "center" })
-  return true
+function isDriftingOffBottom(el: HTMLElement): boolean {
+  if (!scrollEl) return false
+  const hostRect = scrollEl.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  const bottomRel = (elRect.bottom - hostRect.top) / hostRect.height
+  return bottomRel > BOTTOM_BAND
 }
 
-/**
- * Snap the scroll position onto the active paragraph as soon as the
- * modal animation finishes. The block layout is identified by the
- * `.paragraph` class set in `TranscriptText.vue` (the prompter scales
- * up the currently-playing group). If there's no active block — e.g.
- * `position` is still 0 or this is a preview-mode open — the watcher
- * below retries once `position` propagates and a `.paragraph` exists.
- */
-async function onModalPresented(): Promise<void> {
+function isAdjacentBlock(prev: HTMLElement | null, next: HTMLElement): boolean {
+  if (!prev) return false
+  return prev.nextElementSibling === next
+}
+
+function scrollToActive(el: HTMLElement): void {
+  if (!scrollEl) return
+  const now = Date.now()
+  if (now - lastScrollAt < SCROLL_THROTTLE_MS) return
+  const hostRect = scrollEl.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  const upperOffset = hostRect.height * UPPER_OFFSET_FRACTION
+  const elTopInScroll = elRect.top - hostRect.top + scrollEl.scrollTop
+  const targetTop = Math.max(0, elTopInScroll - upperOffset)
+  scrollEl.scrollTo({ top: targetTop, behavior: "smooth" })
+  lastScrollAt = now
+}
+
+// ---- Lifecycle --------------------------------------------------------
+
+function onWindowFocus(): void {
+  // When the browser tab regains focus, IonModal's focus trap (or the
+  // browser itself) may re-focus the first focusable element in the
+  // modal and auto-scroll the viewport to it — usually the close
+  // button at the top, which yanks us to scrollTop=0 instantly. Wait
+  // for the focus-driven scroll to settle (two frames), then re-snap
+  // to whatever the current active block is.
+  if (!props.autoScroll || !open.value || !lastActiveEl) return
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!lastActiveEl) return
+      // Bypass throttle — focus-return needs an immediate correction.
+      lastScrollAt = 0
+      scrollToActive(lastActiveEl)
+    })
+  })
+}
+
+async function attachMachinery(): Promise<void> {
+  if (scrollHost) return // already attached
+  if (!props.autoScroll) return
+  const ionContent = contentRef.value
+  if (!ionContent) return
+  scrollHost = ionContent.$el as HTMLElement
+  if (!scrollHost) return
+  window.addEventListener("focus", onWindowFocus)
+  detachWindowFocus = () => window.removeEventListener("focus", onWindowFocus)
+  // ion-content's `getScrollElement()` lives on the web-component DOM
+  // node (`$el`), NOT on Vue's component wrapper. Calling it on the
+  // wrapper returns undefined and we end up with `scrollEl ===
+  // ion-content` — which isn't itself scrollable, so `scrollTo()` is
+  // a no-op. Resolve via $el; fall back to a DOM query for the
+  // `.inner-scroll` div (older / non-shadow Ionic builds).
+  const ionEl = scrollHost as unknown as {
+    getScrollElement?: () => Promise<HTMLElement>
+  }
+  let inner: HTMLElement | undefined
+  if (typeof ionEl.getScrollElement === "function") {
+    inner = await ionEl.getScrollElement()
+  }
+  if (!inner) {
+    inner = (scrollHost.querySelector(".inner-scroll") as HTMLElement | null) ?? undefined
+  }
+  scrollEl = inner ?? scrollHost
+}
+
+async function performColdOpen(): Promise<void> {
+  if (!scrollHost) return
+  // Let IonModal's auto-focus / focus-trap settle first. Without this
+  // wait the browser's "scroll focused element into view" kicks in
+  // *after* our cold-open scroll and snaps the viewport back to the
+  // first focusable child (the close-button, which lives at the top).
   await nextTick()
-  userScrolled.value = false
-  autoScrollSettled.value = false
-  const host = contentRef.value?.$el
-  if (!host) return
-  detachUserScroll = attachUserScrollListeners(host)
-  if (tryScrollToActive(host)) autoScrollSettled.value = true
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+  const active = scrollHost.querySelector(".transcript-text .paragraph") as HTMLElement | null
+  if (!active) return
+  scrollToActive(active)
+  lastActiveEl = active
 }
 
-// Cold-open retry: if `position` was 0 (or the active paragraph hadn't
-// rendered yet) at modal-present time, retry on the first `position`
-// update. The user-scroll guard stops the retry from yanking the
-// viewport after a manual pull.
+function teardownAutoScroll(): void {
+  detachWindowFocus?.()
+  detachWindowFocus = null
+  scrollHost = null
+  scrollEl = null
+  lastActiveEl = null
+  lastScrollAt = 0
+  lastSeenPosition = 0
+}
+
+async function onModalPresented(): Promise<void> {
+  await attachMachinery()
+  await performColdOpen()
+}
+
+// ---- Position-driven follow ------------------------------------------
+
 watch(
   () => props.position,
   async () => {
-    if (autoScrollSettled.value) return
-    if (userScrolled.value) return
-    if (!open.value) return
+    const newPos = props.position
+    const prevPos = lastSeenPosition
+    lastSeenPosition = newPos
+    if (!props.autoScroll || !open.value || !scrollHost) return
+
+    // Seek-transient guard. The next emit carries the real target —
+    // skip this active-class flip to the first block.
+    const isTransientNearZero =
+      newPos < TRANSIENT_NEAR_ZERO_MS && prevPos - newPos > TRANSIENT_PREV_MIN_MS
+    if (isTransientNearZero) return
+
     await nextTick()
-    const host = contentRef.value?.$el
-    if (!host) return
-    if (tryScrollToActive(host)) autoScrollSettled.value = true
+    const active = scrollHost.querySelector(".transcript-text .paragraph") as HTMLElement | null
+    if (!active || active === lastActiveEl) return
+    const prev = lastActiveEl
+    lastActiveEl = active
+
+    if (isAdjacentBlock(prev, active)) {
+      // Natural block-to-block transition. Scroll only when the active
+      // block has drifted past the bottom comfort band — i.e. it's
+      // visible *and* approaching the lower edge. Three cases we
+      // intentionally leave alone:
+      //   - active off-screen entirely: user is reading elsewhere;
+      //   - active above the upper band: user scrolled forward past
+      //     where playback is and is reading upcoming content — don't
+      //     yank them back;
+      //   - active in the comfort zone: comfortable, no need to move.
+      if (!isInViewport(active)) return
+      if (!isDriftingOffBottom(active)) return
+      scrollToActive(active)
+    } else {
+      // Non-adjacent: a seek or paragraph jump. Treat as an explicit
+      // user intent and scroll to the new active regardless of
+      // current viewport state. The transient guard above already
+      // filters mid-seek `position = 0` flicker.
+      scrollToActive(active)
+    }
   }
 )
 
-// Reset on close so the next open starts clean.
 watch(open, (next) => {
   if (next) return
-  autoScrollSettled.value = false
-  userScrolled.value = false
-  detachUserScroll?.()
-  detachUserScroll = null
+  teardownAutoScroll()
 })
+
+// Mid-session toggle. On → attach machinery only (no cold-open
+// re-scroll: an unrelated reactive flip shouldn't yank the viewport).
+// Off → teardown.
+watch(
+  () => props.autoScroll,
+  (enabled) => {
+    if (!open.value) return
+    if (enabled) void attachMachinery()
+    else teardownAutoScroll()
+  }
+)
 
 function onTextSelected(event: TextSelectedEvent): void {
   lastNoteTappedEvent.value = undefined

@@ -32,6 +32,11 @@
       :duration="dialog.duration.value"
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
       :should-highlight-current-sentence="dialog.highlightCurrentSentence.value"
+      :auto-scroll="
+        dialog.autoScrollCfg.value &&
+        dialog.mirrorsActivePlayer.value &&
+        paywallSubscription.isSubscribed
+      "
       :enable-active-prominence="dialog.mirrorsActivePlayer.value"
       :is-loading="dialog.isLoading.value"
       :error-message="dialog.error.value"

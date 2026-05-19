@@ -156,6 +156,10 @@ export default {
       title: "Highlight sentence",
       description: "Follow the current sentence in the transcript",
     },
+    autoScroll: {
+      title: "Automatic scroll",
+      description: "Follow the current paragraph while audio plays",
+    },
     showAutomatically: {
       title: "Open transcript automatically",
       description: "Open transcript when playing a lecture",
