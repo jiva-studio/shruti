@@ -13,10 +13,67 @@ anchors (`now`, `current_track_id`, `focus`) so the LLM can resolve
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from lectorium_chat.agent.prompts import SYSTEM_PROMPT
 from lectorium_chat.domain import UserContext
+
+
+# ── History compaction ──────────────────────────────────────────────────
+#
+# When a multi-turn conversation comes back as history on turn N+1, the
+# prior assistant messages still carry the inline chip / followup
+# markers the renderer needs. Sending them verbatim to the LLM:
+#   1. Wastes tokens — `[cite:track_OkPVGYhR5PPu@630560-684400|caption]`
+#      is ~60 chars; a reply with 10 citations adds ~600 chars to every
+#      subsequent turn.
+#   2. Primes hallucination — the model sees its own previous prose
+#      with `[cite:track_…]` patterns and starts inventing new ids by
+#      analogy. Empirically: Gemini Flash Lite's track-id fabrications
+#      in long sessions (the "Что такое бхакти" case) cluster on
+#      turns 3+, after the marker pattern is well-established in
+#      context.
+#
+# We strip chip-class markers (cite/card/outline/followup) from prior
+# assistant prose before sending to the LLM. The chip text — the
+# caption — is preserved for cite so the surrounding sentence still
+# reads naturally ("Прабхупада говорит, что бхакти — это «совершенство
+# жизни» — это путь служения").
+#
+# Action markers (`[action:create_playlist|id=…]`) STAY — the model
+# needs to remember it proposed an action in a prior turn.
+#
+# This is server-side only and doesn't affect what's stored or
+# rendered for the user — the client keeps the full marker text.
+
+_CITE_RE = re.compile(r"\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|([^\]]*))?\]")
+_CARD_RE = re.compile(r"\[card:[A-Za-z0-9_.-]+\]")
+_OUTLINE_RE = re.compile(r"\[outline:[A-Za-z0-9_.-]+\]")
+_FOLLOWUP_RE = re.compile(r"\[followup:[^\]\n|]+\]")
+_WS_COLLAPSE = re.compile(r"[ \t]{2,}")
+
+
+def _strip_chip_markers(content: str) -> str:
+    """Drop chip / followup markers from a prior assistant message.
+
+    `[cite:track@start-end|caption]` → `«caption»` (keep the semantic
+    label so the sentence still parses), `[cite:track@start-end]` (no
+    caption) → empty.
+    `[card:…]`, `[outline:…]`, `[followup:…]` → empty.
+    `[action:…|id=…]` markers are left untouched.
+    """
+    def _cite_sub(m: re.Match[str]) -> str:
+        caption = (m.group(1) or "").strip()
+        return f"«{caption}»" if caption else ""
+
+    out = _CITE_RE.sub(_cite_sub, content)
+    out = _CARD_RE.sub("", out)
+    out = _OUTLINE_RE.sub("", out)
+    out = _FOLLOWUP_RE.sub("", out)
+    # Tidy double-spaces left by deletions; preserve newlines.
+    out = _WS_COLLAPSE.sub(" ", out)
+    return out.strip()
 
 
 _LANG_NAME = {"ru": "Russian", "en": "English"}
@@ -55,12 +112,21 @@ def build_messages(
     )
     ctx_directive = _format_user_context(user_context)
     sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
-    # Strip any non-standard fields from history (defensive)
-    clean = [
-        {"role": m["role"], "content": m["content"]}
-        for m in history
-        if m.get("role") in ("user", "assistant") and m.get("content")
-    ]
+    # Strip any non-standard fields from history (defensive). For prior
+    # assistant turns, also strip chip-class markers so the model's
+    # context doesn't get polluted with marker patterns to imitate (the
+    # source of the turn-2+ id-fabrication regression on weaker models).
+    clean: list[dict[str, Any]] = []
+    for m in history:
+        role = m.get("role")
+        content = m.get("content")
+        if role not in ("user", "assistant") or not content:
+            continue
+        if role == "assistant":
+            content = _strip_chip_markers(content)
+            if not content:
+                continue
+        clean.append({"role": role, "content": content})
     return [sys, *clean]
 
 
