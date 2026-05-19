@@ -80,6 +80,7 @@ export default defineConfig({
         find: "@lib/persistence/user",
         replacement: path.resolve(__dirname, "./submodules/persistence-user"),
       },
+      { find: "@docs", replacement: path.resolve(__dirname, "./submodules/docs") },
     ],
   },
 })
