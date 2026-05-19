@@ -8,17 +8,12 @@ import {
   type FocusFragmentPayload,
 } from "@lectorium/composables/useTrackUserState.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useToast } from "@lectorium/services/useToast.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import {
   extractFollowups,
   parseChatMarkers,
 } from "@lectorium/views/Chat/composables/useMarkerParser.js"
-import {
-  addTracksToPlaylist,
-  runChatTurn,
-  type RunChatTurnEvent,
-} from "@lib/application"
+import { addTracksToPlaylist, runChatTurn, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -112,7 +107,6 @@ export const useChatStore = defineStore("chat", () => {
   const appLanguage = useAppLanguage()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
-  const toast = useToast()
   const { t } = useI18n()
 
   const sessions = ref<ChatSession[]>([])

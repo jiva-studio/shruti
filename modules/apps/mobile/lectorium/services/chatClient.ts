@@ -342,10 +342,8 @@ function buildRequestBody(
   const wireMessages = messages.map((m) => {
     const out: Record<string, unknown> = { role: m.role, content: m.content }
     if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
-      const wireAliases: Record<
-        string,
-        { track_id: string; start_ms?: number; end_ms?: number }
-      > = {}
+      const wireAliases: Record<string, { track_id: string; start_ms?: number; end_ms?: number }> =
+        {}
       for (const [k, v] of Object.entries(m.aliases)) {
         const entry: { track_id: string; start_ms?: number; end_ms?: number } = {
           track_id: v.trackId,
