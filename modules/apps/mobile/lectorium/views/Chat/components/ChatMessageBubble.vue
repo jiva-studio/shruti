@@ -1,5 +1,12 @@
 <template>
-  <div :class="['bubble-row', message.role]" :data-message-id="message.id">
+  <div
+    :class="[
+      'bubble-row',
+      message.role,
+      { 'streaming-placeholder': message.role === 'assistant' && message.streaming },
+    ]"
+    :data-message-id="message.id"
+  >
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
       <template v-if="message.role === 'user'">
         <span class="user-text">{{ message.content }}</span>
@@ -223,6 +230,27 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 
 .bubble-row.assistant {
   justify-content: flex-start;
+}
+
+/* While the assistant placeholder is streaming, reserve enough vertical
+ * room below the user's just-sent message that the controller's
+ * `scrollMessageToTop` can actually move it to the top of the viewport.
+ * Without this the placeholder is only ~50px tall (just the thinking
+ * dots) and there's nothing to scroll into, so the user message stays
+ * pinned to the bottom of the visible area.
+ *
+ * `svh` (small viewport height) matches the layout the keyboard leaves
+ * us with on mobile — the keyboard doesn't push this bubble off-screen.
+ * The 200px deduction accounts for the fixed-top fade (~56px), the
+ * input bar (~64px) and ~80px safety margin for OS gestures and the
+ * just-sent user bubble.
+ *
+ * Once the turn is finalised, the store swaps the streaming placeholder
+ * out for the real message (`m.streaming` becomes undefined), the class
+ * binding drops, and the rule disappears — no permanent empty space
+ * below the conversation. */
+.bubble-row.streaming-placeholder {
+  min-height: calc(100svh - 200px);
 }
 
 .bubble {
