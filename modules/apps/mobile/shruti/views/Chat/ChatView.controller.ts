@@ -302,10 +302,7 @@ export function useChatController(): ChatControllerReturn {
       // For the placeholder case the scroll target is the user
       // message right above it, not the placeholder itself. Walk
       // from the end to find the last user message in the list.
-      const target =
-        isUserMessage
-          ? snapshot.id
-          : findLastUserMessageId(store.messages)
+      const target = isUserMessage ? snapshot.id : findLastUserMessageId(store.messages)
       if (target) scrollMessageToTop(target)
     },
     { deep: false }

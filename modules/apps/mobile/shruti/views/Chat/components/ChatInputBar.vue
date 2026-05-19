@@ -5,11 +5,13 @@
         ref="textareaRef"
         v-model="text"
         rows="1"
-        :placeholder="$t('chat.placeholder')"
+        :placeholder="placeholder"
         :disabled="sending"
         class="input"
         @keydown="onKeydown"
         @input="resize"
+        @focus="focused = true"
+        @blur="focused = false"
       />
       <button
         type="button"
@@ -28,7 +30,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue"
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import { IconArrowUp } from "@tabler/icons-vue"
 
@@ -37,11 +40,64 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ send: [text: string] }>()
 
+const { t, tm } = useI18n()
+
 const text = ref("")
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const focused = ref(false)
 
 const hasText = computed(() => text.value.trim().length > 0)
 const canSend = computed(() => !props.sending && hasText.value)
+
+/** Pool the placeholder rotates through — pure suggestion list. The
+ *  generic "ask a question" string used to live here too, but it's dead
+ *  weight: every suggestion is itself a usable question, so showing the
+ *  generic prompt just wastes a rotation slot. Keeping this in sync with
+ *  the chips means newcomers see the same beginner-friendly questions in
+ *  both places. */
+const placeholderPool = computed<string[]>(() => {
+  const raw = tm("chat.suggestions") as unknown
+  return Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === "string" && x.length > 0)
+    : []
+})
+
+/** Random start so different sessions don't all open on the same question. */
+const placeholderIndex = ref(Math.floor(Math.random() * 1000))
+const placeholder = computed<string>(() => {
+  const pool = placeholderPool.value
+  if (pool.length === 0) return t("chat.placeholder")
+  return pool[placeholderIndex.value % pool.length] ?? t("chat.placeholder")
+})
+
+let rotationTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearRotation(): void {
+  if (rotationTimer !== null) {
+    clearTimeout(rotationTimer)
+    rotationTimer = null
+  }
+}
+
+/** Schedule the next placeholder swap. Random 5–7s so the cycle feels
+ *  alive rather than metronomic. Paused while the textarea is focused or
+ *  already has text — moving the placeholder under the user's caret would
+ *  be jarring, and when there's text the placeholder isn't visible anyway. */
+function scheduleNextRotation(): void {
+  clearRotation()
+  if (focused.value || hasText.value) return
+  if (placeholderPool.value.length <= 1) return
+  const delay = 5000 + Math.floor(Math.random() * 2001)
+  rotationTimer = setTimeout(() => {
+    placeholderIndex.value = (placeholderIndex.value + 1) % placeholderPool.value.length
+    scheduleNextRotation()
+  }, delay)
+}
+
+watch([focused, hasText], scheduleNextRotation)
+
+onMounted(scheduleNextRotation)
+onUnmounted(clearRotation)
 
 function resize(): void {
   const el = textareaRef.value
