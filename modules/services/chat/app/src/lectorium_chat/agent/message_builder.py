@@ -55,23 +55,34 @@ _WS_COLLAPSE = re.compile(r"[ \t]{2,}")
 
 
 def _strip_chip_markers(content: str) -> str:
-    """Drop chip / followup markers from a prior assistant message.
+    """Mask chip-marker payloads in a prior assistant message.
 
-    `[cite:track@start-end|caption]` → `«caption»` (keep the semantic
-    label so the sentence still parses), `[cite:track@start-end]` (no
-    caption) → empty.
-    `[card:…]`, `[outline:…]`, `[followup:…]` → empty.
-    `[action:…|id=…]` markers are left untouched.
+    We keep the marker SHAPE (`[cite:…|caption]`, `[card:…]`,
+    `[outline:…]`) so the model still sees "I cited / carded /
+    outlined here" — losing the shape entirely (first iteration:
+    replacing `[cite:…|caption]` with `«caption»`) made weaker models
+    stop emitting citations on turn 2+, since the history no longer
+    showed the pattern they were supposed to mimic.
+
+    We REMOVE the concrete `track_id` and timestamps so:
+      - the model can't copy a stale id as if it were freshly searched
+        (the original "priming-hallucination" problem),
+      - the byte-count savings are still meaningful in long sessions
+        (a 16-char id + 13-char timestamp range per marker × N markers).
+
+    `[followup:…]` is UI-only and dropped entirely.
+    `[action:…|id=…]` is left untouched — the model needs the real
+    `action_id` so it knows which action card it already proposed.
     """
     def _cite_sub(m: re.Match[str]) -> str:
         caption = (m.group(1) or "").strip()
-        return f"«{caption}»" if caption else ""
+        return f"[cite:…|{caption}]" if caption else "[cite:…]"
 
     out = _CITE_RE.sub(_cite_sub, content)
-    out = _CARD_RE.sub("", out)
-    out = _OUTLINE_RE.sub("", out)
+    out = _CARD_RE.sub("[card:…]", out)
+    out = _OUTLINE_RE.sub("[outline:…]", out)
     out = _FOLLOWUP_RE.sub("", out)
-    # Tidy double-spaces left by deletions; preserve newlines.
+    # Tidy double-spaces left by followup deletions; preserve newlines.
     out = _WS_COLLAPSE.sub(" ", out)
     return out.strip()
 
