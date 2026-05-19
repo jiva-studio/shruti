@@ -1,5 +1,12 @@
 <template>
-  <div :class="['bubble-row', message.role]" :data-message-id="message.id">
+  <div
+    :class="[
+      'bubble-row',
+      message.role,
+      { 'streaming-placeholder': message.role === 'assistant' && message.streaming },
+    ]"
+    :data-message-id="message.id"
+  >
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
       <template v-if="message.role === 'user'">
         <span class="user-text">{{ message.content }}</span>
@@ -42,13 +49,6 @@
               v-else-if="token.kind === 'action' && token.actionKind === 'create_playlist'"
               :action-id="token.actionId"
               :payload="playlistPayload(token.actionId)"
-              :state="actionState(token.actionId)"
-              @confirm="onConfirmAction"
-            />
-            <ActionCardNote
-              v-else-if="token.kind === 'action' && token.actionKind === 'save_note'"
-              :action-id="token.actionId"
-              :payload="notePayload(token.actionId)"
               :state="actionState(token.actionId)"
               @confirm="onConfirmAction"
             />
@@ -109,7 +109,6 @@ import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
 import OutlineCard from "./OutlineCard.vue"
 import ActionCardPlaylist from "./ActionCardPlaylist.vue"
-import ActionCardNote from "./ActionCardNote.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
@@ -163,15 +162,7 @@ function playlistPayload(
   actionId: string
 ): Extract<ActionPayload, { kind: "create_playlist" }> | undefined {
   const a = props.message.actions?.[actionId]
-  // No salvage here — useChatStore.sendMessage's finalisation already
-  // rebuilt orphan create_playlist actions from sibling [card:...]
-  // markers before persisting. The bubble is presentation-only.
   return a && a.kind === "create_playlist" ? a : undefined
-}
-
-function notePayload(actionId: string): Extract<ActionPayload, { kind: "save_note" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "save_note" ? a : undefined
 }
 
 function sharePdfPayload(
@@ -239,6 +230,27 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 
 .bubble-row.assistant {
   justify-content: flex-start;
+}
+
+/* While the assistant placeholder is streaming, reserve enough vertical
+ * room below the user's just-sent message that the controller's
+ * `scrollMessageToTop` can actually move it to the top of the viewport.
+ * Without this the placeholder is only ~50px tall (just the thinking
+ * dots) and there's nothing to scroll into, so the user message stays
+ * pinned to the bottom of the visible area.
+ *
+ * `svh` (small viewport height) matches the layout the keyboard leaves
+ * us with on mobile — the keyboard doesn't push this bubble off-screen.
+ * The 200px deduction accounts for the fixed-top fade (~56px), the
+ * input bar (~64px) and ~80px safety margin for OS gestures and the
+ * just-sent user bubble.
+ *
+ * Once the turn is finalised, the store swaps the streaming placeholder
+ * out for the real message (`m.streaming` becomes undefined), the class
+ * binding drops, and the rule disappears — no permanent empty space
+ * below the conversation. */
+.bubble-row.streaming-placeholder {
+  min-height: calc(100svh - 200px);
 }
 
 .bubble {

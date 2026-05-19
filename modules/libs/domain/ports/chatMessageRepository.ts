@@ -1,6 +1,7 @@
 import type {
   ChatActionPayload,
   ChatActionState,
+  ChatAliasEntry,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -20,6 +21,9 @@ export interface CreateChatMessageInput {
   /** Ordered list of follow-up chip texts emitted by the LLM via
    *  `[followup:<text>]` markers. */
   readonly followups?: readonly string[]
+  /** Integer→chunk alias map for the chip markers in `content` — see
+   *  `ChatMessage.aliases`. */
+  readonly aliases?: Record<string, ChatAliasEntry>
 }
 
 /**
