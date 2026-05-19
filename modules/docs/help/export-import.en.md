@@ -23,8 +23,7 @@ catalog automatically.
 1. Open **Settings → Data → Export user data**.
 2. On a phone, the system share sheet opens — pick where to save (cloud
    drive, email, Files, etc.). On the web, the browser starts a download.
-3. The file is named `shruti.<timestamp>.db` and is a regular SQLite
-   database.
+3. The file is a regular SQLite database.
 
 You can export as often as you like — exporting does not change anything in
 the app.

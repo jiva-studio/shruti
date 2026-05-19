@@ -14,6 +14,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODULES_ROOT="$(cd "$ROOT/../.." && pwd)"
 cd "$ROOT"
 
 SERVER_IP="${SERVER_IP:?SERVER_IP env var required (e.g. 159.69.12.34)}"
@@ -87,13 +88,33 @@ echo "  installed: $(docker --version), $(docker compose version | head -1)"
 REMOTE_BOOTSTRAP
 echo "✓ docker ready"
 
-# ── 4. POSTGRES_PASSWORD: generate once, persist on server. ─────────
+# ── 4a. Migrate legacy server layout (one-time). ────────────────────
+# Old layout: $REMOTE_DIR/{app,compose,Dockerfile,...} (flat).
+# New layout: $REMOTE_DIR/services/chat/{app,compose,Dockerfile,...} +
+#             $REMOTE_DIR/docs/help (so docker build context = $REMOTE_DIR
+#             can reach docs/help relative to services/chat/compose).
+ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" 'bash -s' <<REMOTE_MIGRATE
+set -euo pipefail
+cd $REMOTE_DIR 2>/dev/null || exit 0
+if [ -f Dockerfile ] && [ ! -d services/chat ]; then
+  echo "  migrating legacy flat layout → services/chat/"
+  if [ -f compose/docker-compose.yml ]; then
+    docker compose --env-file .env -f compose/docker-compose.yml down || true
+  fi
+  mkdir -p services/chat
+  for f in app compose scripts Dockerfile .dockerignore README.md .env .pg_password fly.toml; do
+    [ -e "\$f" ] && mv "\$f" services/chat/ || true
+  done
+fi
+REMOTE_MIGRATE
+
+# ── 4b. POSTGRES_PASSWORD: generate once, persist on server. ────────
 PG_PASS=$(ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" \
-  "if [ ! -f $REMOTE_DIR/.pg_password ]; then mkdir -p $REMOTE_DIR && head -c 24 /dev/urandom | base64 | tr -d '/+=' > $REMOTE_DIR/.pg_password; fi; cat $REMOTE_DIR/.pg_password")
+  "mkdir -p $REMOTE_DIR/services/chat && if [ ! -f $REMOTE_DIR/services/chat/.pg_password ]; then head -c 24 /dev/urandom | base64 | tr -d '/+=' > $REMOTE_DIR/services/chat/.pg_password; fi; cat $REMOTE_DIR/services/chat/.pg_password")
 echo "POSTGRES_PASSWORD=postgres" >> "$TMP_ENV"
 
-# ── 5. Sync code + compose + Dockerfile. ────────────────────────────
-echo "→ Syncing code to $SERVER_USER@$SERVER_IP:$REMOTE_DIR"
+# ── 5. Sync code + compose + Dockerfile + shared help corpus. ───────
+echo "→ Syncing chat service to $SERVER_USER@$SERVER_IP:$REMOTE_DIR/services/chat"
 rsync -avz --delete \
   -e "ssh ${SSH_OPTS[*]}" \
   --exclude '.env' \
@@ -103,17 +124,29 @@ rsync -avz --delete \
   --exclude '.venv' \
   --exclude '.povtorenie-work' \
   --exclude '*.tsv' \
+  --exclude '.pg_password' \
   app compose scripts Dockerfile .dockerignore README.md \
-  "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/"
+  "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/services/chat/"
+
+echo "→ Syncing shared help corpus to $SERVER_USER@$SERVER_IP:$REMOTE_DIR/docs/help"
+ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" "mkdir -p $REMOTE_DIR/docs"
+rsync -avz --delete \
+  -e "ssh ${SSH_OPTS[*]}" \
+  "$MODULES_ROOT/docs/help/" \
+  "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/docs/help/"
+
+echo "→ Syncing context-root .dockerignore"
+scp "${SSH_OPTS[@]}" "$MODULES_ROOT/.dockerignore" \
+  "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/.dockerignore"
 
 # Push the generated .env separately to a tmpfile then move atomically.
-scp "${SSH_OPTS[@]}" "$TMP_ENV" "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/.env.new"
-ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" "mv $REMOTE_DIR/.env.new $REMOTE_DIR/.env"
+scp "${SSH_OPTS[@]}" "$TMP_ENV" "$SERVER_USER@$SERVER_IP:$REMOTE_DIR/services/chat/.env.new"
+ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" "mv $REMOTE_DIR/services/chat/.env.new $REMOTE_DIR/services/chat/.env"
 
 # ── 6. Build + start. ───────────────────────────────────────────────
 echo "→ docker compose up -d --build"
 ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" \
-  "cd $REMOTE_DIR && docker compose --env-file .env -f compose/docker-compose.yml up -d --build"
+  "cd $REMOTE_DIR && docker compose --env-file services/chat/.env -f services/chat/compose/docker-compose.yml up -d --build"
 
 # ── 7. Wait for /healthz over HTTPS (Caddy needs cert first). ───────
 URL="https://$DOMAIN"
@@ -141,4 +174,4 @@ fi
 echo
 echo "✓ Deployed: $URL"
 echo "  ssh root@$SERVER_IP"
-echo "  fly-style logs: ssh root@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f compose/docker-compose.yml logs -f chat'"
+echo "  fly-style logs: ssh root@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f services/chat/compose/docker-compose.yml logs -f chat'"

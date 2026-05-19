@@ -24,7 +24,8 @@
       "@lib/application":      ["./submodules/application/index.ts"],
       "@lib/application/*":    ["./submodules/application/*"],
       "@lib/persistence/main": ["./submodules/persistence-main/index.ts"],
-      "@lib/persistence/user": ["./submodules/persistence-user/index.ts"]
+      "@lib/persistence/user": ["./submodules/persistence-user/index.ts"],
+      "@docs/*":               ["./submodules/docs/*"]
     }
   },
   "include": [
