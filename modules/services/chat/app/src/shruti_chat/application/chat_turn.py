@@ -143,6 +143,20 @@ async def run_chat_turn(
             tail = await expander.flush()
             if tail:
                 yield AgentEvent(type="delta", data={"text": tail})
+            # Before terminating, hand the client the integer→chunk
+            # alias map this turn minted. The client persists it on
+            # the freshly-finalised assistant message; on the next
+            # turn it ships back via `aliases` on the same message in
+            # history, and the server uses it to fold this turn's
+            # chip markers back into `[cite:N|...]` form so the LLM
+            # sees one numbering scheme throughout the conversation.
+            # Empty maps are still emitted (the client can treat
+            # `aliases: {}` as "no chip markers in this answer").
+            if len(aliases) > 0:
+                yield AgentEvent(
+                    type="aliases",
+                    data={"map": aliases.serialize()},
+                )
         elif ev.type == "tool_start":
             await expander.flush()
         yield ev
