@@ -31,15 +31,29 @@ defineEmits<{
   "pick-followup": [text: string]
 }>()
 
-/** Index of the last *finalised* assistant message — chips render under
- *  this row only. The currently-streaming placeholder is excluded so
- *  chips don't flash before the message is fully parsed. */
+/** Index of the last *finalised* assistant message, IF it's also the
+ *  very last item in the list. Two reasons for that second check:
+ *
+ *   - It hides the previous turn's chips the moment the user sends a
+ *     new message (last item is now the user bubble), instead of
+ *     keeping them visible through the streaming of the new reply
+ *     and then ripping them out at finalisation. Removing chips
+ *     after the new reply lands would shrink the content ABOVE the
+ *     user bubble and visually pull the whole conversation upward
+ *     — the glitch we want to avoid.
+ *   - It still excludes the streaming placeholder (which is the last
+ *     item during the new reply); chips for the previous turn would
+ *     otherwise sit between the user bubble and the streaming dots,
+ *     which looks odd.
+ *
+ *  Net effect: chips appear once per turn, on the final assistant
+ *  message, and only when there's no in-flight reply after it.
+ *  Removal happens at the boundary of "user sent a new message"
+ *  rather than at the boundary of "new reply finished". */
 const lastAssistantIndex = computed<number>(() => {
-  for (let i = props.messages.length - 1; i >= 0; i--) {
-    const m = props.messages[i]
-    if (m.role === "assistant" && !m.streaming) return i
-  }
-  return -1
+  const last = props.messages[props.messages.length - 1]
+  if (!last || last.role !== "assistant" || last.streaming) return -1
+  return props.messages.length - 1
 })
 </script>
 
