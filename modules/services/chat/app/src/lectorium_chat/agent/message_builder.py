@@ -13,88 +13,10 @@ anchors (`now`, `current_track_id`, `focus`) so the LLM can resolve
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from lectorium_chat.agent.prompts import SYSTEM_PROMPT
 from lectorium_chat.domain import UserContext
-
-
-# ── History compaction ──────────────────────────────────────────────────
-#
-# When a multi-turn conversation comes back as history on turn N+1, the
-# prior assistant messages still carry the inline chip / followup
-# markers the renderer needs. Sending them verbatim to the LLM:
-#   1. Wastes tokens — `[cite:track_OkPVGYhR5PPu@630560-684400|caption]`
-#      is ~60 chars; a reply with 10 citations adds ~600 chars to every
-#      subsequent turn.
-#   2. Primes hallucination — the model sees its own previous prose
-#      with `[cite:track_…]` patterns and starts inventing new ids by
-#      analogy. Empirically: Gemini Flash Lite's track-id fabrications
-#      in long sessions (the "Что такое бхакти" case) cluster on
-#      turns 3+, after the marker pattern is well-established in
-#      context.
-#
-# We strip chip-class markers (cite/card/outline/followup) from prior
-# assistant prose before sending to the LLM. The chip text — the
-# caption — is preserved for cite so the surrounding sentence still
-# reads naturally ("Прабхупада говорит, что бхакти — это «совершенство
-# жизни» — это путь служения").
-#
-# Action markers (`[action:create_playlist|id=…]`) STAY — the model
-# needs to remember it proposed an action in a prior turn.
-#
-# This is server-side only and doesn't affect what's stored or
-# rendered for the user — the client keeps the full marker text.
-
-# Captures EVERY cite-shaped marker the LLM might emit — with or
-# without `@start-end` timestamps, with or without a caption. The wide
-# match matters because the model sometimes invents non-canonical
-# track_id formats (e.g. `BG_1972_03.05` from its pre-training on
-# Vedabase) and writes them without timestamps. If we only matched the
-# canonical `track_X@1-2|caption` shape, the invented ids would leak
-# through the strip untouched, prime the next turn, and the model
-# would happily continue fabricating in that format.
-_CITE_RE = re.compile(
-    r"\[cite:[^\]\s|@]+(?:@\d+-\d+)?(?:\|([^\]]*))?\]"
-)
-_CARD_RE = re.compile(r"\[card:[^\]\s]+\]")
-_OUTLINE_RE = re.compile(r"\[outline:[^\]\s]+\]")
-_FOLLOWUP_RE = re.compile(r"\[followup:[^\]\n|]+\]")
-_WS_COLLAPSE = re.compile(r"[ \t]{2,}")
-
-
-def _strip_chip_markers(content: str) -> str:
-    """Mask chip-marker payloads in a prior assistant message.
-
-    We keep the marker SHAPE (`[cite:…|caption]`, `[card:…]`,
-    `[outline:…]`) so the model still sees "I cited / carded /
-    outlined here" — losing the shape entirely (first iteration:
-    replacing `[cite:…|caption]` with `«caption»`) made weaker models
-    stop emitting citations on turn 2+, since the history no longer
-    showed the pattern they were supposed to mimic.
-
-    We REMOVE the concrete `track_id` and timestamps so:
-      - the model can't copy a stale id as if it were freshly searched
-        (the original "priming-hallucination" problem),
-      - the byte-count savings are still meaningful in long sessions
-        (a 16-char id + 13-char timestamp range per marker × N markers).
-
-    `[followup:…]` is UI-only and dropped entirely.
-    `[action:…|id=…]` is left untouched — the model needs the real
-    `action_id` so it knows which action card it already proposed.
-    """
-    def _cite_sub(m: re.Match[str]) -> str:
-        caption = (m.group(1) or "").strip()
-        return f"[cite:…|{caption}]" if caption else "[cite:…]"
-
-    out = _CITE_RE.sub(_cite_sub, content)
-    out = _CARD_RE.sub("[card:…]", out)
-    out = _OUTLINE_RE.sub("[outline:…]", out)
-    out = _FOLLOWUP_RE.sub("", out)
-    # Tidy double-spaces left by followup deletions; preserve newlines.
-    out = _WS_COLLAPSE.sub(" ", out)
-    return out.strip()
 
 
 _LANG_NAME = {"ru": "Russian", "en": "English"}
@@ -133,21 +55,12 @@ def build_messages(
     )
     ctx_directive = _format_user_context(user_context)
     sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
-    # Strip any non-standard fields from history (defensive). For prior
-    # assistant turns, also strip chip-class markers so the model's
-    # context doesn't get polluted with marker patterns to imitate (the
-    # source of the turn-2+ id-fabrication regression on weaker models).
-    clean: list[dict[str, Any]] = []
-    for m in history:
-        role = m.get("role")
-        content = m.get("content")
-        if role not in ("user", "assistant") or not content:
-            continue
-        if role == "assistant":
-            content = _strip_chip_markers(content)
-            if not content:
-                continue
-        clean.append({"role": role, "content": content})
+    # Strip any non-standard fields from history (defensive)
+    clean = [
+        {"role": m["role"], "content": m["content"]}
+        for m in history
+        if m.get("role") in ("user", "assistant") and m.get("content")
+    ]
     return [sys, *clean]
 
 
