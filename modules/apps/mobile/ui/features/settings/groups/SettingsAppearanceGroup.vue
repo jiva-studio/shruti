@@ -7,12 +7,18 @@
   <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
   <ShowPlayerOnNotesSettingsItem v-model="showPlayerOnNotes" />
   <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
+  <AutomaticScrollSettingsItem
+    v-model="autoScroll"
+    :is-subscribed="isSubscribed"
+    @request-paywall="emit('request-paywall')"
+  />
   <OpenTranscriptAutomaticallySettingsItem v-model="openTranscriptAutomatically" />
 </template>
 
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
+import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
 import HighlightCurrentSentenceSettingsItem from "../HighlightCurrentSentenceSettingsItem.vue"
 import OpenTranscriptAutomaticallySettingsItem from "../OpenTranscriptAutomaticallySettingsItem.vue"
 import ServerSettingsItem from "../ServerSettingsItem.vue"
@@ -27,7 +33,10 @@ interface SelectorItem {
 defineProps<{
   languageItems: SelectorItem[]
   serverItems: SelectorItem[]
+  isSubscribed: boolean
 }>()
+
+const emit = defineEmits<{ "request-paywall": [] }>()
 
 const appLanguage = defineModel<string>("appLanguage", { required: true })
 const activeServerId = defineModel<string>("activeServerId", { required: true })
@@ -36,6 +45,7 @@ const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: 
 const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
   required: true,
 })
+const autoScroll = defineModel<boolean>("autoScroll", { required: true })
 const openTranscriptAutomatically = defineModel<boolean>("openTranscriptAutomatically", {
   required: true,
 })
