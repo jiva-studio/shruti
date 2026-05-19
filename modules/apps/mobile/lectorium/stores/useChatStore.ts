@@ -226,11 +226,20 @@ export const useChatStore = defineStore("chat", () => {
     const repos = chatRepos()
 
     // Snapshot history BEFORE we add the new turn so the server doesn't
-    // see its own optimistic placeholder.
+    // see its own optimistic placeholder. For assistant messages we
+    // also ship the per-turn `aliases` map (server-minted integer→chunk
+    // map) so the agent can fold this message's chip markers back into
+    // numbered-ref form before the LLM sees them.
     const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
     const history: ChatTurn[] = messages.value
       .filter((m) => !m.streaming)
-      .map((m) => ({ role: m.role, content: m.content }))
+      .map((m) => {
+        const turn: ChatTurn = { role: m.role, content: m.content }
+        if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
+          ;(turn as { aliases?: ChatTurn["aliases"] }).aliases = m.aliases
+        }
+        return turn
+      })
 
     let assistantMsgId: ChatMessageId | null = null
     let acc = ""

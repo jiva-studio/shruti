@@ -38,6 +38,14 @@ export type ChatRole = "user" | "assistant"
 export interface ChatTurn {
   readonly role: ChatRole
   readonly content: string
+  /** Server-minted integer→chunk alias map for the chip markers in
+   *  this assistant message's `content`. Round-tripped from a prior
+   *  turn's `aliases` SSE event via the client's meta storage. Only
+   *  present on `role === "assistant"`. Wire layer maps it back to
+   *  snake_case before sending. */
+  readonly aliases?: Readonly<
+    Record<string, { readonly trackId: string; readonly startMs?: number; readonly endMs?: number }>
+  >
 }
 
 /** Cleanly-decoded SSE event the stream client yields. The variants
@@ -53,6 +61,16 @@ export type ChatStreamEvent =
     }
   | { readonly type: "action"; readonly payload: ChatActionPayload }
   | { readonly type: "outline"; readonly payload: ChatOutlinePayload }
+  | {
+      readonly type: "aliases"
+      /** Wire shape kept snake_case to match the agent's
+       *  `serialize()` payload; the use-case layer maps to camelCase
+       *  `ChatAliasEntry` for the domain. Keys are integer aliases
+       *  serialised as strings (JSON limitation). */
+      readonly map: Readonly<
+        Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
+      >
+    }
   | {
       readonly type: "done"
       readonly requestId?: string

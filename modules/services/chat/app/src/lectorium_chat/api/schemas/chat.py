@@ -66,9 +66,32 @@ class UserContextDto(BaseModel):
         )
 
 
+class ChunkAliasDto(BaseModel):
+    """One row of the integer-alias map the server minted while answering
+    a prior turn. The client persists this alongside the assistant
+    message (in its versioned-meta JSON) and ships it back when sending
+    the next turn's history. The server uses it to re-substitute
+    `[cite:track_X@start-end|caption]` markers in that message's prose
+    back into `[cite:N|caption]` form so the LLM sees one consistent
+    numbered-ref format throughout the history."""
+
+    track_id: str
+    start_ms: int | None = None
+    end_ms: int | None = None
+
+
 class ChatMessageDto(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    # Server-minted integer aliases for the chip markers in `content`.
+    # Keys are integers serialised as strings (JSON limitation); values
+    # describe the catalog reference each alias points to. Only present
+    # on assistant turns and only if the client persisted what the
+    # server sent on the `aliases` event for that turn. Legacy
+    # assistant messages (before this protocol) have it absent; the
+    # server falls back to stripping their chip markers to placeholder
+    # text.
+    aliases: dict[str, ChunkAliasDto] | None = None
 
 
 # Proactive-rule context — opaque JSON dict. Each rule kind has its own
