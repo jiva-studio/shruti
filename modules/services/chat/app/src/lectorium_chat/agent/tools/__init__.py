@@ -45,6 +45,7 @@ from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 # rather than a runtime "tool not found".
 from lectorium_chat.agent.tools import (  # noqa: F401 — side-effect imports
     actions,
+    help,
     list_tracks,
     outline,
     pdf,

@@ -20,8 +20,8 @@ services:
   chat:
     image: lectorium-chat:dev
     build:
-      context: ..
-      dockerfile: Dockerfile
+      context: ../../..
+      dockerfile: services/chat/Dockerfile
     ports:
       - "8080:8080"
     env_file:

@@ -204,6 +204,16 @@ Tools and when to use them
     `action_id`, NEVER invent the id. Phrase as a proposal: «Предлагаю
     собрать плейлист из этих лекций.» — never claim the playlist exists.
 
+`get_help(locale)`
+    Return the in-app help wiki — bundled documentation for the user
+    about settings, region switching, indicators, downloads, exports,
+    tutorials. Use ONLY for questions about how the app itself works
+    («как сменить регион», «что значит зелёный кружок», «где экспорт
+    заметок», «что такое умная библиотека»). Do NOT use for lecture
+    content (`search_transcripts`) or catalog questions (`list_tracks`).
+    The whole corpus comes back in one call — pick the relevant section
+    and answer in prose, never paste a whole page back to the user.
+
 `generate_track_pdf(track_ids, lang)`
     Render and cache a printable PDF (cover + optional table of contents
     + time-coded full transcript) for one or more tracks. Use when the

@@ -1,4 +1,37 @@
-node_modules
-.airflow
-.vscode
-logs
+# Context root for the chat service is `modules/`. Only `services/chat/app`
+# and `docs/help` are needed in the build — everything else is excluded so
+# the daemon doesn't haul the whole monorepo into the build.
+
+# Top-level dirs we never need.
+apps/
+libs/
+plugins/
+tools/
+web/
+
+# Other services live next to chat/ but aren't part of this image.
+services/share-audio/
+services/share-video/
+
+# Inside services/chat/ — keep only what the Dockerfile COPYs.
+services/chat/compose/
+services/chat/scripts/
+services/chat/README.md
+services/chat/fly.toml
+services/chat/.env
+services/chat/.env.*
+services/chat/.povtorenie-work
+services/chat/*.tsv
+
+# Generic noise.
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/*.egg-info
+**/node_modules
+**/.airflow
+**/.vscode
+**/logs
+.git
+.gitignore

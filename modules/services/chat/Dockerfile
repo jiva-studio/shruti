@@ -12,14 +12,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Stage 1 — install deps. Cached unless pyproject.toml changes.
-COPY app/pyproject.toml /app/pyproject.toml
+COPY services/chat/app/pyproject.toml /app/pyproject.toml
 RUN mkdir -p /app/src/lectorium_chat && \
     echo '__version__ = "0.0.0"' > /app/src/lectorium_chat/__init__.py
 RUN pip install --upgrade pip && pip install .
 
 # Stage 2 — copy actual source. Fast layer.
-COPY app/src /app/src
+COPY services/chat/app/src /app/src
 RUN pip install --no-deps -e .
+
+# Stage 3 — bundled help corpus (single source of truth: modules/docs/help/).
+COPY docs/help /app/docs/help
 
 RUN mkdir -p /var/lib/chat
 
