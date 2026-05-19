@@ -95,8 +95,27 @@ async def run_llm_loop(
             tool_calls_by_index: dict[int, dict[str, Any]] = {}
             usage = None
 
+            # On the FIRST round of an answer (no tool result yet in
+            # this message stack), force the model to make a tool call
+            # before it can return prose. Empirically Gemini Flash Lite
+            # ignores the "always search before answering" prompt rule
+            # after a few successful exchanges in a long session — it
+            # drifts back to answering from memory, producing replies
+            # with zero citations. `tool_choice: "required"` is a
+            # provider-level guarantee: the streamed completion MUST
+            # contain at least one tool_use block, so the LLM cannot
+            # skip search_transcripts. Subsequent rounds (after a tool
+            # already ran in this turn) use the default `auto` so the
+            # model can write its final answer.
+            extra: dict[str, Any] = {}
+            already_called_tool_this_turn = any(
+                m.get("role") == "tool" for m in messages
+            )
+            if not already_called_tool_this_turn:
+                extra["tool_choice"] = "required"
+
             async for chunk in llm.stream_completion(
-                model=model, messages=messages, tools=tool_schemas,
+                model=model, messages=messages, tools=tool_schemas, **extra,
             ):
                 if await _client_gone():
                     log.info("agent_cancelled_mid_stream", request_id=rid, turn=turn)
