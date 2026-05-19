@@ -13,10 +13,73 @@ anchors (`now`, `current_track_id`, `focus`) so the LLM can resolve
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from lectorium_chat.agent.prompts import SYSTEM_PROMPT
+from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain import UserContext
+
+
+# Marker patterns we know how to either fold-back into numbered refs
+# (when the corresponding alias map is available) or strip down to a
+# placeholder (when it isn't). Catches every legal chip-marker shape
+# the server might have emitted to the client in a prior turn.
+_CITE_FULL_RE = re.compile(
+    r"\[cite:([^|@\]\s]+)@(\d+)-(\d+)(?:\|([^\]]*))?\]"
+)
+_CARD_FULL_RE = re.compile(r"\[card:([^\]\s]+)\]")
+_OUTLINE_FULL_RE = re.compile(r"\[outline:([^\]\s]+)\]")
+
+
+def _fold_prior_assistant_content(
+    content: str,
+    aliases: TurnAliasMap | None,
+) -> str:
+    """Rewrite chip markers in a prior assistant message back into the
+    numbered-ref format the LLM expects throughout history.
+
+    With `aliases` present (the per-turn alias map the server emitted
+    after the message was generated and the client persisted): each
+    `[cite:track_X@start-end|caption]` whose `(track_X, start, end)`
+    is in `aliases` becomes `[cite:N|caption]`. `[card:track_X]` /
+    `[outline:track_X]` become `[card:N]` / `[outline:N]` if track_X
+    has any alias in the map. Markers that aren't in the alias map
+    (orphans, content drift) fall through to the same placeholder
+    path as legacy messages.
+
+    With `aliases=None` (legacy assistant message persisted before
+    this protocol existed): every chip marker is collapsed to a
+    placeholder that preserves only the caption — the model sees
+    "I cited here" without a concrete catalog id to imitate, and the
+    poison can't seed a new hallucination."""
+
+    def _cite_sub(m: re.Match[str]) -> str:
+        track_id, start_str, end_str = m.group(1), m.group(2), m.group(3)
+        caption = (m.group(4) or "").strip()
+        if aliases is not None:
+            n = aliases.lookup_ref(track_id, int(start_str), int(end_str))
+            if n is not None:
+                return f"[cite:{n}|{caption}]" if caption else f"[cite:{n}]"
+        # No alias — fall back to placeholder so the format isn't a
+        # `track_X@...` pattern the model could imitate.
+        return f"[cite:…|{caption}]" if caption else "[cite:…]"
+
+    def _whole_track_sub(prefix: str) -> "callable":
+        def _sub(m: re.Match[str]) -> str:
+            track_id = m.group(1)
+            if aliases is not None:
+                # Track-level (card/outline) alias has start_ms/end_ms = None.
+                n = aliases.lookup_ref(track_id, None, None)
+                if n is not None:
+                    return f"[{prefix}:{n}]"
+            return f"[{prefix}:…]"
+        return _sub
+
+    content = _CITE_FULL_RE.sub(_cite_sub, content)
+    content = _CARD_FULL_RE.sub(_whole_track_sub("card"), content)
+    content = _OUTLINE_FULL_RE.sub(_whole_track_sub("outline"), content)
+    return content
 
 
 _LANG_NAME = {"ru": "Russian", "en": "English"}
@@ -39,6 +102,18 @@ def build_messages(
     lang: str,
     user_context: UserContext | None = None,
 ) -> list[dict[str, Any]]:
+    """Build the LLM messages list.
+
+    For each prior assistant turn, the input dict may carry an
+    optional `aliases` field — the integer→chunk map the server
+    emitted while answering that turn (the client persisted it and
+    shipped it back). If present, chip markers in the assistant
+    content are folded back into `[cite:N|caption]` form so the LLM
+    sees one consistent numbered-ref format across the whole history.
+    If absent (legacy assistant message), the markers are collapsed
+    to placeholders so a `track_X@...` pattern can't seed a new
+    hallucination.
+    """
     lang_name = _LANG_NAME.get(lang, lang)
     lang_directive = (
         "\n\n"
@@ -55,12 +130,22 @@ def build_messages(
     )
     ctx_directive = _format_user_context(user_context)
     sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
-    # Strip any non-standard fields from history (defensive)
-    clean = [
-        {"role": m["role"], "content": m["content"]}
-        for m in history
-        if m.get("role") in ("user", "assistant") and m.get("content")
-    ]
+    clean: list[dict[str, Any]] = []
+    for m in history:
+        role = m.get("role")
+        content = m.get("content")
+        if role not in ("user", "assistant") or not content:
+            continue
+        if role == "assistant":
+            aliases_payload = m.get("aliases")
+            local_aliases: TurnAliasMap | None = None
+            if isinstance(aliases_payload, dict) and aliases_payload:
+                local_aliases = TurnAliasMap()
+                local_aliases.load_external(aliases_payload)
+            content = _fold_prior_assistant_content(content, local_aliases)
+            if not content:
+                continue
+        clean.append({"role": role, "content": content})
     return [sys, *clean]
 
 

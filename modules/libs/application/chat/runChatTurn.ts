@@ -1,5 +1,6 @@
 import type {
   ChatActionPayload,
+  ChatAliasEntry,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -75,18 +76,6 @@ export interface RunChatTurnDeps {
   readonly buildUserContext: (
     focus?: FocusFragmentPayload
   ) => Promise<UserContextPayload>
-  /** Synthesize a playlist payload when the LLM emitted
-   *  `[action:create-playlist|id=X]` without calling propose_playlist
-   *  (a known DeepSeek failure mode). Returns the merged action map
-   *  or `existing` unchanged if salvage isn't applicable. */
-  readonly salvageOrphanActions: (
-    content: string,
-    existing: Record<string, ChatActionPayload>,
-    fallbackName: string
-  ) => Record<string, ChatActionPayload>
-  /** Localised fallback name when the salvage can't infer one from the
-   *  user prompt. */
-  readonly fallbackPlaylistName: string
   /** Pull `[followup:<text>]` chip texts out of the final assistant
    *  content. Strict parser — malformed markers leak into prose and
    *  return no chip (fix lives in the prompt, not here). */
@@ -143,6 +132,7 @@ export async function* runChatTurn(
   let lastError: { code: string; message: string; retryAfter?: number } | null = null
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
+  let aliases: Record<string, ChatAliasEntry> | undefined
 
   // The history passed by the caller is the conversation BEFORE this
   // turn (caller has no clean way to splice the new user message in
@@ -191,6 +181,23 @@ export async function* runChatTurn(
             payload: event.payload,
           }
           break
+        case "aliases":
+          // Server-emitted integer→chunk map for the chip markers in
+          // this turn's accumulated `acc`. Persist on the finalised
+          // message so the next turn can ship it back and the LLM
+          // sees one numbering scheme across the whole conversation.
+          aliases = {}
+          for (const [k, v] of Object.entries(event.map)) {
+            const entry: ChatAliasEntry = { trackId: v.track_id }
+            if (typeof v.start_ms === "number") {
+              ;(entry as { startMs?: number }).startMs = v.start_ms
+            }
+            if (typeof v.end_ms === "number") {
+              ;(entry as { endMs?: number }).endMs = v.end_ms
+            }
+            aliases[k] = entry
+          }
+          break
         case "done":
           sawDone = true
           break
@@ -220,15 +227,6 @@ export async function* runChatTurn(
       ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
       : undefined
 
-  // 6. Salvage orphan actions from the final content (LLM may have
-  // emitted `[action:create-playlist|id=X]` without calling
-  // propose_playlist; the salvage walker rebuilds from sibling cards).
-  const mergedActions = deps.salvageOrphanActions(
-    acc,
-    actions,
-    input.text.slice(0, 60) || deps.fallbackPlaylistName
-  )
-
   if (acc.length > 0) {
     const followups = deps.extractFollowups(acc)
     const finalised = await deps.messages.create({
@@ -237,10 +235,11 @@ export async function* runChatTurn(
       role: "assistant",
       content: acc,
       createdAt: Date.now(),
-      actions: mergedActions,
+      actions,
       outlines,
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
+      aliases,
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }

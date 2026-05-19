@@ -8,7 +8,6 @@ import {
   type FocusFragmentPayload,
 } from "@lectorium/composables/useTrackUserState.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import {
@@ -18,7 +17,6 @@ import {
 import {
   addTracksToPlaylist,
   runChatTurn,
-  saveChatNote,
   type RunChatTurnEvent,
 } from "@lib/application"
 import type {
@@ -71,38 +69,28 @@ function deriveTitle(text: string, max = 48): string {
 }
 
 /**
- * LLM occasionally writes `[action:create-playlist|id=X]` inline without
- * calling propose_playlist (a known DeepSeek failure mode). Salvage:
- * scan content for orphan markers and synthesize from sibling
- * `[card:track_id]` markers. Runs once on message finalisation.
+ * Log a structured warning for every `[action:<kind>|id=X]` marker the
+ * LLM emitted whose id has no matching payload in `message.actions`. The
+ * card renders the broken-state placeholder anyway; we surface the
+ * mismatch so residual marker/payload-id drift is greppable in logs
+ * after the agent-side tool-call validation lands.
+ *
+ * Doesn't throw, doesn't mutate the message — pure observability.
  */
-function salvageOrphanActions(
-  content: string,
-  existing: Record<string, ActionPayload>,
-  fallbackName: string
-): Record<string, ActionPayload> {
-  const tokens = parseChatMarkers(content)
-  const orphans = tokens
-    .filter(
-      (t): t is Extract<typeof t, { kind: "action" }> =>
-        t.kind === "action" && t.actionKind === "create_playlist" && !existing[t.actionId]
-    )
-    .map((t) => t.actionId)
-  if (orphans.length === 0) return existing
-  const trackIds = tokens
-    .filter((t): t is Extract<typeof t, { kind: "card" }> => t.kind === "card")
-    .map((t) => t.trackId)
-  if (trackIds.length === 0) return existing
-  const out = { ...existing }
-  for (const id of orphans) {
-    out[id] = {
-      kind: "create_playlist",
-      id,
-      name: fallbackName,
-      trackIds,
-    }
+function warnOrphanActionMarkers(message: ChatMessage): void {
+  if (message.role !== "assistant") return
+  const tokens = parseChatMarkers(message.content)
+  const actions = message.actions ?? {}
+  for (const t of tokens) {
+    if (t.kind !== "action") continue
+    if (actions[t.actionId]) continue
+    console.warn("[chat] orphan action marker — no matching payload", {
+      messageId: message.id,
+      sessionId: message.sessionId,
+      actionKind: t.actionKind,
+      actionId: t.actionId,
+    })
   }
-  return out
 }
 
 /* -------------------------------------------------------------------------- */
@@ -124,7 +112,6 @@ export const useChatStore = defineStore("chat", () => {
   const appLanguage = useAppLanguage()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
-  const notes = useNotesStore()
   const toast = useToast()
   const { t } = useI18n()
 
@@ -239,11 +226,20 @@ export const useChatStore = defineStore("chat", () => {
     const repos = chatRepos()
 
     // Snapshot history BEFORE we add the new turn so the server doesn't
-    // see its own optimistic placeholder.
+    // see its own optimistic placeholder. For assistant messages we
+    // also ship the per-turn `aliases` map (server-minted integer→chunk
+    // map) so the agent can fold this message's chip markers back into
+    // numbered-ref form before the LLM sees them.
     const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
     const history: ChatTurn[] = messages.value
       .filter((m) => !m.streaming)
-      .map((m) => ({ role: m.role, content: m.content }))
+      .map((m) => {
+        const turn: ChatTurn = { role: m.role, content: m.content }
+        if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
+          ;(turn as { aliases?: ChatTurn["aliases"] }).aliases = m.aliases
+        }
+        return turn
+      })
 
     let assistantMsgId: ChatMessageId | null = null
     let acc = ""
@@ -268,8 +264,6 @@ export const useChatStore = defineStore("chat", () => {
           stream: streamClient(),
           title: titleService(),
           buildUserContext: (focus) => trackUserState.buildUserContext(focus),
-          salvageOrphanActions,
-          fallbackPlaylistName: t("chat.fallbackPlaylistName"),
           extractFollowups,
         }
       )) {
@@ -388,6 +382,12 @@ export const useChatStore = defineStore("chat", () => {
         for (const action of Object.values(event.message.actions ?? {})) {
           void recordInlineHintCooldown(event.message.id, action)
         }
+        // Visibility for orphan action markers: any `[action:...|id=X]`
+        // in the finalised prose whose id has no matching payload will
+        // render the broken-card placeholder. Log so we can grep for
+        // residual LLM marker/payload-id drift after the agent-side
+        // tool-call validation lands.
+        warnOrphanActionMarkers(event.message)
         return
       }
       case "title-updated": {
@@ -461,20 +461,6 @@ export const useChatStore = defineStore("chat", () => {
           }
         )
         if (!r.ok) throw new Error(`add to playlist failed: ${r.error}`)
-      } else if (action.kind === "save_note") {
-        const r = await saveChatNote(
-          {
-            trackId: action.trackId as TrackId,
-            text: action.text,
-            startMs: action.startMs,
-            endMs: action.endMs,
-            chatActionId: actionId,
-          },
-          { notes: app.repositories().notes }
-        )
-        if (!r.ok) throw new Error(`save chat note failed: ${r.error}`)
-        await notes.refresh()
-        await toast.info(t("chat.noteSaved"))
       } else if (action.kind === "enable_daily_reminder") {
         // Card lets the user pick a time before tapping Confirm; if
         // they did, the chosen value rides in via `override.time`.

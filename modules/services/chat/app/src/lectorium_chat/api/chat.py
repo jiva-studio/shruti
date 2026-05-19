@@ -103,6 +103,7 @@ async def chat(
                     request_id=request_id,
                     user_context=user_ctx,
                     is_disconnected=request.is_disconnected,
+                    deps=deps,
                 )
             async for ev in stream:
                 yield {

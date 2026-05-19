@@ -220,6 +220,21 @@ export function useChatController(): ChatControllerReturn {
    * what actually moves); falls back to direct `scrollTop` on the
    * wrapper if IonContent isn't reachable.
    */
+  /**
+   * Walk the message list from the end and return the id of the
+   * last entry whose role is `user`. Used by the pin-to-top watcher
+   * when the trigger is the streaming-placeholder append — at that
+   * point the user message sits one slot above the placeholder.
+   */
+  function findLastUserMessageId(
+    messages: readonly { id: string; role: "user" | "assistant" }[]
+  ): string | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") return messages[i].id
+    }
+    return null
+  }
+
   function scrollMessageToTop(messageId: string): void {
     const el = contentRef.value
     if (!el) return
@@ -227,10 +242,16 @@ export function useChatController(): ChatControllerReturn {
       `[data-message-id="${CSS.escape(messageId)}"]`
     ) as HTMLElement | null
     if (!target) return
-    // The fixed-top fade gradient eats ~44px of the safe area. Offset
-    // the scroll target so the bubble sits below it, not under it.
-    const TOP_PAD = 56
-    const y = Math.max(0, target.offsetTop - TOP_PAD)
+    // The fixed-top fade gradient overlays the top of the scroll
+    // container — its real height depends on the safe-area inset
+    // (notch / status bar varies by device), the action-row buttons
+    // (44px) and the gradient bottom padding (28px). Measuring it at
+    // scroll time keeps the offset honest across devices and any
+    // future tweaks to the header layout. Falls back to 56px if the
+    // element isn't found (e.g. test environment).
+    const fixedTop = document.querySelector(".chat-fixed-top") as HTMLElement | null
+    const topPad = fixedTop ? fixedTop.getBoundingClientRect().height + 8 : 56
+    const y = Math.max(0, target.offsetTop - topPad)
     const host = el.closest("ion-content") as
       | (HTMLElement & {
           scrollToPoint?: (x: number, y: number, durationMs: number) => Promise<void>
@@ -244,25 +265,48 @@ export function useChatController(): ChatControllerReturn {
   }
 
   /**
-   * Pin the just-sent user message to the top of the viewport when its
-   * bubble first appears as the *last* element of the list. Subsequent
-   * events on the same turn — the assistant placeholder being appended,
-   * streamed deltas, the finalised replacement, follow-up chips — keep
-   * `messages[last].id` either the same (deltas / finalise) or shift it
-   * to an assistant id (placeholder); neither path re-triggers a scroll.
-   * Session open / switch lands on an assistant message as the last
-   * element, so it's also a no-op. The user, not the controller, owns
-   * scroll position from there.
+   * Pin the just-sent user message to the top of the viewport. The
+   * store fires two events back-to-back at the start of a turn:
+   * first the user message is appended (last.role === 'user'), then
+   * the streaming-placeholder assistant bubble is appended
+   * (last.role === 'assistant', last.streaming === true). We re-fire
+   * the scroll on BOTH:
+   *
+   *   - on user-message append, there's nothing below the user bubble
+   *     yet, so the browser has nowhere to scroll — the call is a
+   *     no-op. We make it anyway as a cheap first try.
+   *   - on placeholder append, the placeholder's `min-height` (set in
+   *     `ChatMessageBubble.vue`) creates the scroll room and the call
+   *     actually moves the user message to the top.
+   *
+   * Streamed deltas mutate the same placeholder and never change
+   * `last.id`, so they don't re-trigger. Once the placeholder is
+   * swapped for the finalised reply, `last.streaming` becomes
+   * undefined and the watcher exits early. Session open / switch
+   * lands on a non-streaming assistant message as the last element,
+   * also a no-op. The user, not the controller, owns scroll position
+   * from there.
    */
   watch(
     () => {
       const last = store.messages[store.messages.length - 1]
-      return last ? { id: last.id, role: last.role } : null
+      if (!last) return null
+      return { id: last.id, role: last.role, streaming: last.streaming === true }
     },
     async (snapshot) => {
-      if (!snapshot || snapshot.role !== "user") return
+      if (!snapshot) return
+      const isPlaceholder = snapshot.role === "assistant" && snapshot.streaming
+      const isUserMessage = snapshot.role === "user"
+      if (!isUserMessage && !isPlaceholder) return
       await nextTick()
-      scrollMessageToTop(snapshot.id)
+      // For the placeholder case the scroll target is the user
+      // message right above it, not the placeholder itself. Walk
+      // from the end to find the last user message in the list.
+      const target =
+        isUserMessage
+          ? snapshot.id
+          : findLastUserMessageId(store.messages)
+      if (target) scrollMessageToTop(target)
     },
     { deep: false }
   )

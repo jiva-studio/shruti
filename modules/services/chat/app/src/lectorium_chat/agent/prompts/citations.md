@@ -1,14 +1,51 @@
 ═══════════════════════════════════════════════════════════════════════
-Citation and rendering format
+Citation and rendering format — NUMBERED REFS ONLY
 ═══════════════════════════════════════════════════════════════════════
 
-Place these markers inline in your text — the client parses them into UI:
+You CANNOT see catalog `track_id`s. Tool results give you each entry
+with a small integer field `ref` — that integer is the ONLY way to
+cite the entry. The server keeps the real `track_id` and timestamps,
+and rewrites your numbered reference into a working chip before the
+user sees the reply.
 
-    [cite:track_id@start_ms-end_ms|caption] — quotation chip (taps open the player)
-    [card:track_id] — lecture card (taps open the lecture)
+Chip-class markers — write these inline in your prose:
 
-**The caption is mandatory** and describes the SNIPPET (what is said in
-this specific audio fragment) — not the lecture title.
+    [cite:N|caption]   ← quotation chip (taps open the audio player)
+    [card:N]           ← lecture card  (taps open the lecture)
+    [outline:N]        ← outline card  (taps to jump to a chapter)
+
+`N` is the `ref` field from a tool result in the CURRENT turn.
+Nothing else is legal — not `track_*`, not `BG_…`, not `SB_…`, not
+some integer you decided fits the topic. The server silently drops
+any marker whose `N` isn't in the current alias map, and the user
+sees a hole in your sentence.
+
+EXAMPLE — correct flow:
+
+    [tool_use] search_transcripts(query="бхакти преданное служение")
+    [tool_result]
+        [{"ref": 1, "lang": "ru", "start_ms": 630560, "end_ms": 684400,
+          "text": "Бхакти — это путь преданного служения…"},
+         {"ref": 2, "lang": "ru", "start_ms": 200,    "end_ms": 280,
+          "text": "Преданность означает занять все чувства в служении…"},
+         {"ref": 3, …}]
+
+    [your reply]
+        Прабхупада объясняет что бхакти — это путь преданного служения,
+        в котором человек занимает все чувства Кришне. [cite:1|путь
+        служения] Это не подавление чувств, а их очищение через
+        служение повелителю чувств. [cite:2|занять все чувства]
+
+EXAMPLE — INVALID, will not render:
+
+    [cite:track_OkPVGYhR5PPu@630560-684400|путь служения]
+    [cite:BG_1972_03.05|деятельность]
+    [cite:7|...]                ← only refs 1, 2, 3 existed in the last result
+
+If no `ref` from the current turn fits the point you're making, omit
+the citation. Don't invent a number to fill the gap — the user gets
+a more honest reply when you leave a claim uncited than when you
+attach a wrong source.
 
 CAPTION RULES — read every one of these, they are all enforced:
 
@@ -49,40 +86,40 @@ They live OUTSIDE the sentence they cite — meaning AFTER the closing
 the last word of a sentence and its punctuation.
 
 WRONG (chip before the period, period dangling after the chip):
-    Имя должно быть авторитетным [cite:X@1-2|авторитетное имя] .
+    Имя должно быть авторитетным [cite:1|авторитетное имя] .
 
 WRONG (chip splits the clause):
-    Прабхупада объясняет это [cite:X@1-2|причина страданий] так.
+    Прабхупада объясняет это [cite:1|причина страданий] так.
 
 RIGHT (chip after the closing punctuation, no orphan dot):
-    Имя должно быть авторитетным. [cite:X@1-2|авторитетное имя]
+    Имя должно быть авторитетным. [cite:1|авторитетное имя]
 
 RIGHT (chip closes a clause inside a longer paragraph, after the comma):
-    Прабхупада объясняет, почему мы страдаем, [cite:X@1-2|причина страданий]
+    Прабхупада объясняет, почему мы страдаем, [cite:1|причина страданий]
     и затем переходит к решению.
 
-**Don't describe what the card already shows.** A `[card:track_id]`
-renders title, date, location, duration, and scripture references on its
-own. Writing "— Лекция «...» (29 января 1977 года, Бхубанешвар)" right
-after the card is pure duplication — the user already sees that inside
-the card. Only add commentary that conveys NEW information not visible
-in the card itself (e.g. one-sentence reason this lecture is relevant
-to the question, or a thematic note tying it to the next card).
+**Don't describe what the card already shows.** A `[card:N]` renders
+title, date, location, duration, and scripture references on its own.
+Writing "— Лекция «...» (29 января 1977 года, Бхубанешвар)" right
+after the card is pure duplication — the user already sees that
+inside the card. Only add commentary that conveys NEW information
+not visible in the card itself (e.g. one-sentence reason this lecture
+is relevant to the question, or a thematic note tying it to the next
+card).
 
 WRONG (echoing card fields + blank line padding between cards):
-    [card:track_X]
+    [card:4]
     — Лекция "Учения Кришны" (29 января 1977 года, Бхубанешвар).
 
-    [card:track_Y]
+    [card:5]
     — Лекция о медитации (10 мая 1972, Бомбей).
 
 RIGHT (cards stacked adjacent, no blank line between):
-    [card:track_X]
-    [card:track_Y]
+    [card:4]
+    [card:5]
 
 RIGHT (commentary adds something the card doesn't show):
-    [card:track_X]
+    [card:4]
     Здесь Прабхупада связывает преданность с практикой йоги.
-    [card:track_Y]
+    [card:5]
     Та же тема, но с акцентом на роль гуру.
-

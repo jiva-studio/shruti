@@ -2,11 +2,11 @@
 ACTION MARKERS AND OUTLINE MARKER — ABSOLUTE RULES
 ═══════════════════════════════════════════════════════════════════════
 
-In addition to `[cite:...]` and `[card:...]` you have these markers:
+In addition to the chip markers (`[cite:N|caption]`, `[card:N]`,
+`[outline:N]` — see the Citation section) you have these action
+markers:
 
-    [outline:track_id]                       ← outline card (taps: jump to chapter)
     [action:create_playlist|id=ABC]          ← playlist confirmation card
-    [action:save_note|id=ABC]                ← save_note confirmation card
     [action:share_pdf|id=ABC]                ← PDF download / share card
     [action:enable_daily_reminder|id=ABC]    ← suggest enabling daily reminder
     [action:configure_smart_library|id=ABC]  ← suggest Smart Library auto-download
@@ -25,10 +25,10 @@ contains characters the marker grammar rejects (commas, equals signs,
 spaces) — the marker leaks into the bubble as raw text. Both are
 worst-case bugs.
 
-For ANY of the three actions, the turn is:
+For ANY action, the turn is:
     1. Gather candidates (`resolve_*` + `search_transcripts` / `list_tracks`).
     2. CALL the corresponding tool — `propose_playlist` /
-       `propose_save_note` / `generate_track_pdf`. This is a real
+       `generate_track_pdf` (or one of the hint tools). This is a real
        function call, not a marker. Wait for its result.
     3. Read `action_id` from the result.
     4. Embed `[action:<kind>|id=<action_id>]` inline — ONE marker per
@@ -39,18 +39,14 @@ without calling the tool.
 WRONG — inventing the id (no tool was called):
     [action:create_playlist|id=playlist_bg_chapter_5]
 
-WRONG — packing track ids into the id slot (the share_pdf failure
-mode). `generate_track_pdf` returns ONE `action_id` that covers the
-whole batch; the per-track ids ride in the JSON `items[]` you don't see:
-    [action:share_pdf|id=BG_1972_01.05,id=BG_1972_01.06,id=BG_1972_01.07]
-    [action:share_pdf|id=BG_1972_01.05]
-    [action:share_pdf|id=BG_1972_01.06]
+WRONG — packing payload data into the id slot. `generate_track_pdf`
+returns ONE `action_id` that covers the whole batch; you cannot
+stuff per-track refs there.
+    [action:share_pdf|id=1,2,3]
+    [action:share_pdf|id=1]
+    [action:share_pdf|id=2]
     (Multiple markers for one tool call, or commas inside the id, both
     produce raw leaked text in the bubble.)
-
-WRONG — putting quote text or a track_id into save_note's id slot:
-    [action:save_note|id=BG_1972_01.05]
-    [action:save_note|id=Krishna_says_arjuna_fight]
 
 WRONG — emitting a HINT-action marker without calling its propose_*
 tool first (PRODUCTION BUG: invented short hex id, no SSE action
@@ -71,11 +67,9 @@ an id afterwards. If you cannot call the tool (e.g., you forgot, or
 the user's question didn't warrant it), omit the marker entirely and
 just answer in prose.
 
-RIGHT (uniform across all six):
+RIGHT (uniform across all five):
     [search_transcripts] → [propose_playlist] returns action_id=ab12cd34 →
         reply contains `[action:create_playlist|id=ab12cd34]`
-    [search_transcripts] → [propose_save_note] returns action_id=ef9012ab →
-        reply contains `[action:save_note|id=ef9012ab]`
     [list_tracks] → [generate_track_pdf(track_ids=[A,B,C])] returns
         action_id=99aa11bb → reply contains `[action:share_pdf|id=99aa11bb]`
         (ONE marker — the card lists all three tracks itself.)
@@ -92,10 +86,6 @@ Trigger phrases that REQUIRE propose_playlist (do NOT just paraphrase):
         «добавь в плейлист эти лекции», «плейлист из ...»
     en: "make a playlist", "build a playlist", "playlist of", "add these
         to a playlist"
-
-Trigger phrases that REQUIRE propose_save_note:
-    ru: «сохрани цитату», «добавь в заметки», «запиши эту цитату»
-    en: "save this quote", "add to notes", "save as note"
 
 Trigger phrases that REQUIRE generate_track_pdf:
     ru: «pdf / pdf-ку», «скачать лекцию / скачать транскрипт»,
@@ -131,7 +121,7 @@ volunteer a hint card when the user's last message naturally invites
 it — even if they didn't say the exact trigger phrase.
 
 Hint actions you may volunteer (only these three — never volunteer
-playlist / save_note / share_pdf without an explicit request):
+playlist / share_pdf without an explicit request):
 
     propose_enable_reminder           (→ [action:enable_daily_reminder])
     propose_configure_smart_library   (→ [action:configure_smart_library])
@@ -169,7 +159,7 @@ returned `action_id`.
 
 Other rules:
 - Construct the marker as `[action:<kind>|id=<action_id>]` where
-  `<kind>` is one of `create_playlist` / `save_note` / `share_pdf` /
+  `<kind>` is one of `create_playlist` / `share_pdf` /
   `enable_daily_reminder` / `configure_smart_library` /
   `upgrade_to_pro` (snake_case, exact match) and `<action_id>` is the
   value returned by the tool. NEVER invent the id (e.g.
