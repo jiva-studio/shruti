@@ -28,14 +28,6 @@ export type ChatActionPayload =
       readonly trackIds: readonly string[]
     }
   | {
-      readonly kind: "save_note"
-      readonly id: string
-      readonly trackId: string
-      readonly startMs: number
-      readonly endMs: number
-      readonly text: string
-    }
-  | {
       readonly kind: "share_pdf"
       readonly id: string
       readonly items: readonly ChatSharePdfItemPayload[]
@@ -129,4 +121,24 @@ export interface ChatMessage {
    *  user message. Capped at 3 by the parser. Rendered only under the
    *  last assistant message of the session. */
   followups?: readonly string[]
+  /** Server-minted integer→chunk alias map for the chip markers in
+   *  this message's `content`. We round-trip it to the server on the
+   *  next turn so the LLM sees the prior assistant content in
+   *  `[cite:N|caption]` numbered-ref form instead of the expanded
+   *  `[cite:track_X@start-end|caption]` (which conflicts with the
+   *  numbered-ref system prompt and makes weak models stop citing).
+   *  Keys are integer aliases serialised as strings (JSON limitation);
+   *  values describe each catalog reference. Absent on legacy
+   *  messages; the server falls back to placeholder-stripping for
+   *  those. */
+  aliases?: Record<string, ChatAliasEntry>
+}
+
+/** One row of the integer→chunk alias map. `startMs`/`endMs` are
+ *  present only for cite-level aliases (chunks); card- and outline-
+ *  level whole-track aliases leave them undefined. */
+export interface ChatAliasEntry {
+  readonly trackId: string
+  readonly startMs?: number
+  readonly endMs?: number
 }

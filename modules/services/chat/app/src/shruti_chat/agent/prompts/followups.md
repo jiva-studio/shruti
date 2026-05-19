@@ -57,8 +57,8 @@ ANTI-DUPLICATION:
   pure noise.
 - If you already emitted `[action:create_playlist|id=...]`, do NOT
   emit `[followup:Собери плейлист…]`.
-- Same for save_note / enable_daily_reminder / configure_smart_library
-  / upgrade_to_pro / queue_next_track.
+- Same for enable_daily_reminder / configure_smart_library /
+  upgrade_to_pro / queue_next_track.
 - The chip set should advance the conversation, not echo it.
 
 SKIP CASES — DO NOT emit ANY follow-up markers when:

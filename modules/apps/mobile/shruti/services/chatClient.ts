@@ -9,6 +9,13 @@ export type ChatRole = "user" | "assistant"
 export interface ChatTurn {
   readonly role: ChatRole
   readonly content: string
+  /** Round-tripped from a prior turn's `aliases` SSE event. Only
+   *  present on assistant turns whose `meta.aliases` was persisted.
+   *  Domain stays camelCase; `buildRequestBody` converts to the wire
+   *  snake_case shape before sending. */
+  readonly aliases?: Readonly<
+    Record<string, { readonly trackId: string; readonly startMs?: number; readonly endMs?: number }>
+  >
 }
 
 export interface OutlineItemPayload {
@@ -36,14 +43,6 @@ export type ActionPayload =
       readonly id: string
       readonly name: string
       readonly trackIds: readonly string[]
-    }
-  | {
-      readonly kind: "save_note"
-      readonly id: string
-      readonly trackId: string
-      readonly startMs: number
-      readonly endMs: number
-      readonly text: string
     }
   | {
       readonly kind: "share_pdf"
@@ -91,6 +90,14 @@ export type ChatStreamEvent =
   | { readonly type: "tool" }
   | { readonly type: "action"; readonly payload: ActionPayload }
   | { readonly type: "outline"; readonly payload: OutlinePayload }
+  /** Emitted once per turn, right before `done`. Carries the
+   *  integer→chunk map the server used to expand `[cite:N|…]` /
+   *  `[card:N]` / `[outline:N]` into the wire-format markers in
+   *  this turn's `delta` text. Persisting it on the freshly-finalised
+   *  assistant message lets us ship it back as `aliases` on the
+   *  message in the next turn's history, so the LLM sees one
+   *  numbering scheme throughout the conversation. */
+  | { readonly type: "aliases"; readonly map: AliasMapPayload }
   | { readonly type: "done" }
   | {
       readonly type: "error"
@@ -98,6 +105,19 @@ export type ChatStreamEvent =
       readonly message: string
       readonly retryAfter?: number
     }
+
+/** Wire shape of the alias map emitted by the agent. Keys are integer
+ *  aliases serialised as strings (JSON limitation); start/end ms are
+ *  present only for cite-level chunk aliases. Wire layer keeps the
+ *  snake_case from the agent payload; the domain layer maps it to
+ *  camelCase `ChatAliasEntry`. */
+export interface AliasMapPayload {
+  readonly [refStr: string]: {
+    readonly track_id: string
+    readonly start_ms?: number
+    readonly end_ms?: number
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*                               Title generator                              */
@@ -316,7 +336,29 @@ function buildRequestBody(
   lang: "ru" | "en",
   opts: StreamChatOptions
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = { messages, lang }
+  // Wire-format messages: server's ChatMessageDto expects `aliases`
+  // entries in snake_case (track_id / start_ms / end_ms). The domain
+  // side uses camelCase, so we transform on the boundary.
+  const wireMessages = messages.map((m) => {
+    const out: Record<string, unknown> = { role: m.role, content: m.content }
+    if (m.role === "assistant" && m.aliases && Object.keys(m.aliases).length > 0) {
+      const wireAliases: Record<
+        string,
+        { track_id: string; start_ms?: number; end_ms?: number }
+      > = {}
+      for (const [k, v] of Object.entries(m.aliases)) {
+        const entry: { track_id: string; start_ms?: number; end_ms?: number } = {
+          track_id: v.trackId,
+        }
+        if (typeof v.startMs === "number") entry.start_ms = v.startMs
+        if (typeof v.endMs === "number") entry.end_ms = v.endMs
+        wireAliases[k] = entry
+      }
+      out.aliases = wireAliases
+    }
+    return out
+  })
+  const body: Record<string, unknown> = { messages: wireMessages, lang }
   if (opts.userContext !== undefined) body.user_context = opts.userContext
   if (opts.proactive !== undefined) {
     body.proactive = {
@@ -457,6 +499,10 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       const op = parseOutlinePayload(payload)
       return op ? { type: "outline", payload: op } : null
     }
+    case "aliases": {
+      const map = parseAliasMap(payload.map)
+      return map ? { type: "aliases", map } : null
+    }
     case "error":
       return {
         type: "error",
@@ -478,6 +524,23 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       console.warn("[chat] unknown sse event:", name)
       return null
   }
+}
+
+function parseAliasMap(raw: unknown): AliasMapPayload | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+  const out: Record<string, { track_id: string; start_ms?: number; end_ms?: number }> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") continue
+    const obj = v as Record<string, unknown>
+    if (typeof obj.track_id !== "string") continue
+    const entry: { track_id: string; start_ms?: number; end_ms?: number } = {
+      track_id: obj.track_id,
+    }
+    if (typeof obj.start_ms === "number") entry.start_ms = obj.start_ms
+    if (typeof obj.end_ms === "number") entry.end_ms = obj.end_ms
+    out[k] = entry
+  }
+  return out
 }
 
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
@@ -507,19 +570,6 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
     if (!name || trackIds.length === 0) return null
     return { kind: "create_playlist", id, name, trackIds }
-  }
-  if (kind === "save_note") {
-    const trackId = typeof p.track_id === "string" ? p.track_id : ""
-    const text = typeof p.text === "string" ? p.text : ""
-    if (!trackId || !text) return null
-    return {
-      kind: "save_note",
-      id,
-      trackId,
-      startMs: typeof p.start_ms === "number" ? p.start_ms : 0,
-      endMs: typeof p.end_ms === "number" ? p.end_ms : 0,
-      text,
-    }
   }
   if (kind === "share_pdf") {
     const itemsRaw = Array.isArray(p.items) ? p.items : []

@@ -18,6 +18,10 @@ from typing import Any, Callable
 
 from shruti_chat.agent.tools._registry import ToolDef, register_tool
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
+from shruti_chat.observability.logging import get_logger
+
+
+log = get_logger(__name__)
 
 
 YieldEvent = Callable[[str, dict[str, Any]], None]
@@ -48,7 +52,17 @@ async def propose_playlist(
     yield_event: YieldEvent = _noop_yield,
     catalog_repo: CatalogRepository,
 ) -> dict[str, Any]:
-    """Ask the client to create a playlist (after user confirmation)."""
+    """Ask the client to create a playlist (after user confirmation).
+
+    Validates every requested track_id against the catalog. If any are
+    rejected, the LLM sees both the validated subset AND the dropped
+    ids in the tool result so it can rephrase its surrounding prose
+    (e.g. "I made a playlist of 10 lectures" while we only kept 6
+    would silently lie — instead the model gets a chance to correct).
+
+    If ALL ids are invalid, the SSE `action` event is suppressed
+    entirely and the LLM gets an error so it has to retry or back out.
+    """
     name = (name or "").strip()
     if not name:
         return {"error": "name_required"}
@@ -57,8 +71,24 @@ async def propose_playlist(
     # prompt; 30 is the hard ceiling.
     requested = list(track_ids or [])[:MAX_PLAYLIST_TRACKS]
     valid = await catalog_repo.filter_existing_track_ids(requested)
+    rejected = [t for t in requested if t not in set(valid)]
+    if rejected:
+        log.info(
+            "chat_tool_call_partial_rejected",
+            tool="propose_playlist",
+            rejected_count=len(rejected),
+            rejected_track_ids=rejected,
+        )
     if not valid:
-        return {"error": "no_valid_tracks"}
+        return {
+            "error": "all_track_ids_invalid",
+            "rejected_track_ids": rejected,
+            "hint": (
+                "Every track_id you supplied is missing from the catalog. "
+                "Re-run search_transcripts / list_tracks for fresh ids — "
+                "do not invent or reuse ids from past chats."
+            ),
+        }
     action_id = _new_action_id()
     yield_event(
         "action",
@@ -73,40 +103,7 @@ async def propose_playlist(
         "ok": True,
         "action_id": action_id,
         "validated_track_ids": valid,
-    }
-
-
-async def propose_save_note(
-    track_id: str,
-    start_ms: int,
-    end_ms: int,
-    text: str,
-    *,
-    yield_event: YieldEvent = _noop_yield,
-) -> dict[str, Any]:
-    """Ask the client to save a note (after user confirmation)."""
-    text = (text or "").strip()
-    if not text:
-        return {"error": "text_required"}
-    if not track_id:
-        return {"error": "track_id_required"}
-    if end_ms < start_ms:
-        end_ms = start_ms
-    action_id = _new_action_id()
-    yield_event(
-        "action",
-        {
-            "kind": "save_note",
-            "id": action_id,
-            "track_id": track_id,
-            "start_ms": int(start_ms),
-            "end_ms": int(end_ms),
-            "text": text,
-        },
-    )
-    return {
-        "ok": True,
-        "action_id": action_id,
+        "rejected_track_ids": rejected,
     }
 
 
@@ -121,8 +118,15 @@ register_tool(ToolDef(
         "inline in your reply where the card should render (construct it "
         "from the returned `action_id`). Never claim the playlist exists — "
         "say 'предлагаю собрать плейлист'. Pick at most 20 track_ids "
-        "(server hard-caps at 30). DO NOT also emit `[card:...]` for the "
-        "same tracks — the action card shows them itself."
+        "(server hard-caps at 30). DO NOT also call `propose_card` for the "
+        "same tracks — the action card shows them itself. "
+        "Returns `{ok, action_id, validated_track_ids, rejected_track_ids}` "
+        "— if `rejected_track_ids` is non-empty, the catalog could not "
+        "find those ids and you should adjust your prose accordingly (do "
+        "NOT claim a count of lectures that includes the rejected ones). "
+        "If every id is rejected the tool returns "
+        "`{error: 'all_track_ids_invalid'}` and emits no action event — "
+        "re-search for fresh ids or back out of the proposal."
     ),
     parameters={
         "type": "object",
@@ -134,24 +138,3 @@ register_tool(ToolDef(
     },
 ))
 
-register_tool(ToolDef(
-    name="propose_save_note",
-    fn=propose_save_note,
-    emits_events=True,
-    description=(
-        "Propose saving a quote as a user note — DOES NOT save it. "
-        "The client will render a card with a confirm button. Embed "
-        "`[action:save_note|id=<action_id>]` inline (construct from the "
-        "returned action_id). Never claim the note is saved."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "track_id": {"type": "string"},
-            "start_ms": {"type": "integer"},
-            "end_ms": {"type": "integer"},
-            "text": {"type": "string"},
-        },
-        "required": ["track_id", "start_ms", "end_ms", "text"],
-    },
-))

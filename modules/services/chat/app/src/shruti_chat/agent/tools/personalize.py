@@ -9,10 +9,11 @@
 These tools are exposed to the LLM with NO `user_context` parameter in
 their JSON-Schema — the loop binds it via `build_personalized_tools`.
 
-Notes are intentionally not in `user_context`: chat only writes notes
-via the `propose_save_note` action; there is no read/search direction
-in the current UX. When that changes, add `recent_notes` back + the
-matching tool synchronously with the consumer UI.
+Notes are intentionally not in `user_context`: chat surfaces citations
+as `[cite:...]` chips the user can save from the action sheet, but
+there is no read/search direction in the current UX. When that
+changes, add `recent_notes` back + the matching tool synchronously
+with the consumer UI.
 """
 
 from __future__ import annotations

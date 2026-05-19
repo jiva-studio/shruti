@@ -29,9 +29,10 @@ export interface FocusFragmentPayload {
  *  them without inferring a separate timezone field. The offset suffix
  *  replaces what would otherwise be a `tz_offset_minutes` field.
  *
- *  Notes are NOT sent. Chat can write notes (via `propose_save_note`
- *  action) but not read or search them — the field would be dead bytes
- *  in every request until a search-my-notes UI flow lands. */
+ *  Notes are NOT sent. Chat exposes citations as `[cite:...]` chips
+ *  the user can save from the action sheet, but the agent has no read
+ *  side for notes — the field would be dead bytes in every request
+ *  until a search-my-notes UI flow lands. */
 export interface UserContextPayload {
   readonly current_track_id: string | null
   readonly now: string
