@@ -1,5 +1,6 @@
 import type {
   ChatActionPayload,
+  ChatAliasEntry,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -131,6 +132,7 @@ export async function* runChatTurn(
   let lastError: { code: string; message: string; retryAfter?: number } | null = null
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
+  let aliases: Record<string, ChatAliasEntry> | undefined
 
   // The history passed by the caller is the conversation BEFORE this
   // turn (caller has no clean way to splice the new user message in
@@ -179,6 +181,23 @@ export async function* runChatTurn(
             payload: event.payload,
           }
           break
+        case "aliases":
+          // Server-emitted integer→chunk map for the chip markers in
+          // this turn's accumulated `acc`. Persist on the finalised
+          // message so the next turn can ship it back and the LLM
+          // sees one numbering scheme across the whole conversation.
+          aliases = {}
+          for (const [k, v] of Object.entries(event.map)) {
+            const entry: ChatAliasEntry = { trackId: v.track_id }
+            if (typeof v.start_ms === "number") {
+              ;(entry as { startMs?: number }).startMs = v.start_ms
+            }
+            if (typeof v.end_ms === "number") {
+              ;(entry as { endMs?: number }).endMs = v.end_ms
+            }
+            aliases[k] = entry
+          }
+          break
         case "done":
           sawDone = true
           break
@@ -220,6 +239,7 @@ export async function* runChatTurn(
       outlines,
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
+      aliases,
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }

@@ -2,6 +2,7 @@ import type { IDatabase } from "@ports/app/index.js"
 import type {
   ChatActionPayload,
   ChatActionState,
+  ChatAliasEntry,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -32,6 +33,7 @@ interface ParsedMeta {
   readonly actionStates: Record<string, ChatActionState>
   readonly followups: readonly string[]
   readonly error: ChatMessageError | undefined
+  readonly aliases: Record<string, ChatAliasEntry> | undefined
 }
 
 const EMPTY_META: ParsedMeta = Object.freeze({
@@ -40,6 +42,7 @@ const EMPTY_META: ParsedMeta = Object.freeze({
   actionStates: {},
   followups: [],
   error: undefined,
+  aliases: undefined,
 })
 
 function parseMeta(raw: unknown): ParsedMeta {
@@ -67,7 +70,25 @@ function parseMeta(raw: unknown): ParsedMeta {
     actionStates: extractRecord<ChatActionState>(data.actionStates),
     followups: extractFollowups(data.followups),
     error: parseError(data.error),
+    aliases: extractAliases(data.aliases),
   }
+}
+
+function extractAliases(raw: unknown): Record<string, ChatAliasEntry> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const out: Record<string, ChatAliasEntry> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!v || typeof v !== "object") continue
+    const o = v as Record<string, unknown>
+    if (typeof o.trackId !== "string") continue
+    const entry: { trackId: string; startMs?: number; endMs?: number } = {
+      trackId: o.trackId,
+    }
+    if (typeof o.startMs === "number") entry.startMs = o.startMs
+    if (typeof o.endMs === "number") entry.endMs = o.endMs
+    out[k] = entry
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function extractRecord<T>(raw: unknown): Record<string, T> {
@@ -96,6 +117,7 @@ function wrapMeta(payload: {
   actionStates?: Record<string, ChatActionState>
   followups?: readonly string[]
   error?: ChatMessageError | undefined
+  aliases?: Record<string, ChatAliasEntry>
 }): string {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
@@ -104,6 +126,7 @@ function wrapMeta(payload: {
     data.actionStates = payload.actionStates
   if (payload.followups && payload.followups.length > 0) data.followups = payload.followups
   if (payload.error) data.error = payload.error
+  if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }
 
@@ -122,6 +145,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     actionStates: meta.actionStates,
     error: meta.error,
     followups: meta.followups.length > 0 ? meta.followups : undefined,
+    aliases: meta.aliases,
   }
 }
 
@@ -152,6 +176,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actionStates: input.actionStates,
         followups: input.followups,
         error: input.error,
+        aliases: input.aliases,
       })
       await db.execute(
         `INSERT INTO chat_messages
@@ -171,6 +196,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actionStates: input.actionStates ?? {},
         error: input.error,
         followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
+        aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
       }
     },
 
@@ -190,6 +216,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actionStates,
         followups: current.followups,
         error: current.error,
+        aliases: current.aliases,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       await db.save()
