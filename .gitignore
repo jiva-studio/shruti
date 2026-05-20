@@ -72,11 +72,7 @@ modules/tools/tgDownloader
 #                                  Chat evals                                  #
 # ---------------------------------------------------------------------------- #
 
-# Output of `tests/evals/run_chunk_tools_eval.py` — regenerated on every
-# run, never source-of-truth. Historical snapshots (results-stage1-*) were
-# accidentally committed during the Stage 1 development and removed in the
-# cleanup pass; this rule keeps them out for good.
-modules/services/chat/app/tests/evals/results.jsonl
-modules/services/chat/app/tests/evals/results.filtered.jsonl
-modules/services/chat/app/tests/evals/results.filtered.tmp.jsonl
-modules/services/chat/app/tests/evals/results-stage*.jsonl
+# Output of `tests/evals/run_chunk_tools_eval.py` — regenerated on every run.
+# chunk_tools.jsonl is the source-of-truth test cases file; everything else is artefact.
+modules/services/chat/app/tests/evals/*.jsonl
+!modules/services/chat/app/tests/evals/chunk_tools.jsonl
