@@ -67,3 +67,16 @@ modules/apps/mobile/android/app/src/main/assets/*
 scripts/.scripts
 modules/tools/tgDownloader
 *.tar.gz
+
+# ---------------------------------------------------------------------------- #
+#                                  Chat evals                                  #
+# ---------------------------------------------------------------------------- #
+
+# Output of `tests/evals/run_chunk_tools_eval.py` — regenerated on every
+# run, never source-of-truth. Historical snapshots (results-stage1-*) were
+# accidentally committed during the Stage 1 development and removed in the
+# cleanup pass; this rule keeps them out for good.
+modules/services/chat/app/tests/evals/results.jsonl
+modules/services/chat/app/tests/evals/results.filtered.jsonl
+modules/services/chat/app/tests/evals/results.filtered.tmp.jsonl
+modules/services/chat/app/tests/evals/results-stage*.jsonl
