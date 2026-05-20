@@ -1,6 +1,6 @@
 """Catalog DB (`current.db`) bootstrap + atomic swap.
 
-The agent's tools (resolve_*, list_tracks, get_track, search_transcripts filters)
+The agent's tools (resolve_*, list_tracks, get_track, chunks_search filters)
 all read the catalog SQLite by opening fresh connections per call. We download
 to a temp file on the same filesystem and `os.replace()` over the canonical
 location — atomic at the kernel level; existing FDs continue reading the old
@@ -24,7 +24,9 @@ log = get_logger(__name__)
 async def read_current_version() -> str | None:
     pool = get_pool()
     async with pool.acquire() as conn:
-        return await conn.fetchval("SELECT current_version FROM catalog_state WHERE id = 1")
+        return await conn.fetchval(
+            "SELECT current_version FROM db_state WHERE kind = 'catalog'"
+        )
 
 
 async def write_current_version(version: str) -> None:
@@ -32,9 +34,9 @@ async def write_current_version(version: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute(
             """
-            INSERT INTO catalog_state (id, current_version, updated_at)
-            VALUES (1, $1, NOW())
-            ON CONFLICT (id) DO UPDATE SET
+            INSERT INTO db_state (kind, current_version, updated_at)
+            VALUES ('catalog', $1, NOW())
+            ON CONFLICT (kind) DO UPDATE SET
               current_version = EXCLUDED.current_version,
               updated_at      = NOW()
             """,

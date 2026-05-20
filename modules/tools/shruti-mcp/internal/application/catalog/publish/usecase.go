@@ -52,16 +52,40 @@ type Result struct {
 	Plan       []string `json:"plan,omitempty"`
 }
 
-type configManifest struct {
-	Databases []struct {
-		Version int64 `json:"version"`
-		Scheme  int   `json:"scheme"`
-	} `json:"databases"`
-	// Proactive config (rules + holiday calendar) is opaque to the
-	// publisher — we read it from disk as raw JSON and pass it through
-	// to every target. Lets the mobile schema for proactive evolve
-	// without touching this Go code.
-	Proactive json.RawMessage `json:"proactive,omitempty"`
+// configManifest models only the fields catalog.publish owns
+// (`databases`, `proactive`). Other top-level keys — notably `library`
+// added by library.publish — must round-trip untouched, otherwise this
+// publisher silently strips them. We therefore read into a generic
+// map of raw messages, peel `databases` / `proactive` out for typed
+// editing, and merge the modified versions back before writing.
+type databaseEntry struct {
+	Version int64 `json:"version"`
+	Scheme  int   `json:"scheme"`
+}
+
+type configManifest map[string]json.RawMessage
+
+func (m configManifest) databases() []databaseEntry {
+	raw, ok := m["databases"]
+	if !ok {
+		return nil
+	}
+	var out []databaseEntry
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+func (m configManifest) setDatabases(entries []databaseEntry) {
+	raw, _ := json.Marshal(entries)
+	m["databases"] = raw
+}
+
+func (m configManifest) setProactive(raw json.RawMessage) {
+	if len(raw) == 0 {
+		delete(m, "proactive")
+		return
+	}
+	m["proactive"] = raw
 }
 
 func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
@@ -84,9 +108,12 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	if found, err := primary.GetJSON(ctx, "public/config.json", &existingCfg); err != nil {
 		return Result{}, fmt.Errorf("get config.json: %w", err)
 	} else if !found {
-		// brand-new bucket; OK, treat as empty.
+		existingCfg = configManifest{}
 	}
-	for _, d := range existingCfg.Databases {
+	if existingCfg == nil {
+		existingCfg = configManifest{}
+	}
+	for _, d := range existingCfg.databases() {
 		if d.Version >= cur {
 			cur = d.Version + 1
 		}
@@ -161,26 +188,29 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if _, err := target.GetJSON(ctx, "public/config.json", &cfg); err != nil {
 			return Result{}, fmt.Errorf("get config.json (%s): %w", target.Name(), err)
 		}
+		if cfg == nil {
+			cfg = configManifest{}
+		}
 		// dedupe by version, prepend, sort desc, top 5.
-		filtered := cfg.Databases[:0]
-		for _, d := range cfg.Databases {
+		entries := cfg.databases()
+		filtered := entries[:0]
+		for _, d := range entries {
 			if d.Version != cur {
 				filtered = append(filtered, d)
 			}
 		}
-		filtered = append([]struct {
-			Version int64 `json:"version"`
-			Scheme  int   `json:"scheme"`
-		}{{Version: cur, Scheme: uc.SupportedScheme}}, filtered...)
+		filtered = append([]databaseEntry{{Version: cur, Scheme: uc.SupportedScheme}}, filtered...)
 		sort.Slice(filtered, func(i, j int) bool { return filtered[i].Version > filtered[j].Version })
 		if len(filtered) > 5 {
 			filtered = filtered[:5]
 		}
-		cfg.Databases = filtered
+		cfg.setDatabases(filtered)
 		// Always write the latest proactive block from disk — never
 		// merge with whatever existed on the bucket. The on-disk file
 		// is the source of truth (under git, reviewed in PRs).
-		cfg.Proactive = proactiveBlock
+		cfg.setProactive(proactiveBlock)
+		// Other top-level keys (e.g. `library` written by library.publish)
+		// stay untouched because we never touched cfg[<other>].
 		body, _ := json.MarshalIndent(cfg, "", "  ")
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)

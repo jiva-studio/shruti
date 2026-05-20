@@ -22,25 +22,23 @@ sees a hole in your sentence.
 
 EXAMPLE — correct flow:
 
-    [tool_use] search_transcripts(query="бхакти преданное служение")
+    [tool_use] chunks_search(query="бхакти преданное служение", type="lecture")
     [tool_result]
-        [{"ref": 1, "lang": "ru", "start_ms": 630560, "end_ms": 684400,
-          "text": "Бхакти — это путь преданного служения…"},
-         {"ref": 2, "lang": "ru", "start_ms": 200,    "end_ms": 280,
-          "text": "Преданность означает занять все чувства в служении…"},
-         {"ref": 3, …}]
+        [{"type": "lecture", "ref": 4823, "lang": "ru",
+          "label": "Lecture [10:30–11:24]",
+          "text": "Бхакти — это путь преданного служения…",
+          "meta": {"start_ms": 630560, "end_ms": 684400}},
+         {"type": "lecture", "ref": 91, "lang": "ru",
+          "label": "Lecture [00:00–00:04]",
+          "text": "Преданность означает занять все чувства в служении…",
+          "meta": {"start_ms": 200, "end_ms": 280}},
+         {...}]
 
     [your reply]
         Прабхупада объясняет что бхакти — это путь преданного служения,
-        в котором человек занимает все чувства Кришне. [cite:1|путь
+        в котором человек занимает все чувства Кришне. [cite:4823|путь
         служения] Это не подавление чувств, а их очищение через
-        служение повелителю чувств. [cite:2|занять все чувства]
-
-EXAMPLE — INVALID, will not render:
-
-    [cite:track_OkPVGYhR5PPu@630560-684400|путь служения]
-    [cite:BG_1972_03.05|деятельность]
-    [cite:7|...]                ← only refs 1, 2, 3 existed in the last result
+        служение повелителю чувств. [cite:91|занять все чувства]
 
 If no `ref` from the current turn fits the point you're making, omit
 the citation. Don't invent a number to fill the gap — the user gets

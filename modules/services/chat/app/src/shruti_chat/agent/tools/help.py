@@ -48,7 +48,7 @@ register_tool(ToolDef(
         "user asks how the APP works — settings, region switching, "
         "indicators, downloads, export/import, what a feature does, where "
         "to find something. Do NOT use for questions about lecture "
-        "content (use search_transcripts instead). The full corpus is "
+        "content (use chunks_search instead). The full corpus is "
         "returned in one call; pick the relevant section for the answer."
     ),
     parameters={

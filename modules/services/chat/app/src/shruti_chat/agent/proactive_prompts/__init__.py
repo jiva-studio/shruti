@@ -9,7 +9,7 @@ dump of the device-supplied `rule_context` so the LLM has the data
 it needs to write the body.
 
 Both are deliberately small — the LLM keeps full access to the same
-tool registry (`list_tracks`, `search_transcripts`, …) and the same
+tool registry (`list_tracks`, `chunks_search`, …) and the same
 output discipline (`[action:...|id=...]` markers, citation rules).
 """
 

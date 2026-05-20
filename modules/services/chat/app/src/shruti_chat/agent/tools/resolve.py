@@ -78,7 +78,7 @@ register_tool(ToolDef(
     fn=resolve_author,
     description=(
         "Translate a human author name into author_id. Call BEFORE "
-        "list_tracks/search_transcripts when filtering by author."
+        "list_tracks/chunks_search when filtering by author."
     ),
     parameters=_RESOLVE_PARAMS,
 ))

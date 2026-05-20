@@ -52,7 +52,7 @@ class UserContextTrack:
 class FocusFragment:
     """User just tapped a specific span (e.g. an outline chapter) and the
     next message implicitly targets it. The agent should pull
-    `get_transcript_window` around this range instead of guessing.
+    `chunks_get_window` around this range instead of guessing.
 
     `title` is informational for the LLM (rendered into the system
     prompt anchors block); tools receive only `track_id`, `start_ms`,

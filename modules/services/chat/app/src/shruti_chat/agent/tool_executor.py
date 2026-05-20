@@ -28,7 +28,7 @@ log = get_logger(__name__)
 # request's UI language unless the LLM explicitly picked one. The
 # per-tool fallback (search/list_tracks/history/recommend) then broadens
 # transparently on empty result sets.
-_LANG_DEFAULT_TOOLS = frozenset({"search_transcripts", "list_tracks"})
+_LANG_DEFAULT_TOOLS = frozenset({"chunks_search", "list_tracks"})
 
 
 @dataclass

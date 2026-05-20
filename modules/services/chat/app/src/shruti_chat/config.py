@@ -91,6 +91,11 @@ class Settings(BaseSettings):
         return self.catalog_dir / "catalog.db"
 
     @property
+    def library_db_path(self) -> Path:
+        """Local path for the published library.db snapshot."""
+        return self.catalog_dir / "library.db"
+
+    @property
     def langs(self) -> list[str]:
         return [s.strip() for s in self.indexer_langs.split(",") if s.strip()]
 

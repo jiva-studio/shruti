@@ -37,7 +37,7 @@ log = get_logger(__name__)
 
 # Ceiling on tool-call turns per /chat request. Real-world playlist /
 # multi-criteria queries observably need 5-7 turns (resolve_source →
-# search_transcripts → list_tracks → resolve_tag → list_tracks → answer).
+# chunks_search → list_tracks → resolve_tag → list_tracks → answer).
 # 10 leaves comfortable headroom for the agent's exploratory passes
 # without inviting runaway loops. Hitting the ceiling surfaces a typed
 # error to the client so the UX can render a specific "agent didn't
@@ -104,7 +104,7 @@ async def run_llm_loop(
             # with zero citations. `tool_choice: "required"` is a
             # provider-level guarantee: the streamed completion MUST
             # contain at least one tool_use block, so the LLM cannot
-            # skip search_transcripts. Subsequent rounds (after a tool
+            # skip chunks_search. Subsequent rounds (after a tool
             # already ran in this turn) use the default `auto` so the
             # model can write its final answer.
             extra: dict[str, Any] = {}
@@ -182,7 +182,7 @@ async def run_llm_loop(
                 return
 
             # The streamed preamble text is a "thinking out loud" prelude
-            # ("Я сделаю это через search_transcripts..."); we wipe it
+            # ("Я сделаю это через chunks_search..."); we wipe it
             # client-side on `tool_start`. Feeding it back into the LLM's
             # own history would let it keep narrating its plan forever,
             # so we persist an empty content with the tool_calls only.

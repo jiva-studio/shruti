@@ -18,6 +18,7 @@ _SECTIONS = (
     "followups",
     "no_narration",
     "citations",
+    "library",
     "quoting",
     "response_shape",
     "language",

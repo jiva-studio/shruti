@@ -8,6 +8,7 @@ import {
   type FocusFragmentPayload,
 } from "@shruti/composables/useTrackUserState.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
+import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import {
   extractFollowups,
@@ -107,6 +108,7 @@ export const useChatStore = defineStore("chat", () => {
   const appLanguage = useAppLanguage()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
+  const verseBodyStore = useVerseBodyStore()
   const { t } = useI18n()
 
   const sessions = ref<ChatSession[]>([])
@@ -353,6 +355,20 @@ export const useChatStore = defineStore("chat", () => {
           outlines: { ...(cur.outlines ?? {}), [event.trackId]: event.payload },
         }
         messages.value = next
+        return
+      }
+      case "verse-payload": {
+        // Server-streamed verse body for one (source_id, tokens). The
+        // store caches it (with persistence) so `VerseCard.vue`
+        // can render the full block. Does NOT touch the message list
+        // — verse-payload arrives BEFORE the prose deltas containing
+        // the marker, and the marker itself is what triggers render.
+        verseBodyStore.set(event.sourceId, event.tokens, {
+          addrLabel: event.addrLabel,
+          sanskrit: event.sanskrit,
+          transliteration: event.transliteration,
+          translation: event.translation,
+        })
         return
       }
       case "finalised": {

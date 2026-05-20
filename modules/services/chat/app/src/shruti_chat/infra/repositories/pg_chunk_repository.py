@@ -13,7 +13,7 @@ from typing import Any
 
 import asyncpg
 
-from shruti_chat.domain.entities import Chunk, ScoredChunk
+from shruti_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
 
 
 class PgChunkRepository:
@@ -30,7 +30,8 @@ class PgChunkRepository:
         lang: str | None,
         top_k: int,
     ) -> list[ScoredChunk]:
-        where = ["embed_model = $1"]
+        # `kind='track_transcript'` keeps library rows out of lecture search.
+        where = ["embed_model = $1", "kind = 'track_transcript'"]
         params: list[Any] = [self._embed_model]
         if lang:
             where.append(f"lang = ${len(params) + 1}")
@@ -150,6 +151,115 @@ class PgChunkRepository:
         async with pool.acquire() as conn:
             rows = await conn.fetch(sql, *params)
         return [r["text"] for r in rows]
+
+    async def search_library_by_embedding(
+        self,
+        embedding: list[float],
+        *,
+        kinds: list[str],
+        source_id: str | None = None,
+        author_id: str | None = None,
+        lang: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        top_k: int = 8,
+    ) -> list[ScoredLibraryChunk]:
+        if not kinds:
+            return []
+        where: list[str] = [
+            "embed_model = $1",
+            f"kind = ANY($2::text[])",
+        ]
+        params: list[Any] = [self._embed_model, kinds]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        if source_id:
+            where.append(f"source_id = ${len(params) + 1}")
+            params.append(source_id)
+        if author_id:
+            where.append(f"author_id = ${len(params) + 1}")
+            params.append(author_id)
+        if date_from:
+            where.append(f"doc_date >= ${len(params) + 1}")
+            params.append(date_from)
+        if date_to:
+            where.append(f"doc_date <= ${len(params) + 1}")
+            params.append(date_to)
+        params.append(embedding)
+        params.append(top_k)
+        sql = f"""
+          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
+                 lang, segment_index, text, addr_label,
+                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY embedding <=> ${len(params) - 1}::vector
+          LIMIT ${len(params)}
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            ScoredLibraryChunk(
+                chunk=LibraryChunk(
+                    item_id=r["item_id"],
+                    item_kind=r["kind"],
+                    source_id=r["source_id"],
+                    tokens=r["tokens"],
+                    author_id=r["author_id"],
+                    doc_date=r["doc_date"],
+                    lang=r["lang"],
+                    segment_index=r["segment_index"],
+                    text=r["text"],
+                    addr_label=r["addr_label"],
+                ),
+                score=float(r["score"]),
+            )
+            for r in rows
+        ]
+
+    async def get_chunks_by_addr_label(
+        self,
+        addr_label: str,
+        *,
+        kinds: list[str],
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        if not kinds:
+            return []
+        where: list[str] = [
+            "kind = ANY($1::text[])",
+            "embed_model = $2",
+            "addr_label = $3",
+        ]
+        params: list[Any] = [kinds, self._embed_model, addr_label]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        sql = f"""
+          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
+                 lang, segment_index, text, addr_label
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY segment_index NULLS FIRST
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            LibraryChunk(
+                item_id=r["item_id"],
+                item_kind=r["kind"],
+                source_id=r["source_id"],
+                tokens=r["tokens"],
+                author_id=r["author_id"],
+                doc_date=r["doc_date"],
+                lang=r["lang"],
+                segment_index=r["segment_index"],
+                text=r["text"],
+                addr_label=r["addr_label"],
+            )
+            for r in rows
+        ]
 
     async def get_first_chunk_embeddings(
         self,
