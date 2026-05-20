@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from shruti_chat.agent.turn_aliases import ChunkRef, TurnAliasMap
+from shruti_chat.agent.turn_aliases import ChunkRef, TurnAliasMap, VerseRef
 from shruti_chat.observability.logging import get_logger
 
 
@@ -25,9 +25,10 @@ log = get_logger(__name__)
 # A complete marker in the form we accept from the LLM. The integer
 # ref captures `N`; an optional `|caption` tail captures the chip
 # label. Cards / outlines have no caption.
-_CITE_RE = re.compile(r"^\[cite:(\d+)(?:\|([^\]]*))?\]$")
-_CARD_RE = re.compile(r"^\[card:(\d+)\]$")
+_CITE_RE    = re.compile(r"^\[cite:(\d+)(?:\|([^\]]*))?\]$")
+_CARD_RE    = re.compile(r"^\[card:(\d+)\]$")
 _OUTLINE_RE = re.compile(r"^\[outline:(\d+)\]$")
+_VERSE_RE   = re.compile(r"^\[verse:(\d+)(?:\|([^\]]*))?\]$")
 
 # If buffering grows past this with no closing `]`, it's clearly not a
 # marker — flush as plain text.
@@ -97,12 +98,17 @@ class MarkerExpander:
         m = _OUTLINE_RE.match(marker)
         if m:
             return self._format_outline(int(m.group(1)), marker)
+        # verse — integer ref + optional caption (library widget)
+        m = _VERSE_RE.match(marker)
+        if m:
+            n_str, caption = m.group(1), (m.group(2) or "").strip()
+            return self._format_verse(int(n_str), caption, marker)
         # Not a numbered-ref marker. Could be `[action:...]` (we leave
         # those for the client), or stray brackets in prose, or a
         # malformed/hallucinated chip marker (e.g. `[cite:track_X|...]`,
         # `[cite:BG_1972_03.05|...]`) — drop those, log, and emit
         # nothing in their place so the surrounding prose stays clean.
-        if marker.startswith(("[cite:", "[card:", "[outline:")):
+        if marker.startswith(("[cite:", "[card:", "[outline:", "[verse:")):
             log.info(
                 "chat_marker_non_integer_dropped",
                 request_id=self._request_id,
@@ -115,7 +121,7 @@ class MarkerExpander:
 
     def _format_cite(self, n: int, caption: str, original: str) -> str:
         ref = self._aliases.resolve(n)
-        if ref is None or ref.start_ms is None or ref.end_ms is None:
+        if not isinstance(ref, ChunkRef) or ref.start_ms is None or ref.end_ms is None:
             log.info(
                 "chat_marker_alias_miss",
                 request_id=self._request_id,
@@ -129,7 +135,7 @@ class MarkerExpander:
 
     def _format_card(self, n: int, original: str) -> str:
         ref = self._aliases.resolve(n)
-        if ref is None:
+        if not isinstance(ref, ChunkRef):
             log.info(
                 "chat_marker_alias_miss",
                 request_id=self._request_id,
@@ -142,7 +148,7 @@ class MarkerExpander:
 
     def _format_outline(self, n: int, original: str) -> str:
         ref = self._aliases.resolve(n)
-        if ref is None:
+        if not isinstance(ref, ChunkRef):
             log.info(
                 "chat_marker_alias_miss",
                 request_id=self._request_id,
@@ -152,3 +158,17 @@ class MarkerExpander:
             )
             return ""
         return f"[outline:{ref.track_id}]"
+
+    def _format_verse(self, n: int, caption: str, original: str) -> str:
+        ref = self._aliases.resolve(n)
+        if not isinstance(ref, VerseRef):
+            log.info(
+                "chat_marker_alias_miss",
+                request_id=self._request_id,
+                kind="verse",
+                ref=n,
+                known_max=len(self._aliases),
+            )
+            return ""
+        body = f"{ref.source_id}/{ref.tokens}"
+        return f"[verse:{body}|{caption}]" if caption else f"[verse:{body}]"

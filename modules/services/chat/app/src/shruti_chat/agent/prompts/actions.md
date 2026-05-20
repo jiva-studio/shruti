@@ -26,7 +26,7 @@ spaces) — the marker leaks into the bubble as raw text. Both are
 worst-case bugs.
 
 For ANY action, the turn is:
-    1. Gather candidates (`resolve_*` + `search_transcripts` / `list_tracks`).
+    1. Gather candidates (`resolve_*` + `chunks_search` / `list_tracks`).
     2. CALL the corresponding tool — `propose_playlist` /
        `generate_track_pdf` (or one of the hint tools). This is a real
        function call, not a marker. Wait for its result.
@@ -68,7 +68,7 @@ the user's question didn't warrant it), omit the marker entirely and
 just answer in prose.
 
 RIGHT (uniform across all five):
-    [search_transcripts] → [propose_playlist] returns action_id=ab12cd34 →
+    [chunks_search(type='lecture')] → [propose_playlist] returns action_id=ab12cd34 →
         reply contains `[action:create_playlist|id=ab12cd34]`
     [list_tracks] → [generate_track_pdf(track_ids=[A,B,C])] returns
         action_id=99aa11bb → reply contains `[action:share_pdf|id=99aa11bb]`

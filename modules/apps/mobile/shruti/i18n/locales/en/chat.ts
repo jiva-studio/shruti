@@ -40,17 +40,17 @@ export default {
   suggestionRecapRecent: "Recap last lecture",
   followupAriaLabel: "Suggested follow-up: {text}",
   suggestions: [
-    "Where did I stop?", // list_my_tracks(status='in_progress')
+    "Where did I stop?", // user_tracks_list(status='in_progress')
     "Playlist on Gita ch. 2", // propose_playlist
     "Lectures on BG 2.11–20", // list_tracks(ref_prefix='2', ref_from=11, ref_to=20)
-    "What I heard this week", // list_my_tracks(since=now-7d)
-    "What to listen next?", // recommend_next
-    "About bhakti", // search_transcripts (semantic)
-    "What is the soul?", // search_transcripts (semantic)
+    "What I heard this week", // user_tracks_list(since=now-7d)
+    "What to listen next?", // user_recommendations_get
+    "About bhakti", // chunks_search (semantic)
+    "What is the soul?", // chunks_search (semantic)
     "Bombay morning walks", // list_tracks(location=Bombay, tag=morning_walk)
     "Vrindavan conversations", // list_tracks(location=Vrindavan, tag=conversation)
     "PDF of last lecture", // generate_track_pdf
-    // Beginner-friendly philosophy questions — all route to search_transcripts.
+    // Beginner-friendly philosophy questions — all route to chunks_search.
     "Who is Krishna?",
     "Why do we suffer?",
     "What is karma?",

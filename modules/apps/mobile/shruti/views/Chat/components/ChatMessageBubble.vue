@@ -87,6 +87,25 @@
               :state="actionState(token.actionId)"
               @confirm="onConfirmAction"
             />
+            <VerseCard
+              v-else-if="token.kind === 'verse'"
+              :source-id="token.sourceId"
+              :tokens="token.tokens"
+              :caption="token.caption"
+            />
+            <!--
+              Markdown blockquote (library document citation). bodyHtml and
+              attributionHtml are output of marked.parseInline on a vetted
+              text snippet, same v-html note as for token.kind === 'text'.
+            -->
+            <blockquote v-else-if="token.kind === 'quote'" class="chat-quote">
+              <span v-html="token.bodyHtml" />
+              <span
+                v-if="token.attributionHtml"
+                class="chat-quote-attribution"
+                v-html="token.attributionHtml"
+              />
+            </blockquote>
           </template>
           <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
             errorSuffix
@@ -108,6 +127,7 @@ import type { ActionPayload } from "@shruti/services/chatClient.js"
 import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
 import OutlineCard from "./OutlineCard.vue"
+import VerseCard from "./VerseCard.vue"
 import ActionCardPlaylist from "./ActionCardPlaylist.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
@@ -218,6 +238,29 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 </script>
 
 <style scoped>
+/* Library document citation — styled blockquote rendered between text
+ * tokens. Body inherits inline-md spans (em/strong/code); attribution
+ * sits on a separate line, smaller and italic.
+ */
+.chat-quote {
+  display: block;
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--ion-color-primary, #5a3e8e);
+  background: rgba(90, 62, 142, 0.06);
+  border-radius: 4px;
+  font-style: italic;
+  color: var(--ion-color-medium-shade, #4d4d4d);
+  line-height: 1.4;
+}
+.chat-quote-attribution {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8125em;
+  font-style: italic;
+  color: var(--ion-color-medium, #777);
+}
+
 .bubble-row {
   display: flex;
   margin: 6px 0;

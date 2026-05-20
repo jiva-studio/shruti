@@ -26,6 +26,7 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.composition import AppDeps
 from shruti_chat.config import get_settings
 from shruti_chat.domain import UserContext
+from shruti_chat.indexer.library.repo import fetch_verse_body
 from shruti_chat.observability.logging import get_logger
 
 
@@ -105,7 +106,27 @@ async def run_chat_turn(
     wrapper translates back."""
     settings = get_settings()
     aliases = TurnAliasMap()
-    messages = build_messages(history, lang, user_context)
+    # Pre-mint refs for `current_track_id` and `focus.track_id` so the
+    # LLM sees integer refs instead of raw track_ids in the system prompt
+    # — same protocol as tool results. Without this, the LLM would try
+    # to pass focus/current track_ids verbatim into chunks_get_window,
+    # which only accepts integer refs.
+    focus_ref: int | None = None
+    current_track_ref: int | None = None
+    if user_context is not None:
+        if user_context.current_track_id:
+            current_track_ref = aliases.alias_track(user_context.current_track_id)
+        if user_context.focus is not None:
+            focus_ref = aliases.alias_chunk(
+                user_context.focus.track_id,
+                int(user_context.focus.start_ms),
+                int(user_context.focus.end_ms),
+            )
+    messages = build_messages(
+        history, lang, user_context,
+        focus_ref=focus_ref,
+        current_track_ref=current_track_ref,
+    )
     tools = build_personalized_tools(TOOLS, user_context)
     tools = build_aliased_tools(tools, aliases)
     expander = MarkerExpander(aliases, request_id=request_id)
@@ -116,6 +137,15 @@ async def run_chat_turn(
         await _audit_bypass_markers(
             llm_prose, deps=deps, request_id=request_id,
         )
+
+    # Set of verse-alias ref numbers for which we've already streamed a
+    # `verse_payload` to the client. Each tool-call result may mint new
+    # verse refs (via aliased_tools._alias_verse_entry → alias_verse).
+    # When a `tool` event lands we walk the alias map and flush any
+    # fresh verse-refs as `verse_payload` events BEFORE the LLM's prose
+    # deltas reach the client — so the mobile has the body cached by
+    # the time it parses the `[verse:source_id/tokens|caption]` marker.
+    emitted_verse_refs: set[int] = set()
 
     async for ev in run_llm_loop(
         messages,
@@ -160,3 +190,52 @@ async def run_chat_turn(
         elif ev.type == "tool_start":
             await expander.flush()
         yield ev
+        if ev.type == "tool":
+            async for verse_event in _emit_pending_verse_payloads(
+                aliases, emitted_verse_refs, settings.library_db_path, request_id,
+            ):
+                yield verse_event
+
+
+async def _emit_pending_verse_payloads(
+    aliases: TurnAliasMap,
+    emitted: set[int],
+    library_db,
+    request_id: str,
+) -> AsyncIterator[AgentEvent]:
+    """Yield one `verse_payload` AgentEvent per verse-alias minted since
+    the last call. Bodies missing from `library.db` (the version
+    indexed in pgvector is ahead of the local SQLite snapshot, or the
+    verse was deleted between publish + chat) are skipped silently —
+    the mobile falls back to the addr-only chip in that case.
+
+    Fetches sequentially. Typical turn mints ≤ 8 verses; the read is
+    cached page-level by SQLite + the OS, so a tight loop is fine."""
+    for ref_num, vref in aliases.verse_refs():
+        if ref_num in emitted:
+            continue
+        emitted.add(ref_num)
+        try:
+            body = await fetch_verse_body(library_db, vref.source_id, vref.tokens)
+        except Exception as exc:
+            log.warning(
+                "verse_payload_fetch_failed",
+                request_id=request_id,
+                source_id=vref.source_id,
+                tokens=vref.tokens,
+                error=str(exc),
+            )
+            continue
+        if body is None:
+            continue
+        yield AgentEvent(
+            type="verse_payload",
+            data={
+                "source_id": vref.source_id,
+                "tokens": vref.tokens,
+                "addr_label": vref.addr_label or "",
+                "sanskrit": body["sanskrit"],
+                "transliteration": body["transliteration"],
+                "translation": body["translation"],
+            },
+        )

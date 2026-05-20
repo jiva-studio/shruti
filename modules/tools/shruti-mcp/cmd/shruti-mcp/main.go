@@ -26,6 +26,7 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/commit"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/ingest"
+	librarypublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/library/publish"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	reviewuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/runner"
@@ -39,6 +40,7 @@ import (
 	exactresolver "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/exact"
 	openaicompatresolver "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
+	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	httpcdn "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
 	openaicompattranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/dicttranslate/openaicompat"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
@@ -123,6 +125,7 @@ func main() {
 	cdnSrc := httpcdn.New(cfg.CDN.ReadBaseURL)
 	catalogOpMutex := &sync.Mutex{}
 	currentDBPath := filepath.Join(cfg.Out, "artifacts", "catalog", "current.db")
+	libraryDBPath := filepath.Join(cfg.Out, "artifacts", "library", "library.db")
 
 	// LLM extractor for metadata. Uses the shared openai-compat client
 	// pointed at OpenRouter (or any compatible upstream) — same model
@@ -551,6 +554,16 @@ func main() {
 		SupportedScheme: catalog.SupportedDBScheme,
 		Targets:         publishTargets,
 		OpMutex:         catalogOpMutex,
+	}
+	deps.Library = tools.LibraryDeps{
+		Repo: sqlitelibrary.NewLazy(libraryDBPath),
+	}
+	deps.LibraryPublish = tools.LibraryPublishDeps{
+		UseCase: librarypublish.UseCase{
+			OutDir:  cfg.Out,
+			Targets: publishTargets,
+			OpMutex: catalogOpMutex, // share with catalog: never two concurrent publishes
+		},
 	}
 	deps.Proactive = tools.ProactiveDeps{
 		UseCase: catalogproactive.UseCase{

@@ -40,6 +40,15 @@ export type RunChatTurnEvent =
       readonly trackId: string
       readonly payload: ChatOutlinePayload
     }
+  | {
+      readonly kind: "verse-payload"
+      readonly sourceId: string
+      readonly tokens: string
+      readonly addrLabel: string
+      readonly sanskrit: string
+      readonly transliteration: string
+      readonly translation: { readonly [lang: string]: string }
+    }
   | { readonly kind: "finalised"; readonly message: ChatMessage }
   | {
       readonly kind: "error"
@@ -196,6 +205,22 @@ export async function* runChatTurn(
               ;(entry as { endMs?: number }).endMs = v.end_ms
             }
             aliases[k] = entry
+          }
+          break
+        case "verse_payload":
+          // Verse body shipped ahead of the prose deltas containing
+          // its `[verse:source_id/tokens|caption]` marker. The store
+          // subscriber caches it under `${sourceId}|${tokens}` so the
+          // VerseCard component can render the full block instead of
+          // the chip placeholder.
+          yield {
+            kind: "verse-payload",
+            sourceId: event.payload.source_id,
+            tokens: event.payload.tokens,
+            addrLabel: event.payload.addr_label,
+            sanskrit: event.payload.sanskrit,
+            transliteration: event.payload.transliteration,
+            translation: event.payload.translation,
           }
           break
         case "done":

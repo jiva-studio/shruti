@@ -37,6 +37,64 @@ class ScoredChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class LibraryChunk:
+    """A chunk of canonical library content (verse / commentary / prose chapter / letter)."""
+    item_id: str
+    item_kind: str           # 'verse' | 'commentary' | 'prose_chapter' | 'letter'
+    source_id: str
+    tokens: str
+    author_id: str | None
+    doc_date: str | None
+    lang: str
+    segment_index: int
+    text: str
+    addr_label: str
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredLibraryChunk:
+    chunk: LibraryChunk
+    score: float
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkEnvelope:
+    """Unified LLM-facing chunk result.
+
+    Every chunks_* / user_* tool that returns chunks emits a list of
+    these. The shape is type-discriminated:
+
+    - `type='lecture'`   → ref is set; meta has `start_ms`, `end_ms`,
+                           optionally `reference_source_id`. `track_id`
+                           is intentionally absent — the LLM only sees
+                           `ref` and uses it in `[cite:N|...]` markers
+                           (server expands ref → track_id at output time).
+    - `type='verse'`     → ref is set; meta has `source_id`, `tokens`.
+                           The LLM uses meta directly in
+                           `[verse:source_id/tokens|caption]` markers
+                           (NOT the ref). Ref is also used as a verse
+                           alias to drive the `verse_payload` SSE event.
+    - `type='commentary' / 'prose_chapter' / 'letter'` → ref is None
+                           (no citation marker protocol exists for
+                           these — the LLM quotes them inline). Meta
+                           has `source_id?`, `tokens?`, `author_id?`,
+                           `doc_date?` for attribution captions.
+
+    `score` is set for semantic-search results; None for exact-lookup
+    and time-window results.
+    """
+
+    type: str
+    ref: int | None
+    label: str
+    text: str
+    lang: str
+    score: float | None
+    meta: dict[str, Any]
+
+
+
+@dataclass(frozen=True, slots=True)
 class Reference:
     source_id: str
     full_name: str | None

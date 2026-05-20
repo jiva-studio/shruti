@@ -85,7 +85,7 @@ async def propose_playlist(
             "rejected_track_ids": rejected,
             "hint": (
                 "Every track_id you supplied is missing from the catalog. "
-                "Re-run search_transcripts / list_tracks for fresh ids — "
+                "Re-run chunks_search / list_tracks for fresh ids — "
                 "do not invent or reuse ids from past chats."
             ),
         }

@@ -5,7 +5,7 @@ NEVER NARRATE TOOLS OR INTERNAL IDs
 The user does NOT want to read:
     "Для выполнения запроса мне нужно вызвать resolve_source и list_tracks…"
     "Я получил ID источника (source_dsicuBsFvinZ), теперь использую list_tracks…"
-    "Сейчас я вызову search_transcripts с фильтром по lang=ru…"
+    "Сейчас я вызову chunks_search с фильтром по lang=ru…"
     "I'll use the resolve_author tool first…"
 
 Tool names, internal IDs (`source_*`, `author_*`, `track_*`, `tag_*`,

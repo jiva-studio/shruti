@@ -31,6 +31,22 @@ export type ChatToken =
       readonly actionKind: ActionKind
       readonly actionId: string
     }
+  | {
+      /** Library verse widget (sanskrit / IAST / translation). Rendered
+       *  by `VerseCard.vue`. Address is `(sourceId, tokens)`. */
+      readonly kind: "verse"
+      readonly sourceId: string
+      readonly tokens: string
+      readonly caption: string
+    }
+  | {
+      /** Library document citation — commentary, prose chapter, or
+       *  letter — rendered as a styled blockquote with an optional
+       *  italic attribution line. */
+      readonly kind: "quote"
+      readonly bodyHtml: string
+      readonly attributionHtml?: string
+    }
 
 /* -------------------------------------------------------------------------- */
 /*                                  Regexes                                   */
@@ -42,6 +58,15 @@ export type ChatToken =
 const CITE_RE = /\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]/g
 const CARD_RE = /\[card:([A-Za-z0-9_.-]+)\]/g
 const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
+// Library verse widget marker. source_id matches `source_<base62-12>` plus a
+// permissive class for safety; tokens are digit groups separated by `.` or `,`
+// (combined verses like "1.2.28,1.2.29").
+const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
+// Markdown blockquote run: one or more consecutive lines starting with `>`.
+// Match begins after a line boundary (start-of-string or `\n`). The capture
+// group keeps the raw lines (each still prefixed by `>`) so the parser can
+// peel the leading `>` and detect an optional trailing italic attribution.
+const QUOTE_RE = /(?:^|\n)((?:[ \t]*>[^\n]*(?:\n|$))+)/g
 // Snake-case kinds throughout: marker, action-card payload, action enum
 // — one wire format end-to-end. Regex stays permissive (matches `a-z0-9_`)
 // so a malformed marker with a stray dash is still captured by the
@@ -129,6 +154,39 @@ export function parseChatMarkers(input: string): ChatToken[] {
       token: { kind: "action", actionKind, actionId },
     })
   }
+  for (const match of input.matchAll(VERSE_RE)) {
+    const [full, sourceId, tokens, captionRaw] = match
+    const start = match.index ?? 0
+    hits.push({
+      start,
+      end: start + full.length,
+      token: {
+        kind: "verse",
+        sourceId,
+        tokens,
+        caption: (captionRaw ?? "").trim(),
+      },
+    })
+  }
+  // Markdown blockquotes — group consecutive `> ...` lines into one
+  // `quote` token. The capturing group starts AFTER the leading newline
+  // (or at the string start), so the hit's range covers the run minus
+  // that boundary char — we leave the boundary newline in the text
+  // segment so paragraph breaks render correctly above the quote.
+  for (const match of input.matchAll(QUOTE_RE)) {
+    const lead = match[0].startsWith("\n") ? 1 : 0
+    const block = match[1]
+    if (!block) continue
+    const start = (match.index ?? 0) + lead
+    const end = start + block.length
+    const { bodyHtml, attributionHtml } = parseQuoteBlock(block)
+    if (!bodyHtml && !attributionHtml) continue
+    hits.push({
+      start,
+      end,
+      token: { kind: "quote", bodyHtml, attributionHtml },
+    })
+  }
   // Followup markers are stripped from the prose (chips render outside
   // the bubble), so we record their spans in `hits` to drop them from
   // the text segments — but never push a renderable token for them.
@@ -196,7 +254,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   const TRAIL = /(?:\s|<br\s*\/?>)+$/i
   const isBlank = (html: string) => /^(?:\s|<br\s*\/?>)*$/i.test(html)
   const blockLike = (k: ChatToken["kind"] | undefined) =>
-    k === "card" || k === "outline" || k === "action"
+    k === "card" || k === "outline" || k === "action" || k === "quote" || k === "verse"
   const out: ChatToken[] = []
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]
@@ -211,6 +269,40 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
     out.push({ kind: "text", html })
   }
   return out
+}
+
+/** Markdown blockquote block → bodyHtml + optional attributionHtml.
+ *  Strip each line's leading `>` plus one optional space; if the last
+ *  remaining line is wholly wrapped in `*…*` or `_…_`, peel it off as
+ *  the italic attribution. Body lines run through `marked.parseInline`
+ *  for inline emphasis/bold. */
+function parseQuoteBlock(raw: string): { bodyHtml: string; attributionHtml?: string } {
+  const lines = raw.split("\n").map((l) => l.replace(/^[ \t]*>[ \t]?/, ""))
+  // Trim trailing blank line that QUOTE_RE may have eaten.
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop()
+  if (lines.length === 0) return { bodyHtml: "" }
+
+  let attributionHtml: string | undefined
+  const last = lines[lines.length - 1].trim()
+  const italicMatch = last.match(/^(?:\*([^*]+)\*|_([^_]+)_)$/)
+  if (italicMatch && lines.length > 1) {
+    const inner = italicMatch[1] ?? italicMatch[2] ?? ""
+    attributionHtml = inlineMd(inner)
+    lines.pop()
+    while (lines.length && lines[lines.length - 1].trim() === "") lines.pop()
+  }
+  const bodyRaw = lines.join("\n").trim()
+  const bodyHtml = bodyRaw ? inlineMd(bodyRaw).replace(/\n/g, "<br>") : ""
+  return { bodyHtml, attributionHtml }
+}
+
+function inlineMd(raw: string): string {
+  try {
+    const parsed = marked.parseInline(raw, { async: false }) as unknown
+    return typeof parsed === "string" ? parsed : escapeHtml(raw)
+  } catch {
+    return escapeHtml(raw)
+  }
 }
 
 /** Strict whitelist — only known action kinds are accepted. Anything

@@ -45,17 +45,17 @@ export default {
   suggestionRecapRecent: "Перескажи последнюю лекцию",
   followupAriaLabel: "Подсказка: {text}",
   suggestions: [
-    "Где остановился?", // list_my_tracks(status='in_progress')
+    "Где остановился?", // user_tracks_list(status='in_progress')
     "Собери плейлист по Гите 2", // propose_playlist
     "Лекции по Гите 2.11–20", // list_tracks(ref_prefix='2', ref_from=11, ref_to=20)
-    "Что слушал на неделе?", // list_my_tracks(since=now-7d)
-    "Что послушать ещё?", // recommend_next
-    "Расскажи про бхакти", // search_transcripts (semantic)
-    "Что такое душа?", // search_transcripts (semantic)
+    "Что слушал на неделе?", // user_tracks_list(since=now-7d)
+    "Что послушать ещё?", // user_recommendations_get
+    "Расскажи про бхакти", // chunks_search (semantic)
+    "Что такое душа?", // chunks_search (semantic)
     "Утренние прогулки в Бомбее", // list_tracks(location=Bombay, tag=morning_walk)
     "Беседы во Вриндаване", // list_tracks(location=Vrindavan, tag=conversation)
     "PDF последней лекции", // generate_track_pdf
-    // Beginner-friendly philosophy questions — all route to search_transcripts.
+    // Beginner-friendly philosophy questions — all route to chunks_search.
     "Кто такой Кришна?",
     "Почему мы страдаем?",
     "Что такое карма?",
