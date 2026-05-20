@@ -39,8 +39,7 @@
 import { computed, ref } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import TrackMiniRow from "./TrackMiniRow.vue"
-import type { ActionPayload } from "@shruti/services/chatClient.js"
-import type { ActionState } from "@shruti/stores/useChatStore.js"
+import type { ActionPayload, ActionState } from "@shruti/stores/useChatStore.js"
 
 const props = defineProps<{
   actionId: string

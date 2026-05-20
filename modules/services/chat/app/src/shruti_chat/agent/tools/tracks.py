@@ -53,7 +53,7 @@ async def get_track(
 
 
 register_tool(ToolDef(
-    name="get_track",
+    name="track_get",
     fn=get_track,
     description="Fetch full metadata for one track by id. Use to enrich a citation.",
     parameters={

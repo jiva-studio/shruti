@@ -136,24 +136,24 @@ def bind_repositories(
         "user_history_search":    {"chunk_repo": chunk_repo, "embedder": embedder},
         "user_recommendations_get": {"chunk_repo": chunk_repo},
         "user_tracks_list":       {"catalog_repo": catalog_repo},
-        "get_track":             {"catalog_repo": catalog_repo},
-        "list_tracks":           {"catalog_repo": catalog_repo},
-        "resolve_author":        {"catalog_repo": catalog_repo},
-        "resolve_source":        {"catalog_repo": catalog_repo},
-        "resolve_location":      {"catalog_repo": catalog_repo},
-        "resolve_tag":           {"catalog_repo": catalog_repo},
-        "get_track_outline":     {
+        "track_get":             {"catalog_repo": catalog_repo},
+        "tracks_list":           {"catalog_repo": catalog_repo},
+        "author_resolve":        {"catalog_repo": catalog_repo},
+        "source_resolve":        {"catalog_repo": catalog_repo},
+        "location_resolve":      {"catalog_repo": catalog_repo},
+        "tag_resolve":           {"catalog_repo": catalog_repo},
+        "track_outline_get":     {
             "catalog_repo": catalog_repo,
             "transcript_storage": transcript_storage,
             "outline_cache": outline_cache,
         },
-        "generate_track_pdf":    {
+        "track_pdf_generate":    {
             "catalog_repo": catalog_repo,
             "transcript_storage": transcript_storage,
             "outline_cache": outline_cache,
             "pdf_storage": pdf_storage,
         },
-        "propose_playlist":      {"catalog_repo": catalog_repo},
+        "playlist_propose":      {"catalog_repo": catalog_repo},
     }
     for name, kwargs in bindings.items():
         fn = TOOLS.get(name)

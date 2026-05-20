@@ -53,7 +53,7 @@ async def propose_enable_reminder(
         {
             "kind": "enable_daily_reminder",
             "id": action_id,
-            "time": t,
+            "payload": {"time": t},
         },
     )
     return {"ok": True, "action_id": action_id}
@@ -96,7 +96,7 @@ async def propose_configure_smart_library(
         {
             "kind": "configure_smart_library",
             "id": action_id,
-            "filters": filters,
+            "payload": {"filters": filters},
         },
     )
     return {"ok": True, "action_id": action_id}
@@ -119,14 +119,14 @@ async def propose_upgrade_to_pro(
         {
             "kind": "upgrade_to_pro",
             "id": action_id,
-            "reason": r[:64],
+            "payload": {"reason": r[:64]},
         },
     )
     return {"ok": True, "action_id": action_id}
 
 
 register_tool(ToolDef(
-    name="propose_enable_reminder",
+    name="reminder_propose",
     fn=propose_enable_reminder,
     emits_events=True,
     description=(
@@ -152,7 +152,7 @@ register_tool(ToolDef(
 ))
 
 register_tool(ToolDef(
-    name="propose_configure_smart_library",
+    name="smart_library_propose",
     fn=propose_configure_smart_library,
     emits_events=True,
     description=(
@@ -180,7 +180,7 @@ register_tool(ToolDef(
 ))
 
 register_tool(ToolDef(
-    name="propose_upgrade_to_pro",
+    name="pro_upgrade_propose",
     fn=propose_upgrade_to_pro,
     emits_events=True,
     description=(

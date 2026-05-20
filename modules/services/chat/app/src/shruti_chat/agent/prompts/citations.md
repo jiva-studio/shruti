@@ -20,21 +20,12 @@ some integer you decided fits the topic. The server silently drops
 any marker whose `N` isn't in the current alias map, and the user
 sees a hole in your sentence.
 
-EXAMPLE — correct flow:
+EXAMPLE — correct rendering:
 
-    [tool_use] chunks_search(query="бхакти преданное служение", type="lecture")
-    [tool_result]
-        [{"type": "lecture", "ref": 4823, "lang": "ru",
-          "label": "Lecture [10:30–11:24]",
-          "text": "Бхакти — это путь преданного служения…",
-          "meta": {"start_ms": 630560, "end_ms": 684400}},
-         {"type": "lecture", "ref": 91, "lang": "ru",
-          "label": "Lecture [00:00–00:04]",
-          "text": "Преданность означает занять все чувства в служении…",
-          "meta": {"start_ms": 200, "end_ms": 280}},
-         {...}]
+Two lecture notes arrived: (ref=4823, body "Бхакти — это путь
+преданного служения…"), (ref=91, body "Преданность означает занять
+все чувства в служении…"). Your reply:
 
-    [your reply]
         Прабхупада объясняет что бхакти — это путь преданного служения,
         в котором человек занимает все чувства Кришне. [cite:4823|путь
         служения] Это не подавление чувств, а их очищение через

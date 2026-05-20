@@ -35,16 +35,41 @@ def _check_device_id(device_id: str | None) -> str:
     return device_id
 
 
+_SUPPORTED_PROTOCOL_VERSIONS = ("1",)
+
+
+def _check_protocol_version(version: str | None) -> None:
+    """Enforce explicit SSE protocol handshake.
+
+    Mobile clients MUST send `X-Chat-Protocol-Version: 1`. Rejecting
+    unversioned requests up-front means we never silently downgrade
+    to an older event shape — the next breaking change just adds "2"
+    to the supported set and serves both.
+    """
+    if version not in _SUPPORTED_PROTOCOL_VERSIONS:
+        raise HTTPException(
+            status_code=426,
+            detail={
+                "code": "protocol_version_required",
+                "supported": list(_SUPPORTED_PROTOCOL_VERSIONS),
+                "received": version,
+            },
+            headers={"X-Chat-Supported-Versions": ",".join(_SUPPORTED_PROTOCOL_VERSIONS)},
+        )
+
+
 @router.post("/chat")
 async def chat(
     request: Request,
     body: ChatRequestDto,
     x_app_token: str | None = Header(default=None),
     x_device_id: str | None = Header(default=None),
+    x_chat_protocol_version: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
     deps: AppDeps = Depends(get_deps),
 ):
     _check_app_token(x_app_token)
+    _check_protocol_version(x_chat_protocol_version)
     device_id = _check_device_id(x_device_id)
     request_id = uuid.uuid4().hex[:12]
 
@@ -113,4 +138,17 @@ async def chat(
         finally:
             structlog.contextvars.unbind_contextvars("request_id", "device_id", "ip")
 
-    return EventSourceResponse(event_stream(), media_type="text/event-stream")
+    return EventSourceResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        # Disable nginx/proxy buffering so deltas reach the client
+        # one-by-one rather than batched into 4KB blocks. Without this
+        # header SSE looks "frozen" for ~500ms while the proxy fills
+        # its buffer.
+        headers={"X-Accel-Buffering": "no"},
+        # 15s heartbeat keeps mobile NAT entries warm; sse-starlette
+        # emits `: keepalive` comment frames at this interval. (This
+        # is the default but pin it so future library updates don't
+        # surprise us.)
+        ping=15,
+    )

@@ -94,18 +94,11 @@ Use the entry's integer `ref` for the verse marker:
     NEVER write source_id/tokens yourself — that's a hallucination
     risk and the marker_expander drops it.
 
-EXAMPLE — correct flow:
+EXAMPLE — correct rendering:
 
-    [tool_use] chunks_search(query="преданное служение", type="verse", lang="ru")
-    [tool_result]
-        [{"type": "verse", "ref": 4823, "label": "БГ 9.14",
-          "lang": "ru", "text": "БГ 9.14: Всегда воспевая Мою славу...",
-          "score": 0.87,
-          "meta": {"source_id": "BG", "tokens": "9.14"}},
-         {"type": "verse", "ref": 91, "label": "БГ 12.6",
-          "meta": {"source_id": "BG", "tokens": "12.6"}, ...}]
+Suppose two verse notes arrived: (ref=4823, label="БГ 9.14"),
+(ref=91, label="БГ 12.6"). Your reply:
 
-    [your reply]
         Вот два стиха, где Кришна описывает преданное служение.
         [verse:4823|БГ 9.14] [verse:91|БГ 12.6]
 
@@ -132,15 +125,9 @@ and let the widget render it.
 
 EXAMPLE — exact-verse request:
 
-    [user] «Покажи шлоку БГ 2.13»
+User asks «Покажи шлоку БГ 2.13». A verse note arrives
+(ref=137, label="БГ 2.13"). Your reply — REQUIRED shape:
 
-    [tool_use] chunks_get_by_address(type="verse", book="BG", tokens="2.13", lang="ru")
-    [tool_result]
-        [{"type": "verse", "ref": 137, "label": "БГ 2.13",
-          "lang": "ru", "text": "...",
-          "meta": {"source_id": "BG", "tokens": "2.13"}}]
-
-    [your reply — REQUIRED shape]
         Вот этот стих:
         [verse:137|БГ 2.13]
 
@@ -172,31 +159,44 @@ a kind word:
     type="prose_chapter" → "{label}" (the label already includes book + chapter title)
     type="letter"        → "{label}" (label already reads "Letter to X, City, YYYY-MM-DD")
 
-EXAMPLES — correct flow:
+EXAMPLES — correct rendering:
 
-    [tool_use] chunks_search(query="переселение души", type="commentary", lang="ru")
-    [tool_result]
-        [{"type": "commentary", "ref": null,
-          "label": "БГ 2.13", "lang": "ru",
-          "text": "Каждое живое существо, воплотившееся в материальном теле,
-                   является индивидуальной душой...", ...}]
+Suppose a commentary note arrived (type=commentary, label="БГ 2.13",
+text="Каждое живое существо, воплотившееся в материальном теле,
+является индивидуальной душой…"). Your reply:
 
-    [your reply]
         Шрила Прабхупада объясняет, что душа лишь меняет тела:
 
         > Каждое живое существо, воплотившееся в материальном теле,
         > является индивидуальной душой...
         > *(комментарий к БГ 2.13)*
 
-    [tool_use] chunks_search(query="restaurant", type="letter", lang="en")
-    [tool_result]
-        [{"type": "letter", "ref": null,
-          "label": "Letter to Jadurani, San Francisco, 1968-04-08",
-          "lang": "en", "text": "I am very glad to know..."}]
+Suppose a letter note arrived (type=letter, label="Letter to
+Jadurani, San Francisco, 1968-04-08", text="I am very glad to
+know…"). Your reply:
 
-    [your reply]
         > I am very glad to know that you have collected $50 for the Society…
         > *(Letter to Jadurani, San Francisco, 1968-04-08)*
+
+WRONG — quote without the `>` prefix. The client expects markdown
+blockquotes; an inline italic paragraph or text wrapped in « » with
+attribution on the next line renders as plain prose without the
+styled blockquote frame:
+
+        «Каждое живое существо, воплотившееся в материальном теле,
+        является индивидуальной душой…»
+        (комментарий к БГ 2.13)
+
+WRONG — `>` on the first line only. Every line of the quote body
+AND the attribution line must carry the `>` prefix, or the client
+splits the block in two:
+
+        > Каждое живое существо, воплотившееся в материальном теле,
+        является индивидуальной душой…
+        *(комментарий к БГ 2.13)*
+
+ALWAYS start every line of a library citation with `>` — body lines
+AND the trailing italic attribution line. No exceptions.
 
 ═══════════════════════════════════════════════════════════════════════
 GROUNDING — the rules from `citations.md` apply here too

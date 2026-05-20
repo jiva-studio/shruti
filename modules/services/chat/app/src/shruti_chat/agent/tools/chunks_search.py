@@ -136,7 +136,14 @@ async def chunks_search(
         # Strict lang produced nothing; relax both branches together to
         # avoid mixing strict-ru with relaxed-en in one merged result.
         rows = await _run(None)
-    return rows
+
+    # Relevance floor. HNSW returns top-K regardless of similarity, so
+    # an off-topic query (quantum computers / aliens / modern science)
+    # still gets 8 unrelated chunks back at score 0.3-0.45. The
+    # synthesizer would then compose paragraphs from junk. Cut at 0.45:
+    # empirically relevant matches sit at 0.5+, mid-relevance 0.45-0.5,
+    # noise below 0.45. Empty list → synth follows refusal rule.
+    return [r for r in rows if (r.get("score") or 0.0) >= 0.45]
 
 
 register_tool(ToolDef(

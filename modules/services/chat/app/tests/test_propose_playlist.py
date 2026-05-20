@@ -50,7 +50,7 @@ async def test_propose_playlist_all_valid_emits_action_event() -> None:
     assert len(events) == 1
     assert events[0][0] == "action"
     assert events[0][1]["kind"] == "create_playlist"
-    assert events[0][1]["track_ids"] == ["track_A", "track_B", "track_C"]
+    assert events[0][1]["payload"]["track_ids"] == ["track_A", "track_B", "track_C"]
 
 
 @pytest.mark.asyncio
@@ -71,7 +71,7 @@ async def test_propose_playlist_partial_valid_reports_rejected_to_llm() -> None:
     assert out["validated_track_ids"] == ["track_A", "track_C"]
     assert sorted(out["rejected_track_ids"]) == ["track_FAKE_1", "track_FAKE_2"]
     # Action event uses only the validated subset
-    assert events[0][1]["track_ids"] == ["track_A", "track_C"]
+    assert events[0][1]["payload"]["track_ids"] == ["track_A", "track_C"]
 
 
 @pytest.mark.asyncio

@@ -172,4 +172,14 @@ export default {
   timeUnitWeek: "нед",
   timeUnitMonth: "мес",
   timeUnitYear: "г",
+
+  // Метки `status` SSE-события (протокол v1). Ключ должен совпадать с
+  // полем `key` в событии — см. backend `agent/events.py`.
+  status: {
+    thinking: "Думаю…",
+    searching_corpus: "Ищу в записях…",
+    composing_answer: "Пишу ответ…",
+    preparing_action: "Готовлю…",
+    browsing_catalog: "Смотрю каталог…",
+  },
 }

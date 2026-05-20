@@ -80,12 +80,13 @@ async def list_tracks(
 
 
 register_tool(ToolDef(
-    name="list_tracks",
+    name="tracks_list",
     fn=list_tracks,
     description=(
         "Deterministic metadata filter over the lecture catalog. Use "
         "for list-style queries: 'lectures by X from Y in period Z'. "
-        "Returns tracks for [card:track_id] markers in your reply. "
+        "Returns tracks the synthesizer will render as `[card:N]` "
+        "widgets — use the integer `ref` field from each row. "
         "Kind (morning walk / conversation / lecture / ...) is "
         "passed via tag_ids (e.g. ['tag_morning_walk']).\n\n"
         "**`title_query` is the way to find a lecture by name.** "
