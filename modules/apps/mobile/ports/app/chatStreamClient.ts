@@ -5,18 +5,57 @@
  * must not import `@lib/domain` (clean-architecture rule), and domain
  * must not import ports either — both layers redeclare the wire
  * contract independently and the composition root reconciles them.
+ *
+ * v1 SSE protocol: `kind`-specific fields live under nested `payload`
+ * — the discriminator (kind, id) is split from the body so a single
+ * switch on `kind` routes to the right payload reader.
  */
 export type ChatActionPayload =
   | {
       readonly kind: "create_playlist"
       readonly id: string
-      readonly name: string
-      readonly trackIds: readonly string[]
+      readonly payload: {
+        readonly name: string
+        readonly trackIds: readonly string[]
+      }
     }
   | {
       readonly kind: "share_pdf"
       readonly id: string
-      readonly items: readonly ChatSharePdfItemPayload[]
+      readonly payload: { readonly items: readonly ChatSharePdfItemPayload[] }
+    }
+  | {
+      readonly kind: "enable_daily_reminder"
+      readonly id: string
+      readonly payload: { readonly time: string }
+    }
+  | {
+      readonly kind: "configure_smart_library"
+      readonly id: string
+      readonly payload: {
+        readonly filters: {
+          readonly authorIds?: readonly string[]
+          readonly tagIds?: readonly string[]
+          readonly sourceIds?: readonly string[]
+          readonly locationIds?: readonly string[]
+          readonly languageCodes?: readonly string[]
+        }
+      }
+    }
+  | {
+      readonly kind: "upgrade_to_pro"
+      readonly id: string
+      readonly payload: { readonly reason: string }
+    }
+  | {
+      readonly kind: "outline"
+      readonly id: string
+      readonly payload: ChatOutlinePayload
+    }
+  | {
+      readonly kind: "verse"
+      readonly id: string
+      readonly payload: ChatVersePayloadWire
     }
 
 export interface ChatSharePdfItemPayload {
@@ -64,36 +103,31 @@ export interface ChatTurn {
   >
 }
 
-/** Cleanly-decoded SSE event the stream client yields. The variants
- *  track the wire-level event names; consumers pattern-match on `type`. */
+/** Cleanly-decoded SSE event the stream client yields — v1 protocol.
+ *  Negotiated via `X-Chat-Protocol-Version: 1` request header. The
+ *  variants track the wire-level event names; consumers pattern-match
+ *  on `type`. */
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
-  | { readonly type: "tool_start"; readonly name: string }
+  | { readonly type: "tool_start"; readonly name?: string }
+  | { readonly type: "tool_end"; readonly name?: string }
   | {
-      readonly type: "tool"
-      readonly name: string
-      readonly durationMs?: number
-      readonly resultCount?: number
+      readonly type: "status"
+      readonly key: string
+      readonly params?: Readonly<Record<string, string | number>>
     }
   | { readonly type: "action"; readonly payload: ChatActionPayload }
-  | { readonly type: "outline"; readonly payload: ChatOutlinePayload }
-  | { readonly type: "verse_payload"; readonly payload: ChatVersePayloadWire }
-  | {
-      readonly type: "aliases"
-      /** Wire shape kept snake_case to match the agent's
-       *  `serialize()` payload; the use-case layer maps to camelCase
-       *  `ChatAliasEntry` for the domain. Keys are integer aliases
-       *  serialised as strings (JSON limitation). */
-      readonly map: Readonly<
-        Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
-      >
-    }
   | {
       readonly type: "done"
-      readonly requestId?: string
-      readonly totalTokens?: number
-      readonly toolCalls?: number
-      readonly durationMs?: number
+      /** Alias map for the chip markers in this turn's accumulated
+       *  prose. Wire shape kept snake_case to match the agent's
+       *  `serialize()` payload; use-case maps to camelCase
+       *  `ChatAliasEntry` for the domain. Keys are integer aliases
+       *  as strings (JSON limitation). Embedded inline on `done`
+       *  per SSE v1 (was a separate `aliases` event in the prototype). */
+      readonly aliases?: Readonly<
+        Record<string, { track_id: string; start_ms?: number; end_ms?: number }>
+      >
     }
   | {
       readonly type: "error"

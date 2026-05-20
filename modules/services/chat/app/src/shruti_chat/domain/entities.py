@@ -17,7 +17,7 @@ fields (e.g. `short_name` for sources).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, Required, TypedDict
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,3 +128,45 @@ class ResolvedEntity:
     full_name: str
     confidence: float
     extra: dict[str, Any] = field(default_factory=dict)
+
+
+# ── LLM messaging ────────────────────────────────────────────────────────
+#
+# These shapes mirror OpenAI's chat-completions JSON one-for-one so adapters
+# (LiteLLM, langchain_openai.ChatOpenAI) don't need a conversion layer when
+# they are themselves OpenAI-compatible. Kept here so `LLMPort` signatures
+# don't import from langchain-core in the domain layer.
+
+
+class Message(TypedDict, total=False):
+    """One turn in an LLM conversation. `role` and `content` are required;
+    `tool_calls` / `tool_call_id` show up only on assistant / tool messages."""
+
+    role: Required[Literal["system", "user", "assistant", "tool"]]
+    content: Required[str]
+    tool_calls: list[dict[str, Any]]
+    tool_call_id: str
+
+
+class ToolCallDelta(TypedDict, total=False):
+    """Incremental tool-call data within a streamed completion. The LLM
+    streams the function name once, then JSON arguments across many chunks
+    — `index` ties fragments to the same call when several are emitted
+    in parallel."""
+
+    index: int
+    id: str
+    name: str
+    arguments_delta: str
+
+
+class CompletionChunk(TypedDict, total=False):
+    """One chunk of a streamed LLM completion. Either text, tool-call
+    deltas, a finish signal, or token-usage. All fields optional —
+    different providers emit chunks of different shapes."""
+
+    text: str
+    tool_calls: list[ToolCallDelta]
+    finish_reason: str
+    prompt_tokens: int
+    completion_tokens: int

@@ -26,9 +26,9 @@ log = get_logger(__name__)
 
 # Discovery tools where the agent loop force-defaults `lang` to the
 # request's UI language unless the LLM explicitly picked one. The
-# per-tool fallback (search/list_tracks/history/recommend) then broadens
+# per-tool fallback (search/tracks_list/history/recommend) then broadens
 # transparently on empty result sets.
-_LANG_DEFAULT_TOOLS = frozenset({"chunks_search", "list_tracks"})
+_LANG_DEFAULT_TOOLS = frozenset({"chunks_search", "tracks_list"})
 
 
 @dataclass

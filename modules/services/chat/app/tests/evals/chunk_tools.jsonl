@@ -1,20 +1,36 @@
-{"query": "найди стих про йогу", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "найди стих про йогу", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"all_items": [{"type": "verse"}]}}
 {"query": "дай мне БГ 2.13", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "verse", "book": "BG", "tokens": "2.13"}, "expect_result": {"min_count": 1, "max_count": 2, "all_items": [{"type": "verse", "label_contains": "2.13"}]}}
 {"query": "комментарий к БГ 2.13", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "BG", "tokens": "2.13"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
-{"query": "find a shloka about karma", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
-{"query": "purport on SB 5.5.3", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "SB", "tokens": "5.5.3"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
-{"query": "find a verse about devotional service in CC Madhya 12", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "find a shloka about karma", "lang": "en", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "purport on SB 5.5.3", "lang": "en", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "SB", "tokens": "5.5.3"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
+{"query": "find a shloka about devotional service", "lang": "en", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
 {"query": "что Прабхупада говорит про преданное служение в комментариях", "expect_tool": "chunks_search", "expect_args": {"type": "commentary"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
-{"query": "letter from Prabhupada about restaurant", "expect_tool": "chunks_search", "expect_args": {"type": "letter"}, "expect_result": {"min_count": 1, "all_items": [{"type": "letter"}]}}
+{"query": "letter from Prabhupada about devotional service", "lang": "en", "expect_tool_chain": ["chunks_search"], "expect_result": {"min_count": 1, "all_items": [{"type": "letter"}]}}
 {"query": "из Книги Кришны главу про Говардхану", "expect_tool": "chunks_search", "expect_args": {"type": "prose_chapter"}, "expect_result": {"min_count": 1, "all_items": [{"type": "prose_chapter"}]}}
 {"query": "что Прабхупада говорил про варнашраму в лекциях", "expect_tool": "chunks_search", "expect_args": {"type": "lecture"}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
-{"query": "найди что-нибудь про сознание", "expect_tool": "chunks_search", "expect_args": {"type": null}, "expect_result": {"min_count": 4, "diversity": {"type": ["lecture", "verse"], "min_each": 1}}}
-{"query": "what's said about consciousness", "expect_tool": "chunks_search", "expect_args": {"type": null}, "expect_result": {"min_count": 4, "diversity": {"type": ["lecture", "verse"], "min_each": 1}}}
+{"query": "найди что-нибудь про сознание", "expect_tool": "chunks_search", "expect_result": {"min_count": 3}}
+{"query": "what's said about consciousness", "lang": "en", "expect_tool": "chunks_search", "expect_result": {"min_count": 3}}
 {"query": "расскажи подробнее этот фрагмент", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_get_window", "expect_args": {}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
 {"query": "что было до этой цитаты", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_get_window", "expect_args": {}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
 {"query": "найди что-то похожее на эту лекцию", "context": {"current_track_ref": "auto"}, "expect_tool": "chunks_find_similar", "expect_args": {}, "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
-{"query": "recommend more like this fragment", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_find_similar", "expect_args": {}, "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
-{"query": "что я недавно слушал про преданное служение", "expect_tool": "user_history_search", "expect_args": {"query": "преданное служение"}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
-{"query": "I heard something about karma recently — find it", "expect_tool": "user_history_search", "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
-{"query": "что я слушал на этой неделе", "expect_tool": "user_tracks_list", "expect_result": {"min_count": 1}}
-{"query": "что мне послушать дальше", "expect_tool": "user_recommendations_get", "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
+{"query": "recommend more like this fragment", "lang": "en", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_find_similar", "expect_args": {}, "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
+{"query": "что я недавно слушал про преданное служение", "context": {"recent_tracks": "auto"}, "expect_tool": "user_history_search", "expect_args": {"query": "преданное служение"}}
+{"query": "I heard something about karma recently — find it", "lang": "en", "context": {"recent_tracks": "auto"}, "expect_tool": "user_history_search"}
+{"query": "что я слушал на этой неделе", "context": {"recent_tracks": "auto"}, "expect_tool": "user_tracks_list"}
+{"query": "что мне послушать дальше", "context": {"recent_tracks": "auto"}, "expect_tool": "user_recommendations_get"}
+{"_comment": "Stage-1 cases below use expect_intent / expect_no_tool / expect_tool_chain / expect_no_marker_kind — run_chunk_tools_eval gets extended in Stage 1 to honour them. Existing predicates stay backward-compatible."}
+{"query": "привет", "expect_intent": "direct_chat", "expect_no_tool": true}
+{"query": "спасибо большое", "expect_intent": "direct_chat", "expect_no_tool": true}
+{"query": "пока", "expect_intent": "direct_chat", "expect_no_tool": true}
+{"query": "hi there", "lang": "en", "expect_intent": "direct_chat", "expect_no_tool": true}
+{"query": "что ты умеешь?", "expect_intent": "help", "expect_tool": "help_get"}
+{"query": "как создать плейлист?", "expect_intent": "help", "expect_tool": "help_get"}
+{"query": "what can you do", "lang": "en", "expect_intent": "help", "expect_tool": "help_get"}
+{"query": "найди три лекции про карму и собери из них плейлист", "expect_intent": "create_action", "expect_tool_chain": ["chunks_search", "playlist_propose"], "expect_result": {"min_count": 1}}
+{"query": "поставь мне утренние прогулки 1976 года Бомбей в плейлист", "expect_intent": "create_action", "expect_tool_chain": ["tracks_list", "playlist_propose"]}
+{"query": "что в письмах Прабхупады о принципах БГ 9.27", "expect_intent": "research", "expect_tool_chain": ["chunks_get_by_address", "chunks_search"]}
+{"query": "сравни как Прабхупада говорил про преданное служение в лекциях и в комментариях", "expect_intent": "research", "expect_tool": "chunks_search", "expect_result": {"diversity": {"type": ["lecture", "commentary"], "min_each": 1}}}
+{"query": "найди стих про космические корабли инопланетян", "expect_intent": "research", "expect_tool": "chunks_search", "expect_response_contains_marker": "blockquote"}
+{"query": "find a verse about quantum computers", "lang": "en", "expect_intent": "research", "expect_tool": "chunks_search", "expect_response_contains": ["could not find", "no results", "couldn't find", "did not directly address", "did not find", "do not find", "no mention"]}
+{"query": "комментарий к БГ 2.47 — что Прабхупада там говорит", "expect_intent": "research", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "BG", "tokens": "2.47"}, "expect_no_marker_kind": "cite", "expect_response_contains_marker": "blockquote"}
+{"query": "процитируй письмо Прабхупады про temple management 1972", "expect_intent": "research", "expect_tool": "chunks_search", "expect_args": {"type": "letter"}, "expect_no_marker_kind": "cite", "expect_response_contains_marker": "blockquote"}

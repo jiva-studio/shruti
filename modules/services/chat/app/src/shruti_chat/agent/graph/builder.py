@@ -1,0 +1,101 @@
+"""Build the compiled chat StateGraph.
+
+One factory function; called once at app startup. The compiled graph
+is reused for every chat turn — node fns are async and stateless, all
+per-turn data flows via `state` and `context` (TurnContext).
+
+Topology:
+
+                       START
+                         │
+                         ▼
+                      router ──── direct_chat / unknown ─────┐
+                         │                                    │
+       ┌────────────┬────┴────────────────┬────────────┐      │
+       │            │                     │            │      │
+       ▼            ▼                     ▼            ▼      │
+   help_worker  catalog_worker      research_worker   …       │
+       │            │                     │                   │
+       │            │            create_action ──► action_worker
+       │            │                     │                   │
+       │            │            else ────┘                   │
+       │            │                     │                   │
+       └────────────┴──► synthesizer ◄────┴───────────────────┘
+                            │
+                            ▼
+                           END
+"""
+
+from __future__ import annotations
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.pregel import Pregel
+
+from shruti_chat.agent.graph.conditional import (
+    route_after_catalog,
+    route_after_research,
+    route_after_router,
+)
+from shruti_chat.agent.graph.nodes import (
+    action_worker_node,
+    catalog_worker_node,
+    help_worker_node,
+    research_worker_node,
+    router_node,
+    synthesizer_node,
+)
+from shruti_chat.agent.graph.state import ChatState
+from shruti_chat.domain.turn_context import TurnContext
+
+
+def build_chat_graph() -> Pregel:
+    """Construct and compile the chat StateGraph.
+
+    Returns a compiled `Pregel` (the runnable form). Callers invoke
+    via `graph.astream(input, context=turn_ctx, stream_mode=[...])`.
+    """
+    builder: StateGraph = StateGraph(ChatState, context_schema=TurnContext)
+
+    builder.add_node("router", router_node)
+    builder.add_node("research_worker", research_worker_node)
+    builder.add_node("catalog_worker", catalog_worker_node)
+    builder.add_node("action_worker", action_worker_node)
+    builder.add_node("help_worker", help_worker_node)
+    builder.add_node("synthesizer", synthesizer_node)
+
+    builder.add_edge(START, "router")
+    builder.add_conditional_edges(
+        "router",
+        route_after_router,
+        {
+            "research_worker": "research_worker",
+            "catalog_worker": "catalog_worker",
+            "action_worker": "action_worker",
+            "help_worker": "help_worker",
+            "synthesizer": "synthesizer",
+        },
+    )
+    # research_worker forks: stay → synth, OR chain → action_worker.
+    builder.add_conditional_edges(
+        "research_worker",
+        route_after_research,
+        {
+            "action_worker": "action_worker",
+            "synthesizer": "synthesizer",
+        },
+    )
+    # catalog_worker forks just like research_worker: stay → synth,
+    # OR chain into action_worker for catalog-hint create_action turns.
+    builder.add_conditional_edges(
+        "catalog_worker",
+        route_after_catalog,
+        {
+            "action_worker": "action_worker",
+            "synthesizer": "synthesizer",
+        },
+    )
+    builder.add_edge("action_worker", "synthesizer")
+    builder.add_edge("help_worker", "synthesizer")
+    builder.add_edge("synthesizer", END)
+
+    return builder.compile()

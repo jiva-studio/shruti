@@ -217,7 +217,7 @@ async def run_llm_loop(
                 )
                 for se in ex.side_events:
                     yield se
-                yield AgentEvent(type="tool", data={})
+                yield AgentEvent(type="tool_end", data={})
                 messages.append({
                     "role": "tool",
                     "tool_call_id": spec.id,

@@ -325,7 +325,14 @@ async def get_track_outline(
         }
 
     items = payload.get("items") or []
-    yield_event("outline", {"track_id": track_id, "items": items})
+    yield_event(
+        "action",
+        {
+            "kind": "outline",
+            "id": f"outline_{track_id}",
+            "payload": {"track_id": track_id, "items": items},
+        },
+    )
     return {
         "track_id": track_id,
         "lang": effective_lang,
@@ -334,7 +341,7 @@ async def get_track_outline(
 
 
 register_tool(ToolDef(
-    name="get_track_outline",
+    name="track_outline_get",
     fn=get_track_outline,
     emits_events=True,
     description=(

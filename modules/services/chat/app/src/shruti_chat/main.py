@@ -70,6 +70,15 @@ async def lifespan(app: FastAPI):
         store=PgRateLimitStore(pool=pool), settings=s,
     )
 
+    # LangGraph wiring. Compile the chat graph once and stash on deps —
+    # node fns are async and stateless, the compiled graph is reused
+    # for every chat turn.
+    from shruti_chat.agent.graph import build_chat_graph
+    from shruti_chat.infra.llm_provider import OpenRouterLLMProvider
+
+    llm_provider = OpenRouterLLMProvider(s)
+    chat_graph = build_chat_graph()
+
     app.state.deps = AppDeps(
         settings=s,
         pool=pool,
@@ -80,6 +89,8 @@ async def lifespan(app: FastAPI):
         outline_cache=outline_cache,
         pdf_storage=pdf_storage,
         rate_limiter=rate_limiter,
+        llm=llm_provider,
+        chat_graph=chat_graph,
     )
 
     # Wire the registered tool callables with their concrete adapters.
@@ -143,6 +154,11 @@ app.add_middleware(
         "Accept",
         "X-Device-Id",
         "X-App-Token",
+        # SSE v1 handshake — client MUST send `X-Chat-Protocol-Version: 1`
+        # on every /chat call (see api/chat.py:_check_protocol_version).
+        # Without it on this list, the CORS preflight rejects with 400
+        # and the actual POST never fires.
+        "X-Chat-Protocol-Version",
         # Client-generated request id for retry dedup (Etap 4.4). Without
         # this in the allow-list, every browser preflight fails — the
         # actual POST never lands.

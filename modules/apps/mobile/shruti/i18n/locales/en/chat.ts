@@ -159,4 +159,14 @@ export default {
   timeUnitWeek: "w",
   timeUnitMonth: "mo",
   timeUnitYear: "y",
+
+  // Server-streamed `status` event labels (SSE v1). Key matches the
+  // `key` field on the status event — see backend `agent/events.py`.
+  status: {
+    thinking: "Thinking…",
+    searching_corpus: "Searching the recordings…",
+    composing_answer: "Writing the answer…",
+    preparing_action: "Preparing…",
+    browsing_catalog: "Browsing the catalog…",
+  },
 }

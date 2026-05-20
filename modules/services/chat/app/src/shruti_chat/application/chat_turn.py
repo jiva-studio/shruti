@@ -1,9 +1,23 @@
-"""Application use-case: run one chat turn.
+"""Application use-case: run one chat turn through the LangGraph chat graph.
 
-Composes the orchestration the API endpoint needs — message build,
-per-turn user-context binding into personalize tools, then streams
-events out of the LLM loop. Adapters (LLM provider, tool registry)
-are imported here; the endpoint stays thin.
+This file used to drive `run_llm_loop` directly. Stage 1 of the
+multi-agent migration replaces that with a compiled LangGraph
+StateGraph (router → research_worker → synthesizer). The chat_turn
+function owns the surrounding plumbing the graph doesn't:
+
+- pre-mint `focus_ref` / `current_track_ref` so user-context ids
+  never leak to the LLM as raw track ids
+- build the `TurnContext` (per-turn services) the graph nodes pull
+  from `runtime.context`
+- bridge the graph's `astream` events into the existing `AgentEvent`
+  SSE stream (so api/chat.py is unchanged)
+- final terminal events: aliases map + done
+- post-turn bypass-marker audit (catches the LLM typing
+  `[cite:track_X@...]` directly instead of going through the
+  numbered-ref protocol)
+
+The external signature is unchanged so api/chat.py + run_proactive_turn
+keep working.
 """
 
 from __future__ import annotations
@@ -13,32 +27,71 @@ from typing import Any, AsyncIterator, Awaitable, Callable
 
 from shruti_chat.agent.aliased_tools import build_aliased_tools
 from shruti_chat.agent.events import AgentEvent
-from shruti_chat.agent.llm_loop import run_llm_loop
 from shruti_chat.agent.marker_expander import MarkerExpander
-from shruti_chat.agent.message_builder import build_messages
-from shruti_chat.agent.tools import (
-    EMITS_EVENTS,
-    TOOL_SCHEMAS,
-    TOOLS,
-    build_personalized_tools,
-)
+from shruti_chat.agent.tools import TOOLS, build_personalized_tools
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.composition import AppDeps
-from shruti_chat.config import get_settings
 from shruti_chat.domain import UserContext
-from shruti_chat.indexer.library.repo import fetch_verse_body
-from shruti_chat.observability.logging import get_logger
+from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.observability.logging import (
+    bind_turn_context,
+    clear_turn_context,
+    get_logger,
+)
 
 
 log = get_logger(__name__)
 
 
+# Per-worker tool subsets — one bag, sliced by name per graph node.
+# Splitting cuts each worker's tool-menu to ~5-7 entries instead of
+# 17, which improves tool-selection accuracy on weaker models.
+_RESEARCH_TOOL_NAMES = frozenset({
+    "chunks_search",
+    "chunks_get_by_address",
+    "chunks_get_window",
+    "chunks_find_similar",
+    "user_history_search",
+    "track_outline_get",
+})
+_CATALOG_TOOL_NAMES = frozenset({
+    "author_resolve",
+    "source_resolve",
+    "location_resolve",
+    "tag_resolve",
+    "tracks_list",
+    "track_get",
+    "user_tracks_list",
+    "user_recommendations_get",
+})
+_ACTION_TOOL_NAMES = frozenset({
+    "playlist_propose",
+    "track_pdf_generate",
+    "reminder_propose",
+    "smart_library_propose",
+    "pro_upgrade_propose",
+})
+_HELP_TOOL_NAMES = frozenset({
+    "help_get",
+})
+
+
+def _subset(
+    tools: dict[str, Any], names: frozenset[str]
+) -> dict[str, Any]:
+    """Pick the named subset out of the full tool bag. Silently drop
+    names that aren't bound (e.g. an action tool that didn't register
+    because its dependency is unavailable) so partial deploys don't
+    crash the graph at build time."""
+    return {n: tools[n] for n in names if n in tools}
+
+
 # Inline chip-class markers the LLM is FORBIDDEN to write directly —
-# it must call propose_cite / propose_card / propose_outline so the
-# agent can validate the track_id before injecting the marker into
-# the stream. Anything matching these regexes in the LLM-typed prose
-# is a bypass: log it, optionally cross-reference against the catalog
-# to flag fabricated ids.
+# it must use the numbered-ref protocol (`[cite:N]`, `[card:N]`, ...)
+# and the MarkerExpander expands those into the real track-id form
+# below before they hit the client. Anything matching these regexes
+# in the LLM-typed prose means the model bypassed the protocol — log
+# the slip for prompt-engineering follow-up.
 _CITE_MARKER_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
 _CARD_MARKER_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
 _OUTLINE_MARKER_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
@@ -47,16 +100,14 @@ _OUTLINE_MARKER_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
 async def _audit_bypass_markers(
     llm_prose: str,
     *,
-    deps: AppDeps,
+    deps: AppDeps | None,
     request_id: str | None,
 ) -> None:
-    """Log every chip-class marker the LLM typed in prose. With
-    `propose_cite` / `propose_card` / `propose_outline` in place, the
-    correct path injects markers via tool side-events that bypass
-    `content_buf` — so anything that DOES appear in the LLM-prose
-    buffer is an instruction-following slip we want visible in
-    metrics, never silently stripped."""
-    findings: list[tuple[str, str]] = []  # (kind, track_id)
+    """Log every chip-class marker the LLM typed in prose. With the
+    numbered-ref protocol active the correct path injects markers via
+    `propose_*` tool side-events; anything in the LLM-prose buffer is
+    an instruction-following slip we want visible in metrics."""
+    findings: list[tuple[str, str]] = []
     for m in _CITE_MARKER_RE.finditer(llm_prose):
         findings.append(("cite", m.group(1)))
     for m in _CARD_MARKER_RE.finditer(llm_prose):
@@ -66,16 +117,17 @@ async def _audit_bypass_markers(
     if not findings:
         return
 
-    all_ids = list({tid for _kind, tid in findings})
-    try:
-        valid = set(await deps.catalog_repo.filter_existing_track_ids(all_ids))
-    except Exception as exc:
-        log.warning(
-            "bypass_audit_validation_failed",
-            request_id=request_id,
-            error=str(exc),
-        )
-        valid = set()
+    valid: set[str] = set()
+    if deps is not None:
+        all_ids = list({tid for _, tid in findings})
+        try:
+            valid = set(await deps.catalog_repo.filter_existing_track_ids(all_ids))
+        except Exception as exc:
+            log.warning(
+                "bypass_audit_validation_failed",
+                request_id=request_id,
+                error=str(exc),
+            )
     for kind, tid in findings:
         log.info(
             "chat_marker_bypassed_tool",
@@ -84,6 +136,20 @@ async def _audit_bypass_markers(
             track_id=tid,
             in_catalog=tid in valid,
         )
+
+
+def _extract_latest_user_query(history: list[dict[str, Any]]) -> str:
+    """The router and workers only need the current question — pull it
+    out so we don't have to thread the whole history into their inner
+    LLM calls. Synthesizer DOES get the full history (folded down to
+    user-visible text by `fold_history`) so the assistant remembers
+    prior exchanges; that fan-out lives in `state["history"]` →
+    `synthesizer_turn`.
+    """
+    for entry in reversed(history):
+        if entry.get("role") == "user" and isinstance(entry.get("content"), str):
+            return entry["content"]
+    return ""
 
 
 async def run_chat_turn(
@@ -95,147 +161,151 @@ async def run_chat_turn(
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
     deps: AppDeps | None = None,
 ) -> AsyncIterator[AgentEvent]:
-    """Run one chat turn end-to-end, yielding agent events as they stream.
+    """Drive one chat turn through the LangGraph chat graph.
 
-    Numbered-refs protocol: the LLM never sees real `track_id`s. Tool
-    results are post-processed to expose only integer refs the LLM
-    cites by (`[cite:N|caption]`, `[card:N]`, `[outline:N]`). The
-    `MarkerExpander` filter expands those integers back to real
-    catalog ids before the marker hits the client. Action tools that
-    take track_ids accept the same integer refs from the LLM and the
-    wrapper translates back."""
-    settings = get_settings()
-    aliases = TurnAliasMap()
-    # Pre-mint refs for `current_track_id` and `focus.track_id` so the
-    # LLM sees integer refs instead of raw track_ids in the system prompt
-    # — same protocol as tool results. Without this, the LLM would try
-    # to pass focus/current track_ids verbatim into chunks_get_window,
-    # which only accepts integer refs.
-    focus_ref: int | None = None
-    current_track_ref: int | None = None
-    if user_context is not None:
-        if user_context.current_track_id:
-            current_track_ref = aliases.alias_track(user_context.current_track_id)
-        if user_context.focus is not None:
-            focus_ref = aliases.alias_chunk(
-                user_context.focus.track_id,
-                int(user_context.focus.start_ms),
-                int(user_context.focus.end_ms),
-            )
-    messages = build_messages(
-        history, lang, user_context,
-        focus_ref=focus_ref,
-        current_track_ref=current_track_ref,
-    )
-    tools = build_personalized_tools(TOOLS, user_context)
-    tools = build_aliased_tools(tools, aliases)
-    expander = MarkerExpander(aliases, request_id=request_id)
-
-    async def _on_done(llm_prose: str) -> None:
-        if deps is None:
-            return
-        await _audit_bypass_markers(
-            llm_prose, deps=deps, request_id=request_id,
+    Same shape as the legacy monolithic loop: takes history + lang +
+    request_id, yields `AgentEvent`s. The graph internals are hidden
+    behind the `astream` event bridge below.
+    """
+    if deps is None or deps.chat_graph is None or deps.llm is None:
+        raise RuntimeError(
+            "run_chat_turn requires AppDeps with chat_graph + llm "
+            "(lifespan must have built them)"
         )
 
-    # Set of verse-alias ref numbers for which we've already streamed a
-    # `verse_payload` to the client. Each tool-call result may mint new
-    # verse refs (via aliased_tools._alias_verse_entry → alias_verse).
-    # When a `tool` event lands we walk the alias map and flush any
-    # fresh verse-refs as `verse_payload` events BEFORE the LLM's prose
-    # deltas reach the client — so the mobile has the body cached by
-    # the time it parses the `[verse:source_id/tokens|caption]` marker.
-    emitted_verse_refs: set[int] = set()
+    trace_id = request_id or "anon"
+    bind_turn_context(trace_id=trace_id, request_id=request_id, agent_role="main")
 
-    async for ev in run_llm_loop(
-        messages,
-        tools=tools,
-        tool_schemas=TOOL_SCHEMAS,
-        emits_events=EMITS_EVENTS,
-        lang=lang,
-        model=settings.llm_default,
-        request_id=request_id,
-        is_disconnected=is_disconnected,
-        on_done=_on_done,
-    ):
-        if ev.type == "delta":
-            cleaned = await expander.feed(ev.data.get("text", ""))
-            if cleaned:
-                yield AgentEvent(type="delta", data={"text": cleaned})
-            continue
-        # Stream-terminating or stream-resetting events: flush any
-        # partial-marker tail FIRST so the client sees its last text
-        # before the terminator. `tool_start` wipes the client-side
-        # accumulator (the "thinking out loud" prelude), so we drop
-        # the buffered tail entirely for it — there's nothing to
-        # forward downstream of a wiped bubble.
-        if ev.type in ("done", "error"):
-            tail = await expander.flush()
-            if tail:
-                yield AgentEvent(type="delta", data={"text": tail})
-            # Before terminating, hand the client the integer→chunk
-            # alias map this turn minted. The client persists it on
-            # the freshly-finalised assistant message; on the next
-            # turn it ships back via `aliases` on the same message in
-            # history, and the server uses it to fold this turn's
-            # chip markers back into `[cite:N|...]` form so the LLM
-            # sees one numbering scheme throughout the conversation.
-            # Empty maps are still emitted (the client can treat
-            # `aliases: {}` as "no chip markers in this answer").
-            if len(aliases) > 0:
-                yield AgentEvent(
-                    type="aliases",
-                    data={"map": aliases.serialize()},
+    try:
+        # ── Build per-turn services (aliases + expander + tools) ──────
+        aliases = TurnAliasMap()
+        # Pre-mint refs for `current_track_id` and `focus.track_id` so
+        # the LLM sees integer refs throughout the turn, not raw ids.
+        # Capture the minted integers — workers' system prompts surface
+        # them as anchor metadata so the LLM can pass them straight into
+        # chunks_get_window / chunks_find_similar.
+        current_track_ref: int | None = None
+        focus_ref: int | None = None
+        focus_around_ms: int | None = None
+        now_iso: str | None = None
+        history_summary: str | None = None
+        if user_context is not None:
+            if user_context.current_track_id:
+                current_track_ref = aliases.alias_track(user_context.current_track_id)
+            if user_context.focus is not None:
+                focus_ref = aliases.alias_chunk(
+                    user_context.focus.track_id,
+                    int(user_context.focus.start_ms),
+                    int(user_context.focus.end_ms),
                 )
-        elif ev.type == "tool_start":
-            await expander.flush()
-        yield ev
-        if ev.type == "tool":
-            async for verse_event in _emit_pending_verse_payloads(
-                aliases, emitted_verse_refs, settings.library_db_path, request_id,
-            ):
-                yield verse_event
+                focus_around_ms = (
+                    int(user_context.focus.start_ms) + int(user_context.focus.end_ms)
+                ) // 2
+            if user_context.now is not None:
+                now_iso = user_context.now.isoformat()
+            if user_context.recent_tracks:
+                in_prog = len(user_context.in_progress_tracks())
+                history_summary = (
+                    f"recent={len(user_context.recent_tracks)} "
+                    f"in_progress={in_prog}"
+                )
 
+        # Per-worker tool subsets — each graph node gets a narrow toolset
+        # so the LLM picks from a smaller menu and tool-selection
+        # accuracy goes up. The full bag is aliased once; we then slice
+        # by name per worker (the aliasing is idempotent and the shared
+        # alias map keeps refs consistent across workers in the same
+        # turn).
+        all_tools = build_personalized_tools(TOOLS, user_context)
+        aliased_tools = build_aliased_tools(all_tools, aliases)
+        research_tools = _subset(aliased_tools, _RESEARCH_TOOL_NAMES)
+        catalog_tools = _subset(aliased_tools, _CATALOG_TOOL_NAMES)
+        action_tools = _subset(aliased_tools, _ACTION_TOOL_NAMES)
+        help_tools = _subset(aliased_tools, _HELP_TOOL_NAMES)
 
-async def _emit_pending_verse_payloads(
-    aliases: TurnAliasMap,
-    emitted: set[int],
-    library_db,
-    request_id: str,
-) -> AsyncIterator[AgentEvent]:
-    """Yield one `verse_payload` AgentEvent per verse-alias minted since
-    the last call. Bodies missing from `library.db` (the version
-    indexed in pgvector is ahead of the local SQLite snapshot, or the
-    verse was deleted between publish + chat) are skipped silently —
-    the mobile falls back to the addr-only chip in that case.
+        expander = MarkerExpander(aliases, request_id=request_id)
 
-    Fetches sequentially. Typical turn mints ≤ 8 verses; the read is
-    cached page-level by SQLite + the OS, so a tight loop is fine."""
-    for ref_num, vref in aliases.verse_refs():
-        if ref_num in emitted:
-            continue
-        emitted.add(ref_num)
-        try:
-            body = await fetch_verse_body(library_db, vref.source_id, vref.tokens)
-        except Exception as exc:
-            log.warning(
-                "verse_payload_fetch_failed",
-                request_id=request_id,
-                source_id=vref.source_id,
-                tokens=vref.tokens,
-                error=str(exc),
-            )
-            continue
-        if body is None:
-            continue
-        yield AgentEvent(
-            type="verse_payload",
-            data={
-                "source_id": vref.source_id,
-                "tokens": vref.tokens,
-                "addr_label": vref.addr_label or "",
-                "sanskrit": body["sanskrit"],
-                "transliteration": body["transliteration"],
-                "translation": body["translation"],
-            },
+        ctx = TurnContext(
+            request_id=trace_id,
+            aliases=aliases,
+            expander=expander,
+            llm=deps.llm,
+            research_tools=research_tools,
+            catalog_tools=catalog_tools,
+            action_tools=action_tools,
+            help_tools=help_tools,
+            library_db_path=deps.settings.library_db_path,
         )
+
+        initial_state: dict[str, Any] = {
+            "history": history,
+            "user_query": _extract_latest_user_query(history),
+            "lang": lang,
+            "request_id": trace_id,
+            "tool_results": [],
+            "focus_ref": focus_ref,
+            "focus_around_ms": focus_around_ms,
+            "current_track_ref": current_track_ref,
+            "now_iso": now_iso,
+            "history_summary": history_summary,
+        }
+
+        # ── Drive the graph; bridge custom events to AgentEvents ─────
+        full_prose: list[str] = []
+        try:
+            async for mode, payload in deps.chat_graph.astream(
+                initial_state,
+                context=ctx,
+                stream_mode=["custom"],
+            ):
+                if mode != "custom":
+                    continue
+                # All node-writer emissions have shape {type, data}.
+                ev_type = payload.get("type")
+                ev_data = payload.get("data", {})
+                if not ev_type:
+                    continue
+                if ev_type == "delta":
+                    full_prose.append(ev_data.get("text", ""))
+                yield AgentEvent(type=ev_type, data=ev_data)
+                # Co-op cancellation if the client closed the SSE.
+                if is_disconnected is not None and await is_disconnected():
+                    log.info(
+                        "chat_cancelled_mid_stream",
+                        request_id=request_id,
+                        prose_chars=sum(len(s) for s in full_prose),
+                    )
+                    return
+        except Exception as exc:
+            log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
+            yield AgentEvent(
+                type="error",
+                data={"code": "agent_error", "message": str(exc)},
+            )
+            return
+
+        # ── Flush any partial-marker tail still in expander ──────────
+        tail = await expander.flush()
+        if tail:
+            yield AgentEvent(type="delta", data={"text": tail})
+            full_prose.append(tail)
+
+        # ── Bypass-marker audit (off the hot path) ───────────────────
+        await _audit_bypass_markers(
+            "".join(full_prose),
+            deps=deps,
+            request_id=request_id,
+        )
+
+        # ── Terminal `done` carries the alias map inline ─────────────
+        # v1 protocol: client persists `done.data.aliases` on the
+        # freshly-finalised assistant message and ships it back on the
+        # next turn so `_fold_prior_assistant_content` rewrites chip
+        # markers in history into `[cite:N|...]` form.
+        done_data: dict[str, Any] = {}
+        if len(aliases) > 0:
+            done_data["aliases"] = aliases.serialize()
+        yield AgentEvent(type="done", data=done_data)
+
+    finally:
+        clear_turn_context()

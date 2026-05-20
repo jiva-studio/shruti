@@ -74,17 +74,17 @@ _RESOLVE_PARAMS = {
 
 
 register_tool(ToolDef(
-    name="resolve_author",
+    name="author_resolve",
     fn=resolve_author,
     description=(
         "Translate a human author name into author_id. Call BEFORE "
-        "list_tracks/chunks_search when filtering by author."
+        "tracks_list/chunks_search when filtering by author."
     ),
     parameters=_RESOLVE_PARAMS,
 ))
 
 register_tool(ToolDef(
-    name="resolve_source",
+    name="source_resolve",
     fn=resolve_source,
     description=(
         "Translate a book/source name (e.g. 'Bhagavad-gita', "
@@ -94,14 +94,14 @@ register_tool(ToolDef(
 ))
 
 register_tool(ToolDef(
-    name="resolve_location",
+    name="location_resolve",
     fn=resolve_location,
     description="Translate a location name (city, place) into location_id.",
     parameters=_RESOLVE_PARAMS,
 ))
 
 register_tool(ToolDef(
-    name="resolve_tag",
+    name="tag_resolve",
     fn=resolve_tag,
     description=(
         "Translate a tag name into tag_id. Includes kind-tags: "

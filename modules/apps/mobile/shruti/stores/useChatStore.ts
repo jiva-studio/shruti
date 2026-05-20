@@ -41,7 +41,15 @@ import type { ChatTurn } from "@ports/app/index.js"
 // `@shruti/stores/useChatStore` (the legacy path) while the
 // canonical declarations live in `@lib/domain`.
 export type ChatSession = DomainChatSession
-export type ChatMessage = DomainChatMessage & { streaming?: boolean }
+export type ChatMessage = DomainChatMessage & {
+  streaming?: boolean
+  /** Ephemeral i18n status key (e.g. "searching_corpus") set on the
+   *  streaming bubble while the server is mid-turn; cleared on
+   *  `finalised`. UI maps to a localized label via
+   *  `t(`chat.status.${statusKey}`, params)`. */
+  statusKey?: string
+  statusParams?: Readonly<Record<string, string | number>>
+}
 export type ActionPayload = ChatActionPayload
 export type OutlinePayload = ChatOutlinePayload
 export type ActionState = ChatActionState
@@ -330,6 +338,18 @@ export const useChatStore = defineStore("chat", () => {
         if (idx < 0) return
         const next = [...messages.value]
         next[idx] = { ...next[idx], content: "" }
+        messages.value = next
+        return
+      }
+      case "status": {
+        // i18n status key from the server (e.g. "searching_corpus",
+        // "composing_answer"). Surfaced as `statusKey` on the streaming
+        // bubble so StatusPill.vue can render the localized label
+        // without polling.
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], statusKey: event.statusKey, statusParams: event.params }
         messages.value = next
         return
       }
