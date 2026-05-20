@@ -45,17 +45,20 @@ from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 # rather than a runtime "tool not found".
 from lectorium_chat.agent.tools import (  # noqa: F401 — side-effect imports
     actions,
+    chunks_find_similar,
+    chunks_get_by_address,
+    chunks_get_window,
+    chunks_search,
     help,
     list_tracks,
     outline,
     pdf,
-    personalize,
     propose_hints,
     resolve,
-    search,
-    similar,
     tracks,
-    window,
+    user_history_search,
+    user_recommendations_get,
+    user_tracks_list,
 )
 
 
@@ -113,7 +116,7 @@ def bind_repositories(
 
     Tool modules register bare functions at import time. They declare
     repository parameters as keyword-only (e.g.
-    `search_transcripts(..., *, chunk_repo, catalog_repo)`), then the
+    `chunks_search(..., *, chunk_repo, catalog_repo, embedder)`), then the
     composition root calls this once at startup to replace each
     `TOOLS[name]` with a `functools.partial` that supplies the actual
     adapter.
@@ -122,16 +125,17 @@ def bind_repositories(
     dataclass and explicit `register_tool` calls in lifespan.
     """
     bindings: dict[str, dict[str, Any]] = {
-        "search_transcripts": {
+        "chunks_search": {
             "chunk_repo": chunk_repo,
             "catalog_repo": catalog_repo,
             "embedder": embedder,
         },
-        "get_transcript_window": {"chunk_repo": chunk_repo},
-        "find_similar_chunks":   {"chunk_repo": chunk_repo, "embedder": embedder},
-        "search_my_history":     {"chunk_repo": chunk_repo, "embedder": embedder},
-        "recommend_next":        {"chunk_repo": chunk_repo},
-        "list_my_tracks":        {"catalog_repo": catalog_repo},
+        "chunks_get_by_address":  {"chunk_repo": chunk_repo},
+        "chunks_get_window":      {"chunk_repo": chunk_repo},
+        "chunks_find_similar":    {"chunk_repo": chunk_repo, "embedder": embedder},
+        "user_history_search":    {"chunk_repo": chunk_repo, "embedder": embedder},
+        "user_recommendations_get": {"chunk_repo": chunk_repo},
+        "user_tracks_list":       {"catalog_repo": catalog_repo},
         "get_track":             {"catalog_repo": catalog_repo},
         "list_tracks":           {"catalog_repo": catalog_repo},
         "resolve_author":        {"catalog_repo": catalog_repo},

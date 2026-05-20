@@ -133,3 +133,61 @@ describe("extractFollowups", () => {
     expect(extractFollowups("")).toEqual([])
   })
 })
+
+describe("parseChatMarkers — library verse markers", () => {
+  it("parses [verse:source/tokens|caption]", () => {
+    const tokens = parseChatMarkers("Вот стих [verse:source_dsicuBsFvinZ/2.13|БГ 2.13]")
+    const verse = tokens.find((t) => t.kind === "verse")
+    expect(verse).toBeTruthy()
+    if (verse && verse.kind === "verse") {
+      expect(verse.sourceId).toBe("source_dsicuBsFvinZ")
+      expect(verse.tokens).toBe("2.13")
+      expect(verse.caption).toBe("БГ 2.13")
+    }
+  })
+
+  it('accepts compound verse tokens (e.g. "1.2.28,1.2.29")', () => {
+    const tokens = parseChatMarkers("[verse:source_abc/1.2.28,1.2.29|SB 1.2.28-29]")
+    const verse = tokens.find((t) => t.kind === "verse")
+    expect(verse?.kind).toBe("verse")
+    if (verse?.kind === "verse") expect(verse.tokens).toBe("1.2.28,1.2.29")
+  })
+
+  it("treats verse caption as optional", () => {
+    const tokens = parseChatMarkers("[verse:source_x/5.1]")
+    const verse = tokens.find((t) => t.kind === "verse")
+    if (verse?.kind === "verse") expect(verse.caption).toBe("")
+  })
+})
+
+describe("parseChatMarkers — markdown blockquote", () => {
+  it("parses a simple blockquote run into a 'quote' token", () => {
+    const tokens = parseChatMarkers(
+      "Прабхупада говорит:\n\n> Каждое живое существо является душой\n> *(комментарий к БГ 2.13)*\n\nТо же в письме."
+    )
+    const quote = tokens.find((t) => t.kind === "quote")
+    expect(quote).toBeTruthy()
+    if (quote?.kind === "quote") {
+      expect(quote.bodyHtml).toContain("Каждое живое существо")
+      // Parens around the addr are preserved verbatim — they're part of
+      // the agent's intentional visual styling, not parser noise.
+      expect(quote.attributionHtml).toBe("(комментарий к БГ 2.13)")
+    }
+  })
+
+  it("treats a single-line blockquote without italic line as body-only", () => {
+    const tokens = parseChatMarkers("> short note")
+    const quote = tokens.find((t) => t.kind === "quote")
+    if (quote?.kind === "quote") {
+      expect(quote.bodyHtml).toContain("short note")
+      expect(quote.attributionHtml).toBeUndefined()
+    }
+  })
+
+  it("preserves prose before and after the blockquote", () => {
+    const tokens = parseChatMarkers("Intro.\n\n> body\n> *(addr)*\n\nOutro.")
+    expect(tokens[0]?.kind).toBe("text")
+    expect(tokens[1]?.kind).toBe("quote")
+    expect(tokens[2]?.kind).toBe("text")
+  })
+})

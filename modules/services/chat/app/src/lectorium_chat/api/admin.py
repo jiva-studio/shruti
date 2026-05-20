@@ -73,7 +73,7 @@ async def readyz() -> ReadyResponse:
         if s.catalog_db_path.exists():
             async with get_pool().acquire() as conn:
                 row = await conn.fetchrow(
-                    "SELECT current_version FROM catalog_state WHERE id = 1")
+                    "SELECT current_version FROM db_state WHERE kind = 'catalog'")
                 checks["catalog"] = bool(row and row["current_version"])
     except Exception:
         pass
@@ -105,7 +105,7 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
     async with pool.acquire() as conn:
         # catalog version
         cs = await conn.fetchrow(
-            "SELECT current_version, updated_at FROM catalog_state WHERE id=1")
+            "SELECT current_version, updated_at FROM db_state WHERE kind='catalog'")
         # vectors
         v_total = await conn.fetchval("SELECT COUNT(*) FROM chunks")
         v_models = await conn.fetch(

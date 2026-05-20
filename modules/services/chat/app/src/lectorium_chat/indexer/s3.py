@@ -86,6 +86,56 @@ async def download_catalog(version: str, dest: Path, settings: Settings | None =
                     await f.write(chunk)
 
 
+# ── Library DB manifest + fetch ────────────────────────────────────────
+#
+# library.db lives under `public/library/library.{version}.db` and is
+# advertised via the `library.versions[]` array inside `public/config.json`
+# (set by the `library.publish` MCP tool — independent of the catalog
+# version ladder).
+
+
+@dataclass
+class LibraryManifestEntry:
+    version: str
+
+
+async def read_library_manifest(settings: Settings | None = None) -> list[LibraryManifestEntry]:
+    """Pull public/config.json and parse the library.versions array.
+
+    Real shape (inside the same config.json the catalog uses):
+        {"library": {"versions": [{"version": 20260519144040}, ...]}}
+    Returns an empty list if the `library` field is absent (config.json
+    written by an older publisher).
+    """
+    s = settings or get_settings()
+    url = f"{s.s3_public_url}/public/config.json"
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.get(url)
+        r.raise_for_status()
+        data = r.json()
+    if not isinstance(data, dict):
+        return []
+    lib = data.get("library")
+    if not isinstance(lib, dict):
+        return []
+    items_raw = lib.get("versions") or []
+    return [LibraryManifestEntry(version=str(it["version"]))
+            for it in items_raw if isinstance(it, dict)]
+
+
+async def download_library(version: str, dest: Path, settings: Settings | None = None) -> None:
+    """Download public/library/library.{version}.db to `dest` (streamed)."""
+    s = settings or get_settings()
+    url = f"{s.s3_public_url}/public/library/library.{version}.db"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    async with httpx.AsyncClient(timeout=300) as client:
+        async with client.stream("GET", url) as r:
+            r.raise_for_status()
+            async with aiofiles.open(dest, "wb") as f:
+                async for chunk in r.aiter_bytes(chunk_size=1 << 20):
+                    await f.write(chunk)
+
+
 def list_transcripts(langs: list[str], settings: Settings | None = None) -> list[TranscriptObject]:
     """Enumerate public/tracks/<id>/transcripts/<lang>.json objects with ETags.
 

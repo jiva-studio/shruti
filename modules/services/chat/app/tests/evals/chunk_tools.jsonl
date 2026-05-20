@@ -1,0 +1,20 @@
+{"query": "найди стих про йогу", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "дай мне БГ 2.13", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "verse", "book": "BG", "tokens": "2.13"}, "expect_result": {"min_count": 1, "max_count": 2, "all_items": [{"type": "verse", "label_contains": "2.13"}]}}
+{"query": "комментарий к БГ 2.13", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "BG", "tokens": "2.13"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
+{"query": "find a shloka about karma", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "purport on SB 5.5.3", "expect_tool": "chunks_get_by_address", "expect_args": {"type": "commentary", "book": "SB", "tokens": "5.5.3"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
+{"query": "find a verse about devotional service in CC Madhya 12", "expect_tool": "chunks_search", "expect_args": {"type": "verse"}, "expect_result": {"min_count": 1, "all_items": [{"type": "verse"}]}}
+{"query": "что Прабхупада говорит про преданное служение в комментариях", "expect_tool": "chunks_search", "expect_args": {"type": "commentary"}, "expect_result": {"min_count": 1, "all_items": [{"type": "commentary"}]}}
+{"query": "letter from Prabhupada about restaurant", "expect_tool": "chunks_search", "expect_args": {"type": "letter"}, "expect_result": {"min_count": 1, "all_items": [{"type": "letter"}]}}
+{"query": "из Книги Кришны главу про Говардхану", "expect_tool": "chunks_search", "expect_args": {"type": "prose_chapter"}, "expect_result": {"min_count": 1, "all_items": [{"type": "prose_chapter"}]}}
+{"query": "что Прабхупада говорил про варнашраму в лекциях", "expect_tool": "chunks_search", "expect_args": {"type": "lecture"}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
+{"query": "найди что-нибудь про сознание", "expect_tool": "chunks_search", "expect_args": {"type": null}, "expect_result": {"min_count": 4, "diversity": {"type": ["lecture", "verse"], "min_each": 1}}}
+{"query": "what's said about consciousness", "expect_tool": "chunks_search", "expect_args": {"type": null}, "expect_result": {"min_count": 4, "diversity": {"type": ["lecture", "verse"], "min_each": 1}}}
+{"query": "расскажи подробнее этот фрагмент", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_get_window", "expect_args": {}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
+{"query": "что было до этой цитаты", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_get_window", "expect_args": {}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
+{"query": "найди что-то похожее на эту лекцию", "context": {"current_track_ref": "auto"}, "expect_tool": "chunks_find_similar", "expect_args": {}, "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
+{"query": "recommend more like this fragment", "context": {"focus_ref": "auto"}, "expect_tool": "chunks_find_similar", "expect_args": {}, "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}
+{"query": "что я недавно слушал про преданное служение", "expect_tool": "user_history_search", "expect_args": {"query": "преданное служение"}, "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
+{"query": "I heard something about karma recently — find it", "expect_tool": "user_history_search", "expect_result": {"min_count": 1, "all_items": [{"type": "lecture"}]}}
+{"query": "что я слушал на этой неделе", "expect_tool": "user_tracks_list", "expect_result": {"min_count": 1}}
+{"query": "что мне послушать дальше", "expect_tool": "user_recommendations_get", "expect_result": {"min_count": 3, "all_items": [{"type": "lecture"}]}}

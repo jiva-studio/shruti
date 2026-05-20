@@ -1,87 +1,58 @@
-"""Wrap registered tools so their outputs use integer refs instead of
-real `track_id`s, and so action tools accept integer refs from the
-LLM and translate them back.
+"""Wrap registered tools so the LLM only ever sees integer refs.
 
-This is the moving part of the numbered-refs protocol: the model only
-ever sees integers, the agent owns the integer↔track_id mapping for
-the duration of one turn, and the catalog stays the single source of
-truth — we just don't expose the catalog's id format to the model.
+Two responsibilities:
+
+1. **Inject `alias_map` into chunks_* / user_* tools that accept it.**
+   These tools mint their own envelopes and own the alias allocation
+   end-to-end. The wrapper just hands them the per-turn map.
+
+2. **Output-alias + input-dealias legacy track-shaped tools.** The
+   `list_tracks` / `get_track` family still emits raw `track_id` rows
+   and accepts `track_id` strings on input. The wrapper post-processes
+   their results to strip `track_id` → mint integer ref, and on input
+   it accepts the LLM's integer ref and de-aliases it back to a real
+   `track_id` before the underlying repo call.
+
+Both responsibilities use convention-based detection (param name suffix
+or fixed legacy table) so adding a new chunks_*-tool requires no
+changes here.
 """
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from lectorium_chat.agent.tools._registry import ToolFn
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 
 
-# ── Tools whose RESULT carries one or more {track_id, [start_ms,
-# end_ms]} entries that we need to alias before showing to the LLM.
-# Each entry says "this tool's result is a list of dicts, alias each
-# dict's chunk reference". For single-entity returns (`get_track`),
-# the wrapper treats a non-list result the same way.
-
-# Tools that return list-of-chunks (track_id + start_ms + end_ms each):
-_CHUNK_LIST_TOOLS = frozenset({
-    "search_transcripts",
-    "find_similar_chunks",
-    "search_my_history",
-    "get_transcript_window",
-})
-
-# Tools that return list-of-tracks (whole-track entities — track_id
-# only, no chunk timestamps):
+# Legacy track-list tools — they emit `{track_id, ...}` rows; the
+# wrapper mints a fresh track-ref per row and strips the real id.
 _TRACK_LIST_TOOLS = frozenset({
     "list_tracks",
-    "list_my_tracks",
-    "recommend_next",
 })
 
-# Single-track tools (one dict, not a list):
+# Legacy single-track tools — one `{track_id, ...}` dict, not a list.
 _TRACK_SINGLE_TOOLS = frozenset({
     "get_track",
 })
 
-# Tools that take track_id as input — LLM passes integer refs, we
-# de-alias before the underlying tool call.
+# Legacy tools that accept lists of integer refs on input. Each entry
+# is the underlying arg name (kept as `track_ids` for repo-side compat).
 _ACCEPTS_TRACK_REFS = {
-    # tool_name → list of arg names that carry track-id lists
     "propose_playlist": ["track_ids"],
     "generate_track_pdf": ["track_ids"],
 }
 
-# Tools that take a single track_id input arg:
+# Legacy tools that accept a single integer-ref input arg.
 _ACCEPTS_TRACK_REF_SINGLE = {
-    # tool_name → arg name carrying single track_id
     "get_track": "track_id",
     "get_track_outline": "track_id",
-    "get_transcript_window": "track_id",
-    "find_similar_chunks": "track_id",
 }
 
 
-def _alias_chunk_entry(entry: dict[str, Any], aliases: TurnAliasMap) -> dict[str, Any]:
-    """One chunk dict → replace track_id with integer ref. Keep
-    start_ms / end_ms in the model-facing payload so the model can
-    still reason about position in a track if it wants, BUT we use the
-    server-side mapping for the marker expansion (we don't trust
-    timestamps the model might invent)."""
-    tid = entry.get("track_id")
-    start = entry.get("start_ms")
-    end = entry.get("end_ms")
-    if not isinstance(tid, str) or not isinstance(start, int) or not isinstance(end, int):
-        # Shape we don't recognise — leave as-is.
-        return entry
-    ref = aliases.alias_chunk(tid, start, end)
-    out = dict(entry)
-    out.pop("track_id", None)
-    out["ref"] = ref
-    return out
-
-
 def _alias_track_entry(entry: dict[str, Any], aliases: TurnAliasMap) -> dict[str, Any]:
-    """Whole-track dict — replace track_id with integer ref."""
     tid = entry.get("track_id")
     if not isinstance(tid, str):
         return entry
@@ -93,24 +64,22 @@ def _alias_track_entry(entry: dict[str, Any], aliases: TurnAliasMap) -> dict[str
 
 
 def _alias_result(name: str, result: Any, aliases: TurnAliasMap) -> Any:
-    if name in _CHUNK_LIST_TOOLS:
-        if not isinstance(result, list):
-            return result
-        return [_alias_chunk_entry(e, aliases) if isinstance(e, dict) else e for e in result]
     if name in _TRACK_LIST_TOOLS:
         if not isinstance(result, list):
             return result
-        return [_alias_track_entry(e, aliases) if isinstance(e, dict) else e for e in result]
+        return [
+            _alias_track_entry(e, aliases) if isinstance(e, dict) else e
+            for e in result
+        ]
     if name in _TRACK_SINGLE_TOOLS:
         if isinstance(result, dict):
             return _alias_track_entry(result, aliases)
     return result
 
 
-def _dealias_args(name: str, kwargs: dict[str, Any], aliases: TurnAliasMap) -> dict[str, Any]:
-    """Convert any integer-ref arguments back to real track_ids before
-    the underlying tool call. Unknown refs are silently dropped (we
-    log on the wrapper side if needed)."""
+def _dealias_args(
+    name: str, kwargs: dict[str, Any], aliases: TurnAliasMap,
+) -> dict[str, Any]:
     if name in _ACCEPTS_TRACK_REFS:
         out = dict(kwargs)
         for arg_name in _ACCEPTS_TRACK_REFS[name]:
@@ -130,36 +99,59 @@ def _dealias_args(name: str, kwargs: dict[str, Any], aliases: TurnAliasMap) -> d
     return kwargs
 
 
+def _accepts_alias_map(fn: ToolFn) -> bool:
+    """True iff the tool's signature declares an `alias_map` kwarg.
+
+    chunks_* / user_* tools take their own alias_map to mint envelope
+    refs eagerly. Legacy tools don't — they go through the
+    output-aliasing path below instead.
+    """
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return "alias_map" in params
+
+
 def build_aliased_tools(
     base: dict[str, ToolFn], aliases: TurnAliasMap,
 ) -> dict[str, ToolFn]:
-    """Wrap every relevant tool so:
-      - outputs that carry track_ids are post-processed to use
-        integer refs (alias minted into `aliases`),
-      - inputs that carry track_ids accept integer refs and are
-        de-aliased before the real tool runs.
+    """Wrap every tool that needs the per-turn alias map.
 
-    Tools not in either list pass through unchanged. The wrapper is
-    a thin async closure — no behaviour change for unrelated tools.
+    For chunks_* / user_* tools (signature accepts `alias_map`) — inject
+    it via closure; they handle envelope shaping themselves.
+
+    For legacy track tools (`list_tracks`, `get_track`, `propose_playlist`,
+    `generate_track_pdf`, `get_track_outline`) — output-alias track_id →
+    ref, input-dealias ref → track_id.
+
+    Tools matching neither pass through unchanged.
     """
 
-    def _make(name: str, fn: ToolFn) -> ToolFn:
-        async def _wrapped(**kwargs: Any) -> Any:
-            real_kwargs = _dealias_args(name, kwargs, aliases)
-            raw = await fn(**real_kwargs)
-            return _alias_result(name, raw, aliases)
-
-        return _wrapped
-
-    relevant = (
-        _CHUNK_LIST_TOOLS
-        | _TRACK_LIST_TOOLS
+    legacy_relevant = (
+        _TRACK_LIST_TOOLS
         | _TRACK_SINGLE_TOOLS
         | _ACCEPTS_TRACK_REFS.keys()
         | _ACCEPTS_TRACK_REF_SINGLE.keys()
     )
+
+    def _make_envelope_wrapper(fn: ToolFn) -> ToolFn:
+        async def _wrapped(**kwargs: Any) -> Any:
+            kwargs.setdefault("alias_map", aliases)
+            return await fn(**kwargs)
+        return _wrapped
+
+    def _make_legacy_wrapper(name: str, fn: ToolFn) -> ToolFn:
+        async def _wrapped(**kwargs: Any) -> Any:
+            real_kwargs = _dealias_args(name, kwargs, aliases)
+            raw = await fn(**real_kwargs)
+            return _alias_result(name, raw, aliases)
+        return _wrapped
+
     out = dict(base)
     for name, fn in base.items():
-        if name in relevant:
-            out[name] = _make(name, fn)
+        if _accepts_alias_map(fn):
+            out[name] = _make_envelope_wrapper(fn)
+        elif name in legacy_relevant:
+            out[name] = _make_legacy_wrapper(name, fn)
     return out

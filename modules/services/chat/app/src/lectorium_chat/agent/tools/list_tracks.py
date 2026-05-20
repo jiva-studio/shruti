@@ -92,7 +92,7 @@ register_tool(ToolDef(
         "When the user says «найди лекцию «X»» / «перескажи лекцию X», "
         "pass the bare phrase (no quotes) as `title_query` — it runs "
         "FTS against the actual lecture titles (with prefix matching, "
-        "accent-insensitive). search_transcripts searches the SPOKEN "
+        "accent-insensitive). chunks_search(type='lecture') searches the SPOKEN "
         "TEXT, not titles — don't use it for 'find lecture named X'.\n\n"
         "**Scripture chapter/verse — use `ref_prefix` + optional "
         "`ref_from`/`ref_to`.** «Гита 2» → source_id=<BG>, "

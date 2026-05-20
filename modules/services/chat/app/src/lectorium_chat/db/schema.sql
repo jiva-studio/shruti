@@ -19,20 +19,60 @@ CREATE INDEX IF NOT EXISTS chunks_model ON chunks (embed_model);
 CREATE INDEX IF NOT EXISTS chunks_hnsw
     ON chunks USING hnsw (embedding vector_cosine_ops);
 
-CREATE TABLE IF NOT EXISTS indexed_tracks (
-    track_id    TEXT NOT NULL,
+-- Index registry — one row per (item_kind, item_id, lang, embed_model) tells
+-- us whether the underlying source has changed since we last embedded it.
+-- Generic across content kinds: `etag` is opaque to the indexer (S3 ETag
+-- for transcripts; sha256(body) for library items).
+--
+-- Pre-existing deployments have `indexed_tracks` from the transcript era —
+-- the DO block migrates it in place so existing per-track ETags carry over
+-- and we don't re-embed the whole transcript corpus on next tick.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'indexed_tracks')
+       AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'indexed_items') THEN
+        ALTER TABLE indexed_tracks RENAME TO indexed_items;
+        ALTER TABLE indexed_items ADD COLUMN item_kind TEXT;
+        UPDATE indexed_items SET item_kind = 'track_transcript' WHERE item_kind IS NULL;
+        ALTER TABLE indexed_items ALTER COLUMN item_kind SET NOT NULL;
+        ALTER TABLE indexed_items RENAME COLUMN track_id TO item_id;
+        ALTER TABLE indexed_items DROP CONSTRAINT IF EXISTS indexed_tracks_pkey;
+        ALTER TABLE indexed_items ADD PRIMARY KEY (item_kind, item_id, lang, embed_model);
+    END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS indexed_items (
+    item_kind   TEXT NOT NULL,    -- 'track_transcript' | 'verse' | 'commentary' | 'prose_chapter' | 'letter'
+    item_id     TEXT NOT NULL,
     lang        TEXT NOT NULL,
     embed_model TEXT NOT NULL,
-    etag        TEXT NOT NULL,
+    etag        TEXT NOT NULL,    -- S3 ETag for transcripts; sha256(body) for library
     indexed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (track_id, lang, embed_model)
+    PRIMARY KEY (item_kind, item_id, lang, embed_model)
 );
 
-CREATE TABLE IF NOT EXISTS catalog_state (
-    id              INT PRIMARY KEY DEFAULT 1,
-    current_version TEXT NOT NULL,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CHECK (id = 1)
+-- Source DB state — current local version of each downloadable artifact
+-- (catalog/current.db, library/library.db). Replaces the old single-row
+-- catalog_state table; same migration pattern.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'catalog_state')
+       AND NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'db_state') THEN
+        ALTER TABLE catalog_state RENAME TO db_state;
+        ALTER TABLE db_state ADD COLUMN kind TEXT;
+        UPDATE db_state SET kind = 'catalog' WHERE kind IS NULL;
+        ALTER TABLE db_state ALTER COLUMN kind SET NOT NULL;
+        ALTER TABLE db_state DROP CONSTRAINT IF EXISTS catalog_state_pkey;
+        ALTER TABLE db_state DROP CONSTRAINT IF EXISTS catalog_state_id_check;
+        ALTER TABLE db_state DROP COLUMN id;
+        ALTER TABLE db_state ADD PRIMARY KEY (kind);
+    END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS db_state (
+    kind            TEXT PRIMARY KEY,    -- 'catalog' | 'library'
+    current_version TEXT,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS usage (
@@ -58,3 +98,37 @@ CREATE TABLE IF NOT EXISTS indexer_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_indexer_runs_started
     ON indexer_runs (started_at DESC);
+
+-- ── Library corpus (verses + commentaries + prose + letters) ──────────
+--
+-- Imported from library.db (published independently of the catalog). Lands
+-- in the SAME chunks table as transcripts — a `kind` discriminator and a
+-- few nullable columns hold the library-specific metadata. Embedding model
+-- and ANN index are shared; only the WHERE filter differs at query time.
+--
+-- The link between a commentary chunk and its parent verse is derived from
+-- (source_id, tokens) — same convention as inside library.db.
+
+ALTER TABLE chunks
+    ADD COLUMN IF NOT EXISTS kind          TEXT NOT NULL DEFAULT 'track_transcript',
+    ADD COLUMN IF NOT EXISTS item_id       TEXT,
+    ADD COLUMN IF NOT EXISTS source_id     TEXT,
+    ADD COLUMN IF NOT EXISTS tokens        TEXT,
+    ADD COLUMN IF NOT EXISTS author_id     TEXT,
+    ADD COLUMN IF NOT EXISTS doc_date      TEXT,
+    ADD COLUMN IF NOT EXISTS segment_index INT,
+    ADD COLUMN IF NOT EXISTS addr_label    TEXT;
+
+-- Legacy NOT NULL constraints on track-only columns relaxed so library
+-- rows can omit them. DROP NOT NULL is a no-op on already-nullable columns.
+ALTER TABLE chunks ALTER COLUMN track_id DROP NOT NULL;
+ALTER TABLE chunks ALTER COLUMN start_ms DROP NOT NULL;
+ALTER TABLE chunks ALTER COLUMN end_ms   DROP NOT NULL;
+
+CREATE INDEX IF NOT EXISTS chunks_kind       ON chunks (kind);
+CREATE INDEX IF NOT EXISTS chunks_lib_item   ON chunks (item_id, lang) WHERE item_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS chunks_lib_addr   ON chunks (source_id, tokens) WHERE source_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS chunks_lib_author ON chunks (author_id) WHERE author_id IS NOT NULL;
+
+-- Library diff state and version live in the shared `indexed_items` /
+-- `db_state` tables defined above (discriminated by item_kind / kind).

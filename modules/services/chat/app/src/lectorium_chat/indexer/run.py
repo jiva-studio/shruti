@@ -20,6 +20,8 @@ from lectorium_chat.db.client import get_pool
 from lectorium_chat.indexer import catalog, s3
 from lectorium_chat.indexer.chunker import Chunk, chunk_reviewed
 from lectorium_chat.indexer.embed import Embedder, get_embedder
+from lectorium_chat.indexer.library import db as library_db
+from lectorium_chat.indexer.library.indexer import run_once_library
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -46,6 +48,14 @@ async def bootstrap_catalog(settings: Settings | None = None) -> None:
             """,
         )
     await catalog.ensure_catalog(s)
+    # Library bootstrap happens AFTER catalog so the chunker can read
+    # sources.short_name for addr_label composition. Failure to bootstrap
+    # library is non-fatal — older deployments may not have run
+    # library.publish yet.
+    try:
+        await library_db.ensure_library(s)
+    except Exception as exc:
+        log.error("library_bootstrap_failed", error=str(exc))
 
 
 # ── Periodic loop ──────────────────────────────────────────────────────
@@ -108,16 +118,16 @@ async def run_once(
             objects = [o for o in objects if o.track_id in set(track_ids_filter)]
         log.info("transcript_discovered", total=len(objects), langs=langs)
 
-        # Diff against indexed_tracks for the active embed_model
+        # Diff against indexed_items for the active embed_model (track kind)
         async with pool.acquire() as conn:
             indexed = await conn.fetch(
                 """
-                SELECT track_id, lang, etag FROM indexed_tracks
-                WHERE embed_model = $1
+                SELECT item_id, lang, etag FROM indexed_items
+                WHERE item_kind = 'track_transcript' AND embed_model = $1
                 """,
                 embedder.name,
             )
-        indexed_map = {(r["track_id"], r["lang"]): r["etag"] for r in indexed}
+        indexed_map = {(r["item_id"], r["lang"]): r["etag"] for r in indexed}
         to_process = [o for o in objects if indexed_map.get((o.track_id, o.lang)) != o.etag]
         log.info(
             "transcript_diff",
@@ -137,8 +147,9 @@ async def run_once(
                 )
                 await conn.executemany(
                     """
-                    DELETE FROM indexed_tracks
-                    WHERE track_id = $1 AND lang = $2 AND embed_model = $3
+                    DELETE FROM indexed_items
+                    WHERE item_kind = 'track_transcript'
+                      AND item_id = $1 AND lang = $2 AND embed_model = $3
                     """,
                     [(t, lang, embedder.name) for t, lang in stale],
                 )
@@ -194,6 +205,16 @@ async def run_once(
             tracks_indexed=len(to_process),
             chunks_total=chunks_total,
         )
+
+        # Library pass — independent of transcript indexing. Errors here
+        # must not fail the run (transcripts are the headline content;
+        # library is opportunistic).
+        try:
+            lib_stats = await run_once_library(s)
+            log.info("library_run_complete", **lib_stats)
+        except Exception as exc:
+            log.exception("library_run_failed", error=str(exc))
+
         return run_id
     except Exception as exc:
         async with pool.acquire() as conn:
@@ -220,9 +241,10 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
         async with get_pool().acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO indexed_tracks (track_id, lang, embed_model, etag, indexed_at)
-                VALUES ($1, $2, $3, $4, NOW())
-                ON CONFLICT (track_id, lang, embed_model)
+                INSERT INTO indexed_items
+                  (item_kind, item_id, lang, embed_model, etag, indexed_at)
+                VALUES ('track_transcript', $1, $2, $3, $4, NOW())
+                ON CONFLICT (item_kind, item_id, lang, embed_model)
                 DO UPDATE SET etag=$4, indexed_at=NOW()
                 """,
                 obj.track_id, obj.lang, embedder.name, obj.etag,
@@ -252,9 +274,10 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
             )
             await conn.execute(
                 """
-                INSERT INTO indexed_tracks (track_id, lang, embed_model, etag, indexed_at)
-                VALUES ($1, $2, $3, $4, NOW())
-                ON CONFLICT (track_id, lang, embed_model)
+                INSERT INTO indexed_items
+                  (item_kind, item_id, lang, embed_model, etag, indexed_at)
+                VALUES ('track_transcript', $1, $2, $3, $4, NOW())
+                ON CONFLICT (item_kind, item_id, lang, embed_model)
                 DO UPDATE SET etag=$4, indexed_at=NOW()
                 """,
                 obj.track_id, obj.lang, embedder.name, obj.etag,

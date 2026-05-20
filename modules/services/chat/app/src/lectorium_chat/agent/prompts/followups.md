@@ -91,10 +91,10 @@ SKIP CASES — DO NOT emit ANY follow-up markers when:
 
 CORRECT — discovery answer with all three chip categories:
     Глава 2 Бхагавад-гиты раскрывает суть санкхья-йоги и описывает
-    природу души [cite:BG_1972_02.13@600000-680000|душа вечна].
+    природу души [cite:1|душа вечна].
 
-    [card:BG_1972_02.13]
-    [card:BG_1972_02.20]
+    [card:2]
+    [card:3]
     [followup:Сделай PDF этих лекций]
     [followup:А что в главе 3?]
     [followup:Покажи похожие беседы]

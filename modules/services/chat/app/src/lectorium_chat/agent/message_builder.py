@@ -101,6 +101,9 @@ def build_messages(
     history: list[dict[str, Any]],
     lang: str,
     user_context: UserContext | None = None,
+    *,
+    focus_ref: int | None = None,
+    current_track_ref: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build the LLM messages list.
 
@@ -128,7 +131,9 @@ def build_messages(
         f"{lang_name}-only.\n\n"
         f"{_LANG_EXAMPLE.get(lang, '')}\n"
     )
-    ctx_directive = _format_user_context(user_context)
+    ctx_directive = _format_user_context(
+        user_context, focus_ref=focus_ref, current_track_ref=current_track_ref,
+    )
     sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
     clean: list[dict[str, Any]] = []
     for m in history:
@@ -149,25 +154,35 @@ def build_messages(
     return [sys, *clean]
 
 
-def _format_user_context(uc: UserContext | None) -> str:
+def _format_user_context(
+    uc: UserContext | None,
+    *,
+    focus_ref: int | None = None,
+    current_track_ref: int | None = None,
+) -> str:
     """Render the small temporal anchors into the system prompt.
 
     Big lists (recent_tracks/notes) stay accessible only via personalize
     tools — pasting them into the prompt would explode the token bill on
-    every turn. But `now` and `current_track_id` are tiny and load-bearing
+    every turn. But `now` and `current_track_ref` are tiny and load-bearing
     for relative-time and "this lecture" phrases — those go inline.
+
+    `focus_ref` / `current_track_ref` are integer refs the turn runner
+    pre-mints from `aliases.alias_track(...)` so the LLM can pass them
+    straight into `chunks_get_window` / `chunks_find_similar` without
+    ever seeing the raw `track_id`.
     """
     if uc is None:
         return ""
     lines: list[str] = []
     if uc.now is not None:
         lines.append(f"now: {uc.now.isoformat()}")
-    if uc.current_track_id:
-        lines.append(f"current_track_id: {uc.current_track_id}")
-    if uc.focus is not None:
+    if uc.current_track_id and current_track_ref is not None:
+        lines.append(f"current_track_ref: {current_track_ref}")
+    if uc.focus is not None and focus_ref is not None:
         ftitle = uc.focus.title or ""
         lines.append(
-            f"focus: track_id={uc.focus.track_id} "
+            f"focus: track_ref={focus_ref} "
             f"start_ms={uc.focus.start_ms} "
             f"end_ms={uc.focus.end_ms} "
             f"title={ftitle!r}"
@@ -186,22 +201,23 @@ def _format_user_context(uc: UserContext | None) -> str:
         "═══════════════════════════════════════════════════════════════════════\n\n"
         + "\n".join(lines)
         + "\n\n"
-        "Use `now` to compute `since` / `until` bounds for `list_my_tracks`\n"
+        "Use `now` to compute `since` / `until` bounds for `user_tracks_list`\n"
         "when the user asks «вчера / на этой неделе / a week ago». Pass\n"
         "ISO-8601 strings with the same offset as `now`.\n\n"
         "When the user says «эту / текущую / только что слушал / this / current»\n"
-        "lecture OR doesn't name any lecture — and `current_track_id` is set —\n"
-        "use it directly as the track_id for `get_track_outline` /\n"
-        "`get_transcript_window` etc. NEVER outline a random track when the\n"
+        "lecture OR doesn't name any lecture — and `current_track_ref` is set —\n"
+        "use it directly as the ref for `get_track_outline` /\n"
+        "`chunks_get_window` etc. NEVER outline a random track when the\n"
         "user means 'this one' — that's the worst kind of hallucination here.\n"
-        "If `current_track_id` is NOT set and the user didn't name a track,\n"
+        "If `current_track_ref` is NOT set and the user didn't name a track,\n"
         "ask which lecture they mean instead of guessing.\n\n"
         "If `focus` is set, the user has tapped a specific span (an outline\n"
         "chapter or a citation) and the request implicitly targets it.\n"
-        "Always start with `get_transcript_window(track_id=focus.track_id,\n"
+        "Always start with `chunks_get_window(track_ref=<focus.track_ref>,\n"
         "around_ms=(focus.start_ms + focus.end_ms)/2,\n"
         "window_seconds=ceil((focus.end_ms - focus.start_ms) / 1000) + 30)`\n"
         "and base your retelling on those chunks. Cite individual lines\n"
-        "with [cite:track_id@start_ms-end_ms|caption]. Do NOT call\n"
-        "get_track_outline — the user already saw it.\n"
+        "with [cite:N|caption] where N is the integer `ref` field of\n"
+        "each returned chunk — NO timestamps, NO track ids in the\n"
+        "marker. Do NOT call get_track_outline — the user already saw it.\n"
     )

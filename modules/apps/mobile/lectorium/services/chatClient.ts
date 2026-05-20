@@ -98,6 +98,12 @@ export type ChatStreamEvent =
    *  message in the next turn's history, so the LLM sees one
    *  numbering scheme throughout the conversation. */
   | { readonly type: "aliases"; readonly map: AliasMapPayload }
+  /** Emitted once per verse the LLM is about to cite, BEFORE the
+   *  `delta` deltas containing the `[verse:source_id/tokens|caption]`
+   *  marker. Carries the full verse body so the mobile can render the
+   *  block (addr / sanskrit / IAST / translation) without a network
+   *  round-trip. Mobile caches keyed by `${source_id}|${tokens}`. */
+  | { readonly type: "verse_payload"; readonly payload: VersePayload }
   | { readonly type: "done" }
   | {
       readonly type: "error"
@@ -105,6 +111,19 @@ export type ChatStreamEvent =
       readonly message: string
       readonly retryAfter?: number
     }
+
+/** Wire shape of a verse body emitted via `verse_payload`. `translation`
+ *  is keyed by ISO-639 language code (`ru`, `en`, …); rendering picks
+ *  the entry matching the user's current locale and falls back to any
+ *  available one. */
+export interface VersePayload {
+  readonly source_id: string
+  readonly tokens: string
+  readonly addr_label: string
+  readonly sanskrit: string
+  readonly transliteration: string
+  readonly translation: { readonly [lang: string]: string }
+}
 
 /** Wire shape of the alias map emitted by the agent. Keys are integer
  *  aliases serialised as strings (JSON limitation); start/end ms are
@@ -501,6 +520,10 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       const map = parseAliasMap(payload.map)
       return map ? { type: "aliases", map } : null
     }
+    case "verse_payload": {
+      const vp = parseVersePayload(payload)
+      return vp ? { type: "verse_payload", payload: vp } : null
+    }
     case "error":
       return {
         type: "error",
@@ -539,6 +562,29 @@ function parseAliasMap(raw: unknown): AliasMapPayload | null {
     out[k] = entry
   }
   return out
+}
+
+function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
+  const sourceId = typeof p.source_id === "string" ? p.source_id : ""
+  const tokens = typeof p.tokens === "string" ? p.tokens : ""
+  if (!sourceId || !tokens) return null
+  const addrLabel = typeof p.addr_label === "string" ? p.addr_label : ""
+  const sanskrit = typeof p.sanskrit === "string" ? p.sanskrit : ""
+  const transliteration = typeof p.transliteration === "string" ? p.transliteration : ""
+  const translation: Record<string, string> = {}
+  if (p.translation && typeof p.translation === "object" && !Array.isArray(p.translation)) {
+    for (const [lang, text] of Object.entries(p.translation as Record<string, unknown>)) {
+      if (typeof text === "string" && text) translation[lang] = text
+    }
+  }
+  return {
+    source_id: sourceId,
+    tokens,
+    addr_label: addrLabel,
+    sanskrit,
+    transliteration,
+    translation,
+  }
 }
 
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
