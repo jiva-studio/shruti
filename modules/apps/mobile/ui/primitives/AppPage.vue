@@ -31,6 +31,17 @@ ion-content {
   --padding-top: var(--ion-safe-area-top);
 }
 
+/* flex-column + min-height:100% gives children a vertical box to grow
+ * into — required for empty-state patterns (e.g. PlaylistSection)
+ * that want `flex:1` to consume the leftover viewport height. Block
+ * children still flow naturally because their default `flex` keeps
+ * them at intrinsic height. */
+.page-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
 .placeholder {
   width: 100%;
   /* Matches the floating mini-player's visible height (see

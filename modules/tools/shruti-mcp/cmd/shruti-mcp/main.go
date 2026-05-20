@@ -20,6 +20,7 @@ import (
 	titleuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/title"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
@@ -482,6 +483,12 @@ func main() {
 				Catalog:    sqlitecatalog.NewLazy(currentDBPath),
 				FuzzyIndex: fuzzyIndex,
 				Minter:     minter,
+			},
+		},
+		PackCRUD: tools.PackCRUDDeps{
+			UseCase: packcrud.UseCase{
+				Catalog: sqlitecatalog.NewLazy(currentDBPath),
+				Minter:  minter,
 			},
 		},
 		Find: tools.FindDeps{
