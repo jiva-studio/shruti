@@ -201,9 +201,11 @@ const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
 const SCROLL_THROTTLE_MS = 400
 // Bottom comfort band as a fraction of host height. On natural
 // block-to-block transitions we scroll only when the active block's
-// bottom drifts past this line — until then it's still comfortably
-// in the upper portion of the viewport.
-const BOTTOM_BAND = 0.75
+// bottom drifts past this line. Keep this high so the active block
+// has room to drift well into the lower portion of the viewport
+// before we re-snap it back to the top — premature scrolling feels
+// jumpy and forces the reader to keep refocusing.
+const BOTTOM_BAND = 0.9
 // Where the block lands when we *do* scroll — just a small gap from
 // the top of the visible area so the reader sees mostly upcoming
 // content, not previously-read context. Teleprompter style.
