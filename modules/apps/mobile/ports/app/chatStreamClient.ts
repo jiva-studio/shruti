@@ -33,6 +33,22 @@ export interface ChatOutlinePayload {
   readonly items: readonly { readonly startMs: number; readonly title: string }[]
 }
 
+/** Verse body shipped ahead of the prose deltas containing the
+ *  `[verse:source_id/tokens|caption]` marker that references it.
+ *  The store subscriber caches it under `${sourceId}|${tokens}` so
+ *  VerseCard renders the full block instead of the chip placeholder.
+ *
+ *  Wire fields are snake_case to match the agent's emitted JSON; the
+ *  use-case layer maps them to camelCase on the domain side. */
+export interface ChatVersePayloadWire {
+  readonly source_id: string
+  readonly tokens: string
+  readonly addr_label: string
+  readonly sanskrit: string
+  readonly transliteration: string
+  readonly translation: Readonly<Record<string, string>>
+}
+
 export type ChatRole = "user" | "assistant"
 
 export interface ChatTurn {
@@ -61,6 +77,7 @@ export type ChatStreamEvent =
     }
   | { readonly type: "action"; readonly payload: ChatActionPayload }
   | { readonly type: "outline"; readonly payload: ChatOutlinePayload }
+  | { readonly type: "verse_payload"; readonly payload: ChatVersePayloadWire }
   | {
       readonly type: "aliases"
       /** Wire shape kept snake_case to match the agent's
