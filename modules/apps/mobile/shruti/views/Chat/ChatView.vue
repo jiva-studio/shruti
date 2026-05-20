@@ -29,19 +29,20 @@
           @pick-chapter="onPickChapter"
           @pick-followup="onSend"
         />
-        <div v-else class="empty-state">
-          <img src="/chat-empty.png" class="empty-icon" alt="" aria-hidden="true" />
-          <SuggestionChips
-            :has-current-track="hasCurrentTrack"
-            :has-recent-listening="hasRecentListening"
-            @pick="onPickSuggestion"
-          />
-          <RecentSessions
-            :sessions="sessions"
-            :unread-ids="unseenProactiveSessionIds"
-            @pick="onPickSession"
-          />
-        </div>
+        <PageSticker v-else image="/chat-empty.png">
+          <template #footer>
+            <SuggestionChips
+              :has-current-track="hasCurrentTrack"
+              :has-recent-listening="hasRecentListening"
+              @pick="onPickSuggestion"
+            />
+            <RecentSessions
+              :sessions="sessions"
+              :unread-ids="unseenProactiveSessionIds"
+              @pick="onPickSession"
+            />
+          </template>
+        </PageSticker>
       </div>
     </IonContent>
     <ChatInputBar ref="inputBarRef" :sending="sending" @send="onSend" />
@@ -65,6 +66,7 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
+import { PageSticker } from "@ui/primitives/index.js"
 import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
 import ChatSessionList from "./components/ChatSessionList.vue"
@@ -198,45 +200,5 @@ const headerTitle = computed<string>(() => {
 
 .action-btn:active {
   background: rgba(var(--ion-color-primary-rgb), 0.12);
-}
-
-/* flex:1 makes the empty-state stretch to fill the IonContent's
- * available vertical space, then center its children inside it. With
- * chat-scroll being a column-flex container, this guarantees the icon +
- * title + message land in the geometric middle of the chat viewport,
- * regardless of header / input-bar padding. */
-.empty-state {
-  /* Fill the full IonContent so `justify-content:center` actually has
-   * vertical space to push the contents into — without the explicit
-   * height the column hugs its children at the top. */
-  flex: 1 1 auto;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px 16px;
-  text-align: center;
-}
-
-.empty-icon {
-  width: 60vw;
-  height: auto;
-  margin-bottom: 8px;
-  opacity: 0.95;
-}
-
-.empty-title {
-  font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 6px;
-  color: var(--ion-text-color);
-}
-
-.empty-message {
-  font-size: 14px;
-  color: var(--ion-color-step-500, #8a8a8a);
-  margin: 0;
-  max-width: 280px;
 }
 </style>
