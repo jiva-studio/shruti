@@ -44,6 +44,7 @@ type Deps struct {
 	Runs             runregistry.Registry
 	Runner           *runner.Runner
 	DictCRUD         DictCRUDDeps
+	PackCRUD         PackCRUDDeps
 	Catalog          CatalogDeps
 	Library          LibraryDeps
 	LibraryPublish   LibraryPublishDeps

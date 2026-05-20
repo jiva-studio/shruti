@@ -4,4 +4,4 @@ package catalog
 // against. Mirrors source/lectorium/modules/db-scheme.json. If a downloaded
 // snapshot reports a different scheme, catalog_refresh refuses with a
 // clear error — rebuild the binary against the new scheme.
-const SupportedDBScheme = 20260512
+const SupportedDBScheme = 20260520

@@ -11,11 +11,54 @@ import (
 // already match `SupportedDBScheme` — the publisher owns schema; the
 // client only opens.
 func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
+	if err := ensurePackTables(ctx, db); err != nil {
+		return fmt.Errorf("ensure pack tables: %w", err)
+	}
 	if err := seedKindTags(ctx, db); err != nil {
 		return fmt.Errorf("seed kind tags: %w", err)
 	}
 	if err := backfillCombinedFtsRows(ctx, db); err != nil {
 		return fmt.Errorf("backfill combined fts: %w", err)
+	}
+	return nil
+}
+
+// ensurePackTables creates the `packs` and `pack_tracks` tables when
+// missing AND records the migration in the `migrations` table so the
+// mobile scheme-validator (which reads scheme from migrations.ORDER BY
+// name DESC LIMIT 1) accepts the freshly-published current.db.
+//
+// IF NOT EXISTS keeps the DDL idempotent; the INSERT OR IGNORE makes
+// the migrations row idempotent against repeat open() calls and against
+// already-shipped catalogs.
+func ensurePackTables(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS packs (
+			id          TEXT NOT NULL,
+			language    TEXT NOT NULL,
+			name        TEXT NOT NULL,
+			featured    INTEGER NOT NULL DEFAULT 0,
+			sort_order  INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (id, language)
+		)`,
+		`CREATE TABLE IF NOT EXISTS pack_tracks (
+			pack_id        TEXT NOT NULL,
+			pack_language  TEXT NOT NULL,
+			track_id       TEXT NOT NULL,
+			position       INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (pack_id, pack_language, track_id),
+			FOREIGN KEY (pack_id, pack_language) REFERENCES packs(id, language) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pack_tracks_pack ON pack_tracks(pack_id, pack_language, position)`,
+		// Make this look like a regular numbered migration so the mobile
+		// SchemeReader sees scheme=20260520 at the top of the table.
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('003_add_packs', 20260520, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
 	}
 	return nil
 }
