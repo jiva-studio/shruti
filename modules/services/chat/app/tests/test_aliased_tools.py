@@ -40,8 +40,8 @@ async def test_legacy_track_list_aliases_track_id_to_ref() -> None:
         ]
 
     aliases = TurnAliasMap()
-    wrapped = build_aliased_tools({"list_tracks": fake_list_tracks}, aliases)
-    out = await wrapped["list_tracks"]()
+    wrapped = build_aliased_tools({"tracks_list": fake_list_tracks}, aliases)
+    out = await wrapped["tracks_list"]()
 
     for row in out:
         assert "track_id" not in row
@@ -63,8 +63,8 @@ async def test_legacy_propose_playlist_dealiases_track_ids() -> None:
     aliases = TurnAliasMap()
     r1 = aliases.alias_track("track_A")
     r2 = aliases.alias_track("track_B")
-    wrapped = build_aliased_tools({"propose_playlist": fake_propose_playlist}, aliases)
-    await wrapped["propose_playlist"](track_ids=[r1, r2], name="mix")
+    wrapped = build_aliased_tools({"playlist_propose": fake_propose_playlist}, aliases)
+    await wrapped["playlist_propose"](track_ids=[r1, r2], name="mix")
 
     # Underlying fn saw real track_ids, not refs.
     assert received["track_ids"] == ["track_A", "track_B"]
@@ -79,8 +79,8 @@ async def test_get_track_single_ref_input_dealiased() -> None:
 
     aliases = TurnAliasMap()
     ref = aliases.alias_track("real_track")
-    wrapped = build_aliased_tools({"get_track": fake_get_track}, aliases)
-    out = await wrapped["get_track"](track_id=ref, lang="ru")
+    wrapped = build_aliased_tools({"track_get": fake_get_track}, aliases)
+    out = await wrapped["track_get"](track_id=ref, lang="ru")
 
     # Underlying fn got the real id.
     assert received["track_id"] == "real_track"

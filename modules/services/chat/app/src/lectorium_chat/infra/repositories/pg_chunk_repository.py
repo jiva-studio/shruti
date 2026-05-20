@@ -66,7 +66,14 @@ class PgChunkRepository:
         """
         pool = self._pool
         async with pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
+            async with conn.transaction():
+                # SET LOCAL keeps the param scoped to this transaction.
+                # See _init_connection in db/client.py for the rationale —
+                # filtered HNSW search returns 0 rows without it.
+                await conn.execute(
+                    "SET LOCAL hnsw.iterative_scan = relaxed_order"
+                )
+                rows = await conn.fetch(sql, *params)
         return [
             ScoredChunk(
                 chunk=Chunk(
@@ -198,7 +205,16 @@ class PgChunkRepository:
           LIMIT ${len(params)}
         """
         async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *params)
+            async with conn.transaction():
+                # SET LOCAL is scoped to this transaction so it doesn't
+                # bleed into other queries on the same conn. pgvector
+                # HNSW + WHERE filters need iterative_scan to find rows
+                # past the ef_search candidates; without it filtered
+                # queries return 0 rows.
+                await conn.execute(
+                    "SET LOCAL hnsw.iterative_scan = relaxed_order"
+                )
+                rows = await conn.fetch(sql, *params)
         return [
             ScoredLibraryChunk(
                 chunk=LibraryChunk(

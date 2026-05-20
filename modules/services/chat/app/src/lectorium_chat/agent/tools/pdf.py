@@ -244,7 +244,7 @@ async def generate_track_pdf(
         {
             "kind": "share_pdf",
             "id": action_id,
-            "items": ok_items,
+            "payload": {"items": ok_items},
         },
     )
     return {
@@ -256,7 +256,7 @@ async def generate_track_pdf(
 
 
 register_tool(ToolDef(
-    name="generate_track_pdf",
+    name="track_pdf_generate",
     fn=generate_track_pdf,
     emits_events=True,
     description=(

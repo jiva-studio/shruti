@@ -14,7 +14,15 @@
 }
 
 {$DOMAIN} {
-    encode zstd gzip
+    # Compress everything EXCEPT text/event-stream. Compression buffers
+    # response chunks to fill its block size, which defeats SSE
+    # streaming — the client sees nothing until the buffer flushes,
+    # making the answer appear as one big drop instead of token-by-token.
+    @compressible {
+        not header Accept text/event-stream
+        not header Content-Type text/event-stream
+    }
+    encode @compressible zstd gzip
 
     # SSE: disable response buffering so chunks reach the client immediately.
     reverse_proxy chat:8080 {

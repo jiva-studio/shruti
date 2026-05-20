@@ -11,8 +11,8 @@ import { streamChat } from "../chatClient.js"
  * `@lectorium/services/chatClient`) to the `IChatStreamClient` port.
  *
  * The port + chatClient already share the wire-protocol type names
- * (delta / tool_start / tool / action / outline / done / error) so
- * this wrapper is a thin pass-through. It exists so the use-case
+ * (delta / tool_start / tool_end / status / action / done / error)
+ * so this wrapper is a thin pass-through. It exists so the use-case
  * imports a port, not a concrete service — letting tests inject a
  * fake without monkey-patching the chatClient module.
  */

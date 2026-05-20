@@ -1,14 +1,12 @@
-"""Build the LLM messages list from chat history + UserContext.
+"""Fold prior assistant turns down to user-visible transcript form.
 
-Pure functions — no SQL, no HTTP, no streaming state. Given a history
-+ language + optional user context, produces the `[{role, content},
-...]` array LiteLLM consumes.
-
-The language directive forces the assistant to reply in the user's
-interface language even when the model's natural inclination would be
-to switch. The user-context directive surfaces the small temporal
-anchors (`now`, `current_track_id`, `focus`) so the LLM can resolve
-"вчера / this lecture" without a tool call.
+Pure functions — no SQL, no HTTP, no streaming state. Workers/synth
+in the LangGraph layer call `fold_history(history)` to strip every
+chip marker / widget id / tool-protocol envelope from past assistant
+turns before passing them to the LLM. The principle: feed the model
+ONLY what the user actually read on screen — no integer refs, no
+track ids, no source_id/tokens shapes — so it can't cargo-cult those
+shapes back out on the next turn.
 """
 
 from __future__ import annotations
@@ -16,9 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from lectorium_chat.agent.prompts import SYSTEM_PROMPT
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
-from lectorium_chat.domain import UserContext
 
 
 # Marker patterns we know how to either fold-back into numbered refs
@@ -30,112 +26,99 @@ _CITE_FULL_RE = re.compile(
 )
 _CARD_FULL_RE = re.compile(r"\[card:([^\]\s]+)\]")
 _OUTLINE_FULL_RE = re.compile(r"\[outline:([^\]\s]+)\]")
+# Verse marker expanded form: `[verse:source_id/tokens|caption]`. source_id
+# is a catalog reference id (no `/`), tokens is the verse address inside
+# the book (digits, dots, commas, dashes — e.g. `2.13`, `1.2.28,1.2.29`).
+_VERSE_FULL_RE = re.compile(
+    r"\[verse:([^/|\]\s]+)/([^|\]\s]+)(?:\|([^\]]*))?\]"
+)
+
+# Hallucinated tool-protocol leaks. The agent never emits `[tool_use]`
+# / `[tool_result]` envelopes legitimately — they only appear when a
+# weaker model invents them as fake "transcript" prose at the top of
+# an assistant reply (production bug: Gemini Flash Lite, fed
+# JSON-shaped research notes, copies the shape). If such a tainted
+# message lands in history, feeding it back to the next turn teaches
+# the model to keep doing it. Strip the entire block so the next
+# `fold_history` consumer never sees the trigger.
+#
+# The block runs from a `[tool_use]` or `[tool_result]` opener until
+# either the next prose paragraph (blank line + non-bracket text) or
+# the end of the message. We're conservative: we only delete the
+# leaked envelope, not the legitimate prose that may have followed.
+_TOOL_PROTOCOL_LEAK_RE = re.compile(
+    r"(?:^|\n)[ \t]*\[tool_(?:use|result)\][^\n]*"
+    r"(?:\n(?:[ \t]*[\[\{].*|[ \t]*[\]\}].*|[ \t]+[^\n]*))*",
+    re.MULTILINE,
+)
+
+
+def _strip_tool_protocol_leaks(content: str) -> str:
+    """Remove any `[tool_use]…[tool_result]…{json…}` envelope that a
+    prior assistant turn invented. See `_TOOL_PROTOCOL_LEAK_RE`."""
+    return _TOOL_PROTOCOL_LEAK_RE.sub("", content).lstrip()
+
+
+_FOLLOWUP_RE = re.compile(r"\[followup:[^\]\n]*\]")
+_ACTION_RE = re.compile(r"\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]")
 
 
 def _fold_prior_assistant_content(
     content: str,
-    aliases: TurnAliasMap | None,
+    aliases: TurnAliasMap | None,  # noqa: ARG001 — kept for callsite compat
 ) -> str:
-    """Rewrite chip markers in a prior assistant message back into the
-    numbered-ref format the LLM expects throughout history.
+    """Strip prior-turn chip markers down to the user-visible text.
 
-    With `aliases` present (the per-turn alias map the server emitted
-    after the message was generated and the client persisted): each
-    `[cite:track_X@start-end|caption]` whose `(track_X, start, end)`
-    is in `aliases` becomes `[cite:N|caption]`. `[card:track_X]` /
-    `[outline:track_X]` become `[card:N]` / `[outline:N]` if track_X
-    has any alias in the map. Markers that aren't in the alias map
-    (orphans, content drift) fall through to the same placeholder
-    path as legacy messages.
+    Principle: history fed to the LLM must look like the conversation
+    transcript the user actually saw — no integer refs, no internal
+    catalog ids, no system envelopes. The LLM's grounding for the
+    CURRENT turn comes from fresh tool_results; the only thing it
+    needs from history is the conversational thread.
 
-    With `aliases=None` (legacy assistant message persisted before
-    this protocol existed): every chip marker is collapsed to a
-    placeholder that preserves only the caption — the model sees
-    "I cited here" without a concrete catalog id to imitate, and the
-    poison can't seed a new hallucination."""
+    Substitutions:
+      `[cite:track_X@s-e|caption]`           → caption (or dropped if empty)
+      `[verse:source_id/tokens|caption]`     → caption (or dropped if empty)
+      `[card:track_X]` / `[outline:track_X]` → dropped (widget-only)
+      `[action:kind|id=X]`                   → dropped (widget-only)
+      `[followup:text]`                      → dropped (chip outside bubble)
 
-    def _cite_sub(m: re.Match[str]) -> str:
-        track_id, start_str, end_str = m.group(1), m.group(2), m.group(3)
-        caption = (m.group(4) or "").strip()
-        if aliases is not None:
-            n = aliases.lookup_ref(track_id, int(start_str), int(end_str))
-            if n is not None:
-                return f"[cite:{n}|{caption}]" if caption else f"[cite:{n}]"
-        # No alias — fall back to placeholder so the format isn't a
-        # `track_X@...` pattern the model could imitate.
-        return f"[cite:…|{caption}]" if caption else "[cite:…]"
-
-    def _whole_track_sub(prefix: str) -> "callable":
-        def _sub(m: re.Match[str]) -> str:
-            track_id = m.group(1)
-            if aliases is not None:
-                # Track-level (card/outline) alias has start_ms/end_ms = None.
-                n = aliases.lookup_ref(track_id, None, None)
-                if n is not None:
-                    return f"[{prefix}:{n}]"
-            return f"[{prefix}:…]"
-        return _sub
-
-    content = _CITE_FULL_RE.sub(_cite_sub, content)
-    content = _CARD_FULL_RE.sub(_whole_track_sub("card"), content)
-    content = _OUTLINE_FULL_RE.sub(_whole_track_sub("outline"), content)
-    return content
-
-
-_LANG_NAME = {"ru": "Russian", "en": "English"}
-_LANG_EXAMPLE = {
-    "ru": (
-        "User: «Дай список лекций про политику»\n"
-        "WRONG (in English): \"The search for 'politics' yields...\"\n"
-        "RIGHT (in Russian): «Вот несколько лекций о политике:» followed by [card:...] markers."
-    ),
-    "en": (
-        "User: \"Give me lectures on politics\"\n"
-        "WRONG (in Russian): «Поиск по слову 'политика' дал...»\n"
-        "RIGHT (in English): \"Here are some lectures on politics:\" followed by [card:...] markers."
-    ),
-}
-
-
-def build_messages(
-    history: list[dict[str, Any]],
-    lang: str,
-    user_context: UserContext | None = None,
-    *,
-    focus_ref: int | None = None,
-    current_track_ref: int | None = None,
-) -> list[dict[str, Any]]:
-    """Build the LLM messages list.
-
-    For each prior assistant turn, the input dict may carry an
-    optional `aliases` field — the integer→chunk map the server
-    emitted while answering that turn (the client persisted it and
-    shipped it back). If present, chip markers in the assistant
-    content are folded back into `[cite:N|caption]` form so the LLM
-    sees one consistent numbered-ref format across the whole history.
-    If absent (legacy assistant message), the markers are collapsed
-    to placeholders so a `track_X@...` pattern can't seed a new
-    hallucination.
+    The `aliases` parameter is no longer used but kept on the signature
+    so `fold_history` callsites don't change shape.
     """
-    lang_name = _LANG_NAME.get(lang, lang)
-    lang_directive = (
-        "\n\n"
-        "═══════════════════════════════════════════════════════════════════════\n"
-        f"RESPONSE LANGUAGE — STRICT — REPLY ONLY IN {lang_name.upper()}\n"
-        "═══════════════════════════════════════════════════════════════════════\n"
-        f"\nThe user's interface language is {lang_name} ({lang}). EVERY sentence "
-        f"of your reply prose MUST be written in {lang_name}. Do not switch "
-        "languages mid-response. Do not narrate in English what you'll do "
-        f"if the user wrote in {lang_name}. Tool search queries may be in any "
-        f"language that improves recall, but your visible reply text is "
-        f"{lang_name}-only.\n\n"
-        f"{_LANG_EXAMPLE.get(lang, '')}\n"
-    )
-    ctx_directive = _format_user_context(
-        user_context, focus_ref=focus_ref, current_track_ref=current_track_ref,
-    )
-    sys = {"role": "system", "content": SYSTEM_PROMPT + lang_directive + ctx_directive}
-    clean: list[dict[str, Any]] = []
+
+    def _caption_only(m: re.Match[str], idx: int) -> str:
+        caption = (m.group(idx) or "").strip()
+        return caption  # empty → marker disappears entirely
+
+    content = _CITE_FULL_RE.sub(lambda m: _caption_only(m, 4), content)
+    content = _VERSE_FULL_RE.sub(lambda m: _caption_only(m, 3), content)
+    content = _CARD_FULL_RE.sub("", content)
+    content = _OUTLINE_FULL_RE.sub("", content)
+    content = _ACTION_RE.sub("", content)
+    content = _FOLLOWUP_RE.sub("", content)
+    # Collapse the runs of whitespace + blank lines we just opened up.
+    content = re.sub(r"[ \t]+\n", "\n", content)
+    content = re.sub(r"\n{3,}", "\n\n", content)
+    return content.strip()
+
+
+def fold_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Public helper for nodes/use-cases that need history but build
+    their own message lists (i.e. the LangGraph synth node, which
+    composes prompt + history + internal-notes + final-question rather
+    than the monolithic shape `build_messages` produces).
+
+    Walks `history`, drops malformed entries, and for each assistant
+    turn rewrites chip markers back to integer ref form using THAT
+    turn's persisted `aliases` payload. Returns a list of plain
+    `{role, content}` dicts ready to splice into a Message list.
+
+    History entries without an `aliases` payload (legacy persisted
+    messages from before the numbered-ref protocol) collapse their
+    chip markers to placeholders so a raw `track_X@...` shape can't
+    seed a hallucination on the current turn.
+    """
+    out: list[dict[str, Any]] = []
     for m in history:
         role = m.get("role")
         content = m.get("content")
@@ -148,76 +131,21 @@ def build_messages(
                 local_aliases = TurnAliasMap()
                 local_aliases.load_external(aliases_payload)
             content = _fold_prior_assistant_content(content, local_aliases)
+            # Defensive: drop any `[tool_use]/[tool_result]` envelopes
+            # a tainted past turn may have leaked. Feeding them back
+            # reinforces the mimicry on every subsequent turn.
+            content = _strip_tool_protocol_leaks(content)
             if not content:
                 continue
-        clean.append({"role": role, "content": content})
-    return [sys, *clean]
+        out.append({"role": role, "content": content})
+    return out
 
 
-def _format_user_context(
-    uc: UserContext | None,
-    *,
-    focus_ref: int | None = None,
-    current_track_ref: int | None = None,
-) -> str:
-    """Render the small temporal anchors into the system prompt.
-
-    Big lists (recent_tracks/notes) stay accessible only via personalize
-    tools — pasting them into the prompt would explode the token bill on
-    every turn. But `now` and `current_track_ref` are tiny and load-bearing
-    for relative-time and "this lecture" phrases — those go inline.
-
-    `focus_ref` / `current_track_ref` are integer refs the turn runner
-    pre-mints from `aliases.alias_track(...)` so the LLM can pass them
-    straight into `chunks_get_window` / `chunks_find_similar` without
-    ever seeing the raw `track_id`.
-    """
-    if uc is None:
-        return ""
-    lines: list[str] = []
-    if uc.now is not None:
-        lines.append(f"now: {uc.now.isoformat()}")
-    if uc.current_track_id and current_track_ref is not None:
-        lines.append(f"current_track_ref: {current_track_ref}")
-    if uc.focus is not None and focus_ref is not None:
-        ftitle = uc.focus.title or ""
-        lines.append(
-            f"focus: track_ref={focus_ref} "
-            f"start_ms={uc.focus.start_ms} "
-            f"end_ms={uc.focus.end_ms} "
-            f"title={ftitle!r}"
-        )
-    in_progress_n = len(uc.in_progress_tracks())
-    lines.append(
-        f"history_size: recent={len(uc.recent_tracks)} "
-        f"in_progress={in_progress_n}"
-    )
-    if not lines:
-        return ""
-    return (
-        "\n\n"
-        "═══════════════════════════════════════════════════════════════════════\n"
-        "USER CONTEXT (anchors for relative-time and 'this lecture' phrases)\n"
-        "═══════════════════════════════════════════════════════════════════════\n\n"
-        + "\n".join(lines)
-        + "\n\n"
-        "Use `now` to compute `since` / `until` bounds for `user_tracks_list`\n"
-        "when the user asks «вчера / на этой неделе / a week ago». Pass\n"
-        "ISO-8601 strings with the same offset as `now`.\n\n"
-        "When the user says «эту / текущую / только что слушал / this / current»\n"
-        "lecture OR doesn't name any lecture — and `current_track_ref` is set —\n"
-        "use it directly as the ref for `get_track_outline` /\n"
-        "`chunks_get_window` etc. NEVER outline a random track when the\n"
-        "user means 'this one' — that's the worst kind of hallucination here.\n"
-        "If `current_track_ref` is NOT set and the user didn't name a track,\n"
-        "ask which lecture they mean instead of guessing.\n\n"
-        "If `focus` is set, the user has tapped a specific span (an outline\n"
-        "chapter or a citation) and the request implicitly targets it.\n"
-        "Always start with `chunks_get_window(track_ref=<focus.track_ref>,\n"
-        "around_ms=(focus.start_ms + focus.end_ms)/2,\n"
-        "window_seconds=ceil((focus.end_ms - focus.start_ms) / 1000) + 30)`\n"
-        "and base your retelling on those chunks. Cite individual lines\n"
-        "with [cite:N|caption] where N is the integer `ref` field of\n"
-        "each returned chunk — NO timestamps, NO track ids in the\n"
-        "marker. Do NOT call get_track_outline — the user already saw it.\n"
-    )
+# `build_messages` / `_format_user_context` / `_LANG_NAME` /
+# `_LANG_EXAMPLE` lived here while `chat_turn.py` drove the legacy
+# `run_llm_loop`. With the LangGraph migration the system prompt is
+# composed per-node (router_turn, research_turn, synthesizer_turn
+# each pick their own sections), the language directive lives in
+# `agent/prompts/language.md`, and USER CONTEXT anchors are rendered
+# by `agent/graph/nodes/_worker_common.anchor_block`. All four had
+# zero remaining callers — removed.

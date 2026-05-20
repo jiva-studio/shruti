@@ -15,6 +15,13 @@ _pool: asyncpg.Pool | None = None
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
     await register_vector(conn)
+    # Note: `SET hnsw.iterative_scan = relaxed_order` is applied at the
+    # query level via `SET LOCAL` inside the search methods, not here.
+    # Session-level SET in asyncpg pool init didn't reliably propagate
+    # to lazy-created connections; SET LOCAL inside an explicit
+    # transaction is more robust and self-documents which queries
+    # require it. See pg_chunk_repository.search_by_embedding /
+    # search_library_by_embedding for the actual sites.
 
 
 async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:

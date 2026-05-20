@@ -27,28 +27,28 @@ from lectorium_chat.agent.tools._registry import ToolFn
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 
 
-# Legacy track-list tools — they emit `{track_id, ...}` rows; the
-# wrapper mints a fresh track-ref per row and strips the real id.
+# Track-list tools — they emit `{track_id, ...}` rows; the wrapper
+# mints a fresh track-ref per row and strips the real id.
 _TRACK_LIST_TOOLS = frozenset({
-    "list_tracks",
+    "tracks_list",
 })
 
-# Legacy single-track tools — one `{track_id, ...}` dict, not a list.
+# Single-track tools — one `{track_id, ...}` dict, not a list.
 _TRACK_SINGLE_TOOLS = frozenset({
-    "get_track",
+    "track_get",
 })
 
-# Legacy tools that accept lists of integer refs on input. Each entry
-# is the underlying arg name (kept as `track_ids` for repo-side compat).
+# Tools that accept lists of integer refs on input. Each entry is the
+# underlying arg name (kept as `track_ids` for repo-side compat).
 _ACCEPTS_TRACK_REFS = {
-    "propose_playlist": ["track_ids"],
-    "generate_track_pdf": ["track_ids"],
+    "playlist_propose": ["track_ids"],
+    "track_pdf_generate": ["track_ids"],
 }
 
-# Legacy tools that accept a single integer-ref input arg.
+# Tools that accept a single integer-ref input arg.
 _ACCEPTS_TRACK_REF_SINGLE = {
-    "get_track": "track_id",
-    "get_track_outline": "track_id",
+    "track_get": "track_id",
+    "track_outline_get": "track_id",
 }
 
 
@@ -60,6 +60,11 @@ def _alias_track_entry(entry: dict[str, Any], aliases: TurnAliasMap) -> dict[str
     out = dict(entry)
     out.pop("track_id", None)
     out["ref"] = ref
+    # Tag the envelope with a synth-readable `type` so the
+    # `_render_one_note` header reads `kind=lecture · ref=N` — which
+    # is the shape the grounding instruction binds to `[card:N]`
+    # marker emission. tracks_list raw shape has no `type` field.
+    out.setdefault("type", "lecture")
     return out
 
 
@@ -121,9 +126,8 @@ def build_aliased_tools(
     For chunks_* / user_* tools (signature accepts `alias_map`) — inject
     it via closure; they handle envelope shaping themselves.
 
-    For legacy track tools (`list_tracks`, `get_track`, `propose_playlist`,
-    `generate_track_pdf`, `get_track_outline`) — output-alias track_id →
-    ref, input-dealias ref → track_id.
+    For track-shaped tools — see the frozensets above for the canonical
+    names — output-alias `track_id → ref`, input-dealias `ref → track_id`.
 
     Tools matching neither pass through unchanged.
     """

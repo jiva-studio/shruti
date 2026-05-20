@@ -35,8 +35,12 @@ export { PurchaseCancelledError } from "./purchases.js"
 export type {
   IChatStreamClient,
   ChatRole,
+  ChatActionPayload,
+  ChatOutlinePayload,
   ChatStreamEvent,
   ChatTurn,
+  ChatVersePayloadWire,
+  ChatSharePdfItemPayload,
   StreamChatOptions,
 } from "./chatStreamClient.js"
 export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"

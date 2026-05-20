@@ -89,6 +89,48 @@ _RESOLVE_TABLES = {
 }
 
 
+def _normalize_source_id(
+    db_path: Path, source_id: str | None
+) -> str | None:
+    """Accept either an opaque catalog id (`source_<base62>`) or a short
+    name (`BG`, `СB`, `БГ`, `ШБ`) and return the opaque id.
+
+    The agent's router and the LLM in the catalog worker both tend to
+    pass short names — that's the natural shape extracted from user
+    queries like «Гита 2», «БГ 2.13», "SB 5.5.3". The catalog DB
+    indexes by opaque id (`source_dsicuBsFvinZ` etc.); accepting only
+    that form meant short-name calls silently filtered to zero matches.
+
+    Resolution rules:
+    - None / empty → None (no filter)
+    - Starts with `source_` → already opaque, returned as-is
+    - Otherwise → case-insensitive `short_name` lookup across all
+      languages (BG and БГ both resolve to the Bhagavad-gītā opaque id)
+    - No match → None (drops the filter rather than producing 0 rows)
+    """
+    if not source_id:
+        return None
+    if source_id.startswith("source_"):
+        return source_id
+    needle = source_id.strip().casefold()
+    if not needle:
+        return None
+    # SQLite's built-in LOWER() is ASCII-only, so "БГ" wouldn't match.
+    # The `sources` table is small (~10 sources × 2 langs), so we
+    # fetch all short_names and compare with Python's `casefold()`
+    # (which DOES handle Cyrillic and other scripts).
+    try:
+        with _catalog_conn(db_path) as conn:
+            rows = conn.execute("SELECT id, short_name FROM sources").fetchall()
+    except sqlite3.Error:
+        return None
+    for r in rows:
+        sn = r["short_name"] or ""
+        if sn.strip().casefold() == needle:
+            return r["id"]
+    return None
+
+
 def _load_dict(
     db_path: Path,
     table: str,
@@ -148,6 +190,7 @@ def _filter_track_ids_sync(
     date_from: str | None,
     date_to: str | None,
 ) -> list[str] | None:
+    source_id = _normalize_source_id(db_path, source_id)
     if not any([author_id, source_id, location_id, tag_ids, date_from, date_to]):
         return None
     sql = ["SELECT t.id FROM tracks t WHERE t.hidden = 0"]
@@ -314,6 +357,7 @@ def _list_tracks_sync(
     ref_from: int | None = None,
     ref_to: int | None = None,
 ) -> list[Track]:
+    source_id = _normalize_source_id(db_path, source_id)
     # When lang is None, fall back to "en" for the title-lookup join, but
     # skip the EXISTS-filter so all languages remain visible.
     title_lang = lang or "en"

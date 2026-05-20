@@ -41,7 +41,7 @@ async def get_help(locale: str = "en") -> str:
 
 
 register_tool(ToolDef(
-    name="get_help",
+    name="help_get",
     fn=get_help,
     description=(
         "Return the in-app help wiki for the user's locale. Use when the "

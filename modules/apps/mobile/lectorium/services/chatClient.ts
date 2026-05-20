@@ -37,74 +37,98 @@ export interface SharePdfItemPayload {
   readonly pdfUrl: string
 }
 
+/**
+ * v1 SSE protocol: every `action` event is `{kind, id, payload: {...}}`.
+ * The discriminator is `kind`; payload shape depends on it. Splitting
+ * the static fields (kind, id) from the kind-specific body simplifies
+ * routing on the client — one switch on `kind`, kind-specific reading
+ * pulled from `payload`.
+ *
+ * Auto-render kinds (card, outline, verse) pair with an inline
+ * marker in delta text — the action event arrives first and stashes
+ * the payload; the marker triggers render. Interactive kinds
+ * (create_playlist, share_pdf, enable_daily_reminder, …) render a
+ * standalone card with a confirm button — no inline marker.
+ */
 export type ActionPayload =
   | {
       readonly kind: "create_playlist"
       readonly id: string
-      readonly name: string
-      readonly trackIds: readonly string[]
+      readonly payload: {
+        readonly name: string
+        readonly trackIds: readonly string[]
+      }
     }
   | {
       readonly kind: "share_pdf"
       readonly id: string
-      readonly items: readonly SharePdfItemPayload[]
+      readonly payload: {
+        readonly items: readonly SharePdfItemPayload[]
+      }
     }
-  // Hint-class actions the LLM can emit inline during normal user
-  // conversations. The mobile cards (ActionCardEnableReminder /
-  // ActionCardConfigureSmartLibrary / ActionCardUpgradeToPro) handle
-  // rendering; the chat store also writes a `chat_messages_proactive_state`
-  // row when one of these arrives so the autonomous tutorial scheduler
-  // sees a recent firing and respects the 30-day cooldown.
   | {
       readonly kind: "enable_daily_reminder"
       readonly id: string
-      /** `'HH:mm'` 24h local time. */
-      readonly time: string
+      readonly payload: {
+        /** `'HH:mm'` 24h local time. */
+        readonly time: string
+      }
     }
   | {
       readonly kind: "configure_smart_library"
       readonly id: string
-      readonly filters: {
-        readonly authorIds?: readonly string[]
-        readonly tagIds?: readonly string[]
-        readonly sourceIds?: readonly string[]
-        readonly locationIds?: readonly string[]
-        readonly languageCodes?: readonly string[]
+      readonly payload: {
+        readonly filters: {
+          readonly authorIds?: readonly string[]
+          readonly tagIds?: readonly string[]
+          readonly sourceIds?: readonly string[]
+          readonly locationIds?: readonly string[]
+          readonly languageCodes?: readonly string[]
+        }
       }
     }
   | {
       readonly kind: "upgrade_to_pro"
       readonly id: string
-      readonly reason: string
+      readonly payload: { readonly reason: string }
+    }
+  // Auto-render widgets paired with inline markers in delta text.
+  | {
+      readonly kind: "outline"
+      readonly id: string
+      readonly payload: OutlinePayload
+    }
+  | {
+      readonly kind: "verse"
+      readonly id: string
+      readonly payload: VersePayload
     }
 
 /**
- * Decoded SSE events. `tool_start`, `tool`, `done` carry no payload —
- * the event type alone is the signal. Server-side metrics (tokens,
- * tool durations, request id) live in structured logs, not on the
- * wire.
+ * Decoded SSE events — v1 protocol (7 types). Negotiated via the
+ * `X-Chat-Protocol-Version: 1` request header; server rejects with
+ * 426 if absent. See backend `agent/events.py` for the contract.
+ *
+ * - `delta`      streaming text fragment
+ * - `tool_start` / `tool_end`  tool-call lifecycle (UI thinking pill)
+ * - `status`     i18n status label (key + optional params)
+ * - `action`     widget payload — auto-render (paired with marker in
+ *                delta text) or interactive (standalone card). The
+ *                action event MUST arrive BEFORE its paired marker.
+ * - `done`       terminal; carries alias map for next-turn round-trip
+ * - `error`      terminal failure
  */
 export type ChatStreamEvent =
   | { readonly type: "delta"; readonly text: string }
-  | { readonly type: "tool_start" }
-  | { readonly type: "tool" }
+  | { readonly type: "tool_start"; readonly name?: string }
+  | { readonly type: "tool_end"; readonly name?: string }
+  | {
+      readonly type: "status"
+      readonly key: string
+      readonly params?: Readonly<Record<string, string | number>>
+    }
   | { readonly type: "action"; readonly payload: ActionPayload }
-  | { readonly type: "outline"; readonly payload: OutlinePayload }
-  /** Emitted once per turn, right before `done`. Carries the
-   *  integer→chunk map the server used to expand `[cite:N|…]` /
-   *  `[card:N]` / `[outline:N]` into the wire-format markers in
-   *  this turn's `delta` text. Persisting it on the freshly-finalised
-   *  assistant message lets us ship it back as `aliases` on the
-   *  message in the next turn's history, so the LLM sees one
-   *  numbering scheme throughout the conversation. */
-  | { readonly type: "aliases"; readonly map: AliasMapPayload }
-  /** Emitted once per verse the LLM is about to cite, BEFORE the
-   *  `delta` deltas containing the `[verse:source_id/tokens|caption]`
-   *  marker. Carries the full verse body so the mobile can render the
-   *  block (addr / sanskrit / IAST / translation) without a network
-   *  round-trip. Mobile caches keyed by `${source_id}|${tokens}`. */
-  | { readonly type: "verse_payload"; readonly payload: VersePayload }
-  | { readonly type: "done" }
+  | { readonly type: "done"; readonly aliases?: AliasMapPayload }
   | {
       readonly type: "error"
       readonly code: string
@@ -112,10 +136,10 @@ export type ChatStreamEvent =
       readonly retryAfter?: number
     }
 
-/** Wire shape of a verse body emitted via `verse_payload`. `translation`
- *  is keyed by ISO-639 language code (`ru`, `en`, …); rendering picks
- *  the entry matching the user's current locale and falls back to any
- *  available one. */
+/** Wire shape of a verse body — carried by an `action` event with
+ *  `kind: "verse"` per SSE v1. `translation` is keyed by ISO-639
+ *  language code (`ru`, `en`, …); rendering picks the entry matching
+ *  the user's current locale and falls back to any available one. */
 export interface VersePayload {
   readonly source_id: string
   readonly tokens: string
@@ -244,6 +268,7 @@ export async function* streamChat(
       Accept: "text/event-stream",
       "X-Device-Id": clientId,
       "X-App-Token": appToken,
+      "X-Chat-Protocol-Version": "1",
       "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify(buildRequestBody(messages, lang, opts)),
@@ -503,26 +528,28 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
     case "tool_start":
-      return { type: "tool_start" }
-    case "tool":
-      return { type: "tool" }
-    case "done":
-      return { type: "done" }
+      return {
+        type: "tool_start",
+        name: typeof payload.name === "string" ? payload.name : undefined,
+      }
+    case "tool_end":
+      return {
+        type: "tool_end",
+        name: typeof payload.name === "string" ? payload.name : undefined,
+      }
+    case "status":
+      return {
+        type: "status",
+        key: typeof payload.key === "string" ? payload.key : "",
+        params: parseStatusParams(payload.params),
+      }
+    case "done": {
+      const aliases = parseAliasMap(payload.aliases)
+      return aliases ? { type: "done", aliases } : { type: "done" }
+    }
     case "action": {
       const ap = parseActionPayload(payload)
       return ap ? { type: "action", payload: ap } : null
-    }
-    case "outline": {
-      const op = parseOutlinePayload(payload)
-      return op ? { type: "outline", payload: op } : null
-    }
-    case "aliases": {
-      const map = parseAliasMap(payload.map)
-      return map ? { type: "aliases", map } : null
-    }
-    case "verse_payload": {
-      const vp = parseVersePayload(payload)
-      return vp ? { type: "verse_payload", payload: vp } : null
     }
     case "error":
       return {
@@ -537,14 +564,18 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
               : undefined,
       }
     default:
-      // Unknown event name. The server may have shipped ahead of the
-      // client (new event type added in a later release); log it so a
-      // silent feature-drop shows up in dev consoles and crash logs,
-      // and return null so the rest of the stream still flows.
-
       console.warn("[chat] unknown sse event:", name)
       return null
   }
+}
+
+function parseStatusParams(raw: unknown): Readonly<Record<string, string | number>> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const out: Record<string, string | number> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" || typeof v === "number") out[k] = v
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function parseAliasMap(raw: unknown): AliasMapPayload | null {
@@ -608,15 +639,26 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
   const kind = typeof p.kind === "string" ? p.kind : ""
   const id = typeof p.id === "string" ? p.id : ""
   if (!kind || !id) return null
+  // v1 wire shape: kind-specific body lives under `payload`. Older
+  // event shapes (flat `{kind, id, name, ...}`) are rejected — the
+  // protocol handshake guarantees the server speaks v1, so any
+  // straggling flat-shape event is a server bug, not a forward-compat
+  // case we need to humor.
+  const body =
+    p.payload && typeof p.payload === "object" && !Array.isArray(p.payload)
+      ? (p.payload as Record<string, unknown>)
+      : null
+  if (!body) return null
+
   if (kind === "create_playlist") {
-    const name = typeof p.name === "string" ? p.name : ""
-    const trackIdsRaw = Array.isArray(p.track_ids) ? p.track_ids : []
+    const name = typeof body.name === "string" ? body.name : ""
+    const trackIdsRaw = Array.isArray(body.track_ids) ? body.track_ids : []
     const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
     if (!name || trackIds.length === 0) return null
-    return { kind: "create_playlist", id, name, trackIds }
+    return { kind: "create_playlist", id, payload: { name, trackIds } }
   }
   if (kind === "share_pdf") {
-    const itemsRaw = Array.isArray(p.items) ? p.items : []
+    const itemsRaw = Array.isArray(body.items) ? body.items : []
     const items: SharePdfItemPayload[] = []
     for (const raw of itemsRaw) {
       if (!raw || typeof raw !== "object") continue
@@ -634,15 +676,18 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
       })
     }
     if (items.length === 0) return null
-    return { kind: "share_pdf", id, items }
+    return { kind: "share_pdf", id, payload: { items } }
   }
   if (kind === "enable_daily_reminder") {
-    const time = typeof p.time === "string" && /^\d{1,2}:\d{2}$/.test(p.time) ? p.time : "07:00"
-    return { kind: "enable_daily_reminder", id, time }
+    const time =
+      typeof body.time === "string" && /^\d{1,2}:\d{2}$/.test(body.time) ? body.time : "07:00"
+    return { kind: "enable_daily_reminder", id, payload: { time } }
   }
   if (kind === "configure_smart_library") {
     const f =
-      p.filters && typeof p.filters === "object" ? (p.filters as Record<string, unknown>) : {}
+      body.filters && typeof body.filters === "object"
+        ? (body.filters as Record<string, unknown>)
+        : {}
     const pickStringArray = (v: unknown): readonly string[] | undefined => {
       if (!Array.isArray(v)) return undefined
       const xs = v.filter((x): x is string => typeof x === "string")
@@ -651,18 +696,29 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     return {
       kind: "configure_smart_library",
       id,
-      filters: {
-        authorIds: pickStringArray(f.author_ids),
-        tagIds: pickStringArray(f.tag_ids),
-        sourceIds: pickStringArray(f.source_ids),
-        locationIds: pickStringArray(f.location_ids),
-        languageCodes: pickStringArray(f.language_codes),
+      payload: {
+        filters: {
+          authorIds: pickStringArray(f.author_ids),
+          tagIds: pickStringArray(f.tag_ids),
+          sourceIds: pickStringArray(f.source_ids),
+          locationIds: pickStringArray(f.location_ids),
+          languageCodes: pickStringArray(f.language_codes),
+        },
       },
     }
   }
   if (kind === "upgrade_to_pro") {
-    const reason = typeof p.reason === "string" && p.reason.length > 0 ? p.reason : "generic"
-    return { kind: "upgrade_to_pro", id, reason }
+    const reason =
+      typeof body.reason === "string" && body.reason.length > 0 ? body.reason : "generic"
+    return { kind: "upgrade_to_pro", id, payload: { reason } }
+  }
+  if (kind === "outline") {
+    const op = parseOutlinePayload(body)
+    return op ? { kind: "outline", id, payload: op } : null
+  }
+  if (kind === "verse") {
+    const vp = parseVersePayload(body)
+    return vp ? { kind: "verse", id, payload: vp } : null
   }
   return null
 }

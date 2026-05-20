@@ -12,11 +12,11 @@
         <span class="user-text">{{ message.content }}</span>
       </template>
       <template v-else>
-        <span v-if="message.content.length === 0 && message.streaming" class="thinking">
-          <span class="dot" />
-          <span class="dot" />
-          <span class="dot" />
-        </span>
+        <StatusPill
+          v-if="message.streaming && message.content.length === 0"
+          :status-key="message.statusKey"
+          :params="message.statusParams"
+        />
         <template v-else>
           <template v-for="(token, idx) in tokens" :key="idx">
             <!--
@@ -123,7 +123,6 @@ import router from "@lectorium/router/index.js"
 import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
-import type { ActionPayload } from "@lectorium/services/chatClient.js"
 import CitationChip from "./CitationChip.vue"
 import LectureCard from "./LectureCard.vue"
 import OutlineCard from "./OutlineCard.vue"
@@ -134,6 +133,7 @@ import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
 import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
+import StatusPill from "./StatusPill.vue"
 
 const props = defineProps<{ message: ChatMessage }>()
 defineEmits<{
@@ -180,14 +180,14 @@ function actionState(actionId: string): ActionState {
 
 function playlistPayload(
   actionId: string
-): Extract<ActionPayload, { kind: "create_playlist" }> | undefined {
+): Extract<ChatActionPayload, { kind: "create_playlist" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "create_playlist" ? a : undefined
 }
 
 function sharePdfPayload(
   actionId: string
-): Extract<ActionPayload, { kind: "share_pdf" }> | undefined {
+): Extract<ChatActionPayload, { kind: "share_pdf" }> | undefined {
   const a = props.message.actions?.[actionId]
   return a && a.kind === "share_pdf" ? a : undefined
 }

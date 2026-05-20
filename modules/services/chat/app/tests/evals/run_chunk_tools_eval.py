@@ -1,17 +1,34 @@
-"""End-to-end eval gate for the chunks_* / user_* tool surface.
+"""End-to-end eval gate for the chunks_* / user_* tool surface AND the
+multi-agent graph (router → workers → synthesizer).
 
 Reads `chunk_tools.jsonl`, runs each query through a real chat client
-against the production-shaped backend, and checks three things:
+against the production-shaped backend, and checks any combination of:
 
-  1. The LLM picked the EXPECTED tool name first.
-  2. The tool arguments contain the expected subset
-     (e.g. `type='verse'` when the case says so).
-  3. The tool RESULT satisfies the case's content predicates
-     (count, item types, score floor, cross-corpus diversity, etc.).
+  Tool-level predicates (single-tool legacy + multi-tool chain):
+  - `expect_tool`        — name of the FIRST tool called
+  - `expect_args`        — args of the first tool (subset match)
+  - `expect_result`      — content predicates on first tool's result
+                           (min_count, all_items, diversity, ...)
+  - `expect_tool_chain`  — ordered subsequence of tool names; LLM may
+                           add extras in between, but every name in the
+                           list must appear in order
+  - `expect_no_tool`     — no tools called at all (direct_chat path)
+
+  Router-level predicates:
+  - `expect_intent`      — router's RoutingDecision.intent
+
+  Synthesizer-level predicates:
+  - `expect_no_marker_kind`        — assert NO `[<kind>:...]` marker
+                                     in the response (e.g. commentary
+                                     must be inline blockquote, not cite)
+  - `expect_response_contains`     — list of substrings, ANY of which must
+                                     appear (case-insensitive)
+  - `expect_response_contains_marker` — "blockquote" → markdown `>`,
+                                        or marker kind like "cite"
 
 Runs as a standalone script — NOT a pytest test — because it requires
 a live LLM API key and is billed per call. Use it before merging
-significant prompt or tool-surface changes:
+significant prompt or graph changes:
 
     python -m tests.evals.run_chunk_tools_eval
 
@@ -22,9 +39,17 @@ you can diff it against the previous run to spot regressions.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+from tests.evals.observation import (
+    TurnObservation,
+    has_blockquote,
+    has_marker_kind,
+)
 
 
 HERE = Path(__file__).parent
@@ -33,7 +58,16 @@ DEFAULT_RESULTS = HERE / "results.jsonl"
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    # Drop comment-shaped entries (lines whose only key is "_comment").
+    out: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        obj = json.loads(line)
+        if isinstance(obj, dict) and set(obj.keys()) == {"_comment"}:
+            continue
+        out.append(obj)
+    return out
 
 
 def args_subset_match(actual: dict[str, Any], expected: dict[str, Any] | None) -> bool:
@@ -132,80 +166,337 @@ def predicate_match(result: Any, expected: dict[str, Any] | None) -> tuple[bool,
     return True, ""
 
 
+# ── Multi-agent predicates (operate on TurnObservation) ──────────────────
+
+
+def _check_intent(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    expected = case.get("expect_intent")
+    if expected is None:
+        return []
+    if obs.intent != expected:
+        return [f"intent: expected={expected!r}, got={obs.intent!r}"]
+    return []
+
+
+def _check_no_tool(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    if not case.get("expect_no_tool"):
+        return []
+    if obs.tool_chain:
+        return [f"expect_no_tool but got {obs.tool_names!r}"]
+    return []
+
+
+def _check_first_tool(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    expected = case.get("expect_tool")
+    if expected is None:
+        return []
+    actual = obs.first_tool.name if obs.first_tool else None
+    if actual != expected:
+        return [f"expect_tool: expected={expected!r}, got={actual!r}"]
+    return []
+
+
+def _check_first_tool_args(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    expected = case.get("expect_args")
+    if expected is None:
+        return []
+    if obs.first_tool is None:
+        return ["expect_args set but no tool called"]
+    if not args_subset_match(obs.first_tool.args, expected):
+        return [
+            f"args: expected subset {expected!r} not in {obs.first_tool.args!r}"
+        ]
+    return []
+
+
+def _check_first_tool_result(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """Check `expect_result` against the relevant tool's output.
+
+    Picks the tool to inspect like this:
+    - If `expect_tool` is set: the first invocation of that named tool.
+    - Else if `expect_tool_chain` is set: the first invocation whose
+      name appears in the chain (skip helper tools like
+      `resolve_author` that aren't asserted in the chain).
+    - Else: the very first tool called.
+
+    Without this resolution, queries that legitimately need a helper
+    tool first (`resolve_author` → `chunks_search`) would fail
+    `expect_result` checks because the helper's result doesn't match
+    the search-result shape.
+    """
+    expected = case.get("expect_result")
+    if expected is None:
+        return []
+    target_name = case.get("expect_tool")
+    target_chain = case.get("expect_tool_chain") or []
+    target: Any = None
+    if target_name:
+        target = next((t for t in obs.tool_chain if t.name == target_name), None)
+    elif target_chain:
+        target = next((t for t in obs.tool_chain if t.name in target_chain), None)
+    if target is None:
+        target = obs.first_tool
+    if target is None:
+        return ["expect_result set but no tool called"]
+    ok, reason = predicate_match(target.result, expected)
+    return [f"result: {reason}"] if not ok else []
+
+
+def _check_tool_chain(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """Ordered subsequence match: every name in `expect_tool_chain`
+    must appear in `obs.tool_names` in the same order. The LLM may
+    insert helper tools in between — that's fine; we care that the
+    expected progression happened."""
+    expected = case.get("expect_tool_chain")
+    if expected is None:
+        return []
+    actual = obs.tool_names
+    i = 0
+    for name in expected:
+        try:
+            i = actual.index(name, i) + 1
+        except ValueError:
+            return [
+                f"tool_chain: expected subsequence {expected!r}, "
+                f"got {actual!r} — missing {name!r} at/after position {i}"
+            ]
+    return []
+
+
+def _check_no_marker_kind(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    kind = case.get("expect_no_marker_kind")
+    if not kind:
+        return []
+    if has_marker_kind(obs.response_text, kind):
+        return [
+            f"expect_no_marker_kind={kind!r} but response contains it: "
+            f"{_excerpt_markers(obs.response_text, kind)}"
+        ]
+    return []
+
+
+def _excerpt_markers(text: str, kind: str, max_items: int = 3) -> list[str]:
+    """First few matches of `[<kind>:...]` for the failure message."""
+    pat = re.compile(rf"\[{re.escape(kind)}:[^\]\n]+\]")
+    return pat.findall(text)[:max_items]
+
+
+def _check_response_contains(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """ANY-of semantics: the list is a set of acceptable phrasings (e.g.
+    refusal synonyms `["could not find", "couldn't find", "no results"]`).
+    Pass if at least one substring appears, fail with all candidates."""
+    needles = case.get("expect_response_contains") or []
+    if not needles:
+        return []
+    haystack = obs.response_text.lower()
+    if any(n.lower() in haystack for n in needles):
+        return []
+    return [f"response missing any of: {needles!r}"]
+
+
+def _check_response_contains_marker(
+    case: dict[str, Any], obs: TurnObservation
+) -> list[str]:
+    """`blockquote` → markdown `>` style. Anything else is treated as a
+    marker kind (must find `[<kind>:` in the response)."""
+    target = case.get("expect_response_contains_marker")
+    if not target:
+        return []
+    if target == "blockquote":
+        if not has_blockquote(obs.response_text):
+            return ["expect blockquote in response but none found"]
+        return []
+    if not has_marker_kind(obs.response_text, target):
+        return [f"expect marker kind={target!r} in response but none found"]
+    return []
+
+
+# Ordered list of predicate runners. Each returns failure strings.
+_PREDICATES = (
+    _check_intent,
+    _check_no_tool,
+    _check_first_tool,
+    _check_first_tool_args,
+    _check_first_tool_result,
+    _check_tool_chain,
+    _check_no_marker_kind,
+    _check_response_contains,
+    _check_response_contains_marker,
+)
+
+
+def evaluate_case(
+    case: dict[str, Any], obs: TurnObservation
+) -> tuple[bool, list[str]]:
+    """Run every predicate the case declares against the observation.
+
+    Returns (passed, failures). `passed=True` when no failures were
+    collected. Predicates the case doesn't declare are skipped — a case
+    with only `expect_intent` won't fail on missing tool checks.
+    """
+    failures: list[str] = []
+    for predicate in _PREDICATES:
+        failures.extend(predicate(case, obs))
+    return (not failures), failures
+
+
 # ── Live runner ───────────────────────────────────────────────────────
 # The runner below talks to the real chat service. Kept separate from
 # pure predicate logic above so the file can be imported (and its
 # predicates unit-tested) without spinning up infra.
 
 
-async def run_eval(cases_path: Path, results_path: Path) -> int:
-    """Execute every case, write per-case results to disk, print a summary.
+async def _run_one(
+    case: dict[str, Any], chat_client: Any, sem: asyncio.Semaphore
+) -> dict[str, Any]:
+    """Run one case under the semaphore, return a result dict.
+
+    Failures inside the chat client surface as a `case+error` row; the
+    runner doesn't crash on per-case errors so a single network blip
+    doesn't kill the whole batch.
+    """
+    async with sem:
+        query = case["query"]
+        try:
+            obs = await chat_client.observe_turn(
+                query,
+                context=case.get("context", {}),
+                lang=case.get("lang", "ru"),
+            )
+        except Exception as exc:  # noqa: BLE001 — surface raw error for triage
+            return {"case": query, "error": repr(exc), "passed": False}
+
+        passed, failures = evaluate_case(case, obs)
+        return {
+            "case": query,
+            "intent": obs.intent,
+            "tool_chain": obs.tool_names,
+            "response_chars": len(obs.response_text),
+            "response_text": obs.response_text,
+            "passed": passed,
+            "failures": failures,
+        }
+
+
+async def run_eval(
+    cases_path: Path, results_path: Path, *, concurrency: int = 5
+) -> int:
+    """Execute every case in parallel (bounded by `concurrency`), write
+    per-case results to disk, print a summary.
+
+    `concurrency=5` is conservative for OpenRouter — most Gemini Flash
+    Lite plans tolerate 10+ concurrent. Bump if you have headroom.
 
     Returns the process exit code (0 = all OK, 1 = at least one
     regression).
     """
-    # NOTE: chat-client wiring is environment-specific; expected to be
-    # injected via the surrounding harness. The minimal shape we need is:
-    #   chat_client.run_turn(query, context=...) -> {tool_call, result}
-    # with `tool_call.name` and `tool_call.args` exposed.
     try:
         from tests.evals._fixtures import make_chat_client  # type: ignore
     except ImportError:
         print(
             "tests/evals/_fixtures.make_chat_client not found.\n"
             "Wire a chat client adapter for your environment (LLM key,\n"
-            "test DB, alias map) and re-run."
+            "test DB) returning TurnObservation, then re-run."
         )
         return 2
 
     chat_client = make_chat_client()
     cases = load_jsonl(cases_path)
+    if not cases:
+        print("no cases loaded")
+        return 0
+
+    # Warm up the client once (the lazy factory builds DB pool, LLM,
+    # graph on the first observe_turn call — we don't want N parallel
+    # workers racing on that). A tiny noop turn keeps it cheap.
+    print(f"warming up client (1 call)...")
+    await chat_client.observe_turn("__warmup__")
+    print(f"running {len(cases)} cases with concurrency={concurrency}...")
+
+    sem = asyncio.Semaphore(concurrency)
+    tasks = [_run_one(case, chat_client, sem) for case in cases]
+    # Run as_completed to print live progress (one dot per case) so the
+    # user can see things ARE happening even though we don't pipe through
+    # tail anymore.
     results: list[dict[str, Any]] = []
-    pass_count = 0
+    for done in asyncio.as_completed(tasks):
+        r = await done
+        results.append(r)
+        marker = "." if r.get("passed") else "F"
+        print(marker, end="", flush=True)
+    print()  # newline after the dots
 
-    for case in cases:
-        try:
-            turn = await chat_client.run_turn(
-                case["query"], context=case.get("context", {}),
-            )
-        except Exception as exc:  # noqa: BLE001 — surface raw error for triage
-            results.append({"case": case["query"], "error": repr(exc)})
-            continue
+    # Preserve original case order in results.jsonl so diffs are stable.
+    case_order = {c["query"]: i for i, c in enumerate(cases)}
+    results.sort(key=lambda r: case_order.get(r["case"], 9999))
 
-        tool_match = turn.tool_call.name == case["expect_tool"]
-        args_match = args_subset_match(turn.tool_call.args, case.get("expect_args"))
-        result_match, reason = predicate_match(turn.result, case.get("expect_result"))
-        passed = tool_match and args_match and result_match
-        if passed:
-            pass_count += 1
-        results.append({
-            "case": case["query"],
-            "expected_tool": case["expect_tool"],
-            "actual_tool": turn.tool_call.name,
-            "tool_match": tool_match,
-            "args_match": args_match,
-            "result_match": result_match,
-            "fail_reason": reason if not result_match else "",
-        })
-
-    results_path.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in results) + "\n")
-    accuracy = pass_count / len(cases) if cases else 0.0
+    results_path.write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in results) + "\n"
+    )
+    pass_count = sum(1 for r in results if r.get("passed"))
+    accuracy = pass_count / len(cases)
     print(f"\n{pass_count} / {len(cases)} passed ({accuracy:.0%})")
     for r in results:
-        if not r.get("tool_match") or not r.get("args_match") or not r.get("result_match"):
-            print(f"  FAIL: {r['case']} → {r.get('actual_tool')} ({r.get('fail_reason')})")
+        if not r.get("passed"):
+            reasons = "; ".join(r.get("failures") or [])
+            if not reasons and r.get("error"):
+                reasons = f"error: {r['error']}"
+            print(f"  FAIL: {r['case']!r} — {reasons}")
     return 0 if accuracy >= 0.90 else 1
 
 
 def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(
+        description="Run chunk_tools eval against the live multi-agent graph",
+    )
     p.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     p.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
+    p.add_argument(
+        "--concurrency",
+        type=int,
+        default=5,
+        help="Parallel cases under the OpenRouter call cap (default 5)",
+    )
+    p.add_argument(
+        "--filter",
+        "-k",
+        default=None,
+        help=(
+            "Substring match against case['query']. Pass a few chars to "
+            "rerun just the cases you're iterating on, skipping the rest."
+        ),
+    )
     return p.parse_args()
 
 
-if __name__ == "__main__":
-    import asyncio
+async def _main_with_filter(args: argparse.Namespace) -> int:
+    cases = load_jsonl(args.cases)
+    results_path = args.results
+    if args.filter:
+        flt = args.filter.lower()
+        filtered_cases = [c for c in cases if flt in c["query"].lower()]
+        if not filtered_cases:
+            print(f"no cases match filter {args.filter!r}")
+            return 2
+        print(f"filter {args.filter!r} matched {len(filtered_cases)}/{len(cases)} cases:")
+        for c in filtered_cases:
+            print(f"  • {c['query']!r}")
+        # Filtered runs write to a side file to keep the canonical
+        # results.jsonl as the last full-run snapshot.
+        results_path = args.results.with_suffix(".filtered.jsonl")
+        # Re-write a temp filtered cases file so run_eval (which loads
+        # from path) only sees the subset.
+        tmp_cases = args.cases.with_suffix(".filtered.tmp.jsonl")
+        tmp_cases.write_text(
+            "\n".join(json.dumps(c, ensure_ascii=False) for c in filtered_cases) + "\n"
+        )
+        try:
+            return await run_eval(tmp_cases, results_path, concurrency=args.concurrency)
+        finally:
+            tmp_cases.unlink(missing_ok=True)
+    return await run_eval(args.cases, results_path, concurrency=args.concurrency)
 
+
+if __name__ == "__main__":
     args = _parse_args()
-    raise SystemExit(asyncio.run(run_eval(args.cases, args.results)))
+    raise SystemExit(asyncio.run(_main_with_filter(args)))

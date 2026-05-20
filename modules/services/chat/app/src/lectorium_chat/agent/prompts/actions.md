@@ -26,9 +26,9 @@ spaces) — the marker leaks into the bubble as raw text. Both are
 worst-case bugs.
 
 For ANY action, the turn is:
-    1. Gather candidates (`resolve_*` + `chunks_search` / `list_tracks`).
-    2. CALL the corresponding tool — `propose_playlist` /
-       `generate_track_pdf` (or one of the hint tools). This is a real
+    1. Gather candidates (`resolve_*` + `chunks_search` / `tracks_list`).
+    2. CALL the corresponding tool — `playlist_propose` /
+       `track_pdf_generate` (or one of the hint tools). This is a real
        function call, not a marker. Wait for its result.
     3. Read `action_id` from the result.
     4. Embed `[action:<kind>|id=<action_id>]` inline — ONE marker per
@@ -39,7 +39,7 @@ without calling the tool.
 WRONG — inventing the id (no tool was called):
     [action:create_playlist|id=playlist_bg_chapter_5]
 
-WRONG — packing payload data into the id slot. `generate_track_pdf`
+WRONG — packing payload data into the id slot. `track_pdf_generate`
 returns ONE `action_id` that covers the whole batch; you cannot
 stuff per-track refs there.
     [action:share_pdf|id=1,2,3]
@@ -54,7 +54,7 @@ event was emitted, the client renders nothing because the payload
 lookup fails):
     Reply text: «Подписка Pro открывает доступ...
                   [action:upgrade_to_pro|id=66bba78c]»
-    (No `propose_upgrade_to_pro` was called in the same turn. `66bba78c`
+    (No `pro_upgrade_propose` was called in the same turn. `66bba78c`
     is a token-shaped string the model invented to look plausible. The
     user sees a broken card.)
 
@@ -68,45 +68,45 @@ the user's question didn't warrant it), omit the marker entirely and
 just answer in prose.
 
 RIGHT (uniform across all five):
-    [chunks_search(type='lecture')] → [propose_playlist] returns action_id=ab12cd34 →
+    [chunks_search(type='lecture')] → [playlist_propose] returns action_id=ab12cd34 →
         reply contains `[action:create_playlist|id=ab12cd34]`
-    [list_tracks] → [generate_track_pdf(track_ids=[A,B,C])] returns
+    [tracks_list] → [track_pdf_generate(track_ids=[A,B,C])] returns
         action_id=99aa11bb → reply contains `[action:share_pdf|id=99aa11bb]`
         (ONE marker — the card lists all three tracks itself.)
-    [propose_enable_reminder(time="07:00")] returns action_id=ee5588ff →
+    [reminder_propose(time="07:00")] returns action_id=ee5588ff →
         reply contains `[action:enable_daily_reminder|id=ee5588ff]`
-    [propose_configure_smart_library(tag_ids=["bhakti"])] returns
+    [smart_library_propose(tag_ids=["bhakti"])] returns
         action_id=11aa22bb → reply contains
         `[action:configure_smart_library|id=11aa22bb]`
-    [propose_upgrade_to_pro(reason="smart_library")] returns
+    [pro_upgrade_propose(reason="smart_library")] returns
         action_id=cc77dd88 → reply contains `[action:upgrade_to_pro|id=cc77dd88]`
 
-Trigger phrases that REQUIRE propose_playlist (do NOT just paraphrase):
+Trigger phrases that REQUIRE playlist_propose (do NOT just paraphrase):
     ru: «собери плейлист», «сделай плейлист», «составь плейлист»,
         «добавь в плейлист эти лекции», «плейлист из ...»
     en: "make a playlist", "build a playlist", "playlist of", "add these
         to a playlist"
 
-Trigger phrases that REQUIRE generate_track_pdf:
+Trigger phrases that REQUIRE track_pdf_generate:
     ru: «pdf / pdf-ку», «скачать лекцию / скачать транскрипт»,
         «поделиться лекцией / поделиться этой / поделиться pdf»,
         «отправь pdf», «сохрани лекцию файлом»
     en: "pdf", "download (the/this) lecture", "download transcript",
         "share the lecture", "send the transcript", "export to pdf"
 
-Trigger phrases that REQUIRE propose_enable_reminder:
+Trigger phrases that REQUIRE reminder_propose:
     ru: «напоминай каждый день», «настрой ежедневное напоминание»,
         «чтоб не забывать слушать», «уведомление каждый день в …»
     en: "remind me every day", "daily reminder", "schedule a daily nudge",
         "ping me every morning"
 
-Trigger phrases that REQUIRE propose_configure_smart_library:
+Trigger phrases that REQUIRE smart_library_propose:
     ru: «умная библиотека», «авто-загрузка лекций», «чтобы лекции сами
         скачивались», «чтобы постоянно были свежие лекции офлайн»
     en: "smart library", "auto-download lectures", "keep my library full
         offline", "automatically queue new lectures"
 
-Trigger phrases that REQUIRE propose_upgrade_to_pro:
+Trigger phrases that REQUIRE pro_upgrade_propose:
     ru: «купить pro», «оформить подписку», «активировать pro»,
         «подключить премиум»
     en: "buy pro", "upgrade to pro", "subscribe", "go premium",
@@ -123,22 +123,22 @@ it — even if they didn't say the exact trigger phrase.
 Hint actions you may volunteer (only these three — never volunteer
 playlist / share_pdf without an explicit request):
 
-    propose_enable_reminder           (→ [action:enable_daily_reminder])
-    propose_configure_smart_library   (→ [action:configure_smart_library])
-    propose_upgrade_to_pro            (→ [action:upgrade_to_pro])
+    reminder_propose           (→ [action:enable_daily_reminder])
+    smart_library_propose   (→ [action:configure_smart_library])
+    pro_upgrade_propose            (→ [action:upgrade_to_pro])
 
 When it is appropriate:
 
 - User talks about staying consistent, building a daily practice,
   morning sadhana, or losing the rhythm of listening
-  → propose_enable_reminder.
+  → reminder_propose.
 - User asks how to queue lectures for offline, fill the library
   automatically, or wishes lectures arrived without manual searching
-  → propose_configure_smart_library.
+  → smart_library_propose.
 - User asks about a Pro-gated feature (Smart Library / Notes Studio /
   auto-archive) and they're clearly not subscribed (the conversation
   surfaced it)
-  → propose_upgrade_to_pro.
+  → pro_upgrade_propose.
 
 When it is NOT appropriate:
 
@@ -149,7 +149,7 @@ When it is NOT appropriate:
   relevant.
 - Volunteer the same hint twice within a single chat session — once is
   enough. (Cross-session cooldown is handled client-side.)
-- Pre-fill `filters` on `propose_configure_smart_library` unless the
+- Pre-fill `filters` on `smart_library_propose` unless the
   user explicitly mentioned a tag / author / source in this
   conversation. Empty payload is fine.
 

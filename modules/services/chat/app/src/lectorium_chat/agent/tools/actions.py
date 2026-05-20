@@ -75,7 +75,7 @@ async def propose_playlist(
     if rejected:
         log.info(
             "chat_tool_call_partial_rejected",
-            tool="propose_playlist",
+            tool="playlist_propose",
             rejected_count=len(rejected),
             rejected_track_ids=rejected,
         )
@@ -85,7 +85,7 @@ async def propose_playlist(
             "rejected_track_ids": rejected,
             "hint": (
                 "Every track_id you supplied is missing from the catalog. "
-                "Re-run chunks_search / list_tracks for fresh ids — "
+                "Re-run chunks_search / tracks_list for fresh ids — "
                 "do not invent or reuse ids from past chats."
             ),
         }
@@ -95,8 +95,10 @@ async def propose_playlist(
         {
             "kind": "create_playlist",
             "id": action_id,
-            "name": name,
-            "track_ids": valid,
+            "payload": {
+                "name": name,
+                "track_ids": valid,
+            },
         },
     )
     return {
@@ -108,7 +110,7 @@ async def propose_playlist(
 
 
 register_tool(ToolDef(
-    name="propose_playlist",
+    name="playlist_propose",
     fn=propose_playlist,
     emits_events=True,
     description=(

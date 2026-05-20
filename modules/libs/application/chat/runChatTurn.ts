@@ -9,6 +9,7 @@ import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
 import type {
+  ChatActionPayload as WireChatActionPayload,
   ChatStreamEvent,
   IChatStreamClient,
   IChatTitleService,
@@ -30,6 +31,14 @@ export type RunChatTurnEvent =
     }
   | { readonly kind: "delta"; readonly text: string }
   | { readonly kind: "tool-start" }
+  | {
+      readonly kind: "status"
+      /** Server-emitted i18n key — e.g. "searching_corpus",
+       *  "composing_answer". The store maps it to a localized label
+       *  via `t(`chat.status.${statusKey}`, params)`. */
+      readonly statusKey: string
+      readonly params?: Readonly<Record<string, string | number>>
+    }
   | {
       readonly kind: "action"
       readonly actionId: string
@@ -172,58 +181,72 @@ export async function* runChatTurn(
           acc = ""
           yield { kind: "tool-start" }
           break
-        case "tool":
+        case "tool_end":
           break
-        case "action":
-          actions[event.payload.id] = event.payload
+        case "status":
+          // i18n status label for the thinking pill. Use-case forwards
+          // verbatim — the store decides whether to render it.
+          yield { kind: "status", statusKey: event.key, params: event.params }
+          break
+        case "action": {
+          // Auto-render kinds paired with inline markers: outline and
+          // verse fan out into the outline/verse-payload bubble streams
+          // so the existing component wiring keeps working without
+          // every consumer learning to switch on action.kind.
+          if (event.payload.kind === "outline") {
+            outlines[event.payload.payload.trackId] = event.payload.payload
+            yield {
+              kind: "outline",
+              trackId: event.payload.payload.trackId,
+              payload: event.payload.payload,
+            }
+            break
+          }
+          if (event.payload.kind === "verse") {
+            yield {
+              kind: "verse-payload",
+              sourceId: event.payload.payload.source_id,
+              tokens: event.payload.payload.tokens,
+              addrLabel: event.payload.payload.addr_label,
+              sanskrit: event.payload.payload.sanskrit,
+              transliteration: event.payload.payload.transliteration,
+              translation: event.payload.payload.translation,
+            }
+            break
+          }
+          // Interactive widgets: unwrap wire `{kind, id, payload: {…}}`
+          // into the flat domain `ChatActionPayload` shape that the
+          // store persists and ActionCard*.vue components read from.
+          // Domain stays flat so SQLite migration isn't needed and
+          // existing components don't change; wire stays nested per
+          // SSE v1 (plan §11.3).
+          const flat = unwrapInteractiveAction(event.payload)
+          if (flat === null) break
+          actions[flat.id] = flat
           yield {
             kind: "action",
-            actionId: event.payload.id,
-            payload: event.payload,
+            actionId: flat.id,
+            payload: flat,
           }
           break
-        case "outline":
-          outlines[event.payload.trackId] = event.payload
-          yield {
-            kind: "outline",
-            trackId: event.payload.trackId,
-            payload: event.payload,
-          }
-          break
-        case "aliases":
-          // Server-emitted integer→chunk map for the chip markers in
-          // this turn's accumulated `acc`. Persist on the finalised
-          // message so the next turn can ship it back and the LLM
-          // sees one numbering scheme across the whole conversation.
-          aliases = {}
-          for (const [k, v] of Object.entries(event.map)) {
-            const entry: ChatAliasEntry = { trackId: v.track_id }
-            if (typeof v.start_ms === "number") {
-              ;(entry as { startMs?: number }).startMs = v.start_ms
-            }
-            if (typeof v.end_ms === "number") {
-              ;(entry as { endMs?: number }).endMs = v.end_ms
-            }
-            aliases[k] = entry
-          }
-          break
-        case "verse_payload":
-          // Verse body shipped ahead of the prose deltas containing
-          // its `[verse:source_id/tokens|caption]` marker. The store
-          // subscriber caches it under `${sourceId}|${tokens}` so the
-          // VerseCard component can render the full block instead of
-          // the chip placeholder.
-          yield {
-            kind: "verse-payload",
-            sourceId: event.payload.source_id,
-            tokens: event.payload.tokens,
-            addrLabel: event.payload.addr_label,
-            sanskrit: event.payload.sanskrit,
-            transliteration: event.payload.transliteration,
-            translation: event.payload.translation,
-          }
-          break
+        }
         case "done":
+          // v1: alias map ships inline with `done`. Persist on the
+          // finalised message so the next turn can ship it back and
+          // the LLM sees one numbering scheme across the conversation.
+          if (event.aliases) {
+            aliases = {}
+            for (const [k, v] of Object.entries(event.aliases)) {
+              const entry: ChatAliasEntry = { trackId: v.track_id }
+              if (typeof v.start_ms === "number") {
+                ;(entry as { startMs?: number }).startMs = v.start_ms
+              }
+              if (typeof v.end_ms === "number") {
+                ;(entry as { endMs?: number }).endMs = v.end_ms
+              }
+              aliases[k] = entry
+            }
+          }
           sawDone = true
           break
         case "error":
@@ -307,4 +330,61 @@ export async function* runChatTurn(
     }
   }
 
+}
+
+/**
+ * Wire-to-domain converter for interactive action payloads.
+ *
+ * The wire (SSE v1) nests kind-specific fields under `payload`; the
+ * domain (persisted on chat_messages.actions) keeps the legacy flat
+ * shape so existing SQLite rows + ActionCard*.vue components don't
+ * need a migration. This function bridges that one place.
+ *
+ * Auto-render kinds (`outline`, `verse`) are handled by the caller —
+ * they don't get persisted as ChatActionPayload, they fan out into
+ * separate streams.
+ *
+ * Returns `null` if the wire payload was malformed (unknown kind, or
+ * required fields missing). Caller drops the event in that case so a
+ * server bug doesn't crash the bubble render.
+ */
+function unwrapInteractiveAction(
+  wire: WireChatActionPayload
+): ChatActionPayload | null {
+  switch (wire.kind) {
+    case "create_playlist":
+      return {
+        kind: "create_playlist",
+        id: wire.id,
+        name: wire.payload.name,
+        trackIds: wire.payload.trackIds,
+      }
+    case "share_pdf":
+      return {
+        kind: "share_pdf",
+        id: wire.id,
+        items: wire.payload.items,
+      }
+    case "enable_daily_reminder":
+      return {
+        kind: "enable_daily_reminder",
+        id: wire.id,
+        time: wire.payload.time,
+      }
+    case "configure_smart_library":
+      return {
+        kind: "configure_smart_library",
+        id: wire.id,
+        filters: wire.payload.filters,
+      }
+    case "upgrade_to_pro":
+      return {
+        kind: "upgrade_to_pro",
+        id: wire.id,
+        reason: wire.payload.reason,
+      }
+    default:
+      // outline / verse — handled upstream as separate event streams
+      return null
+  }
 }
