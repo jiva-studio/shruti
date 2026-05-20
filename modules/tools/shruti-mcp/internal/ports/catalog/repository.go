@@ -85,6 +85,27 @@ type Repository interface {
 	TrackRepository
 }
 
+// PackRepository is the starter-pack side of the catalog (`packs` +
+// `pack_tracks`). Packs are curated, locale-keyed bundles surfaced on
+// empty-state screens; unlike dicts they are never fuzzy-resolved, so
+// the port stays small and is consumed only by the packcrud use case.
+type PackRepository interface {
+	CreatePackLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error
+	UpdatePackLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error
+	GetPack(ctx context.Context, id string) (catalog.Pack, map[string][]string, bool, error)
+	ListPacks(ctx context.Context, opts catalog.PackListOpts) ([]catalog.Pack, error)
+	DeletePack(ctx context.Context, id string) error
+	DeletePackLocale(ctx context.Context, id, language string) error
+	SetPackTracks(ctx context.Context, packID, language string, trackIDs []string) error
+	AddPackTrack(ctx context.Context, packID, language, trackID string, position *int) error
+	RemovePackTrack(ctx context.Context, packID, language, trackID string) error
+	// TrackLanguages returns the set of languages this track has a
+	// `track_variants` row for. The packcrud use case uses this to
+	// enforce the per-locale invariant: a track may only join a pack
+	// whose language matches one of its variants.
+	TrackLanguages(ctx context.Context, trackID string) ([]string, error)
+}
+
 // Resolver maps a raw extracted string (author/location/source/tag) to an ID
 // in the catalog. Implementations: exact (string match) and anthropic (LLM).
 type Resolver interface {

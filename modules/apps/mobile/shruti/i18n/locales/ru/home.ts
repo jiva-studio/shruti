@@ -2,6 +2,10 @@ export default {
   upNext: "Следующие треки",
   playlistIsEmpty: "Плейлист пуст",
   tapToAddTracks: 'Добавьте лекции в разделе "Поиск"',
+  tapToAddTracksWithPacks: 'Добавьте лекции в разделе "Поиск" или выберите из предложенных ниже',
+  starterPacks: {
+    error: "Не удалось добавить лекции",
+  },
   subscriptionNag: {
     title: "Поддержите проект",
     description:

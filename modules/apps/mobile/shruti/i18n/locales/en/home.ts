@@ -2,6 +2,11 @@ export default {
   upNext: "Up Next",
   playlistIsEmpty: "Playlist is empty",
   tapToAddTracks: 'Add lectures in the "Search" section',
+  tapToAddTracksWithPacks:
+    'Add lectures in the "Search" section or pick from the suggestions below',
+  starterPacks: {
+    error: "Failed to add lectures",
+  },
   subscriptionNag: {
     title: "Support the project",
     description:

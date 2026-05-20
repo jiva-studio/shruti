@@ -24,7 +24,7 @@
       <PlaylistSection
         :rows="rows"
         :empty-header="$t('home.playlistIsEmpty')"
-        :empty-message="$t('home.tapToAddTracks')"
+        :empty-message="emptyMessage"
         :empty-image="emptyImage"
         @click="onSelect"
         @delete="onRemove"
@@ -34,6 +34,9 @@
             <PlaylistCountBadge :value="queueCount" />
             <DurationBadge v-if="queueTotalSeconds > 0" :text="formatDuration(queueTotalSeconds)" />
           </SectionHeader>
+        </template>
+        <template #empty-footer>
+          <PlaylistStarterPacks :packs="starterPacks" :disabled="addingPack" @pick="onPickPack" />
         </template>
       </PlaylistSection>
     </template>
@@ -65,16 +68,23 @@ import {
 import { AppPage, SectionHeader } from "@ui/primitives/index.js"
 import { DurationBadge } from "@ui/components/badges/index.js"
 import { ActivitySection, CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
+import { useI18n } from "vue-i18n"
 import {
   PlaylistCountBadge,
   PlaylistSection,
+  PlaylistStarterPacks,
   SubscriptionNagBanner,
 } from "@ui/features/playlist/index.js"
 import { SubscriptionDialog } from "@ui/features/settings/index.js"
+import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
+import { useStarterPacks } from "@shruti/composables/useStarterPacks.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
+import { useToast } from "@shruti/services/useToast.js"
+import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
 
 const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
@@ -144,5 +154,43 @@ onIonViewWillEnter(() => {
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await loadMore()
   await e.target.complete()
+}
+
+// Empty-state starter packs: chip set + tap → batch playlist.add.
+// Sourced from the catalog DB (packs / pack_tracks); the composable
+// returns [] when the bundled current.db predates the schema, so the
+// empty-state degrades to the pre-feature look on older builds.
+const { t } = useI18n()
+const playlist = usePlaylistStore()
+const appLanguage = useAppLanguage()
+const toast = useToast()
+const { packs: starterPacks } = useStarterPacks(appLanguage)
+const addingPack = ref(false)
+
+// Append the "or pick from the suggestions below" call-to-action only
+// when at least one starter pack made it out of the catalog DB — keeps
+// the original message intact on old bundled DBs that predate the
+// `packs` schema.
+const emptyMessage = computed(() =>
+  starterPacks.value.length > 0 ? t("home.tapToAddTracksWithPacks") : t("home.tapToAddTracks")
+)
+
+async function onPickPack(packId: string): Promise<void> {
+  const pack = starterPacks.value.find((p) => p.id === packId)
+  if (!pack || pack.trackIds.length === 0) return
+  addingPack.value = true
+  try {
+    const result = await addTracksToPlaylist(
+      { trackIds: [...pack.trackIds] },
+      { playlist: { add: (id) => playlist.add(id) } }
+    )
+    if (!result.ok) {
+      void toast.error(t("home.starterPacks.error"))
+    }
+  } catch {
+    void toast.error(t("home.starterPacks.error"))
+  } finally {
+    addingPack.value = false
+  }
 }
 </script>

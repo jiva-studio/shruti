@@ -14,6 +14,7 @@ import { createSqlTagRepository } from "./tagsRepository.sql.js"
 import { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 import { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 import { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
+import { createSqlPackRepository } from "./packsRepository.sql.js"
 
 export { createSqlSchemeVersionRepository } from "./schemeVersionRepository.sql.js"
 export { createSqlNoteRepository } from "./notesRepository.sql.js"
@@ -30,6 +31,8 @@ export { createSqlTagRepository } from "./tagsRepository.sql.js"
 export { createSqlChatSessionRepository } from "./chatSessionsRepository.sql.js"
 export { createSqlChatMessageRepository } from "./chatMessagesRepository.sql.js"
 export { createSqlProactiveStateRepository } from "./proactiveStateRepository.sql.js"
+export { createSqlPackRepository } from "./packsRepository.sql.js"
+export type { FeaturedPackRow, ISqlPackRepository } from "./packsRepository.sql.js"
 
 export interface SqlAppRepositories {
   readonly tracks: ReturnType<typeof createSqlTrackRepository>
@@ -46,6 +49,7 @@ export interface SqlAppRepositories {
   readonly chatSessions: ReturnType<typeof createSqlChatSessionRepository>
   readonly chatMessages: ReturnType<typeof createSqlChatMessageRepository>
   readonly proactiveState: ReturnType<typeof createSqlProactiveStateRepository>
+  readonly packs: ReturnType<typeof createSqlPackRepository>
 }
 
 export interface CreateSqlAppRepositoriesDeps {
@@ -83,5 +87,6 @@ export function createSqlAppRepositories(deps: CreateSqlAppRepositoriesDeps): Sq
     chatSessions: createSqlChatSessionRepository(deps.userDb),
     chatMessages: createSqlChatMessageRepository(deps.userDb),
     proactiveState: createSqlProactiveStateRepository(deps.userDb),
+    packs: createSqlPackRepository(deps.contentDb),
   }
 }
