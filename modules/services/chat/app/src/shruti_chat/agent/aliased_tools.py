@@ -6,16 +6,17 @@ Two responsibilities:
    These tools mint their own envelopes and own the alias allocation
    end-to-end. The wrapper just hands them the per-turn map.
 
-2. **Output-alias + input-dealias legacy track-shaped tools.** The
-   `list_tracks` / `get_track` family still emits raw `track_id` rows
-   and accepts `track_id` strings on input. The wrapper post-processes
-   their results to strip `track_id` → mint integer ref, and on input
-   it accepts the LLM's integer ref and de-aliases it back to a real
-   `track_id` before the underlying repo call.
+2. **Output-alias + input-dealias track-id-shaped tools.** The
+   `list_tracks` / `track_get` family emits raw `track_id` rows and
+   accepts `track_id` strings on input — they don't know about the
+   alias protocol themselves. The wrapper post-processes their results
+   to strip `track_id` → mint integer ref, and on input accepts the
+   LLM's integer ref and de-aliases it back to a real `track_id`
+   before the underlying repo call.
 
-Both responsibilities use convention-based detection (param name suffix
-or fixed legacy table) so adding a new chunks_*-tool requires no
-changes here.
+Both responsibilities use convention-based detection (param-name check
+or fixed table of track-id-shaped tools) so adding a new chunks_*-tool
+requires no changes here.
 """
 
 from __future__ import annotations
@@ -108,7 +109,7 @@ def _accepts_alias_map(fn: ToolFn) -> bool:
     """True iff the tool's signature declares an `alias_map` kwarg.
 
     chunks_* / user_* tools take their own alias_map to mint envelope
-    refs eagerly. Legacy tools don't — they go through the
+    refs eagerly. Track-id-shaped tools don't — they go through the
     output-aliasing path below instead.
     """
     try:
@@ -126,13 +127,14 @@ def build_aliased_tools(
     For chunks_* / user_* tools (signature accepts `alias_map`) — inject
     it via closure; they handle envelope shaping themselves.
 
-    For track-shaped tools — see the frozensets above for the canonical
-    names — output-alias `track_id → ref`, input-dealias `ref → track_id`.
+    For track-id-shaped tools — see the frozensets above for the
+    canonical names — output-alias `track_id → ref`, input-dealias
+    `ref → track_id`.
 
     Tools matching neither pass through unchanged.
     """
 
-    legacy_relevant = (
+    track_id_shaped = (
         _TRACK_LIST_TOOLS
         | _TRACK_SINGLE_TOOLS
         | _ACCEPTS_TRACK_REFS.keys()
@@ -145,7 +147,7 @@ def build_aliased_tools(
             return await fn(**kwargs)
         return _wrapped
 
-    def _make_legacy_wrapper(name: str, fn: ToolFn) -> ToolFn:
+    def _make_track_id_wrapper(name: str, fn: ToolFn) -> ToolFn:
         async def _wrapped(**kwargs: Any) -> Any:
             real_kwargs = _dealias_args(name, kwargs, aliases)
             raw = await fn(**real_kwargs)
@@ -156,6 +158,6 @@ def build_aliased_tools(
     for name, fn in base.items():
         if _accepts_alias_map(fn):
             out[name] = _make_envelope_wrapper(fn)
-        elif name in legacy_relevant:
-            out[name] = _make_legacy_wrapper(name, fn)
+        elif name in track_id_shaped:
+            out[name] = _make_track_id_wrapper(name, fn)
     return out
