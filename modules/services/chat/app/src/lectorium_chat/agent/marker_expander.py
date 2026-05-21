@@ -22,13 +22,14 @@ from lectorium_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 
-# A complete marker in the form we accept from the LLM. The integer
-# ref captures `N`; an optional `|caption` tail captures the chip
-# label. Cards / outlines have no caption.
-_CITE_RE    = re.compile(r"^\[cite:(\d+)(?:\|([^\]]*))?\]$")
-_CARD_RE    = re.compile(r"^\[card:(\d+)\]$")
-_OUTLINE_RE = re.compile(r"^\[outline:(\d+)\]$")
-_VERSE_RE   = re.compile(r"^\[verse:(\d+)(?:\|([^\]]*))?\]$")
+# The ONLY marker the LLM emits is `[ref:N]` (or `[ref:N|caption]` —
+# caption is optional and only used when alias N is a lecture fragment).
+# Server routes by alias type:
+#   ChunkRef + start_ms/end_ms → [cite:track_X@start-end|caption?]   audio fragment
+#   ChunkRef without start/end → [card:track_X]                       whole-track card
+#   VerseRef                   → [verse:src/tokens|addr_label]        verse widget
+# The LLM never picks the client-side marker type itself.
+_REF_RE = re.compile(r"^\[ref:(\d+)(?:\|([^\]]*))?\]$")
 
 # Markers that are NOT consumed by MarkerExpander but ARE part of our
 # wire protocol — must pass through verbatim. The client (mobile / web)
@@ -101,100 +102,63 @@ class MarkerExpander:
         return tail
 
     def _expand_marker(self, marker: str) -> str:
-        # cite — has integer ref + optional caption
-        m = _CITE_RE.match(marker)
+        # The ONLY marker form the LLM emits.
+        m = _REF_RE.match(marker)
         if m:
             n_str, caption = m.group(1), (m.group(2) or "").strip()
-            return self._format_cite(int(n_str), caption, marker)
-        # card — integer ref, no caption
-        m = _CARD_RE.match(marker)
-        if m:
-            return self._format_card(int(m.group(1)), marker)
-        # outline — integer ref, no caption
-        m = _OUTLINE_RE.match(marker)
-        if m:
-            return self._format_outline(int(m.group(1)), marker)
-        # verse — integer ref + optional caption (library widget)
-        m = _VERSE_RE.match(marker)
-        if m:
-            n_str, caption = m.group(1), (m.group(2) or "").strip()
-            return self._format_verse(int(n_str), caption, marker)
-        # Not a numbered-ref marker. Could be `[action:...]` (we leave
-        # those for the client), or stray brackets in prose, or a
-        # malformed/hallucinated chip marker (e.g. `[cite:track_X|...]`,
-        # `[cite:BG_1972_03.05|...]`) — drop those, log, and emit
-        # nothing in their place so the surrounding prose stays clean.
-        # Hallucinated document-kind markers (LLM modelling on [verse:…]
-        # for commentary/purport/letter/prose chunks). Drop silently +
-        # log so we can iterate the prompt if the rate is high.
-        if _HALLUCINATED_DOC_MARKER_RE.match(marker):
+            return self._format_ref(int(n_str), caption, marker)
+
+        # Hallucinated bracket markers that LLM occasionally invents by
+        # analogy with the documented protocol — drop silently + log so
+        # prompt regressions are observable. Covers both pre-migration
+        # markers (the LLM was trained to emit [cite:N|...] /
+        # [verse:N|...] / [card:N] / [outline:N] in earlier versions and
+        # MAY still produce them) and document-kind hallucinations
+        # ([commentary:BG 2.13], [purport:…], etc.).
+        if _HALLUCINATED_DOC_MARKER_RE.match(marker) or marker.startswith(
+            ("[cite:", "[card:", "[outline:", "[verse:")
+        ):
             log.info(
-                "chat_marker_hallucinated_doc_kind_dropped",
+                "chat_marker_legacy_or_hallucinated_dropped",
                 request_id=self._request_id,
                 marker=marker[:80],
             )
             return ""
-        if marker.startswith(("[cite:", "[card:", "[outline:", "[verse:")):
-            log.info(
-                "chat_marker_non_integer_dropped",
-                request_id=self._request_id,
-                marker=marker[:80],
-            )
-            return ""
-        # Anything else (action markers, plain bracketed text) — pass
-        # through untouched.
+
+        # Anything else (action markers, followup markers, plain
+        # bracketed text) — pass through untouched.
         return marker
 
-    def _format_cite(self, n: int, caption: str, original: str) -> str:
+    def _format_ref(self, n: int, caption: str, original: str) -> str:
+        """Resolve alias N and emit the client-side marker matching the
+        ref's shape. Verses → [verse:src/tokens|label]; lecture
+        fragments → [cite:track@start-end|caption?]; whole-track refs
+        (ChunkRef without start/end) → [card:track]. Caption from the LLM
+        is used only for lecture fragments — verses always use their
+        addr_label, and cards have no caption."""
         ref = self._aliases.resolve(n)
-        if not isinstance(ref, ChunkRef) or ref.start_ms is None or ref.end_ms is None:
-            log.info(
-                "chat_marker_alias_miss",
-                request_id=self._request_id,
-                kind="cite",
-                ref=n,
-                known_max=len(self._aliases),
-            )
-            return ""
-        body = f"{ref.track_id}@{ref.start_ms}-{ref.end_ms}"
-        return f"[cite:{body}|{caption}]" if caption else f"[cite:{body}]"
 
-    def _format_card(self, n: int, original: str) -> str:
-        ref = self._aliases.resolve(n)
-        if not isinstance(ref, ChunkRef):
-            log.info(
-                "chat_marker_alias_miss",
-                request_id=self._request_id,
-                kind="card",
-                ref=n,
-                known_max=len(self._aliases),
-            )
-            return ""
-        return f"[card:{ref.track_id}]"
+        if isinstance(ref, VerseRef):
+            body = f"{ref.source_id}/{ref.tokens}"
+            # Use the curator-stored addr_label as caption; ignore any
+            # LLM-supplied caption to keep verse citations consistent.
+            label = ref.addr_label or caption or ""
+            return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
 
-    def _format_outline(self, n: int, original: str) -> str:
-        ref = self._aliases.resolve(n)
-        if not isinstance(ref, ChunkRef):
-            log.info(
-                "chat_marker_alias_miss",
-                request_id=self._request_id,
-                kind="outline",
-                ref=n,
-                known_max=len(self._aliases),
-            )
-            return ""
-        return f"[outline:{ref.track_id}]"
+        if isinstance(ref, ChunkRef):
+            if ref.start_ms is not None and ref.end_ms is not None:
+                # Lecture audio fragment.
+                body = f"{ref.track_id}@{ref.start_ms}-{ref.end_ms}"
+                return f"[cite:{body}|{caption}]" if caption else f"[cite:{body}]"
+            # Whole-track card (no playhead position).
+            return f"[card:{ref.track_id}]"
 
-    def _format_verse(self, n: int, caption: str, original: str) -> str:
-        ref = self._aliases.resolve(n)
-        if not isinstance(ref, VerseRef):
-            log.info(
-                "chat_marker_alias_miss",
-                request_id=self._request_id,
-                kind="verse",
-                ref=n,
-                known_max=len(self._aliases),
-            )
-            return ""
-        body = f"{ref.source_id}/{ref.tokens}"
-        return f"[verse:{body}|{caption}]" if caption else f"[verse:{body}]"
+        # Unknown alias — drop with diagnostic.
+        log.info(
+            "chat_marker_alias_miss",
+            request_id=self._request_id,
+            kind="ref",
+            ref=n,
+            known_max=len(self._aliases),
+        )
+        return ""
