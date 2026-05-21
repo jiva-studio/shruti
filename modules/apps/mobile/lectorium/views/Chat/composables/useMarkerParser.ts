@@ -225,7 +225,6 @@ export function parseChatMarkers(input: string): ChatToken[] {
   return groupAdjacentCards(collapseBlanksAroundCards(out))
 }
 
-
 /**
  * Fold consecutive `cards` tokens (each emitted with a single trackId
  * by the parser) into one `cards` token carrying the full list. The
