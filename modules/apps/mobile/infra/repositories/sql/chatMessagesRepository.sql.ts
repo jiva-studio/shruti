@@ -222,6 +222,11 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       await db.save()
     },
 
+    async delete(id: ChatMessageId): Promise<void> {
+      await db.execute("DELETE FROM chat_messages WHERE id = ?", [id])
+      await db.save()
+    },
+
     async deleteBySession(sessionId: ChatSessionId): Promise<void> {
       await db.execute("DELETE FROM chat_messages WHERE session_id = ?", [sessionId])
       await db.save()

@@ -87,9 +87,22 @@ export type ChatActionState =
  * Why a streamed assistant message ended without `event: done`. JSON-
  * encoded into `chat_messages.error`; the discriminator is `kind` so
  * future error shapes (rate_limited, blocked, …) can grow without a
- * schema migration. Today only `truncated` is used.
+ * schema migration.
+ *
+ * - `truncated` — partial text was streamed before the connection
+ *   dropped or the agent ran out of tool-turns. The bubble keeps the
+ *   accumulated content and appends a label.
+ * - `failed` — nothing usable was streamed; the assistant bubble
+ *   becomes a dedicated error row with a Retry button. `code` mirrors
+ *   the stream-client codes (`network`, `rate_limited`, `agent_error`,
+ *   `http_<status>`, `protocol_version_required`, `stream`, …).
+ *   `retryAfterAt` is an absolute UnixMs deadline (only set for
+ *   `rate_limited`) — converted from the 429 `Retry-After` header at
+ *   the moment the error is received, so countdowns don't drift.
  */
-export type ChatMessageError = { kind: "truncated"; reason: "stream" | "turns" }
+export type ChatMessageError =
+  | { kind: "truncated"; reason: "stream" | "turns" }
+  | { kind: "failed"; code: string; retryAfterAt?: UnixMs }
 
 export interface ChatMessage {
   readonly id: ChatMessageId
