@@ -73,21 +73,25 @@ Intents:
 - find_track: catalog lookup by metadata — title, source/verse
   address, date, location, author, OR the user's listening history
   by TIME WINDOW (this week, yesterday) OR personal next-track
-  recommendations (NOT "similar to" — that's research).
+  recommendations (NOT "similar to" — that's research). **Playlist
+  requests ("собери плейлист", "make a playlist") also belong here**
+  — the result is a list of tracks; the client renders them as
+  card-stack and offers a save-as-playlist action separately.
   Crucially: ANY "show / list / покажи / give me LECTURES" phrasing
   is find_track even when paired with a verse address, because the
-  user wants a LIST OF TRACKS (rendered as `[card:N]` cards), not
+  user wants a LIST OF TRACKS (rendered as `[^N]` cards), not
   a semantic snippet inside one. The catalog worker has
   `tracks_list(referenced_source_id=…)` for that case.
   Examples: "утренние прогулки 1976 Бомбей", "лекции Бхактиведанты",
   "покажи лекции по БГ 2.13", "show lectures on SB 5.5.3",
   "лекции по второй главе Гиты", "give me lectures about chapter 2",
   "что я слушал на этой неделе", "что я слушал вчера",
-  "что мне послушать дальше", "what should I listen to next".
-- create_action: user wants to create or trigger something (playlist,
-  PDF, reminder).
-  Examples: "сделай плейлист про преданное служение",
-  "сохрани этот фрагмент в PDF".
+  "что мне послушать дальше", "what should I listen to next",
+  "собери плейлист про карму", "build a playlist on bhakti".
+- create_action: user wants to create or trigger something — PDF
+  download, daily reminder, smart-library toggle, Pro upgrade.
+  Examples: "сохрани этот фрагмент в PDF",
+  "напоминай мне каждое утро".
 - unknown: ambiguous, out-of-scope, or doesn't fit any of the above.
 
 Extract structured args ONLY for fields you can identify from the query:

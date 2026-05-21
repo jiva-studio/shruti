@@ -77,17 +77,21 @@ async def test_plain_text_passes_through() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cite_marker_expanded_into_track_form() -> None:
-    """LLM writes `[cite:N|caption]` — MarkerExpander unfolds N into
-    the real track_id@start-end. Client gets the expanded form."""
+async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
+    """LLM writes `[^N]`; if alias N is a lecture fragment, server
+    expands into the `[cite:track@start-end|caption]` shape the
+    client renders. The caption comes from `aliases.captions`
+    (populated by the background caption_generator). Period-after-
+    marker gets swapped server-side."""
     aliases = TurnAliasMap()
     n = aliases.alias_chunk("track_OkPVGYhR5PPu", 1500, 2500)
+    aliases.captions[n] = "01:30-02:30"
     expander = MarkerExpander(aliases)
 
     llm = StreamingLLM(
         chunks=[
             "Прабхупада объясняет это в ",
-            f"[cite:{n}|01:30-02:30]",
+            f"[^{n}]",
             ".",
         ]
     )
@@ -103,18 +107,21 @@ async def test_cite_marker_expanded_into_track_form() -> None:
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
     assert "[cite:track_OkPVGYhR5PPu@1500-2500|01:30-02:30]" in full
-    # Integer form never reaches the client.
-    assert f"[cite:{n}|" not in full
+    # Period swapped to BEFORE the widget.
+    assert full.rstrip().endswith("[cite:track_OkPVGYhR5PPu@1500-2500|01:30-02:30]")
+    # Raw footnote form never reaches the client — always expanded.
+    assert f"[^{n}" not in full
 
 
 @pytest.mark.asyncio
-async def test_verse_marker_expanded() -> None:
-    """`[verse:N|caption]` → `[verse:source_id/tokens|caption]`."""
+async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
+    """`[^N]` resolving to a VerseRef → `[verse:source_id/tokens|addr_label]`.
+    The verse caption is the alias's `addr_label`, not LLM-supplied."""
     aliases = TurnAliasMap()
-    n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
+    n = aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
     expander = MarkerExpander(aliases)
 
-    llm = StreamingLLM(chunks=[f"См. [verse:{n}|БГ 2.13]"])
+    llm = StreamingLLM(chunks=[f"См. [^{n}]"])
     events = await _drain(
         run_synthesizer_turn(
             "verse",
@@ -127,20 +134,18 @@ async def test_verse_marker_expanded() -> None:
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
     assert "[verse:source_BG/2.13|БГ 2.13]" in full
-    assert f"[verse:{n}|" not in full
+    assert f"[^{n}" not in full
 
 
 @pytest.mark.asyncio
-async def test_marker_split_across_chunks_buffers_correctly() -> None:
-    """LLM tokeniser might split `[cite:N|caption]` across multiple
-    streaming chunks. MarkerExpander must buffer and emit the expanded
-    form once the `]` closes."""
+async def test_ref_marker_split_across_chunks_buffers_correctly() -> None:
+    """SSE deltas can split a marker mid-buffer. MarkerExpander must
+    buffer and emit the expanded form once the `]` closes."""
     aliases = TurnAliasMap()
     n = aliases.alias_chunk("track_X", 1000, 2000)
     expander = MarkerExpander(aliases)
 
-    # Split into many tiny chunks so the marker straddles them.
-    raw = f"Цитата [cite:{n}|caption] здесь"
+    raw = f"Цитата [^{n}] здесь"
     llm = StreamingLLM(chunks=[c for c in raw])
 
     events = await _drain(
@@ -154,8 +159,7 @@ async def test_marker_split_across_chunks_buffers_correctly() -> None:
         )
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
-    assert "[cite:track_X@1000-2000|caption]" in full
-    # `Цитата ` and ` здесь` made it through.
+    assert "[cite:track_X@1000-2000]" in full
     assert "Цитата " in full
     assert " здесь" in full
 
@@ -164,15 +168,18 @@ async def test_marker_split_across_chunks_buffers_correctly() -> None:
 async def test_unknown_integer_ref_dropped() -> None:
     """LLM hallucinates an integer ref not in the alias map →
     MarkerExpander drops it silently (logs a `chat_marker_alias_miss`).
-    Surrounding prose still streams."""
+    Surrounding prose still streams. With multiple aliases unused, no
+    single-candidate recovery can fire."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_X", 0, 100)
+    aliases.alias_chunk("track_Y", 0, 100)
+    aliases.alias_chunk("track_Z", 0, 100)
     expander = MarkerExpander(aliases)
 
-    # 9999 is unlikely to be the minted ref (1-in-9999) — use a value
-    # we know isn't allocated. Pre-mint a known ref + a clearly-fake one.
-    bogus = 91337  # outside [1, 9999], explicitly invalid
-    llm = StreamingLLM(chunks=[f"Хм [cite:{bogus}|fake] вот"])
+    # 91337 is way outside the sequential 1..K mint range, can't
+    # collide with any minted alias.
+    bogus = 91337
+    llm = StreamingLLM(chunks=[f"Хм [^{bogus}] вот"])
 
     events = await _drain(
         run_synthesizer_turn(
@@ -185,9 +192,10 @@ async def test_unknown_integer_ref_dropped() -> None:
         )
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
-    # Bogus marker removed; surrounding text survives.
-    assert "Хм  вот" in full or "Хм " in full and " вот" in full
-    assert "cite:91337" not in full
+    # Bogus marker removed; surrounding text survives with single space.
+    assert "Хм вот" in full
+    assert f"^{bogus}" not in full
+    assert "cite:" not in full
 
 
 @pytest.mark.asyncio
@@ -260,12 +268,14 @@ async def test_history_flows_into_synth_messages() -> None:
     # from echoing `[tool_use]`/`[tool_result]` blocks (see synth_turn).
     assert roles == ["system", "user", "assistant", "user"]
 
-    # Prior assistant content was folded down to user-visible text:
-    # the caption survives, the integer ref + track id are gone.
+    # Prior assistant content was folded down to plain prose: ALL
+    # widget markers stripped entirely (including their captions) so
+    # the LLM in turn N+1 can't latch onto chip-format leftovers.
     prior_assistant = msgs[2]["content"]
     assert "track_PRIOR" not in prior_assistant
     assert "[cite:" not in prior_assistant
-    assert "prior" in prior_assistant
+    assert "prior" not in prior_assistant   # caption dropped, not kept
+    assert "Прабхупада объясняет" in prior_assistant
 
     # The latest user message (third in history) got the lang tag.
     latest_user = msgs[3]["content"]
@@ -375,26 +385,29 @@ def test_format_tool_results_emits_no_trigger_tokens() -> None:
         )
 
     # Sanity: the model still has enough context to cite — it needs
-    # the integer ref, label, and text.
+    # the integer ref (lecture title kept; verse-ref label dropped to
+    # break the `[^N] БГ X.Y` adjacency) and the text.
     assert "7882" in out
-    assert "BG 2.13" in out
+    # Verse-ref note has NO addr_label adjacency to the marker — the
+    # widget will render the address on the client.
+    assert "BG 2.13" not in out
     assert "absolute truth" in out
 
 
-def test_format_tool_results_renders_marker_hint_without_cite_shape() -> None:
-    """The note header tells the LLM `cite as cite-ref N` — NOT
-    `[cite:N]`. If we wrote the literal marker in the header, weaker
-    models copy it as-is into their reply, producing `[cite:N]` with
-    no actual citation prose around it. Defensive pin."""
+def test_format_tool_results_renders_footnote_marker_only() -> None:
+    """The note header carries `[^N]` and nothing else with bracket
+    syntax. The LLM copies the footnote shape verbatim into prose;
+    `[cite:` / `[verse:` are server-side expansion outputs, NOT
+    things the LLM should ever see in its input."""
     from shruti_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results(
         [{"type": "lecture", "ref": 42, "label": "x", "text": "…", "meta": {}}]
     )
-    # The integer is exposed; the bracket shape is not.
-    assert "42" in out
+    assert "[^42]" in out
     assert "[cite:42" not in out
     assert "[verse:" not in out
+    assert "[ref:" not in out
 
 
 @pytest.mark.asyncio
@@ -450,31 +463,50 @@ async def test_notes_in_system_block_not_assistant_role() -> None:
 # pin the fix.
 
 
-def test_format_tool_results_ref_is_top_level_field() -> None:
-    """The note header must expose `ref=N` as a plain `key=value`
-    pair, not buried in a phrase. The model latches onto the literal
-    `ref=N` shape to copy into `[cite:N|caption]` / `[card:N]`. An
-    earlier "cite as cite-ref N" phrasing was too oblique and the
-    model dropped markers."""
+def test_format_tool_results_ref_emitted_as_literal_marker() -> None:
+    """The note header leads with the LITERAL `[^N]` marker — the
+    model copies it verbatim into prose to cite. Lecture/title pair
+    survives adjacency because the title is natural-language and
+    won't be mistaken for a shloka address."""
     from shruti_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results(
-        [{"type": "lecture", "ref": 8209, "label": "x", "meta": {}}]
+        [{"type": "lecture", "ref": 5, "label": "x", "meta": {}}]
     )
-    assert "ref=8209" in out
+    assert "[^5]" in out
+    assert "Note 1" not in out
+
+
+def test_format_tool_results_verse_ref_has_no_addr_label_adjacency() -> None:
+    """Verse-with-ref header drops `addr_label` so the LLM never sees
+    a shloka address adjacent to `[^N]` — the strongest priming
+    source for `[^БГ 2.13]` string-stuffed hallucinations. The verse
+    widget on the client renders the address."""
+    from shruti_chat.application.synthesizer_turn import _format_tool_results
+
+    out = _format_tool_results([{
+        "type": "verse",
+        "ref": 3,
+        "label": "БГ 2.13",
+        "text": "Душа меняет тела…",
+        "meta": {"source_id": "source_BG", "tokens": "2.13"},
+    }])
+    assert "[^3]" in out
+    assert "БГ 2.13" not in out
+    assert "Душа меняет тела" in out
 
 
 def test_format_tool_results_track_uses_title_when_no_label() -> None:
     """tracks_list envelope has `title`, not `label`. The renderer
-    must fall back to `title` so the synth header still carries a
-    human label for the lecture — otherwise the model can't attribute
-    the card."""
+    must fall back to `title` so the header still carries the
+    human attribution — otherwise the LLM can't name the lecture.
+    Title is natural-language and stays adjacent to the marker."""
     from shruti_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results([
         {
             "type": "lecture",
-            "ref": 8209,
+            "ref": 8,
             "title": "Вот вам ваше новое тело, сэр",
             "author_name": "Шрила Прабхупада",
             "location_name": "Лондон",
@@ -482,41 +514,53 @@ def test_format_tool_results_track_uses_title_when_no_label() -> None:
             "duration_ms": 1680000,
         }
     ])
-    assert "ref=8209" in out
-    assert "label=Вот вам ваше новое тело, сэр" in out
-    # tracks_list meta gets pulled into the per-note meta line.
-    assert "author_name=Шрила Прабхупада" in out
-    assert "location_name=Лондон" in out
-    assert "date=1973-08-26" in out
+    assert "[^8]" in out
+    assert "Вот вам ваше новое тело, сэр" in out
+    # Technical fields (author_name=, date=, location_name=) are
+    # intentionally NOT in the LLM-facing render — noise that doesn't
+    # change LLM behaviour and confuses smaller models.
+    assert "author_name=" not in out
+    assert "location_name=" not in out
+
+
+def test_format_tool_results_commentary_keeps_addr_label() -> None:
+    """Commentary / letter / prose_chapter notes have no `ref` —
+    they're quoted as markdown blockquotes. The header MUST keep the
+    addr_label so the LLM can write a proper attribution line
+    (e.g. `*(комментарий к БГ 2.13)*`)."""
+    from shruti_chat.application.synthesizer_turn import _format_tool_results
+
+    out = _format_tool_results([{
+        "type": "commentary",
+        "ref": None,
+        "label": "БГ 2.13, комментарий",
+        "text": "Каждое живое существо…",
+        "meta": {"source_id": "source_BG", "tokens": "2.13"},
+    }])
+    assert "БГ 2.13, комментарий" in out
+    assert "[^" not in out
 
 
 def test_format_tool_results_flattens_list_results() -> None:
     """chunks_search returns `list[dict]`; propose_* returns a single
-    `dict`. The renderer must accept both and flatten into one note
-    list — earlier we crashed with `'list' object has no attribute
-    'get'` when a chunks_search result landed in tool_results."""
+    `dict`. The renderer accepts both and flattens into one note
+    list."""
     from shruti_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results(
         [
-            # chunks_search shape: list of envelopes
             [
                 {"type": "lecture", "ref": 1, "label": "L1", "meta": {}},
                 {"type": "lecture", "ref": 2, "label": "L2", "meta": {}},
             ],
-            # propose_* shape: single dict
             {"ok": True, "action_id": "abc123"},
-            # error envelope: rendered as the error-line variant
             {"error": "no_match"},
         ]
     )
-    # All three notes show up.
-    assert "ref=1" in out
-    assert "ref=2" in out
-    assert "abc123" in out or "ok=True" in out or "Note 3" in out
+    assert "[^1]" in out
+    assert "[^2]" in out
     assert "no_match" in out
-    # Renderer didn't crash on the heterogeneous list.
-    assert out.count("Note ") >= 3
+    assert out.count("\n\n") >= 2
 
 
 def test_aliased_tracks_list_results_tagged_kind_lecture() -> None:

@@ -12,14 +12,6 @@
  */
 export type ChatActionPayload =
   | {
-      readonly kind: "create_playlist"
-      readonly id: string
-      readonly payload: {
-        readonly name: string
-        readonly trackIds: readonly string[]
-      }
-    }
-  | {
       readonly kind: "share_pdf"
       readonly id: string
       readonly payload: { readonly items: readonly ChatSharePdfItemPayload[] }

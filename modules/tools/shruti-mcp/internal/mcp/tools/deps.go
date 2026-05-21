@@ -46,8 +46,9 @@ type Deps struct {
 	DictCRUD         DictCRUDDeps
 	PackCRUD         PackCRUDDeps
 	Catalog          CatalogDeps
-	Library          LibraryDeps
-	LibraryPublish   LibraryPublishDeps
+	Library             LibraryDeps
+	LibraryAttribution  LibraryAttributionDeps
+	LibraryPublish      LibraryPublishDeps
 	Proactive        ProactiveDeps
 	Find       FindDeps
 	InDir      string

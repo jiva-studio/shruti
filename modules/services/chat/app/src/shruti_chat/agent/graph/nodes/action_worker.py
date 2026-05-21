@@ -8,7 +8,7 @@ tracks the research_worker found; this worker calls one of the
 the action result so the synthesizer can render the inline
 `[action:kind|id=…]` marker.
 
-Toolset is narrow on purpose: playlist_propose / track_pdf_generate
+Toolset is narrow on purpose: track_pdf_generate
 and the three hint kinds (reminder / smart_library / pro_upgrade).
 Two turns max — one to dispatch the propose call, one to converge.
 """
