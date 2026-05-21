@@ -1,0 +1,266 @@
+package sqlitelibrary
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"testing"
+
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/library"
+)
+
+func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
+	t.Helper()
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "library.db")
+	r, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	// Seed a verses table + one row so ref_add validation can find it.
+	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_verses (
+		id TEXT PRIMARY KEY, source_id TEXT, tokens TEXT, text TEXT, transliteration TEXT)`); err != nil {
+		t.Fatalf("create verses table: %v", err)
+	}
+	if verseID != "" {
+		if _, err := r.db.ExecContext(ctx,
+			`INSERT INTO library_verses (id, source_id, tokens, text, transliteration) VALUES (?,?,?,?,?)`,
+			verseID, sourceID, tokens, "devanagari", "iast"); err != nil {
+			t.Fatalf("seed verse: %v", err)
+		}
+	}
+	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_verse_variants (
+		verse_id TEXT, language TEXT, translation TEXT)`); err != nil {
+		t.Fatalf("create variants table: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_documents (
+		id TEXT PRIMARY KEY, source_id TEXT, tokens TEXT, author_id TEXT, kind TEXT, date TEXT)`); err != nil {
+		t.Fatalf("create docs table: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_document_variants (
+		document_id TEXT, language TEXT, title TEXT, body TEXT)`); err != nil {
+		t.Fatalf("create doc variants: %v", err)
+	}
+	return r
+}
+
+func TestAttributionCreate_BasicFlow(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	if err := r.AttributionCreate(ctx, "attribution_xyz", library.AttrQuestion, "ru", "что такое разум"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, ok, err := r.AttributionGet(ctx, "attribution_xyz")
+	if err != nil || !ok {
+		t.Fatalf("get: ok=%v err=%v", ok, err)
+	}
+	if got.Kind != library.AttrQuestion {
+		t.Fatalf("kind mismatch: %v", got.Kind)
+	}
+	if len(got.Texts["ru"]) != 1 || got.Texts["ru"][0] != "что такое разум" {
+		t.Fatalf("texts mismatch: %v", got.Texts)
+	}
+	if len(got.Refs) != 0 {
+		t.Fatalf("expected empty refs, got %v", got.Refs)
+	}
+}
+
+func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "что такое разум")
+	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "природа разума"); err != nil {
+		t.Fatalf("add 2: %v", err)
+	}
+	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "что значит buddhi"); err != nil {
+		t.Fatalf("add 3: %v", err)
+	}
+	if err := r.AttributionTextAdd(ctx, "attribution_a", "en", "what is intelligence"); err != nil {
+		t.Fatalf("add en: %v", err)
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_a")
+	if len(got.Texts["ru"]) != 3 {
+		t.Fatalf("expected 3 ru variants, got %d: %v", len(got.Texts["ru"]), got.Texts["ru"])
+	}
+	if len(got.Texts["en"]) != 1 {
+		t.Fatalf("expected 1 en variant, got %d", len(got.Texts["en"]))
+	}
+}
+
+func TestAttributionTextAdd_DuplicateGracefulNoOp(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "что такое разум")
+	// Same text again — INSERT OR IGNORE makes this a no-op.
+	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "что такое разум"); err != nil {
+		t.Fatalf("dup add: %v", err)
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_a")
+	if len(got.Texts["ru"]) != 1 {
+		t.Fatalf("expected dedupe (1 variant), got %d", len(got.Texts["ru"]))
+	}
+}
+
+func TestAttributionRefAdd_VerseValidation(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+
+	// Existing verse → OK.
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "verse", TargetID: "verse_xyz",
+	}); err != nil {
+		t.Fatalf("ref_add existing verse: %v", err)
+	}
+	// Non-existing verse → error.
+	err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "verse", TargetID: "verse_missing",
+	})
+	if !errors.Is(err, ErrRefTargetNotFound) {
+		t.Fatalf("expected ErrRefTargetNotFound, got %v", err)
+	}
+}
+
+func TestAttributionRefAdd_DocumentValidation(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO library_documents (id, source_id, tokens, author_id, kind, date) VALUES (?,?,?,?,?,?)`,
+		"library_document_abc", "source_BG", "2.13", "author_p", "commentary", ""); err != nil {
+		t.Fatalf("seed doc: %v", err)
+	}
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "document", TargetID: "library_document_abc",
+	}); err != nil {
+		t.Fatalf("ref_add doc: %v", err)
+	}
+	err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "document", TargetID: "library_document_missing",
+	})
+	if !errors.Is(err, ErrRefTargetNotFound) {
+		t.Fatalf("expected ErrRefTargetNotFound, got %v", err)
+	}
+}
+
+func TestAttributionRefAdd_InvalidKind(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "playlist", TargetID: "x",
+	})
+	if err == nil {
+		t.Fatalf("expected error for invalid kind")
+	}
+}
+
+func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionTextAdd(ctx, "attribution_a", "en", "y")
+	_ = r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"})
+
+	if err := r.AttributionDelete(ctx, "attribution_a"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	var n int
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_texts WHERE attribution_id='attribution_a'`).Scan(&n); err != nil {
+		t.Fatalf("count texts: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("cascade texts failed: %d remain", n)
+	}
+	if err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM library_attribution_refs WHERE attribution_id='attribution_a'`).Scan(&n); err != nil {
+		t.Fatalf("count refs: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("cascade refs failed: %d remain", n)
+	}
+}
+
+func TestAttributionList_FilterByKind(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_q1", library.AttrQuestion, "ru", "вопрос про душу")
+	_ = r.AttributionCreate(ctx, "attribution_q2", library.AttrQuestion, "ru", "вопрос про карму")
+	_ = r.AttributionCreate(ctx, "attribution_t1", library.AttrTopic, "ru", "вечность души")
+
+	got, err := r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrQuestion})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 question rows, got %d", len(got))
+	}
+	got, err = r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrTopic})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 topic row, got %d", len(got))
+	}
+}
+
+func TestAttributionList_QueryLike(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "природа души")
+	_ = r.AttributionCreate(ctx, "attribution_b", library.AttrQuestion, "ru", "вопрос про карму")
+
+	got, err := r.AttributionList(ctx, library.ListAttributionsOpts{Query: "душ"})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "attribution_a" {
+		t.Fatalf("expected only attribution_a, got %+v", got)
+	}
+}
+
+func TestAttribution_NotFoundErrors(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+
+	if err := r.AttributionTextAdd(ctx, "absent", "ru", "x"); !errors.Is(err, ErrAttributionNotFound) {
+		t.Fatalf("text_add expected ErrAttributionNotFound, got %v", err)
+	}
+	if err := r.AttributionRefAdd(ctx, "absent", library.AttributionRef{Kind: "verse", TargetID: "verse_x"}); !errors.Is(err, ErrAttributionNotFound) {
+		t.Fatalf("ref_add expected ErrAttributionNotFound, got %v", err)
+	}
+	if err := r.AttributionDelete(ctx, "absent"); !errors.Is(err, ErrAttributionNotFound) {
+		t.Fatalf("delete expected ErrAttributionNotFound, got %v", err)
+	}
+}
+
+func TestAttributionTextRemove(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "v1")
+	_ = r.AttributionTextAdd(ctx, "attribution_a", "ru", "v2")
+
+	if err := r.AttributionTextRemove(ctx, "attribution_a", "ru", "v1"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_a")
+	if len(got.Texts["ru"]) != 1 || got.Texts["ru"][0] != "v2" {
+		t.Fatalf("after remove expected only v2, got %v", got.Texts["ru"])
+	}
+}
+
+func TestAttributionRefRemove(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"})
+
+	if err := r.AttributionRefRemove(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_a")
+	if len(got.Refs) != 0 {
+		t.Fatalf("expected refs empty after remove, got %v", got.Refs)
+	}
+}
