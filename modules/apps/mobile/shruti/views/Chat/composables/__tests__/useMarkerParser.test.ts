@@ -7,33 +7,36 @@ import { extractFollowups, parseChatMarkers } from "../useMarkerParser.js"
  * here silently turns markers into text tokens.
  */
 describe("parseChatMarkers — action markers", () => {
-  it("recognises create_playlist (snake_case)", () => {
-    const tokens = parseChatMarkers("ok [action:create_playlist|id=abc12345]")
+  it("recognises share_pdf (snake_case)", () => {
+    const tokens = parseChatMarkers("ok [action:share_pdf|id=abc12345]")
     const action = tokens.find((t) => t.kind === "action")
     expect(action).toBeTruthy()
     if (action && action.kind === "action") {
-      expect(action.actionKind).toBe("create_playlist")
+      expect(action.actionKind).toBe("share_pdf")
       expect(action.actionId).toBe("abc12345")
     }
   })
 
-  it("rejects legacy kebab-case form (create-playlist)", () => {
-    // Snake-only since Etap «protocol cleanup». Kebab-form markers from
-    // older persisted messages parse to no action token (text only).
-    const t1 = parseChatMarkers("[action:create-playlist|id=abc12345]")
+  it("rejects legacy kebab-case form (share-pdf)", () => {
+    // Snake-only. Kebab-form markers from older persisted messages
+    // parse to no action token (text only).
+    const t1 = parseChatMarkers("[action:share-pdf|id=abc12345]")
     expect(t1.find((t) => t.kind === "action")).toBeUndefined()
   })
 
-  it("ignores the removed save_note action kind", () => {
-    // save_note was removed in favour of the CitationChip action-sheet
-    // path. Old persisted messages with the marker render as plain text.
-    const tokens = parseChatMarkers("[action:save_note|id=note_ABC_1]")
-    expect(tokens.find((t) => t.kind === "action")).toBeUndefined()
+  it("ignores the removed create_playlist / save_note action kinds", () => {
+    // create_playlist removed when "playlists become a stack of cards"
+    // — old persisted messages parse to no action token (text only).
+    // save_note removed earlier in favour of the CitationChip sheet.
+    const t1 = parseChatMarkers("[action:create_playlist|id=abc12345]")
+    expect(t1.find((t) => t.kind === "action")).toBeUndefined()
+    const t2 = parseChatMarkers("[action:save_note|id=note_ABC_1]")
+    expect(t2.find((t) => t.kind === "action")).toBeUndefined()
   })
 
   it("rejects malformed markers — wrong delimiter, spaces inside id", () => {
-    const tokens1 = parseChatMarkers("[action:create_playlist id=abc12345]")
-    const tokens2 = parseChatMarkers("[action:create_playlist|id=abc 12345]")
+    const tokens1 = parseChatMarkers("[action:share_pdf id=abc12345]")
+    const tokens2 = parseChatMarkers("[action:share_pdf|id=abc 12345]")
     expect(tokens1.find((t) => t.kind === "action")).toBeUndefined()
     expect(tokens2.find((t) => t.kind === "action")).toBeUndefined()
   })
@@ -45,20 +48,41 @@ describe("parseChatMarkers — action markers", () => {
 
   it("finds multiple action markers in one message", () => {
     const tokens = parseChatMarkers(
-      "first [action:create_playlist|id=aaa] then [action:share_pdf|id=bbb]"
+      "first [action:share_pdf|id=aaa] then [action:enable_daily_reminder|id=bbb]"
     )
     const actions = tokens.filter((t) => t.kind === "action")
     expect(actions).toHaveLength(2)
   })
+})
 
-  it("recognises share_pdf (PDF download / share card)", () => {
-    const tokens = parseChatMarkers("Готово [action:share_pdf|id=ab12cd34]")
-    const action = tokens.find((t) => t.kind === "action")
-    expect(action).toBeTruthy()
-    if (action && action.kind === "action") {
-      expect(action.actionKind).toBe("share_pdf")
-      expect(action.actionId).toBe("ab12cd34")
+describe("parseChatMarkers — card grouping (playlists as card stacks)", () => {
+  it("groups consecutive [card:X] markers into one cards token", () => {
+    const tokens = parseChatMarkers(
+      "Вот несколько лекций:\n[card:track_A]\n[card:track_B]\n[card:track_C]"
+    )
+    const cards = tokens.filter((t) => t.kind === "cards")
+    expect(cards).toHaveLength(1)
+    if (cards[0].kind === "cards") {
+      expect(cards[0].trackIds).toEqual(["track_A", "track_B", "track_C"])
     }
+  })
+
+  it("emits a singleton cards token for an isolated [card:X]", () => {
+    const tokens = parseChatMarkers("Прабхупада [card:track_X] упоминает")
+    const cards = tokens.filter((t) => t.kind === "cards")
+    expect(cards).toHaveLength(1)
+    if (cards[0].kind === "cards") {
+      expect(cards[0].trackIds).toEqual(["track_X"])
+    }
+  })
+
+  it("splits when a non-blank text separates the cards", () => {
+    // Cards interleaved with substantive prose stay separate groups.
+    const tokens = parseChatMarkers(
+      "[card:track_A]\nProse paragraph.\n[card:track_B]"
+    )
+    const cards = tokens.filter((t) => t.kind === "cards")
+    expect(cards).toHaveLength(2)
   })
 })
 
