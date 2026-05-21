@@ -83,7 +83,7 @@ function onConfirm() {
 
 .name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .footer {

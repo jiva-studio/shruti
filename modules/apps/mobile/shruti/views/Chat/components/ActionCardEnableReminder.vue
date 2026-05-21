@@ -115,7 +115,7 @@ function onConfirm() {
   padding: 4px 8px;
   border-radius: 8px;
   font-variant-numeric: tabular-nums;
-  font-size: 14px;
+  font-size: 15px;
   background: rgba(var(--ion-color-primary-rgb), 0.12);
   color: var(--ion-color-primary);
   border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);

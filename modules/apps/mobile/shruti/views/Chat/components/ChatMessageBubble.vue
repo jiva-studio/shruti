@@ -241,7 +241,7 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 .chat-quote-attribution {
   display: block;
   margin-top: 4px;
-  font-size: 0.8125em;
+  font-size: 12px;
   font-style: italic;
   color: var(--ion-color-medium, #777);
 }
