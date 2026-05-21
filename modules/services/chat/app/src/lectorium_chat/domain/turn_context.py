@@ -35,7 +35,7 @@ confirmation that mutations propagate across nodes via context.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
@@ -79,13 +79,6 @@ class TurnContext:
     catalog_tools: ToolMap = field(default_factory=dict)
     action_tools: ToolMap = field(default_factory=dict)
     help_tools: ToolMap = field(default_factory=dict)
-
-    # ── SSE writer bridge ──────────────────────────────────────────────
-    # When set, tools (via the as_langchain_tool yield_event closure)
-    # and nodes (via direct call) push events through this callable.
-    # The chat_turn.py wrapper hooks it into LangGraph's
-    # `get_stream_writer` at composition time.
-    writer: Callable[[str, dict[str, Any]], None] | None = None
 
     # ── Library DB path ─────────────────────────────────────────────────
     # Path to local library.db SQLite (for verse body lookups in the
