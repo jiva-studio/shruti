@@ -300,3 +300,61 @@ async def test_marker_at_end_of_stream_flushed_as_is() -> None:
     e = MarkerExpander(aliases)
     out = await _expand(e, f"text [^{ref}]")
     assert out == "text [cite:track_X@0-1000]"
+
+
+# ── Server-side dedup (drop 2nd+ occurrence of same alias) ───────────
+
+
+async def test_duplicate_cite_dropped_keeps_first() -> None:
+    """LLM writes `[^1] … [^1]`. First expands, second silently
+    dropped — one chip in UI no matter how often the LLM cites it."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"first [^{ref}] middle [^{ref}] tail")
+    assert out == "first [cite:track_X@0-1000] middle tail"
+
+
+async def test_duplicate_verse_dropped() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}] then [^{ref}] again")
+    assert out == "[verse:source_BG/2.13|БГ 2.13] then again"
+
+
+async def test_duplicate_adjacent_dropped() -> None:
+    """Two markers back-to-back with no separator (UX worst case) —
+    the second one drops, leaving a clean single chip."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}][^{ref}]")
+    assert out == "[cite:track_X@0-1000]"
+
+
+async def test_dedup_does_not_block_distinct_aliases() -> None:
+    """Different aliases still all render — dedup is per-N."""
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 0, 1000)
+    b = aliases.alias_chunk("track_B", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{a}] [^{b}] [^{a}]")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000]"
+
+
+async def test_dedup_does_not_steal_alias_via_recovery() -> None:
+    """A duplicate `[^N]` (already emitted) must NOT trigger the
+    single-candidate recovery path — that would silently swap it to
+    an unrelated unused alias. Dedup short-circuits before recovery."""
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 0, 1000)   # 1
+    b = aliases.alias_chunk("track_B", 0, 1000)   # 2
+    e = MarkerExpander(aliases)
+    # Emit [^1] then [^1] again. Without dedup short-circuit, second
+    # [^1] would see "1 is emitted, only 2 unused, single-candidate →
+    # recover" — substituting track_B incorrectly. With dedup it just
+    # drops.
+    out = await _expand(e, f"[^{a}] dup [^{a}] tail")
+    assert out == "[cite:track_A@0-1000] dup tail"
+    assert "track_B" not in out

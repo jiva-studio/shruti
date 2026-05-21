@@ -281,9 +281,26 @@ class MarkerExpander:
     def _format_ref(self, n: int | None) -> str:
         """Resolve alias N. If N is None or unknown, try single-
         candidate recovery (exactly one alias still unused → use it).
-        Otherwise drop with diagnostic log."""
+        Otherwise drop with diagnostic log.
+
+        Deduplicates within a response: if the alias has already been
+        emitted in this stream, drop the second+ occurrence silently.
+        The prompt instructs the LLM to use each cite at most once;
+        this is the server-side enforcement so any model slip-up
+        doesn't produce spammy duplicate chips."""
         ref: ChunkRef | VerseRef | None = None
         if isinstance(n, int):
+            # Dedup: if this exact alias has already been expanded in
+            # this response, drop with log. Do this BEFORE recovery so
+            # a "[^1] … [^1]" repeat doesn't accidentally recover to a
+            # neighbouring unused alias.
+            if n in self._emitted:
+                log.info(
+                    "chat_marker_dedup_dropped",
+                    request_id=self._request_id,
+                    ref=n,
+                )
+                return ""
             ref = self._aliases.resolve(n)
 
         if ref is None:
