@@ -67,6 +67,11 @@ class MarkerExpander:
         self._request_id = request_id
         self._buffer: list[str] = []
         self._in_marker = False
+        # Track aliases we've ALREADY successfully expanded in this
+        # response. Used by `_format_ref` to recover from a hallucinated
+        # `[ref:N]` when exactly one valid alias is still unused — the
+        # LLM "meant" the only one left.
+        self._emitted: set[int] = set()
 
     async def feed(self, text: str) -> str:
         """Process a delta chunk; returns what should be forwarded."""
@@ -135,8 +140,42 @@ class MarkerExpander:
         fragments → [cite:track@start-end|caption?]; whole-track refs
         (ChunkRef without start/end) → [card:track]. Caption from the LLM
         is used only for lecture fragments — verses always use their
-        addr_label, and cards have no caption."""
+        addr_label, and cards have no caption.
+
+        If N is unknown but exactly ONE valid alias remains unused in
+        this response, the LLM had a single valid candidate left — we
+        substitute it. With sequential aliases [1..K] this is a strong
+        signal: hallucinated 4-digit refs like `[ref:1022]` get pinned
+        back to the right note when only one slot is open."""
         ref = self._aliases.resolve(n)
+
+        # Hallucinated alias — attempt recovery before dropping.
+        if ref is None:
+            remaining = self._aliases.known_keys() - self._emitted
+            if len(remaining) == 1:
+                recovered = next(iter(remaining))
+                log.info(
+                    "chat_marker_alias_recovered",
+                    request_id=self._request_id,
+                    requested=n,
+                    recovered=recovered,
+                    known_max=len(self._aliases),
+                )
+                n = recovered
+                ref = self._aliases.resolve(n)
+            else:
+                log.info(
+                    "chat_marker_alias_miss",
+                    request_id=self._request_id,
+                    kind="ref",
+                    ref=n,
+                    known_max=len(self._aliases),
+                    emitted=sorted(self._emitted),
+                    remaining=sorted(remaining),
+                )
+                return ""
+
+        self._emitted.add(n)
 
         if isinstance(ref, VerseRef):
             body = f"{ref.source_id}/{ref.tokens}"
@@ -153,12 +192,6 @@ class MarkerExpander:
             # Whole-track card (no playhead position).
             return f"[card:{ref.track_id}]"
 
-        # Unknown alias — drop with diagnostic.
-        log.info(
-            "chat_marker_alias_miss",
-            request_id=self._request_id,
-            kind="ref",
-            ref=n,
-            known_max=len(self._aliases),
-        )
+        # Resolved to something that's not Chunk/Verse — should be
+        # impossible given AliasRef union, but stay defensive.
         return ""
