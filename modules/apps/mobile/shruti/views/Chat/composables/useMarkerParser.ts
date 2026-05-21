@@ -405,3 +405,106 @@ function escapeHtml(raw: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
 }
+
+/* -------------------------------------------------------------------------- */
+/*                  Plain-Markdown export (copy + share)                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Verse body lookup callback (matches `useVerseBodyStore().get`). Kept
+ * as an injected dependency so `messageToMarkdown` stays pure /
+ * pinia-free and can be unit-tested with synthetic verse data.
+ */
+export interface VerseBodyLike {
+  readonly addrLabel: string
+  readonly sanskrit: string
+  readonly transliteration: string
+  readonly translation: { readonly [lang: string]: string }
+}
+export type VerseLookup = (sourceId: string, tokens: string) => VerseBodyLike | null
+
+export interface MessageToMarkdownOptions {
+  /** UI language — picks `translation[lang]` for inline verses; falls
+   *  back to English when the requested language is missing. */
+  readonly lang: "ru" | "en"
+  /** Lookup against the verse-body cache. Pass `() => null` if the
+   *  caller doesn't have access (verses then drop out, same as widgets). */
+  readonly verseLookup: VerseLookup
+}
+
+/**
+ * Convert an assistant message's raw content into a clean Markdown
+ * string suitable for clipboard / share-sheet handoff. The function is
+ * intentionally lossy: widget markers and audio citations are stripped
+ * (the user can't usefully paste an inline track-card or audio chip
+ * into another app), while prose, markdown blockquotes (library
+ * document citations) and verse bodies are preserved.
+ *
+ *  Stripped: `[cite:...]`, `[card:...]`, `[outline:...]`,
+ *            `[action:...|id=...]`, `[followup:...]`
+ *  Expanded: `[verse:sourceId/tokens|caption]` → addrLabel + sanskrit +
+ *            transliteration + translation[lang]. Body is pulled from
+ *            `verseLookup`; markers without a cached body are dropped.
+ *  Preserved: prose (already Markdown source) and `> blockquote` runs.
+ *
+ * After all substitutions, runs of 3+ blank lines collapse to 2 so the
+ * gaps left by stripped markers don't render as accidental section
+ * breaks when pasted into a destination editor that respects paragraph
+ * spacing.
+ */
+export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions): string {
+  if (!input) return ""
+
+  let out = input
+  // Audio citations and assorted widgets: strip the whole marker. Order
+  // doesn't matter because each regex is self-contained.
+  out = out.replace(CITE_RE, "")
+  out = out.replace(CARD_RE, "")
+  out = out.replace(OUTLINE_RE, "")
+  out = out.replace(ACTION_RE, "")
+  out = out.replace(FOLLOWUP_RE, "")
+  // Verses: expand using the cache. We rebuild a fresh RegExp instead
+  // of reusing VERSE_RE so the iterator state isn't shared with any
+  // other consumer of the global pattern.
+  const verseRe = new RegExp(VERSE_RE.source, "g")
+  out = out.replace(verseRe, (_full, sourceId: string, tokens: string) => {
+    const body = opts.verseLookup(sourceId, tokens)
+    if (!body) return ""
+    return renderVerseMarkdown(body, opts.lang)
+  })
+
+  // Collapse multi-blank gaps left behind by stripped markers and trim
+  // edges. Don't touch single blank lines — those are intentional
+  // paragraph breaks in the LLM's prose.
+  out = out
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+
+  return out
+}
+
+/**
+ * Plain-Markdown rendering of one verse: bold addr label, then
+ * sanskrit / transliteration / translation each on their own paragraph.
+ * Italic-wraps the transliteration so it visually separates from the
+ * surrounding script. Falls back to English translation when the
+ * requested language isn't in the dictionary, and to *any* available
+ * language if English is also missing — better an unexpected language
+ * than a dangling header.
+ */
+function renderVerseMarkdown(body: VerseBodyLike, lang: "ru" | "en"): string {
+  const translation =
+    body.translation[lang] ??
+    body.translation.en ??
+    Object.values(body.translation).find((v) => typeof v === "string" && v.length > 0) ??
+    ""
+  const parts: string[] = []
+  if (body.addrLabel) parts.push(`**${body.addrLabel}**`)
+  if (body.sanskrit) parts.push(body.sanskrit)
+  if (body.transliteration) parts.push(`*${body.transliteration}*`)
+  if (translation) parts.push(translation)
+  // Leading + trailing blank line so the verse sits as its own block
+  // between surrounding prose paragraphs.
+  return parts.length > 0 ? `\n\n${parts.join("\n\n")}\n\n` : ""
+}
