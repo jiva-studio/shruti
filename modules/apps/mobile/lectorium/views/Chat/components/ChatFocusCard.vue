@@ -8,7 +8,7 @@
     />
     <blockquote class="focus-quote">{{ focus.text }}</blockquote>
     <div v-if="suggestionsLoading" class="focus-suggestions-loading">
-      <span class="loading-pill">{{ $t("chat.suggestionsLoading") }}</span>
+      <StatusPill status-key="picking_questions" />
     </div>
     <div v-else-if="visibleChips.length > 0" class="focus-suggestions">
       <button
@@ -44,6 +44,7 @@ import { computed } from "vue"
 import { useI18n } from "vue-i18n"
 import type { ChatFocusPayload } from "@lib/domain/chatMessage.js"
 import ChatFocusPlayer from "./ChatFocusPlayer.vue"
+import StatusPill from "./StatusPill.vue"
 
 const props = defineProps<{
   messageId: string
@@ -132,16 +133,5 @@ const visibleChips = computed<readonly string[]>(() => {
 .focus-suggestions-loading {
   display: flex;
   margin-top: 4px;
-}
-
-.loading-pill {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  font-style: italic;
-  color: var(--ion-color-medium);
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  padding: 4px 12px;
-  border-radius: 999px;
 }
 </style>

@@ -59,10 +59,6 @@ export default {
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
   followupAriaLabel: "Suggested follow-up: {text}",
-  // Loading label shown in place of suggestion chips while the
-  // server is generating per-fragment questions for the Ask Sadhu
-  // focus card. Stays visible until /questions resolves (or fails).
-  suggestionsLoading: "Picking questions…",
   // Static fallback chips for a focus fragment when the server's
   // /questions endpoint returns an empty list (LLM failure, endpoint
   // not deployed yet, etc). Keeps the affordance visible so the user
@@ -206,5 +202,9 @@ export default {
     composing_answer: "Writing the answer…",
     preparing_action: "Preparing…",
     browsing_catalog: "Browsing the catalog…",
+    // Shown on a focus card while `/questions` is in flight. Reuses
+    // the chat.status.* slot so StatusPill picks it up — same dots
+    // spinner + pill geometry as the assistant status indicator.
+    picking_questions: "Picking questions…",
   },
 }
