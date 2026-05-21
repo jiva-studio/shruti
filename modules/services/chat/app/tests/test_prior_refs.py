@@ -63,16 +63,37 @@ def test_dedupes_same_track_seen_twice() -> None:
     assert extract_prior_track_refs(history) == ["track_X"]
 
 
-def test_only_reads_last_assistant_message() -> None:
-    """Earlier assistant turns are ignored — only the most recent
-    chat bubble is referenced by deictic phrases like «этих лекций»."""
+def test_walks_back_past_assistants_without_refs() -> None:
+    """Real conversation: user says «спасибо», bot replies, user
+    eventually says «PDF этих лекций». The immediate prior assistant
+    is just an ack with no card refs — we need to walk further back
+    to find the actual card-stack turn the user is pointing at."""
+    history = [
+        {"role": "user", "content": "плейлист по второй главе"},
+        {
+            "role": "assistant",
+            "content": "Вот лекции:\n[card:track_A]\n[card:track_B]\n[card:track_C]",
+        },
+        {"role": "user", "content": "Спасибо!"},
+        {"role": "assistant", "content": "Пожалуйста, рад помочь."},
+        {"role": "user", "content": "Сделай PDF этих лекций"},
+    ]
+    assert extract_prior_track_refs(history) == [
+        "track_A", "track_B", "track_C",
+    ]
+
+
+def test_picks_most_recent_assistant_with_refs() -> None:
+    """When multiple prior assistant turns had cards, the deictic
+    «these» refers to the MOST RECENT card-bearing message — not
+    older ones."""
     history = [
         {"role": "user", "content": "q1"},
-        {"role": "assistant", "content": "[card:track_OLD]"},
+        {"role": "assistant", "content": "[card:track_OLD_1]\n[card:track_OLD_2]"},
         {"role": "user", "content": "q2"},
-        {"role": "assistant", "content": "[card:track_RECENT]"},
+        {"role": "assistant", "content": "[card:track_NEW]"},
     ]
-    assert extract_prior_track_refs(history) == ["track_RECENT"]
+    assert extract_prior_track_refs(history) == ["track_NEW"]
 
 
 def test_ignores_other_marker_kinds() -> None:

@@ -45,15 +45,25 @@ def _prior_refs_prompt(prior_track_ids: list[str], aliases) -> str:
     by its freshly-minted integer alias. Mint here so the same alias
     map serves both the prompt rendering and the downstream
     `aliased_tools` dealias step."""
-    lines = ["PRIOR-TURN TRACKS — use these refs in track-shaped tools:"]
+    refs: list[int] = []
     for tid in prior_track_ids:
-        ref = aliases.alias_track(tid)
-        lines.append(f"  [^{ref}] — track {tid}")
+        refs.append(aliases.alias_track(tid))
+    lines = ["PRIOR-TURN TRACKS — these are the lectures the user is "
+             "referring to. Use these refs in track-shaped tools:"]
+    for ref, tid in zip(refs, prior_track_ids):
+        lines.append(f"  [^{ref}] — {tid}")
+    all_refs = ", ".join(str(r) for r in refs)
     lines.append(
-        '\nFor "first" use the lowest ref; "last" use the highest; '
-        '"all" / "these" use every ref above; specific positions — '
-        "pick the matching refs by index. NEVER pick a ref that is "
-        "not in this list."
+        f'\nDeictic resolution: «этих» / «эти» / «these» / «those» / «them» '
+        f'/ «all» → use ALL refs above ({all_refs}). '
+        f'«first» / «первой» → lowest ref ({refs[0]}). '
+        f'«last» / «последней» → highest ref ({refs[-1]}). '
+        f'Specific positions — pick the matching refs by index.'
+        f'\n\nIMPORTANT: when the user refers deictically to "those/these/etc" '
+        f'lectures, use ONLY the PRIOR-TURN refs above. IGNORE any track '
+        f'refs in the research notes section — those came from a fresh '
+        f'search that the user is NOT pointing at.'
+        f'\n\nNEVER pick a ref outside {all_refs}.'
     )
     return "\n".join(lines)
 
@@ -70,13 +80,14 @@ async def action_worker_node(
     # fail at the aliased_tools dealias step.
     prior_track_ids = extract_prior_track_refs(history)
     prior_refs_block = ""
+    log.info(
+        "action_worker_prior_refs",
+        request_id=ctx.request_id,
+        count=len(prior_track_ids),
+        history_len=len(history),
+    )
     if prior_track_ids:
         prior_refs_block = _prior_refs_prompt(prior_track_ids, ctx.aliases)
-        log.info(
-            "action_worker_prior_refs",
-            request_id=ctx.request_id,
-            count=len(prior_track_ids),
-        )
 
     extra_user_query = None
     if prior_refs_block:
