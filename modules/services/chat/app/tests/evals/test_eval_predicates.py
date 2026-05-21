@@ -211,12 +211,27 @@ def test_expect_response_contains_case_insensitive() -> None:
     assert ok
 
 
-def test_expect_response_contains_missing_one_fails() -> None:
+def test_expect_response_contains_fails_when_none_match() -> None:
+    """ANY-of semantics: predicate fails only when NONE of the needles
+    appear in the response. Used for refusal phrasings where any of
+    several synonyms is acceptable evidence the model refused — e.g.
+    ["could not find", "no results", "couldn't find"]."""
     obs = _obs(response_text="Found two matches.")
     ok, fails = evaluate_case(
-        {"expect_response_contains": ["found", "matches", "no-such-thing"]}, obs
+        {"expect_response_contains": ["nothing-here", "no-such-thing"]}, obs
     )
-    assert not ok and any("no-such-thing" in f for f in fails)
+    assert not ok and any("nothing-here" in f for f in fails)
+
+
+def test_expect_response_contains_passes_when_any_match() -> None:
+    """Even if some needles are missing, as long as one is present the
+    predicate accepts. This is the typical pattern for refusal
+    detection — we don't require the model to use a specific wording."""
+    obs = _obs(response_text="Found two matches.")
+    ok, _ = evaluate_case(
+        {"expect_response_contains": ["found", "no-such-thing"]}, obs
+    )
+    assert ok
 
 
 # expect_response_contains_marker
