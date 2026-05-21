@@ -346,3 +346,120 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     assert action["id"] == "act_abc123"
     # Nested payload shape per SSE v1 (plan §11.3).
     assert action["payload"]["track_ids"] == ["t1", "t2"]
+
+
+@pytest.mark.asyncio
+async def test_action_worker_resolves_prior_track_refs_for_pdf() -> None:
+    """Regression for the «PDF этих лекций» multi-turn failure.
+
+    The user's prior assistant message held `[card:track_A]` /
+    `[card:track_B]` markers. `fold_history` strips them — so when
+    the next turn asks "Сделай PDF этих лекций", the LLM in
+    action_worker can't see what "этих" referred to.
+
+    Fix: action_worker pre-extracts the prior track_ids from the
+    RAW history, mints integer aliases in the current turn's
+    TurnAliasMap, and injects them as a `PRIOR-TURN TRACKS` block
+    so the LLM picks subsets by integer ref. The existing
+    aliased_tools wrapper dealiases back to real catalog ids before
+    calling `track_pdf_generate` — the model never touches raw
+    track strings.
+
+    This test pins the wiring: the worker DOES inject the block, and
+    when the LLM picks refs `[1, 2]`, the tool sees the real track
+    ids `["track_A", "track_B"]`.
+    """
+    captured: dict[str, Any] = {}
+
+    async def fake_track_pdf_generate(**kwargs: Any) -> dict[str, Any]:
+        captured["track_ids"] = kwargs.get("track_ids")
+        captured["system_prompt_saw_prior_refs"] = True  # set when called
+        yield_event = kwargs.get("yield_event")
+        if yield_event is not None:
+            yield_event(
+                "action",
+                {"kind": "share_pdf", "id": "act_pdf", "payload": {"items": []}},
+            )
+        return {
+            "ok": True,
+            "kind": "share_pdf",
+            "action_id": "act_pdf",
+            "items": [],
+            "errors": [],
+        }
+
+    from shruti_chat.agent.aliased_tools import build_aliased_tools
+
+    llm = FakeLLM(
+        router_responses=[
+            RoutingDecision(intent="create_action", confidence=0.95),
+        ],
+        stream_responses=[
+            # research_worker: no tools, just converge (we don't care
+            # about it for this test).
+            [{"finish_reason": "stop"}],
+            # action_worker turn 1: call track_pdf_generate with the
+            # alias integers 1 and 2 — the LLM was given a
+            # PRIOR-TURN TRACKS block listing [^1] and [^2].
+            [
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "tc1",
+                            "name": "track_pdf_generate",
+                            "arguments_delta": '{"track_ids":[1,2],"lang":"ru"}',
+                        }
+                    ]
+                },
+                {"finish_reason": "stop"},
+            ],
+            # action_worker turn 2: converge.
+            [{"finish_reason": "stop"}],
+            # Synth: copies the action marker.
+            [{"text": "Готовлю PDF.\n[action:share_pdf|id=act_pdf]"},
+             {"finish_reason": "stop"}],
+        ],
+    )
+
+    graph = build_chat_graph()
+    aliases = TurnAliasMap()
+    # Wrap fake tool through aliased_tools so the integer→track_id
+    # translation actually happens (this is the load-bearing piece).
+    action_tools = build_aliased_tools(
+        {"track_pdf_generate": fake_track_pdf_generate}, aliases,
+    )
+    ctx = TurnContext(
+        request_id="r-pdf",
+        aliases=aliases,
+        expander=MarkerExpander(aliases),
+        llm=llm,
+        action_tools=action_tools,
+    )
+
+    async for _ in graph.astream(
+        {
+            "history": [
+                {"role": "user", "content": "плейлист по второй главе"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Вот лекции:\n"
+                        "[card:track_A]\n"
+                        "[card:track_B]"
+                    ),
+                },
+                {"role": "user", "content": "Сделай PDF этих лекций"},
+            ],
+            "user_query": "Сделай PDF этих лекций",
+            "lang": "ru",
+            "request_id": "r-pdf",
+        },
+        context=ctx,
+        stream_mode=["custom"],
+    ):
+        pass
+
+    # Tool received the REAL catalog track_ids — not the integer
+    # refs the LLM wrote, not invented strings.
+    assert captured["track_ids"] == ["track_A", "track_B"], captured
