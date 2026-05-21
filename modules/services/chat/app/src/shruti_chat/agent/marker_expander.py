@@ -9,7 +9,7 @@ LLM stream and the client SSE stream:
        * `[^N]` with integer N           → expand by alias type
        * `[^anything]` (string-stuffed)  → recover via single-candidate
                                             heuristic or drop
-       * legacy `[ref:...]` / `[cite:...]` etc → drop with log
+       * any other bracket-text          → pass through verbatim
   3. After emitting the expansion, peek look-ahead chars. If the next
      non-whitespace char is trailing punctuation (`.,!?…:;`) — swap
      order so the punctuation lands BEFORE the widget. LLMs habitually
@@ -53,16 +53,6 @@ _FOOTNOTE_RE = re.compile(r"^\[\^(\d+)\]$")
 
 # Catch-all `[^anything]` — non-integer string-stuffed hallucination.
 _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
-
-# Legacy marker forms from the pre-[^N] protocol — drop silently.
-_LEGACY_RE = re.compile(
-    r"^\[(?:ref|cite|card|outline|verse):[^\]]*\]$"
-)
-
-# Document-kind hallucinations like `[commentary:БГ 2.13]`.
-_HALLUCINATED_DOC_MARKER_RE = re.compile(
-    r"^\[(commentary|purport|prose_chapter|prose|letter|doc|document|book|chapter):[^\]]*\]$"
-)
 
 # Runaway buffer cap — if we don't see `]` after this many chars, it
 # wasn't a marker.
@@ -258,27 +248,8 @@ class MarkerExpander:
             )
             return self._format_ref(None)
 
-        # Legacy markers — drop with diagnostic.
-        if _LEGACY_RE.match(marker):
-            log.info(
-                "chat_marker_legacy_dropped",
-                request_id=self._request_id,
-                marker=marker[:80],
-            )
-            return ""
-
-        # Document-kind hallucinations — drop.
-        if _HALLUCINATED_DOC_MARKER_RE.match(marker):
-            log.info(
-                "chat_marker_legacy_or_hallucinated_dropped",
-                request_id=self._request_id,
-                marker=marker[:80],
-            )
-            return ""
-
-        # Anything else (action / followup / plain bracketed text) —
-        # pass through. The held whitespace was already deferred but
-        # will be flushed by the next text char.
+        # Anything else (`[action:...]`, `[followup:...]`, plain
+        # bracketed text) passes through verbatim.
         return marker
 
     def _format_ref(self, n: int | None) -> str:
