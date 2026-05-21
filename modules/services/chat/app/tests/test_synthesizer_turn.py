@@ -463,6 +463,57 @@ async def test_notes_in_system_block_not_assistant_role() -> None:
 # pin the fix.
 
 
+def test_format_tool_results_action_renders_copy_marker_directive() -> None:
+    """Action-tool results (`{ok, kind, action_id, ...}`) render as an
+    explicit "copy this marker" directive — synth just copies the
+    `[action:kind|id=ID]` string character-for-character. Prevents the
+    "Карточка действия повреждена" failure mode where synth either
+    skipped the marker or invented the action_id."""
+    from shruti_chat.application.synthesizer_turn import _format_tool_results
+
+    out = _format_tool_results([{
+        "ok": True,
+        "kind": "share_pdf",
+        "action_id": "ab12cd34",
+        "items": [{"track_id": "track_X", "pdf_url": "https://…/a.pdf"}],
+    }])
+    assert "ACTION CARD READY" in out
+    assert "[action:share_pdf|id=ab12cd34]" in out
+
+
+def test_format_tool_results_action_unknown_kind_treated_as_regular_note() -> None:
+    """Defensive: a result with `action_id` but a `kind` we don't
+    recognise (rogue tool / future kind) falls through to the regular
+    note renderer instead of emitting a bogus marker."""
+    from shruti_chat.application.synthesizer_turn import _format_tool_results
+
+    out = _format_tool_results([{
+        "ok": True,
+        "kind": "unknown_future_action",
+        "action_id": "ab12cd34",
+    }])
+    assert "ACTION CARD READY" not in out
+    assert "[action:unknown_future_action" not in out
+
+
+def test_format_tool_results_action_for_each_known_kind() -> None:
+    """All four action kinds emit the directive correctly."""
+    from shruti_chat.application.synthesizer_turn import _format_tool_results
+
+    for kind in (
+        "share_pdf",
+        "enable_daily_reminder",
+        "configure_smart_library",
+        "upgrade_to_pro",
+    ):
+        out = _format_tool_results([{
+            "ok": True,
+            "kind": kind,
+            "action_id": "xx0011aa",
+        }])
+        assert f"[action:{kind}|id=xx0011aa]" in out, f"missing for kind={kind}"
+
+
 def test_format_tool_results_ref_emitted_as_literal_marker() -> None:
     """The note header leads with the LITERAL `[^N]` marker — the
     model copies it verbatim into prose to cite. Lecture/title pair
