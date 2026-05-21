@@ -246,7 +246,6 @@ export const useChatStore = defineStore("chat", () => {
       })
 
     let assistantMsgId: ChatMessageId | null = null
-    let acc = ""
 
     try {
       const isFirst =
@@ -284,25 +283,29 @@ export const useChatStore = defineStore("chat", () => {
           // already cleared seen_at. Replying is no longer the trigger.
         }
         if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
-        if (event.kind === "delta") acc += event.text
-        if (event.kind === "tool-start") acc = ""
       }
     } catch (err) {
-      lastError.value = {
-        code: "stream",
-        message: err instanceof Error ? err.message : "Stream failed",
-      }
+      // Unexpected error escaping the for-await loop (runChatTurn catches
+      // stream-side failures internally and yields them as `error` events,
+      // so we rarely land here — but if applyTurnEvent or another folded
+      // step throws, surface it through the same inline path so the user
+      // sees a failed bubble + Retry instead of a silently vanishing
+      // placeholder.
+      const code = "stream"
+      const message = err instanceof Error ? err.message : "Stream failed"
+      applyTurnEvent({ kind: "error", code, message })
     } finally {
       abort = null
       sending.value = false
-      // If the assistant bubble was never finalised (e.g. abort mid-stream),
-      // drop the streaming placeholder so the UI doesn't keep its spinner.
+      // Abort path only: chatClient.ts swallows AbortError silently, so
+      // no `error` event reached applyTurnEvent and the placeholder is
+      // still streaming. Drop it so the spinner doesn't linger. (Real
+      // errors are converted to failed-bubble by the error handler
+      // above, which clears `streaming`, so this branch skips them.)
       if (assistantMsgId) {
         const idx = messages.value.findIndex((m) => m.id === assistantMsgId)
         if (idx >= 0 && messages.value[idx].streaming) {
-          if (acc.length === 0) {
-            messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
-          }
+          messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
         }
       }
     }
@@ -436,8 +439,56 @@ export const useChatStore = defineStore("chat", () => {
           message: event.message,
           retryAfter: event.retryAfter,
         }
-        // Drop the empty placeholder — the toast / banner conveys failure.
-        messages.value = messages.value.filter((m) => !m.streaming)
+        // Convert relative `Retry-After` (seconds, only set on the 429
+        // path inside chatClient.ts) into an absolute deadline at the
+        // moment we receive it. Without this the bubble's countdown
+        // would drift if the user backgrounds the app — relative-seconds
+        // captured at this point would be stale on next render.
+        const retryAfterAt: number | undefined =
+          typeof event.retryAfter === "number" && event.retryAfter > 0
+            ? Date.now() + event.retryAfter * 1000
+            : undefined
+        const failedErr: ChatMessageError = retryAfterAt
+          ? { kind: "failed", code: event.code, retryAfterAt }
+          : { kind: "failed", code: event.code }
+        // Transform the streaming placeholder into a failed-bubble in
+        // place — keeps the message slot's id stable (handy for any
+        // scroll/anchor logic) and avoids the placeholder briefly
+        // vanishing before the failure appears. Failed bubbles stay
+        // in-memory only: they're not useful history and the SQL
+        // `parseError` whitelist would discard the `failed` kind on
+        // reload anyway.
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx >= 0) {
+          const next = [...messages.value]
+          next[idx] = {
+            ...next[idx],
+            streaming: false,
+            content: "",
+            statusKey: undefined,
+            statusParams: undefined,
+            error: failedErr,
+          }
+          messages.value = next
+        } else {
+          // No streaming placeholder (error fired before
+          // `assistant-placeholder` was yielded — rare; happens if the
+          // pre-stream fetch itself errors and the iterator bails
+          // before runChatTurn's first yield reaches us). Synthesize
+          // an inline failed assistant row so the user still sees the
+          // failure attached to the turn they just sent.
+          messages.value = [
+            ...messages.value,
+            {
+              id: randomId() as ChatMessageId,
+              sessionId: (activeSessionId.value ?? "") as ChatSessionId,
+              role: "assistant",
+              content: "",
+              createdAt: Date.now(),
+              error: failedErr,
+            },
+          ]
+        }
         return
       }
     }
@@ -446,6 +497,71 @@ export const useChatStore = defineStore("chat", () => {
   function cancelStream(): void {
     if (abort) abort.abort()
     abort = null
+  }
+
+  /**
+   * Retry the assistant reply for the last failed turn. Locates the
+   * assistant message carrying an error marker (`failed` or
+   * `truncated`) — either by id, or the most recent one if no id is
+   * passed — drops both it AND the user prompt that produced it from
+   * memory + DB, then re-sends the same user text as a fresh turn.
+   *
+   * Deleting the user row first keeps the DB from accumulating a long
+   * tail of repeat-prompts every time the user hammers Retry while
+   * the network is flaky; the fresh `sendMessage(text)` call below
+   * will persist a new user message via runChatTurn anyway, so net
+   * effect after a successful retry is one user + one assistant row
+   * per turn.
+   *
+   * `failed` bubbles live in memory only (the SQL repo's `parseError`
+   * whitelist filters them out on reload), so deleting them from the
+   * DB is a no-op for that variant — but the call is cheap and keeps
+   * one code path for both `failed` and `truncated`.
+   */
+  async function retryLast(messageId?: string): Promise<void> {
+    if (sending.value) return
+    const all = messages.value
+    let assistantIdx = -1
+    if (messageId) {
+      assistantIdx = all.findIndex((m) => m.id === messageId)
+    } else {
+      for (let i = all.length - 1; i >= 0; i--) {
+        if (all[i].role === "assistant" && all[i].error) {
+          assistantIdx = i
+          break
+        }
+      }
+    }
+    if (assistantIdx < 0) return
+    const assistant = all[assistantIdx]
+    if (assistant.role !== "assistant" || !assistant.error) return
+
+    // Walk back to the user prompt that produced this assistant reply.
+    let userIdx = -1
+    for (let i = assistantIdx - 1; i >= 0; i--) {
+      if (all[i].role === "user") {
+        userIdx = i
+        break
+      }
+    }
+    if (userIdx < 0) return
+    const userMsg = all[userIdx]
+    const userText = userMsg.content
+
+    messages.value = all.filter((_, i) => i !== assistantIdx && i !== userIdx)
+    const repos = chatRepos()
+    try {
+      await repos.messages.delete(userMsg.id as ChatMessageId)
+    } catch (err) {
+      console.warn("chat: failed to delete prior user message on retry", err)
+    }
+    try {
+      await repos.messages.delete(assistant.id as ChatMessageId)
+    } catch (err) {
+      console.warn("chat: failed to delete failed assistant on retry", err)
+    }
+
+    await sendMessage(userText)
   }
 
   async function setActionState(
@@ -639,6 +755,7 @@ export const useChatStore = defineStore("chat", () => {
     startNewSession,
     sendMessage,
     cancelStream,
+    retryLast,
     executeAction,
     deleteSession,
     clearAll,

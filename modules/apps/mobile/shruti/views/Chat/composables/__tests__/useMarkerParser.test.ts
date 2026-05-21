@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { extractFollowups, parseChatMarkers } from "../useMarkerParser.js"
+import {
+  extractFollowups,
+  messageToMarkdown,
+  parseChatMarkers,
+  type VerseBodyLike,
+} from "../useMarkerParser.js"
 
 /**
  * Marker grammar coverage. The parser is the bridge between LLM-emitted
@@ -211,5 +216,125 @@ describe("parseChatMarkers — markdown blockquote", () => {
     expect(tokens[0]?.kind).toBe("text")
     expect(tokens[1]?.kind).toBe("quote")
     expect(tokens[2]?.kind).toBe("text")
+  })
+})
+
+/**
+ * Copy / Share export. `messageToMarkdown` is what we ship to the
+ * clipboard and the platform share sheet, so a regression here breaks
+ * user-visible behaviour silently — these cases pin the strip / keep
+ * decisions for each marker kind.
+ */
+describe("messageToMarkdown", () => {
+  const noVerses = () => null
+  const ru = { lang: "ru" as const, verseLookup: noVerses }
+  const en = { lang: "en" as const, verseLookup: noVerses }
+
+  it("returns plain prose unchanged", () => {
+    expect(messageToMarkdown("Hello **world**.", ru)).toBe("Hello **world**.")
+  })
+
+  it("strips audio cite markers and tidies the surrounding whitespace", () => {
+    const out = messageToMarkdown("See here [cite:t1@1000-2000|caption] and there.", ru)
+    expect(out).toContain("See here")
+    expect(out).toContain("and there.")
+    expect(out).not.toContain("[cite:")
+  })
+
+  it("strips card, outline, and action markers entirely", () => {
+    const out = messageToMarkdown(
+      "Top.\n\n[card:t1]\n[outline:t1]\n\n[action:share_pdf|id=abc12345]\n\nEnd.",
+      ru
+    )
+    expect(out).not.toContain("[card:")
+    expect(out).not.toContain("[outline:")
+    expect(out).not.toContain("[action:")
+    expect(out).toMatch(/^Top\./)
+    expect(out.trim().endsWith("End.")).toBe(true)
+  })
+
+  it("strips followup chips", () => {
+    const out = messageToMarkdown("Answer.\n\n[followup:Ask again?]", ru)
+    expect(out.trim()).toBe("Answer.")
+  })
+
+  it("keeps markdown blockquotes (library document citations)", () => {
+    const src = "Intro.\n\n> body line\n> *Attribution*\n\nOutro."
+    expect(messageToMarkdown(src, ru)).toBe(src)
+  })
+
+  it("expands a verse marker into addr / sanskrit / iast / translation", () => {
+    const body: VerseBodyLike = {
+      addrLabel: "BG 2.14",
+      sanskrit: "मात्रास्पर्शास्तु…",
+      transliteration: "mātrā-sparśās tu…",
+      translation: { en: "O son of Kunti…", ru: "О сын Кунти…" },
+    }
+    const opts = {
+      lang: "ru" as const,
+      verseLookup: (sid: string, tokens: string) =>
+        sid === "source_abc" && tokens === "2.14" ? body : null,
+    }
+    const out = messageToMarkdown(
+      "Verse below: [verse:source_abc/2.14|caption]\n\nthen prose.",
+      opts
+    )
+    expect(out).toContain("**BG 2.14**")
+    expect(out).toContain("mātrā-sparśās tu…")
+    // Transliteration is intentionally NOT italic-wrapped — see
+    // renderVerseMarkdown for the why (multi-line `*…*` is non-portable).
+    expect(out).not.toMatch(/\*mātrā-sparśās tu…\*/)
+    expect(out).toContain("О сын Кунти…")
+    expect(out).not.toContain("[verse:")
+  })
+
+  it("collapses multi-blank-line runs inside sanskrit/iast/translation", () => {
+    // Server occasionally ships verse text with `\n\n` between every
+    // line (pāda-per-paragraph) — rendering that raw produces stacked
+    // empty paragraphs when pasted into Telegram / Notes.
+    const body: VerseBodyLike = {
+      addrLabel: "ШБ 5.5.14",
+      sanskrit: "кармāśayam line1\n\nline2\n\nline3\n\nline4",
+      transliteration: "karmāśayam line1\n\nline2\n\nline3",
+      translation: { ru: "Перевод\n\nвторая строка" },
+    }
+    const opts = { lang: "ru" as const, verseLookup: () => body }
+    const out = messageToMarkdown("[verse:s/5.5.14]", opts)
+    expect(out).not.toMatch(/line1\n\nline2/)
+    expect(out).toMatch(/line1\nline2\nline3/)
+    expect(out).toMatch(/Перевод\nвторая строка/)
+  })
+
+  it("falls back to English translation when requested locale is missing", () => {
+    const body: VerseBodyLike = {
+      addrLabel: "BG 1.1",
+      sanskrit: "धर्मक्षेत्रे…",
+      transliteration: "dharma-kṣetre…",
+      translation: { en: "On the field of dharma…" },
+    }
+    const opts = {
+      lang: "ru" as const,
+      verseLookup: () => body,
+    }
+    const out = messageToMarkdown("[verse:source_x/1.1]", opts)
+    expect(out).toContain("On the field of dharma…")
+  })
+
+  it("drops verse markers when the cache misses", () => {
+    const out = messageToMarkdown("Mention: [verse:source_zzz/9.9] — but no body cached.", en)
+    expect(out).not.toContain("[verse:")
+    expect(out).toContain("Mention:")
+    expect(out).toContain("but no body cached.")
+  })
+
+  it("collapses 3+ blank lines left by stripped markers down to 2", () => {
+    const out = messageToMarkdown("A.\n\n[card:t1]\n\n[card:t2]\n\nB.", ru)
+    // Trailing trim + collapse means the gap between A and B is exactly
+    // one blank line.
+    expect(out).toBe("A.\n\nB.")
+  })
+
+  it("returns an empty string for empty input", () => {
+    expect(messageToMarkdown("", ru)).toBe("")
   })
 })
