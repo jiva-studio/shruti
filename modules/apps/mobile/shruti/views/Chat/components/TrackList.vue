@@ -96,7 +96,7 @@ async function onAddAll(): Promise<void> {
   background: rgba(var(--ion-color-primary-rgb), 0.14);
   color: var(--ion-color-primary);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition:
