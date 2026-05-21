@@ -228,7 +228,7 @@ class TurnAliasMap:
         into action tools) back to real catalog `track_id`s. Unknown
         refs and verse refs (which carry no track_id) are silently
         dropped — callers see only the realised ids and can decide
-        what to do (e.g. propose_playlist will reject an empty list)."""
+        what to do (e.g. track_pdf_generate will reject an empty list)."""
         out: list[str] = []
         for r in refs:
             try:
