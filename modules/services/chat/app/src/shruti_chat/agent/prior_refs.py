@@ -27,27 +27,34 @@ _TRACK_REF_RE = re.compile(
 
 
 def extract_prior_track_refs(history: list[dict[str, Any]] | None) -> list[str]:
-    """Scan the most recent assistant message in `history` for track
-    refs embedded in `[card:X]` / `[cite:X@s-e]` markers. Returns the
-    list of catalog track_ids in first-seen order, deduplicated.
+    """Walk `history` backwards through assistant messages and return
+    the track refs from the FIRST one that contains any. Returns
+    catalog track_ids in document order, deduplicated.
 
-    Returns an empty list when there's no prior assistant message or
-    the message had no track-shaped markers.
+    Walking backwards-until-found (rather than just reading the
+    single last assistant message) handles long conversations where
+    the user said "thanks" / "ok" between the card stack and the
+    deictic follow-up — the immediate last assistant turn may be a
+    plain ack with no refs. We want the most recent turn that
+    actually surfaced tracks the user can point at.
     """
-    last_assistant = ""
-    for m in reversed(history or []):
-        if m.get("role") == "assistant":
-            last_assistant = m.get("content") or ""
-            break
-    if not last_assistant:
+    if not history:
         return []
 
-    seen: set[str] = set()
-    out: list[str] = []
-    for match in _TRACK_REF_RE.finditer(last_assistant):
-        tid = match.group(1)
-        if tid in seen:
+    for m in reversed(history):
+        if m.get("role") != "assistant":
             continue
-        seen.add(tid)
-        out.append(tid)
-    return out
+        content = m.get("content") or ""
+        if not isinstance(content, str) or not content:
+            continue
+        seen: set[str] = set()
+        out: list[str] = []
+        for match in _TRACK_REF_RE.finditer(content):
+            tid = match.group(1)
+            if tid in seen:
+                continue
+            seen.add(tid)
+            out.append(tid)
+        if out:
+            return out
+    return []
