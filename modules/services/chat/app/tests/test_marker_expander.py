@@ -195,3 +195,60 @@ async def test_ref_marker_split_across_chunks_still_expands() -> None:
     b = await e.feed("|cap]")
     tail = await e.flush()
     assert a + b + tail == f"text [cite:track_Y@0-1000|cap]"
+
+
+# ── Hallucinated-ref recovery (single unused valid alias remaining) ──
+
+
+async def test_hallucinated_ref_recovered_when_one_alias_unused() -> None:
+    """Flash-Lite sometimes emits `[ref:1022]` mid-stream when the real
+    aliases are 1-3. If exactly one valid alias hasn't been emitted
+    yet, the LLM "meant" that one — substitute silently."""
+    aliases = TurnAliasMap()
+    aliases.alias_chunk("track_A", 0, 1000)   # 1
+    aliases.alias_chunk("track_B", 0, 1000)   # 2
+    aliases.alias_chunk("track_C", 0, 1000)   # 3
+    e = MarkerExpander(aliases)
+    # LLM correctly emits 1 and 2, then hallucinates 1022 — only ref 3
+    # is left unused, so 1022 → 3.
+    out = await _expand(e, "[ref:1] [ref:2] [ref:1022]")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] [cite:track_C@0-1000]"
+
+
+async def test_hallucinated_ref_dropped_when_multiple_unused() -> None:
+    """If multiple valid aliases are unused, we cannot safely guess —
+    drop the hallucinated marker silently rather than risk pointing
+    the user at the wrong widget."""
+    aliases = TurnAliasMap()
+    aliases.alias_chunk("track_A", 0, 1000)   # 1
+    aliases.alias_chunk("track_B", 0, 1000)   # 2
+    aliases.alias_chunk("track_C", 0, 1000)   # 3
+    e = MarkerExpander(aliases)
+    # Only ref 1 emitted; refs 2 and 3 both still unused → ambiguous.
+    out = await _expand(e, "[ref:1] hallucinated [ref:9999] tail")
+    assert out == "[cite:track_A@0-1000] hallucinated  tail"
+
+
+async def test_hallucinated_ref_dropped_when_all_aliases_used() -> None:
+    """If every valid alias has already been emitted, there's nothing
+    to recover — drop silently."""
+    aliases = TurnAliasMap()
+    aliases.alias_chunk("track_A", 0, 1000)   # 1
+    aliases.alias_chunk("track_B", 0, 1000)   # 2
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "[ref:1] [ref:2] [ref:7]")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] "
+
+
+async def test_emitted_set_tracks_recovered_alias() -> None:
+    """A recovered alias must be marked as emitted — otherwise a second
+    hallucinated marker after recovery could 'recover' to the same
+    slot, double-citing the same note."""
+    aliases = TurnAliasMap()
+    aliases.alias_chunk("track_A", 0, 1000)   # 1
+    aliases.alias_chunk("track_B", 0, 1000)   # 2
+    e = MarkerExpander(aliases)
+    # First hallucination: ref 1 used, ref 2 unused → recover to 2.
+    # Second hallucination: refs 1 and 2 both emitted now → drop.
+    out = await _expand(e, "[ref:1] [ref:999] [ref:998]")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] "
