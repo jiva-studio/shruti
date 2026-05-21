@@ -66,11 +66,30 @@ async function onAddAll(): Promise<void> {
 .track-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
+  /* Breathing room from the prose paragraph above. The parser strips
+     trailing whitespace before a block element, so the gap has to
+     come from the widget itself. */
+  margin-top: 10px;
+}
+
+/* Inside a track list the cards stack tightly — override LectureCard's
+   own 10px vertical margin (designed for standalone use) so the
+   stack doesn't look airy. */
+.track-list :deep(.lecture-card) {
+  margin: 0;
 }
 
 .add-all-btn {
-  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Lock the height so the busy-spinner doesn't make the button taller
+     than its idle text state — the dots-spinner has a different
+     intrinsic height than the body text. */
+  min-height: 40px;
+  /* No own top margin — the flex container's `gap` already spaces the
+     button from the last card (same 6px as inter-card gap). */
   padding: 10px 14px;
   border: none;
   border-radius: 12px;
@@ -97,6 +116,9 @@ async function onAddAll(): Promise<void> {
 
 .spinner {
   --color: var(--ion-color-primary);
-  height: 18px;
+  /* Match the line-height of the body text so the button's content box
+     stays the same size as in the idle state. */
+  height: 20px;
+  width: 28px;
 }
 </style>
