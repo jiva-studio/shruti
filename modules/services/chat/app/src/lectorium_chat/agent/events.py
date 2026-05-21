@@ -37,8 +37,8 @@ absent or unsupported). The current set is **7 event types**:
 # Action event ordering invariant
 
 Every `action` event MUST be emitted to the client BEFORE the
-`delta` carrying its inline marker (`[card:N]`, `[outline:N]`,
-`[verse:N]`, `[action:kind|id=X]`). Worker nodes flush pending
+`delta` carrying its inline marker (`[^N]`, `[^N]`,
+`[^N]`, `[action:kind|id=X]`). Worker nodes flush pending
 action events on `on_tool_end` before the next LLM yield resumes.
 """
 

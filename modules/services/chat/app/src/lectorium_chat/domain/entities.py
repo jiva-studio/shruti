@@ -67,7 +67,7 @@ class ChunkEnvelope:
     - `type='lecture'`   → ref is set; meta has `start_ms`, `end_ms`,
                            optionally `reference_source_id`. `track_id`
                            is intentionally absent — the LLM only sees
-                           `ref` and uses it in `[cite:N|...]` markers
+                           `ref` and uses it in `[^N]` markers
                            (server expands ref → track_id at output time).
     - `type='verse'`     → ref is set; meta has `source_id`, `tokens`.
                            The LLM uses meta directly in

@@ -12,7 +12,7 @@ the cross-type "concept fan-out" pattern. One tool, one `type` switch:
                        merge top-K by score.
 
 Returns `ChunkEnvelope` rows. Lecture entries carry a `ref` the LLM
-uses in `[cite:N|...]`; verse entries carry a `ref` used in the SSE
+uses in `[^N]`; verse entries carry a `ref` used in the SSE
 verse_payload path (the LLM still emits `[verse:source_id/tokens|...]`
 markers directly from meta).
 """
@@ -43,7 +43,7 @@ _DESCRIPTION = (
     "`type='lecture'` for 'where did he say'), or OMIT `type` for "
     "cross-corpus search ('what's said about consciousness' — returns "
     "lectures AND verses ranked together by relevance). Lecture results "
-    "are cited via `[cite:N|caption]` using the `ref` field; verse "
+    "are cited via `[^N]` using the `ref` field; verse "
     "results via `[verse:source_id/tokens|caption]` using meta directly; "
     "commentary/letter/prose are quoted inline as blockquotes. For an "
     "EXACT verse address ('БГ 2.13') use `chunks_get_by_address` instead "

@@ -76,7 +76,7 @@ Intents:
   recommendations (NOT "similar to" — that's research).
   Crucially: ANY "show / list / покажи / give me LECTURES" phrasing
   is find_track even when paired with a verse address, because the
-  user wants a LIST OF TRACKS (rendered as `[card:N]` cards), not
+  user wants a LIST OF TRACKS (rendered as `[^N]` cards), not
   a semantic snippet inside one. The catalog worker has
   `tracks_list(referenced_source_id=…)` for that case.
   Examples: "утренние прогулки 1976 Бомбей", "лекции Бхактиведанты",

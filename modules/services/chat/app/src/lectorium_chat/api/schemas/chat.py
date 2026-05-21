@@ -72,7 +72,7 @@ class ChunkAliasDto(BaseModel):
     message (in its versioned-meta JSON) and ships it back when sending
     the next turn's history. The server uses it to re-substitute
     `[cite:track_X@start-end|caption]` markers in that message's prose
-    back into `[cite:N|caption]` form so the LLM sees one consistent
+    back into `[^N]` form so the LLM sees one consistent
     numbered-ref format throughout the history."""
 
     track_id: str

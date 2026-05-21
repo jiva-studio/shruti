@@ -62,7 +62,7 @@ def _alias_track_entry(entry: dict[str, Any], aliases: TurnAliasMap) -> dict[str
     out["ref"] = ref
     # Tag the envelope with a synth-readable `type` so the
     # `_render_one_note` header reads `kind=lecture · ref=N` — which
-    # is the shape the grounding instruction binds to `[card:N]`
+    # is the shape the grounding instruction binds to `[^N]`
     # marker emission. tracks_list raw shape has no `type` field.
     out.setdefault("type", "lecture")
     return out

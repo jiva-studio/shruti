@@ -7,7 +7,7 @@ dataclass in `domain/entities.py` documents the shape.
 
 Lecture chunks have their `track_id` stripped from the LLM-visible
 payload — the model only sees `ref`, and the marker expander resolves
-`[cite:N|...]` back to the real `track_id` server-side. Library chunks
+`[^N]` back to the real `track_id` server-side. Library chunks
 (verse / commentary / letter / prose) keep `source_id`+`tokens` in
 meta so the model can emit `[verse:source_id/tokens|...]` directly.
 """
@@ -48,7 +48,7 @@ def lecture_to_envelope(
     """Mint a fresh ref for the chunk and assemble an LLM-facing dict.
 
     `track_id` is intentionally NOT in the output — the LLM uses `ref`
-    everywhere. The marker expander resolves `[cite:N|...]` server-side
+    everywhere. The marker expander resolves `[^N]` server-side
     using `alias_map.resolve(N)` to recover the real `track_id`.
     """
     ref = alias_map.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms)
@@ -78,7 +78,7 @@ def library_to_envelope(
     layer can resolve into a `verse_payload` event.
 
     For commentary / letter / prose_chapter the model cites via
-    `[cite:N|...]` like lectures, but `source_id`+`tokens` stay in meta
+    `[^N]` like lectures, but `source_id`+`tokens` stay in meta
     so attribution captions and follow-up tool calls have the data.
     """
     meta: dict[str, Any] = {}
