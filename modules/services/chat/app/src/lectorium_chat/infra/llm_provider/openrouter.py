@@ -8,7 +8,7 @@ provider route by model prefix (`google/gemini-3.1-flash-lite`,
 Why ChatOpenAI specifically: it streams reliably through OpenRouter
 via the OpenAI-compatible base_url, handles `tool_choice` (including
 the literal-tool-name form we use on single-tool worker menus, see
-`research_turn.run_research_turn`), and gives us `with_structured_output`
+`react_loop.run_react_loop`), and gives us `with_structured_output`
 for the router's JSON-mode classification. Tested against
 google/gemini-3.1-flash-lite (default) and Claude (premium tier).
 """
@@ -154,7 +154,7 @@ class OpenRouterLLMProvider:
             #   "<tool_name>"                        – force specific tool
             #   {"type": "function", "function": {...}} – dict form
             # We pass the string through verbatim (the loop in
-            # research_turn already picks a valid value: a generic mode
+            # react_loop already picks a valid value: a generic mode
             # OR a known tool name). Reject obviously malformed values
             # to avoid noisy provider errors.
             _allowed_generic = ("auto", "required", "none")

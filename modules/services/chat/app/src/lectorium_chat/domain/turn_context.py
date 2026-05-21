@@ -18,7 +18,7 @@ that nodes consume but don't conceptually "produce" or "update":
   has already gone through `build_personalized_tools` +
   `build_aliased_tools`, then sliced by name in
   `chat_turn.py:_subset(...)` to the per-worker bag. Nodes hand the
-  bag to `application/research_turn.run_research_turn` — we run our
+  bag to `application/react_loop.run_react_loop` — we run our
   own ReAct loop, not LangGraph's `create_react_agent`, so we can
   inject `yield_event` into emits_events tools.
 - `request_id` — for log correlation; mirrored into structlog's

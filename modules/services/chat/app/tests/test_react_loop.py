@@ -1,4 +1,4 @@
-"""Tests for `application/research_turn.py` — multi-step ReAct loop.
+"""Tests for `application/react_loop.py` — multi-step ReAct loop.
 
 Uses a `FakeLLM` that scripts streaming chunks (text/tool_call deltas)
 and a `FakeTools` dict so we exercise the full dispatcher without
@@ -14,7 +14,7 @@ from typing import Any, AsyncIterator
 import pytest
 
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
-from lectorium_chat.application.research_turn import run_research_turn
+from lectorium_chat.application.react_loop import run_react_loop
 from lectorium_chat.domain.entities import CompletionChunk, Message
 
 
@@ -107,7 +107,7 @@ async def test_single_tool_call_then_converge() -> None:
             [_finish_chunk()],
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "найди про карму",
         extracted_args={},
         lang="ru",
@@ -149,7 +149,7 @@ async def test_multi_step_cross_kind_chain() -> None:
             [_finish_chunk()],
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "найди про карму",
         extracted_args={},
         lang="ru",
@@ -190,7 +190,7 @@ async def test_first_turn_forces_tool_choice() -> None:
             [_finish_chunk()],
         ],
     )
-    await run_research_turn(
+    await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -210,7 +210,7 @@ async def test_first_turn_forces_tool_choice() -> None:
             [_finish_chunk()],
         ],
     )
-    await run_research_turn(
+    await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -239,7 +239,7 @@ async def test_max_turns_cap_reached() -> None:
             for i in range(3)
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -272,7 +272,7 @@ async def test_unknown_tool_returns_error_dict() -> None:
             [_finish_chunk()],
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -300,7 +300,7 @@ async def test_tool_raising_returns_error_dict() -> None:
             [_finish_chunk()],
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -323,7 +323,7 @@ async def test_extracted_args_appear_in_system_prompt() -> None:
     async def search_x(**kwargs: Any) -> dict[str, Any]:
         return {}
 
-    await run_research_turn(
+    await run_react_loop(
         "find verses about karma",
         extracted_args={"year": 1976, "location": "Bombay", "source_id": "BG"},
         lang="en",
@@ -365,7 +365,7 @@ async def test_tool_lifecycle_callback_fires_around_each_dispatch() -> None:
         ],
     )
 
-    await run_research_turn(
+    await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -401,7 +401,7 @@ async def test_tool_lifecycle_fires_even_on_tool_error() -> None:
         ],
     )
 
-    await run_research_turn(
+    await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",
@@ -438,7 +438,7 @@ async def test_streamed_prose_dropped_not_returned() -> None:
             ],
         ],
     )
-    result = await run_research_turn(
+    result = await run_react_loop(
         "x",
         extracted_args={},
         lang="ru",

@@ -11,7 +11,7 @@ Does NOT hold:
   passed via LangGraph's `context_schema`. See plan section 9.4.
 - conversation history — that's input from the client per request,
   threaded into `history` once at graph entry; the worker's internal
-  ReAct messages are kept local to `run_research_turn`.
+  ReAct messages are kept local to `run_react_loop`.
 
 Mutable state additions use simple reducers (overwrite or list-append).
 We don't use LangChain's `add_messages` because workers don't

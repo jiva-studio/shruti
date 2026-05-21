@@ -154,7 +154,7 @@ def fold_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # `build_messages` / `_format_user_context` / `_LANG_NAME` /
 # `_LANG_EXAMPLE` lived here while `chat_turn.py` drove the legacy
 # `run_llm_loop`. With the LangGraph migration the system prompt is
-# composed per-node (router_turn, research_turn, synthesizer_turn
+# composed per-node (router_turn, react_loop, synthesizer_turn
 # each pick their own sections), the language directive lives in
 # `agent/prompts/language.md`, and USER CONTEXT anchors are rendered
 # by `agent/graph/nodes/_worker_common.anchor_block`. All four had
