@@ -42,8 +42,11 @@ log = get_logger(__name__)
 # Worker prompt sections — every tool-calling worker uses the same
 # subset. The "voice" sections (citations, response_shape, language,
 # safety, followups) shape the FINAL prose — only the synthesizer
-# writes that, so they're omitted here.
-WORKER_PROMPT_SECTIONS = ("header", "tools", "quoting")
+# writes that, so they're omitted here. `actions` carries the
+# `[action:kind|id=…]` marker protocol — action_worker NEEDS it; the
+# others tolerate it (~100 lines is the cost of keeping the worker
+# prompt uniform).
+WORKER_PROMPT_SECTIONS = ("header", "tools", "actions", "quoting")
 
 
 def tool_schemas_from(tools: dict[str, Any]) -> list[dict[str, Any]]:
