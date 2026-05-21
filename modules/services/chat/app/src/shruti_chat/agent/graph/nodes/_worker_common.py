@@ -139,7 +139,7 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
     """Emit `action.kind=verse` events for every verse alias minted
     on this turn that hasn't been emitted yet — ordering invariant
     from plan section 11.5.1 (payload arrives BEFORE the inline
-    `[verse:N]` marker in delta text).
+    `[^N]` marker in delta text).
 
     Called at the end of any worker that may have minted verse refs
     (research_worker calls chunks_search / chunks_get_by_address →

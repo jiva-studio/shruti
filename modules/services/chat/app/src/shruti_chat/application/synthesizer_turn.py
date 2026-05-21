@@ -4,8 +4,7 @@ the final response to the client.
 Reads `tool_results` accumulated by the research worker (or whichever
 worker ran), composes a grounded answer, emits delta chunks one
 token at a time. Each chunk is fed through `MarkerExpander` so the
-integer-ref markers (`[cite:N]`, `[verse:N]`, `[card:N]`,
-`[outline:N]`) the LLM writes are unfolded into their client-facing
+integer-ref markers (`[^N]`) the LLM writes are unfolded into their client-facing
 form (`[cite:track_X@...]`, `[verse:source_id/tokens|...]`, etc.)
 *before* the bytes leave this function.
 
@@ -235,7 +234,7 @@ async def run_synthesizer_turn(
     (including the latest user message). Pass it for multi-turn
     continuity — the synthesizer then sees prior Q&A and can reference
     earlier exchanges ("вернёмся к тому что мы обсуждали"). Prior
-    assistant messages' chip markers get folded back to `[cite:N|...]`
+    assistant messages' chip markers get folded back to `[^N]`
     form via each entry's persisted `aliases` payload.
     When `history` is None or empty the synth sees only the current
     `user_query` plus the internal research notes.
