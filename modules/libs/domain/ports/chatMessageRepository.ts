@@ -2,6 +2,7 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -24,6 +25,10 @@ export interface CreateChatMessageInput {
   /** Integer→chunk alias map for the chip markers in `content` — see
    *  `ChatMessage.aliases`. */
   readonly aliases?: Record<string, ChatAliasEntry>
+  /** Focus payload — set when the message was inserted by the
+   *  "Ask Sadhu" flow on a transcript selection. Determines whether
+   *  the bubble renders as a focus card. */
+  readonly focus?: ChatFocusPayload
 }
 
 /**
@@ -51,6 +56,12 @@ export interface IChatMessageRepository {
    *  failed assistant row AND the user prompt that produced it so the
    *  fresh turn doesn't pile a duplicate user message into history. */
   delete(id: ChatMessageId): Promise<void>
+
+  /** Replace the followups list. Used to persist server-generated
+   *  Ask-Sadhu suggestion chips onto a focus message after the
+   *  `/questions` round-trip lands. Read-modify-writes the `meta`
+   *  envelope so chips survive a session reload. */
+  updateFollowups(id: ChatMessageId, followups: readonly string[]): Promise<void>
 
   /** Delete every message belonging to a session. The session row is
    *  removed by the session repository; this is the cascade companion. */

@@ -3,11 +3,12 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
 } from "@lib/domain/chatMessage.js"
-import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
+import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import type {
   CreateChatMessageInput,
   IChatMessageRepository,
@@ -34,6 +35,7 @@ interface ParsedMeta {
   readonly followups: readonly string[]
   readonly error: ChatMessageError | undefined
   readonly aliases: Record<string, ChatAliasEntry> | undefined
+  readonly focus: ChatFocusPayload | undefined
 }
 
 const EMPTY_META: ParsedMeta = Object.freeze({
@@ -43,6 +45,7 @@ const EMPTY_META: ParsedMeta = Object.freeze({
   followups: [],
   error: undefined,
   aliases: undefined,
+  focus: undefined,
 })
 
 function parseMeta(raw: unknown): ParsedMeta {
@@ -71,7 +74,38 @@ function parseMeta(raw: unknown): ParsedMeta {
     followups: extractFollowups(data.followups),
     error: parseError(data.error),
     aliases: extractAliases(data.aliases),
+    focus: extractFocus(data.focus),
   }
+}
+
+function extractFocus(raw: unknown): ChatFocusPayload | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  if (typeof o.trackId !== "string") return undefined
+  if (typeof o.startMs !== "number" || typeof o.endMs !== "number") return undefined
+  if (typeof o.text !== "string") return undefined
+  const out: {
+    trackId: TrackId
+    startMs: number
+    endMs: number
+    text: string
+    sourceKey?: string
+    trackTitle?: string
+    authorName?: string
+    date?: string
+    location?: string
+  } = {
+    trackId: o.trackId as TrackId,
+    startMs: o.startMs,
+    endMs: o.endMs,
+    text: o.text,
+  }
+  if (typeof o.sourceKey === "string") out.sourceKey = o.sourceKey
+  if (typeof o.trackTitle === "string") out.trackTitle = o.trackTitle
+  if (typeof o.authorName === "string") out.authorName = o.authorName
+  if (typeof o.date === "string") out.date = o.date
+  if (typeof o.location === "string") out.location = o.location
+  return out
 }
 
 function extractAliases(raw: unknown): Record<string, ChatAliasEntry> | undefined {
@@ -118,6 +152,7 @@ function wrapMeta(payload: {
   followups?: readonly string[]
   error?: ChatMessageError | undefined
   aliases?: Record<string, ChatAliasEntry>
+  focus?: ChatFocusPayload
 }): string {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
@@ -127,6 +162,7 @@ function wrapMeta(payload: {
   if (payload.followups && payload.followups.length > 0) data.followups = payload.followups
   if (payload.error) data.error = payload.error
   if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
+  if (payload.focus) data.focus = payload.focus
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }
 
@@ -146,6 +182,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     error: meta.error,
     followups: meta.followups.length > 0 ? meta.followups : undefined,
     aliases: meta.aliases,
+    focus: meta.focus,
   }
 }
 
@@ -177,6 +214,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         followups: input.followups,
         error: input.error,
         aliases: input.aliases,
+        focus: input.focus,
       })
       await db.execute(
         `INSERT INTO chat_messages
@@ -197,7 +235,31 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: input.error,
         followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
         aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
+        focus: input.focus,
       }
+    },
+
+    async updateFollowups(id: ChatMessageId, followups: readonly string[]): Promise<void> {
+      // Read-modify-write the `meta` envelope, same pattern as
+      // `updateActionStates`. Used to persist server-generated
+      // Ask-Sadhu chips onto a focus message after `/questions`.
+      const rows = await db.query<{ meta: string | null }>(
+        "SELECT meta FROM chat_messages WHERE id = ?",
+        [id]
+      )
+      if (rows.length === 0) return
+      const current = parseMeta(rows[0].meta)
+      const next = wrapMeta({
+        actions: current.actions,
+        outlines: current.outlines,
+        actionStates: current.actionStates,
+        followups,
+        error: current.error,
+        aliases: current.aliases,
+        focus: current.focus,
+      })
+      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
+      await db.save()
     },
 
     async updateActionStates(
@@ -217,6 +279,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         followups: current.followups,
         error: current.error,
         aliases: current.aliases,
+        focus: current.focus,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       await db.save()

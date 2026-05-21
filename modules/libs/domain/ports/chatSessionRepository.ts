@@ -1,11 +1,15 @@
 import type { ChatSession } from "../chatSession.js"
-import type { ChatSessionId } from "../core.js"
+import type { ChatSessionId, TrackId } from "../core.js"
 
 export interface CreateChatSessionInput {
   readonly id: ChatSessionId
   /** Initial title — usually `deriveTitle(firstUserMessage)`. Replaced by
    *  the LLM rephrase via `/title` after the first assistant turn. */
   readonly title: string | null
+  /** Optional anchor track. Set when the session is started by the
+   *  "Ask Sadhu" flow from a transcript selection; left null for
+   *  free-form chats started from the tab. */
+  readonly trackId?: TrackId | null
 }
 
 /**
@@ -34,4 +38,9 @@ export interface IChatSessionRepository {
 
   /** Wipe every session — used by the "Clear history" danger zone. */
   clearAll(): Promise<void>
+
+  /** Most recent session anchored to this track, or `null` if none.
+   *  Drives Sadhu-tap session reuse: a second "Ask" from the same
+   *  track lands in the prior session instead of spawning a new one. */
+  findLatestByTrack(trackId: TrackId): Promise<ChatSession | null>
 }

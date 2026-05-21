@@ -15,6 +15,13 @@ export interface OutlineChapterPick {
   nextItem: { startMs: number; title: string } | null
 }
 
+export interface SessionHeaderInfo {
+  readonly title: string | null
+  readonly authorName: string | null
+  readonly date: string | null
+  readonly location: string | null
+}
+
 export interface ChatControllerReturn {
   messages: ComputedRef<ChatMessage[]>
   sessions: ComputedRef<ChatSession[]>
@@ -32,6 +39,16 @@ export interface ChatControllerReturn {
   /** Session ids with an unreplied agent-initiated message — passed to
    *  RecentSessions and ChatSessionList for the per-session dot marker. */
   unseenProactiveSessionIds: ComputedRef<ReadonlySet<string>>
+  /** Set of focus message ids whose `/questions` round-trip is
+   *  in-flight. Threaded into ChatMessageList so each focus card can
+   *  show a "Picking questions…" placeholder until its chips land. */
+  loadingFocusIds: ComputedRef<ReadonlySet<string>>
+  /** Bibliographic header above the message list (derived from the
+   *  first focus message in the session). `null` for free-form chats. */
+  sessionHeader: ComputedRef<SessionHeaderInfo | null>
+  /** Reactive ping the view watches to focus the textarea after the
+   *  Ask-Sadhu navigation. */
+  inputFocusToken: ComputedRef<number>
   onSend: (text: string) => Promise<void>
   onNewSession: () => void
   onOpenHistory: () => Promise<void>
@@ -319,6 +336,22 @@ export function useChatController(): ChatControllerReturn {
     })()
   })
 
+  const sessionHeader = computed<SessionHeaderInfo | null>(() => {
+    // Pull bibliographic context from the FIRST focus message in the
+    // session (its payload pinned title/author/date at insert time).
+    // All focuses in a focused session belong to the same track and
+    // share metadata — the first one is what gave the session its
+    // identity.
+    const firstFocus = store.messages.find((m) => m.focus)?.focus
+    if (!firstFocus) return null
+    return {
+      title: firstFocus.trackTitle ?? null,
+      authorName: firstFocus.authorName ?? null,
+      date: firstFocus.date ?? null,
+      location: firstFocus.location ?? null,
+    }
+  })
+
   return {
     messages: computed(() => [...store.messages]),
     sessions: computed(() => [...store.sessions]),
@@ -332,6 +365,9 @@ export function useChatController(): ChatControllerReturn {
     searchQuery,
     filteredSessions,
     unseenProactiveSessionIds: computed(() => store.unseenProactiveSessionIds),
+    loadingFocusIds: computed(() => store.loadingFocusIds),
+    sessionHeader,
+    inputFocusToken: computed(() => store.inputFocusToken),
     onSend,
     onNewSession,
     onOpenHistory,

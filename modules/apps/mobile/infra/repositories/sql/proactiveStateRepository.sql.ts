@@ -256,6 +256,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
           actionStates: current.actionStates,
           followups: current.followups,
           error: current.error,
+          aliases: current.aliases,
+          focus: current.focus,
         })
         await db.execute("UPDATE chat_messages SET content = ?, meta = ? WHERE id = ?", [
           content,

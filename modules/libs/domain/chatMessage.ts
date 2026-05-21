@@ -1,4 +1,4 @@
-import type { ChatMessageId, ChatSessionId, UnixMs } from "./core.js"
+import type { ChatMessageId, ChatSessionId, TrackId, UnixMs } from "./core.js"
 
 /**
  * Server-emitted "do something" payload referenced inline by an
@@ -139,6 +139,11 @@ export interface ChatMessage {
    *  messages; the server falls back to placeholder-stripping for
    *  those. */
   aliases?: Record<string, ChatAliasEntry>
+  /** Present iff this message was inserted by the "Ask Sadhu" flow on
+   *  a transcript selection. `content` still carries the quoted text
+   *  (history → LLM stays a vanilla user turn); the renderer branches
+   *  on this field to draw a focus card instead of the normal bubble. */
+  focus?: ChatFocusPayload
 }
 
 /** One row of the integer→chunk alias map. `startMs`/`endMs` are
@@ -148,4 +153,43 @@ export interface ChatAliasEntry {
   readonly trackId: string
   readonly startMs?: number
   readonly endMs?: number
+}
+
+/**
+ * "Focus" attached to a user-role message produced by the "Ask Sadhu"
+ * flow on a transcript selection. The message's `content` carries the
+ * quoted text (so it ships to the LLM as part of history like any
+ * other user turn); this struct carries the bibliographic + audio
+ * coordinates needed to render the message as a full-width focus
+ * card (inline player + range header + quote) instead of a plain
+ * user bubble.
+ *
+ * Multiple focus messages can accumulate inside a single session as
+ * the user keeps listening and tapping Sadhu on new fragments of the
+ * same track — each one is just another row in `chat_messages`.
+ */
+export interface ChatFocusPayload {
+  readonly trackId: TrackId
+  /** Selection range start in milliseconds, matches the `data-time-start`
+   *  attribute on transcript blocks. */
+  readonly startMs: number
+  /** Selection range end in milliseconds. */
+  readonly endMs: number
+  /** Quoted transcript text — duplicated from the row's `content` so
+   *  parsers / downstream consumers that only see `meta.focus` (e.g.
+   *  the `/questions` request body) don't have to re-join with the row. */
+  readonly text: string
+  /** Source-audio path the inline player can hand to `shareAudioService.cut`
+   *  to mint an excerpt URL. Resolved at insert time from the catalog row;
+   *  cached on the message so the card can play without re-querying. */
+  readonly sourceKey?: string
+  /** Localised lecture title at insert time — pinned so a future
+   *  catalog rename doesn't quietly change the card's header. */
+  readonly trackTitle?: string
+  /** Localised author name at insert time, same pinning rationale. */
+  readonly authorName?: string
+  /** ISO date string (`YYYY-MM-DD`) of the lecture. */
+  readonly date?: string
+  /** Localised location string ("Bombay", "Москва"). */
+  readonly location?: string
 }

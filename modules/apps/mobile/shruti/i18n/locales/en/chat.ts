@@ -59,6 +59,20 @@ export default {
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",
   followupAriaLabel: "Suggested follow-up: {text}",
+  // Loading label shown in place of suggestion chips while the
+  // server is generating per-fragment questions for the Ask Sadhu
+  // focus card. Stays visible until /questions resolves (or fails).
+  suggestionsLoading: "Picking questions…",
+  // Static fallback chips for a focus fragment when the server's
+  // /questions endpoint returns an empty list (LLM failure, endpoint
+  // not deployed yet, etc). Keeps the affordance visible so the user
+  // can still seed a question without having to compose from scratch.
+  focusFallbackSuggestions: [
+    "What does this fragment mean?",
+    "Explain in simple terms",
+    "Give me more context",
+    "Which scripture is this from?",
+  ],
   suggestions: [
     "Where did I stop?", // user_tracks_list(status='in_progress')
     "Playlist on Gita ch. 2", // propose_playlist
