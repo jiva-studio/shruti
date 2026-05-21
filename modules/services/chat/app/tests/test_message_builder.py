@@ -1,14 +1,12 @@
 """Tests for message_builder fold logic.
 
-History fold principle (post-tool-leak fix): we feed the LLM only the
-user-visible transcript — no integer refs, no track ids, no
-source_id/tokens shapes, no widget envelopes. Chip markers collapse to
-their caption (or disappear if there was no caption). The per-turn
-alias map is no longer round-tripped into the prompt; the current turn
-relies on fresh tool_results for grounding.
-
-These tests pin the strip behavior so a future refactor can't silently
-re-introduce system-data leakage into the LLM context.
+History fold principle: feed the LLM ONLY pure-prose transcript. No
+integer refs, no captions, no widget envelopes — EVERY bracketed
+marker is dropped entirely, body and all. Earlier behavior kept
+caption text (e.g. "духовная энергия") which leaked tokens the LLM
+could re-use as ref-slot fillers, producing `[^духовная энергия]`
+string-stuffed hallucinations. Captions are widget-only — the LLM
+shouldn't see them in history.
 """
 
 from __future__ import annotations
@@ -20,36 +18,53 @@ from lectorium_chat.agent.message_builder import (
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 
 
-def test_cite_marker_kept_as_caption() -> None:
+def test_cite_marker_dropped_entirely() -> None:
+    """Cite marker AND its caption removed — the LLM shouldn't see
+    chip-format leftovers when continuing the conversation."""
     out = _fold_prior_assistant_content(
         "В лекции [cite:track_X@1500-2500|карма последствия] он объясняет.",
         None,
     )
-    assert "карма последствия" in out
-    # No internal identifiers — caption only.
+    assert "карма последствия" not in out
     assert "track_X" not in out
     assert "[cite:" not in out
     assert "1500" not in out
+    assert "В лекции" in out
+    assert "он объясняет" in out
 
 
-def test_verse_marker_kept_as_caption() -> None:
+def test_verse_marker_dropped_entirely() -> None:
     out = _fold_prior_assistant_content(
         "Стих [verse:source_BG/2.13|БГ 2.13] раскрывает тему.",
         None,
     )
-    assert "БГ 2.13" in out
+    assert "БГ 2.13" not in out
     assert "source_BG" not in out
     assert "[verse:" not in out
+    assert "Стих" in out
+    assert "раскрывает тему" in out
 
 
-def test_verse_marker_compound_tokens() -> None:
-    """Compound verses use comma-separated tokens like 1.2.28,1.2.29."""
+def test_verse_marker_compound_tokens_dropped() -> None:
+    """Compound verses use comma-separated tokens like 1.2.28,1.2.29.
+    Whole marker including caption is dropped."""
     out = _fold_prior_assistant_content(
         "Стих [verse:source_SB/1.2.28,1.2.29|ШБ 1.2.28-29] говорит...",
         None,
     )
-    assert "ШБ 1.2.28-29" in out
+    assert "ШБ 1.2.28-29" not in out
     assert "source_SB" not in out
+    assert "Стих" in out
+
+
+def test_footnote_marker_also_stripped_defensively() -> None:
+    """If a bare `[^N]` leaks past the expander (shouldn't happen, but
+    defensive), fold also drops it. Otherwise history could prime the
+    LLM to think `[^N]` is part of natural prose."""
+    out = _fold_prior_assistant_content("text [^3] more", None)
+    assert "[^3]" not in out
+    assert "text" in out
+    assert "more" in out
 
 
 def test_verse_marker_without_caption_disappears() -> None:
@@ -120,9 +135,9 @@ def test_tool_protocol_leak_stripped_from_fold_history() -> None:
 
 
 def test_aliases_payload_ignored_by_fold() -> None:
-    """`aliases` on a history entry used to be round-tripped into
-    integer refs. We no longer do that — the field is accepted (for
-    backward compat with persisted messages) but ignored."""
+    """`aliases` on a history entry is accepted (for backward compat
+    with persisted messages) but ignored — markers are dropped
+    regardless. The folded content is pure prose, no chip residue."""
     a = TurnAliasMap()
     a.alias_chunk("track_A", 100, 200)
     out = fold_history([
@@ -134,10 +149,10 @@ def test_aliases_payload_ignored_by_fold() -> None:
         },
     ])
     folded = out[1]["content"]
-    assert "caption1" in folded
+    assert "caption1" not in folded
     assert "track_A" not in folded
-    # No integer ref slipped in.
     assert "[cite:" not in folded
+    assert folded == "answer"
 
 
 # ── fold_history public helper ───────────────────────────────────────────

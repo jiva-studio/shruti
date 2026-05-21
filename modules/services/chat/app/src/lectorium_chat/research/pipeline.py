@@ -29,6 +29,7 @@ from lectorium_chat.agent.tools._envelope import (
 )
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
+from lectorium_chat.research.caption_generator import generate_captions
 from lectorium_chat.research.constants import (
     DEFAULT_TOPIC_BOOST,
     MAX_FANOUT_ROUNDS,
@@ -258,15 +259,20 @@ async def run_research(
             name="supplementary_fanout", request_id=request_id,
         )
 
-        return ResearchResult(
+        result = ResearchResult(
             authoritative_refs=authoritative,
             research_chunks=supplementary.chunks[:8],
             matched_question_ids=[m.attribution_id for m in question_matches],
             matched_topic_ids=[],
         )
+        _kick_caption_gen(
+            result, alias_map=alias_map, question=question, lang=lang,
+            llm=llm, model=expand_model, request_id=request_id,
+        )
+        return result
 
     # 3. LONG PATH.
-    return await _research_path(
+    long_result = await _research_path(
         question=question, lang=lang, expansion=expansion,
         boost_ids=None,  # computed below from topics
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
@@ -275,6 +281,63 @@ async def run_research(
         topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
         request_id=request_id,
     )
+    _kick_caption_gen(
+        long_result, alias_map=alias_map, question=question, lang=lang,
+        llm=llm, model=expand_model, request_id=request_id,
+    )
+    return long_result
+
+
+def _kick_caption_gen(
+    result: ResearchResult,
+    *,
+    alias_map: Any,
+    question: str,
+    lang: str,
+    llm: Any,
+    model: str | None,
+    request_id: str | None,
+) -> None:
+    """Fire-and-forget background Flash-Lite call that fills
+    `alias_map.captions` with 2-5 word topic tags for every lecture-
+    fragment alias in the result. Reference is stored on the alias map
+    so the event loop keeps the task alive (asyncio only holds weak
+    refs to tasks). Read by `MarkerExpander` when expanding `[^N]` for
+    a `ChunkRef` with timestamps."""
+    targets: list[tuple[int, str]] = []
+    for env in (*result.authoritative_refs, *result.research_chunks):
+        if not isinstance(env, dict):
+            continue
+        if env.get("type") != "lecture":
+            continue
+        ref = env.get("ref")
+        if not isinstance(ref, int):
+            continue
+        meta = env.get("meta") or {}
+        # Only fragments (with timestamps) need a caption — whole-track
+        # cards render as track tiles, no chip-label slot.
+        if meta.get("start_ms") is None or meta.get("end_ms") is None:
+            continue
+        text = (env.get("text") or "").strip()
+        if not text:
+            continue
+        targets.append((ref, text))
+
+    if not targets:
+        return
+
+    task = asyncio.create_task(
+        generate_captions(
+            targets,
+            user_question=question, lang=lang,
+            llm=llm, model=model,
+            captions_out=alias_map.captions,
+            request_id=request_id,
+        ),
+    )
+    # Hold a strong reference on the alias map so the loop doesn't GC
+    # the task before it writes captions.
+    alias_map._caption_task = task  # type: ignore[attr-defined]
 
 
 async def _research_path(

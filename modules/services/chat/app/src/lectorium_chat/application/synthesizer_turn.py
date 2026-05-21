@@ -91,39 +91,57 @@ def _format_tool_results(tool_results: list[Any]) -> str:
 def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     """One note → minimal LLM-facing paragraph.
 
-    Two shapes only — driven by whether the note has a citation ref:
+    Shape by note type:
 
-      [ref:8209] Утренняя прогулка, 1976-04-03, Бомбей
-      <text>
+      Verse with ref (`[^N]` alone — NO addr_label adjacency, the
+      shloka address goes via the client-side widget):
 
-    or (no ref → blockquote-attribution mode):
+          [^5]
+          <verse text>
 
-      БГ 2.13, комментарий
-      <text>
+      Lecture with ref (`[^N]` + natural-language title; titles like
+      "Утренняя прогулка, 1976-04-03, Бомбей" don't look like shloka
+      addresses, no string-stuffing risk):
+
+          [^5] Утренняя прогулка, 1976-04-03, Бомбей
+          <chunk text>
+
+      Commentary / prose_chapter / letter (NO ref — quoted as block,
+      addr_label kept for blockquote attribution per library.md):
+
+          БГ 2.13, комментарий
+          <text>
 
     Everything the LLM doesn't act on — `kind=`, `lang=`, IDs like
     `source_id` / `author_id` — is dropped. The server-side marker
-    expander knows the type via alias resolution; the LLM only needs
-    the marker and a human attribution label.
+    expander knows the type via alias resolution.
     """
     if "error" in note:
         return f"(no usable results: {note.get('error')!s})"
 
     ref = note.get("ref")
+    note_type = (note.get("type") or "").lower()
     # ChunkEnvelope uses `label`; tracks_list envelope uses `title`.
     label = note.get("label") or note.get("title") or ""
     text = (note.get("text") or "").strip()
     meta = note.get("meta") or {}
 
-    # Pick a single human-readable attribution line for ref-less notes
-    # (verse/commentary/prose). `addr_label` is precomputed by the
-    # library envelope; fall back to `label` for envelopes that didn't
-    # set it.
     attribution = label or meta.get("addr_label") or ""
 
     if isinstance(ref, int):
-        header = f"[ref:{ref}] {attribution}".rstrip()
+        if note_type == "verse":
+            # Drop addr_label adjacency — the strongest priming source
+            # for "[^N]" → "[^БГ 2.13]" hallucinations. Verse widget
+            # on the client renders the address; the LLM doesn't need
+            # to see it in the note header.
+            header = f"[^{ref}]"
+        else:
+            # Lecture fragment or whole-track card — title is natural
+            # language, safe to keep adjacent.
+            header = f"[^{ref}] {attribution}".rstrip()
     else:
+        # commentary / prose_chapter / letter — addr_label drives the
+        # markdown blockquote attribution downstream.
         header = attribution
 
     return f"{header}\n{text}".rstrip() if header else text
@@ -142,18 +160,18 @@ of what you searched. Begin your reply with the first word of the
 actual answer to the user's question.
 
 Compose the final answer ONLY from the research notes above. Each
-note's header begins with `[ref:N]` — copy that EXACT marker into
-your prose when you cite the note. The integer is opaque; never
-guess one, never increment, never use position. Cite EVERY note you
+note's header begins with `[^N]` — copy that EXACT marker into your
+prose when you cite the note. The integer is opaque; never guess
+one, never increment, never use position. Cite EVERY note you
 describe in prose; an ungrounded paragraph is a regression.
 
-When a note's header has NO `[ref:N]` (commentary / prose_chapter /
+When a note's header has NO `[^N]` (commentary / prose_chapter /
 letter), quote inline as a markdown blockquote with attribution
 beneath:
 
 > The cited text…
 >
-> — Source attribution from meta (e.g. "BG 2.13, purport")
+> — Source attribution from the note header (e.g. "BG 2.13, purport")
 
 NEVER fabricate refs. NEVER invent track_ids or verse addresses.
 

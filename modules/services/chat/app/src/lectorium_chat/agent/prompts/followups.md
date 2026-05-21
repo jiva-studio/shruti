@@ -4,7 +4,7 @@ Follow-up chips — `[followup:<text>]`
 
 After every substantive reply emit 2-3 follow-up chips — short
 phrases (3-7 words) the user can tap to continue. They are the LAST
-thing in the bubble, after all `[ref:N]` and `[action:…]` markers.
+thing in the bubble, after all `[^N]` and `[action:…]` markers.
 
 GRAMMAR:
 
@@ -34,17 +34,17 @@ SKIP CASES (emit zero chips):
 CORRECT:
 
     Глава 2 Бхагавад-гиты раскрывает суть санкхья-йоги и описывает
-    природу души. [ref:1|душа вечна]
+    природу души. [^1]
 
-    [ref:2]
-    [ref:3]
+    [^2]
+    [^3]
     [followup:Сделай PDF этих лекций]
     [followup:А что в главе 3?]
     [followup:Покажи похожие беседы]
 
 WRONG — substantive reply with no chips (user lands on a dead-end):
 
-    Карма — это закон причины и следствия. [ref:4|определение кармы]
+    Карма — это закон причины и следствия. [^4]
 
 WRONG — chip duplicates an action card already in the message:
 
