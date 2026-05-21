@@ -162,8 +162,12 @@ actual answer to the user's question.
 Compose the final answer ONLY from the research notes above. Each
 note's header begins with `[^N]` — copy that EXACT marker into your
 prose when you cite the note. The integer is opaque; never guess
-one, never increment, never use position. Cite EVERY note you
-describe in prose; an ungrounded paragraph is a regression.
+one, never increment, never use position.
+
+ONE CITE PER THESIS: each `[^N]` appears AT MOST ONCE in your
+reply. If one note supports several related points, group them into
+ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
+`[^N]` across multiple paragraphs — see response_shape.md.
 
 When a note's header has NO `[^N]` (commentary / prose_chapter /
 letter), quote inline as a markdown blockquote with attribution

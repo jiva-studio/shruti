@@ -311,6 +311,82 @@ def _check_response_contains_marker(
     return []
 
 
+# Regexes for marker-hygiene predicates. The CLIENT-FACING shape of
+# each marker after expansion:
+#   audio fragment  — [cite:track_X@s-e]   or [cite:...|caption]
+#   verse card      — [verse:source/tok]   or [verse:...|addr_label]
+#   whole-track     — [card:track_X]
+# The MarkerExpander emits exactly these shapes; anything else is a
+# regression.
+_CITE_EXPANDED_RE = re.compile(r"\[cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?\]")
+_VERSE_EXPANDED_RE = re.compile(r"\[verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?\]")
+_CARD_EXPANDED_RE = re.compile(r"\[card:[^\]\s|@]+\]")
+_FOOTNOTE_LEFTOVER_RE = re.compile(r"\[\^\d+\]")
+# Pre-[^N] integer-ref shapes — if these leak past the expander
+# something is broken in the regex chain.
+_LEGACY_INTEGER_REF_RE = re.compile(r"\[(?:ref|cite|verse|card|outline):\d+(?:\|[^\]]*)?\]")
+
+
+def _check_no_duplicate_markers(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """If `expect_no_duplicate_markers` is true, fail when any single
+    expanded marker (`[cite:...]`, `[verse:...]`, `[card:...]`)
+    appears more than once in the response. The LLM should structure
+    its reply so each note backs ONE thesis paragraph — repeats
+    produce spammy chip stacks in the UI."""
+    if not case.get("expect_no_duplicate_markers"):
+        return []
+    text = obs.response_text
+    failures: list[str] = []
+    for name, pattern in (
+        ("cite", _CITE_EXPANDED_RE),
+        ("verse", _VERSE_EXPANDED_RE),
+        ("card", _CARD_EXPANDED_RE),
+    ):
+        counts: dict[str, int] = {}
+        for m in pattern.finditer(text):
+            counts[m.group(0)] = counts.get(m.group(0), 0) + 1
+        dupes = {k: v for k, v in counts.items() if v > 1}
+        if dupes:
+            top = sorted(dupes.items(), key=lambda kv: -kv[1])[:3]
+            sample = ", ".join(f"{m!r}×{c}" for m, c in top)
+            failures.append(
+                f"expect_no_duplicate_markers: {name} markers repeat — {sample}"
+            )
+    return failures
+
+
+def _check_no_unexpanded_footnote(
+    case: dict[str, Any], obs: TurnObservation
+) -> list[str]:
+    """Server-side MarkerExpander must convert every `[^N]` to its
+    expanded shape before the response reaches the client. If raw
+    `[^N]` leaks through, either the regex broke or there's a code
+    path bypassing the expander."""
+    if not case.get("expect_no_unexpanded_footnote", True):
+        return []
+    leftovers = _FOOTNOTE_LEFTOVER_RE.findall(obs.response_text)
+    if leftovers:
+        return [
+            f"raw [^N] markers leaked past expander: {leftovers[:5]!r}"
+        ]
+    return []
+
+
+def _check_no_legacy_marker(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """Pre-migration integer-ref shapes like `[ref:1]`, `[cite:1]`,
+    `[verse:2|...]` must never reach the client — they're either an
+    LLM hallucination of the old protocol or a regex misfire. The
+    MarkerExpander legacy-drop branch should swallow them."""
+    if not case.get("expect_no_legacy_marker", True):
+        return []
+    leftovers = _LEGACY_INTEGER_REF_RE.findall(obs.response_text)
+    if leftovers:
+        return [
+            f"legacy integer-ref markers leaked past expander: {leftovers[:5]!r}"
+        ]
+    return []
+
+
 # Ordered list of predicate runners. Each returns failure strings.
 _PREDICATES = (
     _check_intent,
@@ -322,6 +398,9 @@ _PREDICATES = (
     _check_no_marker_kind,
     _check_response_contains,
     _check_response_contains_marker,
+    _check_no_duplicate_markers,
+    _check_no_unexpanded_footnote,
+    _check_no_legacy_marker,
 )
 
 
