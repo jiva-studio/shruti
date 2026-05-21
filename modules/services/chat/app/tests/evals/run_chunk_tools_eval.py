@@ -322,9 +322,23 @@ _CITE_EXPANDED_RE = re.compile(r"\[cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?\]")
 _VERSE_EXPANDED_RE = re.compile(r"\[verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?\]")
 _CARD_EXPANDED_RE = re.compile(r"\[card:[^\]\s|@]+\]")
 _FOOTNOTE_LEFTOVER_RE = re.compile(r"\[\^\d+\]")
-# Pre-[^N] integer-ref shapes — if these leak past the expander
-# something is broken in the regex chain.
-_LEGACY_INTEGER_REF_RE = re.compile(r"\[(?:ref|cite|verse|card|outline):\d+(?:\|[^\]]*)?\]")
+
+# Whitelist of bracket shapes the client is supposed to see. Anything
+# else inside `[...]` in the response is a regression — either an
+# expander bug or an LLM emitting a shape we don't expect. Generic
+# defence so a future drift (`[cite:1]`, `[caption:foo]`, `[note:42]`,
+# whatever) gets caught without us having to enumerate it.
+_ALLOWED_BRACKET_RE = re.compile(
+    r"\[(?:"
+        r"cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?"               # audio fragment
+        r"|verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?"             # verse card
+        r"|card:[^\]\s|@]+"                                  # whole-track card
+        r"|action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+"        # action chip
+        r"|followup:[^\]\n]+"                                # followup chip
+    r")\]"
+)
+# Anything bracketed at all (greedy-minimal).
+_ANY_BRACKET_RE = re.compile(r"\[[^\]\n]+\]")
 
 
 def _check_no_duplicate_markers(case: dict[str, Any], obs: TurnObservation) -> list[str]:
@@ -372,17 +386,27 @@ def _check_no_unexpanded_footnote(
     return []
 
 
-def _check_no_legacy_marker(case: dict[str, Any], obs: TurnObservation) -> list[str]:
-    """Pre-migration integer-ref shapes like `[ref:1]`, `[cite:1]`,
-    `[verse:2|...]` must never reach the client — they're either an
-    LLM hallucination of the old protocol or a regex misfire. The
-    MarkerExpander legacy-drop branch should swallow them."""
-    if not case.get("expect_no_legacy_marker", True):
+def _check_no_unexpected_brackets(
+    case: dict[str, Any], obs: TurnObservation,
+) -> list[str]:
+    """Every `[...]` in the response must match the small whitelist
+    of expanded marker shapes: `[cite:track@s-e[|caption]]`,
+    `[verse:src/tokens[|label]]`, `[card:track]`, `[action:kind|id=...]`,
+    `[followup:text]`. Anything else is a regression — old protocol
+    leaking back (`[ref:1]`, `[cite:1]`), the LLM inventing a new
+    marker by analogy (`[note:42]`, `[caption:foo]`, `[ШБ 4.25.26]`),
+    or the expander dropping the bracket prefix. Generic catch — no
+    enumeration of "known bad" patterns."""
+    if not case.get("expect_no_unexpected_brackets", True):
         return []
-    leftovers = _LEGACY_INTEGER_REF_RE.findall(obs.response_text)
-    if leftovers:
+    seen_any = _ANY_BRACKET_RE.findall(obs.response_text)
+    if not seen_any:
+        return []
+    allowed = set(_ALLOWED_BRACKET_RE.findall(obs.response_text))
+    unexpected = [b for b in seen_any if b not in allowed]
+    if unexpected:
         return [
-            f"legacy integer-ref markers leaked past expander: {leftovers[:5]!r}"
+            f"unexpected bracketed token(s) in response: {unexpected[:5]!r}"
         ]
     return []
 
@@ -400,7 +424,7 @@ _PREDICATES = (
     _check_response_contains_marker,
     _check_no_duplicate_markers,
     _check_no_unexpanded_footnote,
-    _check_no_legacy_marker,
+    _check_no_unexpected_brackets,
 )
 
 
