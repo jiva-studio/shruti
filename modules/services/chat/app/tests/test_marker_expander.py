@@ -13,7 +13,7 @@ populated by a background Flash-Lite pass. Missing caption → bare
 
 Defenses against model failure:
   - String-stuffed `[^НП 6]` → single-candidate recovery or drop
-  - Legacy `[ref:…]` / `[cite:N]` / `[verse:N]` etc → drop with log
+  - Duplicate `[^N]` (same alias twice in a response) → drop 2nd+
   - Trailing punctuation after marker → server swaps order
 """
 
@@ -152,52 +152,6 @@ async def test_numeric_hallucination_dropped_when_multiple_unused() -> None:
     e = MarkerExpander(aliases)
     out = await _expand(e, "[^1] hallucinated [^9999] tail")
     assert out == "[cite:track_A@0-1000] hallucinated tail"
-
-
-# ── Legacy markers — all dropped ─────────────────────────────────────
-
-
-async def test_legacy_ref_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    aliases.alias_chunk("track_X", 0, 1000)
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "before [ref:1|cap] after")
-    assert out == "before after"
-
-
-async def test_legacy_cite_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "text [cite:track_X@0-100|cap] tail")
-    assert out == "text tail"
-
-
-async def test_legacy_verse_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "text [verse:src/2.13|БГ 2.13] tail")
-    assert out == "text tail"
-
-
-async def test_legacy_card_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "[card:track_X]")
-    assert out == ""
-
-
-async def test_legacy_outline_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "[outline:track_X]")
-    assert out == ""
-
-
-async def test_hallucinated_doc_marker_dropped() -> None:
-    aliases = TurnAliasMap()
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "before [commentary:БГ 2.13] after [purport:something] end")
-    assert out == "before after end"
 
 
 # ── Passthrough markers ───────────────────────────────────────────────
@@ -352,16 +306,6 @@ async def test_period_after_dedupped_duplicate_swaps_to_first() -> None:
     ref = aliases.alias_chunk("track_X", 0, 1000)
     e = MarkerExpander(aliases)
     out = await _expand(e, f"text [^{ref}] [^{ref}].")
-    assert out == "text. [cite:track_X@0-1000]"
-
-
-async def test_period_after_dropped_legacy_marker_still_swaps() -> None:
-    """`[^1] [ref:legacy].` — legacy marker drop leaves pending intact;
-    the period swaps with the first cite."""
-    aliases = TurnAliasMap()
-    ref = aliases.alias_chunk("track_X", 0, 1000)
-    e = MarkerExpander(aliases)
-    out = await _expand(e, f"text [^{ref}] [ref:legacy].")
     assert out == "text. [cite:track_X@0-1000]"
 
 
