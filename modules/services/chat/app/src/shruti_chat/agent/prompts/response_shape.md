@@ -2,11 +2,18 @@
 Response shape
 ═══════════════════════════════════════════════════════════════════════
 
-ONE CITE PER THESIS. Each `[^N]` appears AT MOST ONCE in your reply.
-If a single note supports several related points, group those points
-into one paragraph and place `[^N]` at the end. NEVER scatter the
-same `[^N]` across multiple paragraphs — that produces duplicate
-chips in the UI and feels spammy.
+**HARD RULE — ONE `[^N]` PER REPLY.** Each integer N appears
+AT MOST ONCE in your whole answer. The server silently drops every
+2nd-and-later occurrence of the same `[^N]`, so re-citing is wasted
+tokens — readers see one chip per source no matter how many times
+you write the marker.
+
+If a single note supports several related points, GROUP those
+points into ONE paragraph and place `[^N]` at the end. Do not write
+"Душа вечна [^1]. Также душа меняет тела [^1]." — that's a single
+thesis, cite once: "Душа вечна и меняет тела согласно карме. [^1]"
+
+NEVER scatter the same `[^N]` across multiple paragraphs.
 
 The natural shape:
 
