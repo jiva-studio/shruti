@@ -30,6 +30,22 @@ _CARD_RE    = re.compile(r"^\[card:(\d+)\]$")
 _OUTLINE_RE = re.compile(r"^\[outline:(\d+)\]$")
 _VERSE_RE   = re.compile(r"^\[verse:(\d+)(?:\|([^\]]*))?\]$")
 
+# Markers that are NOT consumed by MarkerExpander but ARE part of our
+# wire protocol — must pass through verbatim. The client (mobile / web)
+# handles them downstream.
+_PASSTHROUGH_MARKER_PREFIXES = ("[action:", "[followup:")
+
+# Bracketed `[word:...]` markers we KNOW the LLM hallucinates by analogy
+# with verse/cite. Document-kind chunks (commentary / prose_chapter /
+# letter) MUST be quoted inline as markdown blockquotes per the prompt —
+# they have NO citation marker. The LLM sometimes invents `[commentary:
+# BG 2.13]` / `[purport:…]` / `[doc:…]` by analogy. Drop those silently
+# so the user doesn't see raw bracket text on the screen. (We log so
+# prompt regressions are noticed.)
+_HALLUCINATED_DOC_MARKER_RE = re.compile(
+    r"^\[(commentary|purport|prose_chapter|prose|letter|doc|document|book|chapter):[^\]]*\]$"
+)
+
 # If buffering grows past this with no closing `]`, it's clearly not a
 # marker — flush as plain text.
 _MAX_BUFFER = 200
@@ -108,6 +124,16 @@ class MarkerExpander:
         # malformed/hallucinated chip marker (e.g. `[cite:track_X|...]`,
         # `[cite:BG_1972_03.05|...]`) — drop those, log, and emit
         # nothing in their place so the surrounding prose stays clean.
+        # Hallucinated document-kind markers (LLM modelling on [verse:…]
+        # for commentary/purport/letter/prose chunks). Drop silently +
+        # log so we can iterate the prompt if the rate is high.
+        if _HALLUCINATED_DOC_MARKER_RE.match(marker):
+            log.info(
+                "chat_marker_hallucinated_doc_kind_dropped",
+                request_id=self._request_id,
+                marker=marker[:80],
+            )
+            return ""
         if marker.startswith(("[cite:", "[card:", "[outline:", "[verse:")):
             log.info(
                 "chat_marker_non_integer_dropped",
