@@ -17,11 +17,14 @@
       </div>
     </template>
     <template v-else>
-      <header class="title">{{ title }}</header>
-      <div class="details-line">
-        <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
-        <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
-        <span v-if="metaLine" class="details">{{ metaLine }}</span>
+      <IconHeadphones class="lecture-icon" :size="32" :stroke-width="1.6" aria-hidden="true" />
+      <div class="lecture-info">
+        <span class="title">{{ title }}</span>
+        <div class="details-line">
+          <span v-if="primaryRef" class="ref">{{ primaryRef }}</span>
+          <span v-if="extraRefCount > 0" class="ref extra">+{{ extraRefCount }}</span>
+          <span v-if="metaLine" class="details">{{ metaLine }}</span>
+        </div>
       </div>
     </template>
     <IonActionSheet
@@ -36,6 +39,7 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
+import { IconHeadphones } from "@tabler/icons-vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { groupReferences } from "@lectorium/composables/groupReferences.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
@@ -132,33 +136,48 @@ function onOpen() {
 </script>
 
 <style scoped>
+/* Minimal row in a stacked TrackList — no card-background or border;
+   the row sits in a flat list with a document icon on the left,
+   title + ref+meta on the right. Mirrors the PDF list pattern. */
 .lecture-card {
-  display: block;
-  margin: 10px 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 4px;
+  background: transparent;
+  border: none;
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    background 120ms ease,
-    transform 60ms ease;
+  transition: background 120ms ease;
 }
 
 .lecture-card:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  transform: scale(0.997);
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+.lecture-icon {
+  flex: 0 0 32px;
+  color: var(--ion-color-primary);
+}
+
+.lecture-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .title {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 15px;
   line-height: 1.3;
-  margin-bottom: 4px;
   color: var(--ion-text-color);
-  /* No wrapping pathology — title can wrap normally but stays compact. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* One physical line: ref chip first, then `location · date · duration`.

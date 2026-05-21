@@ -66,47 +66,54 @@ async function onAddAll(): Promise<void> {
 .track-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
   /* Breathing room from the prose paragraph above. The parser strips
      trailing whitespace before a block element, so the gap has to
      come from the widget itself. */
-  margin-top: 10px;
+  margin: 10px 0;
 }
 
-/* Inside a track list the cards stack tightly — override LectureCard's
-   own 10px vertical margin (designed for standalone use) so the
-   stack doesn't look airy. */
-.track-list :deep(.lecture-card) {
-  margin: 0;
+/* Soft gradient divider between consecutive rows — mirrors the
+   VerseCard top/bottom rules (faded edges, soft middle). 1px wide
+   line painted via background-image so it stays on element layout
+   without needing a pseudo-element. */
+.track-list :deep(.lecture-card + .lecture-card),
+.add-all-btn {
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    rgba(var(--ion-color-tertiary-rgb), 0.18),
+    transparent
+  );
+  background-position: top;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
 }
 
 .add-all-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  /* Lock the height so the busy-spinner doesn't make the button taller
-     than its idle text state — the dots-spinner has a different
-     intrinsic height than the body text. */
-  min-height: 40px;
-  /* No own top margin — the flex container's `gap` already spaces the
-     button from the last card (same 6px as inter-card gap). */
-  padding: 10px 14px;
+  /* Right-aligned, inline-style link button. Lock min-height so the
+     busy-spinner doesn't change the row height. */
+  justify-content: flex-end;
+  min-height: 32px;
+  margin: 0;
+  padding: 6px 4px;
   border: none;
-  border-radius: 12px;
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  /* No `background` shorthand — would clobber the gradient divider
+     painted above on the shared selector. Default transparent fill
+     comes for free. */
+  background-color: transparent;
   color: var(--ion-color-primary);
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 400;
+  font-size: 12px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition:
-    background 120ms ease,
-    transform 60ms ease;
+  transition: opacity 120ms ease;
 }
 
 .add-all-btn:active:not(:disabled) {
-  background: rgba(var(--ion-color-primary-rgb), 0.2);
-  transform: scale(0.998);
+  opacity: 0.6;
 }
 
 .add-all-btn:disabled {
