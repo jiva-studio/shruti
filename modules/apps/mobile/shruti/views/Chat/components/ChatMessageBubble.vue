@@ -38,19 +38,12 @@
               :end-ms="token.endMs"
               :caption="token.caption"
             />
-            <LectureCard v-else-if="token.kind === 'card'" :track-id="token.trackId" />
+            <TrackList v-else-if="token.kind === 'cards'" :track-ids="token.trackIds" />
             <OutlineCard
               v-else-if="token.kind === 'outline'"
               :track-id="token.trackId"
               :items="message.outlines?.[token.trackId]?.items ?? []"
               @pick-chapter="$emit('pick-chapter', $event)"
-            />
-            <ActionCardPlaylist
-              v-else-if="token.kind === 'action' && token.actionKind === 'create_playlist'"
-              :action-id="token.actionId"
-              :payload="playlistPayload(token.actionId)"
-              :state="actionState(token.actionId)"
-              @confirm="onConfirmAction"
             />
             <ActionCardSharePdf
               v-else-if="token.kind === 'action' && token.actionKind === 'share_pdf'"
@@ -124,10 +117,9 @@ import { parseChatMarkers } from "../composables/useMarkerParser.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import CitationChip from "./CitationChip.vue"
-import LectureCard from "./LectureCard.vue"
+import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
-import ActionCardPlaylist from "./ActionCardPlaylist.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
@@ -176,13 +168,6 @@ function actionState(actionId: string): ActionState {
   // collapses to "pending" so the Create button is always reachable.
   if (raw === "executing" || raw === "done" || raw === "error") return raw
   return "pending"
-}
-
-function playlistPayload(
-  actionId: string
-): Extract<ChatActionPayload, { kind: "create_playlist" }> | undefined {
-  const a = props.message.actions?.[actionId]
-  return a && a.kind === "create_playlist" ? a : undefined
 }
 
 function sharePdfPayload(
