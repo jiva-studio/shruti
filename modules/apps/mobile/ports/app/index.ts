@@ -45,6 +45,11 @@ export type {
 } from "./chatStreamClient.js"
 export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"
 export type {
+  IChatQuestionsService,
+  ChatQuestionsFocusInput,
+  FetchSuggestedQuestionsOptions,
+} from "./chatQuestionsService.js"
+export type {
   IProactiveChatService,
   ProactiveTurnRequest,
   ProactiveTurnResult,

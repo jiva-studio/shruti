@@ -1,12 +1,23 @@
-import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
+import {
+  computed,
+  nextTick,
+  ref,
+  watch,
+  type ComputedRef,
+  type MaybeRefOrGetter,
+  type Ref,
+} from "vue"
 import type { LanguageCode, NoteId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
 import { useShruti } from "@shruti/shruti.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
+import { pickAudioVariant } from "@shruti/views/Chat/composables/useCitationSnippet.js"
+import router from "@shruti/router/index.js"
 import { buildTranscriptViewData } from "@shruti/composables/buildTranscriptViewData.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
 import { resolveLocalizedName } from "@shruti/composables/resolveLocalized.js"
@@ -45,7 +56,7 @@ export interface TranscriptDialogState {
   onClose(): void
   onSeek(positionMs: number): void
   onSelectionAction(action: {
-    action: "copy" | "bookmark" | "share" | "delete"
+    action: "copy" | "bookmark" | "share" | "delete" | "ask"
     text: string
     timeStart: number
     timeEnd: number
@@ -62,6 +73,7 @@ export function useTranscriptDialogController(
   const player = usePlayerStore()
   const dictionaries = useDictionariesStore()
   const notesStore = useNotesStore()
+  const chatStore = useChatStore()
   const appLanguage = useAppLanguage()
   const allowMultipleLanguages = ref<boolean>(false)
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
@@ -143,6 +155,69 @@ export function useTranscriptDialogController(
     },
     onError: (message) => {
       loader.error.value = message
+    },
+    onAskRequested: async ({ trackId, text, timeStart, timeEnd }) => {
+      // Build focus payload — pin all bibliographic context at insert
+      // time so a later catalog rename / dictionary swap doesn't
+      // silently change the focus card's header. Source-audio path
+      // is best-effort: missing audio → focus message renders with a
+      // disabled player (still useful as a quoted text card).
+      const track = hydration.track.value
+      const ctx = buildShareTrackContext()
+      const variant = track ? pickAudioVariant(track) : null
+      const sourceKey = variant?.audio?.path ?? undefined
+      const lang = appLanguage.value
+      const location = track?.locationId
+        ? dictionaries.locationsById.get(track.locationId)
+        : undefined
+      const locationName = location ? resolveLocalizedName(location, lang) : undefined
+      const focus = {
+        trackId,
+        startMs: timeStart,
+        endMs: timeEnd,
+        text,
+        sourceKey,
+        trackTitle: ctx?.title,
+        authorName: ctx?.authorName,
+        date: ctx?.date,
+        location: locationName,
+      }
+      // Prep chat state FIRST while the transcript modal is still
+      // mounted — that way our `chatStore` calls have access to the
+      // user-DB without racing the modal teardown.
+      try {
+        const sessionId = await chatStore.openOrCreateFocusedSession(trackId)
+        const focusMessageId = await chatStore.appendFocusMessage(focus)
+        // Fire-and-forget — chips land on the focus message's
+        // `followups` once /questions resolves (or `[]` on failure,
+        // which the card interprets as "fall back to static i18n").
+        void chatStore.requestSuggestions(focusMessageId, focus)
+        chatStore.requestInputFocus()
+        // Close the transcript modal BEFORE navigating to chat. Just
+        // calling `transcriptStore.close()` was unreliable — IonModal's
+        // `:is-open=false` binding doesn't always run the dismiss when
+        // a route push is queued behind it, leaving the modal stuck on
+        // top of the chat tab in a broken "no transcript" state. Belt
+        // and braces: flip the store first (state stays consistent),
+        // then query the live <ion-modal> and await its imperative
+        // dismiss() so we know it's actually gone before navigation.
+        transcriptStore.close()
+        await nextTick()
+        const liveModal = document.querySelector("ion-modal.transcript-dialog") as
+          | (HTMLElement & { dismiss?: () => Promise<void> })
+          | null
+        if (liveModal && typeof liveModal.dismiss === "function") {
+          try {
+            await liveModal.dismiss()
+          } catch {
+            // Already dismissing / dismissed — nothing to do.
+          }
+        }
+        await router.push({ name: "chat-session", params: { sessionId } })
+      } catch (err) {
+        console.warn("[transcript] ask-sadhu dispatch failed:", err)
+        loader.error.value = err instanceof Error ? err.message : String(err)
+      }
     },
   })
 

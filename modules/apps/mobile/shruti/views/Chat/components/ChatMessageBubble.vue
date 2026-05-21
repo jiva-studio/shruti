@@ -1,5 +1,15 @@
 <template>
+  <ChatFocusCard
+    v-if="message.focus"
+    :data-message-id="message.id"
+    :message-id="message.id"
+    :focus="message.focus"
+    :suggestions="focusSuggestions"
+    :suggestions-loading="focusLoading"
+    @pick-suggestion="$emit('pick-suggestion', $event)"
+  />
   <div
+    v-else
     :class="[
       'bubble-row',
       message.role,
@@ -153,6 +163,7 @@ import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.v
 import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 import StatusPill from "./StatusPill.vue"
+import ChatFocusCard from "./ChatFocusCard.vue"
 
 const props = withDefaults(
   defineProps<{
@@ -161,6 +172,14 @@ const props = withDefaults(
      *  the trailing failed/truncated message gets a Retry button —
      *  earlier ones are frozen history. */
     isLast?: boolean
+    /** Persisted Ask-Sadhu chips for this focus message (lives on
+     *  `meta.followups`). `null` means "fetch hasn't resolved yet" —
+     *  the card falls back to the static i18n list in that case so
+     *  the affordance is always visible. */
+    focusSuggestions?: readonly string[] | null
+    /** True while the focus message's `/questions` round-trip is in
+     *  flight — card renders a loading pill instead of chips. */
+    focusLoading?: boolean
   }>(),
   { isLast: false }
 )
@@ -176,6 +195,8 @@ const emit = defineEmits<{
   ]
   /** User tapped Retry on a failed/truncated assistant bubble. */
   retry: [messageId: string]
+  /** Forwarded up from ChatFocusCard's suggestion chip taps. */
+  "pick-suggestion": [text: string]
 }>()
 const chat = useChatStore()
 const verseBody = useVerseBodyStore()

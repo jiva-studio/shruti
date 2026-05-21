@@ -17,7 +17,7 @@ import { IonPopover } from "@ionic/vue"
 import SelectionActions from "./SelectionActions.vue"
 import type { TextSelectedEvent } from "./TranscriptText.vue"
 
-export type SelectionAction = "copy" | "bookmark" | "share" | "delete"
+export type SelectionAction = "copy" | "bookmark" | "share" | "delete" | "ask"
 
 /**
  * Input describing a tap on an already-highlighted span. The popover

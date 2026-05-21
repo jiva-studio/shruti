@@ -1,4 +1,4 @@
-import type { ChatSessionId, UnixMs } from "./core.js"
+import type { ChatSessionId, TrackId, UnixMs } from "./core.js"
 
 /**
  * One Sadhu-tab conversation. The `title` is initially derived locally
@@ -16,4 +16,12 @@ export interface ChatSession {
   readonly title: string | null
   readonly createdAt: UnixMs
   readonly updatedAt: UnixMs
+  /**
+   * Track this session is anchored to. Set when the session is started
+   * by tapping the Sadhu icon on a transcript selection — every
+   * subsequent "Ask Sadhu" from the same track lands in this session,
+   * accumulating multiple focus messages. `null` for free-form chats
+   * (the user opened the chat tab without a transcript context).
+   */
+  readonly trackId?: TrackId | null
 }
