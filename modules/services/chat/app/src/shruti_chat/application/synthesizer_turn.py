@@ -111,12 +111,40 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
           БГ 2.13, комментарий
           <text>
 
+      Action result (a propose_* tool returned `{ok, kind, action_id}`):
+
+          ACTION CARD READY — copy this marker exactly into your reply,
+          on its own line:
+          [action:share_pdf|id=ab12cd34]
+
     Everything the LLM doesn't act on — `kind=`, `lang=`, IDs like
     `source_id` / `author_id` — is dropped. The server-side marker
     expander knows the type via alias resolution.
     """
     if "error" in note:
         return f"(no usable results: {note.get('error')!s})"
+
+    # Action-tool result: emit an explicit "copy this marker" directive.
+    # The propose_* tools return `{ok, kind, action_id, ...}`; synth
+    # copies the marker character-by-character — no chance to invent
+    # the action_id, no chance to omit it.
+    action_kind = note.get("kind")
+    action_id = note.get("action_id")
+    if (
+        isinstance(action_kind, str)
+        and isinstance(action_id, str)
+        and action_kind in {
+            "share_pdf",
+            "enable_daily_reminder",
+            "configure_smart_library",
+            "upgrade_to_pro",
+        }
+    ):
+        return (
+            "ACTION CARD READY — copy this marker exactly into your reply, "
+            "on its own line:\n"
+            f"[action:{action_kind}|id={action_id}]"
+        )
 
     ref = note.get("ref")
     note_type = (note.get("type") or "").lower()
