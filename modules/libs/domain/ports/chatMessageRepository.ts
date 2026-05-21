@@ -46,6 +46,12 @@ export interface IChatMessageRepository {
     actionStates: Record<string, ChatActionState>
   ): Promise<void>
 
+  /** Remove a single message. Used by chat retry: when the user taps
+   *  Retry on a failed/truncated assistant reply, the store deletes the
+   *  failed assistant row AND the user prompt that produced it so the
+   *  fresh turn doesn't pile a duplicate user message into history. */
+  delete(id: ChatMessageId): Promise<void>
+
   /** Delete every message belonging to a session. The session row is
    *  removed by the session repository; this is the cascade companion. */
   deleteBySession(sessionId: ChatSessionId): Promise<void>
