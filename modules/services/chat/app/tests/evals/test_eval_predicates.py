@@ -296,3 +296,95 @@ def test_case_without_predicates_passes() -> None:
     ok, fails = evaluate_case({"query": "x"}, _obs())
     assert ok
     assert fails == []
+
+
+# ── marker-hygiene predicates ─────────────────────────────────────────
+
+
+def test_no_duplicate_markers_passes_when_each_cite_unique() -> None:
+    case = {"expect_no_duplicate_markers": True}
+    obs = _obs(response_text=(
+        "Душа вечна. [cite:track_A@0-1000|вечность]\n\n"
+        "Душа меняет тела. [cite:track_B@2000-3000|перерождение]\n\n"
+        "Душа — частица Бога. [verse:source_BG/15.7|БГ 15.7]"
+    ))
+    ok, fails = evaluate_case(case, obs)
+    assert ok, fails
+
+
+def test_no_duplicate_markers_fails_on_repeated_cite() -> None:
+    """Spammy duplicate cites — same chip rendered 3 times — is
+    exactly the regression the LLM was producing on 'что такое разум'
+    before we taught it the one-cite-per-thesis structure."""
+    case = {"expect_no_duplicate_markers": True}
+    obs = _obs(response_text=(
+        "Душа вечна. [cite:track_A@0-1000|вечность]\n\n"
+        "Душа — это X. [cite:track_A@0-1000|вечность]\n\n"
+        "И ещё Y. [cite:track_A@0-1000|вечность]"
+    ))
+    ok, fails = evaluate_case(case, obs)
+    assert not ok
+    assert any("cite" in f and "×3" in f for f in fails)
+
+
+def test_no_duplicate_markers_fails_on_repeated_verse() -> None:
+    case = {"expect_no_duplicate_markers": True}
+    obs = _obs(response_text=(
+        "[verse:source_BG/2.13|БГ 2.13]\n[verse:source_BG/2.13|БГ 2.13]"
+    ))
+    ok, fails = evaluate_case(case, obs)
+    assert not ok
+    assert any("verse" in f for f in fails)
+
+
+def test_no_duplicate_markers_skipped_when_flag_absent() -> None:
+    """Cases that don't set the flag aren't checked — opt-in only."""
+    obs = _obs(response_text="[cite:A@0-1] [cite:A@0-1]")
+    ok, _ = evaluate_case({}, obs)
+    assert ok
+
+
+def test_no_unexpanded_footnote_fails_on_raw_footnote() -> None:
+    """Raw [^N] reaching the response = MarkerExpander broken."""
+    obs = _obs(response_text="text [^3] tail")
+    ok, fails = evaluate_case({}, obs)
+    assert not ok
+    assert any("[^N]" in f and "[^3]" in f for f in fails)
+
+
+def test_no_unexpanded_footnote_passes_on_expanded_only() -> None:
+    obs = _obs(response_text="text [cite:track_X@0-100] tail")
+    ok, fails = evaluate_case({}, obs)
+    assert ok, fails
+
+
+def test_no_legacy_marker_fails_on_legacy_ref() -> None:
+    """[ref:1] is the pre-migration shape — drops in legacy branch
+    of expander, never reaches client."""
+    obs = _obs(response_text="see [ref:1|caption] here")
+    ok, fails = evaluate_case({}, obs)
+    assert not ok
+    assert any("legacy" in f for f in fails)
+
+
+def test_no_legacy_marker_fails_on_legacy_cite_with_integer() -> None:
+    """`[cite:1]` (integer N, not track_id) is the old shape from
+    pre-[^N] protocol — legacy."""
+    obs = _obs(response_text="text [cite:1|cap] tail")
+    ok, fails = evaluate_case({}, obs)
+    assert not ok
+
+
+def test_no_legacy_marker_passes_on_expanded_cite() -> None:
+    """`[cite:track_X@s-e]` is the expanded shape — not legacy."""
+    obs = _obs(response_text="text [cite:track_X@1000-2000|caption] tail")
+    ok, fails = evaluate_case({}, obs)
+    assert ok, fails
+
+
+def test_no_legacy_marker_can_be_disabled() -> None:
+    """A case can opt out by setting the flag to False — useful for
+    tests that intentionally use the legacy shape."""
+    obs = _obs(response_text="[ref:1]")
+    ok, _ = evaluate_case({"expect_no_legacy_marker": False}, obs)
+    assert ok
