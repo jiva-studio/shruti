@@ -13,31 +13,7 @@
     >
       <span class="pdf-icon" aria-hidden="true">
         <IonSpinner v-if="rowState(item.trackId) === 'sharing'" name="dots" />
-        <svg v-else viewBox="0 0 40 48" width="34" height="40">
-          <!-- Document page with folded top-right corner (line-style),
-               + red "PDF" tag on the bottom — recognisable PDF
-               document badge at glance. -->
-          <path
-            d="M5 3h22l8 8v32a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
-            fill="var(--ion-background-color, #fff)"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linejoin="round"
-          />
-          <path
-            d="M27 3v6a2 2 0 0 0 2 2h6"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linejoin="round"
-          />
-          <rect x="3" y="26" width="28" height="13" rx="2" fill="#d83b3b" />
-          <text
-            x="17" y="36"
-            font-size="9" font-weight="800" text-anchor="middle"
-            fill="#fff" font-family="system-ui, -apple-system, sans-serif"
-          >PDF</text>
-        </svg>
+        <IconFileTypePdf v-else :size="32" :stroke-width="1.6" />
       </span>
       <div class="pdf-info">
         <span class="pdf-title">{{ item.title }}</span>
@@ -55,6 +31,7 @@
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
+import { IconFileTypePdf } from "@tabler/icons-vue"
 import type { ActionPayload } from "@shruti/stores/useChatStore.js"
 import type { ChatSharePdfItemPayload as SharePdfItemPayload } from "@lib/domain/chatMessage.js"
 import { useShruti } from "@shruti/shruti.js"
@@ -161,8 +138,18 @@ void props.actionId
   transition: background 120ms ease;
 }
 
+/* Soft gradient divider between rows — mirrors the VerseCard top /
+   bottom rules so action lists read consistently with verse cards. */
 .pdf-row + .pdf-row {
-  border-top: 1px solid rgba(var(--ion-color-step-200-rgb, 200, 200, 200), 0.18);
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    rgba(var(--ion-color-tertiary-rgb), 0.18),
+    transparent
+  );
+  background-position: top;
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
 }
 
 .pdf-row:active:not([aria-disabled="true"]) {
