@@ -36,6 +36,7 @@ _SYNTH_PROMPT_SECTIONS = (
     "library",
     "quoting",
     "response_shape",
+    "actions",
     "language",
     "safety",
     "followups",
