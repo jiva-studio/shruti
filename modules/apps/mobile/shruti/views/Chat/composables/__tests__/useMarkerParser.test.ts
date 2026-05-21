@@ -78,9 +78,7 @@ describe("parseChatMarkers — card grouping (playlists as card stacks)", () => 
 
   it("splits when a non-blank text separates the cards", () => {
     // Cards interleaved with substantive prose stay separate groups.
-    const tokens = parseChatMarkers(
-      "[card:track_A]\nProse paragraph.\n[card:track_B]"
-    )
+    const tokens = parseChatMarkers("[card:track_A]\nProse paragraph.\n[card:track_B]")
     const cards = tokens.filter((t) => t.kind === "cards")
     expect(cards).toHaveLength(2)
   })

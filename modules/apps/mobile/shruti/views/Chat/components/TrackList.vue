@@ -80,7 +80,9 @@ async function onAddAll(): Promise<void> {
   font-size: 14px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 120ms ease, transform 60ms ease;
+  transition:
+    background 120ms ease,
+    transform 60ms ease;
 }
 
 .add-all-btn:active:not(:disabled) {
