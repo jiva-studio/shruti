@@ -249,6 +249,10 @@ async def generate_track_pdf(
     )
     return {
         "ok": True,
+        # `kind` lets the synthesizer's note-renderer recognise this
+        # as an action result (vs a regular chunk envelope) and emit
+        # the `[action:share_pdf|id=...]` marker in prose.
+        "kind": "share_pdf",
         "action_id": action_id,
         "items": ok_items,
         "errors": errors,

@@ -56,7 +56,7 @@ async def propose_enable_reminder(
             "payload": {"time": t},
         },
     )
-    return {"ok": True, "action_id": action_id}
+    return {"ok": True, "kind": "enable_daily_reminder", "action_id": action_id}
 
 
 async def propose_configure_smart_library(
@@ -99,7 +99,7 @@ async def propose_configure_smart_library(
             "payload": {"filters": filters},
         },
     )
-    return {"ok": True, "action_id": action_id}
+    return {"ok": True, "kind": "configure_smart_library", "action_id": action_id}
 
 
 async def propose_upgrade_to_pro(
@@ -122,7 +122,7 @@ async def propose_upgrade_to_pro(
             "payload": {"reason": r[:64]},
         },
     )
-    return {"ok": True, "action_id": action_id}
+    return {"ok": True, "kind": "upgrade_to_pro", "action_id": action_id}
 
 
 register_tool(ToolDef(
