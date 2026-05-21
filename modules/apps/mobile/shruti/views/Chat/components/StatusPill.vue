@@ -1,10 +1,6 @@
 <template>
   <div class="status-pill" role="status" aria-live="polite">
-    <span class="dots" aria-hidden="true">
-      <span class="dot" />
-      <span class="dot" />
-      <span class="dot" />
-    </span>
+    <IonSpinner class="spinner" name="dots" aria-hidden="true" />
     <span v-if="label" class="label">{{ label }}</span>
   </div>
 </template>
@@ -12,6 +8,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { useI18n } from "vue-i18n"
+import { IonSpinner } from "@ionic/vue"
 
 const props = defineProps<{
   /** i18n key under `chat.status.<key>`. The server emits these via
@@ -47,35 +44,12 @@ const label = computed(() => {
   font-size: 13px;
   line-height: 1;
 }
-.dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-.dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-  animation: dot-bounce 1.2s infinite ease-in-out;
-}
-.dot:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.dot:nth-child(3) {
-  animation-delay: 0.3s;
-}
-@keyframes dot-bounce {
-  0%,
-  80%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  40% {
-    transform: translateY(-3px);
-    opacity: 1;
-  }
+/* Same `IonSpinner name="dots"` used on the send button — calm pulse,
+ * no vertical bounce. Sized down so it sits inside the pill cleanly. */
+.spinner {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
 }
 .label {
   white-space: nowrap;
