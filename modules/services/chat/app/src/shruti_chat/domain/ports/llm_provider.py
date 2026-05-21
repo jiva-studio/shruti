@@ -75,7 +75,7 @@ class LLMPort(Protocol):
     # NB: an earlier draft of the port exposed `as_chat_model() ->
     # BaseChatModel` as an escape hatch for LangGraph's
     # `create_react_agent`. We don't use create_react_agent (we run
-    # our own ReAct loop in `application/research_turn.py` so we can
+    # our own ReAct loop in `application/react_loop.py` so we can
     # inject `yield_event` into emits_events tools), so the method
     # has no callers and is intentionally NOT on the Protocol.
     # If a future feature needs the underlying LangChain model, add

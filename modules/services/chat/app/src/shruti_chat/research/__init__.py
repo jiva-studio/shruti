@@ -1,7 +1,7 @@
 """Code-driven research pipeline.
 
 Replaces the LLM-driven ReAct loop (`application/react_loop.py`, formerly
-`research_turn.py`) for `router.intent == "research"` turns. Deterministic
+`react_loop.py`) for `router.intent == "research"` turns. Deterministic
 orchestrator with explicit timeouts and a two-path execution model:
 
   SHORT path (question-attribution match):
