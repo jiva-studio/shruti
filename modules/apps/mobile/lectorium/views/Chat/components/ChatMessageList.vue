@@ -4,8 +4,11 @@
       <ChatMessageBubble
         :message="msg"
         :is-last="i === messages.length - 1"
+        :focus-suggestions="msg.focus ? (msg.followups ?? null) : null"
+        :focus-loading="msg.focus ? loadingFocusIds?.has(msg.id) === true : false"
         @pick-chapter="$emit('pick-chapter', $event)"
         @retry="$emit('retry', $event)"
+        @pick-suggestion="$emit('pick-suggestion', $event)"
       />
       <FollowupChips
         v-if="
@@ -24,7 +27,13 @@ import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import ChatMessageBubble from "./ChatMessageBubble.vue"
 import FollowupChips from "./FollowupChips.vue"
 
-const props = defineProps<{ messages: readonly ChatMessage[] }>()
+const props = defineProps<{
+  messages: readonly ChatMessage[]
+  /** Set of focus-message ids whose `/questions` round-trip is
+   *  in-flight. Each focus card looks itself up in here to decide
+   *  between "loading pill" vs "chips" vs "fallback". */
+  loadingFocusIds?: ReadonlySet<string>
+}>()
 defineEmits<{
   "pick-chapter": [
     args: {
@@ -34,6 +43,7 @@ defineEmits<{
     },
   ]
   "pick-followup": [text: string]
+  "pick-suggestion": [text: string]
   retry: [messageId: string]
 }>()
 

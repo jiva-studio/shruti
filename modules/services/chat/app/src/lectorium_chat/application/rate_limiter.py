@@ -44,6 +44,8 @@ class RateLimiter:
         s = self._settings
         if scope == "title":
             return s.title_device_rate_limit_per_day, s.title_ip_rate_limit_per_day
+        if scope == "questions":
+            return s.questions_device_rate_limit_per_day, s.questions_ip_rate_limit_per_day
         return s.device_rate_limit_per_day, s.ip_rate_limit_per_day
 
     async def check_and_increment(

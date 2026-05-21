@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -18,6 +18,7 @@ import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
+  ChatFocusPayload,
   ChatMessage as DomainChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
@@ -27,6 +28,7 @@ import type {
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@lectorium/services/chat/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@lectorium/services/chat/httpChatTitleService.js"
+import { createHttpChatQuestionsService } from "@lectorium/services/chat/httpChatQuestionsService.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
@@ -130,8 +132,28 @@ export const useChatStore = defineStore("chat", () => {
    *  (badge lights up iff this set is non-empty). Cleared per-session
    *  when `openSession(id)` stamps `seen_at`. */
   const unseenProactiveSessionIds = ref<ReadonlySet<string>>(new Set())
+  /** Set of focus message ids whose `/questions` round-trip is
+   *  in-flight. Drives the per-card "Picking questions…" placeholder.
+   *  The actual chip texts ride on the message's `followups` field —
+   *  persisted via `updateFollowups`, survives a session reload. */
+  const loadingFocusIds = ref<ReadonlySet<string>>(new Set())
+  /** Bumped by the "Ask Sadhu" controller after a focus message is
+   *  appended + navigation is queued. ChatView watches this counter
+   *  and calls `inputBarRef.focus()` so the keyboard comes up without
+   *  the user having to tap the textarea after the router lands. */
+  const inputFocusToken = ref<number>(0)
+  /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
+   *  session header above the message list (track title / author /
+   *  date) and any other code that needs to know whether the current
+   *  session is anchored to a track. */
+  const activeSession = computed<ChatSession | null>(() => {
+    const id = activeSessionId.value
+    if (!id) return null
+    return sessions.value.find((s) => s.id === id) ?? null
+  })
 
   let abort: AbortController | null = null
+  let suggestionsAbort: AbortController | null = null
 
   function userDb() {
     const db = app.databases.user
@@ -152,6 +174,9 @@ export const useChatStore = defineStore("chat", () => {
   }
   function titleService() {
     return createHttpChatTitleService()
+  }
+  function questionsService() {
+    return createHttpChatQuestionsService()
   }
 
   async function refreshSessions(): Promise<void> {
@@ -176,6 +201,14 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function openSession(id: string): Promise<void> {
+    // No-op when the caller asks to open the already-active session.
+    // The "Ask Sadhu" flow opens a focused session, appends a focus
+    // message, starts a /questions fetch, then navigates — the router
+    // watcher re-fires `openSession(activeSessionId)` after the push.
+    // Without this guard, that second call would abort the in-flight
+    // suggestions request and reload the message list redundantly.
+    if (activeSessionId.value === id) return
+    cancelSuggestions()
     activeSessionId.value = id
     const repos = chatRepos()
     const rows = await repos.messages.listBySession(id as ChatSessionId)
@@ -201,9 +234,157 @@ export const useChatStore = defineStore("chat", () => {
 
   function startNewSession(): void {
     if (sending.value) cancelStream()
+    cancelSuggestions()
     activeSessionId.value = null
     messages.value = []
     lastError.value = null
+  }
+
+  /**
+   * "Ask Sadhu" entry point — open the latest session anchored to
+   * `trackId`, or create a fresh one if none exists. Multiple Sadhu-taps
+   * from the same track end up in the SAME session (accumulating focus
+   * messages), instead of spawning a dupe per fragment. Free-form chats
+   * (`trackId === null`) are not touched.
+   */
+  async function openOrCreateFocusedSession(trackId: TrackId): Promise<ChatSessionId> {
+    if (sending.value) cancelStream()
+    cancelSuggestions()
+    const repos = chatRepos()
+    const existing = await repos.sessions.findLatestByTrack(trackId)
+    if (existing) {
+      await openSession(existing.id)
+      return existing.id as ChatSessionId
+    }
+    const id = randomId() as ChatSessionId
+    const created = await repos.sessions.create({ id, title: null, trackId })
+    activeSessionId.value = id
+    messages.value = []
+    lastError.value = null
+    sessions.value = [created, ...sessions.value.filter((s) => s.id !== id)]
+    return id
+  }
+
+  /**
+   * Append a focus-marked user message to the active session. Goes
+   * through the regular `chat_messages` table with `role: "user"` +
+   * `meta.focus` payload — server sees it as a normal history turn;
+   * the bubble renderer branches on `focus` to draw the full-width
+   * focus card (player + quote) instead of a user bubble.
+   *
+   * NOT a chat turn — does NOT call the agent. The caller dispatches
+   * `requestSuggestions(focus)` separately if it wants chips.
+   */
+  async function appendFocusMessage(focus: ChatFocusPayload): Promise<ChatMessageId> {
+    const sessionId = activeSessionId.value
+    if (!sessionId) {
+      throw new Error(
+        "appendFocusMessage: no active session — call openOrCreateFocusedSession first"
+      )
+    }
+    const repos = chatRepos()
+    const id = randomId() as ChatMessageId
+    const createdAt = Date.now()
+    const persisted = await repos.messages.create({
+      id,
+      sessionId: sessionId as ChatSessionId,
+      role: "user",
+      content: focus.text,
+      createdAt,
+      focus,
+    })
+    await repos.sessions.touch(sessionId as ChatSessionId, createdAt)
+    // Move the session to the top of the history list (same dance as
+    // `sendMessage`'s `user-message` branch).
+    const idx = sessions.value.findIndex((s) => s.id === sessionId)
+    if (idx >= 0) {
+      const updated = { ...sessions.value[idx], updatedAt: createdAt }
+      sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
+    }
+    messages.value = [...messages.value, { ...persisted }]
+    return id
+  }
+
+  /**
+   * Fire-and-forget request to `/questions` for the just-inserted focus
+   * fragment. Populates `pendingSuggestions` on success; on any failure
+   * the value stays `null` and the UI renders no chips. Auto-aborts if
+   * the active session changes mid-flight (user switched away).
+   */
+  async function requestSuggestions(
+    messageId: ChatMessageId,
+    focus: ChatFocusPayload
+  ): Promise<void> {
+    cancelSuggestions()
+    const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+    const ctl = new AbortController()
+    suggestionsAbort = ctl
+    const forSessionId = activeSessionId.value
+    // Surface loading state immediately so the focus card shows the
+    // "Picking questions…" placeholder instead of staying chip-less
+    // during the round-trip.
+    const nextLoading = new Set(loadingFocusIds.value)
+    nextLoading.add(messageId)
+    loadingFocusIds.value = nextLoading
+    try {
+      const result = await questionsService().fetchSuggestedQuestions(
+        {
+          trackId: focus.trackId,
+          startMs: focus.startMs,
+          endMs: focus.endMs,
+          text: focus.text,
+          sourceKey: focus.sourceKey,
+          trackTitle: focus.trackTitle,
+          authorName: focus.authorName,
+          date: focus.date,
+          location: focus.location,
+        },
+        lang,
+        { signal: ctl.signal }
+      )
+      if (ctl.signal.aborted) return
+      if (activeSessionId.value !== forSessionId) return
+      // Persist on the focus message's `meta.followups` so the chips
+      // survive a session reload. Stored as an empty array when the
+      // server gave us nothing — the ChatFocusCard interprets `[]` as
+      // "fetch resolved, fall back to the static i18n list".
+      const persisted: readonly string[] = result.length > 0 ? [...result] : []
+      try {
+        await chatRepos().messages.updateFollowups(messageId, persisted)
+      } catch (err) {
+        console.warn("chat: failed to persist focus followups", err)
+      }
+      const idx = messages.value.findIndex((m) => m.id === messageId)
+      if (idx >= 0) {
+        const next = [...messages.value]
+        next[idx] = { ...next[idx], followups: persisted }
+        messages.value = next
+      }
+    } catch {
+      // Service maps errors to []; this catch is defence-in-depth.
+    } finally {
+      if (suggestionsAbort === ctl) suggestionsAbort = null
+      const after = new Set(loadingFocusIds.value)
+      after.delete(messageId)
+      loadingFocusIds.value = after
+    }
+  }
+
+  function cancelSuggestions(): void {
+    if (suggestionsAbort) {
+      suggestionsAbort.abort()
+      suggestionsAbort = null
+    }
+    if (loadingFocusIds.value.size > 0) {
+      loadingFocusIds.value = new Set()
+    }
+  }
+
+  /** Bump the focus-input ping. ChatView watches `inputFocusToken` and
+   *  brings the textarea into focus on every increment. Idempotent —
+   *  call as many times as needed; the watcher fires per increment. */
+  function requestInputFocus(): void {
+    inputFocusToken.value = (inputFocusToken.value + 1) % 1_000_000
   }
 
   async function ensureActiveSession(seedTitle: string): Promise<string> {
@@ -722,6 +903,7 @@ export const useChatStore = defineStore("chat", () => {
     // finally-block would persist its accumulated reply into the
     // freshly-emptied tables, leaving an orphan row.
     cancelStream()
+    cancelSuggestions()
     const repos = chatRepos()
     await repos.messages.clearAll()
     await repos.sessions.clearAll()
@@ -745,13 +927,20 @@ export const useChatStore = defineStore("chat", () => {
 
   return {
     sessions,
+    activeSession,
     activeSessionId,
     messages,
     sending,
     lastError,
+    loadingFocusIds,
+    inputFocusToken,
     unseenProactiveSessionIds,
     refreshSessions,
     openSession,
+    openOrCreateFocusedSession,
+    appendFocusMessage,
+    requestSuggestions,
+    requestInputFocus,
     startNewSession,
     sendMessage,
     cancelStream,

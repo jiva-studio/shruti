@@ -5,7 +5,7 @@ import { formatNoteShare, type NoteShareContext } from "@lib/application/formatN
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 
-export type SelectionActionKind = "copy" | "bookmark" | "share" | "delete"
+export type SelectionActionKind = "copy" | "bookmark" | "share" | "delete" | "ask"
 
 export interface SelectionActionEvent {
   action: SelectionActionKind
@@ -16,11 +16,26 @@ export interface SelectionActionEvent {
   /** End of the selected text range, in **milliseconds**. */
   timeEnd: number
   /**
-   * Populated only when `action === "delete"` (tap-on-highlight path).
-   * The first id is removed; multi-note overlap can be addressed in a
-   * follow-up.
+   * Populated for `delete` (tap-on-highlight) and `ask` when the user
+   * tapped an existing note instead of dragging a fresh selection. The
+   * `ask` branch reads the first id to pull the note's text + range
+   * from the repo (the popover sends `text:""` and `timeStart=0` for
+   * the existing-note path).
    */
   noteIds?: readonly NoteId[]
+}
+
+/**
+ * Argument shape handed to `onAskRequested` by the `'ask'` branch.
+ * Narrow on purpose — text + range + trackId. The consumer (typically
+ * the transcript dialog controller) is responsible for resolving track
+ * metadata + sourceKey + dispatching the chat store + router.
+ */
+export interface AskRequestParams {
+  readonly trackId: TrackId
+  readonly text: string
+  readonly timeStart: number
+  readonly timeEnd: number
 }
 
 export interface UseTranscriptSelectionActionsOptions {
@@ -52,6 +67,15 @@ export interface UseTranscriptSelectionActionsOptions {
   onNoteDeleted?: () => void
   /** Surface a load/save error back to the consumer. */
   onError?: (message: string) => void
+  /**
+   * Dispatched on `'ask'` actions. The composable normalises the
+   * `selection` vs `existing` paths into one params shape — drag-select
+   * sends live `event.text`+range; tap-on-highlight resolves the note
+   * via `getNotes().getById(noteIds[0])` and forwards its persisted
+   * text + range. The consumer wires this to the chat store +
+   * navigation; if absent, `'ask'` is a no-op.
+   */
+  onAskRequested?: (params: AskRequestParams) => Promise<void> | void
 }
 
 export interface UseTranscriptSelectionActionsReturn {
@@ -127,6 +151,42 @@ export function useTranscriptSelectionActions(
         return
       }
       options.onNoteDeleted?.()
+      return
+    }
+    if (event.action === "ask") {
+      // Two arrival paths:
+      //  - selection: `event.text` + `event.timeStart` / `timeEnd` come
+      //    straight from the drag. Use as-is.
+      //  - existing (tap-on-highlight): popover forwards empty text +
+      //    zero range; the real values live on the note row, so we
+      //    fetch it here. Keeps the consumer ignorant of the two paths.
+      let text = event.text
+      let timeStart = event.timeStart
+      let timeEnd = event.timeEnd
+      if (!text || timeEnd <= timeStart) {
+        const noteId = event.noteIds?.[0]
+        if (!noteId) return
+        try {
+          const note = await options.getNotes().getById(noteId)
+          if (!note) return
+          text = note.text
+          timeStart = note.timeStart
+          timeEnd = note.timeEnd
+        } catch (err) {
+          options.onError?.(
+            `Could not load note: ${err instanceof Error ? err.message : String(err)}`
+          )
+          return
+        }
+      }
+      if (!text) return
+      const normalisedStart = Math.max(0, Math.round(timeStart))
+      await options.onAskRequested?.({
+        trackId,
+        text,
+        timeStart: normalisedStart,
+        timeEnd: Math.max(normalisedStart + 1, Math.round(timeEnd)),
+      })
       return
     }
   }

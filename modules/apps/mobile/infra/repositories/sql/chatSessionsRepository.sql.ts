@@ -1,6 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { ChatSession } from "@lib/domain/chatSession.js"
-import type { ChatSessionId } from "@lib/domain/core.js"
+import type { ChatSessionId, TrackId } from "@lib/domain/core.js"
 import type {
   CreateChatSessionInput,
   IChatSessionRepository,
@@ -11,6 +11,7 @@ interface ChatSessionRow {
   readonly title: string | null
   readonly created_at: number
   readonly updated_at: number
+  readonly track_id: string | null
 }
 
 function rowToSession(r: ChatSessionRow): ChatSession {
@@ -19,6 +20,7 @@ function rowToSession(r: ChatSessionRow): ChatSession {
     title: r.title,
     createdAt: Number(r.created_at),
     updatedAt: Number(r.updated_at),
+    trackId: r.track_id ? (r.track_id as TrackId) : null,
   }
 }
 
@@ -26,7 +28,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
   return {
     async list(limit = 200): Promise<readonly ChatSession[]> {
       const rows = await db.query<ChatSessionRow>(
-        `SELECT id, title, created_at, updated_at
+        `SELECT id, title, created_at, updated_at, track_id
            FROM chat_sessions
           ORDER BY updated_at DESC
           LIMIT ?`,
@@ -37,7 +39,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
 
     async getById(id: ChatSessionId): Promise<ChatSession | null> {
       const rows = await db.query<ChatSessionRow>(
-        `SELECT id, title, created_at, updated_at
+        `SELECT id, title, created_at, updated_at, track_id
            FROM chat_sessions WHERE id = ? LIMIT 1`,
         [id]
       )
@@ -46,9 +48,10 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
 
     async create(input: CreateChatSessionInput): Promise<ChatSession> {
       const now = Date.now()
+      const trackId = input.trackId ?? null
       await db.execute(
-        "INSERT INTO chat_sessions (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-        [input.id, input.title, now, now]
+        "INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id) VALUES (?, ?, ?, ?, ?)",
+        [input.id, input.title, now, now, trackId]
       )
       await db.save()
       return {
@@ -56,6 +59,7 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
         title: input.title,
         createdAt: now,
         updatedAt: now,
+        trackId,
       }
     },
 
@@ -77,6 +81,18 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
     async clearAll(): Promise<void> {
       await db.execute("DELETE FROM chat_sessions")
       await db.save()
+    },
+
+    async findLatestByTrack(trackId: TrackId): Promise<ChatSession | null> {
+      const rows = await db.query<ChatSessionRow>(
+        `SELECT id, title, created_at, updated_at, track_id
+           FROM chat_sessions
+          WHERE track_id = ?
+          ORDER BY updated_at DESC
+          LIMIT 1`,
+        [trackId]
+      )
+      return rows[0] ? rowToSession(rows[0]) : null
     },
   }
 }

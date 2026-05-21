@@ -141,7 +141,16 @@ function setText(next: string): void {
   })
 }
 
-defineExpose({ setText })
+/** Focus the textarea without changing its content. Used after the
+ *  "Ask Sadhu" navigation: the focus card + chips are already in place
+ *  and the user expects the keyboard to come up immediately. */
+function focus(): void {
+  void nextTick(() => {
+    textareaRef.value?.focus()
+  })
+}
+
+defineExpose({ setText, focus })
 </script>
 
 <style scoped>

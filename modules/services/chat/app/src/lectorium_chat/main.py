@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from lectorium_chat.agent import llm
 from lectorium_chat.agent.tools import bind_repositories
-from lectorium_chat.api import admin, chat, title
+from lectorium_chat.api import admin, chat, questions, title
 from lectorium_chat.application.rate_limiter import RateLimiter
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.config import get_settings
@@ -171,3 +171,4 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(admin.router)
 app.include_router(title.router)
+app.include_router(questions.router)

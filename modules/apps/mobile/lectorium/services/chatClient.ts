@@ -197,6 +197,66 @@ export async function fetchSessionTitle(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                          Suggested-questions generator                     */
+/* -------------------------------------------------------------------------- */
+
+/** Wire shape for the `/questions` request body. Server expects
+ *  camelCase for `focus.*` fields (Pydantic alias = trackId / startMs /
+ *  endMs / trackTitle / authorName). `lang` is the UI language. */
+export interface QuestionsFocusInput {
+  readonly trackId: string
+  readonly startMs: number
+  readonly endMs: number
+  readonly text: string
+  readonly sourceKey?: string
+  readonly trackTitle?: string
+  readonly authorName?: string
+  readonly date?: string
+  readonly location?: string
+}
+
+/**
+ * POST /questions — 3-4 short suggestion chips for the focus fragment
+ * the user just dropped into the chat. Fire-and-forget on the client
+ * side: any error path (network, HTTP non-2xx, parse failure, server
+ * returned []) collapses to an empty list, which the UI renders as
+ * "no chips" without a toast. The caller MUST treat the empty result
+ * as graceful degradation, not as a hard failure.
+ */
+export async function fetchSuggestedQuestions(
+  focus: QuestionsFocusInput,
+  lang: "ru" | "en",
+  opts: { baseUrl?: string; appToken?: string; clientId?: string; signal?: AbortSignal } = {}
+): Promise<readonly string[]> {
+  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
+  const clientId = opts.clientId ?? (await resolveClientId())
+
+  try {
+    const response = await fetch(joinUrl(baseUrl, "/questions"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Device-Id": clientId,
+        "X-App-Token": appToken,
+        "Idempotency-Key": newIdempotencyKey(),
+      },
+      body: JSON.stringify({ focus, lang }),
+      signal: opts.signal,
+    })
+    if (!response.ok) return []
+    const body = (await response.json()) as { questions?: unknown }
+    if (!Array.isArray(body.questions)) return []
+    return body.questions
+      .filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+      .map((q) => q.trim())
+  } catch {
+    return []
+  }
+}
+
 export interface ProactiveTurnOptions {
   readonly ruleKind: "weekly_digest" | "inactivity" | "holiday"
   readonly ruleDate: string // 'YYYY-MM-DD'

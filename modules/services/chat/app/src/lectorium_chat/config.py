@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     # without this gate gives an attacker free billable LLM access.
     title_device_rate_limit_per_day: int = 60
     title_ip_rate_limit_per_day: int = 300
+    # /questions is the "suggest 3-4 chips" call fired when the user
+    # asks Sadhu about a transcript fragment. Same cost profile as
+    # /title (gemini-flash, ~400 tokens out) but slightly noisier on
+    # the device side — one selection drag fires one call. Bucket is
+    # sized accordingly.
+    questions_device_rate_limit_per_day: int = 100
+    questions_ip_rate_limit_per_day: int = 500
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

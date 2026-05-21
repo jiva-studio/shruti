@@ -23,11 +23,20 @@
     </div>
     <IonContent class="chat-content" :fullscreen="true">
       <div ref="contentRef" class="chat-scroll">
+        <ChatSessionHeader
+          v-if="sessionHeader"
+          :title="sessionHeader.title"
+          :author-name="sessionHeader.authorName"
+          :date="sessionHeader.date"
+          :location="sessionHeader.location"
+        />
         <ChatMessageList
           v-if="hasMessages"
           :messages="messages"
+          :loading-focus-ids="loadingFocusIds"
           @pick-chapter="onPickChapter"
           @pick-followup="onSend"
+          @pick-suggestion="onPickSuggestion"
           @retry="onRetry"
         />
         <PageSticker v-else image="/chat-empty.png">
@@ -63,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
@@ -73,6 +82,7 @@ import ChatInputBar from "./components/ChatInputBar.vue"
 import ChatSessionList from "./components/ChatSessionList.vue"
 import RecentSessions from "./components/RecentSessions.vue"
 import SuggestionChips from "./components/SuggestionChips.vue"
+import ChatSessionHeader from "./components/ChatSessionHeader.vue"
 import { useChatController } from "./ChatView.controller.js"
 
 const inputBarRef = ref<InstanceType<typeof ChatInputBar> | null>(null)
@@ -92,6 +102,9 @@ const {
   searchQuery,
   filteredSessions,
   unseenProactiveSessionIds,
+  loadingFocusIds,
+  sessionHeader,
+  inputFocusToken,
   onSend,
   onNewSession,
   onOpenHistory,
@@ -102,6 +115,12 @@ const {
   onPickChapter,
   onRetry,
 } = useChatController()
+
+watch(inputFocusToken, () => {
+  // Ping from `chatStore.requestInputFocus()` — bring the textarea up
+  // so the user can type immediately after the Ask-Sadhu navigation.
+  inputBarRef.value?.focus()
+})
 
 function onPickSuggestion(text: string): void {
   inputBarRef.value?.setText(text)
