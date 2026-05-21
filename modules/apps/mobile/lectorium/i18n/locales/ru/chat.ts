@@ -128,6 +128,12 @@ export default {
   actionRetry: "Повторить",
   actionDegraded: "Карточка действия повреждена.",
 
+  /** Aria-label и toast для inline-кнопки Copy под сообщением. */
+  copyAction: "Скопировать сообщение",
+  copyDone: "Скопировано",
+  /** Aria-label для inline-кнопки Share под сообщением. */
+  shareAction: "Поделиться сообщением",
+
   // Заголовки автономных tutorial-сессий, которые scheduler создаёт
   // когда правило срабатывает первый раз для пользователя.
   proactiveSessionTitleEnableReminder: "Ежедневное напоминание",

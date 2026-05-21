@@ -129,6 +129,7 @@
         </template>
       </template>
     </div>
+    <ChatMessageActions v-if="showActions" :markdown="exportMarkdown" />
   </div>
 </template>
 
@@ -136,10 +137,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import router from "@lectorium/router/index.js"
-import { parseChatMarkers } from "../composables/useMarkerParser.js"
+import { messageToMarkdown, parseChatMarkers } from "../composables/useMarkerParser.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
+import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import CitationChip from "./CitationChip.vue"
+import ChatMessageActions from "./ChatMessageActions.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
@@ -174,6 +178,8 @@ const emit = defineEmits<{
   retry: [messageId: string]
 }>()
 const chat = useChatStore()
+const verseBody = useVerseBodyStore()
+const appLanguage = useAppLanguage()
 // Singleton import — see NotesView.controller for the why.
 const { t } = useI18n()
 
@@ -181,6 +187,23 @@ const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
   return parseChatMarkers(props.message.content)
 })
+
+/* -------------------------------------------------------------------- */
+/*  Copy / Share — plain-Markdown rendering of the assistant message     */
+/* -------------------------------------------------------------------- */
+
+const exportMarkdown = computed<string>(() => {
+  if (props.message.role !== "assistant") return ""
+  if (props.message.streaming) return ""
+  if (props.message.error?.kind === "failed") return ""
+  const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+  return messageToMarkdown(props.message.content, {
+    lang,
+    verseLookup: (sourceId, tokens) => verseBody.get(sourceId, tokens),
+  })
+})
+
+const showActions = computed<boolean>(() => exportMarkdown.value.trim().length > 0)
 
 const errorSuffix = computed(() => {
   const e = props.message.error

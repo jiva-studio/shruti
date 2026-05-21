@@ -116,6 +116,12 @@ export default {
   actionRetry: "Retry",
   actionDegraded: "Action card data is missing.",
 
+  /** Aria-label and toast for the inline message Copy button. */
+  copyAction: "Copy message",
+  copyDone: "Copied",
+  /** Aria-label for the inline message Share button. */
+  shareAction: "Share message",
+
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Daily reminder",
   proactiveSessionTitleSmartLibrary: "Smart Library",
