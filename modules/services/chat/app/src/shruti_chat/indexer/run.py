@@ -21,6 +21,7 @@ from shruti_chat.indexer import catalog, s3
 from shruti_chat.indexer.chunker import Chunk, chunk_reviewed
 from shruti_chat.indexer.embed import Embedder, get_embedder
 from shruti_chat.indexer.library import db as library_db
+from shruti_chat.indexer.library.attribution_indexer import run_once_attribution
 from shruti_chat.indexer.library.indexer import run_once_library
 from shruti_chat.observability.logging import get_logger
 
@@ -214,6 +215,14 @@ async def run_once(
             log.info("library_run_complete", **lib_stats)
         except Exception as exc:
             log.exception("library_run_failed", error=str(exc))
+
+        # Attribution pass — also opportunistic. Uses the same library.db that
+        # was just ensured by run_once_library above, so we don't re-download.
+        try:
+            attr_stats = await run_once_attribution(s)
+            log.info("attribution_run_complete", **attr_stats)
+        except Exception as exc:
+            log.exception("attribution_run_failed", error=str(exc))
 
         return run_id
     except Exception as exc:
