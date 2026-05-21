@@ -222,7 +222,34 @@ export function parseChatMarkers(input: string): ChatToken[] {
   if (cursor < input.length) {
     pushTextToken(out, input.slice(cursor))
   }
-  return groupAdjacentCards(collapseBlanksAroundCards(out))
+  return trimTrailingBreaks(groupAdjacentCards(collapseBlanksAroundCards(out)))
+}
+
+/**
+ * Strip trailing `<br>` runs (plus any pure whitespace) from the last
+ * text token, dropping the token entirely if nothing readable remains.
+ *
+ * The LLM frequently ends a message with a paragraph break (`\n\n`),
+ * which `pushTextToken` translates to a `<br><br>`. Without this pass
+ * the bubble carries that phantom blank line at its bottom edge,
+ * which now reads as an awkward gap between the prose and the
+ * `ChatMessageActions` row sitting underneath. Block-like tokens
+ * (cards / outline / quote / verse) don't have this problem and stay
+ * untouched.
+ */
+function trimTrailingBreaks(tokens: ChatToken[]): ChatToken[] {
+  if (tokens.length === 0) return tokens
+  const last = tokens[tokens.length - 1]
+  if (last.kind !== "text") return tokens
+  const stripped = last.html.replace(/(?:\s|<br\s*\/?>)+$/i, "")
+  if (stripped === last.html) return tokens
+  const next = [...tokens]
+  if (stripped.length === 0) {
+    next.pop()
+  } else {
+    next[next.length - 1] = { kind: "text", html: stripped }
+  }
+  return next
 }
 
 /**
@@ -487,11 +514,21 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
 /**
  * Plain-Markdown rendering of one verse: bold addr label, then
  * sanskrit / transliteration / translation each on their own paragraph.
- * Italic-wraps the transliteration so it visually separates from the
- * surrounding script. Falls back to English translation when the
- * requested language isn't in the dictionary, and to *any* available
- * language if English is also missing — better an unexpected language
- * than a dangling header.
+ *
+ * Each multi-line field is normalised the same way `VerseCard.vue`
+ * does it — collapse runs of blank lines down to a single newline.
+ * Server data is inconsistent ("sometimes the sanskrit has \n\n
+ * between lines, sometimes \n") and rendering raw makes every pāda
+ * land in its own paragraph when pasted into Telegram / Notes etc.
+ *
+ * Transliteration is intentionally NOT italic-wrapped. Multi-line
+ * `*…*` is invalid in CommonMark and most third-party markdown
+ * engines (Telegram, Slack, GitHub) render the asterisks literally
+ * across the run — uglier than plain text.
+ *
+ * Falls back to English translation when the requested language is
+ * missing, and to any available language if English is also missing
+ * — better an unexpected language than a dangling header.
  */
 function renderVerseMarkdown(body: VerseBodyLike, lang: "ru" | "en"): string {
   const translation =
@@ -499,11 +536,15 @@ function renderVerseMarkdown(body: VerseBodyLike, lang: "ru" | "en"): string {
     body.translation.en ??
     Object.values(body.translation).find((v) => typeof v === "string" && v.length > 0) ??
     ""
+  const normalise = (raw: string): string => raw.replace(/\n{2,}/g, "\n").trim()
   const parts: string[] = []
-  if (body.addrLabel) parts.push(`**${body.addrLabel}**`)
-  if (body.sanskrit) parts.push(body.sanskrit)
-  if (body.transliteration) parts.push(`*${body.transliteration}*`)
-  if (translation) parts.push(translation)
+  if (body.addrLabel) parts.push(`**${body.addrLabel.trim()}**`)
+  const sanskrit = normalise(body.sanskrit)
+  if (sanskrit) parts.push(sanskrit)
+  const iast = normalise(body.transliteration)
+  if (iast) parts.push(iast)
+  const tr = normalise(translation)
+  if (tr) parts.push(tr)
   // Leading + trailing blank line so the verse sits as its own block
   // between surrounding prose paragraphs.
   return parts.length > 0 ? `\n\n${parts.join("\n\n")}\n\n` : ""
