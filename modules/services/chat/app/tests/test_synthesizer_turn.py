@@ -448,25 +448,26 @@ async def test_notes_in_system_block_not_assistant_role() -> None:
 # pin the fix.
 
 
-def test_format_tool_results_ref_is_top_level_field() -> None:
-    """The note header must expose `ref=N` as a plain `key=value`
-    pair, not buried in a phrase. The model latches onto the literal
-    `ref=N` shape to copy into `[cite:N|caption]` / `[card:N]`. An
-    earlier "cite as cite-ref N" phrasing was too oblique and the
-    model dropped markers."""
+def test_format_tool_results_ref_emitted_as_literal_marker() -> None:
+    """The note header must lead with the LITERAL `[ref:N]` marker the
+    model is supposed to copy verbatim. Earlier `Note {idx} · ref=N`
+    layouts caused positional confusion — Flash-Lite kept emitting
+    `[ref:1]` / `[ref:2]` (the note index) instead of the real random
+    alias integers like 8209."""
     from lectorium_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results(
         [{"type": "lecture", "ref": 8209, "label": "x", "meta": {}}]
     )
-    assert "ref=8209" in out
+    assert "[ref:8209]" in out
+    # No legacy "Note 1 · ref=8209" framing — that's the failure mode.
+    assert "Note 1" not in out
 
 
 def test_format_tool_results_track_uses_title_when_no_label() -> None:
     """tracks_list envelope has `title`, not `label`. The renderer
-    must fall back to `title` so the synth header still carries a
-    human label for the lecture — otherwise the model can't attribute
-    the card."""
+    must fall back to `title` so the header still carries the
+    human attribution — otherwise the LLM can't name the lecture."""
     from lectorium_chat.application.synthesizer_turn import _format_tool_results
 
     out = _format_tool_results([
@@ -480,12 +481,13 @@ def test_format_tool_results_track_uses_title_when_no_label() -> None:
             "duration_ms": 1680000,
         }
     ])
-    assert "ref=8209" in out
-    assert "label=Вот вам ваше новое тело, сэр" in out
-    # tracks_list meta gets pulled into the per-note meta line.
-    assert "author_name=Шрила Прабхупада" in out
-    assert "location_name=Лондон" in out
-    assert "date=1973-08-26" in out
+    assert "[ref:8209]" in out
+    assert "Вот вам ваше новое тело, сэр" in out
+    # Technical fields (author_name=, date=, location_name=) are
+    # intentionally NOT in the LLM-facing render — they're noise that
+    # doesn't change the LLM's behaviour and confuses smaller models.
+    assert "author_name=" not in out
+    assert "location_name=" not in out
 
 
 def test_format_tool_results_flattens_list_results() -> None:
@@ -508,13 +510,13 @@ def test_format_tool_results_flattens_list_results() -> None:
             {"error": "no_match"},
         ]
     )
-    # All three notes show up.
-    assert "ref=1" in out
-    assert "ref=2" in out
-    assert "abc123" in out or "ok=True" in out or "Note 3" in out
+    # Each note's literal marker present.
+    assert "[ref:1]" in out
+    assert "[ref:2]" in out
+    # Heterogeneous shapes survive (propose-dict + error-dict).
     assert "no_match" in out
-    # Renderer didn't crash on the heterogeneous list.
-    assert out.count("Note ") >= 3
+    # Renderer rendered three notes — count separator newlines.
+    assert out.count("\n\n") >= 2
 
 
 def test_aliased_tracks_list_results_tagged_kind_lecture() -> None:

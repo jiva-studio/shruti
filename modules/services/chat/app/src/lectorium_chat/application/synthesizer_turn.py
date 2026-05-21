@@ -89,57 +89,44 @@ def _format_tool_results(tool_results: list[Any]) -> str:
 
 
 def _render_one_note(idx: int, note: dict[str, Any]) -> str:
-    """One note → human-readable paragraph. No brackets, no JSON."""
-    if "error" in note:
-        return f"Note {idx}: search returned no usable results ({note.get('error')!s})."
+    """One note → minimal LLM-facing paragraph.
 
-    kind = (note.get("type") or "result").replace("_", " ")
+    Two shapes only — driven by whether the note has a citation ref:
+
+      [ref:8209] Утренняя прогулка, 1976-04-03, Бомбей
+      <text>
+
+    or (no ref → blockquote-attribution mode):
+
+      БГ 2.13, комментарий
+      <text>
+
+    Everything the LLM doesn't act on — `kind=`, `lang=`, IDs like
+    `source_id` / `author_id` — is dropped. The server-side marker
+    expander knows the type via alias resolution; the LLM only needs
+    the marker and a human attribution label.
+    """
+    if "error" in note:
+        return f"(no usable results: {note.get('error')!s})"
+
     ref = note.get("ref")
-    # ChunkEnvelope uses `label`; tracks_list envelope uses `title` —
-    # accept either so the synth header always carries a human label.
+    # ChunkEnvelope uses `label`; tracks_list envelope uses `title`.
     label = note.get("label") or note.get("title") or ""
-    lang = note.get("lang") or ""
     text = (note.get("text") or "").strip()
     meta = note.get("meta") or {}
 
-    head_bits: list[str] = [f"Note {idx}", f"kind={kind}"]
+    # Pick a single human-readable attribution line for ref-less notes
+    # (verse/commentary/prose). `addr_label` is precomputed by the
+    # library envelope; fall back to `label` for envelopes that didn't
+    # set it.
+    attribution = label or meta.get("addr_label") or ""
+
     if isinstance(ref, int):
-        # Expose ref as a prominent `ref=N` field — the synth prompt
-        # tells the model to copy this integer into `[cite:N|caption]`
-        # / `[verse:N|caption]` / `[card:N]`. The `ref=N` shape is what
-        # the model latched onto in the old JSON-dump rendering (where
-        # citations worked); the previous "cite as cite-ref N" phrasing
-        # was too oblique and the model started dropping markers.
-        head_bits.append(f"ref={ref}")
-    if label:
-        head_bits.append(f"label={label}")
-    if lang:
-        head_bits.append(f"lang={lang}")
+        header = f"[ref:{ref}] {attribution}".rstrip()
+    else:
+        header = attribution
 
-    head = " · ".join(head_bits)
-
-    # Meta lines — fields the model needs to compose attribution
-    # (book + verse for library docs, author + date + location for
-    # track listings). Pulled from both `meta` sub-dict (library
-    # envelope shape) and top-level (tracks_list envelope shape) so a
-    # single renderer covers both.
-    meta_bits: list[str] = []
-    for k in ("source_id", "tokens", "addr_label", "author_id", "doc_date", "start_ms", "end_ms"):
-        v = meta.get(k)
-        if v not in (None, ""):
-            meta_bits.append(f"{k}={v}")
-    for k in ("author_name", "location_name", "date", "duration_ms"):
-        v = note.get(k)
-        if v not in (None, "", []):
-            meta_bits.append(f"{k}={v}")
-    meta_line = ("; ".join(meta_bits)) if meta_bits else ""
-
-    body = f"{head}\n"
-    if meta_line:
-        body += f"{meta_line}\n"
-    if text:
-        body += text
-    return body.rstrip()
+    return f"{header}\n{text}".rstrip() if header else text
 
 
 _GROUNDING_INSTRUCTION = """\
@@ -154,28 +141,15 @@ NOT echo their formatting, do NOT prefix your answer with a summary
 of what you searched. Begin your reply with the first word of the
 actual answer to the user's question.
 
-Compose the final answer ONLY from the research notes above. Every
-note carries a `ref=<integer>` field — that integer is what you copy
-into the citation marker. Cite EVERY note you describe in prose; an
-ungrounded paragraph (description without a marker) is a regression.
+Compose the final answer ONLY from the research notes above. Each
+note's header begins with `[ref:N]` — copy that EXACT marker into
+your prose when you cite the note. The integer is opaque; never
+guess one, never increment, never use position. Cite EVERY note you
+describe in prose; an ungrounded paragraph is a regression.
 
-Markers by note kind:
-- `kind=lecture` + `ref=N` → write `[cite:N|caption]` AND/OR `[card:N]`
-  (use card when you're recommending the whole lecture, cite when
-  you're quoting a specific moment inside it)
-- `kind=verse` + `ref=N` → write `[verse:N|caption]`
-- `kind=commentary` / `prose_chapter` / `letter` → quote inline as a
-  markdown blockquote (see below — they have no `ref`).
-
-Worked example. Suppose two notes arrived:
-  Note 1 · kind=lecture · ref=8209 · label=Утренняя прогулка, 1976-04-03, Бомбей
-  Note 2 · kind=lecture · ref=7492 · label=Утренняя прогулка, 1975-01-02, Бомбей
-Then your reply MUST include both `[card:8209]` and `[card:7492]`
-markers (or `[cite:N|caption]` inline if you quote a fragment) —
-NOT just a prose paragraph describing the lectures.
-
-For commentary / letter / prose_chapter results (ref is null) — quote
-inline as a markdown blockquote with attribution beneath:
+When a note's header has NO `[ref:N]` (commentary / prose_chapter /
+letter), quote inline as a markdown blockquote with attribution
+beneath:
 
 > The cited text…
 >
