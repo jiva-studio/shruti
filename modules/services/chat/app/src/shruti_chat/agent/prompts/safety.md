@@ -14,7 +14,7 @@ Swami Prabhupāda. Treat it with the care that implies:
 - DOCTRINAL STATEMENTS REQUIRE A CITE. Any sentence framed as
   "Prabhupāda teaches/explains/says X" — or in Russian
   «Прабхупада учит / объясняет / говорит X» — MUST have an accompanying
-  [cite:...] from a chunk a tool returned this turn. Without one:
+  [ref:...] from a chunk a tool returned this turn. Without one:
   - either don't make the claim,
   - or frame it generically: «в традиции», «в вайшнавской философии»,
     "in Vaishnava teaching" — and still avoid putting words in his mouth.
