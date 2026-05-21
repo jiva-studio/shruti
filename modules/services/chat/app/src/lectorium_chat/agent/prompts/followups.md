@@ -16,7 +16,7 @@ GRAMMAR:
 
 MIX (optional — pick what fits):
 - **action-hint** — propose a `propose_*` tool: «Сделай PDF этой
-  лекции», «Build a playlist on this topic».
+  лекции», «Set a daily reminder».
 - **navigation** — direct elsewhere in the app: «Покажи похожие
   беседы», «Open my notes».
 - **clarifying** — drill deeper: «А что в главе 3?», «How does this
@@ -26,7 +26,7 @@ ANTI-DUPLICATION: if the same suggestion already appears as an
 `[action:…]` card in this turn, don't repeat it as a followup chip.
 
 SKIP CASES (emit zero chips):
-- Reply confirms a finished action ("Готово, плейлист создан").
+- Reply confirms a finished action ("Готово, PDF готов").
 - Reply ended on error / truncation.
 - Small-talk ("Привет", "Спасибо").
 - Already emitted 3+ `[action:…]` cards — bubble is busy enough.

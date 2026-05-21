@@ -234,7 +234,7 @@ async def run_worker(
         into a LangGraph custom-stream write so the SSE transport
         forwards it to the client. Without this hop the action_id the
         LLM gets back is never paired with an SSE `action` event, and
-        the matching `[action:create_playlist|id=…]` marker in delta
+        the matching `[action:share_pdf|id=…]` marker in delta
         text renders as a broken card on mobile.
         """
         writer({"type": event_type, "data": data})

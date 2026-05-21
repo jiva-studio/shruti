@@ -21,9 +21,9 @@ Write a short re-engagement message in the user's locale:
 3. Pull 2–3 fresh lectures: call `list_tracks` filtered by that
    tag. Prefer recently added catalog entries (if `list_tracks`
    supports sort by date, use it; otherwise just take the top 3).
-4. Wrap the suggestions in a single `[action:create_playlist|id=back_in_touch]`
-   marker. The same id MUST appear in the action map. Pick a name
-   like "Снова в путь" / "Back in touch".
+4. Emit each lecture as `[^N]` on its own line — a stack of cards.
+   The client renders them and (when ≥2) offers an "add to playlist"
+   button on the card group.
 
-Maximum 3 sentences before the action card. No emoji. Tone is warm
+Maximum 3 sentences before the card stack. No emoji. Tone is warm
 but not saccharine.

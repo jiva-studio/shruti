@@ -250,12 +250,12 @@ async def test_unknown_intent_soft_fallback_to_synth() -> None:
 async def test_action_yield_event_reaches_sse_stream() -> None:
     """Regression for the action-emission bug.
 
-    Tools registered with `emits_events=True` (playlist_propose,
-    track_pdf_generate, reminder_propose, etc.) accept a
-    `yield_event(type, data)` kwarg — that's how they push the
-    matching SSE `action` event to the client. The new graph's
-    dispatcher (`application/react_loop._dispatch_tool_call`)
-    must inject a writer-bound callback for those tools, or the
+    Tools registered with `emits_events=True` (track_pdf_generate,
+    reminder_propose, etc.) accept a `yield_event(type, data)` kwarg
+    — that's how they push the matching SSE `action` event to the
+    client. The new graph's dispatcher
+    (`application/react_loop._dispatch_tool_call`) must inject a
+    writer-bound callback for those tools, or the
     `[action:<kind>|id=…]` marker the LLM later writes renders as
     a broken card on mobile.
 
@@ -264,7 +264,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     `("action", {kind, id, payload})`, returns the action_id.
     """
 
-    async def fake_propose_playlist(**kwargs: Any) -> dict[str, Any]:
+    async def fake_track_pdf_generate(**kwargs: Any) -> dict[str, Any]:
         yield_event = kwargs.get("yield_event")
         assert yield_event is not None, (
             "yield_event must be injected by the dispatcher for tools "
@@ -274,9 +274,9 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
         yield_event(
             "action",
             {
-                "kind": "create_playlist",
+                "kind": "share_pdf",
                 "id": "act_abc123",
-                "payload": {"name": "demo", "track_ids": ["t1", "t2"]},
+                "payload": {"track_ids": ["t1", "t2"]},
             },
         )
         return {"ok": True, "action_id": "act_abc123"}
@@ -286,15 +286,15 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
             RoutingDecision(intent="research", confidence=0.9),
         ],
         stream_responses=[
-            # Worker turn 1: call playlist_propose
+            # Worker turn 1: call track_pdf_generate
             [
                 {
                     "tool_calls": [
                         {
                             "index": 0,
                             "id": "tc1",
-                            "name": "playlist_propose",
-                            "arguments_delta": '{"name":"demo","track_ids":["t1","t2"]}',
+                            "name": "track_pdf_generate",
+                            "arguments_delta": '{"track_ids":["t1","t2"],"lang":"ru"}',
                         }
                     ]
                 },
@@ -303,7 +303,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
             # Worker turn 2: converge
             [{"finish_reason": "stop"}],
             # Synth stream
-            [{"text": "Готов плейлист."}, {"finish_reason": "stop"}],
+            [{"text": "Готов PDF."}, {"finish_reason": "stop"}],
         ],
     )
 
@@ -319,14 +319,14 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
         aliases=aliases,
         expander=MarkerExpander(aliases),
         llm=llm,
-        research_tools={"playlist_propose": fake_propose_playlist},
+        research_tools={"track_pdf_generate": fake_track_pdf_generate},
     )
 
     events: list[tuple[str, dict[str, Any]]] = []
     async for mode, payload in graph.astream(
         {
             "history": [],
-            "user_query": "собери плейлист",
+            "user_query": "сохрани в pdf",
             "lang": "ru",
             "request_id": "r-action",
         },
@@ -342,8 +342,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
         f"all event types: {[t for t, _ in events]!r}"
     )
     action = action_events[0]
-    assert action["kind"] == "create_playlist"
+    assert action["kind"] == "share_pdf"
     assert action["id"] == "act_abc123"
     # Nested payload shape per SSE v1 (plan §11.3).
-    assert action["payload"]["name"] == "demo"
     assert action["payload"]["track_ids"] == ["t1", "t2"]

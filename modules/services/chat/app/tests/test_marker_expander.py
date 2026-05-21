@@ -160,8 +160,8 @@ async def test_numeric_hallucination_dropped_when_multiple_unused() -> None:
 async def test_action_marker_passes_through_untouched() -> None:
     aliases = TurnAliasMap()
     e = MarkerExpander(aliases)
-    out = await _expand(e, "text [action:create_playlist|id=abc123] tail")
-    assert out == "text [action:create_playlist|id=abc123] tail"
+    out = await _expand(e, "text [action:share_pdf|id=abc123] tail")
+    assert out == "text [action:share_pdf|id=abc123] tail"
 
 
 async def test_followup_marker_passes_through_untouched() -> None:

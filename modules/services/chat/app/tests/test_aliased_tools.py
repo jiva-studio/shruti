@@ -52,19 +52,21 @@ async def test_legacy_track_list_aliases_track_id_to_ref() -> None:
     assert {r.track_id for r in resolved} == {"real_track_X", "real_track_Y"}
 
 
-async def test_legacy_propose_playlist_dealiases_track_ids() -> None:
-    """propose_playlist input list[int refs] → list[str track_ids]."""
+async def test_track_pdf_generate_dealiases_track_ids() -> None:
+    """track_pdf_generate input list[int refs] → list[str track_ids]."""
     received: dict[str, Any] = {}
 
-    async def fake_propose_playlist(*, track_ids: list[str], name: str) -> dict:
+    async def fake_track_pdf_generate(*, track_ids: list[str], lang: str) -> dict:
         received["track_ids"] = track_ids
         return {"ok": True}
 
     aliases = TurnAliasMap()
     r1 = aliases.alias_track("track_A")
     r2 = aliases.alias_track("track_B")
-    wrapped = build_aliased_tools({"playlist_propose": fake_propose_playlist}, aliases)
-    await wrapped["playlist_propose"](track_ids=[r1, r2], name="mix")
+    wrapped = build_aliased_tools(
+        {"track_pdf_generate": fake_track_pdf_generate}, aliases,
+    )
+    await wrapped["track_pdf_generate"](track_ids=[r1, r2], lang="ru")
 
     # Underlying fn saw real track_ids, not refs.
     assert received["track_ids"] == ["track_A", "track_B"]

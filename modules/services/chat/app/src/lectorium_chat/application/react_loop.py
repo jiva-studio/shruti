@@ -35,7 +35,7 @@ ToolLifecycleCallback = Callable[[Literal["tool_start", "tool_end"], str], None]
 # Callback signature for side-channel events emitted from inside a tool
 # (currently only `action` events — `{kind, id, payload}`). Workers
 # bridge this to the SSE writer so an action-producing tool
-# (playlist_propose, track_pdf_generate, …) actually delivers its
+# (track_pdf_generate, …) actually delivers its
 # payload to the client. The callback's first arg is the SSE event
 # type (always "action" today, kept generic for future channels), and
 # the second is the JSON-serializable event data.
@@ -128,12 +128,12 @@ async def _dispatch_tool_call(
     are returned as `{error: "..."}` dicts so the LLM can react in
     its next turn (e.g. correct a malformed verse address).
 
-    Tools registered with `emits_events=True` (playlist_propose,
+    Tools registered with `emits_events=True` (track_pdf_generate,
     track_pdf_generate, track_outline_get, reminder_propose, etc.)
     accept a `yield_event(type, data)` callback as a kwarg —
     that's how they push the matching `action` SSE event to the
     client. Without injection here the LLM gets the `action_id`
-    back, embeds `[action:create_playlist|id=…]` in prose, but the
+    back, embeds `[action:share_pdf|id=…]` in prose, but the
     client never receives the action payload and renders a broken
     card. We pull the `EMITS_EVENTS` set lazily to avoid a circular
     import (`agent.tools.__init__` imports build_personalized_tools
