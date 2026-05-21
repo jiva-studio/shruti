@@ -352,13 +352,6 @@ function unwrapInteractiveAction(
   wire: WireChatActionPayload
 ): ChatActionPayload | null {
   switch (wire.kind) {
-    case "create_playlist":
-      return {
-        kind: "create_playlist",
-        id: wire.id,
-        name: wire.payload.name,
-        trackIds: wire.payload.trackIds,
-      }
     case "share_pdf":
       return {
         kind: "share_pdf",
