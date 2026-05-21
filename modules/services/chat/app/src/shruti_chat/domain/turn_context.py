@@ -92,3 +92,14 @@ class TurnContext:
     # research worker). Typed as Any to avoid pulling pathlib here when
     # most callers pass an Optional[Path].
     library_db_path: Any | None = None
+
+    # ── Research pipeline collaborators ─────────────────────────────────
+    # New code-driven research path (research/pipeline.py:run_research)
+    # calls these directly instead of going through tool wrappers. Older
+    # workers (catalog/action/help) keep using research_tools / catalog_tools.
+    chunk_repo: Any | None = None       # ChunkRepository
+    catalog_repo: Any | None = None     # CatalogRepository
+    embedder: Any | None = None         # EmbedderPort
+    pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
+    embed_model: str | None = None      # settings.embed_model — required for attribution lookup
+    topic_boost: float = 0.15           # settings.attribution_topic_boost

@@ -235,6 +235,13 @@ async def run_chat_turn(
             action_tools=action_tools,
             help_tools=help_tools,
             library_db_path=deps.settings.library_db_path,
+            # Code-driven research pipeline collaborators.
+            chunk_repo=deps.chunk_repo,
+            catalog_repo=deps.catalog_repo,
+            embedder=deps.embedder,
+            pool=deps.pool,
+            embed_model=deps.settings.embed_model,
+            topic_boost=getattr(deps.settings, "attribution_topic_boost", 0.15),
         )
 
         initial_state: dict[str, Any] = {
