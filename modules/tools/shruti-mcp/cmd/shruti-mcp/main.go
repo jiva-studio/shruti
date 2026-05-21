@@ -44,6 +44,8 @@ import (
 	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	httpcdn "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
 	openaicompattranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/dicttranslate/openaicompat"
+	openaicompatattribtranslate "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
+	attributionapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
 	adminconfigrt "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
@@ -562,8 +564,31 @@ func main() {
 		Targets:         publishTargets,
 		OpMutex:         catalogOpMutex,
 	}
+	libraryLazy := sqlitelibrary.NewLazy(libraryDBPath)
 	deps.Library = tools.LibraryDeps{
-		Repo: sqlitelibrary.NewLazy(libraryDBPath),
+		Repo: libraryLazy,
+	}
+
+	// Attribution translator — best-effort auto-translate of one source text
+	// into other supported langs on library.attribution.create. Reuses the
+	// resolver LLM (Flash-Lite class). Failures are non-fatal in the use case.
+	attribTranslator, err := openaicompatattribtranslate.New(openaicompatattribtranslate.Config{
+		Endpoint:  resCfg.Endpoint,
+		APIKey:    resCfg.APIKey,
+		Model:     resCfg.Model,
+		MaxTokens: 200,
+	})
+	if err != nil {
+		log.Fatalf("attribution translator: %v", err)
+	}
+	deps.LibraryAttribution = tools.LibraryAttributionDeps{
+		UseCase: attributionapp.UseCase{
+			Repo:       libraryLazy,
+			Translator: attribTranslator,
+			Minter:     minter,
+			Langs:      []string{"ru", "en"},
+		},
+		Library: libraryLazy,
 	}
 	deps.LibraryPublish = tools.LibraryPublishDeps{
 		UseCase: librarypublish.UseCase{

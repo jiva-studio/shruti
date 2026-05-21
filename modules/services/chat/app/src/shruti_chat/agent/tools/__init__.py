@@ -44,7 +44,6 @@ from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
 # bottom. Imports stay explicit so a missing one is a static error
 # rather than a runtime "tool not found".
 from shruti_chat.agent.tools import (  # noqa: F401 — side-effect imports
-    actions,
     chunks_find_similar,
     chunks_get_by_address,
     chunks_get_window,
@@ -153,7 +152,6 @@ def bind_repositories(
             "outline_cache": outline_cache,
             "pdf_storage": pdf_storage,
         },
-        "playlist_propose":      {"catalog_repo": catalog_repo},
     }
     for name, kwargs in bindings.items():
         fn = TOOLS.get(name)

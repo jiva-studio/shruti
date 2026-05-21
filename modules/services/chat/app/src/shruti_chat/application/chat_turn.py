@@ -65,7 +65,6 @@ _CATALOG_TOOL_NAMES = frozenset({
     "user_recommendations_get",
 })
 _ACTION_TOOL_NAMES = frozenset({
-    "playlist_propose",
     "track_pdf_generate",
     "reminder_propose",
     "smart_library_propose",
@@ -87,7 +86,7 @@ def _subset(
 
 
 # Inline chip-class markers the LLM is FORBIDDEN to write directly —
-# it must use the numbered-ref protocol (`[cite:N]`, `[card:N]`, ...)
+# it must use the numbered-ref protocol (`[^N]`, `[^N]`, ...)
 # and the MarkerExpander expands those into the real track-id form
 # below before they hit the client. Anything matching these regexes
 # in the LLM-typed prose means the model bypassed the protocol — log
@@ -235,6 +234,13 @@ async def run_chat_turn(
             action_tools=action_tools,
             help_tools=help_tools,
             library_db_path=deps.settings.library_db_path,
+            # Code-driven research pipeline collaborators.
+            chunk_repo=deps.chunk_repo,
+            catalog_repo=deps.catalog_repo,
+            embedder=deps.embedder,
+            pool=deps.pool,
+            embed_model=deps.settings.embed_model,
+            topic_boost=getattr(deps.settings, "attribution_topic_boost", 0.15),
         )
 
         initial_state: dict[str, Any] = {
@@ -301,7 +307,7 @@ async def run_chat_turn(
         # v1 protocol: client persists `done.data.aliases` on the
         # freshly-finalised assistant message and ships it back on the
         # next turn so `_fold_prior_assistant_content` rewrites chip
-        # markers in history into `[cite:N|...]` form.
+        # markers in history into `[^N]` form.
         done_data: dict[str, Any] = {}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()

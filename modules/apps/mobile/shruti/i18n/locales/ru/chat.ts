@@ -83,13 +83,11 @@ export default {
    *  short and natural. */
   outlineRecapPrompt: "Перескажи фрагмент {from}–{to}: {title}",
 
-  // Action cards — playlist
-  actionPlaylistKind: "Предлагаю плейлист",
-  actionPlaylistBadge: "{n} лекций",
-  actionPlaylistMore: "и ещё {n} — развернуть",
-  actionPlaylistConfirm: "Добавить в плейлист",
-  actionPlaylistDone: "Лекции добавлены в плейлист",
-  actionPlaylistError: "Не удалось создать плейлист.",
+  // Track list — multi-card "add all to playlist" button
+  trackListAddAllToPlaylist: "Добавить все в плейлист",
+  trackListAddAllDone: "{n} лекций добавлено в плейлист",
+  trackListAddAllPartial: "{added} добавлено, {failed} не удалось",
+  trackListAddAllFailed: "Не удалось добавить лекции в плейлист.",
   actionOpenLibrary: "Открыть",
   actionOpenNotes: "Открыть",
   miniRowOpen: "Открыть лекцию",

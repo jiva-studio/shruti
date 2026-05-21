@@ -112,7 +112,7 @@ def _wrap_tools_for_capture(
 
     `buf` is closed over directly — contextvars don't propagate reliably
     through LangGraph's internal task spawning, so we bind by reference.
-    Calls fire in research_turn's ReAct loop sequentially, so order
+    Calls fire in react_loop's ReAct loop sequentially, so order
     is deterministic within one turn.
     """
     wrapped: dict[str, Any] = {}
@@ -120,7 +120,7 @@ def _wrap_tools_for_capture(
         async def _w(_n: str = n, _fn: Any = fn, _buf: "_CaptureBuf" = buf, **kwargs: Any) -> Any:
             # Snapshot kwargs BEFORE calling _fn so we capture what the
             # LLM passed even when the underlying tool raises (in which
-            # case research_turn._dispatch wraps the exception into
+            # case react_loop._dispatch wraps the exception into
             # `{"error": ...}` and our `await _fn` would have re-raised
             # past us, skipping the append).
             captured_args = {
@@ -134,7 +134,7 @@ def _wrap_tools_for_capture(
                 _buf.tool_calls.append(
                     {"name": _n, "args": captured_args, "result": result}
                 )
-                # Re-raise so research_turn's dispatcher sees the same
+                # Re-raise so react_loop's dispatcher sees the same
                 # error and records the proper tool message.
                 raise
             _buf.tool_calls.append(
@@ -187,7 +187,6 @@ async def observe_turn(
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
             action_tools=_wrap_tools_for_capture(base_ctx.action_tools, buf),
             help_tools=_wrap_tools_for_capture(base_ctx.help_tools, buf),
-            writer=base_ctx.writer,
             library_db_path=base_ctx.library_db_path,
         )
         state: dict[str, Any] = {

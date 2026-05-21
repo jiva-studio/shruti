@@ -61,44 +61,54 @@ def _strip_tool_protocol_leaks(content: str) -> str:
 
 _FOLLOWUP_RE = re.compile(r"\[followup:[^\]\n]*\]")
 _ACTION_RE = re.compile(r"\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]")
+# Defensive: a stray `[^N]` slipping past the expander somehow shouldn't
+# show up in next-turn history either.
+_FOOTNOTE_RAW_RE = re.compile(r"\[\^\d+\]")
 
 
 def _fold_prior_assistant_content(
     content: str,
     aliases: TurnAliasMap | None,  # noqa: ARG001 — kept for callsite compat
 ) -> str:
-    """Strip prior-turn chip markers down to the user-visible text.
+    """Strip ALL chip / widget / tool markers from a prior assistant
+    turn, leaving only pure prose.
 
-    Principle: history fed to the LLM must look like the conversation
-    transcript the user actually saw — no integer refs, no internal
+    Principle: feed the LLM ONLY what looks like a natural-language
+    transcript. No integer refs, no caption fragments, no internal
     catalog ids, no system envelopes. The LLM's grounding for the
-    CURRENT turn comes from fresh tool_results; the only thing it
-    needs from history is the conversational thread.
+    current turn comes from fresh research notes; the only thing it
+    needs from history is the conversational thread, not the chips
+    that were rendered alongside it. Keeping caption text (the old
+    behaviour) leaked tokens like "духовная энергия" into the next
+    turn's context where the model could re-use them as ref-slot
+    fillers and produce hallucinations like `[^духовная энергия]`.
 
-    Substitutions:
-      `[cite:track_X@s-e|caption]`           → caption (or dropped if empty)
-      `[verse:source_id/tokens|caption]`     → caption (or dropped if empty)
-      `[card:track_X]` / `[outline:track_X]` → dropped (widget-only)
-      `[action:kind|id=X]`                   → dropped (widget-only)
-      `[followup:text]`                      → dropped (chip outside bubble)
+    Every marker shape below is DROPPED entirely (caption + body):
+
+      `[cite:track_X@s-e|caption]`           expanded audio chip
+      `[verse:source_id/tokens|caption]`     expanded verse card
+      `[card:track_X]` / `[outline:track_X]` whole-track widgets
+      `[action:kind|id=X]`                   action confirmation card
+      `[followup:text]`                      followup chips outside bubble
+      `[^N]`                                 stray footnote markers
 
     The `aliases` parameter is no longer used but kept on the signature
     so `fold_history` callsites don't change shape.
     """
-
-    def _caption_only(m: re.Match[str], idx: int) -> str:
-        caption = (m.group(idx) or "").strip()
-        return caption  # empty → marker disappears entirely
-
-    content = _CITE_FULL_RE.sub(lambda m: _caption_only(m, 4), content)
-    content = _VERSE_FULL_RE.sub(lambda m: _caption_only(m, 3), content)
+    content = _CITE_FULL_RE.sub("", content)
+    content = _VERSE_FULL_RE.sub("", content)
     content = _CARD_FULL_RE.sub("", content)
     content = _OUTLINE_FULL_RE.sub("", content)
     content = _ACTION_RE.sub("", content)
     content = _FOLLOWUP_RE.sub("", content)
+    content = _FOOTNOTE_RAW_RE.sub("", content)
     # Collapse the runs of whitespace + blank lines we just opened up.
     content = re.sub(r"[ \t]+\n", "\n", content)
     content = re.sub(r"\n{3,}", "\n\n", content)
+    # Trim leading whitespace per line so we don't leave " . Texto"
+    # patterns (artefact of dropping a marker that sat after a comma).
+    content = re.sub(r" {2,}", " ", content)
+    content = re.sub(r"\s+([.,!?…:;])", r"\1", content)
     return content.strip()
 
 
@@ -144,7 +154,7 @@ def fold_history(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
 # `build_messages` / `_format_user_context` / `_LANG_NAME` /
 # `_LANG_EXAMPLE` lived here while `chat_turn.py` drove the legacy
 # `run_llm_loop`. With the LangGraph migration the system prompt is
-# composed per-node (router_turn, research_turn, synthesizer_turn
+# composed per-node (router_turn, react_loop, synthesizer_turn
 # each pick their own sections), the language directive lives in
 # `agent/prompts/language.md`, and USER CONTEXT anchors are rendered
 # by `agent/graph/nodes/_worker_common.anchor_block`. All four had

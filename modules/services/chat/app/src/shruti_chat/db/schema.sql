@@ -132,3 +132,47 @@ CREATE INDEX IF NOT EXISTS chunks_lib_author ON chunks (author_id) WHERE author_
 
 -- Library diff state and version live in the shared `indexed_items` /
 -- `db_state` tables defined above (discriminated by item_kind / kind).
+
+-- ── Attributions (question / topic) ───────────────────────────────────
+--
+-- Mirrors the shruti-mcp library_attributions* tables. Curated text →
+-- refs mapping with two kinds:
+--   - 'question' : matched user query takes SHORT path in research pipeline
+--   - 'topic'    : matched extracted topics BOOST score (+0.15) in fanout
+--
+-- `attributions` holds metadata (id, kind, refs JSONB). Text variants and
+-- their embeddings live in `attribution_embeddings` — one row per
+-- (attribution_id, language, text, embed_model) so N phrasings per (id,lang)
+-- can coexist ("что такое разум" + "природа разума" both index).
+--
+-- Diff via `indexed_items` with item_kind='attribution'; etag is sha256 of
+-- the sorted-joined-texts for one (attribution_id, lang).
+
+CREATE TABLE IF NOT EXISTS attributions (
+    id          TEXT PRIMARY KEY,
+    kind        TEXT NOT NULL CHECK (kind IN ('question', 'topic')),
+    refs        JSONB NOT NULL,        -- [{"ref_kind":"verse"|"document","target_id":"<opaque>"}, …]
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS attributions_by_kind ON attributions(kind);
+
+CREATE TABLE IF NOT EXISTS attribution_embeddings (
+    attribution_id TEXT NOT NULL REFERENCES attributions(id) ON DELETE CASCADE,
+    language       TEXT NOT NULL,
+    text           TEXT NOT NULL CHECK (length(text) < 1000),
+    embedding      vector(1536) NOT NULL,
+    embed_model    TEXT NOT NULL,
+    PRIMARY KEY (attribution_id, language, text, embed_model)
+);
+
+-- Partial HNSW index pinned to the active model. Avoids mixing vector spaces
+-- after an embed_model swap; old vectors coexist in the table but the index
+-- only sees the current model. Change the WHERE clause if rolling forward to
+-- a new model (or build a parallel index for staged rollout).
+CREATE INDEX IF NOT EXISTS attribution_emb_hnsw
+    ON attribution_embeddings
+    USING hnsw (embedding vector_cosine_ops)
+    WHERE embed_model = 'openai/text-embedding-3-small';
+
+CREATE INDEX IF NOT EXISTS attribution_emb_by_lang
+    ON attribution_embeddings (language, embed_model);

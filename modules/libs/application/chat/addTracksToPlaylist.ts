@@ -26,8 +26,7 @@ export interface AddTracksToPlaylistDeps {
  * the first hard failure as a Result error. Sequential rather than
  * concurrent because the underlying repo is single-writer (SQLite).
  *
- * Invoked from the chat store when the user confirms a
- * `create_playlist` action card.
+ * Invoked from HomeView (starter packs) and equivalent batch-add UIs.
  */
 export async function addTracksToPlaylist(
   input: AddTracksToPlaylistInput,

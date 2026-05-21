@@ -1,0 +1,25 @@
+{"q":"что такое душа","lang":"ru","expected_intent":"research","expected_path":"SHORT_or_LONG","expected_chunks_min":3,"notes":"Conceptual; should land on canonical БГ 2.13/2.20/2.22 if attribution exists"}
+{"q":"природа души","lang":"ru","expected_intent":"research","expected_path":"SHORT_or_LONG","expected_chunks_min":3,"notes":"Paraphrase of above — multi-match with canonical kind=question should fire if both attributions exist"}
+{"q":"what is the soul","lang":"en","expected_intent":"research","expected_path":"SHORT_or_LONG","expected_chunks_min":3,"notes":"Cross-lingual fallback if only ru attribution exists"}
+{"q":"что такое разум","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Conceptual; topics extracted: buddhi, иерархия сознания"}
+{"q":"что такое buddhi","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Should boost via topic-attribution if buddhi is curated"}
+{"q":"как карма работает у бхакт","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":4,"notes":"Topics: карма-фала, prarabdha, bhakti and karma"}
+{"q":"как карма работает у преданных","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":4,"notes":"Same as above with different phrasing"}
+{"q":"как Прабхупада объяснял неизменность атмана","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Author hint propagated as router_args.author"}
+{"q":"что говорится о медитации в БГ","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Scripture hint: source_id=BG"}
+{"q":"how does karma work","lang":"en","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"English long-path"}
+{"q":"БГ 2.13","lang":"ru","expected_intent":"research","expected_path":"SHORT_or_LONG","expected_chunks_min":1,"notes":"Direct verse address — router may classify as find_track or research; if research, attribution lookup likely matches"}
+{"q":"что значит атман","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Sanskrit term; topic_extractor should normalize to atman/атман"}
+{"q":"в чём смысл жизни","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Broad conceptual; fanout should still find lectures"}
+{"q":"кто такой Кришна","lang":"ru","expected_intent":"research","expected_path":"SHORT_or_LONG","expected_chunks_min":5,"notes":"Foundational; many curated questions likely match"}
+{"q":"что такое майя","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Sanskrit concept; topics: иллюзия, prakriti, three modes"}
+{"q":"расскажи о трёх гунах","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Topics: саттва, раджас, тамас, гуна-трая"}
+{"q":"что такое мокша","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Liberation; should pull commentary chunks on БГ chapters about renunciation"}
+{"q":"в чём разница между гьяной и бхакти","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Comparative concept; multi-axis topics extracted"}
+{"q":"что значит сатсанг","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Topic: sat-sanga, общение преданных"}
+{"q":"расскажи про вайшнавский этикет","lang":"ru","expected_intent":"research","expected_path":"LONG","expected_chunks_min":3,"notes":"Cultural / behavioural topic"}
+{"q":"спасибо!","lang":"ru","expected_intent":"direct_chat","expected_path":"N/A","expected_chunks_min":0,"notes":"Chit-chat; router skips research entirely"}
+{"q":"как создать плейлист","lang":"ru","expected_intent":"help","expected_path":"N/A","expected_chunks_min":0,"notes":"App-feature question; routed to help_worker"}
+{"q":"лекции Прабхупады из Бомбея 1972","lang":"ru","expected_intent":"find_track","expected_path":"N/A","expected_chunks_min":0,"notes":"Catalog filter; routed to find_track / catalog_worker"}
+{"q":"что я слушал на этой неделе","lang":"ru","expected_intent":"find_track","expected_path":"N/A","expected_chunks_min":0,"notes":"User history by time window"}
+{"q":"сделай плейлист про карму","lang":"ru","expected_intent":"create_action","expected_path":"N/A","expected_chunks_min":0,"notes":"Create_action chain: router → research_node (collects tracks) → action_worker (creates playlist)"}
