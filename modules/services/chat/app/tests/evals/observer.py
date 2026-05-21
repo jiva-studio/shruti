@@ -187,7 +187,6 @@ async def observe_turn(
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
             action_tools=_wrap_tools_for_capture(base_ctx.action_tools, buf),
             help_tools=_wrap_tools_for_capture(base_ctx.help_tools, buf),
-            writer=base_ctx.writer,
             library_db_path=base_ctx.library_db_path,
         )
         state: dict[str, Any] = {
