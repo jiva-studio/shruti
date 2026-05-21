@@ -65,7 +65,6 @@ _CATALOG_TOOL_NAMES = frozenset({
     "user_recommendations_get",
 })
 _ACTION_TOOL_NAMES = frozenset({
-    "playlist_propose",
     "track_pdf_generate",
     "reminder_propose",
     "smart_library_propose",

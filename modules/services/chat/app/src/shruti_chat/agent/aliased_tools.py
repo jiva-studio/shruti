@@ -42,7 +42,6 @@ _TRACK_SINGLE_TOOLS = frozenset({
 # Tools that accept lists of integer refs on input. Each entry is the
 # underlying arg name (kept as `track_ids` for repo-side compat).
 _ACCEPTS_TRACK_REFS = {
-    "playlist_propose": ["track_ids"],
     "track_pdf_generate": ["track_ids"],
 }
 

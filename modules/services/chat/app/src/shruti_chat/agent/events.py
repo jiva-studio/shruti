@@ -20,7 +20,7 @@ absent or unsupported). The current set is **7 event types**:
                  — discriminated by `kind`. Auto-render kinds pair
                  with inline markers in delta text: `card`,
                  `outline`, `verse`. Interactive kinds get a button +
-                 on-click mutation: `create_playlist`, `share_pdf`,
+                 on-click mutation: `share_pdf`,
                  `enable_daily_reminder`, `configure_smart_library`,
                  `upgrade_to_pro`.
 - `done`       — final terminator         `{aliases?: dict, tokens?: int}`
