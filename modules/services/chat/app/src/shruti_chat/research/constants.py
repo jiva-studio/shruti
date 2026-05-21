@@ -37,10 +37,15 @@ DEFAULT_TOPIC_BOOST = 0.15
 
 # ---- Stage timeouts (asyncio.wait_for) -------------------------------------
 
-TIMEOUT_EXPAND_S = 5.0
-TIMEOUT_QUESTION_LOOKUP_S = 3.0
-TIMEOUT_TOPIC_EXTRACT_S = 5.0
-TIMEOUT_TOPIC_LOOKUP_S = 3.0
-TIMEOUT_FANOUT_S = 4.0
-TIMEOUT_REGENERATE_S = 5.0
-TIMEOUT_FETCH_REFS_S = 2.0
+# Bumped from initial dev-machine values after a prod smoke run hit
+# fanout_round_0 timeout at 4.0s: 5 queries × {lecture, verse, commentary,
+# prose} fanout = 20 parallel pgvector queries plus a batched OpenRouter
+# embedding call. Localhost finishes in ~1s, AWS RDS + OpenRouter takes
+# 6-10s on a cold pgvector cache. Give it room.
+TIMEOUT_EXPAND_S = 8.0
+TIMEOUT_QUESTION_LOOKUP_S = 6.0
+TIMEOUT_TOPIC_EXTRACT_S = 8.0
+TIMEOUT_TOPIC_LOOKUP_S = 6.0
+TIMEOUT_FANOUT_S = 15.0
+TIMEOUT_REGENERATE_S = 8.0
+TIMEOUT_FETCH_REFS_S = 5.0
