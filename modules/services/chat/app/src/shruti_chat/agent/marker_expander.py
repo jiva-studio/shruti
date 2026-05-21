@@ -1,14 +1,40 @@
-"""Stream-side marker expander for the numbered-refs protocol.
+"""Stream-side marker expander for the footnote-refs protocol.
 
-The model writes `[cite:N|caption]` / `[card:N]` / `[outline:N]` in
-its prose where `N` is an integer alias minted by `TurnAliasMap`.
-This filter sits between the LLM stream and the client SSE stream:
-when a marker closes (we see `]`), look up `N`, expand to the real
-`[cite:track_X@start-end|caption]` (or drop if `N` is unknown), then
-forward.
+The model writes `[^N]` in its prose where `N` is a small sequential
+integer alias minted by `TurnAliasMap`. This filter sits between the
+LLM stream and the client SSE stream:
 
-Tokens between markers stream through with effectively zero overhead.
-The buffer only holds the in-flight marker — usually under 30 chars.
+  1. Buffer characters between `[` and `]` to detect markers.
+  2. When a marker closes, parse it:
+       * `[^N]` with integer N           → expand by alias type
+       * `[^anything]` (string-stuffed)  → recover via single-candidate
+                                            heuristic or drop
+       * legacy `[ref:...]` / `[cite:...]` etc → drop with log
+  3. After emitting the expansion, peek look-ahead chars. If the next
+     non-whitespace char is trailing punctuation (`.,!?…:;`) — swap
+     order so the punctuation lands BEFORE the widget. LLMs habitually
+     write `Текст [^1].` which renders ugly on the client; we want
+     `Текст. [cite:...|caption]`.
+
+Server-side expansion (alias type → client widget):
+  ChunkRef + start_ms/end_ms → [cite:track_X@start-end|caption?]   audio
+  ChunkRef without start/end → [card:track_X]                       card
+  VerseRef                   → [verse:src/tokens|addr_label]        verse
+
+Captions for audio fragments come from `TurnAliasMap.captions`,
+populated by a background Flash-Lite call in `research.pipeline`. If
+not ready when expanding → emit `[cite:track_X@start-end]` without
+caption; the chip degrades gracefully.
+
+State machine:
+    out_buffer: pending whitespace between last non-ws emit and the
+        next event (a marker open OR more non-ws). Held back so that
+        if a marker opens, we can decide whether the whitespace
+        belongs before the punctuation-swap or after.
+    in_marker / marker_buffer: characters between `[` and `]`.
+    pending_expansion / pending_pre_ws / pending_gap: an expanded
+        marker waiting on look-ahead before being committed (so we
+        can swap with a trailing `.`).
 """
 
 from __future__ import annotations
@@ -22,40 +48,35 @@ from shruti_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 
-# The ONLY marker the LLM emits is `[ref:N]` (or `[ref:N|caption]` —
-# caption is optional and only used when alias N is a lecture fragment).
-# Server routes by alias type:
-#   ChunkRef + start_ms/end_ms → [cite:track_X@start-end|caption?]   audio fragment
-#   ChunkRef without start/end → [card:track_X]                       whole-track card
-#   VerseRef                   → [verse:src/tokens|addr_label]        verse widget
-# The LLM never picks the client-side marker type itself.
-_REF_RE = re.compile(r"^\[ref:(\d+)(?:\|([^\]]*))?\]$")
+# Strict `[^N]` with integer N only.
+_FOOTNOTE_RE = re.compile(r"^\[\^(\d+)\]$")
 
-# Markers that are NOT consumed by MarkerExpander but ARE part of our
-# wire protocol — must pass through verbatim. The client (mobile / web)
-# handles them downstream.
-_PASSTHROUGH_MARKER_PREFIXES = ("[action:", "[followup:")
+# Catch-all `[^anything]` — non-integer string-stuffed hallucination.
+_FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
 
-# Bracketed `[word:...]` markers we KNOW the LLM hallucinates by analogy
-# with verse/cite. Document-kind chunks (commentary / prose_chapter /
-# letter) MUST be quoted inline as markdown blockquotes per the prompt —
-# they have NO citation marker. The LLM sometimes invents `[commentary:
-# BG 2.13]` / `[purport:…]` / `[doc:…]` by analogy. Drop those silently
-# so the user doesn't see raw bracket text on the screen. (We log so
-# prompt regressions are noticed.)
+# Legacy marker forms from the pre-[^N] protocol — drop silently.
+_LEGACY_RE = re.compile(
+    r"^\[(?:ref|cite|card|outline|verse):[^\]]*\]$"
+)
+
+# Document-kind hallucinations like `[commentary:БГ 2.13]`.
 _HALLUCINATED_DOC_MARKER_RE = re.compile(
     r"^\[(commentary|purport|prose_chapter|prose|letter|doc|document|book|chapter):[^\]]*\]$"
 )
 
-# If buffering grows past this with no closing `]`, it's clearly not a
-# marker — flush as plain text.
+# Runaway buffer cap — if we don't see `]` after this many chars, it
+# wasn't a marker.
 _MAX_BUFFER = 200
+
+# Punctuation that should land BEFORE the expanded widget on swap.
+_TRAILING_PUNCT = ".,!?…:;"
 
 
 class MarkerExpander:
-    """Per-stream state machine. Hold tokens between `[` and `]`,
-    parse the buffer as a numbered-refs marker, expand or drop, then
-    forward."""
+    """Per-stream state machine. Held state: marker buffer between
+    `[…]`, pending-expansion awaiting punctuation look-ahead, and a
+    short whitespace hold so we can drop the space before `[^…]` when
+    we end up swapping the marker with a following punctuation."""
 
     def __init__(
         self,
@@ -65,64 +86,186 @@ class MarkerExpander:
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
-        self._buffer: list[str] = []
+
+        # Marker-buffer state.
+        self._marker_buffer: list[str] = []
         self._in_marker = False
-        # Track aliases we've ALREADY successfully expanded in this
-        # response. Used by `_format_ref` to recover from a hallucinated
-        # `[ref:N]` when exactly one valid alias is still unused — the
-        # LLM "meant" the only one left.
+
+        # Aliases successfully expanded so far — used by single-
+        # candidate recovery in `_format_ref`.
         self._emitted: set[int] = set()
+
+        # Pending whitespace seen after the last non-ws emit. May get
+        # forwarded as-is (next char is non-ws or another marker) or
+        # dropped (swap with trailing punctuation glues punct to the
+        # prose, no leading whitespace needed).
+        self._ws_hold: str = ""
+
+        # Pending-expansion buffer: we expanded a marker but haven't
+        # forwarded it yet because we're waiting on the next char to
+        # decide swap-order. `_pre_ws` captures the whitespace that
+        # was held when the `[` opened (we discard it on swap, restore
+        # it on non-swap).
+        self._pending: str | None = None
+        self._pending_pre_ws: str = ""
+        self._pending_gap: str = ""
 
     async def feed(self, text: str) -> str:
         """Process a delta chunk; returns what should be forwarded."""
         out: list[str] = []
         for ch in text:
-            if not self._in_marker:
-                if ch == "[":
-                    self._in_marker = True
-                    self._buffer = ["["]
-                else:
-                    out.append(ch)
+            if self._in_marker:
+                self._marker_buffer.append(ch)
+                if ch == "]":
+                    marker = "".join(self._marker_buffer)
+                    self._marker_buffer = []
+                    self._in_marker = False
+                    expanded = self._expand_marker(marker)
+                    self._on_marker_closed(expanded, out)
+                elif len(self._marker_buffer) > _MAX_BUFFER:
+                    # Not a marker — flush the runaway buffer as text.
+                    runaway = "".join(self._marker_buffer)
+                    self._marker_buffer = []
+                    self._in_marker = False
+                    out.append(self._consume_text(runaway))
                 continue
-            self._buffer.append(ch)
-            if ch == "]":
-                marker = "".join(self._buffer)
-                out.append(self._expand_marker(marker))
-                self._buffer = []
-                self._in_marker = False
-            elif len(self._buffer) > _MAX_BUFFER:
-                # Not a marker at all — flush as plain text.
-                out.append("".join(self._buffer))
-                self._buffer = []
-                self._in_marker = False
+
+            if ch == "[":
+                # Whitespace held in _ws_hold STAYS held — we might
+                # drop it on a swap, or restore it if no swap fires.
+                self._in_marker = True
+                self._marker_buffer = ["["]
+                continue
+
+            out.append(self._consume_text_char(ch))
         return "".join(out)
 
     async def flush(self) -> str:
-        """Drain any partial-marker tail at stream end."""
-        if not self._buffer:
+        """Drain pending state at stream end."""
+        out: list[str] = []
+        if self._pending is not None:
+            # No look-ahead arrived — emit pending without swap.
+            out.append(self._pending_pre_ws + self._pending + self._pending_gap)
+            self._pending = None
+            self._pending_pre_ws = ""
+            self._pending_gap = ""
+        if self._ws_hold:
+            out.append(self._ws_hold)
+            self._ws_hold = ""
+        if self._marker_buffer:
+            # Unclosed `[…` at end of stream — emit raw.
+            out.append("".join(self._marker_buffer))
+            self._marker_buffer = []
+            self._in_marker = False
+        return "".join(out)
+
+    # ── marker-closed dispatch ─────────────────────────────────────
+
+    def _on_marker_closed(self, expanded: str, out: list[str]) -> None:
+        """Bookkeeping when a `[…]` finishes parsing."""
+        if not expanded:
+            # Marker dropped (legacy / hallucinated / unrecovered).
+            # Two normalisations to keep the prose clean:
+            #   (a) discard `_ws_hold` — the whitespace that sat
+            #       immediately before `[` belongs to the dropped
+            #       marker and should not survive as extra spacing
+            #   (b) if a pending expansion was waiting, flush it
+            #       WITHOUT its trailing gap — the gap was the space
+            #       between the pending marker and this just-dropped
+            #       one. The next text's leading whitespace will act
+            #       as the single separator.
+            if self._pending is not None:
+                out.append(self._pending_pre_ws + self._pending)
+                self._pending = None
+                self._pending_pre_ws = ""
+                self._pending_gap = ""
+            self._ws_hold = ""
+            return
+
+        # Successful expansion. If we already had a pending one, flush
+        # it first (two markers in a row — second is the new pending).
+        if self._pending is not None:
+            out.append(self._pending_pre_ws + self._pending + self._pending_gap)
+        self._pending = expanded
+        self._pending_pre_ws = self._ws_hold
+        self._pending_gap = ""
+        self._ws_hold = ""
+
+    # ── plain-text path ────────────────────────────────────────────
+
+    def _consume_text(self, run: str) -> str:
+        """Consume a multi-char text run (used when a runaway marker
+        buffer is flushed back as text)."""
+        return "".join(self._consume_text_char(ch) for ch in run)
+
+    def _consume_text_char(self, ch: str) -> str:
+        """Plain-text path. Coordinates with `_ws_hold` (whitespace
+        held back in case a marker is about to open) and `_pending`
+        (an expanded marker awaiting look-ahead)."""
+        if self._pending is None:
+            if ch.isspace():
+                self._ws_hold += ch
+                return ""
+            # Non-whitespace: commit any held whitespace first.
+            ws = self._ws_hold
+            self._ws_hold = ""
+            return ws + ch
+
+        # Pending expansion exists — decide look-ahead.
+        if ch.isspace():
+            # Could still be the space before a trailing period.
+            self._pending_gap += ch
             return ""
-        tail = "".join(self._buffer)
-        self._buffer = []
-        self._in_marker = False
-        return tail
+
+        if ch in _TRAILING_PUNCT:
+            # Swap: punctuation glues to the prose, then a single
+            # space, then the widget. We discard both the pre-marker
+            # whitespace and the post-marker gap — neither belongs in
+            # the swapped output.
+            expansion = self._pending
+            self._pending = None
+            self._pending_pre_ws = ""
+            self._pending_gap = ""
+            return ch + " " + expansion
+
+        # Non-punct, non-space → no swap. Commit pre_ws + expansion +
+        # gap + ch.
+        pre_ws = self._pending_pre_ws
+        expansion = self._pending
+        gap = self._pending_gap
+        self._pending = None
+        self._pending_pre_ws = ""
+        self._pending_gap = ""
+        return pre_ws + expansion + gap + ch
+
+    # ── marker expansion ───────────────────────────────────────────
 
     def _expand_marker(self, marker: str) -> str:
-        # The ONLY marker form the LLM emits.
-        m = _REF_RE.match(marker)
+        # Strict integer `[^N]`.
+        m = _FOOTNOTE_RE.match(marker)
         if m:
-            n_str, caption = m.group(1), (m.group(2) or "").strip()
-            return self._format_ref(int(n_str), caption, marker)
+            return self._format_ref(int(m.group(1)))
 
-        # Hallucinated bracket markers that LLM occasionally invents by
-        # analogy with the documented protocol — drop silently + log so
-        # prompt regressions are observable. Covers both pre-migration
-        # markers (the LLM was trained to emit [cite:N|...] /
-        # [verse:N|...] / [card:N] / [outline:N] in earlier versions and
-        # MAY still produce them) and document-kind hallucinations
-        # ([commentary:BG 2.13], [purport:…], etc.).
-        if _HALLUCINATED_DOC_MARKER_RE.match(marker) or marker.startswith(
-            ("[cite:", "[card:", "[outline:", "[verse:")
-        ):
+        # Non-integer footnote — try single-candidate recovery.
+        if _FOOTNOTE_CATCH_RE.match(marker):
+            log.info(
+                "chat_marker_footnote_string_stuffed",
+                request_id=self._request_id,
+                marker=marker[:80],
+            )
+            return self._format_ref(None)
+
+        # Legacy markers — drop with diagnostic.
+        if _LEGACY_RE.match(marker):
+            log.info(
+                "chat_marker_legacy_dropped",
+                request_id=self._request_id,
+                marker=marker[:80],
+            )
+            return ""
+
+        # Document-kind hallucinations — drop.
+        if _HALLUCINATED_DOC_MARKER_RE.match(marker):
             log.info(
                 "chat_marker_legacy_or_hallucinated_dropped",
                 request_id=self._request_id,
@@ -130,26 +273,19 @@ class MarkerExpander:
             )
             return ""
 
-        # Anything else (action markers, followup markers, plain
-        # bracketed text) — pass through untouched.
+        # Anything else (action / followup / plain bracketed text) —
+        # pass through. The held whitespace was already deferred but
+        # will be flushed by the next text char.
         return marker
 
-    def _format_ref(self, n: int, caption: str, original: str) -> str:
-        """Resolve alias N and emit the client-side marker matching the
-        ref's shape. Verses → [verse:src/tokens|label]; lecture
-        fragments → [cite:track@start-end|caption?]; whole-track refs
-        (ChunkRef without start/end) → [card:track]. Caption from the LLM
-        is used only for lecture fragments — verses always use their
-        addr_label, and cards have no caption.
+    def _format_ref(self, n: int | None) -> str:
+        """Resolve alias N. If N is None or unknown, try single-
+        candidate recovery (exactly one alias still unused → use it).
+        Otherwise drop with diagnostic log."""
+        ref: ChunkRef | VerseRef | None = None
+        if isinstance(n, int):
+            ref = self._aliases.resolve(n)
 
-        If N is unknown but exactly ONE valid alias remains unused in
-        this response, the LLM had a single valid candidate left — we
-        substitute it. With sequential aliases [1..K] this is a strong
-        signal: hallucinated 4-digit refs like `[ref:1022]` get pinned
-        back to the right note when only one slot is open."""
-        ref = self._aliases.resolve(n)
-
-        # Hallucinated alias — attempt recovery before dropping.
         if ref is None:
             remaining = self._aliases.known_keys() - self._emitted
             if len(remaining) == 1:
@@ -175,23 +311,19 @@ class MarkerExpander:
                 )
                 return ""
 
+        assert isinstance(n, int)
         self._emitted.add(n)
 
         if isinstance(ref, VerseRef):
             body = f"{ref.source_id}/{ref.tokens}"
-            # Use the curator-stored addr_label as caption; ignore any
-            # LLM-supplied caption to keep verse citations consistent.
-            label = ref.addr_label or caption or ""
+            label = ref.addr_label or ""
             return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
 
         if isinstance(ref, ChunkRef):
             if ref.start_ms is not None and ref.end_ms is not None:
-                # Lecture audio fragment.
                 body = f"{ref.track_id}@{ref.start_ms}-{ref.end_ms}"
+                caption = self._aliases.captions.get(n, "")
                 return f"[cite:{body}|{caption}]" if caption else f"[cite:{body}]"
-            # Whole-track card (no playhead position).
             return f"[card:{ref.track_id}]"
 
-        # Resolved to something that's not Chunk/Verse — should be
-        # impossible given AliasRef union, but stay defensive.
         return ""

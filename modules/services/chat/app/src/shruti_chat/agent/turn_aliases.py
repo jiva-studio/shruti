@@ -83,6 +83,16 @@ class TurnAliasMap:
     def __init__(self) -> None:
         self._chunks: dict[int, AliasRef] = {}
         self._next: int = 1
+        # Per-turn cache of LLM-generated audio-fragment captions,
+        # keyed by alias int. Populated by a background task in
+        # `research.pipeline` that runs Flash-Lite once per turn over
+        # the final set of cite-able lecture fragments. The marker
+        # expander reads `captions.get(n, "")` when expanding a
+        # ChunkRef with timestamps — graceful degradation: if the
+        # background task hasn't filled the slot by the time the LLM
+        # emits `[^N]`, the audio chip renders without a caption
+        # (widget still shows title + timestamp).
+        self.captions: dict[int, str] = {}
 
     def _alloc_ref(self) -> int:
         """Allocate the next sequential alias integer for this turn."""
@@ -92,7 +102,7 @@ class TurnAliasMap:
 
     def known_keys(self) -> set[int]:
         """All alias integers minted so far. Used by `MarkerExpander`
-        to recover from a hallucinated `[ref:N]` when exactly one valid
+        to recover from a hallucinated `[^N]` when exactly one valid
         alias has not yet been emitted in the response."""
         return set(self._chunks.keys())
 

@@ -1,21 +1,20 @@
-"""Unit tests for MarkerExpander — unified `[ref:N]` protocol.
+"""Unit tests for MarkerExpander — `[^N]` footnote protocol.
 
-History note: pre-2026-05-21 the LLM emitted 4 marker types
-(`[cite:N]`, `[verse:N]`, `[card:N]`, `[outline:N]`) and had to pick
-the right one from `kind=` in the note header. Flash-lite confused
-them constantly. The new protocol gives the LLM ONE marker — `[ref:N]`
-— and the server routes by alias type:
+The model emits ONE marker shape — `[^N]` where N is a small
+sequential integer from `TurnAliasMap`. Server routes by alias type:
 
   ChunkRef + start/end → [cite:track@start-end|caption?]   audio
   ChunkRef without start/end → [card:track]                whole-track
   VerseRef                   → [verse:src/tokens|addr_label]  verse card
 
-Caption is only honoured for audio fragments; verse/card ignore it
-(verse uses the curator's `addr_label`, card has no caption form).
+Captions for audio fragments come from `TurnAliasMap.captions`,
+populated by a background Flash-Lite pass. Missing caption → bare
+`[cite:track@…]`, no `|`. Graceful degradation.
 
-Legacy markers ([cite:N|...], [verse:N|...], [card:N], [outline:N])
-and document-kind hallucinations ([commentary:...], [purport:...])
-are dropped — see `chat_marker_legacy_or_hallucinated_dropped` log.
+Defenses against model failure:
+  - String-stuffed `[^НП 6]` → single-candidate recovery or drop
+  - Legacy `[ref:…]` / `[cite:N]` / `[verse:N]` etc → drop with log
+  - Trailing punctuation after marker → server swaps order
 """
 
 from __future__ import annotations
@@ -31,224 +30,273 @@ async def _expand(expander: MarkerExpander, text: str) -> str:
     return fed + tail
 
 
-# ── [ref:N] — audio fragment (ChunkRef with start/end) ───────────────
+# ── [^N] — audio fragment (ChunkRef with start/end) ──────────────────
 
 
-async def test_ref_to_lecture_chunk_expands_to_cite() -> None:
+async def test_footnote_to_lecture_chunk_expands_to_cite() -> None:
     aliases = TurnAliasMap()
     ref = aliases.alias_chunk("track_X", 12_000, 15_000)
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"see this [ref:{ref}|key point].")
-    assert out == "see this [cite:track_X@12000-15000|key point]."
+    out = await _expand(e, f"see this [^{ref}] tail")
+    assert out == "see this [cite:track_X@12000-15000] tail"
 
 
-async def test_ref_to_lecture_chunk_no_caption() -> None:
+async def test_footnote_to_lecture_uses_caption_from_aliases() -> None:
+    """Background caption_generator writes into aliases.captions; the
+    expander pulls from there when emitting the cite marker."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    aliases.captions[ref] = "духовная энергия"
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}] tail")
+    assert out == "text [cite:track_X@0-1000|духовная энергия] tail"
+
+
+async def test_footnote_without_caption_in_map_emits_bare_cite() -> None:
+    """If the bg task hasn't filled the slot, expander degrades to a
+    bare `[cite:track@s-e]` — widget renders title + timestamp only."""
     aliases = TurnAliasMap()
     ref = aliases.alias_chunk("track_X", 0, 1000)
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"[ref:{ref}]")
+    out = await _expand(e, f"[^{ref}]")
     assert out == "[cite:track_X@0-1000]"
 
 
-# ── [ref:N] — verse (VerseRef) ────────────────────────────────────────
+# ── [^N] — verse ──────────────────────────────────────────────────────
 
 
-async def test_ref_to_verse_expands_to_verse_marker() -> None:
+async def test_footnote_to_verse_expands_to_verse_marker() -> None:
     aliases = TurnAliasMap()
-    ref = aliases.alias_verse("source_NoY8sAlXF1IT", "12.5.8", addr_label="ШБ 12.5.8")
+    ref = aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"here: [ref:{ref}]")
-    assert out == "here: [verse:source_NoY8sAlXF1IT/12.5.8|ШБ 12.5.8]"
+    out = await _expand(e, f"see [^{ref}] now")
+    assert out == "see [verse:source_BG/2.13|БГ 2.13] now"
 
 
-async def test_ref_to_verse_uses_addr_label_not_llm_caption() -> None:
-    """Verse caption is always the curator's addr_label — LLM-supplied
-    caption is ignored so we don't have to trust the model's wording."""
+async def test_footnote_to_verse_no_addr_label() -> None:
     aliases = TurnAliasMap()
-    ref = aliases.alias_verse("source_X", "2.13", addr_label="БГ 2.13")
+    ref = aliases.alias_verse("source_BG", "2.13")
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"[ref:{ref}|something different]")
-    assert out == "[verse:source_X/2.13|БГ 2.13]"
+    out = await _expand(e, f"[^{ref}]")
+    assert out == "[verse:source_BG/2.13]"
 
 
-async def test_ref_to_verse_without_addr_label() -> None:
+# ── [^N] — whole-track card ──────────────────────────────────────────
+
+
+async def test_footnote_to_whole_track_expands_to_card() -> None:
     aliases = TurnAliasMap()
-    ref = aliases.alias_verse("BG", "2.13")
+    ref = aliases.alias_track("track_Y")
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"[ref:{ref}]")
-    assert out == "[verse:BG/2.13]"
+    out = await _expand(e, f"[^{ref}]")
+    assert out == "[card:track_Y]"
 
 
-# ── [ref:N] — whole-track card (ChunkRef without start/end) ──────────
+# ── String-stuffed `[^anything-not-integer]` ─────────────────────────
 
 
-async def test_ref_to_track_expands_to_card() -> None:
+async def test_string_stuffed_footnote_dropped_when_no_unused() -> None:
+    """`[^НП 6]` with all aliases emitted → drop silently. Expander
+    also collapses the now-orphan whitespace around the dropped
+    marker so the prose reads cleanly with a single separator."""
     aliases = TurnAliasMap()
-    ref = aliases.alias_track("track_card_X")
+    aliases.alias_chunk("track_A", 0, 1000)   # 1
+    aliases.alias_chunk("track_B", 0, 1000)   # 2
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"[ref:{ref}]")
-    assert out == "[card:track_card_X]"
+    out = await _expand(e, "[^1] [^2] [^НП 6] tail")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] tail"
 
 
-# ── unknown / malformed refs ─────────────────────────────────────────
-
-
-async def test_ref_unknown_alias_is_dropped() -> None:
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "ghost [ref:9999] tail")
-    assert out == "ghost  tail"
-
-
-async def test_ref_with_non_integer_arg_is_dropped() -> None:
-    """A malformed `[ref:abc]` doesn't match the integer regex and falls
-    to the pass-through branch — it stays in the output (no harm: not a
-    recognized client marker, so just looks like plain text)."""
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "[ref:abc]")
-    assert out == "[ref:abc]"
-
-
-# ── legacy / hallucinated markers ────────────────────────────────────
-
-
-async def test_legacy_cite_marker_is_dropped() -> None:
-    """LLM occasionally regresses to the old `[cite:N|...]` syntax —
-    dropped silently so the user doesn't see raw bracket text."""
-    aliases = TurnAliasMap()
-    aliases.alias_chunk("track_X", 0, 1000)  # mint alias 1 so [cite:1] *would* resolve
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "before [cite:1|hi] after")
-    assert out == "before  after"
-
-
-async def test_legacy_verse_marker_is_dropped() -> None:
-    aliases = TurnAliasMap()
-    aliases.alias_verse("BG", "2.13", addr_label="БГ 2.13")
-    e = MarkerExpander(aliases)
-    out = await _expand(e, "before [verse:1|БГ 2.13] after")
-    assert out == "before  after"
-
-
-async def test_legacy_card_marker_is_dropped() -> None:
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "[card:1]")
-    assert out == ""
-
-
-async def test_legacy_outline_marker_is_dropped() -> None:
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "[outline:1]")
-    assert out == ""
-
-
-async def test_hallucinated_doc_marker_is_dropped() -> None:
-    """The other regression: LLM invents `[commentary:BG 10.22]` /
-    `[purport:…]` by analogy. Server drops; user sees no bracket text."""
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "before [commentary:BG 10.22] after")
-    assert out == "before  after"
-
-    e2 = MarkerExpander(TurnAliasMap())
-    out2 = await _expand(e2, "[purport:SB 5.5.3]")
-    assert out2 == ""
-
-
-# ── pass-through behaviour ───────────────────────────────────────────
-
-
-async def test_action_marker_passes_through_untouched() -> None:
-    """Action markers carry server-issued action_ids; not the expander's job."""
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "[action:create_playlist|id=ab12cd34]")
-    assert out == "[action:create_playlist|id=ab12cd34]"
-
-
-async def test_followup_marker_passes_through_untouched() -> None:
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "[followup:Что такое разум?]")
-    assert out == "[followup:Что такое разум?]"
-
-
-async def test_plain_bracketed_text_passes_through() -> None:
-    e = MarkerExpander(TurnAliasMap())
-    out = await _expand(e, "see [chapter 1] for details")
-    assert out == "see [chapter 1] for details"
-
-
-async def test_long_buffer_with_no_close_flushes_as_text() -> None:
-    """If we open `[` and never see `]`, we eventually flush as plain text."""
-    e = MarkerExpander(TurnAliasMap())
-    huge = "[" + "x" * 250
-    out = await _expand(e, huge)
-    assert "x" * 100 in out  # flushed at some point
-
-
-# ── streaming behaviour ──────────────────────────────────────────────
-
-
-async def test_ref_marker_split_across_chunks_still_expands() -> None:
-    """Real SSE deltas split markers mid-buffer. Expander must reassemble."""
-    aliases = TurnAliasMap()
-    ref = aliases.alias_chunk("track_Y", 0, 1000)
-    e = MarkerExpander(aliases)
-    a = await e.feed(f"text [ref:{ref}")
-    b = await e.feed("|cap]")
-    tail = await e.flush()
-    assert a + b + tail == f"text [cite:track_Y@0-1000|cap]"
-
-
-# ── Hallucinated-ref recovery (single unused valid alias remaining) ──
-
-
-async def test_hallucinated_ref_recovered_when_one_alias_unused() -> None:
-    """Flash-Lite sometimes emits `[ref:1022]` mid-stream when the real
-    aliases are 1-3. If exactly one valid alias hasn't been emitted
-    yet, the LLM "meant" that one — substitute silently."""
+async def test_string_stuffed_recovered_when_single_unused() -> None:
+    """`[^НП 6]` + exactly one unused alias → recovered."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
     aliases.alias_chunk("track_C", 0, 1000)   # 3
     e = MarkerExpander(aliases)
-    # LLM correctly emits 1 and 2, then hallucinates 1022 — only ref 3
-    # is left unused, so 1022 → 3.
-    out = await _expand(e, "[ref:1] [ref:2] [ref:1022]")
+    out = await _expand(e, "[^1] [^2] [^НП 6]")
     assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] [cite:track_C@0-1000]"
 
 
-async def test_hallucinated_ref_dropped_when_multiple_unused() -> None:
-    """If multiple valid aliases are unused, we cannot safely guess —
-    drop the hallucinated marker silently rather than risk pointing
-    the user at the wrong widget."""
+async def test_string_stuffed_addr_shape_dropped() -> None:
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
     aliases.alias_chunk("track_C", 0, 1000)   # 3
     e = MarkerExpander(aliases)
-    # Only ref 1 emitted; refs 2 and 3 both still unused → ambiguous.
-    out = await _expand(e, "[ref:1] hallucinated [ref:9999] tail")
-    assert out == "[cite:track_A@0-1000] hallucinated  tail"
+    out = await _expand(e, "[^1] [^БГ 2.13]")
+    # Two valid aliases unused after [^1] → ambiguous → drop. The
+    # trailing whitespace gets swallowed into the dropped marker so
+    # the cite ends cleanly.
+    assert out == "[cite:track_A@0-1000]"
 
 
-async def test_hallucinated_ref_dropped_when_all_aliases_used() -> None:
-    """If every valid alias has already been emitted, there's nothing
-    to recover — drop silently."""
+# ── Single-candidate recovery on numeric hallucination ───────────────
+
+
+async def test_numeric_hallucination_recovered_when_one_alias_unused() -> None:
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
+    aliases.alias_chunk("track_C", 0, 1000)   # 3
     e = MarkerExpander(aliases)
-    out = await _expand(e, "[ref:1] [ref:2] [ref:7]")
-    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] "
+    out = await _expand(e, "[^1] [^2] [^1022]")
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] [cite:track_C@0-1000]"
 
 
-async def test_emitted_set_tracks_recovered_alias() -> None:
-    """A recovered alias must be marked as emitted — otherwise a second
-    hallucinated marker after recovery could 'recover' to the same
-    slot, double-citing the same note."""
+async def test_numeric_hallucination_dropped_when_multiple_unused() -> None:
     aliases = TurnAliasMap()
-    aliases.alias_chunk("track_A", 0, 1000)   # 1
-    aliases.alias_chunk("track_B", 0, 1000)   # 2
+    aliases.alias_chunk("track_A", 0, 1000)
+    aliases.alias_chunk("track_B", 0, 1000)
+    aliases.alias_chunk("track_C", 0, 1000)
     e = MarkerExpander(aliases)
-    # First hallucination: ref 1 used, ref 2 unused → recover to 2.
-    # Second hallucination: refs 1 and 2 both emitted now → drop.
-    out = await _expand(e, "[ref:1] [ref:999] [ref:998]")
-    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] "
+    out = await _expand(e, "[^1] hallucinated [^9999] tail")
+    assert out == "[cite:track_A@0-1000] hallucinated tail"
+
+
+# ── Legacy markers — all dropped ─────────────────────────────────────
+
+
+async def test_legacy_ref_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "before [ref:1|cap] after")
+    assert out == "before after"
+
+
+async def test_legacy_cite_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "text [cite:track_X@0-100|cap] tail")
+    assert out == "text tail"
+
+
+async def test_legacy_verse_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "text [verse:src/2.13|БГ 2.13] tail")
+    assert out == "text tail"
+
+
+async def test_legacy_card_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "[card:track_X]")
+    assert out == ""
+
+
+async def test_legacy_outline_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "[outline:track_X]")
+    assert out == ""
+
+
+async def test_hallucinated_doc_marker_dropped() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "before [commentary:БГ 2.13] after [purport:something] end")
+    assert out == "before after end"
+
+
+# ── Passthrough markers ───────────────────────────────────────────────
+
+
+async def test_action_marker_passes_through_untouched() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "text [action:create_playlist|id=abc123] tail")
+    assert out == "text [action:create_playlist|id=abc123] tail"
+
+
+async def test_followup_marker_passes_through_untouched() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "text [followup:а что в главе 3?] tail")
+    assert out == "text [followup:а что в главе 3?] tail"
+
+
+async def test_plain_bracketed_text_passes_through() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "see appendix [a] and [b]")
+    assert out == "see appendix [a] and [b]"
+
+
+# ── Buffer / streaming edge cases ─────────────────────────────────────
+
+
+async def test_long_buffer_with_no_close_flushes_as_text() -> None:
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases)
+    junk = "[" + ("x" * 250)
+    out = await _expand(e, junk)
+    assert out == junk
+
+
+async def test_footnote_split_across_chunks_still_expands() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_Y", 0, 1000)
+    e = MarkerExpander(aliases)
+    a = await e.feed(f"text [^{ref}")
+    b = await e.feed("] tail")
+    tail = await e.flush()
+    assert a + b + tail == "text [cite:track_Y@0-1000] tail"
+
+
+# ── Placement swap — punctuation BEFORE expanded widget ───────────────
+
+
+async def test_period_after_marker_gets_swapped_to_before() -> None:
+    """LLM emits `Душа вечна [^1].` — server swaps to
+    `Душа вечна. [cite:...]` so the period attaches to the prose,
+    not floats next to the widget."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"Душа вечна [^{ref}].")
+    assert out == "Душа вечна. [cite:track_X@0-1000]"
+
+
+async def test_comma_after_marker_swapped() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}], more")
+    assert out == "text, [cite:track_X@0-1000] more"
+
+
+async def test_marker_with_trailing_space_then_period_swapped() -> None:
+    """The model sometimes writes `text [^1] .` (with stray space) —
+    server normalises that too."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}] .")
+    assert out == "text. [cite:track_X@0-1000]"
+
+
+async def test_no_swap_when_next_char_is_letter() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}] more text")
+    assert out == "text [cite:track_X@0-1000] more text"
+
+
+async def test_two_markers_in_a_row_emit_correctly() -> None:
+    aliases = TurnAliasMap()
+    a = aliases.alias_chunk("track_A", 0, 1000)
+    b = aliases.alias_chunk("track_B", 2000, 3000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{a}][^{b}]")
+    assert out == "[cite:track_A@0-1000][cite:track_B@2000-3000]"
+
+
+async def test_marker_at_end_of_stream_flushed_as_is() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}]")
+    assert out == "text [cite:track_X@0-1000]"
