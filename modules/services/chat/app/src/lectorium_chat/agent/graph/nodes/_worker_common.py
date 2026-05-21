@@ -8,10 +8,10 @@ Every worker is a thin LangGraph adapter that:
   4. Optionally renders an "anchor block" header that surfaces the
      UserContext details (focus_ref, current_track_ref, now, history
      summary) the inner LLM needs to pick context-aware tools.
-  5. Calls the generic `run_research_turn` ReAct loop with the right
+  5. Calls the generic `run_react_loop` ReAct loop with the right
      tools + prompt + tool-event callback.
 
-The use-case (`application/research_turn.py`) is purposely generic — the
+The use-case (`application/react_loop.py`) is purposely generic — the
 "research" in the name is historical. It's the ReAct loop the worker
 runs; toolset is parameterised.
 """
@@ -26,10 +26,10 @@ from langgraph.runtime import Runtime
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import build_prompt
 from lectorium_chat.agent.turn_aliases import VerseRef
-from lectorium_chat.application.research_turn import (
+from lectorium_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
     ResearchResult,
-    run_research_turn,
+    run_react_loop,
 )
 from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.indexer.library.repo import fetch_verse_body
@@ -42,8 +42,11 @@ log = get_logger(__name__)
 # Worker prompt sections — every tool-calling worker uses the same
 # subset. The "voice" sections (citations, response_shape, language,
 # safety, followups) shape the FINAL prose — only the synthesizer
-# writes that, so they're omitted here.
-WORKER_PROMPT_SECTIONS = ("header", "tools", "quoting")
+# writes that, so they're omitted here. `actions` carries the
+# `[action:kind|id=…]` marker protocol — action_worker NEEDS it; the
+# others tolerate it (~100 lines is the cost of keeping the worker
+# prompt uniform).
+WORKER_PROMPT_SECTIONS = ("header", "tools", "actions", "quoting")
 
 
 def tool_schemas_from(tools: dict[str, Any]) -> list[dict[str, Any]]:
@@ -139,7 +142,7 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
     """Emit `action.kind=verse` events for every verse alias minted
     on this turn that hasn't been emitted yet — ordering invariant
     from plan section 11.5.1 (payload arrives BEFORE the inline
-    `[verse:N]` marker in delta text).
+    `[^N]` marker in delta text).
 
     Called at the end of any worker that may have minted verse refs
     (research_worker calls chunks_search / chunks_get_by_address →
@@ -231,14 +234,14 @@ async def run_worker(
         into a LangGraph custom-stream write so the SSE transport
         forwards it to the client. Without this hop the action_id the
         LLM gets back is never paired with an SSE `action` event, and
-        the matching `[action:create_playlist|id=…]` marker in delta
+        the matching `[action:share_pdf|id=…]` marker in delta
         text renders as a broken card on mobile.
         """
         writer({"type": event_type, "data": data})
 
     writer({"type": "status", "data": {"key": status_key}})
 
-    result = await run_research_turn(
+    result = await run_react_loop(
         extra_user_query or state["user_query"],
         extracted_args=state.get("extracted_args", {}),
         lang=state["lang"],

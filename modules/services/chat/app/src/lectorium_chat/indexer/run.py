@@ -21,6 +21,7 @@ from lectorium_chat.indexer import catalog, s3
 from lectorium_chat.indexer.chunker import Chunk, chunk_reviewed
 from lectorium_chat.indexer.embed import Embedder, get_embedder
 from lectorium_chat.indexer.library import db as library_db
+from lectorium_chat.indexer.library.attribution_indexer import run_once_attribution
 from lectorium_chat.indexer.library.indexer import run_once_library
 from lectorium_chat.observability.logging import get_logger
 
@@ -209,11 +210,31 @@ async def run_once(
         # Library pass — independent of transcript indexing. Errors here
         # must not fail the run (transcripts are the headline content;
         # library is opportunistic).
+        library_ok = False
         try:
             lib_stats = await run_once_library(s)
             log.info("library_run_complete", **lib_stats)
+            library_ok = True
         except Exception as exc:
             log.exception("library_run_failed", error=str(exc))
+
+        # Attribution pass — depends on the library tables having just
+        # been refreshed. If library failed, the verse / document refs
+        # the attributions point at may have moved or been removed in
+        # the artefact we didn't load; running attribution against the
+        # previous library state would persist orphan or wrongly-aliased
+        # rows. Skip and try again next tick.
+        if library_ok:
+            try:
+                attr_stats = await run_once_attribution(s)
+                log.info("attribution_run_complete", **attr_stats)
+            except Exception as exc:
+                log.exception("attribution_run_failed", error=str(exc))
+        else:
+            log.warning(
+                "attribution_run_skipped",
+                reason="library_pass_failed",
+            )
 
         return run_id
     except Exception as exc:

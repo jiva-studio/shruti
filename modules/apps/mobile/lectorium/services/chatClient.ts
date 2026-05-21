@@ -47,18 +47,10 @@ export interface SharePdfItemPayload {
  * Auto-render kinds (card, outline, verse) pair with an inline
  * marker in delta text — the action event arrives first and stashes
  * the payload; the marker triggers render. Interactive kinds
- * (create_playlist, share_pdf, enable_daily_reminder, …) render a
- * standalone card with a confirm button — no inline marker.
+ * (share_pdf, enable_daily_reminder, …) render a standalone card
+ * with a confirm button — no inline marker.
  */
 export type ActionPayload =
-  | {
-      readonly kind: "create_playlist"
-      readonly id: string
-      readonly payload: {
-        readonly name: string
-        readonly trackIds: readonly string[]
-      }
-    }
   | {
       readonly kind: "share_pdf"
       readonly id: string
@@ -650,13 +642,6 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
       : null
   if (!body) return null
 
-  if (kind === "create_playlist") {
-    const name = typeof body.name === "string" ? body.name : ""
-    const trackIdsRaw = Array.isArray(body.track_ids) ? body.track_ids : []
-    const trackIds = trackIdsRaw.filter((x): x is string => typeof x === "string")
-    if (!name || trackIds.length === 0) return null
-    return { kind: "create_playlist", id, payload: { name, trackIds } }
-  }
   if (kind === "share_pdf") {
     const itemsRaw = Array.isArray(body.items) ? body.items : []
     const items: SharePdfItemPayload[] = []

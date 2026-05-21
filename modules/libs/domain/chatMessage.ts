@@ -22,12 +22,6 @@ export interface SmartLibraryFiltersPayload {
 
 export type ChatActionPayload =
   | {
-      readonly kind: "create_playlist"
-      readonly id: string
-      readonly name: string
-      readonly trackIds: readonly string[]
-    }
-  | {
       readonly kind: "share_pdf"
       readonly id: string
       readonly items: readonly ChatSharePdfItemPayload[]

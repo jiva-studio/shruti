@@ -311,6 +311,106 @@ def _check_response_contains_marker(
     return []
 
 
+# Regexes for marker-hygiene predicates. The CLIENT-FACING shape of
+# each marker after expansion:
+#   audio fragment  — [cite:track_X@s-e]   or [cite:...|caption]
+#   verse card      — [verse:source/tok]   or [verse:...|addr_label]
+#   whole-track     — [card:track_X]
+# The MarkerExpander emits exactly these shapes; anything else is a
+# regression.
+_CITE_EXPANDED_RE = re.compile(r"\[cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?\]")
+_VERSE_EXPANDED_RE = re.compile(r"\[verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?\]")
+_CARD_EXPANDED_RE = re.compile(r"\[card:[^\]\s|@]+\]")
+_FOOTNOTE_LEFTOVER_RE = re.compile(r"\[\^\d+\]")
+
+# Whitelist of bracket shapes the client is supposed to see. Anything
+# else inside `[...]` in the response is a regression — either an
+# expander bug or an LLM emitting a shape we don't expect. Generic
+# defence so a future drift (`[cite:1]`, `[caption:foo]`, `[note:42]`,
+# whatever) gets caught without us having to enumerate it.
+_ALLOWED_BRACKET_RE = re.compile(
+    r"\[(?:"
+        r"cite:[^|@\]]+@\d+-\d+(?:\|[^\]]*)?"               # audio fragment
+        r"|verse:[^/|\]]+/[^|\]]+(?:\|[^\]]*)?"             # verse card
+        r"|card:[^\]\s|@]+"                                  # whole-track card
+        r"|action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+"        # action chip
+        r"|followup:[^\]\n]+"                                # followup chip
+    r")\]"
+)
+# Anything bracketed at all (greedy-minimal).
+_ANY_BRACKET_RE = re.compile(r"\[[^\]\n]+\]")
+
+
+def _check_no_duplicate_markers(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    """If `expect_no_duplicate_markers` is true, fail when any single
+    expanded marker (`[cite:...]`, `[verse:...]`, `[card:...]`)
+    appears more than once in the response. The LLM should structure
+    its reply so each note backs ONE thesis paragraph — repeats
+    produce spammy chip stacks in the UI."""
+    if not case.get("expect_no_duplicate_markers"):
+        return []
+    text = obs.response_text
+    failures: list[str] = []
+    for name, pattern in (
+        ("cite", _CITE_EXPANDED_RE),
+        ("verse", _VERSE_EXPANDED_RE),
+        ("card", _CARD_EXPANDED_RE),
+    ):
+        counts: dict[str, int] = {}
+        for m in pattern.finditer(text):
+            counts[m.group(0)] = counts.get(m.group(0), 0) + 1
+        dupes = {k: v for k, v in counts.items() if v > 1}
+        if dupes:
+            top = sorted(dupes.items(), key=lambda kv: -kv[1])[:3]
+            sample = ", ".join(f"{m!r}×{c}" for m, c in top)
+            failures.append(
+                f"expect_no_duplicate_markers: {name} markers repeat — {sample}"
+            )
+    return failures
+
+
+def _check_no_unexpanded_footnote(
+    case: dict[str, Any], obs: TurnObservation
+) -> list[str]:
+    """Server-side MarkerExpander must convert every `[^N]` to its
+    expanded shape before the response reaches the client. If raw
+    `[^N]` leaks through, either the regex broke or there's a code
+    path bypassing the expander."""
+    if not case.get("expect_no_unexpanded_footnote", True):
+        return []
+    leftovers = _FOOTNOTE_LEFTOVER_RE.findall(obs.response_text)
+    if leftovers:
+        return [
+            f"raw [^N] markers leaked past expander: {leftovers[:5]!r}"
+        ]
+    return []
+
+
+def _check_no_unexpected_brackets(
+    case: dict[str, Any], obs: TurnObservation,
+) -> list[str]:
+    """Every `[...]` in the response must match the small whitelist
+    of expanded marker shapes: `[cite:track@s-e[|caption]]`,
+    `[verse:src/tokens[|label]]`, `[card:track]`, `[action:kind|id=...]`,
+    `[followup:text]`. Anything else is a regression — old protocol
+    leaking back (`[ref:1]`, `[cite:1]`), the LLM inventing a new
+    marker by analogy (`[note:42]`, `[caption:foo]`, `[ШБ 4.25.26]`),
+    or the expander dropping the bracket prefix. Generic catch — no
+    enumeration of "known bad" patterns."""
+    if not case.get("expect_no_unexpected_brackets", True):
+        return []
+    seen_any = _ANY_BRACKET_RE.findall(obs.response_text)
+    if not seen_any:
+        return []
+    allowed = set(_ALLOWED_BRACKET_RE.findall(obs.response_text))
+    unexpected = [b for b in seen_any if b not in allowed]
+    if unexpected:
+        return [
+            f"unexpected bracketed token(s) in response: {unexpected[:5]!r}"
+        ]
+    return []
+
+
 # Ordered list of predicate runners. Each returns failure strings.
 _PREDICATES = (
     _check_intent,
@@ -322,6 +422,9 @@ _PREDICATES = (
     _check_no_marker_kind,
     _check_response_contains,
     _check_response_contains_marker,
+    _check_no_duplicate_markers,
+    _check_no_unexpanded_footnote,
+    _check_no_unexpected_brackets,
 )
 
 

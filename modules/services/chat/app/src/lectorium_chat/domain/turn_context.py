@@ -18,7 +18,7 @@ that nodes consume but don't conceptually "produce" or "update":
   has already gone through `build_personalized_tools` +
   `build_aliased_tools`, then sliced by name in
   `chat_turn.py:_subset(...)` to the per-worker bag. Nodes hand the
-  bag to `application/research_turn.run_research_turn` — we run our
+  bag to `application/react_loop.run_react_loop` — we run our
   own ReAct loop, not LangGraph's `create_react_agent`, so we can
   inject `yield_event` into emits_events tools.
 - `request_id` — for log correlation; mirrored into structlog's
@@ -35,7 +35,7 @@ confirmation that mutations propagate across nodes via context.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
@@ -80,15 +80,19 @@ class TurnContext:
     action_tools: ToolMap = field(default_factory=dict)
     help_tools: ToolMap = field(default_factory=dict)
 
-    # ── SSE writer bridge ──────────────────────────────────────────────
-    # When set, tools (via the as_langchain_tool yield_event closure)
-    # and nodes (via direct call) push events through this callable.
-    # The chat_turn.py wrapper hooks it into LangGraph's
-    # `get_stream_writer` at composition time.
-    writer: Callable[[str, dict[str, Any]], None] | None = None
-
     # ── Library DB path ─────────────────────────────────────────────────
     # Path to local library.db SQLite (for verse body lookups in the
     # research worker). Typed as Any to avoid pulling pathlib here when
     # most callers pass an Optional[Path].
     library_db_path: Any | None = None
+
+    # ── Research pipeline collaborators ─────────────────────────────────
+    # New code-driven research path (research/pipeline.py:run_research)
+    # calls these directly instead of going through tool wrappers. Older
+    # workers (catalog/action/help) keep using research_tools / catalog_tools.
+    chunk_repo: Any | None = None       # ChunkRepository
+    catalog_repo: Any | None = None     # CatalogRepository
+    embedder: Any | None = None         # EmbedderPort
+    pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
+    embed_model: str | None = None      # settings.embed_model — required for attribution lookup
+    topic_boost: float = 0.15           # settings.attribution_topic_boost

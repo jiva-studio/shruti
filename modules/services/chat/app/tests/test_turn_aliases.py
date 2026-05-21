@@ -1,28 +1,27 @@
-"""Unit tests for `TurnAliasMap` random-allocation refs.
+"""Unit tests for `TurnAliasMap` sequential-allocation refs.
 
-The map mints integer aliases the LLM uses in `[cite:N|...]` / `[verse:N|...]`
-markers. Allocation is non-sequential (random in [1, 9999]) to defeat
-"predict-next-N" hallucinations.
+The map mints small sequential integer aliases the LLM uses in
+`[ref:N]` markers. Sequential keeps the integers 1-2 digits so small
+models can copy them verbatim across long output streams (random
+1-9999 alloc drove Flash-Lite to invent plausible-looking 4-digit
+refs by analogy mid-reply).
 """
 
 from __future__ import annotations
-
-import random
 
 from lectorium_chat.agent.turn_aliases import (
     ChunkRef,
     TurnAliasMap,
     VerseRef,
-    _REF_MAX,
-    _REF_MIN,
 )
 
 
-def test_alloc_within_range() -> None:
+def test_alloc_starts_at_one() -> None:
     m = TurnAliasMap()
-    for _ in range(50):
-        n = m.alias_chunk("track_x", 0, 1000)
-        assert _REF_MIN <= n <= _REF_MAX
+    assert m.alias_chunk("track_x", 0, 1000) == 1
+    assert m.alias_chunk("track_y", 0, 1000) == 2
+    assert m.alias_track("track_z") == 3
+    assert m.alias_verse("BG", "2.13") == 4
 
 
 def test_alloc_unique_per_turn() -> None:
@@ -34,14 +33,27 @@ def test_alloc_unique_per_turn() -> None:
         seen.add(n)
 
 
-def test_alloc_non_sequential() -> None:
-    """Three consecutive refs should not all be a sequential run."""
-    random.seed(42)
+def test_alloc_strictly_sequential() -> None:
+    """Sequential allocation: each call gives previous+1.
+
+    The earlier random allocation drove a small model to invent fake
+    4-digit refs (`[ref:1022]`) because the real integer fell out of
+    working memory. Sequential 1-2 digit aliases are dramatically
+    easier to copy verbatim.
+    """
     m = TurnAliasMap()
-    refs = [m.alias_track(f"track_{i}") for i in range(10)]
-    # At least one gap or out-of-order pair — otherwise allocation is suspect.
-    is_strict_run = all(refs[i] + 1 == refs[i + 1] for i in range(len(refs) - 1))
-    assert not is_strict_run, f"unexpectedly sequential: {refs}"
+    refs = [m.alias_track(f"track_{i}") for i in range(5)]
+    assert refs == [1, 2, 3, 4, 5]
+
+
+def test_known_keys_returns_all_minted() -> None:
+    """`known_keys` powers the marker_expander recovery path —
+    `(known - emitted)` reveals the lone unused alias on a miss."""
+    m = TurnAliasMap()
+    m.alias_chunk("track_a", 0, 100)
+    m.alias_verse("BG", "2.13")
+    m.alias_track("track_b")
+    assert m.known_keys() == {1, 2, 3}
 
 
 def test_resolve_round_trip() -> None:
@@ -82,7 +94,7 @@ def test_load_external_reserves_refs() -> None:
         assert n != 42
 
 
-def test_lookup_ref_after_random_alloc() -> None:
+def test_lookup_ref_finds_minted_alias() -> None:
     m = TurnAliasMap()
     n = m.alias_chunk("track_x", 1000, 2000)
     assert m.lookup_ref("track_x", 1000, 2000) == n

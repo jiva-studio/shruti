@@ -26,8 +26,9 @@ Then curate 3–5 relevant lectures:
    Janmashtami, Mahaprabhu's appearance for Gaura Purnima).
 4. Prefer shorter recordings (≤ 45 min) when sort options allow.
 5. Mix authors and decades if possible.
-6. Wrap the chosen track ids in `[action:create_playlist|id=holiday]`
-   with the holiday's localised name as the playlist name.
+6. Emit each chosen track as `[^N]` on its own line — a stack of
+   cards. The client renders them and (when ≥2) offers "add to
+   playlist" itself.
 
 Tone: warm, devotional, concise. In Russian: NO English calques
 like «комнатные беседы» — use natural Russian Vaishnava terms or

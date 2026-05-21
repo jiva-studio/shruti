@@ -15,7 +15,7 @@ from lectorium_chat.domain.user_context import TrackStatus, UserContextTrack
 _DESCRIPTION = (
     "List tracks from the user's listening history, optionally filtered "
     "by `last_played_at` window and completion status. Returns track "
-    "rows with an integer `track_ref` (use it as `[card:N]` for cards "
+    "rows with an integer `track_ref` (use it as `[^N]` for cards "
     "and as `track_ref=` in chunks_get_window / chunks_find_similar).\n\n"
     "Use whenever the user asks about HISTORY (what / when / how long "
     "ago they listened):\n"

@@ -24,9 +24,7 @@ export async function validateAndScrubActions(
   // Collect every track id referenced by any track-bearing action.
   const trackIds = new Set<string>()
   for (const action of Object.values(actions)) {
-    if (action.kind === "create_playlist") {
-      for (const id of action.trackIds) trackIds.add(id)
-    } else if (action.kind === "queue_next_track") {
+    if (action.kind === "queue_next_track") {
       trackIds.add(action.trackId)
     }
   }
@@ -53,14 +51,7 @@ export async function validateAndScrubActions(
   const scrubbedActions: Record<string, ChatActionPayload> = {}
   const droppedActionIds: string[] = []
   for (const [actionId, action] of Object.entries(actions)) {
-    if (action.kind === "create_playlist") {
-      const surviving = action.trackIds.filter((id) => !missing.has(id))
-      if (surviving.length === 0) {
-        droppedActionIds.push(actionId)
-        continue
-      }
-      scrubbedActions[actionId] = { ...action, trackIds: surviving }
-    } else if (action.kind === "queue_next_track") {
+    if (action.kind === "queue_next_track") {
       if (missing.has(action.trackId)) {
         droppedActionIds.push(actionId)
         continue

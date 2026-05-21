@@ -17,7 +17,7 @@ _DESCRIPTION = (
     "Semantic search restricted to the user's recent listening history. "
     "Use when the user asks about content THEY specifically heard "
     "(\"что я слушал недавно про X\", \"тот ролик где он говорил про Y\"). "
-    "Returns lecture chunks with refs cited via `[cite:N|caption]`."
+    "Returns lecture chunks with refs cited via `[^N]`."
 )
 
 

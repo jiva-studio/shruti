@@ -4,40 +4,38 @@ The LLM never sees real catalog track ids. Tool results that would
 normally carry `track_id` strings (`track_OkPVGYhR5PPu`, etc.) are
 post-processed before reaching the model: each `(track_id, start_ms,
 end_ms)` triple — or each `track_id` for whole-track entities — gets
-a NON-SEQUENTIAL integer alias drawn at random from `[1, 9999]`, and
-the agent keeps the real values in `TurnAliasMap` for the duration of
-the chat turn.
+a small SEQUENTIAL integer alias starting from 1, and the agent keeps
+the real values in `TurnAliasMap` for the duration of the chat turn.
 
-When the model later writes `[cite:N|caption]` / `[card:N]` /
-`[outline:N]` in its prose, the stream filter expands `N` back into
-the real `[cite:track_X@start-end|caption]` etc. before the marker
-hits the client.
+When the model later writes `[^N]` in its prose, the stream
+filter expands `N` back into the real `[cite:track_X@start-end|caption]`
+/ `[verse:source_id/tokens|...]` / `[card:track_X]` (chosen by alias
+type) before the marker hits the client.
 
-Why integers and not the canonical `track_X` format:
-  * Hallucination prime is gone — there's no `track_…` / `BG_…` /
-    `SB_…` token shape anywhere in the model's context to imitate.
+Why small sequential integers (not random or canonical track_X):
+  * 1-2 digit numbers are trivial for small models (Flash-Lite) to
+    copy verbatim across long output streams. Earlier random `[1, 9999]`
+    drove the model to invent plausible-looking 4-digit refs mid-reply
+    because the real integer fell out of working memory.
+  * Hallucination prime is still gone — there's no `track_…` / `BG_…`
+    token shape anywhere in the model's context to imitate.
   * Detection of invalid refs is a dict lookup (`int in self._chunks`),
     not a catalog query.
-  * The cite vocabulary is small and visible to the model (`[1] … [5]`
-    are in the same prompt window), so the prompt rule "cite only by
-    number from the list" is a concrete constraint instead of the
-    vague "do not fabricate ids".
+  * With a small alias space (≤K) the server-side expander can recover
+    from a hallucinated `[^N]` when exactly ONE valid integer in
+    [1..K] has not yet been emitted in the response (see
+    `MarkerExpander._format_ref`).
 
-Numbers are drawn at random per allocation (uniqueness per turn enforced
-via `_used`). This kills "predict-next-N" hallucinations — when the
-model sees refs `{742, 18, 9001, 333}`, generating `[cite:9002]` is
-obviously nonsense. Re-aliasing the same `track_id` from a later tool
-call returns a NEW number (we don't deduplicate).
+Re-aliasing the same `track_id` from a later tool call returns a NEW
+number (we don't deduplicate at the mint site); the pipeline calls
+`lookup_ref` / `lookup_verse_ref` to reuse an existing integer when
+the same ref is seen twice in one turn.
 """
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass
 from typing import Any, Iterable
-
-_REF_MIN = 1
-_REF_MAX = 9999
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,17 +82,29 @@ class TurnAliasMap:
 
     def __init__(self) -> None:
         self._chunks: dict[int, AliasRef] = {}
-        self._used: set[int] = set()
+        self._next: int = 1
+        # Per-turn cache of LLM-generated audio-fragment captions,
+        # keyed by alias int. Populated by a background task in
+        # `research.pipeline` that runs Flash-Lite once per turn over
+        # the final set of cite-able lecture fragments. The marker
+        # expander reads `captions.get(n, "")` when expanding a
+        # ChunkRef with timestamps — graceful degradation: if the
+        # background task hasn't filled the slot by the time the LLM
+        # emits `[^N]`, the audio chip renders without a caption
+        # (widget still shows title + timestamp).
+        self.captions: dict[int, str] = {}
 
     def _alloc_ref(self) -> int:
-        """Draw a fresh integer in [1, 9999] not already used in this
-        turn. The address space (~10k) vs typical per-turn ref count
-        (≤50) keeps the rejection loop O(1) in practice."""
-        while True:
-            n = random.randint(_REF_MIN, _REF_MAX)
-            if n not in self._used:
-                self._used.add(n)
-                return n
+        """Allocate the next sequential alias integer for this turn."""
+        n = self._next
+        self._next += 1
+        return n
+
+    def known_keys(self) -> set[int]:
+        """All alias integers minted so far. Used by `MarkerExpander`
+        to recover from a hallucinated `[^N]` when exactly one valid
+        alias has not yet been emitted in the response."""
+        return set(self._chunks.keys())
 
     def alias_chunk(
         self, track_id: str, start_ms: int, end_ms: int,
@@ -116,7 +126,7 @@ class TurnAliasMap:
         self, source_id: str, tokens: str, addr_label: str | None = None,
     ) -> int:
         """Mint an alias for a library verse widget target. The LLM
-        cites it via `[verse:N|caption]`; the marker expander unfolds
+        cites it via `[^N]`; the marker expander unfolds
         N into `[verse:source_id/tokens|caption]` before the client
         sees it. `addr_label` is the precomputed human address from the
         chunks_search/chunks_get_by_address (verse) tool result; preserved so it can ride along in
@@ -182,9 +192,9 @@ class TurnAliasMap:
     def load_external(self, serialized: dict[str, Any]) -> None:
         """Restore aliases sent back by the client with prior turns'
         history. Accepts both track-shape entries (with `track_id`) and
-        verse-shape entries (with `kind="verse"`). Loaded refs are added
-        to `_used` so freshly-minted aliases this turn don't collide
-        with history-side refs."""
+        verse-shape entries (with `kind="verse"`). The sequential mint
+        counter is advanced past every loaded integer so freshly-minted
+        aliases this turn don't collide with history-side refs."""
         for k, entry in serialized.items():
             try:
                 n = int(k)
@@ -210,14 +220,15 @@ class TurnAliasMap:
                     start_ms=int(start) if isinstance(start, int) else None,
                     end_ms=int(end) if isinstance(end, int) else None,
                 )
-            self._used.add(n)
+            if n >= self._next:
+                self._next = n + 1
 
     def dealias_many(self, refs: Iterable[int]) -> list[str]:
         """Translate a list of integer refs (as the LLM passes them
         into action tools) back to real catalog `track_id`s. Unknown
         refs and verse refs (which carry no track_id) are silently
         dropped — callers see only the realised ids and can decide
-        what to do (e.g. propose_playlist will reject an empty list)."""
+        what to do (e.g. track_pdf_generate will reject an empty list)."""
         out: list[str] = []
         for r in refs:
             try:

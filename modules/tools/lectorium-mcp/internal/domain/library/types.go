@@ -93,3 +93,46 @@ type ListTitlesOpts struct {
 	Limit       int
 	Cursor      string
 }
+
+// AttributionKind discriminates how chat-service consumes the attribution.
+//
+//   - AttrQuestion: curated canonical question; matched user query takes
+//     the SHORT path in the research pipeline (refs become authoritative).
+//   - AttrTopic:    short topical label; matched extracted topics BOOST
+//     scores (+0.15) of referenced chunks in the fanout.
+type AttributionKind string
+
+const (
+	AttrQuestion AttributionKind = "question"
+	AttrTopic    AttributionKind = "topic"
+)
+
+// Attribution is a curated mapping: one or more text phrasings (per language)
+// → a set of authoritative library refs. Same shape for both kinds; the kind
+// only changes how the chat-service pipeline uses the matched refs.
+type Attribution struct {
+	ID        string                // "attribution_<nanoid>"
+	Kind      AttributionKind       // "question" | "topic"
+	Texts     map[string][]string   // language → list of phrasings (N variants per lang)
+	Refs      []AttributionRef
+	CreatedAt string                // RFC3339, set by repo on insert
+	UpdatedAt string                // RFC3339, bumped on any mutation
+}
+
+// AttributionRef points to a library entity through its opaque ID. Kind here
+// is the REFERENCED entity type (verse|document) — separate from
+// Attribution.Kind (question|topic).
+type AttributionRef struct {
+	Kind     string // "verse" | "document"
+	TargetID string // verse.id OR library_document.id (opaque)
+	Position int    // ordering hint within the attribution (default 0)
+}
+
+// ListAttributionsOpts narrows an attribution listing.
+type ListAttributionsOpts struct {
+	Kind     AttributionKind // optional filter
+	Query    string          // optional substring match (LIKE on text)
+	Language string          // optional: restrict text-matching to this lang
+	Limit    int
+	Cursor   string // last-seen attribution_id, exclusive
+}

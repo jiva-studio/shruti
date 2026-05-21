@@ -14,7 +14,7 @@ import {
   extractFollowups,
   parseChatMarkers,
 } from "@lectorium/views/Chat/composables/useMarkerParser.js"
-import { addTracksToPlaylist, runChatTurn, type RunChatTurnEvent } from "@lib/application"
+import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -481,17 +481,7 @@ export const useChatStore = defineStore("chat", () => {
 
     await setActionState(messageId, actionId, "executing")
     try {
-      if (action.kind === "create_playlist") {
-        const r = await addTracksToPlaylist(
-          { trackIds: action.trackIds as readonly TrackId[] },
-          {
-            playlist: {
-              add: (id) => playlist.add(id as TrackId) as unknown as Promise<unknown>,
-            },
-          }
-        )
-        if (!r.ok) throw new Error(`add to playlist failed: ${r.error}`)
-      } else if (action.kind === "enable_daily_reminder") {
+      if (action.kind === "enable_daily_reminder") {
         // Card lets the user pick a time before tapping Confirm; if
         // they did, the chosen value rides in via `override.time`.
         await applyProactiveDailyReminder(override?.time ?? action.time)

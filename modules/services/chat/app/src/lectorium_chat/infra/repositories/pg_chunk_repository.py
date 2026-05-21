@@ -277,6 +277,61 @@ class PgChunkRepository:
             for r in rows
         ]
 
+    async def get_chunks_by_target(
+        self,
+        *,
+        ref_kind: str,
+        target_id: str,
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        """ref_kind='verse'    → chunks.kind='verse'
+           ref_kind='document' → chunks.kind IN ('commentary','prose_chapter','letter')
+
+        chunks.item_id IS the opaque library entity ID (verse.id /
+        library_document.id) — copied verbatim by chunker.py:175,240 — so
+        this is a JOIN-by-equality with no parsing.
+        """
+        if ref_kind == "verse":
+            kinds = ["verse"]
+        elif ref_kind == "document":
+            kinds = ["commentary", "prose_chapter", "letter"]
+        else:
+            return []
+
+        where: list[str] = [
+            "kind = ANY($1::text[])",
+            "embed_model = $2",
+            "item_id = $3",
+        ]
+        params: list[Any] = [kinds, self._embed_model, target_id]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        sql = f"""
+          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
+                 lang, segment_index, text, addr_label
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY segment_index NULLS FIRST
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            LibraryChunk(
+                item_id=r["item_id"],
+                item_kind=r["kind"],
+                source_id=r["source_id"],
+                tokens=r["tokens"],
+                author_id=r["author_id"],
+                doc_date=r["doc_date"],
+                lang=r["lang"],
+                segment_index=r["segment_index"],
+                text=r["text"],
+                addr_label=r["addr_label"],
+            )
+            for r in rows
+        ]
+
     async def get_first_chunk_embeddings(
         self,
         track_ids: list[str],
