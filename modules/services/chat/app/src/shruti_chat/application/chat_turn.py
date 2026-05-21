@@ -87,7 +87,7 @@ def _subset(
 
 
 # Inline chip-class markers the LLM is FORBIDDEN to write directly —
-# it must use the numbered-ref protocol (`[cite:N]`, `[card:N]`, ...)
+# it must use the numbered-ref protocol (`[^N]`, `[^N]`, ...)
 # and the MarkerExpander expands those into the real track-id form
 # below before they hit the client. Anything matching these regexes
 # in the LLM-typed prose means the model bypassed the protocol — log
@@ -308,7 +308,7 @@ async def run_chat_turn(
         # v1 protocol: client persists `done.data.aliases` on the
         # freshly-finalised assistant message and ships it back on the
         # next turn so `_fold_prior_assistant_content` rewrites chip
-        # markers in history into `[cite:N|...]` form.
+        # markers in history into `[^N]` form.
         done_data: dict[str, Any] = {}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()

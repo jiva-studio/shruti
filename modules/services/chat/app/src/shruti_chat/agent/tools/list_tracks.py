@@ -85,7 +85,7 @@ register_tool(ToolDef(
     description=(
         "Deterministic metadata filter over the lecture catalog. Use "
         "for list-style queries: 'lectures by X from Y in period Z'. "
-        "Returns tracks the synthesizer will render as `[card:N]` "
+        "Returns tracks the synthesizer will render as `[^N]` "
         "widgets — use the integer `ref` field from each row. "
         "Kind (morning walk / conversation / lecture / ...) is "
         "passed via tag_ids (e.g. ['tag_morning_walk']).\n\n"

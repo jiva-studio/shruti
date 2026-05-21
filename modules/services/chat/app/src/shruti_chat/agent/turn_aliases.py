@@ -7,7 +7,7 @@ end_ms)` triple — or each `track_id` for whole-track entities — gets
 a small SEQUENTIAL integer alias starting from 1, and the agent keeps
 the real values in `TurnAliasMap` for the duration of the chat turn.
 
-When the model later writes `[ref:N|caption]` in its prose, the stream
+When the model later writes `[^N]` in its prose, the stream
 filter expands `N` back into the real `[cite:track_X@start-end|caption]`
 / `[verse:source_id/tokens|...]` / `[card:track_X]` (chosen by alias
 type) before the marker hits the client.
@@ -22,7 +22,7 @@ Why small sequential integers (not random or canonical track_X):
   * Detection of invalid refs is a dict lookup (`int in self._chunks`),
     not a catalog query.
   * With a small alias space (≤K) the server-side expander can recover
-    from a hallucinated `[ref:N]` when exactly ONE valid integer in
+    from a hallucinated `[^N]` when exactly ONE valid integer in
     [1..K] has not yet been emitted in the response (see
     `MarkerExpander._format_ref`).
 
@@ -126,7 +126,7 @@ class TurnAliasMap:
         self, source_id: str, tokens: str, addr_label: str | None = None,
     ) -> int:
         """Mint an alias for a library verse widget target. The LLM
-        cites it via `[verse:N|caption]`; the marker expander unfolds
+        cites it via `[^N]`; the marker expander unfolds
         N into `[verse:source_id/tokens|caption]` before the client
         sees it. `addr_label` is the precomputed human address from the
         chunks_search/chunks_get_by_address (verse) tool result; preserved so it can ride along in

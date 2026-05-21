@@ -78,7 +78,7 @@ async def research_worker_node(
 
     # Emit verse_payload SSE events for any verse aliases minted during
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams
-    # `[verse:N]` markers — the mobile client expects the payload first.
+    # `[^N]` markers — the mobile client expects the payload first.
     await flush_verse_payloads(ctx)
 
     log.info(
