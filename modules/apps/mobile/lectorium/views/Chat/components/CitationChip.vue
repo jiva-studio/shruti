@@ -398,7 +398,9 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   height: 22px;
-  margin: 0 2px;
+  /* Vertical margin gives the chips breathing room when several wrap
+     across lines — without it stacked rows of chips touch with no gap. */
+  margin: 3px 2px;
   padding: 0;
   border-radius: 999px;
   border: 1px solid rgba(var(--ion-color-primary-rgb), 0.45);

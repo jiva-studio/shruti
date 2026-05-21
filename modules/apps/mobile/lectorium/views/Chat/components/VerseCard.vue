@@ -104,7 +104,11 @@ function onTap() {
   display: block;
   margin: 10px 0;
   padding: 10px 0;
-  font-size: 0.95em;
+  /* Concrete px instead of em so children's px sizes don't compound
+     against an em-relative parent. The verse card reads slightly
+     smaller than bubble prose (15px) to visually distinguish the
+     sub-block. */
+  font-size: 14px;
   line-height: 1.45;
 }
 /* Top & bottom rules rendered as 1px gradient bands instead of solid
@@ -149,7 +153,7 @@ function onTap() {
 }
 .verse-card-addr {
   font-weight: 700;
-  font-size: 0.95em;
+  font-size: 13px;
   text-align: center;
   color: var(--ion-color-primary);
   margin: 0 0 2px;
@@ -158,7 +162,10 @@ function onTap() {
   margin: 0 0 2px;
   text-align: center;
   font-family: "Sanskrit2003", "Noto Sans Devanagari", serif;
-  font-size: 1.05em;
+  /* Slightly larger than the bubble base — sanskrit is the
+     headline content of the verse and reads better with a touch
+     more weight. */
+  font-size: 16px;
   white-space: pre-wrap;
 }
 .verse-card-iast {
@@ -183,7 +190,7 @@ function onTap() {
   border: 1px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.08);
   color: var(--ion-color-primary);
-  font-size: 0.8125em;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
   white-space: nowrap;

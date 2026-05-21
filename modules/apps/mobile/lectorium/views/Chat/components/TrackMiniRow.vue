@@ -197,7 +197,7 @@ async function onAddOne(): Promise<void> {
    * string can shrink and ellipsis instead of wrapping onto its own line. */
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.25;
   color: var(--ion-color-medium);
   white-space: nowrap;

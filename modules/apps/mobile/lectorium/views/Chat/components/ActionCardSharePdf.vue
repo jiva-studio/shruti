@@ -1,43 +1,53 @@
 <template>
-  <section v-if="payload" class="action-card pdf">
-    <header class="head">
-      <span class="kind">{{ $t("chat.actionPdfKind") }}</span>
-    </header>
-
-    <ul class="rows">
-      <li v-for="item in payload.items" :key="item.trackId" class="row">
-        <div class="info">
-          <span class="title">{{ item.title }}</span>
-          <span v-if="metaFor(item)" class="meta">{{ metaFor(item) }}</span>
-        </div>
-        <footer class="row-footer">
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="rowState(item.trackId) === 'sharing'"
-            @click="onShare(item)"
-          >
-            <!-- Single fixed-width inner wrapper so the chip itself stays
-                 the same size whether we show a spinner, "Share",
-                 "Sent", or "Retry" — no jitter when state flips. -->
-            <span class="btn-label">
-              <IonSpinner v-if="rowState(item.trackId) === 'sharing'" name="dots" class="spinner" />
-              <template v-else-if="rowState(item.trackId) === 'shared'">
-                {{ $t("chat.actionPdfShared") }}
-              </template>
-              <template v-else-if="rowState(item.trackId) === 'error'">
-                {{ $t("chat.actionRetry") }}
-              </template>
-              <template v-else>{{ $t("chat.actionPdfShare") }}</template>
-            </span>
-          </button>
-        </footer>
-      </li>
-    </ul>
-  </section>
-  <section v-else class="action-card pdf broken">
-    <span class="broken-icon">⚠</span>
-    <span class="broken-text">{{ $t("chat.actionDegraded") }}</span>
+  <ul v-if="payload" class="pdf-list">
+    <li
+      v-for="item in payload.items"
+      :key="item.trackId"
+      class="pdf-row"
+      role="button"
+      tabindex="0"
+      :aria-disabled="rowState(item.trackId) === 'sharing'"
+      :data-state="rowState(item.trackId)"
+      @click="onShare(item)"
+      @keydown.enter.space.prevent="onShare(item)"
+    >
+      <span class="pdf-icon" aria-hidden="true">
+        <IonSpinner v-if="rowState(item.trackId) === 'sharing'" name="dots" />
+        <svg v-else viewBox="0 0 40 48" width="34" height="40">
+          <!-- Document page with folded top-right corner (line-style),
+               + red "PDF" tag on the bottom — recognisable PDF
+               document badge at glance. -->
+          <path
+            d="M5 3h22l8 8v32a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"
+            fill="var(--ion-background-color, #fff)"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M27 3v6a2 2 0 0 0 2 2h6"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+          <rect x="3" y="26" width="28" height="13" rx="2" fill="#d83b3b" />
+          <text
+            x="17" y="36"
+            font-size="9" font-weight="800" text-anchor="middle"
+            fill="#fff" font-family="system-ui, -apple-system, sans-serif"
+          >PDF</text>
+        </svg>
+      </span>
+      <div class="pdf-info">
+        <span class="pdf-title">{{ item.title }}</span>
+        <span v-if="metaFor(item)" class="pdf-meta">{{ metaFor(item) }}</span>
+      </div>
+    </li>
+  </ul>
+  <section v-else class="pdf-broken">
+    <span class="pdf-broken-icon">⚠</span>
+    <span class="pdf-broken-text">{{ $t("chat.actionDegraded") }}</span>
   </section>
 </template>
 
@@ -132,16 +142,87 @@ void props.actionId
 </script>
 
 <style scoped>
-.action-card.pdf {
+.pdf-list {
+  list-style: none;
   margin: 8px 0;
   padding: 0;
-  border-radius: 12px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.28);
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
-.action-card.broken {
+.pdf-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 120ms ease;
+}
+
+.pdf-row + .pdf-row {
+  border-top: 1px solid rgba(var(--ion-color-step-200-rgb, 200, 200, 200), 0.18);
+}
+
+.pdf-row:active:not([aria-disabled="true"]) {
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+.pdf-row[aria-disabled="true"] {
+  cursor: default;
+}
+
+/* "shared" state: subtle dimming + check-mark cue via the icon area. */
+.pdf-row[data-state="shared"] .pdf-icon {
+  opacity: 0.45;
+}
+
+.pdf-icon {
+  flex: 0 0 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ion-color-primary);
+  height: 40px;
+}
+
+.pdf-icon ion-spinner {
+  --color: var(--ion-color-primary);
+  height: 28px;
+  width: 28px;
+}
+
+.pdf-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pdf-title {
+  /* Match bubble prose size (15px / 1.45) so the row reads as
+     part of the conversation, not as an embedded widget. */
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ion-text-color);
+}
+
+.pdf-meta {
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--ion-color-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-broken {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -150,122 +231,16 @@ void props.actionId
   color: var(--ion-color-medium);
   border: 1px dashed rgba(var(--ion-color-medium-rgb, 146, 148, 156), 0.5);
   background: transparent;
+  border-radius: 12px;
 }
 
-.broken-icon {
+.pdf-broken-icon {
   flex: 0 0 auto;
   opacity: 0.8;
 }
 
-.broken-text {
+.pdf-broken-text {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 10px 12px 6px;
-}
-
-.kind {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.6;
-}
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px 8px;
-}
-
-.row + .row {
-  border-top: 1px solid rgba(var(--ion-color-step-200-rgb, 200, 200, 200), 0.14);
-}
-
-.info {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.title {
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.meta {
-  font-size: 12px;
-  line-height: 1.25;
-  color: var(--ion-color-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Footer row mirrors the playlist card's bottom-aligned action: the
- * button parks at the right edge with consistent gutter, and the
- * fixed-width inner label keeps the chip itself the same size
- * whether it renders text or a spinner. */
-.row-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn {
-  appearance: none;
-  border: 0;
-  border-radius: 10px;
-  padding: 6px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.2;
-  min-height: 32px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-label {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  /* Fixed inner width — sized for the widest expected label
-   * ("Поделиться") so RU and EN both fit without resizing the chip
-   * across state transitions. */
-  min-width: 110px;
-}
-
-.btn.primary {
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast);
-}
-
-.btn.primary[disabled] {
-  opacity: 0.7;
-  cursor: default;
-}
-
-.spinner {
-  width: 18px;
-  height: 14px;
 }
 </style>
