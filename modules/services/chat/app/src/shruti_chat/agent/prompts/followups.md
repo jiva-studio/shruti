@@ -1,158 +1,52 @@
-
 ═══════════════════════════════════════════════════════════════════════
-FOLLOW-UP CHIPS — `[followup:<text>]` MARKER
+Follow-up chips — `[followup:<text>]`
 ═══════════════════════════════════════════════════════════════════════
 
-ALWAYS-FOLLOWUP RULE:
-After EVERY substantive reply you MUST emit 2-3 follow-up chips —
-short phrases the user can tap to continue the conversation. The
-only exceptions are the SKIP CASES enumerated below; if your turn is
-NOT one of those, skipping the chips is a failure of instruction-
-following, not a stylistic choice. A reply without chips when chips
-were appropriate is a dead-end for the user — the worst possible UX
-for this app. Even when you think «nothing meaningful to suggest»,
-pick 2 plausible directions (one drill-down, one navigation) — the
-user is better served by imperfect chips than by an empty bubble.
-
-PRIORITY — followups DO NOT replace search or citations. This rule
-fires AFTER you have already searched (ALWAYS-SEARCH-RULE), grounded
-every factual claim in a tool result, and emitted the corresponding
-`[cite:N|…]` / `[card:N]` markers per citations.md. Chips are the
-LAST thing in the bubble, never a substitute for the chips above
-them. An ungrounded answer dressed up with 3 followup chips is still
-an ungrounded answer.
-
-Tapping a chip sends its text verbatim as the user's next message,
-which triggers a brand-new chat turn.
-
-Followup markers are DIFFERENT from `[action:..]` markers:
-- An `[action:<kind>|id=<action_id>]` is a POINTER — it MUST be backed
-  by a real `propose_*` tool call earlier in the same turn.
-- A `[followup:<text>]` is just a TEXT chip — NO tool call required,
-  NO id, NO payload. The text IS the data. The chip becomes a user
-  message if tapped, and you'll handle the request in the NEXT turn.
+After every substantive reply emit 2-3 follow-up chips — short
+phrases (3-7 words) the user can tap to continue. They are the LAST
+thing in the bubble, after all `[ref:N]` and `[action:…]` markers.
 
 GRAMMAR:
+
     [followup:<text>]
-- `text` is plain UTF-8, 3-7 words.
-- `text` MUST NOT contain `]`, `|`, or newlines (the parser stops at
-  the first `]`, drops the chip on `|`, and rejects multi-line input).
-- `text` MUST be on the same language as the rest of your reply
-  (`ru` for Russian conversations, `en` for English).
-- Each marker on its own line, AFTER all `[cite:..]` / `[card:..]` /
-  `[outline:..]` / `[action:..]` markers — the absolute last thing in
-  the message.
 
-QUANTITY & MIX:
-- 2 to 3 chips on substantive turns. 0 chips ONLY when a SKIP CASE
-  applies. Never emit 4+ (the client caps at 3 anyway).
-- Mix categories when natural — don't make all three the same kind:
-  - **action-hint** — propose using one of your `propose_*` tools.
-    Examples:
-        [followup:Сделай PDF этой лекции]
-        [followup:Сохрани цитату в заметки]
-        [followup:Собери плейлист по этой теме]
-        [followup:Make a PDF of this lecture]
-        [followup:Save this quote as a note]
-        [followup:Build a playlist on this topic]
-  - **navigation** — direct the user to another part of the app.
-    Examples:
-        [followup:Покажи похожие беседы]
-        [followup:Открой эту лекцию полностью]
-        [followup:Show me similar lectures]
-        [followup:Open my notes]
-  - **clarifying** — ask a question that drills deeper into the same
-    topic. Examples:
-        [followup:А что в главе 3?]
-        [followup:Чем это отличается от БГ 2.20?]
-        [followup:Кто такие двиджа?]
-        [followup:What about chapter 3?]
-        [followup:How does this differ from BG 2.20?]
+- 3-7 words, in the user's reply language.
+- Text must NOT contain `]`, `|`, or newlines.
+- Each marker on its own line.
 
-ANTI-DUPLICATION:
-- If you already emitted `[action:share_pdf|id=...]` in this turn, do
-  NOT also emit `[followup:Сделай PDF этой лекции]` — same suggestion,
-  pure noise.
-- If you already emitted `[action:create_playlist|id=...]`, do NOT
-  emit `[followup:Собери плейлист…]`.
-- Same for enable_daily_reminder / configure_smart_library /
-  upgrade_to_pro / queue_next_track.
-- The chip set should advance the conversation, not echo it.
+MIX (optional — pick what fits):
+- **action-hint** — propose a `propose_*` tool: «Сделай PDF этой
+  лекции», «Build a playlist on this topic».
+- **navigation** — direct elsewhere in the app: «Покажи похожие
+  беседы», «Open my notes».
+- **clarifying** — drill deeper: «А что в главе 3?», «How does this
+  differ from BG 2.20?».
 
-SKIP CASES — DO NOT emit ANY follow-up markers when:
-- The reply is a final confirmation that closes the loop:
-  «Готово, плейлист создан», «Напоминание включено», «Done, your
-  playlist is ready». Adding chips here is busywork.
-- The message ended on an error / truncated state.
-- The user's question was small-talk («Привет», «Спасибо», «Hello»,
-  «Thanks») — chips would be intrusive.
-- You already emitted three or more `[action:..]` cards — the bubble
-  is busy enough.
+ANTI-DUPLICATION: if the same suggestion already appears as an
+`[action:…]` card in this turn, don't repeat it as a followup chip.
 
-CORRECT — discovery answer with all three chip categories:
+SKIP CASES (emit zero chips):
+- Reply confirms a finished action ("Готово, плейлист создан").
+- Reply ended on error / truncation.
+- Small-talk ("Привет", "Спасибо").
+- Already emitted 3+ `[action:…]` cards — bubble is busy enough.
+
+CORRECT:
+
     Глава 2 Бхагавад-гиты раскрывает суть санкхья-йоги и описывает
-    природу души [cite:1|душа вечна].
+    природу души. [ref:1|душа вечна]
 
-    [card:2]
-    [card:3]
+    [ref:2]
+    [ref:3]
     [followup:Сделай PDF этих лекций]
     [followup:А что в главе 3?]
     [followup:Покажи похожие беседы]
 
-CORRECT — turn that emits an action card already covers the PDF, so
-the followup chips DO NOT mention PDF; they pivot elsewhere:
-    Готов сделать PDF.
-    [action:share_pdf|id=ab12cd34]
-    [followup:Открой эту лекцию полностью]
-    [followup:Что ещё есть в БГ 2.20?]
+WRONG — substantive reply with no chips (user lands on a dead-end):
 
-CORRECT — even a short factual reply gets chips, AND it still cites
-its source (the chips do not replace `[cite:N|…]` — they come AFTER):
-    Двиджа — это «дваждырождённый», член одной из трёх высших варн
-    [cite:3|кто такие двиджа].
+    Карма — это закон причины и следствия. [ref:4|определение кармы]
 
-    [followup:Покажи лекции про варны]
-    [followup:А кто такие шудры?]
+WRONG — chip duplicates an action card already in the message:
 
-WRONG — substantive reply with zero chips. The user lands on a
-dead-end and has to invent their next move:
-    Карма — это закон причины и следствия [cite:4|определение кармы].
-    (Should have ended with 2-3 chips: drill-down on related concepts
-    plus a navigation chip like «Покажи похожие лекции».)
-
-WRONG — emits chips but skipped search and has no cite marker. The
-ALWAYS-SEARCH and grounding rules win over followups; chips never
-replace citations:
-    Карма — это закон причины и следствия.
-
-    [followup:А что такое дхарма?]
-    [followup:Покажи похожие лекции]
-    (No `[cite:N|…]` means the reply is ungrounded — the chips are
-    cosmetic dressing on a violation of the grounding rule.)
-
-WRONG — chip text contains forbidden punctuation `]`:
-    [followup:Узнай про БГ [2.20]]
-    (Parser stops at the first `]`, the rest leaks into prose.)
-
-WRONG — chip text uses `|` (pipe is the marker field separator
-elsewhere; parser drops chips that contain it):
-    [followup:Сделай PDF | плейлист]
-
-WRONG — chip is in the wrong language (ru reply, en chip):
-    [followup:What about chapter 3?]
-    (User reading in Russian sees a foreign-language chip.)
-
-WRONG — duplicates an action card already in the message:
     [action:share_pdf|id=ab12cd34]
     [followup:Сделай PDF этой лекции]
-
-WRONG — emits chips after a confirmation that closes the loop:
-    Напоминание включено каждый день в 07:00.
-    [action:enable_daily_reminder|id=ee55ff88]
-    [followup:Включи Smart Library]
-    (User just confirmed a setup action — chips drag them back into a
-    workflow they were trying to finish.)
-
-WRONG — invents an `id=` slot:
-    [followup:id=abc|Сделай PDF]
-    (Followups have NO id. This is action-marker grammar bleed-through.)

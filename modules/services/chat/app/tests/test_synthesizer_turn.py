@@ -77,9 +77,9 @@ async def test_plain_text_passes_through() -> None:
 
 
 @pytest.mark.asyncio
-async def test_cite_marker_expanded_into_track_form() -> None:
-    """LLM writes `[cite:N|caption]` — MarkerExpander unfolds N into
-    the real track_id@start-end. Client gets the expanded form."""
+async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
+    """LLM writes `[ref:N|caption]`; if alias N is a lecture chunk, server
+    expands into the `[cite:track@start-end|caption]` shape the client renders."""
     aliases = TurnAliasMap()
     n = aliases.alias_chunk("track_OkPVGYhR5PPu", 1500, 2500)
     expander = MarkerExpander(aliases)
@@ -87,7 +87,7 @@ async def test_cite_marker_expanded_into_track_form() -> None:
     llm = StreamingLLM(
         chunks=[
             "Прабхупада объясняет это в ",
-            f"[cite:{n}|01:30-02:30]",
+            f"[ref:{n}|01:30-02:30]",
             ".",
         ]
     )
@@ -103,18 +103,19 @@ async def test_cite_marker_expanded_into_track_form() -> None:
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
     assert "[cite:track_OkPVGYhR5PPu@1500-2500|01:30-02:30]" in full
-    # Integer form never reaches the client.
-    assert f"[cite:{n}|" not in full
+    # Raw [ref:N] form never reaches the client — always expanded.
+    assert f"[ref:{n}" not in full
 
 
 @pytest.mark.asyncio
-async def test_verse_marker_expanded() -> None:
-    """`[verse:N|caption]` → `[verse:source_id/tokens|caption]`."""
+async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
+    """`[ref:N]` resolving to a VerseRef → `[verse:source_id/tokens|addr_label]`.
+    Note: verse caption comes from the alias's `addr_label`, not from the LLM."""
     aliases = TurnAliasMap()
-    n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
+    n = aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
     expander = MarkerExpander(aliases)
 
-    llm = StreamingLLM(chunks=[f"См. [verse:{n}|БГ 2.13]"])
+    llm = StreamingLLM(chunks=[f"См. [ref:{n}]"])
     events = await _drain(
         run_synthesizer_turn(
             "verse",
@@ -127,20 +128,18 @@ async def test_verse_marker_expanded() -> None:
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
     assert "[verse:source_BG/2.13|БГ 2.13]" in full
-    assert f"[verse:{n}|" not in full
+    assert f"[ref:{n}" not in full
 
 
 @pytest.mark.asyncio
-async def test_marker_split_across_chunks_buffers_correctly() -> None:
-    """LLM tokeniser might split `[cite:N|caption]` across multiple
-    streaming chunks. MarkerExpander must buffer and emit the expanded
-    form once the `]` closes."""
+async def test_ref_marker_split_across_chunks_buffers_correctly() -> None:
+    """SSE deltas can split a marker mid-buffer. MarkerExpander must
+    buffer and emit the expanded form once the `]` closes."""
     aliases = TurnAliasMap()
     n = aliases.alias_chunk("track_X", 1000, 2000)
     expander = MarkerExpander(aliases)
 
-    # Split into many tiny chunks so the marker straddles them.
-    raw = f"Цитата [cite:{n}|caption] здесь"
+    raw = f"Цитата [ref:{n}|caption] здесь"
     llm = StreamingLLM(chunks=[c for c in raw])
 
     events = await _drain(
@@ -155,7 +154,6 @@ async def test_marker_split_across_chunks_buffers_correctly() -> None:
     )
     full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
     assert "[cite:track_X@1000-2000|caption]" in full
-    # `Цитата ` and ` здесь` made it through.
     assert "Цитата " in full
     assert " здесь" in full
 

@@ -42,8 +42,8 @@ Tools and when to use them
     `type`, `ref?`, `label`, `text`, `lang`, `score`, `meta`.
 
     Citation by `type`:
-      - lecture     → `[cite:N|caption]` using the entry's `ref`.
-      - verse       → `[verse:N|caption]` using the entry's `ref`.
+      - lecture     → `[ref:N|caption]` using the entry's `ref`.
+      - verse       → `[ref:N|caption]` using the entry's `ref`.
                       The server expands `N` to source_id/tokens before
                       the marker reaches the client.
       - commentary / prose_chapter / letter → quote inline as a markdown
@@ -77,7 +77,7 @@ Tools and when to use them
     Use `type="verse"` for the verse body, `type="commentary"` for
     Prabhupada's purport on that same verse. Returns 0-2 envelope rows
     (one per language). Cite verses via
-    `[verse:N|caption]` using `ref`, commentaries inline as a
+    `[ref:N|caption]` using `ref`, commentaries inline as a
     blockquote.
 
     For letters / prose chapters there is NO stable address grammar —
@@ -112,7 +112,7 @@ Tools and when to use them
     For list-style questions: "lectures by X from Y in 1972", "all
     morning walks in Bombay". Returns track cards: each entry has `ref`
     (integer), `title`, `date`, `author`, `location`, `kind`,
-    `duration`, `references`. Emit `[card:N]` markers in your reply
+    `duration`, `references`. Emit `[ref:N]` markers in your reply
     where `N` is the entry's `ref`.
 
     `Kind` (morning walk / lecture / conversation / etc.) is a TAG.
@@ -193,7 +193,7 @@ Tools and when to use them
 
     After the tool returns, write a 2-4 sentence prose summary based
     on the `items[].title` ONLY — do NOT make up topics the outline
-    doesn't cover. Then embed `[outline:N]` at the position where the
+    doesn't cover. Then embed `[ref:N]` at the position where the
     card should render. Do NOT enumerate items in text — the card
     shows them.
 
@@ -206,7 +206,7 @@ Tools and when to use them
     `user_tracks_list` is THE tool for any question about WHAT or
     WHEN the user listened. Returns rows
     `{track_ref, position_ms, percent, last_played_at, …}` ready for
-    `[card:N]` markers (where N is the `track_ref`). Stale tracks
+    `[ref:N]` markers (where N is the `track_ref`). Stale tracks
     missing from the current catalog are dropped server-side — every
     `track_ref` it returns is safe to emit as a card.
 
@@ -243,7 +243,7 @@ Tools and when to use them
     то что я слушаю». Returns 5-10 lecture cards seeded from the
     user's listening history. No arguments — the tool reads the
     full `recent_tracks` server-side. Render each result as
-    `[card:N]`. Do NOT use `chunks_search` for these — without a
+    `[ref:N]`. Do NOT use `chunks_search` for these — without a
     `recent_tracks` window the agent has nothing to anchor on.
 
     NOTE: there is no `search_my_notes` tool. If the user asks about
@@ -285,5 +285,5 @@ Tools and when to use them
     `track_ids` as the LIST OF INTEGER REFS from prior tool results
     (e.g. `[2, 5]`). Returns `{ok, action_id, items, errors}`. Embed
     `[action:share_pdf|id=<action_id>]` inline — DO NOT also output
-    `[card:N]` for the same tracks. If `errors` is non-empty, mention
+    `[ref:N]` for the same tracks. If `errors` is non-empty, mention
     that briefly in prose.

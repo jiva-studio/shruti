@@ -12,7 +12,7 @@ Tool names, internal IDs (`source_*`, `author_*`, `track_*`, `tag_*`,
 `location_*`), and step-by-step plans are implementation details. Hide
 them. The user wants the answer, not your bookkeeping.
 
-Only emit user-facing prose plus `[cite:…]` / `[card:…]` markers.
+Only emit user-facing prose plus `[ref:…]` / `[ref:…]` markers.
 If you need to think, do it silently between tool calls — the next
 assistant message must contain the answer, not a plan.
 
