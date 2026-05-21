@@ -11,6 +11,20 @@
       <template v-if="message.role === 'user'">
         <span class="user-text">{{ message.content }}</span>
       </template>
+      <template v-else-if="failedKind">
+        <div class="error-card">
+          <span class="error-text">{{ failedText }}</span>
+          <button
+            v-if="failedRetryAllowed"
+            type="button"
+            class="btn primary retry"
+            :disabled="!failedRetryEnabled || !canRetry"
+            @click="onRetry"
+          >
+            {{ failedRetryLabel }}
+          </button>
+        </div>
+      </template>
       <template v-else>
         <StatusPill
           v-if="message.streaming && message.content.length === 0"
@@ -103,20 +117,33 @@
           <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
             errorSuffix
           }}</span>
+          <button
+            v-if="truncatedRetryVisible"
+            type="button"
+            class="btn primary retry truncated-retry"
+            :disabled="!canRetry"
+            @click="onRetry"
+          >
+            {{ t("chat.actionRetry") }}
+          </button>
         </template>
       </template>
     </div>
+    <ChatMessageActions v-if="showActions" :markdown="exportMarkdown" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import router from "@lectorium/router/index.js"
-import { parseChatMarkers } from "../composables/useMarkerParser.js"
+import { messageToMarkdown, parseChatMarkers } from "../composables/useMarkerParser.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
+import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import CitationChip from "./CitationChip.vue"
+import ChatMessageActions from "./ChatMessageActions.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
@@ -127,8 +154,17 @@ import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 import StatusPill from "./StatusPill.vue"
 
-const props = defineProps<{ message: ChatMessage }>()
-defineEmits<{
+const props = withDefaults(
+  defineProps<{
+    message: ChatMessage
+    /** Whether this bubble is the last item in the conversation. Only
+     *  the trailing failed/truncated message gets a Retry button —
+     *  earlier ones are frozen history. */
+    isLast?: boolean
+  }>(),
+  { isLast: false }
+)
+const emit = defineEmits<{
   /** Forwarded from the inline OutlineCard. The view-level controller
    *  owns prompt assembly + chat.sendMessage. */
   "pick-chapter": [
@@ -138,8 +174,12 @@ defineEmits<{
       nextItem: { startMs: number; title: string } | null
     },
   ]
+  /** User tapped Retry on a failed/truncated assistant bubble. */
+  retry: [messageId: string]
 }>()
 const chat = useChatStore()
+const verseBody = useVerseBodyStore()
+const appLanguage = useAppLanguage()
 // Singleton import — see NotesView.controller for the why.
 const { t } = useI18n()
 
@@ -148,18 +188,149 @@ const tokens = computed(() => {
   return parseChatMarkers(props.message.content)
 })
 
+/* -------------------------------------------------------------------- */
+/*  Copy / Share — plain-Markdown rendering of the assistant message     */
+/* -------------------------------------------------------------------- */
+
+const exportMarkdown = computed<string>(() => {
+  if (props.message.role !== "assistant") return ""
+  if (props.message.streaming) return ""
+  if (props.message.error?.kind === "failed") return ""
+  const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+  return messageToMarkdown(props.message.content, {
+    lang,
+    verseLookup: (sourceId, tokens) => verseBody.get(sourceId, tokens),
+  })
+})
+
+const showActions = computed<boolean>(() => exportMarkdown.value.trim().length > 0)
+
 const errorSuffix = computed(() => {
   const e = props.message.error
   if (!e) return ""
   // Pattern-match on discriminator. Unknown kinds fall through to "" so
   // older clients reading newer rows don't render a confusing label.
-  // UI doesn't expose a retry button yet — that needs Last-Event-ID
-  // resume on the SSE channel.
   if (e.kind === "truncated") {
     return e.reason === "turns" ? t("chat.errTruncatedTurns") : t("chat.errTruncatedStream")
   }
   return ""
 })
+
+/* -------------------------------------------------------------------- */
+/*  Failure rendering: dedicated bubble for `failed` + retry button     */
+/* -------------------------------------------------------------------- */
+
+/** Tick once per second while a `rate_limited` countdown is on the
+ *  screen. Used to recompute `failedText` (counts down "in N s") and
+ *  `failedRetryEnabled` (flips at the deadline). Doesn't fire when
+ *  there's no failed bubble — see the onMounted guard. */
+const now = ref(Date.now())
+let tickHandle: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  const e = props.message.error
+  if (e && e.kind === "failed" && typeof e.retryAfterAt === "number") {
+    tickHandle = setInterval(() => {
+      now.value = Date.now()
+      // Stop ticking once the deadline passes — the button becomes
+      // enabled and the wording stops referring to time.
+      if (
+        typeof e.retryAfterAt === "number" &&
+        now.value >= e.retryAfterAt &&
+        tickHandle !== null
+      ) {
+        clearInterval(tickHandle)
+        tickHandle = null
+      }
+    }, 1000)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (tickHandle !== null) clearInterval(tickHandle)
+})
+
+const failedKind = computed<boolean>(() => {
+  const e = props.message.error
+  return !!(e && e.kind === "failed" && !props.message.streaming)
+})
+
+/** Codes where Retry would not help (auth needs restart, protocol
+ *  mismatch needs an update). We still show the message — just no
+ *  button under it. */
+const failedRetryAllowed = computed<boolean>(() => {
+  const e = props.message.error
+  if (!e || e.kind !== "failed") return false
+  return e.code !== "http_401" && e.code !== "http_403" && e.code !== "protocol_version_required"
+})
+
+const failedRetryEnabled = computed<boolean>(() => {
+  const e = props.message.error
+  if (!e || e.kind !== "failed") return false
+  if (typeof e.retryAfterAt === "number") return now.value >= e.retryAfterAt
+  return true
+})
+
+const truncatedRetryVisible = computed<boolean>(() => {
+  const e = props.message.error
+  return !!(e && e.kind === "truncated" && !props.message.streaming && props.isLast)
+})
+
+/** True iff the store is idle and this bubble is the last one. Earlier
+ *  failed bubbles in scrolled-back history stay decorative. */
+const canRetry = computed<boolean>(() => props.isLast && !chat.sending)
+
+const failedText = computed<string>(() => {
+  const e = props.message.error
+  if (!e || e.kind !== "failed") return ""
+  if (e.code === "rate_limited") {
+    if (typeof e.retryAfterAt === "number") {
+      const remainingMs = e.retryAfterAt - now.value
+      if (remainingMs > 0) {
+        return t("chat.errRateAfter", { when: formatRetryWhen(remainingMs, e.retryAfterAt) })
+      }
+    }
+    return t("chat.errRate")
+  }
+  if (e.code === "max_turns_exceeded") return t("chat.errMaxTurns")
+  if (e.code === "agent_error") return t("chat.errAgent")
+  if (e.code === "http_401" || e.code === "http_403") return t("chat.errAuth")
+  if (e.code === "protocol_version_required") return t("chat.errProtocol")
+  if (e.code.startsWith("http_5")) return t("chat.errServiceNotReady")
+  if (e.code === "network") return t("chat.errNetwork")
+  if (e.code === "stream") return t("chat.errStreamDropped")
+  return t("chat.errUnknown")
+})
+
+const failedRetryLabel = computed<string>(() => t("chat.actionRetry"))
+
+/**
+ * Format a "{when}" fragment for `errRateAfter`:
+ *  - <  60s → "in N s" (countdown, ticks every second)
+ *  - <  1h  → "in N min" (still ticks but in coarser units)
+ *  - else   → "at HH:MM" (no countdown; would be visually noisy at hours)
+ *
+ * Server's `Retry-After` for our /chat endpoint is seconds-until-midnight-UTC
+ * (see backend rate_limiter.py), which can easily land in the hours range
+ * when the user blows through quota early in the day.
+ */
+function formatRetryWhen(remainingMs: number, deadlineMs: number): string {
+  const seconds = Math.ceil(remainingMs / 1000)
+  if (seconds < 60) return t("chat.retryInSeconds", { n: seconds })
+  if (seconds < 60 * 60) {
+    const minutes = Math.ceil(seconds / 60)
+    return t("chat.retryInMinutes", { n: minutes })
+  }
+  const d = new Date(deadlineMs)
+  const hh = d.getHours().toString().padStart(2, "0")
+  const mm = d.getMinutes().toString().padStart(2, "0")
+  return t("chat.retryAtTime", { time: `${hh}:${mm}` })
+}
+
+function onRetry(): void {
+  if (!canRetry.value) return
+  emit("retry", props.message.id)
+}
 
 function actionState(actionId: string): ActionState {
   const raw = props.message.actionStates?.[actionId]
@@ -257,7 +428,14 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 }
 
 .bubble-row.assistant {
-  justify-content: flex-start;
+  /* Stack the assistant's full-width prose on top of the inline action
+   * row (`ChatMessageActions`). A flex-row layout would shove the
+   * actions next to the bubble, and since `.bubble.assistant` is
+   * width: 100%, the actions would steal space from the text and end
+   * up parked at the top-right of the first paragraph instead of
+   * under the whole message. */
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 /* While the assistant placeholder is streaming, reserve enough vertical
@@ -376,5 +554,51 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   font-style: italic;
   font-size: 0.85em;
   white-space: pre;
+}
+
+/* Failed-bubble: replaces the assistant content when the turn died with
+ * no streamed text. Block-level so the Retry button can sit on its own
+ * line under the explanation. Matches the action-card error styling
+ * (rounded danger-tinted block + flat primary button) so the user
+ * recognises it as an inline status, not a stray paragraph. */
+.bubble.assistant .error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.32);
+  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
+}
+
+.bubble.assistant .error-card .error-text {
+  color: var(--ion-color-danger, #eb445a);
+  font-size: 0.92em;
+  line-height: 1.35;
+}
+
+.bubble.assistant .btn.primary.retry {
+  background: var(--ion-color-primary);
+  color: var(--ion-color-primary-contrast);
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bubble.assistant .btn.primary.retry:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Standalone Retry under a truncated-suffix — no danger-tinted box,
+ * just the button on its own line. Visually quieter than the failed
+ * card because the user still has the partial answer to read above. */
+.bubble.assistant .btn.primary.retry.truncated-retry {
+  align-self: flex-start;
+  margin-top: 6px;
 }
 </style>

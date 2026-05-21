@@ -28,6 +28,7 @@
           :messages="messages"
           @pick-chapter="onPickChapter"
           @pick-followup="onSend"
+          @retry="onRetry"
         />
         <PageSticker v-else image="/chat-empty.png">
           <template #footer>
@@ -99,6 +100,7 @@ const {
   onDeleteSession,
   onDeleteAllSessions,
   onPickChapter,
+  onRetry,
 } = useChatController()
 
 function onPickSuggestion(text: string): void {
