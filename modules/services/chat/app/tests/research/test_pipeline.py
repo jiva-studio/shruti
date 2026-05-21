@@ -105,6 +105,9 @@ class FakeAliasMap:
         self._verse = 0
         self._lec_map: dict[tuple, int] = {}
         self._verse_map: dict[tuple, int] = {}
+        # Background caption generator writes here. Real `TurnAliasMap`
+        # exposes the same attribute — pipeline expects it.
+        self.captions: dict[int, str] = {}
 
     def alias_chunk(self, track_id, start_ms, end_ms):
         key = (track_id, start_ms, end_ms)
