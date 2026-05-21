@@ -51,13 +51,13 @@ async function onShare(): Promise<void> {
 
 <style scoped>
 /* Assistant has no enclosing bubble (full-width prose, see ChatMessageBubble
- * styles), so the actions row hugs the left gutter to align with the prose
- * column rather than the page edge. */
+ * styles); the parent `.bubble-row.assistant` is a column flex container
+ * with `padding: 0 12px`, so this row inherits the gutter and just sits
+ * flush against the same left edge as the prose above. */
 .message-actions {
   display: flex;
-  gap: 8px;
-  padding: 0 12px;
-  margin: -2px 0 8px;
+  gap: 4px;
+  margin: 2px 0 4px -6px;
 }
 
 .message-action {

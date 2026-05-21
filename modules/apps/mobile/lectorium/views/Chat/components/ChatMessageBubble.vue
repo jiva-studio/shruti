@@ -428,7 +428,14 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 }
 
 .bubble-row.assistant {
-  justify-content: flex-start;
+  /* Stack the assistant's full-width prose on top of the inline action
+   * row (`ChatMessageActions`). A flex-row layout would shove the
+   * actions next to the bubble, and since `.bubble.assistant` is
+   * width: 100%, the actions would steal space from the text and end
+   * up parked at the top-right of the first paragraph instead of
+   * under the whole message. */
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 /* While the assistant placeholder is streaming, reserve enough vertical
