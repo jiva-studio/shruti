@@ -5,7 +5,6 @@ import { marked } from "marked"
 /* -------------------------------------------------------------------------- */
 
 export type ActionKind =
-  | "create_playlist"
   | "share_pdf"
   | "enable_daily_reminder"
   | "configure_smart_library"
@@ -24,7 +23,12 @@ export type ChatToken =
        *  back to the lecture title in that case. */
       readonly caption: string
     }
-  | { readonly kind: "card"; readonly trackId: string }
+  /** A list of one or more track cards. The parser groups consecutive
+   *  `[card:X]` markers (no text token between them) into a single
+   *  `cards` token; isolated cards still arrive as length-1 lists.
+   *  Renders via `TrackList` — single track = one lecture card,
+   *  multiple tracks = card stack with an "add to playlist" button. */
+  | { readonly kind: "cards"; readonly trackIds: readonly string[] }
   | { readonly kind: "outline"; readonly trackId: string }
   | {
       readonly kind: "action"
@@ -131,7 +135,9 @@ export function parseChatMarkers(input: string): ChatToken[] {
     hits.push({
       start,
       end: start + full.length,
-      token: { kind: "card", trackId },
+      // Single-card token. The post-processing pass below groups
+      // adjacent cards into a `cards` list before returning.
+      token: { kind: "cards", trackIds: [trackId] },
     })
   }
   for (const match of input.matchAll(OUTLINE_RE)) {
@@ -216,7 +222,42 @@ export function parseChatMarkers(input: string): ChatToken[] {
   if (cursor < input.length) {
     pushTextToken(out, input.slice(cursor))
   }
-  return collapseBlanksAroundCards(out)
+  return groupAdjacentCards(collapseBlanksAroundCards(out))
+}
+
+
+/**
+ * Fold consecutive `cards` tokens (each emitted with a single trackId
+ * by the parser) into one `cards` token carrying the full list. The
+ * synth emits stacked `[^N]` markers when answering list / playlist
+ * queries — the client renders the merged token as either a single
+ * lecture card or a card stack with an "add to playlist" button.
+ *
+ * Adjacent means "no other token between them" — a text token (even
+ * a `<br>`) breaks the run; the blank-collapse pass above removes the
+ * blank-only text tokens so cards separated only by whitespace get
+ * grouped.
+ */
+function groupAdjacentCards(tokens: ChatToken[]): ChatToken[] {
+  const out: ChatToken[] = []
+  let pending: string[] | null = null
+  const flush = (): void => {
+    if (pending && pending.length > 0) {
+      out.push({ kind: "cards", trackIds: pending })
+    }
+    pending = null
+  }
+  for (const tok of tokens) {
+    if (tok.kind === "cards") {
+      pending ??= []
+      pending.push(...tok.trackIds)
+      continue
+    }
+    flush()
+    out.push(tok)
+  }
+  flush()
+  return out
 }
 
 /**
@@ -254,7 +295,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   const TRAIL = /(?:\s|<br\s*\/?>)+$/i
   const isBlank = (html: string) => /^(?:\s|<br\s*\/?>)*$/i.test(html)
   const blockLike = (k: ChatToken["kind"] | undefined) =>
-    k === "card" || k === "outline" || k === "action" || k === "quote" || k === "verse"
+    k === "cards" || k === "outline" || k === "action" || k === "quote" || k === "verse"
   const out: ChatToken[] = []
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]
@@ -310,7 +351,6 @@ function inlineMd(raw: string): string {
  *  marker is silently dropped from the parsed token stream. */
 function parseActionKind(raw: string): ActionKind | null {
   if (
-    raw === "create_playlist" ||
     raw === "share_pdf" ||
     raw === "enable_daily_reminder" ||
     raw === "configure_smart_library" ||
