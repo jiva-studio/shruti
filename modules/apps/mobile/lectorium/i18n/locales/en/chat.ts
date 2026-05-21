@@ -26,14 +26,34 @@ export default {
   citationAddFailed: "Couldn't add to playlist",
   lectureCardMissing: "Lecture not available in the local catalog.",
   errRate: "Too many requests. Try again in a minute.",
+  /** Rate-limit copy with a deadline placeholder. `{when}` is composed by
+   *  the bubble — "in 12s", "in 4 min", or "at 18:30" depending on how
+   *  far out the 429 `Retry-After` lands. */
+  errRateAfter: "Too many requests. Try again {when}.",
   errNetwork: "Couldn't reach the chat service. Check your connection.",
   errServiceNotReady: "Chat service is warming up. Try again shortly.",
+  /** Server-side exception inside the LLM loop (provider timeout, key
+   *  expired, tool crash). Distinct from `errNetwork` — the connection
+   *  itself worked. */
+  errAgent: "Chat service returned an error. Try again shortly.",
+  /** HTTP 401/403. App token rejected; user can't fix this in-place. */
+  errAuth: "Authorization failed. Restart the app to retry.",
+  /** HTTP 426 — server is on a newer protocol and refuses our request. */
+  errProtocol: "This app version is no longer supported. Please update.",
+  /** SSE connection dropped after handshake but before `done`. */
+  errStreamDropped: "Connection dropped before the answer arrived.",
+  /** Catch-all for `no_body`, `empty`, or any code we haven't seen yet. */
+  errUnknown: "Couldn't get a response.",
   /** Agent hit MAX_TOOL_TURNS without producing a final answer. */
   errMaxTurns: "Couldn't put an answer together. Try a more focused query.",
   /** Appended to an assistant bubble whose stream ended without `done`. */
   errTruncatedStream: " (cut off — connection dropped)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (stopped — too many tool calls)",
+  /** Relative "{when}" fragments composed into errRateAfter. */
+  retryInSeconds: "in {n}s",
+  retryInMinutes: "in {n} min",
+  retryAtTime: "at {time}",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",

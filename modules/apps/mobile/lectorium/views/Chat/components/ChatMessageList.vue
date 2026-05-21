@@ -1,7 +1,12 @@
 <template>
   <div class="chat-message-list">
     <template v-for="(msg, i) in messages" :key="msg.id">
-      <ChatMessageBubble :message="msg" @pick-chapter="$emit('pick-chapter', $event)" />
+      <ChatMessageBubble
+        :message="msg"
+        :is-last="i === messages.length - 1"
+        @pick-chapter="$emit('pick-chapter', $event)"
+        @retry="$emit('retry', $event)"
+      />
       <FollowupChips
         v-if="
           i === lastAssistantIndex && !msg.streaming && msg.followups && msg.followups.length > 0
@@ -29,6 +34,7 @@ defineEmits<{
     },
   ]
   "pick-followup": [text: string]
+  retry: [messageId: string]
 }>()
 
 /** Index of the last *finalised* assistant message, IF it's also the

@@ -40,6 +40,7 @@ export interface ChatControllerReturn {
   onDeleteSession: (id: string) => Promise<void>
   onDeleteAllSessions: () => Promise<void>
   onPickChapter: (pick: OutlineChapterPick) => Promise<void>
+  onRetry: (messageId: string) => Promise<void>
 }
 
 /**
@@ -98,10 +99,15 @@ export function useChatController(): ChatControllerReturn {
   }
 
   async function onSend(text: string): Promise<void> {
+    // Errors surface as inline failed-bubbles via `applyTurnEvent →
+    // error` inside the store; no toast hop needed. `store.lastError`
+    // remains populated for telemetry/debug but the controller no
+    // longer reads from it.
     await store.sendMessage(text)
-    if (store.lastError) {
-      surfaceError()
-    }
+  }
+
+  async function onRetry(messageId: string): Promise<void> {
+    await store.retryLast(messageId)
   }
 
   function onNewSession(): void {
@@ -190,23 +196,6 @@ export function useChatController(): ChatControllerReturn {
         title: item.title,
       },
     })
-  }
-
-  function surfaceError(): void {
-    const err = store.lastError
-    if (!err) return
-    if (err.code === "rate_limited") {
-      void toast.error(t("chat.errRate"))
-    } else if (err.code === "max_turns_exceeded") {
-      // Agent didn't converge within MAX_TOOL_TURNS. Network was fine —
-      // the model just kept calling tools without producing a final
-      // answer. "Couldn't reach the chat service" would be a lie.
-      void toast.error(t("chat.errMaxTurns"))
-    } else if (err.code.startsWith("http_5")) {
-      void toast.error(t("chat.errServiceNotReady"))
-    } else {
-      void toast.error(t("chat.errNetwork"))
-    }
   }
 
   /**
@@ -351,5 +340,6 @@ export function useChatController(): ChatControllerReturn {
     onDeleteSession,
     onDeleteAllSessions,
     onPickChapter,
+    onRetry,
   }
 }
