@@ -246,7 +246,6 @@ export const useChatStore = defineStore("chat", () => {
       })
 
     let assistantMsgId: ChatMessageId | null = null
-    let acc = ""
 
     try {
       const isFirst =
@@ -284,8 +283,6 @@ export const useChatStore = defineStore("chat", () => {
           // already cleared seen_at. Replying is no longer the trigger.
         }
         if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
-        if (event.kind === "delta") acc += event.text
-        if (event.kind === "tool-start") acc = ""
       }
     } catch (err) {
       // Unexpected error escaping the for-await loop (runChatTurn catches
