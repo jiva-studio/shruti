@@ -281,9 +281,28 @@ describe("messageToMarkdown", () => {
     )
     expect(out).toContain("**BG 2.14**")
     expect(out).toContain("mātrā-sparśās tu…")
-    expect(out).toContain("*mātrā-sparśās tu…*")
+    // Transliteration is intentionally NOT italic-wrapped — see
+    // renderVerseMarkdown for the why (multi-line `*…*` is non-portable).
+    expect(out).not.toMatch(/\*mātrā-sparśās tu…\*/)
     expect(out).toContain("О сын Кунти…")
     expect(out).not.toContain("[verse:")
+  })
+
+  it("collapses multi-blank-line runs inside sanskrit/iast/translation", () => {
+    // Server occasionally ships verse text with `\n\n` between every
+    // line (pāda-per-paragraph) — rendering that raw produces stacked
+    // empty paragraphs when pasted into Telegram / Notes.
+    const body: VerseBodyLike = {
+      addrLabel: "ШБ 5.5.14",
+      sanskrit: "кармāśayam line1\n\nline2\n\nline3\n\nline4",
+      transliteration: "karmāśayam line1\n\nline2\n\nline3",
+      translation: { ru: "Перевод\n\nвторая строка" },
+    }
+    const opts = { lang: "ru" as const, verseLookup: () => body }
+    const out = messageToMarkdown("[verse:s/5.5.14]", opts)
+    expect(out).not.toMatch(/line1\n\nline2/)
+    expect(out).toMatch(/line1\nline2\nline3/)
+    expect(out).toMatch(/Перевод\nвторая строка/)
   })
 
   it("falls back to English translation when requested locale is missing", () => {
