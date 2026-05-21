@@ -343,6 +343,28 @@ async def test_dedup_does_not_block_distinct_aliases() -> None:
     assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000]"
 
 
+async def test_period_after_dedupped_duplicate_swaps_to_first() -> None:
+    """Real prod regression: `text [^1] [^1].` — the dedup drop of
+    the second `[^1]` used to immediately commit pending=cite_A,
+    so the period landed AFTER the chip instead of swapping. Fix:
+    drop doesn't commit pending; the period sees pending and swaps."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}] [^{ref}].")
+    assert out == "text. [cite:track_X@0-1000]"
+
+
+async def test_period_after_dropped_legacy_marker_still_swaps() -> None:
+    """`[^1] [ref:legacy].` — legacy marker drop leaves pending intact;
+    the period swaps with the first cite."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_chunk("track_X", 0, 1000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"text [^{ref}] [ref:legacy].")
+    assert out == "text. [cite:track_X@0-1000]"
+
+
 async def test_dedup_does_not_steal_alias_via_recovery() -> None:
     """A duplicate `[^N]` (already emitted) must NOT trigger the
     single-candidate recovery path — that would silently swap it to

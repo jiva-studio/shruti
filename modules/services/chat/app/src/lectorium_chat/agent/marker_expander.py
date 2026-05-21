@@ -164,22 +164,25 @@ class MarkerExpander:
     def _on_marker_closed(self, expanded: str, out: list[str]) -> None:
         """Bookkeeping when a `[…]` finishes parsing."""
         if not expanded:
-            # Marker dropped (legacy / hallucinated / unrecovered).
-            # Two normalisations to keep the prose clean:
+            # Marker dropped (legacy / hallucinated / unrecovered / dedup).
+            # Normalisations:
             #   (a) discard `_ws_hold` — the whitespace that sat
             #       immediately before `[` belongs to the dropped
             #       marker and should not survive as extra spacing
-            #   (b) if a pending expansion was waiting, flush it
-            #       WITHOUT its trailing gap — the gap was the space
-            #       between the pending marker and this just-dropped
-            #       one. The next text's leading whitespace will act
-            #       as the single separator.
-            if self._pending is not None:
-                out.append(self._pending_pre_ws + self._pending)
-                self._pending = None
-                self._pending_pre_ws = ""
-                self._pending_gap = ""
+            #   (b) discard `_pending_gap` — the gap was the space
+            #       between an earlier pending expansion and this
+            #       now-dropped marker, no longer needed
+            #   (c) KEEP `_pending` itself. Don't commit it yet —
+            #       the next char might be trailing punctuation that
+            #       should swap with the pending marker, and an early
+            #       commit here would lose that opportunity. Real
+            #       case the user hit: `text [^1] [^1].` — dedup drops
+            #       the second `[^1]`; if we committed pending=cite_1
+            #       on the drop, the `.` would land AFTER the chip
+            #       instead of swapping to before. Leaving pending
+            #       intact lets the swap fire on the next char.
             self._ws_hold = ""
+            self._pending_gap = ""
             return
 
         # Successful expansion. If we already had a pending one, flush
