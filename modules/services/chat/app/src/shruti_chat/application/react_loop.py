@@ -188,7 +188,7 @@ def _extracted_args_block(extracted_args: dict[str, Any]) -> str:
     )
 
 
-async def run_research_turn(
+async def run_react_loop(
     user_query: str,
     *,
     extracted_args: dict[str, Any],

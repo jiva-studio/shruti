@@ -5,7 +5,7 @@ then drives the full graph through `astream` and asserts the SSE
 stream shape.
 
 Doesn't test individual nodes — that's `test_router_turn.py` /
-`test_research_turn.py` / `test_synthesizer_turn.py`. This file
+`test_react_loop.py` / `test_synthesizer_turn.py`. This file
 exists to catch wiring regressions: schema mismatches, missing
 edges, context plumbing breaks.
 """
@@ -254,7 +254,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     track_pdf_generate, reminder_propose, etc.) accept a
     `yield_event(type, data)` kwarg — that's how they push the
     matching SSE `action` event to the client. The new graph's
-    dispatcher (`application/research_turn._dispatch_tool_call`)
+    dispatcher (`application/react_loop._dispatch_tool_call`)
     must inject a writer-bound callback for those tools, or the
     `[action:<kind>|id=…]` marker the LLM later writes renders as
     a broken card on mobile.
@@ -313,7 +313,7 @@ async def test_action_yield_event_reaches_sse_stream() -> None:
     # routes through research_worker (router intent=research). The bug
     # was symmetric across worker types — fixing it in
     # `_dispatch_tool_call` covers every worker that calls
-    # `run_research_turn`, so testing one worker is sufficient.
+    # `run_react_loop`, so testing one worker is sufficient.
     ctx = TurnContext(
         request_id="r-action",
         aliases=aliases,

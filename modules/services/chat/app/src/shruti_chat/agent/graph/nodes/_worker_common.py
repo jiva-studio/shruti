@@ -8,10 +8,10 @@ Every worker is a thin LangGraph adapter that:
   4. Optionally renders an "anchor block" header that surfaces the
      UserContext details (focus_ref, current_track_ref, now, history
      summary) the inner LLM needs to pick context-aware tools.
-  5. Calls the generic `run_research_turn` ReAct loop with the right
+  5. Calls the generic `run_react_loop` ReAct loop with the right
      tools + prompt + tool-event callback.
 
-The use-case (`application/research_turn.py`) is purposely generic — the
+The use-case (`application/react_loop.py`) is purposely generic — the
 "research" in the name is historical. It's the ReAct loop the worker
 runs; toolset is parameterised.
 """
@@ -26,10 +26,10 @@ from langgraph.runtime import Runtime
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
 from shruti_chat.agent.turn_aliases import VerseRef
-from shruti_chat.application.research_turn import (
+from shruti_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
     ResearchResult,
-    run_research_turn,
+    run_react_loop,
 )
 from shruti_chat.domain.turn_context import TurnContext
 from shruti_chat.indexer.library.repo import fetch_verse_body
@@ -238,7 +238,7 @@ async def run_worker(
 
     writer({"type": "status", "data": {"key": status_key}})
 
-    result = await run_research_turn(
+    result = await run_react_loop(
         extra_user_query or state["user_query"],
         extracted_args=state.get("extracted_args", {}),
         lang=state["lang"],
