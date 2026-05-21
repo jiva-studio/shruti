@@ -1,7 +1,8 @@
-// Package sqlitelibrary opens and reads the canonical-corpus database
-// (artifacts/library/library.db). Schema is created by the one-off
-// agent/library_import/import.py script; this package only opens and
-// reads — no migrate.go yet, since the corpus is rebuilt offline.
+// Package sqlitelibrary opens and reads/writes the canonical-corpus database
+// (artifacts/library/library.db). Read-only data (verses/documents/titles)
+// is created by the one-off agent/library_import/import.py script; the
+// attribution tables (library_attribution*) are mutated through MCP write
+// tools and self-healed at Open() time via migrate.go::applyLocalMigrations.
 package sqlitelibrary
 
 import (
@@ -21,7 +22,7 @@ type Repo struct {
 }
 
 func Open(ctx context.Context, path string) (*Repo, error) {
-	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=60000", path)
+	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&_synchronous=NORMAL&_busy_timeout=60000&_foreign_keys=ON", path)
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open library: %w", err)
@@ -30,6 +31,10 @@ func Open(ctx context.Context, path string) (*Repo, error) {
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("ping library: %w", err)
+	}
+	if err := applyLocalMigrations(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("apply local migrations: %w", err)
 	}
 	return &Repo{db: db, path: path}, nil
 }
