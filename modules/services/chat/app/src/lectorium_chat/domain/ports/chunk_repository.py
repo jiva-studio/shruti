@@ -117,3 +117,20 @@ class ChunkRepository(Protocol):
         matching chunks. Returns an empty list if no row matches.
         """
         ...
+
+    async def get_chunks_by_target(
+        self,
+        *,
+        ref_kind: str,         # "verse" | "document"
+        target_id: str,        # opaque verse.id or library_document.id
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        """Resolve a CanonicalRef → list of chunks. `ref_kind="verse"`
+        narrows to chunks.kind='verse'; `ref_kind="document"` expands to
+        chunks.kind IN ('commentary','prose_chapter','letter') because the
+        library indexer flattens DocumentKind into the chunks discriminator.
+
+        Used by research/pipeline.fetch_refs to materialise authoritative
+        refs from a question-attribution match.
+        """
+        ...
