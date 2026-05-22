@@ -51,6 +51,14 @@ async def research_worker_node(
     writer = get_stream_writer()
     writer({"type": "status", "data": {"key": "searching_corpus"}})
 
+    # Bridge the pipeline (event_type, payload) callback to the
+    # LangGraph stream writer. The pipeline emits `research_question`
+    # and `research_source` events as sub-queries are generated and
+    # sources are inspected, so the mobile client can render a live
+    # "what's being investigated" panel under the streaming bubble.
+    def on_event(event_type: str, data: dict) -> None:
+        writer({"type": event_type, "data": data})
+
     user_query = state.get("user_query", "")
     lang = state.get("lang", "ru")
     router_args = state.get("extracted_args", {}) or {}
@@ -68,6 +76,7 @@ async def research_worker_node(
         embed_model=ctx.embed_model,
         topic_boost=ctx.topic_boost,
         request_id=ctx.request_id,
+        on_event=on_event,
     )
 
     # Flatten authoritative (PINNED) + research_chunks into a single

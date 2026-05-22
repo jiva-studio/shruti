@@ -1,6 +1,10 @@
 <template>
   <div class="chat-message-list">
-    <template v-for="(msg, i) in messages" :key="msg.id">
+    <div
+      v-for="(msg, i) in messages"
+      :key="msg.id"
+      :class="['msg-slot', { tail: i === messages.length - 1 && msg.role === 'assistant' }]"
+    >
       <ChatMessageBubble
         :message="msg"
         :is-last="i === messages.length - 1"
@@ -8,7 +12,7 @@
         :focus-loading="msg.focus ? loadingFocusIds?.has(msg.id) === true : false"
         @pick-chapter="$emit('pick-chapter', $event)"
         @retry="$emit('retry', $event)"
-        @pick-suggestion="$emit('pick-suggestion', $event)"
+        @send-suggestion="$emit('send-suggestion', $event)"
       />
       <FollowupChips
         v-if="
@@ -17,7 +21,7 @@
         :followups="msg.followups"
         @pick="$emit('pick-followup', $event)"
       />
-    </template>
+    </div>
   </div>
 </template>
 
@@ -43,7 +47,7 @@ defineEmits<{
     },
   ]
   "pick-followup": [text: string]
-  "pick-suggestion": [text: string]
+  "send-suggestion": [text: string]
   retry: [messageId: string]
 }>()
 
@@ -79,5 +83,32 @@ const lastAssistantIndex = computed<number>(() => {
   flex-direction: column;
   padding: 12px 0 8px;
   min-height: 100%;
+}
+
+/* Non-tail slots stay invisible to layout — bubble-row and followup
+ * chips render as if there were no wrapper, preserving the prior flex
+ * column flow of the message list. */
+.msg-slot {
+  display: contents;
+}
+
+/* The tail slot — last assistant message in the conversation — owns
+ * the scroll-room reservation. Becoming a flex column makes the slot
+ * itself a real box so its min-height can stretch; bubble + followup
+ * chips sit at the top, the buffer falls below the chips.
+ *
+ * Without this reservation, `scrollMessageToTop` can't pin the user's
+ * just-sent question to the viewport top when the answer is shorter
+ * than a screen — scrollHeight collapses and the browser yanks the
+ * view back to earlier turns.
+ *
+ * `svh` (small viewport height) is the layout the keyboard leaves us
+ * with on mobile. The 200px deduction accounts for the fixed-top fade
+ * (~80px), the input bar (~64px), and ~56px safety margin for OS
+ * gestures and the just-sent user bubble. */
+.msg-slot.tail {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100svh - 200px);
 }
 </style>

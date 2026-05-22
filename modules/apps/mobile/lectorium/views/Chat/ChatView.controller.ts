@@ -34,6 +34,11 @@ export interface ChatControllerReturn {
    *  "recap last lecture" suggestion chip on the empty state. */
   hasRecentListening: Ref<boolean>
   contentRef: Ref<HTMLElement | null>
+  /** False while a session is loading + scroll-positioning. Bound to a
+   *  visibility:hidden class on `.chat-scroll` so the user never sees
+   *  the intermediate "messages at scrollTop=0" frame before
+   *  scrollToBottom completes. */
+  scrollReady: Ref<boolean>
   searchQuery: Ref<string>
   filteredSessions: Ref<ChatSession[]>
   /** Session ids with an unreplied agent-initiated message — passed to
@@ -83,6 +88,22 @@ export function useChatController(): ChatControllerReturn {
   // on the wrapper div inside <ion-content> for auto-scroll-to-bottom.
   const contentRef = ref<HTMLElement | null>(null)
 
+  // Visibility gate for `.chat-scroll`. Goes false while we're loading +
+  // scroll-positioning a session, true once the scroll has actually
+  // landed at the bottom. `IonContent.scrollToBottom` is async (awaits
+  // `getScrollElement` internally + possibly a frame), so even with
+  // `await nextTick(); await scrollToBottom()` the browser slips a
+  // paint at scrollTop=0 into the await window. Hiding the scroller
+  // via `visibility: hidden` (layout preserved, scrollHeight valid)
+  // during that window prevents the user from ever seeing the wrong
+  // frame. Defaults true so empty-state / chat-root renders instantly.
+  const initialSessionId = (() => {
+    const param = route?.params?.sessionId
+    const id = Array.isArray(param) ? param[0] : param
+    return typeof id === "string" && id.length > 0 ? id : null
+  })()
+  const scrollReady = ref<boolean>(initialSessionId === null)
+
   const hasMessages = computed(() => store.messages.length > 0)
   /** Drives the "Recap what I just listened to" suggestion chip. */
   const hasCurrentTrack = computed(() => player.open && !!player.trackId)
@@ -103,23 +124,43 @@ export function useChatController(): ChatControllerReturn {
     const param = route?.params?.sessionId
     const sessionId = Array.isArray(param) ? param[0] : param
     if (typeof sessionId === "string" && sessionId.length > 0) {
+      // Hide the scroller ONLY when we're swapping to a different
+      // session — re-entering the same one doesn't need the blink.
+      // We still run `openSession → nextTick → scrollToBottom` either
+      // way: it's a no-op when the store + scroll are already current,
+      // and it's what catches Ask Sadhu (added a focus message to the
+      // already-active session before pushing the URL) so the new
+      // message lands in view.
+      const sameSession = store.activeSessionId === sessionId
+      if (!sameSession) scrollReady.value = false
       try {
         await store.openSession(sessionId)
+        await nextTick()
+        await scrollToBottom()
       } catch (err) {
         console.warn("chat: failed to open session", err)
         store.startNewSession()
+      } finally {
+        scrollReady.value = true
       }
-    } else if (store.activeSessionId == null && store.messages.length === 0) {
-      // Tab landing — empty state, no implicit session create.
+    } else {
+      // Route has no sessionId — we're on the empty chat home. Clear
+      // any previously-loaded session so the view actually shows the
+      // empty state. Without this, navigating from `/tabs/chat/<id>`
+      // back to `/tabs/chat` (e.g. via the chat-tab back-navigation)
+      // leaves the store holding the old session's messages — URL
+      // says "chat root" but ChatMessageList still renders the
+      // session's bubbles. `startNewSession` is idempotent: cheap
+      // no-op when the store is already empty (initial app mount),
+      // an actual reset when coming from a session view.
       store.startNewSession()
+      scrollReady.value = true
     }
   }
 
   async function onSend(text: string): Promise<void> {
     // Errors surface as inline failed-bubbles via `applyTurnEvent →
-    // error` inside the store; no toast hop needed. `store.lastError`
-    // remains populated for telemetry/debug but the controller no
-    // longer reads from it.
+    // error` inside the store; no toast hop needed.
     await store.sendMessage(text)
   }
 
@@ -146,7 +187,14 @@ export function useChatController(): ChatControllerReturn {
 
   async function onPickSession(id: string): Promise<void> {
     isHistoryOpen.value = false
-    await store.openSession(id)
+    if (store.activeSessionId !== id) scrollReady.value = false
+    try {
+      await store.openSession(id)
+      await nextTick()
+      await scrollToBottom()
+    } finally {
+      scrollReady.value = true
+    }
     void router.replace({ name: "chat-session", params: { sessionId: id } })
   }
 
@@ -216,17 +264,6 @@ export function useChatController(): ChatControllerReturn {
   }
 
   /**
-   * Scroll a specific message's bubble to the top of the viewport. Used
-   * to pin a freshly-sent user message in sight while the assistant
-   * streams its reply below — the user wrote that question, so seeing
-   * the question stay anchored is what they'd expect. We do NOT chase
-   * the streaming reply downward; the user reads at their own pace.
-   *
-   * Uses IonContent's `scrollToPoint` (the inner shadow-DOM scroller is
-   * what actually moves); falls back to direct `scrollTop` on the
-   * wrapper if IonContent isn't reachable.
-   */
-  /**
    * Walk the message list from the end and return the id of the
    * last entry whose role is `user`. Used by the pin-to-top watcher
    * when the trigger is the streaming-placeholder append — at that
@@ -241,6 +278,19 @@ export function useChatController(): ChatControllerReturn {
     return null
   }
 
+  /**
+   * Scroll a specific message's bubble to the top of the viewport. Used
+   * to pin a freshly-sent user message in sight while the assistant
+   * streams its reply below — the user wrote that question, so seeing
+   * the question stay anchored is what they'd expect. We do NOT chase
+   * the streaming reply downward; the user reads at their own pace.
+   *
+   * Uses the browser's native `scrollIntoView({ block: "start" })`
+   * paired with `scroll-margin-top` on `.bubble-row` so the row lands
+   * just below the fixed-top fade instead of under it — the CSS
+   * variable handles the device-dependent offset (safe-area-top + the
+   * button row height).
+   */
   function scrollMessageToTop(messageId: string): void {
     const el = contentRef.value
     if (!el) return
@@ -248,25 +298,31 @@ export function useChatController(): ChatControllerReturn {
       `[data-message-id="${CSS.escape(messageId)}"]`
     ) as HTMLElement | null
     if (!target) return
-    // The fixed-top fade gradient overlays the top of the scroll
-    // container — its real height depends on the safe-area inset
-    // (notch / status bar varies by device), the action-row buttons
-    // (44px) and the gradient bottom padding (28px). Measuring it at
-    // scroll time keeps the offset honest across devices and any
-    // future tweaks to the header layout. Falls back to 56px if the
-    // element isn't found (e.g. test environment).
-    const fixedTop = document.querySelector(".chat-fixed-top") as HTMLElement | null
-    const topPad = fixedTop ? fixedTop.getBoundingClientRect().height + 8 : 56
-    const y = Math.max(0, target.offsetTop - topPad)
+    target.scrollIntoView({ block: "start", behavior: "smooth" })
+  }
+
+  /**
+   * Snap the scroll position to the bottom of the message list. Used
+   * when a session is opened — same UX as every other chat app, the
+   * user lands on the most recent turn instead of having to scroll
+   * down themselves.
+   *
+   * Async because `IonContent.scrollToBottom()` awaits
+   * `getScrollElement()` internally before applying
+   * `scrollTop = scrollHeight`. Callers MUST `await` this.
+   */
+  async function scrollToBottom(durationMs = 0): Promise<void> {
+    const el = contentRef.value
+    if (!el) return
     const host = el.closest("ion-content") as
       | (HTMLElement & {
-          scrollToPoint?: (x: number, y: number, durationMs: number) => Promise<void>
+          scrollToBottom?: (durationMs: number) => Promise<void>
         })
       | null
-    if (host && typeof host.scrollToPoint === "function") {
-      void host.scrollToPoint(0, y, 220)
+    if (host && typeof host.scrollToBottom === "function") {
+      await host.scrollToBottom(durationMs)
     } else {
-      el.scrollTop = y
+      el.scrollTop = el.scrollHeight
     }
   }
 
@@ -293,25 +349,46 @@ export function useChatController(): ChatControllerReturn {
    * also a no-op. The user, not the controller, owns scroll position
    * from there.
    */
+  // Composite KEY (string) — Vue uses `===` to dedupe; a fresh
+  // `{...}` literal returned from the getter would fail that check on
+  // every reactive update and re-fire the scroll. The store replaces
+  // `messages.value` immutably on every SSE event (status,
+  // research_question, research_source, action, delta), so a
+  // reference-comparing watcher was yanking the user back to the top
+  // after every event — including when they had manually scrolled up
+  // to re-read context mid-stream.
   watch(
     () => {
       const last = store.messages[store.messages.length - 1]
-      if (!last) return null
-      return { id: last.id, role: last.role, streaming: last.streaming === true }
+      if (!last) return ""
+      // Only id/role/streaming gate the scroll — anything else on the
+      // last message (statusKey, researchQuestions, actions, deltas)
+      // is intentionally NOT in the key so it doesn't retrigger.
+      return `${last.role}|${last.id}|${last.streaming ? "1" : "0"}`
     },
-    async (snapshot) => {
-      if (!snapshot) return
-      const isPlaceholder = snapshot.role === "assistant" && snapshot.streaming
-      const isUserMessage = snapshot.role === "user"
+    async (key, prev) => {
+      if (!key || key === prev) return
+      // Re-read the last message off the live store — the key is just
+      // a dedup signal, the full object lives in the reactive list.
+      const last = store.messages[store.messages.length - 1]
+      if (!last) return
+      const isPlaceholder = last.role === "assistant" && last.streaming === true
+      const isUserMessage = last.role === "user"
       if (!isUserMessage && !isPlaceholder) return
       await nextTick()
+      // Wait for the browser to lay out before measuring offsetTop —
+      // the placeholder's `min-height: calc(100svh - 200px)` only
+      // takes effect after the next paint, and without that height
+      // there isn't enough scroll room to pin the user message at
+      // the top (the browser silently clamps scrollTop to the
+      // max-reachable value, leaving the previous turn visible above).
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       // For the placeholder case the scroll target is the user
       // message right above it, not the placeholder itself. Walk
       // from the end to find the last user message in the list.
-      const target = isUserMessage ? snapshot.id : findLastUserMessageId(store.messages)
+      const target = isUserMessage ? last.id : findLastUserMessageId(store.messages)
       if (target) scrollMessageToTop(target)
-    },
-    { deep: false }
+    }
   )
 
   watch(
@@ -362,6 +439,7 @@ export function useChatController(): ChatControllerReturn {
     hasCurrentTrack,
     hasRecentListening,
     contentRef,
+    scrollReady,
     searchQuery,
     filteredSessions,
     unseenProactiveSessionIds: computed(() => store.unseenProactiveSessionIds),

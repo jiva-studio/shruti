@@ -45,16 +45,9 @@
         "
         :enable-active-prominence="enableActiveProminence !== false"
         @seek="(pos) => emit('seek', pos)"
-        @text-selected="onTextSelected"
-        @note-tapped="onNoteTapped"
+        @text-selected="(e) => emit('textSelected', e)"
+        @note-tapped="(e) => emit('noteTapped', e)"
         @pick-start="emit('pickStart')"
-      />
-
-      <TranscriptSelectionPopover
-        :selection="lastTextSelectedEvent"
-        :existing="lastNoteTappedEvent"
-        @action="onSelectionAction"
-        @dismissed="onSelectionDismissed"
       />
 
       <SpeakerFloatingChip />
@@ -63,27 +56,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, useTemplateRef, watch } from "vue"
+import { computed, nextTick, useTemplateRef, watch } from "vue"
 import { IonButton, IonContent, IonModal } from "@ionic/vue"
 import { IconXFilled } from "@tabler/icons-vue"
 import LanguageSelector from "./LanguageSelector.vue"
 import SpeakerFloatingChip from "./SpeakerFloatingChip.vue"
 import TranscriptDialogHeader from "./TranscriptDialogHeader.vue"
 import TranscriptStatus from "./TranscriptStatus.vue"
-import TranscriptSelectionPopover, {
-  type SelectionAction,
-  type ExistingNoteSelection,
-} from "./TranscriptSelectionPopover.vue"
 import TranscriptText, { type TextSelectedEvent, type NoteTappedEvent } from "./TranscriptText.vue"
 import type { UiTranscriptBlocksGroup, UiTranscriptLanguage } from "./types.js"
-
-export type SelectionActionEvent = Pick<TextSelectedEvent, "timeStart" | "timeEnd" | "text"> & {
-  action: SelectionAction
-  /** Set when the action is `"delete"` (tap-on-highlight path); empty
-   *  array otherwise. The controller uses this to drive the notes-store
-   *  remove call. */
-  noteIds: readonly string[]
-}
 
 const props = defineProps<{
   blockGroups: readonly UiTranscriptBlocksGroup[]
@@ -120,8 +101,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   seek: [position: number]
-  selectionAction: [action: SelectionActionEvent]
-  selectionDismissed: []
+  /** Drag-select finished — payload describes the selected range. The
+   *  app-level `TranscriptSelectionPopover` watches this to open. */
+  textSelected: [event: TextSelectedEvent]
+  /** User tapped an already-highlighted span — opens the popover in
+   *  Copy/Share/Delete mode against the underlying note id(s). */
+  noteTapped: [event: NoteTappedEvent]
   /** Long-press on a selectable block — controller fires platform haptics. */
   pickStart: []
   /** User tapped the explicit close button (top-right corner). */
@@ -141,17 +126,17 @@ const statusState = computed<"loading" | "error" | "empty" | null>(() => {
   return null
 })
 
-const lastTextSelectedEvent = ref<TextSelectedEvent>()
-/**
- * Mirrors `lastTextSelectedEvent` for the tap-on-highlight path. Setting
- * this drives the popover into `mode="existing"` (Copy/Share/Delete);
- * clearing it closes the popover, same lifecycle as a drag-select event.
- * Kept separate from `lastTextSelectedEvent` so the two flows stay
- * orthogonal — opening one always clears the other.
- */
-const lastNoteTappedEvent = ref<ExistingNoteSelection>()
 const transcriptText = useTemplateRef<{ clearSelection: () => void }>("transcriptText")
 const contentRef = useTemplateRef<{ $el: HTMLElement }>("contentRef")
+
+// Exposed so the app-level orchestrator can drop the browser's native
+// selection range after the sibling popover finishes an action — the
+// drag-select highlight otherwise lingers visually on the transcript.
+defineExpose({
+  clearSelection(): void {
+    transcriptText.value?.clearSelection()
+  },
+})
 
 /**
  * Auto-scroll machinery for the Pro "Automatic scroll" feature.
@@ -398,36 +383,6 @@ watch(
     else teardownAutoScroll()
   }
 )
-
-function onTextSelected(event: TextSelectedEvent): void {
-  lastNoteTappedEvent.value = undefined
-  lastTextSelectedEvent.value = event
-}
-
-function onNoteTapped(event: NoteTappedEvent): void {
-  lastTextSelectedEvent.value = undefined
-  lastNoteTappedEvent.value = { noteIds: event.noteIds, event: event.event }
-}
-
-function onSelectionAction(payload: {
-  action: SelectionAction
-  text: string
-  timeStart: number
-  timeEnd: number
-  noteIds: readonly string[]
-}): void {
-  emit("selectionAction", payload)
-  lastTextSelectedEvent.value = undefined
-  lastNoteTappedEvent.value = undefined
-  transcriptText.value?.clearSelection()
-}
-
-function onSelectionDismissed(): void {
-  lastTextSelectedEvent.value = undefined
-  lastNoteTappedEvent.value = undefined
-  transcriptText.value?.clearSelection()
-  emit("selectionDismissed")
-}
 </script>
 
 <style scoped>

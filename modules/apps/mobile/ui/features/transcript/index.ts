@@ -24,3 +24,5 @@ export type {
   UiTranscriptVerseTextBlock,
   UiTranscriptVerseTranslationBlock,
 } from "./types.js"
+export type { TextSelectedEvent, NoteTappedEvent } from "./TranscriptText.vue"
+export type { SelectionAction, ExistingNoteSelection } from "./TranscriptSelectionPopover.vue"

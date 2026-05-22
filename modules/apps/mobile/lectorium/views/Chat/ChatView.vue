@@ -22,7 +22,7 @@
       </div>
     </div>
     <IonContent class="chat-content" :fullscreen="true">
-      <div ref="contentRef" class="chat-scroll">
+      <div ref="contentRef" :class="['chat-scroll', { 'is-loading': !scrollReady }]">
         <ChatSessionHeader
           v-if="sessionHeader"
           :title="sessionHeader.title"
@@ -36,7 +36,7 @@
           :loading-focus-ids="loadingFocusIds"
           @pick-chapter="onPickChapter"
           @pick-followup="onSend"
-          @pick-suggestion="onPickSuggestion"
+          @send-suggestion="onSend"
           @retry="onRetry"
         />
         <PageSticker v-else image="/chat-empty.png">
@@ -99,6 +99,7 @@ const {
   hasCurrentTrack,
   hasRecentListening,
   contentRef,
+  scrollReady,
   searchQuery,
   filteredSessions,
   unseenProactiveSessionIds,
@@ -147,6 +148,18 @@ const headerTitle = computed<string>(() => {
   min-height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* Visibility gate while a session is loading + scroll-positioning.
+ * `visibility: hidden` keeps the layout (so scrollHeight stays valid
+ * and `scrollToBottom` can land at the actual bottom), but no paint
+ * leaks through — the user never sees the intermediate "messages at
+ * scrollTop=0" frame between message-list render and the IonContent
+ * scroll completing. Controller flips `scrollReady` true on the next
+ * tick after `await scrollToBottom()` resolves. No transition: any
+ * fade would re-introduce a visible movement. */
+.chat-scroll.is-loading {
+  visibility: hidden;
 }
 
 /* Fixed top: opaque cream over the safe area + button row, then a long

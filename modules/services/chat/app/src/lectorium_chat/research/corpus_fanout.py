@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from lectorium_chat.agent.tools._envelope import (
     lecture_to_envelope,
@@ -20,6 +20,77 @@ from lectorium_chat.agent.tools._envelope import (
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import DEFAULT_TOPIC_BOOST, TOPK_PER_QUERY
 from lectorium_chat.research.models import FanoutResult
+
+
+OnEvent = Callable[[str, dict[str, Any]], None]
+
+
+def _label_for_lecture_chunk(c: Any) -> str:
+    """Short preview for a lecture chunk — first line of text (~80 chars)
+    is what the user finds informative: track_id alone is opaque, the
+    timecode is meaningless without title context. Bounded to keep the
+    panel chip small."""
+    text = (getattr(c, "text", "") or "").strip().replace("\n", " ")
+    if len(text) > 80:
+        return text[:79].rstrip() + "…"
+    return text or getattr(c, "track_id", "") or "lecture"
+
+
+def _label_for_library_chunk(c: Any) -> str:
+    addr = getattr(c, "addr_label", "") or ""
+    addr = addr.strip()
+    if addr:
+        return addr
+    return getattr(c, "item_id", "") or "library"
+
+
+def _emit_research_source(on_event: OnEvent | None, r: "_RawScored") -> None:
+    """Surface one inspected source live, BEFORE dedup/boost/sort. The
+    client dedups by `id` on its side."""
+    if on_event is None:
+        return
+    chunk = r.chunk
+    try:
+        if r.kind == "lecture":
+            track_id = getattr(chunk, "track_id", "")
+            start_ms = getattr(chunk, "start_ms", 0)
+            on_event(
+                "research_source",
+                {
+                    "kind": "lecture_chunk",
+                    "id": f"lecture:{track_id}:{start_ms}",
+                    "label": _label_for_lecture_chunk(chunk),
+                },
+            )
+        elif r.kind == "verse":
+            item_id = getattr(chunk, "item_id", "")
+            on_event(
+                "research_source",
+                {
+                    "kind": "verse",
+                    "id": f"verse:{item_id}",
+                    "label": _label_for_library_chunk(chunk),
+                },
+            )
+        else:
+            # commentary / prose_chapter / letter → library_doc on the
+            # wire (the panel doesn't need to distinguish them visually).
+            # Use the `library:<item_id>` namespace — same as
+            # `_emit_source_for_ref` in pipeline.py — so a library doc
+            # discovered via BOTH the attribution-refs path AND the
+            # fanout path lands on the same client-side id and the
+            # client's dedup-by-id collapses the duplicate.
+            item_id = getattr(chunk, "item_id", "")
+            on_event(
+                "research_source",
+                {
+                    "kind": "library_doc",
+                    "id": f"library:{item_id}",
+                    "label": _label_for_library_chunk(chunk),
+                },
+            )
+    except Exception:  # noqa: BLE001 — observability must never break fanout
+        log.warning("on_event_research_source_failed", kind=r.kind)
 
 
 log = get_logger(__name__)
@@ -76,6 +147,7 @@ async def fanout_search_with_boost(
     date_from: str | None = None,
     date_to: str | None = None,
     book_id: str | None = None,
+    on_event: OnEvent | None = None,
 ) -> FanoutResult:
     """One round of fanout. Returns top-K (boosted) envelopes."""
     if not queries:
@@ -122,6 +194,14 @@ async def fanout_search_with_boost(
         rows = await _run(lang)
         if not rows and lang is not None:
             rows = await _run(None)
+        # Surface what THIS query touched live, before the global dedup
+        # and ranking — the user wants "I'm looking at this now", not
+        # "I picked these after thinking". Floor matches the post-dedup
+        # filter so we don't stream obvious noise.
+        for r in rows:
+            if r.score < _RELEVANCE_FLOOR:
+                continue
+            _emit_research_source(on_event, r)
         return rows
 
     # 3. Parallel fanout, dedup by dedup_key (keep max score).

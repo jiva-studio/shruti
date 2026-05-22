@@ -9,7 +9,7 @@ bumping the protocol version handshake in `api/chat.py`.
 
 The client and server negotiate protocol version via the
 `X-Chat-Protocol-Version` header (the request fails with 426 if
-absent or unsupported). The current set is **7 event types**:
+absent or unsupported). The current set is **9 event types**:
 
 - `delta`      — text fragment            `{text: str}`
 - `tool_start` — about to dispatch tool   `{name?: str}`
@@ -23,9 +23,28 @@ absent or unsupported). The current set is **7 event types**:
                  on-click mutation: `share_pdf`,
                  `enable_daily_reminder`, `configure_smart_library`,
                  `upgrade_to_pro`.
+- `research_question` — sub-query the research pipeline is about
+                 to investigate. Emitted live as `query_expander`
+                 / `_regenerate_queries` returns. Payload:
+                 `{question: str}`. Ephemeral — client renders
+                 in the "what's being investigated" panel under
+                 the streaming bubble; cleared the moment prose
+                 deltas start landing.
+- `research_source` — a source the pipeline is inspecting right
+                 now (verse, lecture chunk, library doc). Emitted
+                 BEFORE ranking/dedup so the user sees activity in
+                 real-time, not after top-K is picked. Server does
+                 NOT dedup — client dedups by `id`. Payload:
+                 `{kind: "verse"|"lecture_chunk"|"library_doc",
+                   id: str, label: str}`. Same ephemeral lifecycle
+                 as `research_question`.
 - `done`       — final terminator         `{aliases?: dict, tokens?: int}`
                  Aliases map embedded here (no separate event).
 - `error`      — error payload            `{code, message, retry_after?}`
+
+The two `research_*` events are additive — old clients ignore
+unknown event names (chatClient drops them via the default branch),
+so adding them did NOT bump the protocol version.
 
 # What v1 collapsed (vs the unreleased prototype)
 

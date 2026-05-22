@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from itertools import chain
-from typing import Any
+from typing import Any, Callable
 
 from lectorium_chat.agent.tools._envelope import (
     lecture_to_envelope,
@@ -60,6 +60,52 @@ from lectorium_chat.research.topic_extractor import extract_topics
 log = get_logger(__name__)
 
 
+# (event_type, payload) — bridged to the LangGraph stream writer in
+# research_worker_node. Pipeline code never knows about SSE.
+OnEvent = Callable[[str, dict[str, Any]], None]
+
+
+def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
+    """Emit one `research_question` event. Skips echoes of the original
+    user question so the panel never shows the user their own words back
+    when query expansion degrades to `[question]`.
+
+    Comparison is case-folded so an expansion that re-capitalises the
+    question (`"Почему мы страдаем?"` → `"почему мы страдаем"`) still
+    counts as an echo — the user-visible payload would be identical
+    after the panel's downstream rendering."""
+    if on_event is None:
+        return
+    q = (query or "").strip()
+    if not q or q.casefold() == (original or "").strip().casefold():
+        return
+    try:
+        on_event("research_question", {"question": q})
+    except Exception:  # noqa: BLE001 — observability must never break research
+        log.warning("on_event_research_question_failed", question_chars=len(q))
+
+
+def _emit_source_for_ref(on_event: OnEvent | None, ref: "AttributionRef") -> None:
+    """Emit one `research_source` event for an attribution ref BEFORE we
+    pull its chunks — gives the user immediate "now consulting BG 2.13"
+    feedback instead of waiting on the DB round-trip."""
+    if on_event is None:
+        return
+    target_id = (ref.target_id or "").strip()
+    if not target_id:
+        return
+    if ref.ref_kind == "verse":
+        kind = "verse"
+        source_id = f"verse:{target_id}"
+    else:
+        kind = "library_doc"
+        source_id = f"library:{target_id}"
+    try:
+        on_event("research_source", {"kind": kind, "id": source_id, "label": target_id})
+    except Exception:  # noqa: BLE001
+        log.warning("on_event_research_source_failed", target_id=target_id)
+
+
 async def _safe(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
     """Run a coroutine with a stage timeout; on TimeoutError / any exception,
     return `default` so the orchestrator can keep going with partial state."""
@@ -92,6 +138,7 @@ async def _fetch_refs(
     alias_map: Any,
     lang: str | None,
     canonical_score: float,
+    on_event: OnEvent | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve each AttributionRef → chunks → envelopes. Envelopes carry
     `score = canonical_score` (>= 0.85 for accept) so the synthesizer's
@@ -103,6 +150,9 @@ async def _fetch_refs(
         return []
 
     async def _one(ref: AttributionRef) -> list[dict[str, Any]]:
+        # Surface the ref the moment we know we're going to consult it —
+        # the DB round-trip is what we want to mask, not pad after.
+        _emit_source_for_ref(on_event, ref)
         try:
             chunks = await chunk_repo.get_chunks_by_target(
                 ref_kind=ref.ref_kind, target_id=ref.target_id, lang=lang,
@@ -143,6 +193,7 @@ async def _regenerate_queries(
     *,
     llm: Any,
     model: str | None,
+    on_event: OnEvent | None = None,
 ) -> list[str]:
     """Second-pass query expansion that explicitly avoids the previous
     angles. The query_expander prompt + a follow-up hint."""
@@ -157,6 +208,8 @@ async def _regenerate_queries(
     result: ExpansionResult = await expand_query(
         question, lang, args, llm=llm, model=model,
     )
+    for q in result.queries:
+        _emit_question(on_event, q, question)
     return result.queries
 
 
@@ -177,9 +230,16 @@ async def run_research(
     confirm_model: str | None = None,
     topic_boost: float = DEFAULT_TOPIC_BOOST,
     request_id: str | None = None,
+    on_event: OnEvent | None = None,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
-    `router.intent == "research"`."""
+    `router.intent == "research"`.
+
+    `on_event` (optional) is a sync `(event_type, payload)` callback the
+    pipeline uses to surface sub-queries and inspected sources to the
+    client in real-time, BEFORE ranking/dedup. The node bridges it onto
+    LangGraph's stream writer. Pure observability — never blocks or
+    raises into the research loop."""
 
     # 0. Embed user question once — reused for question-attribution lookup
     # and (implicitly via topic_embeddings) for the topic stage.
@@ -198,7 +258,7 @@ async def run_research(
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
             topic_boost=topic_boost, expand_model=expand_model,
-            request_id=request_id,
+            request_id=request_id, on_event=on_event,
         )
 
     # 1. PARALLEL: expand + question-attribution lookup.
@@ -218,6 +278,12 @@ async def run_research(
     expansion: ExpansionResult = await expand_task
     question_matches: list[AttributionMatch] = await q_lookup_task
 
+    # Surface diversified sub-queries the moment they're ready — both
+    # SHORT and LONG paths use them. Filtered to skip echoes of the
+    # original question (degraded `expand_query` fallback shape).
+    for q in expansion.queries:
+        _emit_question(on_event, q, question)
+
     # 2. SHORT PATH — question-attribution found.
     if question_matches:
         all_refs = _dedupe_refs(list(chain.from_iterable(m.refs for m in question_matches)))
@@ -234,7 +300,7 @@ async def run_research(
         authoritative = await _safe(
             lambda: _fetch_refs(
                 all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=lang, canonical_score=top_score,
+                lang=lang, canonical_score=top_score, on_event=on_event,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_refs", request_id=request_id,
@@ -254,6 +320,7 @@ async def run_research(
                 date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
                 date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
                 book_id=router_args.get("source_id"),
+                on_event=on_event,
             ),
             default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
             name="supplementary_fanout", request_id=request_id,
@@ -279,7 +346,7 @@ async def run_research(
         alias_map=alias_map, llm=llm, router_args=router_args,
         topic_boost=topic_boost, expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
-        request_id=request_id,
+        request_id=request_id, on_event=on_event,
     )
     _kick_caption_gen(
         long_result, alias_map=alias_map, question=question, lang=lang,
@@ -358,6 +425,7 @@ async def _research_path(
     embed_model_for_lookup: str | None = None,
     pool: Any | None = None,
     request_id: str | None = None,
+    on_event: OnEvent | None = None,
 ) -> ResearchResult:
     """LONG path: topic-extract → topic-lookup → boost-aware fanout with
     coverage gate and up to MAX_FANOUT_ROUNDS rounds."""
@@ -426,6 +494,7 @@ async def _research_path(
                 date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
                 date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
                 book_id=router_args.get("source_id"),
+                on_event=on_event,
             ),
             default=None, timeout=TIMEOUT_FANOUT_S,
             name=f"fanout_round_{round_idx}", request_id=request_id,
@@ -442,7 +511,7 @@ async def _research_path(
             queries = await _safe(
                 lambda: _regenerate_queries(
                     question, lang, queries, accumulated.chunks,
-                    llm=llm, model=expand_model,
+                    llm=llm, model=expand_model, on_event=on_event,
                 ),
                 default=[], timeout=TIMEOUT_REGENERATE_S,
                 name="regenerate_queries", request_id=request_id,

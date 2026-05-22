@@ -11,12 +11,22 @@
     >
       <IconShare :size="16" stroke-width="2" />
     </button>
+    <button
+      v-if="retryVisible"
+      type="button"
+      class="message-action"
+      :aria-label="t('chat.actionRetry')"
+      :disabled="retryDisabled"
+      @click="onRetry"
+    >
+      <IconRefresh :size="16" stroke-width="2" />
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useI18n } from "vue-i18n"
-import { IconCopy, IconShare } from "@tabler/icons-vue"
+import { IconCopy, IconRefresh, IconShare } from "@tabler/icons-vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@lectorium/services/useToast.js"
 
@@ -26,6 +36,18 @@ const props = defineProps<{
    *  both buttons — the caller is expected to hide the component in
    *  that case, but we guard defensively too. */
   markdown: string
+  /** Show the Retry icon. Driven by the parent's truncated-retry
+   *  visibility predicate so the action only surfaces on a truncated
+   *  trailing message. */
+  retryVisible?: boolean
+  /** Disable the Retry icon while the store is busy (sending: true) or
+   *  the bubble is no longer the last item. */
+  retryDisabled?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** Forwarded up to ChatMessageBubble → ChatView → store. */
+  retry: []
 }>()
 
 const { t } = useI18n()
@@ -46,6 +68,11 @@ async function onShare(): Promise<void> {
   // reads like a self-contained note; an extra header just clutters
   // the recipient's preview.
   await app.shareService.share({ text: md })
+}
+
+function onRetry(): void {
+  if (props.retryDisabled) return
+  emit("retry")
 }
 </script>
 
@@ -86,5 +113,10 @@ async function onShare(): Promise<void> {
 .message-action:active {
   opacity: 1;
   background: rgba(var(--ion-color-primary-rgb), 0.1);
+}
+
+.message-action:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 </style>

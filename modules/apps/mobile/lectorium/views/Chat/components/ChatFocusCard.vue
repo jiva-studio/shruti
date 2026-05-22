@@ -16,7 +16,7 @@
         :key="i"
         type="button"
         class="suggestion-chip"
-        @click="$emit('pick-suggestion', s)"
+        @click="$emit('send-suggestion', s)"
       >
         {{ s }}
       </button>
@@ -59,7 +59,11 @@ const props = defineProps<{
   suggestionsLoading?: boolean
 }>()
 
-defineEmits<{ "pick-suggestion": [text: string] }>()
+// Focus-card chips fire-and-send: tapping one dispatches the question
+// straight as a chat turn (same UX as FollowupChips). Distinct from
+// the empty-state SuggestionChips, which still emit `pick-suggestion`
+// → setText so the user can edit before sending.
+defineEmits<{ "send-suggestion": [text: string] }>()
 
 const { tm } = useI18n()
 
@@ -90,6 +94,10 @@ const visibleChips = computed<readonly string[]>(() => {
   gap: 8px;
   margin: 12px 0;
   padding: 0 12px;
+  /* Mirrors `.bubble-row` — lands the focus card right below the
+   * button row so the fade gently masks its top edge. See
+   * ChatMessageBubble.vue for the offset breakdown. */
+  scroll-margin-top: calc(var(--ion-safe-area-top, 0px) + 56px);
 }
 
 .focus-quote {
@@ -105,11 +113,22 @@ const visibleChips = computed<readonly string[]>(() => {
   word-break: break-word;
 }
 
-.focus-suggestions {
+.focus-suggestions,
+.focus-suggestions-loading {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
+  /* Reserve enough vertical room for the typical 3–4 chip set (wraps
+   * to 2 lines on mobile widths). Keeps the chips area's height stable
+   * across the loading-pill → chips swap that happens when the
+   * `/questions` round-trip resolves on Ask Sadhu — without this the
+   * focus card grows by ~30px the moment chips arrive, and any prior
+   * `scrollToBottom` lands above the new bottom (intermittent "not at
+   * the latest message" reports). align-items: flex-start so the
+   * loading pill sits at the top instead of stretching to fill. */
+  min-height: 56px;
+  align-items: flex-start;
 }
 
 .suggestion-chip {
@@ -128,10 +147,5 @@ const visibleChips = computed<readonly string[]>(() => {
 
 .suggestion-chip:active {
   background: rgba(var(--ion-color-primary-rgb), 0.1);
-}
-
-.focus-suggestions-loading {
-  display: flex;
-  margin-top: 4px;
 }
 </style>
