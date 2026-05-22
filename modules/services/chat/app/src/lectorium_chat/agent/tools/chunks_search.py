@@ -42,12 +42,13 @@ _DESCRIPTION = (
     "one corpus (e.g. `type='verse'` for 'find a shloka about X', "
     "`type='lecture'` for 'where did he say'), or OMIT `type` for "
     "cross-corpus search ('what's said about consciousness' — returns "
-    "lectures AND verses ranked together by relevance). Lecture results "
-    "are cited via `[^N]` using the `ref` field; verse "
-    "results via `[verse:source_id/tokens|caption]` using meta directly; "
-    "commentary/letter/prose are quoted inline as blockquotes. For an "
-    "EXACT verse address ('БГ 2.13') use `chunks_get_by_address` instead "
-    "— ANN over a short address string is unreliable."
+    "lectures AND verses ranked together by relevance). Every result is "
+    "cited via `[^N]` (integer ref). Commentary results additionally "
+    "support `[^N|s=0,2]` to pick which sentences of the chunk get "
+    "rendered as a verbatim blockquote with author attribution. NEVER "
+    "hand-write `>` blockquotes — the server strips them. For an EXACT "
+    "verse address ('БГ 2.13') use `chunks_get_by_address` — ANN over a "
+    "short address string is unreliable."
 )
 
 
