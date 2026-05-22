@@ -30,9 +30,13 @@ from lectorium_chat.agent.tools._envelope import (
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
 from lectorium_chat.research.caption_generator import generate_captions
+from lectorium_chat.research.commentary_expansion import (
+    expand_verses_with_commentaries,
+)
 from lectorium_chat.research.constants import (
     DEFAULT_TOPIC_BOOST,
     MAX_FANOUT_ROUNDS,
+    TIMEOUT_COMMENTARY_EXPAND_S,
     TIMEOUT_EXPAND_S,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
@@ -326,9 +330,20 @@ async def run_research(
             name="supplementary_fanout", request_id=request_id,
         )
 
+        supplementary_top = supplementary.chunks[:8]
+        commentaries = await _safe(
+            lambda: expand_verses_with_commentaries(
+                authoritative + supplementary_top,
+                chunk_repo=chunk_repo, alias_map=alias_map,
+                lang=lang, on_event=on_event,
+            ),
+            default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
+            name="expand_commentaries_short", request_id=request_id,
+        )
+
         result = ResearchResult(
             authoritative_refs=authoritative,
-            research_chunks=supplementary.chunks[:8],
+            research_chunks=supplementary_top + commentaries,
             matched_question_ids=[m.attribution_id for m in question_matches],
             matched_topic_ids=[],
         )
@@ -519,9 +534,20 @@ async def _research_path(
             if not queries:
                 break
 
+    top_chunks = accumulated.chunks[:20]
+    commentaries = await _safe(
+        lambda: expand_verses_with_commentaries(
+            top_chunks,
+            chunk_repo=chunk_repo, alias_map=alias_map,
+            lang=lang, on_event=on_event,
+        ),
+        default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
+        name="expand_commentaries_long", request_id=request_id,
+    )
+
     return ResearchResult(
         authoritative_refs=[],
-        research_chunks=accumulated.chunks[:20],
+        research_chunks=top_chunks + commentaries,
         matched_question_ids=[],
         matched_topic_ids=[m.attribution_id for m in topic_matches],
     )

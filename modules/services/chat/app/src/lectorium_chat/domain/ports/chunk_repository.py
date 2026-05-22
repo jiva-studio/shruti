@@ -118,6 +118,22 @@ class ChunkRepository(Protocol):
         """
         ...
 
+    async def get_chunks_by_verse(
+        self,
+        *,
+        source_id: str,
+        tokens: str,
+        kinds: list[str],
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        """Lookup library chunks by verse address `(source_id, tokens)` —
+        language-independent join key. One address can resolve to a verse
+        AND any number of commentaries / prose chapters anchored on it;
+        callers narrow via `kinds`. Used by the research pipeline to
+        expand verse hits with their commentaries from all authors.
+        """
+        ...
+
     async def get_chunks_by_target(
         self,
         *,
