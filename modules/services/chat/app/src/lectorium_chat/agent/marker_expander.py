@@ -70,6 +70,13 @@ _MAX_BUFFER = 200
 # Punctuation that should land BEFORE the expanded widget on swap.
 _TRAILING_PUNCT = ".,!?…:;"
 
+# Internal sentinel returned from `_format_commentary` when the new
+# commentary expansion was MERGED into `_pending` in place (same
+# attribution as the run currently in flight). `_on_marker_closed`
+# treats this as "already emitted, eat the marker silently". Never
+# reaches the output stream.
+_MERGE_SENTINEL = "\x02"
+
 
 class MarkerExpander:
     """Per-stream state machine. Held state: marker buffer between
@@ -108,6 +115,16 @@ class MarkerExpander:
         self._pending: str | None = None
         self._pending_pre_ws: str = ""
         self._pending_gap: str = ""
+
+        # If `_pending` currently holds a commentary blockquote, these
+        # carry the structured state needed to MERGE a follow-up
+        # commentary marker with the same `(author, addr_label)` into
+        # the same blockquote — appending its sentences instead of
+        # producing a second visually-glued one. Cleared the moment
+        # `_pending` flushes (prose interrupts) or a non-commentary
+        # marker arrives.
+        self._pending_comm_sentences: list[str] | None = None
+        self._pending_comm_attribution: str | None = None
 
     async def feed(self, text: str) -> str:
         """Process a delta chunk; returns what should be forwarded."""
@@ -162,6 +179,15 @@ class MarkerExpander:
 
     def _on_marker_closed(self, expanded: str, out: list[str]) -> None:
         """Bookkeeping when a `[…]` finishes parsing."""
+        if expanded == _MERGE_SENTINEL:
+            # `_format_commentary` already extended `_pending` in place
+            # for a same-source commentary continuation. Eat the marker
+            # silently — and discard `_ws_hold` (the whitespace that
+            # sat between the two markers belongs to neither and must
+            # not leak into the merged blockquote).
+            self._ws_hold = ""
+            return
+
         if not expanded:
             # Marker dropped (legacy / hallucinated / unrecovered / dedup).
             # Normalisations:
@@ -188,6 +214,12 @@ class MarkerExpander:
         # it first (two markers in a row — second is the new pending).
         if self._pending is not None:
             out.append(self._pending_pre_ws + self._pending + self._pending_gap)
+            # Whatever the previous pending was, the commentary run
+            # tracking is now stale: either prose came in between
+            # (handled in _consume_text_char) or a different-source
+            # marker is opening a fresh blockquote.
+            self._pending_comm_sentences = None
+            self._pending_comm_attribution = None
         self._pending = expanded
         self._pending_pre_ws = self._ws_hold
         self._pending_gap = ""
@@ -228,6 +260,8 @@ class MarkerExpander:
             self._pending = None
             self._pending_pre_ws = ""
             self._pending_gap = ""
+            self._pending_comm_sentences = None
+            self._pending_comm_attribution = None
             return ch + " " + expansion
 
         # Non-punct, non-space → no swap. Commit pre_ws + expansion +
@@ -238,6 +272,10 @@ class MarkerExpander:
         self._pending = None
         self._pending_pre_ws = ""
         self._pending_gap = ""
+        # Prose continuing → commentary run is over; any follow-up
+        # commentary marker is a NEW blockquote, not an extension.
+        self._pending_comm_sentences = None
+        self._pending_comm_attribution = None
         return pre_ws + expansion + gap + ch
 
     # ── marker expansion ───────────────────────────────────────────
@@ -390,20 +428,57 @@ class MarkerExpander:
             if author
             else f"комментарий к {ref.addr_label}"
         )
-        # ONE leading newline so the `>` lands at the start of a line
-        # even if the LLM forgot to put the marker on its own line.
-        # No trailing padding — surrounding LLM prose supplies its own
-        # newlines; doubling them produced 3-4 blank lines visually.
-        #
-        # Each sentence may itself contain newlines (purports embed
-        # multi-line shloka quotations like "*мāṁ ча йо ’вйабхичāреṇа\n
-        # бхакти-йогена севате..."). CommonMark requires `> ` on EVERY
-        # line of a blockquote — so we prefix every internal line of
-        # every picked sentence, not just the first. Empty internal
-        # lines become bare `>` so the blockquote stays continuous
-        # across stanza breaks.
+
+        # Same-source MERGE: if `_pending` is still a commentary
+        # blockquote with the SAME attribution (no prose has flushed
+        # it yet), extend it in place instead of producing a second
+        # adjacent blockquote that would render glued under the first.
+        # Caller sees the marker as "already handled".
+        if (
+            self._pending is not None
+            and self._pending_comm_attribution == attribution
+            and self._pending_comm_sentences is not None
+        ):
+            self._pending_comm_sentences.extend(picked)
+            self._pending = self._render_commentary_blockquote(
+                self._pending_comm_sentences, attribution,
+            )
+            return _MERGE_SENTINEL
+
+        # Fresh commentary expansion — capture the sentences + attribution
+        # so a follow-up marker can extend us.
+        self._pending_comm_sentences = list(picked)
+        self._pending_comm_attribution = attribution
+        return self._render_commentary_blockquote(picked, attribution)
+
+    def _render_commentary_blockquote(
+        self,
+        sentences: list[str],
+        attribution: str,
+    ) -> str:
+        """Pure renderer — takes the merged sentence list and produces
+        the full blockquote string. Used both for fresh expansions and
+        for re-rendering `_pending` when a same-source merge appends
+        new sentences.
+
+        Each sentence may itself contain newlines (purports embed
+        multi-line shloka quotations like "*мāṁ ча йо ’вйабхичāреṇа\n
+        бхакти-йогена севате..."). CommonMark requires `> ` on EVERY
+        line of a blockquote — so we prefix every internal line of
+        every picked sentence, not just the first. Empty internal
+        lines become bare `>` so the blockquote stays continuous
+        across stanza breaks.
+
+        Leading + trailing newline frame the block:
+        - Leading `\\n` so `>` lands at line-start even if the LLM
+          forgot to put the marker on its own line.
+        - Trailing `\\n` so a DIFFERENT-source commentary marker right
+          after this one gets a blank-line separator (one trailing +
+          one leading on the next = `\\n\\n`, which markdown reads as
+          end-of-blockquote, start-of-new-blockquote).
+        """
         rendered: list[str] = []
-        for sent in picked:
+        for sent in sentences:
             sent = sent.strip()
             if not sent:
                 continue
@@ -413,4 +488,4 @@ class MarkerExpander:
         if not rendered:
             return ""
         body = "\n".join(rendered)
-        return f"\n{body}\n>\n> — {attribution}"
+        return f"\n{body}\n>\n> — {attribution}\n"

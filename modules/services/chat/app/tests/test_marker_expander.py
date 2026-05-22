@@ -380,3 +380,96 @@ async def test_s_suffix_on_lecture_alias_is_silently_ignored() -> None:
     e = MarkerExpander(aliases)
     out = await _expand(e, f"see [^{ref}|s=0,1] here")
     assert out == "see [cite:track_X@0-1000] here"
+
+
+# ── Adjacent commentary blockquotes — merge or separate ──────────────
+
+
+async def test_two_adjacent_same_source_commentary_markers_merge() -> None:
+    """Two `[^N|s=…]` for different aliases pointing to the SAME
+    (author, addr_label) must produce ONE merged blockquote — not two
+    glued ones with duplicate attribution lines."""
+    aliases = TurnAliasMap()
+    ref_a = aliases.alias_commentary(
+        "comm_seg0", 0,
+        addr_label="БГ 18.66", author_name="А.Ч. Прабхупада",
+        sentences=["First sentence.", "Second sentence.", "Third."],
+    )
+    ref_b = aliases.alias_commentary(
+        "comm_seg1", 1,  # different chunk, same purport
+        addr_label="БГ 18.66", author_name="А.Ч. Прабхупада",
+        sentences=["Fourth sentence.", "Fifth."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref_a}|s=0]\n[^{ref_b}|s=0]\n")
+    # All four sentences inside ONE blockquote, attribution appears once.
+    assert out.count("— А.Ч. Прабхупада, комментарий к БГ 18.66") == 1
+    assert "> First sentence." in out
+    assert "> Fourth sentence." in out
+
+
+async def test_two_adjacent_different_source_commentary_blockquotes_separated() -> None:
+    """Different authors / addr_labels → TWO distinct blockquotes with
+    blank-line separation so markdown renders them as separate blocks."""
+    aliases = TurnAliasMap()
+    ref_a = aliases.alias_commentary(
+        "ca", 0, addr_label="БГ 18.66", author_name="Author A",
+        sentences=["From A."],
+    )
+    ref_b = aliases.alias_commentary(
+        "cb", 0, addr_label="БГ 18.66", author_name="Author B",
+        sentences=["From B."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref_a}|s=0]\n[^{ref_b}|s=0]\n")
+    # Both attribution lines present (one per blockquote).
+    assert "— Author A" in out
+    assert "— Author B" in out
+    # And a blank-line break separates them: `\n\n` outside any `>` line.
+    # Locate the gap between the two blockquotes — must contain at least
+    # two consecutive newlines for markdown to terminate the first.
+    a_end = out.index("— Author A")
+    b_start = out.index("> From B.")
+    between = out[a_end:b_start]
+    assert "\n\n" in between
+
+
+async def test_commentary_followed_by_prose_then_same_source_doesnt_merge() -> None:
+    """If prose has interrupted the commentary run, a follow-up marker
+    with the same attribution starts a NEW blockquote — merging would
+    fold prose-and-attribution back into the first quote."""
+    aliases = TurnAliasMap()
+    ref_a = aliases.alias_commentary(
+        "ca", 0, addr_label="БГ 18.66", author_name="Author A",
+        sentences=["First."],
+    )
+    ref_b = aliases.alias_commentary(
+        "cb", 1, addr_label="БГ 18.66", author_name="Author A",
+        sentences=["Second."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref_a}|s=0]\nProse in between.\n[^{ref_b}|s=0]\n")
+    # Attribution appears twice — once per blockquote.
+    assert out.count("— Author A") == 2
+
+
+async def test_commentary_blockquote_preserves_internal_newlines_with_gt() -> None:
+    """A sentence containing internal newlines (multi-line shloka quote
+    embedded in a purport) gets `>` on EVERY line, not just the first."""
+    aliases = TurnAliasMap()
+    sanskrit_multi = "Это подтверждает Кришна:\n*мāṁ ча йо\nбхакти-йогена севате\nкалпате*\n«Перевод».."
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="ЧЧ Мадхйа 25.121", author_name="Author",
+        sentences=[sanskrit_multi],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}|s=0]")
+    # Each non-empty line of the sentence got its own `> ` prefix.
+    assert "> *мāṁ ча йо" in out
+    assert "> бхакти-йогена севате" in out
+    assert "> калпате*" in out
+    # No naked Sanskrit line outside a blockquote (i.e. there are no
+    # lines that contain the Sanskrit text but DON'T start with `>`).
+    for line in out.split("\n"):
+        if "бхакти-йогена" in line:
+            assert line.lstrip().startswith(">")
