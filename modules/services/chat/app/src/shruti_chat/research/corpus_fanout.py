@@ -233,6 +233,28 @@ async def fanout_search_with_boost(
     # 5. Sort + take top-K.
     ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
 
+    # Telemetry: per-kind distribution in the dedup pool (before slicing)
+    # vs the top-K. Lets us see when verse-chunks exist in the candidate
+    # pool but lose to lectures in ranking — driving the boost-tuning
+    # conversation with data instead of guesses.
+    candidate_by_kind: dict[str, int] = {}
+    boosted_by_kind: dict[str, int] = {}
+    for r in deduped.values():
+        candidate_by_kind[r.kind] = candidate_by_kind.get(r.kind, 0) + 1
+        if boosted_flags.get(r.dedup_key):
+            boosted_by_kind[r.kind] = boosted_by_kind.get(r.kind, 0) + 1
+    topk_by_kind: dict[str, int] = {}
+    for r in ranked:
+        topk_by_kind[r.kind] = topk_by_kind.get(r.kind, 0) + 1
+    log.info(
+        "fanout_kind_distribution",
+        candidates_total=len(deduped),
+        candidates_by_kind=candidate_by_kind,
+        boosted_by_kind=boosted_by_kind,
+        topk_by_kind=topk_by_kind,
+        boost_ids_count=len(boost_ids),
+    )
+
     # 6. Envelope (mints aliases) and build by_kind partition.
     envelopes: list[dict[str, Any]] = []
     by_kind: dict[str, list[dict[str, Any]]] = {}
