@@ -277,6 +277,51 @@ class PgChunkRepository:
             for r in rows
         ]
 
+    async def get_chunks_by_verse(
+        self,
+        *,
+        source_id: str,
+        tokens: str,
+        kinds: list[str],
+        lang: str | None = None,
+    ) -> list[LibraryChunk]:
+        if not kinds:
+            return []
+        where: list[str] = [
+            "kind = ANY($1::text[])",
+            "embed_model = $2",
+            "source_id = $3",
+            "tokens = $4",
+        ]
+        params: list[Any] = [kinds, self._embed_model, source_id, tokens]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        sql = f"""
+          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
+                 lang, segment_index, text, addr_label
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY kind, author_id NULLS LAST, segment_index NULLS FIRST
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            LibraryChunk(
+                item_id=r["item_id"],
+                item_kind=r["kind"],
+                source_id=r["source_id"],
+                tokens=r["tokens"],
+                author_id=r["author_id"],
+                doc_date=r["doc_date"],
+                lang=r["lang"],
+                segment_index=r["segment_index"],
+                text=r["text"],
+                addr_label=r["addr_label"],
+            )
+            for r in rows
+        ]
+
     async def get_chunks_by_target(
         self,
         *,

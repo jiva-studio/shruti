@@ -41,15 +41,24 @@ from __future__ import annotations
 
 import re
 
-from lectorium_chat.agent.turn_aliases import ChunkRef, TurnAliasMap, VerseRef
+from lectorium_chat.agent.turn_aliases import (
+    ChunkRef,
+    CommentaryRef,
+    TurnAliasMap,
+    VerseRef,
+)
 from lectorium_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
 
 
-# Strict `[^N]` with integer N only.
-_FOOTNOTE_RE = re.compile(r"^\[\^(\d+)\]$")
+# `[^N]` with integer N, optionally `[^N|s=0,2,5]` for commentary
+# blockquote sub-selection (sentence indices into the chunk body).
+# The `|s=...` suffix is silently ignored when the alias resolves to
+# a non-commentary ref (lecture / verse) so a stray suffix on a wrong
+# ref type can't break the stream.
+_FOOTNOTE_RE = re.compile(r"^\[\^(\d+)(?:\|s=([0-9,]+))?\]$")
 
 # Catch-all `[^anything]` — non-integer string-stuffed hallucination.
 _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
@@ -60,6 +69,13 @@ _MAX_BUFFER = 200
 
 # Punctuation that should land BEFORE the expanded widget on swap.
 _TRAILING_PUNCT = ".,!?…:;"
+
+# Internal sentinel returned from `_format_commentary` when the new
+# commentary expansion was MERGED into `_pending` in place (same
+# attribution as the run currently in flight). `_on_marker_closed`
+# treats this as "already emitted, eat the marker silently". Never
+# reaches the output stream.
+_MERGE_SENTINEL = "\x02"
 
 
 class MarkerExpander:
@@ -99,6 +115,16 @@ class MarkerExpander:
         self._pending: str | None = None
         self._pending_pre_ws: str = ""
         self._pending_gap: str = ""
+
+        # If `_pending` currently holds a commentary blockquote, these
+        # carry the structured state needed to MERGE a follow-up
+        # commentary marker with the same `(author, addr_label)` into
+        # the same blockquote — appending its sentences instead of
+        # producing a second visually-glued one. Cleared the moment
+        # `_pending` flushes (prose interrupts) or a non-commentary
+        # marker arrives.
+        self._pending_comm_sentences: list[str] | None = None
+        self._pending_comm_attribution: str | None = None
 
     async def feed(self, text: str) -> str:
         """Process a delta chunk; returns what should be forwarded."""
@@ -153,6 +179,15 @@ class MarkerExpander:
 
     def _on_marker_closed(self, expanded: str, out: list[str]) -> None:
         """Bookkeeping when a `[…]` finishes parsing."""
+        if expanded == _MERGE_SENTINEL:
+            # `_format_commentary` already extended `_pending` in place
+            # for a same-source commentary continuation. Eat the marker
+            # silently — and discard `_ws_hold` (the whitespace that
+            # sat between the two markers belongs to neither and must
+            # not leak into the merged blockquote).
+            self._ws_hold = ""
+            return
+
         if not expanded:
             # Marker dropped (legacy / hallucinated / unrecovered / dedup).
             # Normalisations:
@@ -179,6 +214,12 @@ class MarkerExpander:
         # it first (two markers in a row — second is the new pending).
         if self._pending is not None:
             out.append(self._pending_pre_ws + self._pending + self._pending_gap)
+            # Whatever the previous pending was, the commentary run
+            # tracking is now stale: either prose came in between
+            # (handled in _consume_text_char) or a different-source
+            # marker is opening a fresh blockquote.
+            self._pending_comm_sentences = None
+            self._pending_comm_attribution = None
         self._pending = expanded
         self._pending_pre_ws = self._ws_hold
         self._pending_gap = ""
@@ -219,6 +260,8 @@ class MarkerExpander:
             self._pending = None
             self._pending_pre_ws = ""
             self._pending_gap = ""
+            self._pending_comm_sentences = None
+            self._pending_comm_attribution = None
             return ch + " " + expansion
 
         # Non-punct, non-space → no swap. Commit pre_ws + expansion +
@@ -229,15 +272,35 @@ class MarkerExpander:
         self._pending = None
         self._pending_pre_ws = ""
         self._pending_gap = ""
+        # Prose continuing → commentary run is over; any follow-up
+        # commentary marker is a NEW blockquote, not an extension.
+        self._pending_comm_sentences = None
+        self._pending_comm_attribution = None
         return pre_ws + expansion + gap + ch
 
     # ── marker expansion ───────────────────────────────────────────
 
     def _expand_marker(self, marker: str) -> str:
-        # Strict integer `[^N]`.
+        # `[^N]` or `[^N|s=…]`.
         m = _FOOTNOTE_RE.match(marker)
         if m:
-            return self._format_ref(int(m.group(1)))
+            sentence_indices: list[int] | None = None
+            if m.group(2):
+                # Parse the comma-separated list; tolerate stray empties
+                # from `[^N|s=,0,,2,]`-style sloppy input.
+                sentence_indices = []
+                for part in m.group(2).split(","):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    try:
+                        sentence_indices.append(int(part))
+                    except ValueError:
+                        # Skip non-numeric noise without breaking the
+                        # whole marker — partial sub-selection is better
+                        # than no quote at all.
+                        continue
+            return self._format_ref(int(m.group(1)), sentence_indices)
 
         # Non-integer footnote — try single-candidate recovery.
         if _FOOTNOTE_CATCH_RE.match(marker):
@@ -246,13 +309,13 @@ class MarkerExpander:
                 request_id=self._request_id,
                 marker=marker[:80],
             )
-            return self._format_ref(None)
+            return self._format_ref(None, None)
 
         # Anything else (`[action:...]`, `[followup:...]`, plain
         # bracketed text) passes through verbatim.
         return marker
 
-    def _format_ref(self, n: int | None) -> str:
+    def _format_ref(self, n: int | None, sentence_indices: list[int] | None = None) -> str:
         """Resolve alias N. If N is None or unknown, try single-
         candidate recovery (exactly one alias still unused → use it).
         Otherwise drop with diagnostic log.
@@ -305,6 +368,9 @@ class MarkerExpander:
         assert isinstance(n, int)
         self._emitted.add(n)
 
+        if isinstance(ref, CommentaryRef):
+            return self._format_commentary(ref, sentence_indices)
+
         if isinstance(ref, VerseRef):
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
@@ -318,3 +384,108 @@ class MarkerExpander:
             return f"[card:{ref.track_id}]"
 
         return ""
+
+    def _format_commentary(
+        self,
+        ref: CommentaryRef,
+        sentence_indices: list[int] | None,
+    ) -> str:
+        """Build a markdown blockquote from VERBATIM sentences of the
+        commentary chunk. LLM picks indices; server pulls bytes.
+
+        If `sentence_indices` is None or empty (LLM emitted `[^N]`
+        without `|s=...`) → default to the first 2 sentences. This is a
+        sensible "the LLM forgot to be specific" fallback that still
+        produces a real quote instead of an empty block.
+
+        Out-of-range indices are silently dropped; if NONE of the
+        requested indices resolve to a real sentence, return empty
+        (marker effectively disappears — preferable to a fake quote).
+        """
+        sents = ref.sentences
+        if not sents:
+            return ""
+
+        if not sentence_indices:
+            picked = list(sents[:2])
+        else:
+            picked = []
+            for idx in sentence_indices:
+                if 0 <= idx < len(sents):
+                    picked.append(sents[idx])
+            if not picked:
+                log.info(
+                    "chat_marker_commentary_no_valid_sentences",
+                    request_id=self._request_id,
+                    requested=sentence_indices,
+                    available=len(sents),
+                )
+                return ""
+
+        author = ref.author_name or ""
+        attribution = (
+            f"{author}, комментарий к {ref.addr_label}"
+            if author
+            else f"комментарий к {ref.addr_label}"
+        )
+
+        # Same-source MERGE: if `_pending` is still a commentary
+        # blockquote with the SAME attribution (no prose has flushed
+        # it yet), extend it in place instead of producing a second
+        # adjacent blockquote that would render glued under the first.
+        # Caller sees the marker as "already handled".
+        if (
+            self._pending is not None
+            and self._pending_comm_attribution == attribution
+            and self._pending_comm_sentences is not None
+        ):
+            self._pending_comm_sentences.extend(picked)
+            self._pending = self._render_commentary_blockquote(
+                self._pending_comm_sentences, attribution,
+            )
+            return _MERGE_SENTINEL
+
+        # Fresh commentary expansion — capture the sentences + attribution
+        # so a follow-up marker can extend us.
+        self._pending_comm_sentences = list(picked)
+        self._pending_comm_attribution = attribution
+        return self._render_commentary_blockquote(picked, attribution)
+
+    def _render_commentary_blockquote(
+        self,
+        sentences: list[str],
+        attribution: str,
+    ) -> str:
+        """Pure renderer — takes the merged sentence list and produces
+        the full blockquote string. Used both for fresh expansions and
+        for re-rendering `_pending` when a same-source merge appends
+        new sentences.
+
+        Each sentence may itself contain newlines (purports embed
+        multi-line shloka quotations like "*мāṁ ча йо ’вйабхичāреṇа\n
+        бхакти-йогена севате..."). CommonMark requires `> ` on EVERY
+        line of a blockquote — so we prefix every internal line of
+        every picked sentence, not just the first. Empty internal
+        lines become bare `>` so the blockquote stays continuous
+        across stanza breaks.
+
+        Leading + trailing newline frame the block:
+        - Leading `\\n` so `>` lands at line-start even if the LLM
+          forgot to put the marker on its own line.
+        - Trailing `\\n` so a DIFFERENT-source commentary marker right
+          after this one gets a blank-line separator (one trailing +
+          one leading on the next = `\\n\\n`, which markdown reads as
+          end-of-blockquote, start-of-new-blockquote).
+        """
+        rendered: list[str] = []
+        for sent in sentences:
+            sent = sent.strip()
+            if not sent:
+                continue
+            for line in sent.split("\n"):
+                stripped = line.strip()
+                rendered.append(f"> {stripped}" if stripped else ">")
+        if not rendered:
+            return ""
+        body = "\n".join(rendered)
+        return f"\n{body}\n>\n> — {attribution}\n"

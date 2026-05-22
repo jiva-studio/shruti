@@ -30,9 +30,13 @@ from lectorium_chat.agent.tools._envelope import (
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
 from lectorium_chat.research.caption_generator import generate_captions
+from lectorium_chat.research.commentary_expansion import (
+    expand_verses_with_commentaries,
+)
 from lectorium_chat.research.constants import (
-    DEFAULT_TOPIC_BOOST,
+    BOOST_BY_KIND,
     MAX_FANOUT_ROUNDS,
+    TIMEOUT_COMMENTARY_EXPAND_S,
     TIMEOUT_EXPAND_S,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
@@ -175,6 +179,9 @@ async def _fetch_refs(
         envelopes: list[dict[str, Any]] = []
         for c in chunks:
             env = library_to_envelope(c, alias_map=alias_map, score=canonical_score)
+            # Same shape as fanout's _library_dedup_key so merge_fanout-style
+            # callers can dedup these alongside fanout output.
+            env["_dedup_key"] = (c.item_kind, c.item_id, c.segment_index)
             envelopes.append(env)
         return envelopes
 
@@ -228,7 +235,7 @@ async def run_research(
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
-    topic_boost: float = DEFAULT_TOPIC_BOOST,
+    boost_by_kind: dict[str, float] | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
 ) -> ResearchResult:
@@ -257,7 +264,7 @@ async def run_research(
             boost_ids=set(),
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
-            topic_boost=topic_boost, expand_model=expand_model,
+            boost_by_kind=boost_by_kind, expand_model=expand_model,
             request_id=request_id, on_event=on_event,
         )
 
@@ -326,9 +333,20 @@ async def run_research(
             name="supplementary_fanout", request_id=request_id,
         )
 
+        supplementary_top = supplementary.chunks[:8]
+        commentaries = await _safe(
+            lambda: expand_verses_with_commentaries(
+                authoritative + supplementary_top,
+                chunk_repo=chunk_repo, alias_map=alias_map,
+                lang=lang, catalog_repo=catalog_repo, on_event=on_event,
+            ),
+            default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
+            name="expand_commentaries_short", request_id=request_id,
+        )
+
         result = ResearchResult(
             authoritative_refs=authoritative,
-            research_chunks=supplementary.chunks[:8],
+            research_chunks=supplementary_top + commentaries,
             matched_question_ids=[m.attribution_id for m in question_matches],
             matched_topic_ids=[],
         )
@@ -344,7 +362,7 @@ async def run_research(
         boost_ids=None,  # computed below from topics
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
-        topic_boost=topic_boost, expand_model=expand_model,
+        boost_by_kind=boost_by_kind, expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
         request_id=request_id, on_event=on_event,
     )
@@ -419,7 +437,7 @@ async def _research_path(
     alias_map: Any,
     llm: Any,
     router_args: dict[str, Any],
-    topic_boost: float,
+    boost_by_kind: dict[str, float] | None,
     expand_model: str | None,
     topic_model: str | None = None,
     embed_model_for_lookup: str | None = None,
@@ -477,6 +495,36 @@ async def _research_path(
     else:
         boost_ids = boost_ids or set()
 
+    # Explicit-fetch attribution-flagged refs so they're GUARANTEED in
+    # the candidate pool. Library ANN top-K is narrow (8 per query across
+    # all library kinds combined); a short verse-chunk under-scores against
+    # long queries and may never enter the pool by cosine alone — boost
+    # ranks within the pool, it can't put a chunk INTO the pool. By
+    # fetching topic-attribution refs directly (same path SHORT uses for
+    # question refs), the curator's "this is relevant" decision survives
+    # past the ANN bottleneck. Score 0.75 sits below SHORT's authoritative
+    # 0.85 (topic is a weaker signal than question) but above any sensible
+    # ANN ranking, so these chunks naturally surface in top-20.
+    topic_refs_fetched: list[dict[str, Any]] = []
+    if topic_matches:
+        topic_refs = _dedupe_refs(
+            list(chain.from_iterable(m.refs for m in topic_matches))
+        )
+        topic_refs_fetched = await _safe(
+            lambda: _fetch_refs(
+                topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+                lang=lang, canonical_score=0.75, on_event=on_event,
+            ),
+            default=[], timeout=TIMEOUT_FETCH_REFS_S,
+            name="fetch_topic_refs", request_id=request_id,
+        )
+        log.info(
+            "long_path_topic_refs_fetched",
+            request_id=request_id,
+            refs=len(topic_refs),
+            envelopes=len(topic_refs_fetched),
+        )
+
     # Step C: fanout with topic-boost, coverage gate, up to N rounds.
     accumulated = FanoutResult()
     queries = expansion.queries or [question]
@@ -487,7 +535,7 @@ async def _research_path(
                 queries=queries,
                 embedder=embedder, chunk_repo=chunk_repo,
                 catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
-                boost_ids=boost_ids, boost_factor=topic_boost,
+                boost_ids=boost_ids, boost_by_kind=boost_by_kind,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),
@@ -519,9 +567,39 @@ async def _research_path(
             if not queries:
                 break
 
+    # Merge topic-fetched refs with fanout candidates, dedup by _dedup_key,
+    # take top-20 by score. Topic refs have score=0.75; most fanout chunks
+    # land 0.45-0.75, so attribution-flagged items naturally float to the
+    # top while still letting strongly-matching lectures surface.
+    merged_by_key: dict[tuple, dict[str, Any]] = {}
+    for env in topic_refs_fetched + list(accumulated.chunks):
+        key = env.get("_dedup_key")
+        if key is None:
+            continue
+        prev = merged_by_key.get(key)
+        prev_score = (prev or {}).get("score") or 0.0
+        env_score = env.get("score") or 0.0
+        if prev is None or prev_score < env_score:
+            merged_by_key[key] = env
+    top_chunks = sorted(
+        merged_by_key.values(),
+        key=lambda e: e.get("score") or 0.0,
+        reverse=True,
+    )[:20]
+
+    commentaries = await _safe(
+        lambda: expand_verses_with_commentaries(
+            top_chunks,
+            chunk_repo=chunk_repo, alias_map=alias_map,
+            lang=lang, catalog_repo=catalog_repo, on_event=on_event,
+        ),
+        default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
+        name="expand_commentaries_long", request_id=request_id,
+    )
+
     return ResearchResult(
         authoritative_refs=[],
-        research_chunks=accumulated.chunks[:20],
+        research_chunks=top_chunks + commentaries,
         matched_question_ids=[],
         matched_topic_ids=[m.attribution_id for m in topic_matches],
     )

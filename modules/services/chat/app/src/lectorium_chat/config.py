@@ -52,9 +52,6 @@ class Settings(BaseSettings):
     # Query expander + topic extractor share a model — both are short
     # structured-JSON calls. Flash-Lite is cheap and fast enough.
     llm_query_expander: str = "openrouter/google/gemini-3.1-flash-lite"
-    # Topic-boost magnitude added to chunk.score when item_id is referenced
-    # by a matched topic-attribution. Capped at 1.0 in fanout.
-    attribution_topic_boost: float = 0.15
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

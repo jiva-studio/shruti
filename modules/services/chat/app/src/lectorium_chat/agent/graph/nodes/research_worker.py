@@ -74,7 +74,6 @@ async def research_worker_node(
         pool=ctx.pool,
         llm=ctx.llm,
         embed_model=ctx.embed_model,
-        topic_boost=ctx.topic_boost,
         request_id=ctx.request_id,
         on_event=on_event,
     )
