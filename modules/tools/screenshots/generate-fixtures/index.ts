@@ -21,6 +21,7 @@ import initSqlJs, { type Database } from "sql.js"
 import type { IDatabase, QueryParams } from "@ports/app/index.js"
 import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
 import { playlistTracksFor, demoTranscriptTrackId } from "./tracks.js"
+import { chatFixtureFor, DEMO_SESSION_ID } from "./chat.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -286,6 +287,31 @@ async function seedNotes(db: IDatabase, args: Args, rng: () => number): Promise<
   console.log(`  wrote ${picks.length} notes on demo track ${trackId} (aligned to real blocks)`)
 }
 
+async function seedChat(db: IDatabase, args: Args): Promise<void> {
+  const fixture = chatFixtureFor(args.locale)
+  const sessionCreatedAt = args.now - 30 * 60 * 1000
+  await db.execute(
+    `INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id)
+     VALUES (?, ?, ?, ?, NULL)`,
+    [DEMO_SESSION_ID, fixture.sessionTitle, sessionCreatedAt, args.now]
+  )
+  // Stagger message timestamps by 1s so listBySession's
+  // ORDER BY created_at ASC keeps user-before-assistant order even
+  // though they were inserted within the same wall-clock second.
+  const META_EMPTY = '{"_v":1,"data":{}}'
+  for (let i = 0; i < fixture.messages.length; i++) {
+    const msg = fixture.messages[i]!
+    const createdAt = sessionCreatedAt + i * 1_000
+    await db.execute(
+      `INSERT INTO chat_messages
+         (id, session_id, role, content, created_at, meta)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [msg.id, DEMO_SESSION_ID, msg.role, msg.content, createdAt, META_EMPTY]
+    )
+  }
+  console.log(`  wrote chat session "${fixture.sessionTitle}" with ${fixture.messages.length} messages`)
+}
+
 /* -------------------------------- Main -------------------------------- */
 
 async function main(): Promise<void> {
@@ -306,6 +332,7 @@ async function main(): Promise<void> {
   await seedMediaItems(db, args, playlistTracksFor(args.locale), rng)
   await seedSessions(db, args, itemIds, rng)
   await seedNotes(db, args, rng)
+  await seedChat(db, args)
 
   fs.mkdirSync(path.dirname(args.out), { recursive: true })
   const bytes = raw.export()
