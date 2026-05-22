@@ -6,10 +6,15 @@ Centralised routing matrix:
   help                   → help_worker        → synthesizer
   find_track             → catalog_worker     → synthesizer
   research               → research_worker    → synthesizer
-  create_action          → research_worker    → action_worker → synthesizer
+  create_action          → action_worker      → synthesizer      (short path)
+                        OR research_worker    → action_worker → synthesizer
+                        OR catalog_worker     → action_worker → synthesizer
 
-The action chain (research → action) is wired as static edges in
-`builder.py`; this module only decides the FIRST hop out of the router.
+The action chain (research/catalog → action) is wired as static edges
+in `builder.py`; this module only decides the FIRST hop out of the
+router. The SHORT path skips the pre-action search entirely when:
+- we already know the track (current_track_ref / focus_ref is set), or
+- the action doesn't need tracks at all (reminder, smart_library, pro).
 """
 
 from __future__ import annotations
@@ -43,6 +48,23 @@ def _has_catalog_hint(state: ChatState) -> bool:
     return any(args.get(k) not in (None, "", []) for k in _CATALOG_HINT_KEYS)
 
 
+# Actions that don't need any track candidates — they operate on
+# user-level state (reminders, library config, paywall). Routing them
+# through research/catalog first wastes a turn and pollutes the
+# action_worker's context with irrelevant chunks.
+_TRACK_FREE_ACTIONS = ("reminder", "smart_library", "pro")
+
+
+def _has_track_anchor(state: ChatState) -> bool:
+    """True when the user has a specific track/fragment in scope —
+    either an open lecture (`current_track_ref`) or a focused citation
+    (`focus_ref`). When that's the case, the action_worker already has
+    everything it needs; a pre-action search would just rediscover the
+    same track.
+    """
+    return bool(state.get("current_track_ref") or state.get("focus_ref"))
+
+
 def route_after_router(state: ChatState) -> str:
     """Pick the first worker node based on `state["intent"]`.
 
@@ -57,10 +79,18 @@ def route_after_router(state: ChatState) -> str:
     if intent == "find_track":
         return "catalog_worker"
     if intent == "create_action":
-        # Pre-action hop. If the router extracted catalog hints
-        # (location/year/author/…) → catalog_worker; otherwise the
-        # query is topic-based → research_worker. Either path chains
-        # into action_worker.
+        args = state.get("extracted_args") or {}
+        action_kind = args.get("action_kind")
+        # Short path: skip pre-action search when there's nothing to
+        # search for. Either the track is already anchored in context,
+        # or the action doesn't need tracks at all.
+        if action_kind in _TRACK_FREE_ACTIONS:
+            return "action_worker"
+        if _has_track_anchor(state):
+            return "action_worker"
+        # PDF without an anchor: we DO need to gather tracks first.
+        # Catalog hints (author/source/date/…) → deterministic path;
+        # otherwise the query is topic-based → semantic research.
         return "catalog_worker" if _has_catalog_hint(state) else "research_worker"
     if intent == "research":
         return "research_worker"

@@ -11,19 +11,24 @@ Topology:
                          ▼
                       router ──── direct_chat / unknown ─────┐
                          │                                    │
-       ┌────────────┬────┴────────────────┬────────────┐      │
-       │            │                     │            │      │
-       ▼            ▼                     ▼            ▼      │
-   help_worker  catalog_worker      research_worker   …       │
-       │            │                     │                   │
-       │            │            create_action ──► action_worker
-       │            │                     │                   │
-       │            │            else ────┘                   │
-       │            │                     │                   │
-       └────────────┴──► synthesizer ◄────┴───────────────────┘
+       ┌────────────┬────┴──────────┬──────────────┬───┐      │
+       │            │               │              │   │      │
+       ▼            ▼               ▼              ▼   ▼      │
+   help_worker  catalog_worker  research_worker  action_worker (short)
+       │            │               │                  │      │
+       │            │       create_action ──► action_worker   │
+       │            │               │                  │      │
+       │            │       else ───┘                  │      │
+       │            │               │                  │      │
+       └────────────┴──► synthesizer ◄─────────────────┴──────┘
                             │
                             ▼
                            END
+
+The short path (router → action_worker) is taken when the action
+doesn't need tracks (reminder / smart_library / pro) OR the user
+has a track anchored in context (current_track_ref / focus_ref) —
+see `conditional.route_after_router`.
 """
 
 from __future__ import annotations
