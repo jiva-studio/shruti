@@ -95,4 +95,3 @@ class TurnContext:
     embedder: Any | None = None         # EmbedderPort
     pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
     embed_model: str | None = None      # settings.embed_model — required for attribution lookup
-    topic_boost: float = 0.15           # settings.attribution_topic_boost

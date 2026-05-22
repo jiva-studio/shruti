@@ -34,7 +34,7 @@ from lectorium_chat.research.commentary_expansion import (
     expand_verses_with_commentaries,
 )
 from lectorium_chat.research.constants import (
-    DEFAULT_TOPIC_BOOST,
+    BOOST_BY_KIND,
     MAX_FANOUT_ROUNDS,
     TIMEOUT_COMMENTARY_EXPAND_S,
     TIMEOUT_EXPAND_S,
@@ -232,7 +232,7 @@ async def run_research(
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
-    topic_boost: float = DEFAULT_TOPIC_BOOST,
+    boost_by_kind: dict[str, float] | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
 ) -> ResearchResult:
@@ -261,7 +261,7 @@ async def run_research(
             boost_ids=set(),
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
-            topic_boost=topic_boost, expand_model=expand_model,
+            boost_by_kind=boost_by_kind, expand_model=expand_model,
             request_id=request_id, on_event=on_event,
         )
 
@@ -359,7 +359,7 @@ async def run_research(
         boost_ids=None,  # computed below from topics
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
-        topic_boost=topic_boost, expand_model=expand_model,
+        boost_by_kind=boost_by_kind, expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
         request_id=request_id, on_event=on_event,
     )
@@ -434,7 +434,7 @@ async def _research_path(
     alias_map: Any,
     llm: Any,
     router_args: dict[str, Any],
-    topic_boost: float,
+    boost_by_kind: dict[str, float] | None,
     expand_model: str | None,
     topic_model: str | None = None,
     embed_model_for_lookup: str | None = None,
@@ -502,7 +502,7 @@ async def _research_path(
                 queries=queries,
                 embedder=embedder, chunk_repo=chunk_repo,
                 catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
-                boost_ids=boost_ids, boost_factor=topic_boost,
+                boost_ids=boost_ids, boost_by_kind=boost_by_kind,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),

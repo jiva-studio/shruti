@@ -145,7 +145,7 @@ async def test_boost_applied_to_matching_lecture_chunks():
     res = await fanout_search_with_boost(
         queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_boosted"},
+        boost_ids={"track_boosted"}, boost_by_kind={"lecture": 0.15},
     )
     # Find boosted envelope by inspecting refs (ref number is per-chunk; we
     # match on text content which our fake passes through).
@@ -168,7 +168,7 @@ async def test_boost_can_reorder_results():
     res = await fanout_search_with_boost(
         queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_boost"}, boost_factor=0.15,
+        boost_ids={"track_boost"}, boost_by_kind={"lecture": 0.15},
     )
     # boosted=0.85, normal=0.78 → boosted first
     assert res.chunks[0]["text"] == "BOOST"
@@ -184,7 +184,7 @@ async def test_boost_capped_at_1():
     res = await fanout_search_with_boost(
         queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_x"}, boost_factor=0.15,
+        boost_ids={"track_x"}, boost_by_kind={"lecture": 0.15},
     )
     assert res.chunks[0]["score"] == pytest.approx(1.0)
 
@@ -238,7 +238,7 @@ async def test_boost_on_library_item_id():
     res = await fanout_search_with_boost(
         queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"verse_boost"},
+        boost_ids={"verse_boost"}, boost_by_kind={"verse": 0.15},
     )
     by_text = {env["text"]: env for env in res.chunks}
     assert by_text["BOOST"]["score"] == pytest.approx(0.70)

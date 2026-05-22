@@ -18,7 +18,7 @@ from lectorium_chat.agent.tools._envelope import (
     library_to_envelope,
 )
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.research.constants import DEFAULT_TOPIC_BOOST, TOPK_PER_QUERY
+from lectorium_chat.research.constants import BOOST_BY_KIND, TOPK_PER_QUERY
 from lectorium_chat.research.models import FanoutResult
 
 
@@ -139,7 +139,7 @@ async def fanout_search_with_boost(
     alias_map: Any,
     lang: str | None = None,
     boost_ids: set[str] | None = None,
-    boost_factor: float = DEFAULT_TOPIC_BOOST,
+    boost_by_kind: dict[str, float] | None = None,
     top_k: int = TOPK_PER_QUERY,
     author_id: str | None = None,
     location_id: str | None = None,
@@ -216,13 +216,19 @@ async def fanout_search_with_boost(
                 deduped[r.dedup_key] = r
 
     # 4. Apply topic boost on RAW chunks (item_id directly available).
+    # Per-kind values: a short verse-chunk under-scores against long queries
+    # so it needs a bigger lift to compete with lectures in top-K; the map
+    # makes this tunable per kind without code change.
+    boost_map = boost_by_kind if boost_by_kind is not None else BOOST_BY_KIND
     boosted_flags: dict[tuple, bool] = {}
     if boost_ids:
         for key, r in deduped.items():
             iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
             if iid in boost_ids:
-                r.score = min(1.0, r.score + boost_factor)
-                boosted_flags[key] = True
+                lift = boost_map.get(r.kind, 0.0)
+                if lift > 0.0:
+                    r.score = min(1.0, r.score + lift)
+                    boosted_flags[key] = True
 
     # 5. Sort + take top-K.
     ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
