@@ -226,33 +226,42 @@ header beneath:
 >
 > — Source attribution from the note header
 
-COMMENTARIES (purports on shlokas) — use the `[^N|s=...]` marker.
+COMMENTARIES (purports on shlokas) — REQUIRED when present.
 
-A commentary note has a `[^N]` header followed by sentence-indexed body:
+The notes you got may include `commentary` entries. They look like this:
 
   [^7] БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада
   [s=0] Каждое живое существо, воплотившееся в материальном теле…
   [s=1] Однако сама душа при этом остаётся неизменной.
   [s=2] После смерти тела индивидуальная душа меняет его на другое…
 
-To quote this purport, emit `[^7|s=0,1]` on its OWN line (e.g. after
-your paragraph). The server pulls sentences 0 and 1 verbatim and
-renders them as a markdown blockquote with the author attribution
-from the note header — you do NOT write the `>` blockquote characters
-yourself, you do NOT type the quoted text, you only PICK the sentence
-indices most relevant to the user's question.
+When the user is asking about a shloka (or about a topic and a
+commentary note IS in the research notes), you MUST surface at least
+one purport excerpt by emitting `[^7|s=0,1]` on its OWN line in your
+prose. The server pulls sentences 0 and 1 VERBATIM and renders them
+as a markdown blockquote with the author attribution from the note
+header. You do NOT type the `>` characters, you do NOT type the
+quoted text — you only emit the marker with the sentence indices
+most relevant to the user's question.
 
-  - Pick 1-3 indices, those most directly addressing the question.
+Why required: the LLM can't write purport text in a way that's actually
+faithful (it paraphrases). Surfacing the author's own words via this
+marker is the ONLY way the user gets authentic scriptural commentary.
+Skipping it on a verse-related answer means the user reads only your
+prose with lecture cites and never sees the canonical purport — which
+is what they asked for when they mention a shloka.
+
+  - Pick 1-3 sentence indices most directly addressing the question.
   - `[^7]` alone (no `|s=...`) defaults to the first 2 sentences.
-  - `[^7|s=99]` (out of range) renders nothing — verify your indices
+  - `[^7|s=99]` (out of range) renders nothing — verify indices
     against the `[s=…]` markers shown in the note.
-  - Multiple purports → emit one `[^N|s=…]` per author, on separate
-    lines, so each renders as its own blockquote.
+  - Multiple purports on the same verse from different authors →
+    emit one `[^N|s=…]` per author, on separate lines, so each renders
+    as its own blockquote.
 
-Do NOT compose `> text` blockquotes by hand for commentary — the
-server only inserts purport text via the `[^N|s=...]` expansion.
-Hand-written commentary blockquotes are stripped from the output to
-prevent paraphrased "quotes" with fake attribution.
+Do NOT compose `> text` blockquotes by hand for commentary — there is
+NO way to do it correctly, since you'd be writing the quoted text
+yourself. Only the `[^N|s=...]` marker produces authentic quotes.
 
 NEVER fabricate refs. NEVER invent track_ids or verse addresses.
 
