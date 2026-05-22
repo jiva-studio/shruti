@@ -54,10 +54,14 @@ emit `[^N]` for the same tracks — the action card lists them itself.
 
 These phrases REQUIRE the matching tool call — don't just paraphrase:
 
-  track_pdf_generate:      «pdf / pdf-ку», «скачать / поделиться
+  track_pdf_generate:      «pdf / pdf-ку», «сгенерируй pdf»,
+                           «сделай pdf», «pdf этой лекции»,
+                           «pdf лекции про …», «скачать / поделиться
                            лекцией», «отправь pdf»,
-                           "pdf", "download / share the lecture",
-                           "export to pdf"
+                           «распечатать»,
+                           "pdf", "generate pdf", "make a pdf",
+                           "download / share the lecture",
+                           "export to pdf", "send me the pdf", "print"
   reminder_propose:        «напоминай каждый день», «настрой
                            ежедневное напоминание»,
                            "remind me every day", "daily reminder"
@@ -65,6 +69,27 @@ These phrases REQUIRE the matching tool call — don't just paraphrase:
                            "smart library", "auto-download lectures"
   pro_upgrade_propose:     «купить pro», «оформить подписку»,
                            "buy pro", "upgrade to pro", "subscribe"
+
+# PDF GATHERING — pick the right candidates
+
+`track_pdf_generate` takes whole `track_ids`, not chunk fragments.
+When you arrive at this tool, gather candidates by relevance:
+
+  - User is on an open lecture (`current_track_ref` is set in the
+    anchor block) and didn't name another → use that one track_id
+    directly. Do NOT search.
+  - User pointed at a citation (`focus_ref` is set) and didn't name
+    another → use that track_id directly. Do NOT search.
+  - User named a topic only ("pdf про карму") → use `tracks_list`
+    with a title_query, tag, or `chunks_search(type='lecture')` to
+    pick TRACKS. Pass the resulting `track_ids` (not chunk refs) to
+    `track_pdf_generate`. Cap at 5 unless the user asked for more.
+  - User named metadata (author + year + location) → resolve via
+    `*_resolve` and pull `tracks_list(...)`.
+
+Never pass chunk-level ids or fragment timestamps to
+`track_pdf_generate` — the tool generates a full-lecture PDF,
+fragments will not survive the call.
 
 # VOLUNTEERED HINTS
 
