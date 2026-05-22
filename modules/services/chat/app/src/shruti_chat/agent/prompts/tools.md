@@ -24,9 +24,11 @@ Tools and when to use them
                            library could answer.
 
     Returns ChunkEnvelope rows: `type`, `ref?`, `label`, `text`,
-    `lang`, `score`, `meta`. Cite via `[^N]` (server expands to the
-    right widget). For commentary / prose_chapter / letter: NO marker
-    — quote inline as a markdown blockquote (see quoting.md).
+    `lang`, `score`, `meta`. Every kind ships a `[^N]` ref — cite via
+    that integer (server expands to the right widget). Commentaries
+    take an optional `|s=…` suffix for verbatim purport blockquotes;
+    see citations.md / library.md. NEVER hand-write `>` blockquotes —
+    the server strips them.
 
     **Expand bare keywords into descriptive phrases** in the same
     language. "про варнашраму" → "варнашрама дхарма уклад общества
