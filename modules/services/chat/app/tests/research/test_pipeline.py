@@ -129,6 +129,10 @@ class FakeAliasMap:
         self._verse_map[key] = self._verse
         return self._verse
 
+    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences):
+        self._verse += 1
+        return self._verse
+
 
 @dataclass
 class FakeLLM:

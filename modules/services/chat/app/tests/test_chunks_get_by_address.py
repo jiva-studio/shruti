@@ -59,7 +59,8 @@ async def test_commentary_lookup_en() -> None:
     )
     assert len(rows) == 1
     assert rows[0]["type"] == "commentary"
-    assert rows[0]["ref"] is None  # commentary doesn't mint a citation ref
+    # Commentary now mints a ref so the LLM can cite via `[^N|s=...]`.
+    assert isinstance(rows[0]["ref"], int)
     assert repo.calls == [{"addr": "BG 2.13", "kinds": ["commentary"], "lang": "en"}]
 
 

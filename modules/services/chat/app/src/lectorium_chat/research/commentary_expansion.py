@@ -202,11 +202,15 @@ async def expand_verses_with_commentaries(
                 author_names = {}
 
     for c, child_score in zip(pending, pending_score):
-        env = library_to_envelope(c, alias_map=alias_map, score=child_score)
-        if c.author_id and c.author_id in author_names:
-            meta = env.get("meta") or {}
-            meta["author_name"] = author_names[c.author_id]
-            env["meta"] = meta
+        # Pre-resolve author_name so alias_commentary captures it for
+        # the marker expander's attribution line.
+        author_name = (
+            author_names.get(c.author_id) if c.author_id else None
+        )
+        extra = {"author_name": author_name} if author_name else None
+        env = library_to_envelope(
+            c, alias_map=alias_map, score=child_score, extra_meta=extra,
+        )
         out.append(env)
         _emit_commentary_source(on_event, c)
     return out

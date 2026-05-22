@@ -103,7 +103,7 @@ def test_verse_envelope_keeps_source_id_and_tokens() -> None:
     assert aliases.resolve(env["ref"]) == VerseRef("BG", "2.13", addr_label="БГ 2.13")
 
 
-def test_commentary_envelope_ref_is_none() -> None:
+def test_commentary_envelope_mints_ref_with_sentences() -> None:
     chunk = LibraryChunk(
         item_id="comm_xyz",
         item_kind="commentary",
@@ -113,17 +113,33 @@ def test_commentary_envelope_ref_is_none() -> None:
         doc_date=None,
         lang="ru",
         segment_index=0,
-        text="purport...",
+        text="Первое предложение. Второе предложение. Третье предложение.",
         addr_label="БГ 2.13 (комментарий)",
     )
-    env = library_to_envelope(chunk, alias_map=TurnAliasMap(), score=0.7)
+    aliases = TurnAliasMap()
+    env = library_to_envelope(chunk, alias_map=aliases, score=0.7)
 
     assert env["type"] == "commentary"
-    assert env["ref"] is None
+    # Commentary now gets a ref so the LLM can cite it via `[^N|s=...]`.
+    assert isinstance(env["ref"], int)
     assert env["meta"]["source_id"] == "BG"
     assert env["meta"]["tokens"] == "2.13"
     assert env["meta"]["author_id"] == "prabhupada"
+    assert env["meta"]["sentences"] == [
+        "Первое предложение.",
+        "Второе предложение.",
+        "Третье предложение.",
+    ]
     assert env["label"] == "БГ 2.13 (комментарий)"
+    # Alias resolves to a CommentaryRef carrying the verbatim sentences.
+    resolved = aliases.resolve(env["ref"])
+    assert resolved is not None
+    assert resolved.item_id == "comm_xyz"  # type: ignore[union-attr]
+    assert resolved.sentences == (  # type: ignore[union-attr]
+        "Первое предложение.",
+        "Второе предложение.",
+        "Третье предложение.",
+    )
 
 
 def test_letter_envelope_carries_author_and_date() -> None:

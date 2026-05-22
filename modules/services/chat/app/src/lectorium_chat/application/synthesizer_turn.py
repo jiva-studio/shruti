@@ -162,22 +162,32 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # on the client renders the address; the LLM doesn't need
             # to see it in the note header.
             header = f"[^{ref}]"
+        elif note_type == "commentary":
+            # Commentary notes show sentence-indexed body so the LLM
+            # can pick what to quote via `[^N|s=0,2]`. Author goes in
+            # the header so multiple authors' purports on the same
+            # verse are distinguishable. The marker expander pulls
+            # the picked sentences verbatim from alias storage —
+            # neither the LLM nor any prompt instruction can fabricate
+            # a quote that isn't really there.
+            author = meta.get("author_name") or meta.get("author_id") or ""
+            tag = (
+                f"{attribution} — комментарий, {author}"
+                if author and attribution
+                else (attribution and f"{attribution} — комментарий")
+                or "комментарий"
+            )
+            header = f"[^{ref}] {tag}".rstrip()
+            sentences = meta.get("sentences") or []
+            if isinstance(sentences, list) and sentences:
+                indexed = "\n".join(
+                    f"[s={i}] {s}" for i, s in enumerate(sentences)
+                )
+                return f"{header}\n{indexed}".rstrip()
         else:
             # Lecture fragment or whole-track card — title is natural
             # language, safe to keep adjacent.
             header = f"[^{ref}] {attribution}".rstrip()
-    elif note_type == "commentary":
-        # Three different authors' purports on the same verse arrive
-        # with identical addr_label ("БГ 2.13"). Without an author tag
-        # the LLM can't distinguish them and silently drops all but
-        # one. author_name (resolved by commentary_expansion) makes the
-        # attribution unambiguous; author_id is the slug fallback when
-        # the catalog lookup missed.
-        author = meta.get("author_name") or meta.get("author_id") or ""
-        if author:
-            header = f"{attribution} — комментарий, {author}" if attribution else f"комментарий, {author}"
-        else:
-            header = f"{attribution} — комментарий" if attribution else "комментарий"
     else:
         # prose_chapter / letter — addr_label drives the markdown
         # blockquote attribution downstream.
@@ -208,42 +218,41 @@ reply. If one note supports several related points, group them into
 ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
 `[^N]` across multiple paragraphs — see response_shape.md.
 
-When a note's header has NO `[^N]` (commentary / prose_chapter /
-letter), quote inline as a markdown blockquote with the attribution
-from the note header beneath:
+When a note's header has NO `[^N]` (prose_chapter / letter), quote
+inline as a markdown blockquote with the attribution from the note
+header beneath:
 
 > The cited text…
 >
 > — Source attribution from the note header
 
-COMMENTARIES (purports on shlokas) — quote ONLY what is actually in
-the research notes.
+COMMENTARIES (purports on shlokas) — use the `[^N|s=...]` marker.
 
-A commentary note has a header shaped like "БГ 2.13 — комментарий,
-А.Ч. Бхактиведанта Свами Прабхупада" (verse address + author). If
-such a note IS present in the notes block above and is on-topic, surface
-a short excerpt (1-3 sentences, the most directly relevant clause —
-NOT the whole 400+ char segment) as a blockquote with the author
-attribution from the note header. Different authors arrive as separate
-notes — pick the one that best supports your point, or quote two as
-separate blockquotes when they complement each other. The purport's
-authority comes from being the author's actual words; do not paraphrase
-silently.
+A commentary note has a `[^N]` header followed by sentence-indexed body:
 
-Example shape (only when the cited text physically exists in a
-commentary note):
+  [^7] БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада
+  [s=0] Каждое живое существо, воплотившееся в материальном теле…
+  [s=1] Однако сама душа при этом остаётся неизменной.
+  [s=2] После смерти тела индивидуальная душа меняет его на другое…
 
-> Атма не рождается и не умирает; смерть касается только тела.
->
-> — А.Ч. Бхактиведанта Свами Прабхупада, комментарий к БГ 2.13
+To quote this purport, emit `[^7|s=0,1]` on its OWN line (e.g. after
+your paragraph). The server pulls sentences 0 and 1 verbatim and
+renders them as a markdown blockquote with the author attribution
+from the note header — you do NOT write the `>` blockquote characters
+yourself, you do NOT type the quoted text, you only PICK the sentence
+indices most relevant to the user's question.
 
-ABSOLUTE PROHIBITION: if NO commentary note is present in this turn's
-notes, do NOT invent one. Do NOT write a blockquote attributed to a
-named author when that author's purport isn't in the notes — even if
-the verse is well-known and you "know" what the author probably said.
-Fabricating an attributed quote in the user's own scriptural tradition
-is the single worst trust violation this assistant can commit; answer
-without the blockquote rather than make one up.
+  - Pick 1-3 indices, those most directly addressing the question.
+  - `[^7]` alone (no `|s=...`) defaults to the first 2 sentences.
+  - `[^7|s=99]` (out of range) renders nothing — verify your indices
+    against the `[s=…]` markers shown in the note.
+  - Multiple purports → emit one `[^N|s=…]` per author, on separate
+    lines, so each renders as its own blockquote.
+
+Do NOT compose `> text` blockquotes by hand for commentary — the
+server only inserts purport text via the `[^N|s=...]` expansion.
+Hand-written commentary blockquotes are stripped from the output to
+prevent paraphrased "quotes" with fake attribution.
 
 NEVER fabricate refs. NEVER invent track_ids or verse addresses.
 
