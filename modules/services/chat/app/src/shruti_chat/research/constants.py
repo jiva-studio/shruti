@@ -49,3 +49,11 @@ TIMEOUT_TOPIC_LOOKUP_S = 6.0
 TIMEOUT_FANOUT_S = 30.0
 TIMEOUT_REGENERATE_S = 8.0
 TIMEOUT_FETCH_REFS_S = 5.0
+TIMEOUT_COMMENTARY_EXPAND_S = 5.0
+
+# ---- Verse → commentary expansion -----------------------------------------
+
+# Per verse hit, this is the upper bound on how many commentary chunks
+# get attached. Authors-first selection means up to N distinct purports
+# appear before any second segment from one author.
+MAX_COMMENTARIES_PER_VERSE = 12
