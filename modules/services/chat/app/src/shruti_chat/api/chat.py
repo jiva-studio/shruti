@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from time import perf_counter
 from typing import Any, AsyncIterator
 
 import structlog
@@ -107,6 +108,7 @@ async def chat(
     user_ctx = body.user_context.to_domain() if body.user_context else None
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
+        turn_started = perf_counter()
         try:
             if body.proactive is not None:
                 # Proactive turn — rule-specific prompt swap. Same tool
@@ -136,6 +138,14 @@ async def chat(
                     "data": json.dumps(ev.data, ensure_ascii=False),
                 }
         finally:
+            log.info(
+                "stage_timing",
+                stage="turn_total",
+                stage_ms=round((perf_counter() - turn_started) * 1000, 1),
+                status="ok",
+                request_id=request_id,
+                proactive=body.proactive is not None,
+            )
             structlog.contextvars.unbind_contextvars("request_id", "device_id", "ip")
 
     return EventSourceResponse(
