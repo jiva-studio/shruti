@@ -390,10 +390,11 @@ class MarkerExpander:
             if author
             else f"комментарий к {ref.addr_label}"
         )
-        # Wrap with blank-line padding so the blockquote renders as a
-        # standalone markdown block regardless of where the marker was
-        # inlined in the LLM's prose.
+        # ONE leading newline so the `>` lands at the start of a line
+        # even if the LLM forgot to put the marker on its own line.
+        # No trailing padding — surrounding LLM prose supplies its own
+        # newlines; doubling them produced 3-4 blank lines visually.
         body = "\n".join(f"> {s.strip()}" for s in picked if s.strip())
         if not body:
             return ""
-        return f"\n\n{body}\n>\n> — {attribution}\n\n"
+        return f"\n{body}\n>\n> — {attribution}"
