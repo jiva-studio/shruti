@@ -85,6 +85,17 @@ class CatalogRepository(Protocol):
     ) -> list[ResolvedEntity]:
         ...
 
+    async def get_author_names(
+        self,
+        author_ids: list[str],
+        *,
+        lang: str,
+    ) -> dict[str, str]:
+        """Batch-resolve author_id → full_name for the given language.
+        Missing rows are simply absent from the returned dict (caller
+        falls back to author_id if no name is available)."""
+        ...
+
     def invalidate_cache(self) -> None:
         """Hook for the indexer to call after the catalog DB swaps."""
         ...

@@ -335,7 +335,7 @@ async def run_research(
             lambda: expand_verses_with_commentaries(
                 authoritative + supplementary_top,
                 chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=lang, on_event=on_event,
+                lang=lang, catalog_repo=catalog_repo, on_event=on_event,
             ),
             default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
             name="expand_commentaries_short", request_id=request_id,
@@ -539,7 +539,7 @@ async def _research_path(
         lambda: expand_verses_with_commentaries(
             top_chunks,
             chunk_repo=chunk_repo, alias_map=alias_map,
-            lang=lang, on_event=on_event,
+            lang=lang, catalog_repo=catalog_repo, on_event=on_event,
         ),
         default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
         name="expand_commentaries_long", request_id=request_id,
