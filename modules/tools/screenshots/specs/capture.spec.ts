@@ -3,6 +3,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { scenarios, type Scenario } from "../scenarios.js"
+import { verseBodyCache } from "../generate-fixtures/chat.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -10,7 +11,22 @@ const REPO_ROOT = path.resolve(TOOL_ROOT, "../../..")
 const FIXTURES_DIR = path.resolve(TOOL_ROOT, "fixtures")
 
 const CONTENT_DB_PATH = path.resolve(FIXTURES_DIR, "content.db")
-const CONTENT_DB_VERSION = 20260512121125
+
+/** The mobile app validates the cached / downloaded catalog DB against
+ *  its compile-time `SUPPORTED_DB_SCHEME` (Vite `define` injection from
+ *  `modules/db-scheme.json`). If the constant here drifts from that
+ *  file, Welcome refuses to advance past the loading screen with
+ *  "No compatible database for scheme ..." and the capture spec times
+ *  out waiting for `/tabs/home`. Read it dynamically so a scheme bump
+ *  doesn't quietly break the screenshot pipeline. */
+const DB_SCHEME_PATH = path.resolve(REPO_ROOT, "modules/db-scheme.json")
+const DB_SCHEME: number = (JSON.parse(fs.readFileSync(DB_SCHEME_PATH, "utf-8")) as { scheme: number })
+  .scheme
+/** Synthesised pinned version (yyyyMMddHHmmss). The first 8 digits MUST
+ *  equal `DB_SCHEME` — that's the slice the fake config returns to
+ *  Welcome as `databases[].scheme`. The trailing six digits are
+ *  arbitrary; we just append `000000`. */
+const CONTENT_DB_VERSION = Number(`${DB_SCHEME}000000`)
 
 type Device = "phone" | "iphone67" | "ipad13"
 
@@ -113,6 +129,35 @@ async function preseedSearchFilter(page: Page, code: "en" | "ru"): Promise<void>
 }
 
 /**
+ * Pre-seed the verse-body cache so the chat scenario's `[verse:…]`
+ * markers render as full sanskrit + IAST + translation blocks rather
+ * than chip placeholders. The live app populates this cache from the
+ * server's `verse_payload` SSE event the first time a verse is cited;
+ * with no real chat server in the capture run we have to seed it
+ * directly. Same `CapacitorStorage.` localStorage prefix as the search
+ * filter preseed, same `STORAGE_KEY` (`lectorium.verse_body_cache.v1`)
+ * the store reads at hydrate time.
+ */
+async function preseedVerseBodyCache(page: Page): Promise<void> {
+  const now = Date.now()
+  const serialised: Record<string, unknown> = {}
+  for (const [key, body] of Object.entries(verseBodyCache)) {
+    serialised[key] = { ...body, touchedAt: now }
+  }
+  await page.addInitScript(
+    ({ value }: { value: string }) => {
+      try {
+        localStorage.setItem("CapacitorStorage.lectorium.verse_body_cache.v1", value)
+      } catch {
+        // unavailable origin — non-fatal, the VerseCard falls back to
+        // its inline chip placeholder.
+      }
+    },
+    { value: JSON.stringify(serialised) }
+  )
+}
+
+/**
  * Write the seeded user.db into IndexedDB BEFORE the app boots. The Vite
  * `useSqlJsPersistence` reads from `(lectorium, databases, user.db)` on
  * `open()` and creates an empty DB only when the key is missing — so a
@@ -165,6 +210,7 @@ async function boot(page: Page, code: "en" | "ru"): Promise<void> {
   await interceptContent(page)
   await preseedUserDb(page, code)
   await preseedSearchFilter(page, code)
+  await preseedVerseBodyCache(page)
 
   await page.goto(`/?locale=${code}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
@@ -174,18 +220,11 @@ async function boot(page: Page, code: "en" | "ru"): Promise<void> {
 
 /* --------------------------- navigation ---------------------------- */
 
-const TAB_PATHS: Record<Scenario["route"], string> = {
-  "/tabs/home": "/tabs/home",
-  "/tabs/search": "/tabs/search",
-  "/tabs/notes": "/tabs/notes",
-}
-
 async function navigateToRoute(page: Page, route: Scenario["route"]): Promise<void> {
-  const target = TAB_PATHS[route]
   const url = page.url()
-  if (url.endsWith(target) || url.includes(`${target}?`)) return
-  await page.evaluate((t) => window.__lectorium!.debug!.navigateTo(t), target)
-  await page.waitForURL(`**${target}`, { timeout: 10_000 })
+  if (url.endsWith(route) || url.includes(`${route}?`)) return
+  await page.evaluate((t) => window.__lectorium!.debug!.navigateTo(t), route)
+  await page.waitForURL(`**${route}`, { timeout: 10_000 })
 }
 
 /* --------------------------- the spec ------------------------------ */
