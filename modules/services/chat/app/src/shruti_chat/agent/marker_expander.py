@@ -394,7 +394,23 @@ class MarkerExpander:
         # even if the LLM forgot to put the marker on its own line.
         # No trailing padding — surrounding LLM prose supplies its own
         # newlines; doubling them produced 3-4 blank lines visually.
-        body = "\n".join(f"> {s.strip()}" for s in picked if s.strip())
-        if not body:
+        #
+        # Each sentence may itself contain newlines (purports embed
+        # multi-line shloka quotations like "*мāṁ ча йо ’вйабхичāреṇа\n
+        # бхакти-йогена севате..."). CommonMark requires `> ` on EVERY
+        # line of a blockquote — so we prefix every internal line of
+        # every picked sentence, not just the first. Empty internal
+        # lines become bare `>` so the blockquote stays continuous
+        # across stanza breaks.
+        rendered: list[str] = []
+        for sent in picked:
+            sent = sent.strip()
+            if not sent:
+                continue
+            for line in sent.split("\n"):
+                stripped = line.strip()
+                rendered.append(f"> {stripped}" if stripped else ">")
+        if not rendered:
             return ""
+        body = "\n".join(rendered)
         return f"\n{body}\n>\n> — {attribution}"
