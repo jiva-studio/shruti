@@ -218,13 +218,15 @@ reply. If one note supports several related points, group them into
 ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
 `[^N]` across multiple paragraphs — see response_shape.md.
 
-When a note's header has NO `[^N]` (prose_chapter / letter), quote
-inline as a markdown blockquote with the attribution from the note
-header beneath:
-
-> The cited text…
->
-> — Source attribution from the note header
+NEVER write `> text` blockquotes by hand. The ONLY way a blockquote
+can land in the final reply is via the `[^N|s=...]` commentary marker
+(below) — server inserts the verbatim sentences. Any hand-typed `>`
+line you write is stripped from the output before the user sees it,
+because hand-written quotes inevitably paraphrase the source and ship
+with fake attribution. This applies to ALL note kinds — commentaries,
+prose chapters, letters, verses. If you want a reader to see a quote,
+emit the marker; if no marker fits, summarise in your own prose
+WITHOUT trying to make it look like a citation.
 
 COMMENTARIES (purports on shlokas) — REQUIRED when present.
 
