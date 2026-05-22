@@ -162,13 +162,35 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # on the client renders the address; the LLM doesn't need
             # to see it in the note header.
             header = f"[^{ref}]"
+        elif note_type == "commentary":
+            # Commentary notes show sentence-indexed body so the LLM
+            # can pick what to quote via `[^N|s=0,2]`. Author goes in
+            # the header so multiple authors' purports on the same
+            # verse are distinguishable. The marker expander pulls
+            # the picked sentences verbatim from alias storage —
+            # neither the LLM nor any prompt instruction can fabricate
+            # a quote that isn't really there.
+            author = meta.get("author_name") or meta.get("author_id") or ""
+            tag = (
+                f"{attribution} — комментарий, {author}"
+                if author and attribution
+                else (attribution and f"{attribution} — комментарий")
+                or "комментарий"
+            )
+            header = f"[^{ref}] {tag}".rstrip()
+            sentences = meta.get("sentences") or []
+            if isinstance(sentences, list) and sentences:
+                indexed = "\n".join(
+                    f"[s={i}] {s}" for i, s in enumerate(sentences)
+                )
+                return f"{header}\n{indexed}".rstrip()
         else:
             # Lecture fragment or whole-track card — title is natural
             # language, safe to keep adjacent.
             header = f"[^{ref}] {attribution}".rstrip()
     else:
-        # commentary / prose_chapter / letter — addr_label drives the
-        # markdown blockquote attribution downstream.
+        # prose_chapter / letter — addr_label drives the markdown
+        # blockquote attribution downstream.
         header = attribution
 
     return f"{header}\n{text}".rstrip() if header else text
@@ -196,13 +218,52 @@ reply. If one note supports several related points, group them into
 ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
 `[^N]` across multiple paragraphs — see response_shape.md.
 
-When a note's header has NO `[^N]` (commentary / prose_chapter /
-letter), quote inline as a markdown blockquote with attribution
-beneath:
+NEVER write `> text` blockquotes by hand. The ONLY way a blockquote
+can land in the final reply is via the `[^N|s=...]` commentary marker
+(below) — server inserts the verbatim sentences. Any hand-typed `>`
+line you write is stripped from the output before the user sees it,
+because hand-written quotes inevitably paraphrase the source and ship
+with fake attribution. This applies to ALL note kinds — commentaries,
+prose chapters, letters, verses. If you want a reader to see a quote,
+emit the marker; if no marker fits, summarise in your own prose
+WITHOUT trying to make it look like a citation.
 
-> The cited text…
->
-> — Source attribution from the note header (e.g. "BG 2.13, purport")
+COMMENTARIES (purports on shlokas) — REQUIRED when present.
+
+The notes you got may include `commentary` entries. They look like this:
+
+  [^7] БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада
+  [s=0] Каждое живое существо, воплотившееся в материальном теле…
+  [s=1] Однако сама душа при этом остаётся неизменной.
+  [s=2] После смерти тела индивидуальная душа меняет его на другое…
+
+When the user is asking about a shloka (or about a topic and a
+commentary note IS in the research notes), you MUST surface at least
+one purport excerpt by emitting `[^7|s=0,1]` on its OWN line in your
+prose. The server pulls sentences 0 and 1 VERBATIM and renders them
+as a markdown blockquote with the author attribution from the note
+header. You do NOT type the `>` characters, you do NOT type the
+quoted text — you only emit the marker with the sentence indices
+most relevant to the user's question.
+
+Why required: the LLM can't write purport text in a way that's actually
+faithful (it paraphrases). Surfacing the author's own words via this
+marker is the ONLY way the user gets authentic scriptural commentary.
+Skipping it on a verse-related answer means the user reads only your
+prose with lecture cites and never sees the canonical purport — which
+is what they asked for when they mention a shloka.
+
+  - Pick 1-3 sentence indices most directly addressing the question.
+  - `[^7]` alone (no `|s=...`) defaults to the first 2 sentences.
+  - `[^7|s=99]` (out of range) renders nothing — verify indices
+    against the `[s=…]` markers shown in the note.
+  - Multiple purports on the same verse from different authors →
+    emit one `[^N|s=…]` per author, on separate lines, so each renders
+    as its own blockquote.
+
+Do NOT compose `> text` blockquotes by hand for commentary — there is
+NO way to do it correctly, since you'd be writing the quoted text
+yourself. Only the `[^N|s=...]` marker produces authentic quotes.
 
 NEVER fabricate refs. NEVER invent track_ids or verse addresses.
 

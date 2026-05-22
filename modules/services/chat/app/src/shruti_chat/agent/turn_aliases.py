@@ -72,8 +72,30 @@ class VerseRef:
     addr_label: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class CommentaryRef:
+    """The real-library metadata behind one integer alias for a commentary
+    (purport / tika) chunk.
+
+    Sentences is the pre-split body of the chunk: when the LLM emits
+    `[^N|s=0,2]` the marker expander pulls those sentences verbatim and
+    builds a markdown blockquote with `author_name + addr_label` as
+    attribution. The split happens once at envelope-mint time so the
+    expander stays a pure lookup with no parsing surprises.
+
+    addr_label is the human address ("БГ 2.13"); author_name is the
+    resolved author full name from catalog (or None if lookup missed).
+    """
+
+    item_id: str
+    segment_index: int
+    addr_label: str
+    author_name: str | None
+    sentences: tuple[str, ...]
+
+
 # Any kind of reference an integer alias may resolve to.
-AliasRef = ChunkRef | VerseRef
+AliasRef = ChunkRef | VerseRef | CommentaryRef
 
 
 class TurnAliasMap:
@@ -120,6 +142,29 @@ class TurnAliasMap:
         get_track / propose_card targets). No timestamps."""
         n = self._alloc_ref()
         self._chunks[n] = ChunkRef(track_id=track_id)
+        return n
+
+    def alias_commentary(
+        self,
+        item_id: str,
+        segment_index: int,
+        *,
+        addr_label: str,
+        author_name: str | None,
+        sentences: list[str],
+    ) -> int:
+        """Mint an alias for a commentary (purport / tika) chunk. The LLM
+        cites it via `[^N|s=...]`; the marker expander unfolds N into a
+        markdown blockquote with the picked sentences pulled verbatim
+        from `sentences` and attributed via `author_name + addr_label`."""
+        n = self._alloc_ref()
+        self._chunks[n] = CommentaryRef(
+            item_id=item_id,
+            segment_index=int(segment_index or 0),
+            addr_label=addr_label,
+            author_name=author_name,
+            sentences=tuple(sentences),
+        )
         return n
 
     def alias_verse(
@@ -184,6 +229,18 @@ class TurnAliasMap:
                     entry["end_ms"] = ref.end_ms
             elif isinstance(ref, VerseRef):
                 entry = {"kind": "verse", "source_id": ref.source_id, "tokens": ref.tokens}
+            elif isinstance(ref, CommentaryRef):
+                # Commentary alias is server-side only: the LLM picks
+                # sentences via `[^N|s=...]` and the expander inlines them
+                # as markdown blockquote, so the client never needs the
+                # raw `sentences` list. Persist enough so a multi-turn
+                # client echoing this map back keeps the integer valid
+                # (item_id + segment_index suffice for cache lookup).
+                entry = {
+                    "kind": "commentary",
+                    "item_id": ref.item_id,
+                    "segment_index": ref.segment_index,
+                }
             else:  # pragma: no cover — guarded by AliasRef union
                 continue
             out[str(n)] = entry
