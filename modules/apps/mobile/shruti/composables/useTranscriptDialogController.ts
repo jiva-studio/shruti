@@ -1,13 +1,5 @@
-import {
-  computed,
-  nextTick,
-  ref,
-  watch,
-  type ComputedRef,
-  type MaybeRefOrGetter,
-  type Ref,
-} from "vue"
-import type { LanguageCode, NoteId } from "@lib/domain/core.js"
+import { computed, ref, watch, type ComputedRef, type MaybeRefOrGetter, type Ref } from "vue"
+import type { LanguageCode } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import type { NoteShareContext } from "@lib/application/formatNoteShare.js"
 import { useShruti } from "@shruti/shruti.js"
@@ -28,9 +20,13 @@ import { useTranscriptHydration } from "./transcript/useTranscriptHydration.js"
 import { useTranscriptLoader } from "./transcript/useTranscriptLoader.js"
 import { useTranscriptSelectionActions } from "./transcript/useTranscriptSelectionActions.js"
 import type {
+  ExistingNoteSelection,
+  NoteTappedEvent,
+  TextSelectedEvent,
   UiTranscriptBlocksGroup,
   UiTranscriptLanguage,
 } from "@ui/features/transcript/index.js"
+import type { SelectionActionEvent } from "./transcript/useTranscriptSelectionActions.js"
 
 export interface TranscriptDialogState {
   readonly isOpen: Ref<boolean>
@@ -53,15 +49,21 @@ export interface TranscriptDialogState {
    * only make sense when there's a live `position`.
    */
   readonly mirrorsActivePlayer: ComputedRef<boolean>
+  /**
+   * Live drag-select payload — set by `onTextSelected`, cleared on
+   * popover action/dismiss. `App.vue` binds this to the sibling
+   * `TranscriptSelectionPopover.selection` prop (see App.vue for the
+   * rationale behind the sibling-mount design).
+   */
+  readonly lastTextSelectedEvent: Ref<TextSelectedEvent | undefined>
+  /** Tap-on-existing-highlight payload. Same lifecycle as `lastTextSelectedEvent`. */
+  readonly lastNoteTappedEvent: Ref<ExistingNoteSelection | undefined>
   onClose(): void
   onSeek(positionMs: number): void
-  onSelectionAction(action: {
-    action: "copy" | "bookmark" | "share" | "delete" | "ask"
-    text: string
-    timeStart: number
-    timeEnd: number
-    noteIds: readonly NoteId[]
-  }): Promise<void>
+  onTextSelected(event: TextSelectedEvent): void
+  onNoteTapped(event: NoteTappedEvent): void
+  onSelectionAction(event: SelectionActionEvent): Promise<void>
+  onSelectionDismissed(): void
   onPickStart(): void
 }
 
@@ -85,6 +87,13 @@ export function useTranscriptDialogController(
    * on re-open of the same transcript.
    */
   const notesForTrack = ref<readonly Note[]>([])
+  // Selection state for the popover that lives at App.vue level as a
+  // sibling of TranscriptDialog. Drag-select fills `lastTextSelectedEvent`;
+  // tapping an existing highlight fills `lastNoteTappedEvent`. Setting
+  // either one to `undefined` closes the popover (the popover's watcher
+  // collapses to `isOpen=false`).
+  const lastTextSelectedEvent = ref<TextSelectedEvent>()
+  const lastNoteTappedEvent = ref<ExistingNoteSelection>()
   useTranscriptSystemBars()
 
   // Repos are resolved lazily — at app root the controller is constructed
@@ -193,26 +202,7 @@ export function useTranscriptDialogController(
         // which the card interprets as "fall back to static i18n").
         void chatStore.requestSuggestions(focusMessageId, focus)
         chatStore.requestInputFocus()
-        // Close the transcript modal BEFORE navigating to chat. Just
-        // calling `transcriptStore.close()` was unreliable — IonModal's
-        // `:is-open=false` binding doesn't always run the dismiss when
-        // a route push is queued behind it, leaving the modal stuck on
-        // top of the chat tab in a broken "no transcript" state. Belt
-        // and braces: flip the store first (state stays consistent),
-        // then query the live <ion-modal> and await its imperative
-        // dismiss() so we know it's actually gone before navigation.
         transcriptStore.close()
-        await nextTick()
-        const liveModal = document.querySelector("ion-modal.transcript-dialog") as
-          | (HTMLElement & { dismiss?: () => Promise<void> })
-          | null
-        if (liveModal && typeof liveModal.dismiss === "function") {
-          try {
-            await liveModal.dismiss()
-          } catch {
-            // Already dismissing / dismissed — nothing to do.
-          }
-        }
         await router.push({ name: "chat-session", params: { sessionId } })
       } catch (err) {
         console.warn("[transcript] ask-sadhu dispatch failed:", err)
@@ -311,6 +301,33 @@ export function useTranscriptDialogController(
     void player.seek(Math.round(positionMs))
   }
 
+  // Selection lifecycle. The two events are mutually exclusive — opening
+  // one always clears the other — so the popover's `selection`/`existing`
+  // props never both light up at once.
+  function onTextSelected(event: TextSelectedEvent): void {
+    lastNoteTappedEvent.value = undefined
+    lastTextSelectedEvent.value = event
+  }
+
+  function onNoteTapped(event: NoteTappedEvent): void {
+    lastTextSelectedEvent.value = undefined
+    lastNoteTappedEvent.value = { noteIds: event.noteIds, event: event.event }
+  }
+
+  async function onSelectionAction(event: SelectionActionEvent): Promise<void> {
+    // Clear refs first — that flips the popover to `isOpen=false`
+    // immediately, so its dismiss animation runs in parallel with the
+    // action's async work (DB write for bookmark, chat session for ask).
+    lastTextSelectedEvent.value = undefined
+    lastNoteTappedEvent.value = undefined
+    await selectionActions.perform(event)
+  }
+
+  function onSelectionDismissed(): void {
+    lastTextSelectedEvent.value = undefined
+    lastNoteTappedEvent.value = undefined
+  }
+
   function onPickStart(): void {
     void app.haptics.impact("light")
   }
@@ -331,9 +348,14 @@ export function useTranscriptDialogController(
     highlightCurrentSentence,
     autoScrollCfg,
     mirrorsActivePlayer,
+    lastTextSelectedEvent,
+    lastNoteTappedEvent,
     onClose,
     onSeek,
-    onSelectionAction: (event) => selectionActions.perform(event),
+    onTextSelected,
+    onNoteTapped,
+    onSelectionAction,
+    onSelectionDismissed,
     onPickStart,
   }
 }

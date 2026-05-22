@@ -59,6 +59,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
+import { useNotesInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
@@ -67,24 +68,6 @@ import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
 import { useCitationSnippet } from "../composables/useCitationSnippet.js"
-
-/* -----------------------------------------------------------------------
- * Single-active coordinator (DOM-based)
- * -----------------------------------------------------------------------
- * Only one chip plays at a time. When the current chip's <audio> starts,
- * sweep the DOM and pause every OTHER `<audio>` inside a `.citation-chip`.
- * DOM-based instead of a module-scope pauser registry because:
- *   - Vue re-mounts chips on every streaming bubble update — a saved
- *     `pauseSelf` closure would point at a stale audioEl.
- *   - Vite HMR resets module-level state between edits.
- * Cost is microseconds even with hundreds of chips. */
-function pauseOtherChipAudios(self: HTMLAudioElement | null): void {
-  if (typeof document === "undefined") return
-  const all = document.querySelectorAll<HTMLAudioElement>(".citation-chip audio")
-  for (const el of all) {
-    if (el !== self && !el.paused) el.pause()
-  }
-}
 
 const props = defineProps<{
   trackId: string
@@ -106,8 +89,23 @@ const studioHandoff = useStudioHandoffStore()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
+// Cross-player coordinator: registering `pauseSelf` here makes this
+// chip pause when ANY other inline player (other chip, focus card,
+// main lecture player) calls notifyPlaying — and vice versa via the
+// notifyPlaying call in onPlay below. Replaces the previous DOM-sweep
+// pause-other-chips approach which only paused sibling chips and
+// left the focus card / main player running in parallel.
+const inline = useNotesInlineAudio()
 
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
+
+function pauseSelf(): void {
+  const el = audioEl.value
+  if (!el) return
+  el.pause()
+}
+
+inline.registerPauser(pauseSelf)
 
 const isPlaying = ref(false)
 const isPreparing = ref(false)
@@ -349,7 +347,7 @@ function onPointerCancel(): void {
 
 function onPlay(): void {
   isPlaying.value = true
-  pauseOtherChipAudios(audioEl.value)
+  inline.notifyPlaying(pauseSelf)
 }
 
 function onPause(): void {

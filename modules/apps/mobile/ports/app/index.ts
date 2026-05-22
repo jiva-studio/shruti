@@ -41,6 +41,7 @@ export type {
   ChatTurn,
   ChatVersePayloadWire,
   ChatSharePdfItemPayload,
+  ResearchSourceKind,
   StreamChatOptions,
 } from "./chatStreamClient.js"
 export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"

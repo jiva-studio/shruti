@@ -22,6 +22,7 @@
       @skip-forward="onSkipForward"
     />
     <TranscriptDialog
+      ref="transcriptDialogRef"
       v-model:open="dialog.isOpen.value"
       v-model:active-languages="activeLanguagesModel"
       :block-groups="dialog.blockGroups.value"
@@ -42,9 +43,24 @@
       :error-message="dialog.error.value"
       :has-no-transcripts="dialog.hasNoTranscripts.value"
       @seek="dialog.onSeek"
-      @selection-action="dialog.onSelectionAction"
+      @text-selected="dialog.onTextSelected"
+      @note-tapped="dialog.onNoteTapped"
       @pick-start="dialog.onPickStart"
       @close="dialog.onClose"
+    />
+    <!--
+      Selection popover is mounted as a SIBLING of TranscriptDialog (not
+      inside it). When the dialog dismisses, its child tree is torn down
+      synchronously — if the popover lived in there mid-animation, Vue
+      tried to insertBefore into an already-gone parent and threw,
+      leaving the modal half-open on "no transcripts" state. Sibling
+      mount lets each overlay manage its own lifecycle.
+    -->
+    <TranscriptSelectionPopover
+      :selection="dialog.lastTextSelectedEvent.value"
+      :existing="dialog.lastNoteTappedEvent.value"
+      @action="onSelectionPopoverAction"
+      @dismissed="onSelectionPopoverDismissed"
     />
     <!--
       App-level paywall: a single SubscriptionDialog instance shared by
@@ -68,12 +84,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount } from "vue"
-import { useRoute } from "vue-router"
+import { computed, onMounted, onBeforeUnmount, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
+import router from "@shruti/router/index.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { SubscriptionDialog } from "@ui/features/settings/index.js"
-import { TranscriptDialog } from "@ui/features/transcript/index.js"
+import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
+import type { SelectionActionEvent } from "@shruti/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@shruti/stores/useOverlaysStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -96,7 +113,14 @@ import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudi
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
-const route = useRoute()
+// Use the imported router singleton's reactive `currentRoute`, not
+// `useRoute()`. In Vite dev the inject('route location') symbol can be
+// unresolved at App's setup (router.isReady() fires before the provide
+// chain is fully wired in the browser build) — useRoute() then returns
+// a plain `undefined` (not a ref), so the `floatingPlayerHidden`
+// computed never reactively picks up later route changes. The
+// module-singleton router always exposes the same `currentRoute` ref.
+const currentRoute = router.currentRoute
 const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const tutorial = useTutorialStore()
@@ -128,13 +152,7 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (isKeyboardOpen.value) return true
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
-  // Defensive `?.` — in Vite dev the route injection can briefly be
-  // undefined on first render (router.isReady() fires before App's
-  // setup completes injection lookup, somehow). Without this, the
-  // computed throws, the FloatingPlayer never renders, and the
-  // browser-dev pane looks dead. Mobile (Capacitor) doesn't hit
-  // this — provide chain is synchronous through to mount.
-  const routeName = route?.name
+  const routeName = currentRoute.value.name
   if (routeName === "chat" || routeName === "chat-session") return true
   return false
 })
@@ -175,6 +193,22 @@ const activeLanguagesModel = computed<string[]>({
     dialog.activeLanguages.value = next
   },
 })
+
+// Template ref to the dialog so we can drop the browser's native
+// selection range after the sibling popover finishes — the drag-select
+// highlight otherwise lingers on the transcript text. The controller
+// handles state cleanup (selection refs), the dialog handles DOM.
+const transcriptDialogRef = useTemplateRef<{ clearSelection: () => void }>("transcriptDialogRef")
+
+function onSelectionPopoverAction(payload: SelectionActionEvent): void {
+  void dialog.onSelectionAction(payload)
+  transcriptDialogRef.value?.clearSelection()
+}
+
+function onSelectionPopoverDismissed(): void {
+  dialog.onSelectionDismissed()
+  transcriptDialogRef.value?.clearSelection()
+}
 
 async function onTogglePause(): Promise<void> {
   await player.togglePause()

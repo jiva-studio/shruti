@@ -20,7 +20,6 @@
         :style="{ height: h + '%' }"
       />
     </div>
-    <span class="range-label">{{ rangeLabel }}</span>
     <audio
       ref="audioEl"
       preload="none"
@@ -84,10 +83,6 @@ const peaks = computed<number[]>(() => buildPlaceholderPeaks(props.messageId))
 const progressFraction = computed(() => {
   if (durationMs.value <= 0) return 0
   return Math.min(1, Math.max(0, positionMs.value / durationMs.value))
-})
-
-const rangeLabel = computed(() => {
-  return `${formatMs(props.startMs)}–${formatMs(props.endMs)}`
 })
 
 let cachedUrl: string | null = null
@@ -190,13 +185,6 @@ onBeforeUnmount(() => {
   audioEl.value?.pause()
 })
 
-function formatMs(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-}
-
 function buildPlaceholderPeaks(seed: string): number[] {
   const rand = mulberry32(hashStringTo32(seed) || 1)
   const out: number[] = []
@@ -292,13 +280,5 @@ function mulberry32(seed: number): () => number {
 
 .bar.is-played {
   background: var(--ion-color-primary);
-}
-
-.range-label {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--ion-color-medium);
-  letter-spacing: 0.02em;
 }
 </style>

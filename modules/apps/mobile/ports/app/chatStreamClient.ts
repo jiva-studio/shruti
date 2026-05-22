@@ -95,6 +95,10 @@ export interface ChatTurn {
   >
 }
 
+/** Discriminator on `research_source` events — what kind of corpus
+ *  item the research pipeline is inspecting right now. */
+export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
+
 /** Cleanly-decoded SSE event the stream client yields — v1 protocol.
  *  Negotiated via `X-Chat-Protocol-Version: 1` request header. The
  *  variants track the wire-level event names; consumers pattern-match
@@ -109,6 +113,23 @@ export type ChatStreamEvent =
       readonly params?: Readonly<Record<string, string | number>>
     }
   | { readonly type: "action"; readonly payload: ChatActionPayload }
+  /** Sub-query the research pipeline is about to investigate — emitted
+   *  as `query_expander` / `_regenerate_queries` yields its diversified
+   *  list. Ephemeral: rendered live under the streaming bubble, cleared
+   *  the moment prose deltas start landing. */
+  | { readonly type: "research_question"; readonly question: string }
+  /** A source the pipeline is inspecting right now (verse, lecture
+   *  chunk, library doc). Emitted BEFORE ranking/dedup so the user
+   *  sees activity in real-time. Server does NOT dedup — client dedups
+   *  by `id`. Wire `kind` field is renamed to `sourceKind` on the
+   *  decoded shape to avoid clashing with the `kind` discriminator
+   *  used by ActionPayload. */
+  | {
+      readonly type: "research_source"
+      readonly sourceKind: ResearchSourceKind
+      readonly id: string
+      readonly label: string
+    }
   | {
       readonly type: "done"
       /** Alias map for the chip markers in this turn's accumulated

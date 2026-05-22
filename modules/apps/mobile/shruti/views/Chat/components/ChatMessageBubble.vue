@@ -6,17 +6,9 @@
     :focus="message.focus"
     :suggestions="focusSuggestions"
     :suggestions-loading="focusLoading"
-    @pick-suggestion="$emit('pick-suggestion', $event)"
+    @send-suggestion="$emit('send-suggestion', $event)"
   />
-  <div
-    v-else
-    :class="[
-      'bubble-row',
-      message.role,
-      { 'streaming-placeholder': message.role === 'assistant' && message.streaming },
-    ]"
-    :data-message-id="message.id"
-  >
+  <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
       <template v-if="message.role === 'user'">
         <span class="user-text">{{ message.content }}</span>
@@ -40,6 +32,8 @@
           v-if="message.streaming && message.content.length === 0"
           :status-key="message.statusKey"
           :params="message.statusParams"
+          :research-questions="message.researchQuestions"
+          :research-sources="message.researchSources"
         />
         <template v-else>
           <template v-for="(token, idx) in tokens" :key="idx">
@@ -127,24 +121,21 @@
           <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
             errorSuffix
           }}</span>
-          <button
-            v-if="truncatedRetryVisible"
-            type="button"
-            class="btn primary retry truncated-retry"
-            :disabled="!canRetry"
-            @click="onRetry"
-          >
-            {{ t("chat.actionRetry") }}
-          </button>
         </template>
       </template>
     </div>
-    <ChatMessageActions v-if="showActions" :markdown="exportMarkdown" />
+    <ChatMessageActions
+      v-if="showActions"
+      :markdown="exportMarkdown"
+      :retry-visible="truncatedRetryVisible"
+      :retry-disabled="!canRetry"
+      @retry="onRetry"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue"
+import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import router from "@shruti/router/index.js"
 import { messageToMarkdown, parseChatMarkers } from "../composables/useMarkerParser.js"
@@ -195,8 +186,10 @@ const emit = defineEmits<{
   ]
   /** User tapped Retry on a failed/truncated assistant bubble. */
   retry: [messageId: string]
-  /** Forwarded up from ChatFocusCard's suggestion chip taps. */
-  "pick-suggestion": [text: string]
+  /** Forwarded up from ChatFocusCard's suggestion chip taps. The
+   *  parent dispatches it directly to `onSend` (focus chips are
+   *  fire-and-send, no input-bar detour). */
+  "send-suggestion": [text: string]
 }>()
 const chat = useChatStore()
 const verseBody = useVerseBodyStore()
@@ -224,7 +217,12 @@ const exportMarkdown = computed<string>(() => {
   })
 })
 
-const showActions = computed<boolean>(() => exportMarkdown.value.trim().length > 0)
+const showActions = computed<boolean>(
+  // Retry now lives in the actions row — keep the row visible whenever
+  // the truncated-retry predicate fires, even if the bubble has no
+  // exportable markdown yet (edge case: empty truncated stream).
+  () => exportMarkdown.value.trim().length > 0 || truncatedRetryVisible.value
+)
 
 const errorSuffix = computed(() => {
   const e = props.message.error
@@ -243,33 +241,41 @@ const errorSuffix = computed(() => {
 
 /** Tick once per second while a `rate_limited` countdown is on the
  *  screen. Used to recompute `failedText` (counts down "in N s") and
- *  `failedRetryEnabled` (flips at the deadline). Doesn't fire when
- *  there's no failed bubble — see the onMounted guard. */
+ *  `failedRetryEnabled` (flips at the deadline). */
 const now = ref(Date.now())
 let tickHandle: ReturnType<typeof setInterval> | null = null
 
-onMounted(() => {
-  const e = props.message.error
-  if (e && e.kind === "failed" && typeof e.retryAfterAt === "number") {
+function stopTick(): void {
+  if (tickHandle !== null) {
+    clearInterval(tickHandle)
+    tickHandle = null
+  }
+}
+
+// Drive the tick off `error.retryAfterAt`. Watching (not onMounted) so
+// a bubble that transitions from streaming → failed AFTER mount — e.g.
+// the in-flight placeholder converted to a `rate_limited` failure by
+// `applyTurnEvent('error')` in the store — still gets a live countdown.
+watch(
+  () => {
+    const e = props.message.error
+    return e?.kind === "failed" && typeof e.retryAfterAt === "number" ? e.retryAfterAt : null
+  },
+  (retryAfterAt) => {
+    stopTick()
+    if (retryAfterAt === null) return
+    now.value = Date.now()
     tickHandle = setInterval(() => {
       now.value = Date.now()
       // Stop ticking once the deadline passes — the button becomes
       // enabled and the wording stops referring to time.
-      if (
-        typeof e.retryAfterAt === "number" &&
-        now.value >= e.retryAfterAt &&
-        tickHandle !== null
-      ) {
-        clearInterval(tickHandle)
-        tickHandle = null
-      }
+      if (now.value >= retryAfterAt) stopTick()
     }, 1000)
-  }
-})
+  },
+  { immediate: true }
+)
 
-onBeforeUnmount(() => {
-  if (tickHandle !== null) clearInterval(tickHandle)
-})
+onBeforeUnmount(stopTick)
 
 const failedKind = computed<boolean>(() => {
   const e = props.message.error
@@ -442,6 +448,15 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   display: flex;
   margin: 6px 0;
   padding: 0 12px;
+  /* `scrollIntoView({ block: "start" })` aligns the row's top edge with
+   * viewport y = scroll-margin-top (IonContent is fullscreen so the
+   * scroll-port top sits at viewport y=0). Land the row right below
+   * the 52px action row: safe-area + 4 (top pad) + 44 (buttons) + 4
+   * (bottom pad). The fade gradient extends another 28px past this,
+   * softly masking the bubble's top edge — that's the designed look
+   * (content "emerges" from under the header) rather than parking the
+   * bubble below the fade with visible empty space. */
+  scroll-margin-top: calc(var(--ion-safe-area-top, 0px) + 56px);
 }
 
 .bubble-row.user {
@@ -457,27 +472,6 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
    * under the whole message. */
   flex-direction: column;
   align-items: flex-start;
-}
-
-/* While the assistant placeholder is streaming, reserve enough vertical
- * room below the user's just-sent message that the controller's
- * `scrollMessageToTop` can actually move it to the top of the viewport.
- * Without this the placeholder is only ~50px tall (just the thinking
- * dots) and there's nothing to scroll into, so the user message stays
- * pinned to the bottom of the visible area.
- *
- * `svh` (small viewport height) matches the layout the keyboard leaves
- * us with on mobile — the keyboard doesn't push this bubble off-screen.
- * The 200px deduction accounts for the fixed-top fade (~56px), the
- * input bar (~64px) and ~80px safety margin for OS gestures and the
- * just-sent user bubble.
- *
- * Once the turn is finalised, the store swaps the streaming placeholder
- * out for the real message (`m.streaming` becomes undefined), the class
- * binding drops, and the rule disappears — no permanent empty space
- * below the conversation. */
-.bubble-row.streaming-placeholder {
-  min-height: calc(100svh - 200px);
 }
 
 .bubble {
@@ -613,13 +607,5 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 .bubble.assistant .btn.primary.retry:disabled {
   opacity: 0.55;
   cursor: default;
-}
-
-/* Standalone Retry under a truncated-suffix — no danger-tinted box,
- * just the button on its own line. Visually quieter than the failed
- * card because the user still has the partial answer to read above. */
-.bubble.assistant .btn.primary.retry.truncated-retry {
-  align-self: flex-start;
-  margin-top: 6px;
 }
 </style>
