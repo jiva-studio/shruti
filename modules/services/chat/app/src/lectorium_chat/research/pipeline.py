@@ -179,6 +179,9 @@ async def _fetch_refs(
         envelopes: list[dict[str, Any]] = []
         for c in chunks:
             env = library_to_envelope(c, alias_map=alias_map, score=canonical_score)
+            # Same shape as fanout's _library_dedup_key so merge_fanout-style
+            # callers can dedup these alongside fanout output.
+            env["_dedup_key"] = (c.item_kind, c.item_id, c.segment_index)
             envelopes.append(env)
         return envelopes
 
@@ -492,6 +495,36 @@ async def _research_path(
     else:
         boost_ids = boost_ids or set()
 
+    # Explicit-fetch attribution-flagged refs so they're GUARANTEED in
+    # the candidate pool. Library ANN top-K is narrow (8 per query across
+    # all library kinds combined); a short verse-chunk under-scores against
+    # long queries and may never enter the pool by cosine alone — boost
+    # ranks within the pool, it can't put a chunk INTO the pool. By
+    # fetching topic-attribution refs directly (same path SHORT uses for
+    # question refs), the curator's "this is relevant" decision survives
+    # past the ANN bottleneck. Score 0.75 sits below SHORT's authoritative
+    # 0.85 (topic is a weaker signal than question) but above any sensible
+    # ANN ranking, so these chunks naturally surface in top-20.
+    topic_refs_fetched: list[dict[str, Any]] = []
+    if topic_matches:
+        topic_refs = _dedupe_refs(
+            list(chain.from_iterable(m.refs for m in topic_matches))
+        )
+        topic_refs_fetched = await _safe(
+            lambda: _fetch_refs(
+                topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+                lang=lang, canonical_score=0.75, on_event=on_event,
+            ),
+            default=[], timeout=TIMEOUT_FETCH_REFS_S,
+            name="fetch_topic_refs", request_id=request_id,
+        )
+        log.info(
+            "long_path_topic_refs_fetched",
+            request_id=request_id,
+            refs=len(topic_refs),
+            envelopes=len(topic_refs_fetched),
+        )
+
     # Step C: fanout with topic-boost, coverage gate, up to N rounds.
     accumulated = FanoutResult()
     queries = expansion.queries or [question]
@@ -534,7 +567,26 @@ async def _research_path(
             if not queries:
                 break
 
-    top_chunks = accumulated.chunks[:20]
+    # Merge topic-fetched refs with fanout candidates, dedup by _dedup_key,
+    # take top-20 by score. Topic refs have score=0.75; most fanout chunks
+    # land 0.45-0.75, so attribution-flagged items naturally float to the
+    # top while still letting strongly-matching lectures surface.
+    merged_by_key: dict[tuple, dict[str, Any]] = {}
+    for env in topic_refs_fetched + list(accumulated.chunks):
+        key = env.get("_dedup_key")
+        if key is None:
+            continue
+        prev = merged_by_key.get(key)
+        prev_score = (prev or {}).get("score") or 0.0
+        env_score = env.get("score") or 0.0
+        if prev is None or prev_score < env_score:
+            merged_by_key[key] = env
+    top_chunks = sorted(
+        merged_by_key.values(),
+        key=lambda e: e.get("score") or 0.0,
+        reverse=True,
+    )[:20]
+
     commentaries = await _safe(
         lambda: expand_verses_with_commentaries(
             top_chunks,
