@@ -33,7 +33,19 @@ TOPK_PER_QUERY = 8
 # Topic-boost: added to chunk.score when item_id is referenced by a matched
 # topic-attribution. Capped at 1.0 downstream to avoid breaking score-based
 # refusal checks in the synthesizer (which expects [0, 1]).
-DEFAULT_TOPIC_BOOST = 0.15
+#
+# Per-kind dict so we can tune the lift independently: verses suffer most
+# from short-text embeddings under-scoring against long queries, so they
+# typically need a bigger nudge than lectures (which already score well).
+# Keep the dict shape even when values are equal — tuning becomes a one-
+# constant edit instead of a code change.
+BOOST_BY_KIND: dict[str, float] = {
+    "lecture":       0.30,
+    "verse":         0.30,
+    "commentary":    0.30,
+    "prose_chapter": 0.30,
+    "letter":        0.30,
+}
 
 # ---- Stage timeouts (asyncio.wait_for) -------------------------------------
 
