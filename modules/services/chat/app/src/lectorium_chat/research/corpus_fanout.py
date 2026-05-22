@@ -204,8 +204,30 @@ async def fanout_search_with_boost(
             _emit_research_source(on_event, r)
         return rows
 
-    # 3. Parallel fanout, dedup by dedup_key (keep max score).
+    # 3. Run the parallel fanout queries.
     per_query = await asyncio.gather(*(_one_query(v) for v in q_vecs))
+
+    # 4. Apply topic boost FIRST (before the relevance floor) so an
+    # attribution-flagged chunk isn't filtered out for having a low base
+    # score. A short verse-chunk under-scores against a long query and
+    # sits at ~0.30; the floor at 0.45 would silently drop it before
+    # ranking even has a chance. If the curator's attribution says
+    # "this item is relevant", we trust it past the noise floor.
+    # Per-kind dict makes per-corpus lift tunable without code change.
+    boost_map = boost_by_kind if boost_by_kind is not None else BOOST_BY_KIND
+    boosted_flags: dict[tuple, bool] = {}
+    for batch in per_query:
+        for r in batch:
+            if boost_ids:
+                iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
+                if iid in boost_ids:
+                    lift = boost_map.get(r.kind, 0.0)
+                    if lift > 0.0:
+                        r.score = min(1.0, r.score + lift)
+                        boosted_flags[r.dedup_key] = True
+
+    # 5. Dedup + relevance floor (after boost so curator-flagged chunks
+    # get a chance to clear the floor).
     deduped: dict[tuple, _RawScored] = {}
     for batch in per_query:
         for r in batch:
@@ -214,21 +236,6 @@ async def fanout_search_with_boost(
             prev = deduped.get(r.dedup_key)
             if prev is None or prev.score < r.score:
                 deduped[r.dedup_key] = r
-
-    # 4. Apply topic boost on RAW chunks (item_id directly available).
-    # Per-kind values: a short verse-chunk under-scores against long queries
-    # so it needs a bigger lift to compete with lectures in top-K; the map
-    # makes this tunable per kind without code change.
-    boost_map = boost_by_kind if boost_by_kind is not None else BOOST_BY_KIND
-    boosted_flags: dict[tuple, bool] = {}
-    if boost_ids:
-        for key, r in deduped.items():
-            iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
-            if iid in boost_ids:
-                lift = boost_map.get(r.kind, 0.0)
-                if lift > 0.0:
-                    r.score = min(1.0, r.score + lift)
-                    boosted_flags[key] = True
 
     # 5. Sort + take top-K.
     ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
