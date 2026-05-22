@@ -445,3 +445,153 @@ async def test_authoritative_carries_canonical_score():
         **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
     )
     assert result.authoritative_refs[0]["score"] == pytest.approx(0.91)
+
+
+@pytest.mark.asyncio
+async def test_on_event_emits_research_questions_short_path():
+    """SHORT path: on_event receives one research_question per non-echo
+    sub-query, and a research_source per attribution ref consulted."""
+    pool = FakePool({
+        ("ru", "question"): [
+            _row("attribution_q", 0.92, [
+                {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
+                {"ref_kind": "document", "target_id": "doc_letter_42"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(by_target={
+        ("verse", "verse_BG_2_13"): [
+            _LibChunk("verse_BG_2_13", "verse", "atma", "ru",
+                      source_id="src", tokens="2.13", addr_label="БГ 2.13"),
+        ],
+        ("document", "doc_letter_42"): [
+            _LibChunk("doc_letter_42", "letter", "...", "ru",
+                      source_id="src", tokens="", addr_label="Letter 42"),
+        ],
+    })
+    # Expansion echoes the original question once and adds two real angles —
+    # only the two should be emitted as research_question (echo filtered).
+    llm = FakeLLM(by_schema={
+        "ExpansionResult": ExpansionResult(queries=["что такое душа", "природа души", "atma"]),
+    })
+
+    events: list[tuple[str, dict]] = []
+
+    await run_research(
+        question="что такое душа", lang="ru", router_args={},
+        on_event=lambda t, d: events.append((t, d)),
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    questions = [d["question"] for t, d in events if t == "research_question"]
+    sources = [d for t, d in events if t == "research_source"]
+
+    assert questions == ["природа души", "atma"], (
+        "echo of the original question must be filtered out"
+    )
+    # Two attribution refs → two research_source events (one per ref,
+    # emitted before each DB round-trip).
+    source_ids = sorted(s["id"] for s in sources if s["id"].startswith(("verse:", "library:")))
+    assert "verse:verse_BG_2_13" in source_ids
+    assert "library:doc_letter_42" in source_ids
+    # Wire kind discriminator is correct.
+    by_id = {s["id"]: s for s in sources}
+    assert by_id["verse:verse_BG_2_13"]["kind"] == "verse"
+    assert by_id["library:doc_letter_42"]["kind"] == "library_doc"
+
+
+@pytest.mark.asyncio
+async def test_on_event_emits_research_sources_from_fanout():
+    """LONG path: corpus_fanout emits research_source per inspected raw
+    chunk (lecture / verse / library), keyed for client-side dedup."""
+    pool = FakePool({
+        ("ru", "question"): [],
+        (None, "question"): [],
+        ("ru", "topic"): [],
+    })
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[
+            _Scored(_LecChunk("track_A", 60_000, 90_000, "first words of the fragment", "ru"), 0.78),
+        ],
+        library_results=[
+            _Scored(_LibChunk("verse_X", "verse", "atma", "ru",
+                              source_id="src", tokens="2.20", addr_label="BG 2.20"), 0.71),
+            _Scored(_LibChunk("comm_Y", "commentary", "purport", "ru",
+                              source_id="src", tokens="2.20", addr_label="purport of BG 2.20",
+                              segment_index=0), 0.66),
+        ],
+    )
+    llm = FakeLLM(by_schema={
+        "ExpansionResult": ExpansionResult(queries=["вечность"]),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),
+    })
+
+    events: list[tuple[str, dict]] = []
+
+    await run_research(
+        question="природа души", lang="ru", router_args={},
+        on_event=lambda t, d: events.append((t, d)),
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    sources = [d for t, d in events if t == "research_source"]
+    by_id = {s["id"]: s for s in sources}
+
+    # Lecture chunk → kind="lecture_chunk", id includes start_ms.
+    assert "lecture:track_A:60000" in by_id
+    assert by_id["lecture:track_A:60000"]["kind"] == "lecture_chunk"
+    # Label is a snippet of the chunk text, not the opaque track_id.
+    assert "first words" in by_id["lecture:track_A:60000"]["label"]
+
+    # Verse → kind="verse", id namespaced.
+    assert "verse:verse_X" in by_id
+    assert by_id["verse:verse_X"]["kind"] == "verse"
+    assert by_id["verse:verse_X"]["label"] == "BG 2.20"
+
+    # Commentary → kind="library_doc" (panel collapses non-verse library
+    # kinds into one bucket; addr_label is the human-readable string).
+    # The id namespace is `library:<item_id>`, matching the
+    # attribution-refs path, so the client's dedup-by-id collapses a
+    # doc discovered through both code paths.
+    assert "library:comm_Y" in by_id
+    assert by_id["library:comm_Y"]["kind"] == "library_doc"
+
+
+@pytest.mark.asyncio
+async def test_on_event_no_callback_is_safe():
+    """Pipeline must run identically when on_event is omitted — the
+    research worker passes None for the legacy fallback path."""
+    pool = FakePool({("ru", "question"): []})
+    chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
+    llm = FakeLLM(by_schema={
+        "ExpansionResult": ExpansionResult(queries=["q"]),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),
+    })
+    # No on_event kwarg — just confirm it doesn't raise.
+    result = await run_research(
+        question="x", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_event_callback_exception_does_not_break_research():
+    """A misbehaving on_event must not unwind the research loop — log
+    and move on, since this is pure UI observability."""
+    pool = FakePool({("ru", "question"): []})
+    chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
+    llm = FakeLLM(by_schema={
+        "ExpansionResult": ExpansionResult(queries=["вечность"]),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),
+    })
+
+    def boom(_t: str, _d: dict) -> None:
+        raise RuntimeError("client died")
+
+    result = await run_research(
+        question="x", lang="ru", router_args={}, on_event=boom,
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+    # Research completes despite the callback raising.
+    assert result is not None

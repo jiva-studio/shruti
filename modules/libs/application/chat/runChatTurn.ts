@@ -14,6 +14,7 @@ import type {
   IChatStreamClient,
   IChatTitleService,
   ChatTurn,
+  ResearchSourceKind,
 } from "@ports/app/index.js"
 import type {
   FocusFragmentPayload,
@@ -57,6 +58,20 @@ export type RunChatTurnEvent =
       readonly sanskrit: string
       readonly transliteration: string
       readonly translation: { readonly [lang: string]: string }
+    }
+  /** Sub-query the research pipeline just generated — append to the
+   *  live "investigating" list under the streaming bubble. The store
+   *  does not persist these: when the prose deltas start landing the
+   *  status pill (and this list) collapse together. */
+  | { readonly kind: "research-question"; readonly question: string }
+  /** A source the pipeline is inspecting right now. Dedup is the
+   *  store's job — keyed by `id` so the same chunk surfaced from
+   *  multiple sub-queries collapses to one chip. */
+  | {
+      readonly kind: "research-source"
+      readonly sourceKind: ResearchSourceKind
+      readonly id: string
+      readonly label: string
     }
   | { readonly kind: "finalised"; readonly message: ChatMessage }
   | {
@@ -187,6 +202,24 @@ export async function* runChatTurn(
           // i18n status label for the thinking pill. Use-case forwards
           // verbatim — the store decides whether to render it.
           yield { kind: "status", statusKey: event.key, params: event.params }
+          break
+        case "research_question":
+          // Live progress event from the research pipeline. Forwarded
+          // verbatim — the store appends to the streaming bubble's
+          // ephemeral `researchQuestions` list; nothing folded into
+          // closure state because these never end up persisted.
+          yield { kind: "research-question", question: event.question }
+          break
+        case "research_source":
+          // Live progress event — a source the pipeline is inspecting
+          // right now. Forwarded verbatim; the store dedups by `id` and
+          // drops the whole map when prose deltas start landing.
+          yield {
+            kind: "research-source",
+            sourceKind: event.sourceKind,
+            id: event.id,
+            label: event.label,
+          }
           break
         case "action": {
           // Auto-render kinds paired with inline markers: outline and

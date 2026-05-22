@@ -43,6 +43,10 @@ import type { ChatTurn } from "@ports/app/index.js"
 // `@shruti/stores/useChatStore` (the legacy path) while the
 // canonical declarations live in `@lib/domain`.
 export type ChatSession = DomainChatSession
+export type ChatResearchSource = {
+  readonly sourceKind: "verse" | "lecture_chunk" | "library_doc"
+  readonly label: string
+}
 export type ChatMessage = DomainChatMessage & {
   streaming?: boolean
   /** Ephemeral i18n status key (e.g. "searching_corpus") set on the
@@ -51,6 +55,16 @@ export type ChatMessage = DomainChatMessage & {
    *  `t(`chat.status.${statusKey}`, params)`. */
   statusKey?: string
   statusParams?: Readonly<Record<string, string | number>>
+  /** Ephemeral list of sub-queries the research pipeline generated for
+   *  this turn. Append-only during the stream, dropped when the prose
+   *  deltas start landing — same lifetime as `statusKey`. */
+  researchQuestions?: readonly string[]
+  /** Ephemeral map of sources the pipeline is inspecting right now.
+   *  Keyed by the server-supplied stable id so multiple emissions of
+   *  the same source (from different sub-queries) collapse into one
+   *  chip. Cleared with the other research-* fields on the same
+   *  trigger as `statusKey`. */
+  researchSources?: ReadonlyMap<string, ChatResearchSource>
 }
 export type ActionPayload = ChatActionPayload
 export type OutlinePayload = ChatOutlinePayload
@@ -125,7 +139,6 @@ export const useChatStore = defineStore("chat", () => {
   const activeSessionId = ref<string | null>(null)
   const messages = ref<ChatMessage[]>([])
   const sending = ref<boolean>(false)
-  const lastError = ref<{ code: string; message: string; retryAfter?: number } | null>(null)
   /** Session ids holding at least one proactive_state row in
    *  ready/degraded with `seen_at IS NULL`. Drives both the per-session
    *  dot in RecentSessions / history list AND the tab-level Sadhu badge
@@ -237,7 +250,6 @@ export const useChatStore = defineStore("chat", () => {
     cancelSuggestions()
     activeSessionId.value = null
     messages.value = []
-    lastError.value = null
   }
 
   /**
@@ -260,7 +272,6 @@ export const useChatStore = defineStore("chat", () => {
     const created = await repos.sessions.create({ id, title: null, trackId })
     activeSessionId.value = id
     messages.value = []
-    lastError.value = null
     sessions.value = [created, ...sessions.value.filter((s) => s.id !== id)]
     return id
   }
@@ -403,7 +414,6 @@ export const useChatStore = defineStore("chat", () => {
   ): Promise<void> {
     const clean = text.trim()
     if (!clean || sending.value) return
-    lastError.value = null
     sending.value = true
 
     const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
@@ -530,10 +540,53 @@ export const useChatStore = defineStore("chat", () => {
         // "composing_answer"). Surfaced as `statusKey` on the streaming
         // bubble so StatusPill.vue can render the localized label
         // without polling.
+        //
+        // We also clear the accumulated `researchQuestions` /
+        // `researchSources` here — each status event marks a new
+        // pipeline epoch, and stale research items would otherwise
+        // keep showing up in the ticker rotation after the server
+        // moved on (e.g. when `composing_answer` lands, the user
+        // doesn't want to keep seeing "природа buddhi" sub-queries).
         const idx = messages.value.findIndex((m) => m.streaming)
         if (idx < 0) return
         const next = [...messages.value]
-        next[idx] = { ...next[idx], statusKey: event.statusKey, statusParams: event.params }
+        next[idx] = {
+          ...next[idx],
+          statusKey: event.statusKey,
+          statusParams: event.params,
+          researchQuestions: undefined,
+          researchSources: undefined,
+        }
+        messages.value = next
+        return
+      }
+      case "research-question": {
+        // Append a sub-query the research pipeline just generated.
+        // Ephemeral — lives on the streaming bubble only; dropped on
+        // `finalised` (which replaces the whole message) or `error`
+        // (which removes the placeholder).
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const cur = messages.value[idx]
+        const next = [...messages.value]
+        next[idx] = {
+          ...cur,
+          researchQuestions: [...(cur.researchQuestions ?? []), event.question],
+        }
+        messages.value = next
+        return
+      }
+      case "research-source": {
+        // Add (or replace, last-write-wins) one inspected source.
+        // Dedup happens here — server emits per-query, multiple
+        // sub-queries inspecting the same chunk collapse into one chip.
+        const idx = messages.value.findIndex((m) => m.streaming)
+        if (idx < 0) return
+        const cur = messages.value[idx]
+        const nextMap = new Map(cur.researchSources ?? new Map())
+        nextMap.set(event.id, { sourceKind: event.sourceKind, label: event.label })
+        const next = [...messages.value]
+        next[idx] = { ...cur, researchSources: nextMap }
         messages.value = next
         return
       }
@@ -615,11 +668,6 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "error": {
-        lastError.value = {
-          code: event.code,
-          message: event.message,
-          retryAfter: event.retryAfter,
-        }
         // Convert relative `Retry-After` (seconds, only set on the 429
         // path inside chatClient.ts) into an absolute deadline at the
         // moment we receive it. Without this the bubble's countdown
@@ -931,7 +979,6 @@ export const useChatStore = defineStore("chat", () => {
     activeSessionId,
     messages,
     sending,
-    lastError,
     loadingFocusIds,
     inputFocusToken,
     unseenProactiveSessionIds,

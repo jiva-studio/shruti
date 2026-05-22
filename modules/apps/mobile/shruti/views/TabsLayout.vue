@@ -54,6 +54,18 @@ const shareJob = useShareJobStore()
 // which clears the underlying SQL `seen_at` and the derived count
 // updates automatically.
 const proactiveBadge = useProactiveInboxBadge()
+
+// Note: tapping the chat tab while on `/tabs/chat/<id>` is intentionally
+// a no-op. Ionic's default behaviour for an active-tab tap is
+// `resetTab("chat")` → `router.go(<delta>)` to walk back to the tab's
+// first entry. The `router.go(0)` patch in `router/index.ts` neutralises
+// the degenerate-zero reload bug, and the chat tab's first entry IS
+// almost always the current session (router.replace pattern in
+// onPickSession, Ask Sadhu's router.push from another tab), so the tap
+// naturally degenerates to "stay on session" — which is what the user
+// wants. An earlier version added a custom click handler to drop the
+// user on the chat home, but that's against the intent: tapping a tab
+// you're already on should not navigate away.
 </script>
 
 <style scoped>

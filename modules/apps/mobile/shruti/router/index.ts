@@ -68,6 +68,21 @@ const router = createRouter({
   routes,
 })
 
+// `@ionic/vue-router`'s `resetTab(tab)` runs when the user taps an
+// already-active tab. It looks up the FIRST entry for that tab in the
+// location history and calls `router.go(firstPos - currentPos)` to
+// walk back. If the user landed directly on a child URL (e.g.
+// `/tabs/chat/<id>` via deep link or Ask Sadhu without ever visiting
+// `/tabs/chat`), the first entry IS the current entry — delta = 0.
+// `router.go(0)` resolves to `history.go(0)`, which the browser
+// treats as a full page reload. Intercept the degenerate case so the
+// tap becomes a harmless no-op instead of nuking the SPA.
+const originalGo = router.go.bind(router)
+router.go = function patchedGo(delta: number): ReturnType<typeof originalGo> {
+  if (delta === 0) return
+  return originalGo(delta)
+}
+
 // Deep-linking guard: every non-welcome route depends on both databases
 // being open. If someone lands on /tabs/* before the Welcome view has
 // finished its initialize() cycle, bounce them to /welcome so the app

@@ -96,8 +96,12 @@ export type ActionPayload =
       readonly payload: VersePayload
     }
 
+/** Discriminator for `research_source` events — what kind of corpus
+ *  item the research pipeline is inspecting right now. */
+export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
+
 /**
- * Decoded SSE events — v1 protocol (7 types). Negotiated via the
+ * Decoded SSE events — v1 protocol (9 types). Negotiated via the
  * `X-Chat-Protocol-Version: 1` request header; server rejects with
  * 426 if absent. See backend `agent/events.py` for the contract.
  *
@@ -107,6 +111,13 @@ export type ActionPayload =
  * - `action`     widget payload — auto-render (paired with marker in
  *                delta text) or interactive (standalone card). The
  *                action event MUST arrive BEFORE its paired marker.
+ * - `research_question` / `research_source` — live progress events
+ *                from the research pipeline (sub-queries it generated,
+ *                sources it's inspecting). Additive in protocol v1:
+ *                old clients ignore them via the parser default branch.
+ *                Wire `kind` field renamed to `sourceKind` in the
+ *                decoded shape to avoid clashing with the `kind`
+ *                discriminator used by `ActionPayload`.
  * - `done`       terminal; carries alias map for next-turn round-trip
  * - `error`      terminal failure
  */
@@ -120,6 +131,13 @@ export type ChatStreamEvent =
       readonly params?: Readonly<Record<string, string | number>>
     }
   | { readonly type: "action"; readonly payload: ActionPayload }
+  | { readonly type: "research_question"; readonly question: string }
+  | {
+      readonly type: "research_source"
+      readonly sourceKind: ResearchSourceKind
+      readonly id: string
+      readonly label: string
+    }
   | { readonly type: "done"; readonly aliases?: AliasMapPayload }
   | {
       readonly type: "error"
@@ -569,9 +587,16 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     try {
       payload = JSON.parse(dataRaw) as Record<string, unknown>
     } catch {
-      // Non-JSON payload — surface as a delta with the raw text so the
-      // user at least sees something rather than a silent drop.
+      // Non-JSON payload. For `delta` we surface the raw text so the
+      // user still sees something — text-only delta is a documented
+      // fallback in the wire protocol. For any other event name a
+      // malformed payload is a server bug; log so it doesn't disappear
+      // silently in production.
       if (name === "delta") return { type: "delta", text: dataRaw }
+      console.warn("chatClient: malformed SSE event payload", {
+        event: name,
+        bytes: dataRaw.length,
+      })
       return null
     }
   }
@@ -602,6 +627,29 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
     case "action": {
       const ap = parseActionPayload(payload)
       return ap ? { type: "action", payload: ap } : null
+    }
+    case "research_question": {
+      const question = typeof payload.question === "string" ? payload.question.trim() : ""
+      if (!question) return null
+      return { type: "research_question", question }
+    }
+    case "research_source": {
+      // Wire field is `kind`; we rename to `sourceKind` on the decoded
+      // shape so it doesn't collide with the `kind` discriminator on
+      // ActionPayload.
+      const wireKind = typeof payload.kind === "string" ? payload.kind : ""
+      if (wireKind !== "verse" && wireKind !== "lecture_chunk" && wireKind !== "library_doc") {
+        return null
+      }
+      const id = typeof payload.id === "string" ? payload.id.trim() : ""
+      const label = typeof payload.label === "string" ? payload.label.trim() : ""
+      if (!id) return null
+      return {
+        type: "research_source",
+        sourceKind: wireKind as ResearchSourceKind,
+        id,
+        label,
+      }
     }
     case "error":
       return {
