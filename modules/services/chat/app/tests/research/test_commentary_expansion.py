@@ -58,6 +58,10 @@ class FakeAliasMap:
         self._verse[key] = self._counter
         return self._counter
 
+    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences):
+        self._counter += 1
+        return self._counter
+
 
 def _verse_env(source_id: str, tokens: str, *, score: float = 0.7) -> dict[str, Any]:
     return {

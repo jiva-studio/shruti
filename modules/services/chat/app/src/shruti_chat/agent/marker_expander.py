@@ -41,15 +41,24 @@ from __future__ import annotations
 
 import re
 
-from shruti_chat.agent.turn_aliases import ChunkRef, TurnAliasMap, VerseRef
+from shruti_chat.agent.turn_aliases import (
+    ChunkRef,
+    CommentaryRef,
+    TurnAliasMap,
+    VerseRef,
+)
 from shruti_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
 
 
-# Strict `[^N]` with integer N only.
-_FOOTNOTE_RE = re.compile(r"^\[\^(\d+)\]$")
+# `[^N]` with integer N, optionally `[^N|s=0,2,5]` for commentary
+# blockquote sub-selection (sentence indices into the chunk body).
+# The `|s=...` suffix is silently ignored when the alias resolves to
+# a non-commentary ref (lecture / verse) so a stray suffix on a wrong
+# ref type can't break the stream.
+_FOOTNOTE_RE = re.compile(r"^\[\^(\d+)(?:\|s=([0-9,]+))?\]$")
 
 # Catch-all `[^anything]` — non-integer string-stuffed hallucination.
 _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
@@ -234,10 +243,26 @@ class MarkerExpander:
     # ── marker expansion ───────────────────────────────────────────
 
     def _expand_marker(self, marker: str) -> str:
-        # Strict integer `[^N]`.
+        # `[^N]` or `[^N|s=…]`.
         m = _FOOTNOTE_RE.match(marker)
         if m:
-            return self._format_ref(int(m.group(1)))
+            sentence_indices: list[int] | None = None
+            if m.group(2):
+                # Parse the comma-separated list; tolerate stray empties
+                # from `[^N|s=,0,,2,]`-style sloppy input.
+                sentence_indices = []
+                for part in m.group(2).split(","):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    try:
+                        sentence_indices.append(int(part))
+                    except ValueError:
+                        # Skip non-numeric noise without breaking the
+                        # whole marker — partial sub-selection is better
+                        # than no quote at all.
+                        continue
+            return self._format_ref(int(m.group(1)), sentence_indices)
 
         # Non-integer footnote — try single-candidate recovery.
         if _FOOTNOTE_CATCH_RE.match(marker):
@@ -246,13 +271,13 @@ class MarkerExpander:
                 request_id=self._request_id,
                 marker=marker[:80],
             )
-            return self._format_ref(None)
+            return self._format_ref(None, None)
 
         # Anything else (`[action:...]`, `[followup:...]`, plain
         # bracketed text) passes through verbatim.
         return marker
 
-    def _format_ref(self, n: int | None) -> str:
+    def _format_ref(self, n: int | None, sentence_indices: list[int] | None = None) -> str:
         """Resolve alias N. If N is None or unknown, try single-
         candidate recovery (exactly one alias still unused → use it).
         Otherwise drop with diagnostic log.
@@ -305,6 +330,9 @@ class MarkerExpander:
         assert isinstance(n, int)
         self._emitted.add(n)
 
+        if isinstance(ref, CommentaryRef):
+            return self._format_commentary(ref, sentence_indices)
+
         if isinstance(ref, VerseRef):
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
@@ -318,3 +346,54 @@ class MarkerExpander:
             return f"[card:{ref.track_id}]"
 
         return ""
+
+    def _format_commentary(
+        self,
+        ref: CommentaryRef,
+        sentence_indices: list[int] | None,
+    ) -> str:
+        """Build a markdown blockquote from VERBATIM sentences of the
+        commentary chunk. LLM picks indices; server pulls bytes.
+
+        If `sentence_indices` is None or empty (LLM emitted `[^N]`
+        without `|s=...`) → default to the first 2 sentences. This is a
+        sensible "the LLM forgot to be specific" fallback that still
+        produces a real quote instead of an empty block.
+
+        Out-of-range indices are silently dropped; if NONE of the
+        requested indices resolve to a real sentence, return empty
+        (marker effectively disappears — preferable to a fake quote).
+        """
+        sents = ref.sentences
+        if not sents:
+            return ""
+
+        if not sentence_indices:
+            picked = list(sents[:2])
+        else:
+            picked = []
+            for idx in sentence_indices:
+                if 0 <= idx < len(sents):
+                    picked.append(sents[idx])
+            if not picked:
+                log.info(
+                    "chat_marker_commentary_no_valid_sentences",
+                    request_id=self._request_id,
+                    requested=sentence_indices,
+                    available=len(sents),
+                )
+                return ""
+
+        author = ref.author_name or ""
+        attribution = (
+            f"{author}, комментарий к {ref.addr_label}"
+            if author
+            else f"комментарий к {ref.addr_label}"
+        )
+        # Wrap with blank-line padding so the blockquote renders as a
+        # standalone markdown block regardless of where the marker was
+        # inlined in the LLM's prose.
+        body = "\n".join(f"> {s.strip()}" for s in picked if s.strip())
+        if not body:
+            return ""
+        return f"\n\n{body}\n>\n> — {attribution}\n\n"
