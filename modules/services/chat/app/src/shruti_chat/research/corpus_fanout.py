@@ -18,7 +18,7 @@ from shruti_chat.agent.tools._envelope import (
     library_to_envelope,
 )
 from shruti_chat.observability.logging import get_logger
-from shruti_chat.research.constants import DEFAULT_TOPIC_BOOST, TOPK_PER_QUERY
+from shruti_chat.research.constants import BOOST_BY_KIND, TOPK_PER_QUERY
 from shruti_chat.research.models import FanoutResult
 
 
@@ -139,7 +139,7 @@ async def fanout_search_with_boost(
     alias_map: Any,
     lang: str | None = None,
     boost_ids: set[str] | None = None,
-    boost_factor: float = DEFAULT_TOPIC_BOOST,
+    boost_by_kind: dict[str, float] | None = None,
     top_k: int = TOPK_PER_QUERY,
     author_id: str | None = None,
     location_id: str | None = None,
@@ -204,8 +204,30 @@ async def fanout_search_with_boost(
             _emit_research_source(on_event, r)
         return rows
 
-    # 3. Parallel fanout, dedup by dedup_key (keep max score).
+    # 3. Run the parallel fanout queries.
     per_query = await asyncio.gather(*(_one_query(v) for v in q_vecs))
+
+    # 4. Apply topic boost FIRST (before the relevance floor) so an
+    # attribution-flagged chunk isn't filtered out for having a low base
+    # score. A short verse-chunk under-scores against a long query and
+    # sits at ~0.30; the floor at 0.45 would silently drop it before
+    # ranking even has a chance. If the curator's attribution says
+    # "this item is relevant", we trust it past the noise floor.
+    # Per-kind dict makes per-corpus lift tunable without code change.
+    boost_map = boost_by_kind if boost_by_kind is not None else BOOST_BY_KIND
+    boosted_flags: dict[tuple, bool] = {}
+    for batch in per_query:
+        for r in batch:
+            if boost_ids:
+                iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
+                if iid in boost_ids:
+                    lift = boost_map.get(r.kind, 0.0)
+                    if lift > 0.0:
+                        r.score = min(1.0, r.score + lift)
+                        boosted_flags[r.dedup_key] = True
+
+    # 5. Dedup + relevance floor (after boost so curator-flagged chunks
+    # get a chance to clear the floor).
     deduped: dict[tuple, _RawScored] = {}
     for batch in per_query:
         for r in batch:
@@ -215,17 +237,30 @@ async def fanout_search_with_boost(
             if prev is None or prev.score < r.score:
                 deduped[r.dedup_key] = r
 
-    # 4. Apply topic boost on RAW chunks (item_id directly available).
-    boosted_flags: dict[tuple, bool] = {}
-    if boost_ids:
-        for key, r in deduped.items():
-            iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
-            if iid in boost_ids:
-                r.score = min(1.0, r.score + boost_factor)
-                boosted_flags[key] = True
-
     # 5. Sort + take top-K.
     ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
+
+    # Telemetry: per-kind distribution in the dedup pool (before slicing)
+    # vs the top-K. Lets us see when verse-chunks exist in the candidate
+    # pool but lose to lectures in ranking — driving the boost-tuning
+    # conversation with data instead of guesses.
+    candidate_by_kind: dict[str, int] = {}
+    boosted_by_kind: dict[str, int] = {}
+    for r in deduped.values():
+        candidate_by_kind[r.kind] = candidate_by_kind.get(r.kind, 0) + 1
+        if boosted_flags.get(r.dedup_key):
+            boosted_by_kind[r.kind] = boosted_by_kind.get(r.kind, 0) + 1
+    topk_by_kind: dict[str, int] = {}
+    for r in ranked:
+        topk_by_kind[r.kind] = topk_by_kind.get(r.kind, 0) + 1
+    log.info(
+        "fanout_kind_distribution",
+        candidates_total=len(deduped),
+        candidates_by_kind=candidate_by_kind,
+        boosted_by_kind=boosted_by_kind,
+        topk_by_kind=topk_by_kind,
+        boost_ids_count=len(boost_ids),
+    )
 
     # 6. Envelope (mints aliases) and build by_kind partition.
     envelopes: list[dict[str, Any]] = []

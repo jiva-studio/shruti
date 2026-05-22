@@ -86,6 +86,7 @@ class FakeChunkRepo:
     lecture_results: list[_Scored] = field(default_factory=list)
     library_results: list[_Scored] = field(default_factory=list)
     by_target: dict[tuple[str, str], list[Any]] = field(default_factory=dict)
+    by_verse: dict[tuple[str, str], list[Any]] = field(default_factory=dict)
     fanout_calls: int = 0
 
     async def search_by_embedding(self, q_vec, *, eligible_track_ids=None, lang=None, top_k=8):
@@ -97,6 +98,9 @@ class FakeChunkRepo:
 
     async def get_chunks_by_target(self, *, ref_kind: str, target_id: str, lang: str | None = None):
         return self.by_target.get((ref_kind, target_id), [])
+
+    async def get_chunks_by_verse(self, *, source_id: str, tokens: str, kinds, lang: str | None = None):
+        return self.by_verse.get((source_id, tokens), [])
 
 
 class FakeAliasMap:
@@ -123,6 +127,10 @@ class FakeAliasMap:
             return self._verse_map[key]
         self._verse += 1
         self._verse_map[key] = self._verse
+        return self._verse
+
+    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences):
+        self._verse += 1
         return self._verse
 
 
@@ -595,3 +603,87 @@ async def test_on_event_callback_exception_does_not_break_research():
     )
     # Research completes despite the callback raising.
     assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_long_path_verse_hit_appends_commentaries():
+    """When fanout returns a verse, the LONG path appends every commentary
+    on that verse (from get_chunks_by_verse) to research_chunks."""
+    pool = FakePool({("ru", "question"): []})
+    chunk_repo = FakeChunkRepo(
+        lecture_results=[],
+        library_results=[
+            _Scored(_LibChunk("verse_BG_2_13", "verse", "atma", "ru",
+                              source_id="src_BG", tokens="2.13",
+                              addr_label="БГ 2.13"), 0.78),
+        ],
+        by_verse={
+            ("src_BG", "2.13"): [
+                _LibChunk("comm_prabhupada", "commentary", "purport", "ru",
+                          source_id="src_BG", tokens="2.13",
+                          addr_label="БГ 2.13", author_id="prabhupada"),
+                _LibChunk("comm_vishvanatha", "commentary", "tika", "ru",
+                          source_id="src_BG", tokens="2.13",
+                          addr_label="БГ 2.13", author_id="vishvanatha"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={
+        "ExpansionResult": ExpansionResult(queries=["природа души"]),
+        "TopicExtractionResult": TopicExtractionResult(topics=[]),
+    })
+    result = await run_research(
+        question="что такое душа", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+    types = [e["type"] for e in result.research_chunks]
+    assert "verse" in types
+    # Both commentaries appended at the tail
+    assert types.count("commentary") == 2
+    comm_authors = sorted(
+        e["meta"]["author_id"] for e in result.research_chunks
+        if e["type"] == "commentary"
+    )
+    assert comm_authors == ["prabhupada", "vishvanatha"]
+    # Commentary score = parent verse score - 0.05
+    comm_scores = [e["score"] for e in result.research_chunks if e["type"] == "commentary"]
+    assert all(s == pytest.approx(0.73) for s in comm_scores)
+
+
+@pytest.mark.asyncio
+async def test_short_path_verse_hit_appends_commentaries():
+    """SHORT path: authoritative refs → verse; commentary expansion runs
+    over (authoritative + supplementary) and is appended to research_chunks."""
+    pool = FakePool({
+        ("ru", "question"): [
+            _row("attr_1", 0.92, [
+                {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(
+        by_target={
+            ("verse", "verse_BG_2_13"): [
+                _LibChunk("verse_BG_2_13", "verse", "atma is eternal", "ru",
+                          source_id="src_BG", tokens="2.13", addr_label="БГ 2.13"),
+            ],
+        },
+        by_verse={
+            ("src_BG", "2.13"): [
+                _LibChunk("comm_A", "commentary", "p1", "ru",
+                          source_id="src_BG", tokens="2.13",
+                          addr_label="БГ 2.13", author_id="a"),
+            ],
+        },
+    )
+    llm = FakeLLM(by_schema={"ExpansionResult": ExpansionResult(queries=["q"])})
+    result = await run_research(
+        question="что такое душа", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+    # Authoritative still pinned at top untouched.
+    assert len(result.authoritative_refs) == 1
+    # Commentary appears in research_chunks (the supplementary+commentaries lane).
+    comm = [e for e in result.research_chunks if e["type"] == "commentary"]
+    assert len(comm) == 1
+    assert comm[0]["meta"]["author_id"] == "a"

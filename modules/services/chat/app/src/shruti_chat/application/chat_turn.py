@@ -240,7 +240,6 @@ async def run_chat_turn(
             embedder=deps.embedder,
             pool=deps.pool,
             embed_model=deps.settings.embed_model,
-            topic_boost=getattr(deps.settings, "attribution_topic_boost", 0.15),
         )
 
         initial_state: dict[str, Any] = {
