@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     service_version: str = "dev"
 
+    # ── observability ──────────────────────────────────────────────────
+    # Per-stage `stage_ms` timing logs. Enabled for baseline collection;
+    # sample rate is deterministic per trace_id so all stages of a sampled
+    # turn co-occur, which keeps the per-turn breakdown coherent.
+    stage_timing_enabled: bool = True
+    stage_timing_sample_rate: float = 1.0
+
     # ── S3 ──────────────────────────────────────────────────────────────
     s3_bucket: str = "akds-lectorium"
     s3_region: str = "us-east-1"

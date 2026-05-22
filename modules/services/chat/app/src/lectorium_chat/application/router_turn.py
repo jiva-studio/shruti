@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from lectorium_chat.domain.entities import Message
 from lectorium_chat.domain.routing import RoutingDecision
 from lectorium_chat.observability.logging import get_logger
+from lectorium_chat.observability.timing import stage
 
 
 log = get_logger(__name__)
@@ -191,7 +192,8 @@ async def run_router_turn(
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
         {"role": "user", "content": f"[lang={lang}] {user_query}"},
     ]
-    decision = await llm.structured_output(messages, RoutingDecision, model=model)
+    async with stage("router", request_id=request_id):
+        decision = await llm.structured_output(messages, RoutingDecision, model=model)
     # Low confidence collapses to "unknown" so downstream routing picks
     # the soft fallback path (synthesizer answers without tools).
     if decision.confidence < 0.5 and decision.intent != "unknown":

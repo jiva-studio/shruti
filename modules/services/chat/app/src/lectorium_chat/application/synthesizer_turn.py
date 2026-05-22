@@ -16,6 +16,7 @@ Pure: no LangGraph imports. The adapter in
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, AsyncIterator, Protocol
 
 from lectorium_chat.agent.marker_expander import MarkerExpander
@@ -372,6 +373,8 @@ async def run_synthesizer_turn(
 
     prose_chars = 0
     full_prose: list[str] = []
+    stream_started = perf_counter()
+    first_token_logged = False
 
     async for chunk in llm.stream_completion(
         messages,
@@ -381,6 +384,15 @@ async def run_synthesizer_turn(
         text = chunk.get("text")
         if not text:
             continue
+        if not first_token_logged:
+            log.info(
+                "stage_timing",
+                stage="synthesizer_first_token",
+                stage_ms=round((perf_counter() - stream_started) * 1000, 1),
+                status="ok",
+                request_id=request_id,
+            )
+            first_token_logged = True
         full_prose.append(text)
         cleaned = await expander.feed(text)
         if cleaned:
@@ -393,6 +405,13 @@ async def run_synthesizer_turn(
         yield SynthesizerEvent(type="delta", data={"text": tail})
 
     full_text = "".join(full_prose)
+    log.info(
+        "stage_timing",
+        stage="synthesizer_total",
+        stage_ms=round((perf_counter() - stream_started) * 1000, 1),
+        status="ok",
+        request_id=request_id,
+    )
     log.info(
         "synth_done",
         request_id=request_id,

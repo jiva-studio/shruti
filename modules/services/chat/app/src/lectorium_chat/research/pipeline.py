@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from itertools import chain
+from time import perf_counter
 from typing import Any, Callable
 
 from lectorium_chat.agent.tools._envelope import (
@@ -112,15 +113,32 @@ def _emit_source_for_ref(on_event: OnEvent | None, ref: "AttributionRef") -> Non
 
 async def _safe(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
     """Run a coroutine with a stage timeout; on TimeoutError / any exception,
-    return `default` so the orchestrator can keep going with partial state."""
+    return `default` so the orchestrator can keep going with partial state.
+
+    Emits `stage_timing {stage, stage_ms, status}` on every outcome so the
+    research pipeline is fully covered by the same instrumentation as the
+    rest of the turn — without having to wrap each call site separately.
+    """
+    started = perf_counter()
+    status = "ok"
     try:
         return await asyncio.wait_for(coro_factory(), timeout=timeout)
     except asyncio.TimeoutError:
+        status = "timeout"
         log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
         return default
     except Exception as exc:  # noqa: BLE001 — best-effort
+        status = "error"
         log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
         return default
+    finally:
+        log.info(
+            "stage_timing",
+            stage=name,
+            stage_ms=round((perf_counter() - started) * 1000, 1),
+            status=status,
+            request_id=request_id,
+        )
 
 
 def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
