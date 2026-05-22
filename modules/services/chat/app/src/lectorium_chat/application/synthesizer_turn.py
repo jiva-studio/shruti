@@ -166,9 +166,21 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # Lecture fragment or whole-track card — title is natural
             # language, safe to keep adjacent.
             header = f"[^{ref}] {attribution}".rstrip()
+    elif note_type == "commentary":
+        # Three different authors' purports on the same verse arrive
+        # with identical addr_label ("БГ 2.13"). Without an author tag
+        # the LLM can't distinguish them and silently drops all but
+        # one. author_name (resolved by commentary_expansion) makes the
+        # attribution unambiguous; author_id is the slug fallback when
+        # the catalog lookup missed.
+        author = meta.get("author_name") or meta.get("author_id") or ""
+        if author:
+            header = f"{attribution} — комментарий, {author}" if attribution else f"комментарий, {author}"
+        else:
+            header = f"{attribution} — комментарий" if attribution else "комментарий"
     else:
-        # commentary / prose_chapter / letter — addr_label drives the
-        # markdown blockquote attribution downstream.
+        # prose_chapter / letter — addr_label drives the markdown
+        # blockquote attribution downstream.
         header = attribution
 
     return f"{header}\n{text}".rstrip() if header else text
@@ -197,12 +209,34 @@ ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
 `[^N]` across multiple paragraphs — see response_shape.md.
 
 When a note's header has NO `[^N]` (commentary / prose_chapter /
-letter), quote inline as a markdown blockquote with attribution
-beneath:
+letter), quote inline as a markdown blockquote with the attribution
+from the note header beneath:
 
 > The cited text…
 >
-> — Source attribution from the note header (e.g. "BG 2.13, purport")
+> — Source attribution from the note header
+
+COMMENTARIES (purports on shlokas) — IMPORTANT.
+
+When notes include a `commentary` entry on the same verse you're
+discussing, you MUST surface at least one short excerpt (1-3 sentences,
+the most directly relevant clause — NOT the whole long segment) from
+it as a blockquote, attributed to its author. Multiple authors' purports
+on the same verse are shipped as separate notes with distinct headers
+like "БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада" and
+"БГ 2.13 — комментарий, Вишванатха Чакраварти". Pick the excerpt that
+best supports your point; if two authors say complementary things,
+quote both as separate blockquotes. Do NOT paraphrase the commentary
+text into your own prose without quoting — the purport's authority comes
+from being the author's own words. Do NOT dump the full 400+ char
+segment verbatim — extract the cleanest 1-3 sentences and elide the
+rest with "…".
+
+Example shape:
+
+> Атма не рождается и не умирает; смерть касается только тела.
+>
+> — А.Ч. Бхактиведанта Свами Прабхупада, комментарий к БГ 2.13
 
 NEVER fabricate refs. NEVER invent track_ids or verse addresses.
 

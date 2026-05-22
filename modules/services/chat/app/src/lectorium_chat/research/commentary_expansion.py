@@ -108,6 +108,7 @@ async def expand_verses_with_commentaries(
     chunk_repo: Any,
     alias_map: Any,
     lang: str | None,
+    catalog_repo: Any | None = None,
     max_commentaries_per_verse: int = MAX_COMMENTARIES_PER_VERSE,
     on_event: OnEvent | None = None,
 ) -> list[dict[str, Any]]:
@@ -163,6 +164,8 @@ async def expand_verses_with_commentaries(
     )
 
     out: list[dict[str, Any]] = []
+    pending: list[LibraryChunk] = []
+    pending_score: list[float] = []
     for ((_sid, _tok), parent_score), chunks in zip(pairs, chunk_lists):
         if not chunks:
             log.info("expand_commentaries_empty", source_id=_sid, tokens=_tok)
@@ -174,7 +177,36 @@ async def expand_verses_with_commentaries(
             if dedup_key in seen_commentary:
                 continue
             seen_commentary.add(dedup_key)
-            env = library_to_envelope(c, alias_map=alias_map, score=child_score)
-            out.append(env)
-            _emit_commentary_source(on_event, c)
+            pending.append(c)
+            pending_score.append(child_score)
+
+    # Batch-resolve human author names so the synthesizer can render
+    # "БГ 2.13 — комментарий А.Ч. Бхактиведанты Свами Прабхупады"
+    # instead of three identically-headed "БГ 2.13" blocks the LLM
+    # can't tell apart. Best-effort: if the catalog lookup fails for
+    # any reason we still emit envelopes — the raw author_id stays in
+    # meta and the synth falls back to it.
+    author_names: dict[str, str] = {}
+    if catalog_repo is not None and lang:
+        ids_to_resolve = [c.author_id for c in pending if c.author_id]
+        if ids_to_resolve:
+            try:
+                author_names = await catalog_repo.get_author_names(
+                    ids_to_resolve, lang=lang,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning(
+                    "expand_commentaries_author_resolve_failed",
+                    error=str(exc),
+                )
+                author_names = {}
+
+    for c, child_score in zip(pending, pending_score):
+        env = library_to_envelope(c, alias_map=alias_map, score=child_score)
+        if c.author_id and c.author_id in author_names:
+            meta = env.get("meta") or {}
+            meta["author_name"] = author_names[c.author_id]
+            env["meta"] = meta
+        out.append(env)
+        _emit_commentary_source(on_event, c)
     return out

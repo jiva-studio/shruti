@@ -545,6 +545,39 @@ def _list_tracks_sync(
         return out
 
 
+def _get_author_names_sync(
+    db_path: Path, author_ids: list[str], lang: str,
+) -> dict[str, str]:
+    unique_ids = list({i for i in author_ids if i})
+    if not unique_ids:
+        return {}
+    placeholders = ",".join("?" * len(unique_ids))
+    out: dict[str, str] = {}
+    with _catalog_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT id, full_name FROM authors "
+            f"WHERE id IN ({placeholders}) AND language = ?",
+            [*unique_ids, lang],
+        ).fetchall()
+        for r in rows:
+            out[r["id"]] = r["full_name"]
+        missing = [i for i in unique_ids if i not in out]
+        if missing:
+            # Native lang lookup empty for some — fall back to any
+            # available language (usually 'en') so we still produce a
+            # human-readable name instead of leaking an opaque id.
+            ph2 = ",".join("?" * len(missing))
+            fb_rows = conn.execute(
+                f"SELECT id, full_name FROM authors "
+                f"WHERE id IN ({ph2}) "
+                f"ORDER BY CASE language WHEN 'en' THEN 0 ELSE 1 END",
+                missing,
+            ).fetchall()
+            for r in fb_rows:
+                out.setdefault(r["id"], r["full_name"])
+    return out
+
+
 def _filter_existing_track_ids_sync(db_path: Path, track_ids: list[str]) -> list[str]:
     if not track_ids:
         return []
@@ -690,6 +723,18 @@ class SqliteCatalogRepository:
     ) -> list[ResolvedEntity]:
         return await asyncio.to_thread(
             _resolve_sync, self._db_path, kind, text, lang, limit,
+        )
+
+    async def get_author_names(
+        self,
+        author_ids: list[str],
+        *,
+        lang: str,
+    ) -> dict[str, str]:
+        if not author_ids:
+            return {}
+        return await asyncio.to_thread(
+            _get_author_names_sync, self._db_path, author_ids, lang,
         )
 
     def invalidate_cache(self) -> None:
