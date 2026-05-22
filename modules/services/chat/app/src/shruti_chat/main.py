@@ -35,6 +35,11 @@ from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from shruti_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
 )
+from shruti_chat.infra.cache import versions as cache_versions
+from shruti_chat.infra.cache.cached_embedder import CachedEmbedder
+from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
+from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache
+from shruti_chat.infra.cache.tiered_kv_cache import TieredKVCache
 from shruti_chat.infra.pdf import register_fonts
 from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
 from shruti_chat.infra.storage.s3_pdf_storage import S3PdfStorage
@@ -59,9 +64,37 @@ async def lifespan(app: FastAPI):
     # first request doesn't pay the cost on the hot path.
     register_fonts()
 
+    # KV cache — L1 (in-proc LRU+TTL) always; L2 (Redis, AOF-persistent)
+    # when REDIS_URL is configured. Either tier degrades gracefully:
+    # L2 circuit-opens on repeated failure and L1 keeps serving; L1
+    # caps each entry at min(L2_TTL, 60s) so a version bump propagates
+    # within a minute even without an explicit flush.
+    l1 = MemoryKVCache(max_entries=10000)
+    l2: RedisKVCache | None = None
+    if s.cache_enabled and s.redis_url:
+        l2 = RedisKVCache(s.redis_url)
+    kv_cache = TieredKVCache(l1, l2)
+
+    # Seed version segments. `embed_model` is derived from settings now;
+    # `catalog` / `library` come from `db_state` once the schema is in
+    # place. The indexer hooks bump these on every swap from this point.
+    cache_versions.initialize_from_settings(s)
+    await cache_versions.refresh_from_db(pool)
+
+    # Wrap the embedder so single-query embeddings get memoised by
+    # (text, model). embed_documents stays uncached at this layer (see
+    # CachedEmbedder docstring). When cache_enabled=false the raw
+    # embedder is used so A/B comparisons stay clean.
+    if s.cache_enabled:
+        embedder = CachedEmbedder(embedder, kv_cache)
+
     # Build the composition: each adapter takes only the dependencies
     # it needs, the use-cases take ports.
-    chunk_repo = PgChunkRepository(pool=pool, embed_model=embedder.name)
+    chunk_repo = PgChunkRepository(
+        pool=pool,
+        embed_model=embedder.name,
+        kv_cache=(kv_cache if s.cache_enabled else None),
+    )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     transcript_storage = S3TranscriptStorage(settings=s)
     outline_cache = S3OutlineCache(settings=s)
@@ -89,6 +122,7 @@ async def lifespan(app: FastAPI):
         outline_cache=outline_cache,
         pdf_storage=pdf_storage,
         rate_limiter=rate_limiter,
+        kv_cache=kv_cache,
         llm=llm_provider,
         chat_graph=chat_graph,
     )
@@ -131,6 +165,8 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except (asyncio.CancelledError, Exception):
             pass
+        if l2 is not None:
+            await l2.close()
         await close_pool()
 
 

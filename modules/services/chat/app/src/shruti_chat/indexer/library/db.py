@@ -80,6 +80,14 @@ async def ensure_library(settings: Settings | None = None, force: bool = False) 
     os.replace(tmp_path, s.library_db_path)
     file_size_mb = s.library_db_path.stat().st_size / (1 << 20)
     await write_current_version(latest)
+    # Bump KV cache version segment so library-dependent namespaces
+    # (pg_chunk_search, pg_lib_search, pg_window, caption) miss
+    # automatically without an explicit flush.
+    try:
+        from shruti_chat.infra.cache import versions as cache_versions
+        cache_versions.set_tag("library", latest)
+    except Exception:
+        pass
     log.info(
         "library_swap",
         from_version=local,

@@ -87,6 +87,15 @@ async def ensure_catalog(settings: Settings | None = None, force: bool = False) 
         invalidate_dict_cache()
     except Exception:
         pass
+    # Bump the KV cache namespace version for catalog-derived entries
+    # (track_meta, author_names, attr_confirm). Old keys age out by
+    # TTL; we never DELETE so a half-failed swap doesn't poison the
+    # cache mid-write.
+    try:
+        from shruti_chat.infra.cache import versions as cache_versions
+        cache_versions.set_tag("catalog", latest)
+    except Exception:
+        pass
     log.info(
         "catalog_swap",
         from_version=local,

@@ -95,3 +95,17 @@ class TurnContext:
     embedder: Any | None = None         # EmbedderPort
     pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
     embed_model: str | None = None      # settings.embed_model — required for attribution lookup
+
+    # ── KV cache (Stage 2) ──────────────────────────────────────────────
+    # Tiered L1+L2 cache injected by the composition root. Used by
+    # deterministic LLM calls (router, title, topic, attr_confirm,
+    # caption) and hot DB queries (chunk search, get_window, get_track,
+    # get_author_names) to skip repeat work. Optional so tests can leave
+    # it None and exercise the un-cached path.
+    kv_cache: Any | None = None         # KVCache
+
+    # ── Speculative embedding (Stage 2.8.a) ─────────────────────────────
+    # Kicked off in `chat_turn` in parallel with the router LLM call.
+    # The research pipeline awaits this future instead of re-embedding;
+    # non-research routes cancel it from the router node.
+    embed_task: Any | None = None       # asyncio.Task[list[float]] | None

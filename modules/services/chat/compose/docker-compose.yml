@@ -14,6 +14,28 @@ services:
       POSTGRES_USER: chat
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: chat
+    # HNSW is RAM-hungry: default shared_buffers=128 MB pushes the
+    # index to disk and per-search latency balloons to 300-1000 ms.
+    # Bumping to 2 GB pins the chunks-table HNSW index in memory on
+    # an 8 GB VPS and drops ANN search to 30-150 ms p50.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=5GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - max_connections=50
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - jit=off
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +43,32 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AOF on so the (hot) router/embed_query/title caches survive
+    # restarts and rebuilds; `everysec` is the cheap default and the
+    # extra sub-second of write loss on crash doesn't matter for cache.
+    # 1 GB cap with allkeys-lru: dominated by embed_query (~4 KB each
+    # compressed) so ~250k entries fit, well past expected churn.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 1gb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 
   chat:
     image: shruti-chat:prod
@@ -33,10 +81,13 @@ services:
     environment:
       DATABASE_URL: postgresql://chat:${POSTGRES_PASSWORD}@postgres:5432/chat
       CATALOG_DIR: /var/lib/chat
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - chatdata:/var/lib/chat
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
@@ -67,3 +118,4 @@ volumes:
   chatdata:
   caddydata:
   caddyconfig:
+  redisdata:
