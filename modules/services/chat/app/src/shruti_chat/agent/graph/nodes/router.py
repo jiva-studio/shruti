@@ -25,7 +25,19 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
         lang=state["lang"],
         llm=ctx.llm,
         request_id=ctx.request_id,
+        kv_cache=ctx.kv_cache,
     )
+    # Cancel the speculative embed task for intents that don't consume
+    # the embedding. Saves one OpenRouter call per direct_chat / help /
+    # create_action turn; on research / find_track / unknown we leave
+    # it running so the worker can await its result.
+    if ctx.embed_task is not None and decision.intent not in {
+        "research",
+        "find_track",
+        "unknown",
+    }:
+        ctx.embed_task.cancel()
+        ctx.embed_task = None
     return {
         "intent": decision.intent,
         "confidence": decision.confidence,

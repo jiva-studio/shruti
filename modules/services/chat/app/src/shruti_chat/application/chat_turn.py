@@ -22,6 +22,7 @@ keep working.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any, AsyncIterator, Awaitable, Callable
 
@@ -224,6 +225,22 @@ async def run_chat_turn(
 
         expander = MarkerExpander(aliases, request_id=request_id)
 
+        # Speculative embed: most non-trivial intents (research,
+        # find_track) need the user-query embedding eventually. Start it
+        # in parallel with the router LLM call so we don't pay both
+        # latencies sequentially. The router node cancels this task when
+        # the intent ends up being direct_chat / help / create_action
+        # (those don't need the embedding). On hit we shave 150-300 ms
+        # off every research turn — the embed_query was previously the
+        # first step inside research/pipeline, blocking the rest.
+        user_query_text = _extract_latest_user_query(history)
+        embed_task: Any | None = None
+        if user_query_text and deps.embedder is not None:
+            embed_task = asyncio.create_task(
+                deps.embedder.embed_query(user_query_text),
+                name="speculative_embed_query",
+            )
+
         ctx = TurnContext(
             request_id=trace_id,
             aliases=aliases,
@@ -240,6 +257,8 @@ async def run_chat_turn(
             embedder=deps.embedder,
             pool=deps.pool,
             embed_model=deps.settings.embed_model,
+            kv_cache=deps.kv_cache,
+            embed_task=embed_task,
         )
 
         initial_state: dict[str, Any] = {

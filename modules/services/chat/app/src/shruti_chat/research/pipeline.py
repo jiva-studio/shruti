@@ -50,7 +50,10 @@ from shruti_chat.research.corpus_fanout import (
     fanout_search_with_boost,
     merge_fanout,
 )
-from shruti_chat.research.coverage_gate import is_coverage_sufficient
+from shruti_chat.research.coverage_gate import (
+    is_coverage_good_enough,
+    should_bail_out,
+)
 from shruti_chat.research.models import (
     AttributionMatch,
     AttributionRef,
@@ -256,6 +259,8 @@ async def run_research(
     boost_by_kind: dict[str, float] | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
+    kv_cache: Any | None = None,
+    precomputed_query_embedding_task: Any | None = None,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
     `router.intent == "research"`.
@@ -268,11 +273,29 @@ async def run_research(
 
     # 0. Embed user question once — reused for question-attribution lookup
     # and (implicitly via topic_embeddings) for the topic stage.
-    user_q_embedding = await _safe(
-        lambda: embedder.embed_query(question),
-        default=None, timeout=TIMEOUT_QUESTION_LOOKUP_S,
-        name="embed_user_query", request_id=request_id,
-    )
+    # Speculative path: `chat_turn` kicks off the embed in parallel with
+    # the router, so by the time we get here it's usually done. We
+    # `await` the task instead of doing a fresh embed; if the task is
+    # absent (older callers, tests) or cancelled, fall back to a sync
+    # embed call.
+    if precomputed_query_embedding_task is not None:
+        async def _await_embed() -> list[float] | None:
+            try:
+                return await precomputed_query_embedding_task
+            except (asyncio.CancelledError, Exception):
+                # Speculative task failed — re-embed synchronously.
+                return await embedder.embed_query(question)
+        user_q_embedding = await _safe(
+            _await_embed,
+            default=None, timeout=TIMEOUT_QUESTION_LOOKUP_S,
+            name="embed_user_query", request_id=request_id,
+        )
+    else:
+        user_q_embedding = await _safe(
+            lambda: embedder.embed_query(question),
+            default=None, timeout=TIMEOUT_QUESTION_LOOKUP_S,
+            name="embed_user_query", request_id=request_id,
+        )
     if user_q_embedding is None:
         # No embedding → no attribution lookup possible. Fall straight to
         # plain fanout with the raw question.
@@ -286,7 +309,13 @@ async def run_research(
             request_id=request_id, on_event=on_event,
         )
 
-    # 1. PARALLEL: expand + question-attribution lookup.
+    # 1. PARALLEL: expand + question-attribution lookup + speculative
+    # topic extraction. Topic extraction is only consumed by the LONG
+    # path (no question_match), but the LLM call is independent of both
+    # `expansion` and `question_matches` (it uses [] as expansion
+    # context in the prompt) so we hide its 0.8-1.4 s latency under
+    # `expand_task` instead of paying for it sequentially after we
+    # confirm no question_match. On SHORT path the result is discarded.
     expand_task = asyncio.create_task(_safe(
         lambda: expand_query(question, lang, router_args, llm=llm, model=expand_model),
         default=ExpansionResult(queries=[question]), timeout=TIMEOUT_EXPAND_S,
@@ -300,6 +329,16 @@ async def run_research(
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
     ))
+    topic_task: asyncio.Task[list[str]] | None = None
+    if pool is not None and embed_model is not None:
+        topic_task = asyncio.create_task(_safe(
+            lambda: extract_topics(
+                question, lang, [],
+                llm=llm, model=topic_model, kv_cache=kv_cache,
+            ),
+            default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
+            name="extract_topics_speculative", request_id=request_id,
+        ))
     expansion: ExpansionResult = await expand_task
     question_matches: list[AttributionMatch] = await q_lookup_task
 
@@ -311,6 +350,10 @@ async def run_research(
 
     # 2. SHORT PATH — question-attribution found.
     if question_matches:
+        # Topic extraction was speculative; SHORT path doesn't use it.
+        if topic_task is not None:
+            topic_task.cancel()
+            topic_task = None
         all_refs = _dedupe_refs(list(chain.from_iterable(m.refs for m in question_matches)))
         top_score = max(m.score for m in question_matches)
         log.info(
@@ -374,7 +417,14 @@ async def run_research(
         )
         return result
 
-    # 3. LONG PATH.
+    # 3. LONG PATH. If the speculative topic task is done by now, hand
+    # it through so `_research_path` can skip its own re-extraction.
+    speculative_topics: list[str] = []
+    if topic_task is not None:
+        try:
+            speculative_topics = await topic_task
+        except (asyncio.CancelledError, Exception):
+            speculative_topics = []
     long_result = await _research_path(
         question=question, lang=lang, expansion=expansion,
         boost_ids=None,  # computed below from topics
@@ -383,6 +433,8 @@ async def run_research(
         boost_by_kind=boost_by_kind, expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
         request_id=request_id, on_event=on_event,
+        precomputed_topics=speculative_topics,
+        kv_cache=kv_cache,
     )
     _kick_caption_gen(
         long_result, alias_map=alias_map, question=question, lang=lang,
@@ -462,20 +514,30 @@ async def _research_path(
     pool: Any | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
+    precomputed_topics: list[str] | None = None,
+    kv_cache: Any | None = None,
 ) -> ResearchResult:
     """LONG path: topic-extract → topic-lookup → boost-aware fanout with
     coverage gate and up to MAX_FANOUT_ROUNDS rounds."""
     topic_matches: list[AttributionMatch] = []
 
     if boost_ids is None and pool is not None and embed_model_for_lookup is not None:
-        # Step A: LLM extracts topics from the question.
-        topics: list[str] = await _safe(
-            lambda: extract_topics(
-                question, lang, expansion.queries, llm=llm, model=topic_model,
-            ),
-            default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
-            name="extract_topics", request_id=request_id,
-        )
+        # Step A: LLM extracts topics from the question. Use the
+        # speculative result from `run_research` if it's available
+        # (already paid for under `expand_query` latency); otherwise
+        # extract synchronously here.
+        topics: list[str]
+        if precomputed_topics:
+            topics = precomputed_topics
+        else:
+            topics = await _safe(
+                lambda: extract_topics(
+                    question, lang, expansion.queries,
+                    llm=llm, model=topic_model, kv_cache=kv_cache,
+                ),
+                default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
+                name="extract_topics", request_id=request_id,
+            )
 
         # Step B: embed all topics in one HTTP call, then parallel pgvector
         # lookups for each.
@@ -570,7 +632,17 @@ async def _research_path(
         accumulated = merge_fanout(accumulated, result)
         accumulated.rounds_executed = round_idx + 1
 
-        if is_coverage_sufficient(accumulated):
+        if is_coverage_good_enough(accumulated, round_idx):
+            break
+
+        # Bail out before paying for regenerate_queries + another
+        # fanout round when round 0 had essentially nothing relevant.
+        if round_idx == 0 and should_bail_out(accumulated):
+            log.info(
+                "pipeline_fanout_bailout",
+                request_id=request_id,
+                max_score=round(accumulated.max_score, 3),
+            )
             break
 
         if round_idx + 1 < MAX_FANOUT_ROUNDS:

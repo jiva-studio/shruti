@@ -15,6 +15,7 @@ google/gemini-3.1-flash-lite (default) and Claude (premium tier).
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any, AsyncIterator, TypeVar
 
 from langchain_core.messages import (
@@ -107,13 +108,32 @@ def _chunk_to_domain(chunk: AIMessageChunk) -> CompletionChunk:
     return out
 
 
+@lru_cache(maxsize=32)
+def _build_client(api_key: str, model: str, temperature_key: float | None) -> ChatOpenAI:
+    """Module-level LRU cache of `ChatOpenAI` by (model, temperature).
+
+    Each `ChatOpenAI` owns an httpx client with a persistent connection
+    pool — recreating it per call meant a fresh TLS handshake on every
+    LLM hop (50-150 ms × ~5-8 calls per research turn = up to a second
+    of pure connection overhead). The instance is async-safe and stateless
+    apart from its conn pool, so sharing is trivially correct.
+    """
+    kwargs: dict[str, Any] = {
+        "model": _normalise_model(model),
+        "base_url": _OPENROUTER_BASE_URL,
+        "api_key": api_key,
+        "streaming": True,
+    }
+    if temperature_key is not None:
+        kwargs["temperature"] = temperature_key
+    return ChatOpenAI(**kwargs)
+
+
 class OpenRouterLLMProvider:
     """`LLMPort` impl backed by `langchain_openai.ChatOpenAI` → OpenRouter.
 
-    One instance per request (cheap to construct). The underlying
-    `ChatOpenAI` client is recreated when `model` overrides at call time
-    — small overhead but keeps the API simple. If we hit perf trouble,
-    swap to a small LRU cache of ChatOpenAI by (model, temperature).
+    Clients are pooled by `(model, temperature)` in a module-level LRU
+    so the underlying httpx connection pool survives across calls.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -123,20 +143,12 @@ class OpenRouterLLMProvider:
             )
         self._api_key = settings.openrouter_api_key
         self._default_model = settings.llm_default
-        # Pre-build the default-model client. Per-call overrides create
-        # a transient client (see _client_for).
-        self._default_client = self._client_for(self._default_model, temperature=None)
+        # Pre-warm the default-model client so the first turn doesn't
+        # pay the construction cost on the request path.
+        _build_client(self._api_key, self._default_model, None)
 
     def _client_for(self, model: str, *, temperature: float | None) -> ChatOpenAI:
-        kwargs: dict[str, Any] = {
-            "model": _normalise_model(model),
-            "base_url": _OPENROUTER_BASE_URL,
-            "api_key": self._api_key,
-            "streaming": True,
-        }
-        if temperature is not None:
-            kwargs["temperature"] = temperature
-        return ChatOpenAI(**kwargs)
+        return _build_client(self._api_key, model, temperature)
 
     async def stream_completion(
         self,

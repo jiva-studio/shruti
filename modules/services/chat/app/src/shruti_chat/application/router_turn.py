@@ -10,10 +10,11 @@ Tested with `FakeLLM` that returns scripted `RoutingDecision`.
 
 from __future__ import annotations
 
-from typing import Protocol, TypeVar
+from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from shruti_chat.application.cache_helpers import TTL_7D, cached_llm_json
 from shruti_chat.domain.entities import Message
 from shruti_chat.domain.routing import RoutingDecision
 from shruti_chat.observability.logging import get_logger
@@ -178,6 +179,7 @@ async def run_router_turn(
     llm: _LLMForRouting,
     request_id: str | None = None,
     model: str | None = None,
+    kv_cache: "Any | None" = None,
 ) -> RoutingDecision:
     """Classify the query, return a validated `RoutingDecision`.
 
@@ -187,13 +189,34 @@ async def run_router_turn(
     `model` overrides the LLMPort's default; production uses Gemini
     Flash Lite for routing (cheap, deterministic with temperature=0
     inside structured_output).
+
+    `kv_cache` (optional) memoises the structured-output call by
+    `(query, lang, model)`. The router runs at temperature=0 so the
+    output is deterministic for a given input + model — a perfect
+    cache fit. On miss we still pay the LLM, but the second time the
+    same question rolls in (router only sees the latest user turn)
+    we skip the ~1s call entirely.
     """
     messages: list[Message] = [
         {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
         {"role": "user", "content": f"[lang={lang}] {user_query}"},
     ]
-    async with stage("router", request_id=request_id):
-        decision = await llm.structured_output(messages, RoutingDecision, model=model)
+
+    async def _call() -> RoutingDecision:
+        async with stage("router", request_id=request_id):
+            return await llm.structured_output(messages, RoutingDecision, model=model)
+
+    if kv_cache is not None:
+        decision = await cached_llm_json(
+            kv_cache,
+            ns="router",
+            key_parts={"q": user_query, "lang": lang, "model": model or ""},
+            ttl_s=TTL_7D,
+            schema=RoutingDecision,
+            factory=_call,
+        )
+    else:
+        decision = await _call()
     # Low confidence collapses to "unknown" so downstream routing picks
     # the soft fallback path (synthesizer answers without tools).
     if decision.confidence < 0.5 and decision.intent != "unknown":

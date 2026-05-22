@@ -41,13 +41,18 @@ async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
     finally:
         await bootstrap.close()
 
+    # Sized to absorb a fanout burst (4-5 parallel ANN searches +
+    # window/refs lookups + rate-limiter UPSERT = ~10 conns/turn)
+    # under a handful of concurrent users without queuing. Caps below
+    # the Postgres `max_connections=50` set in compose with slack for
+    # ad-hoc psql.
     _pool = await asyncpg.create_pool(
         dsn=dsn,
-        min_size=1,
-        max_size=10,
+        min_size=5,
+        max_size=25,
         init=_init_connection,
     )
-    log.info("db_pool_ready", min_size=1, max_size=10)
+    log.info("db_pool_ready", min_size=5, max_size=25)
     return _pool
 
 
