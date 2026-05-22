@@ -26,6 +26,9 @@ dependencies = [
   "aiofiles>=24.1",
   "tenacity>=9.0",
   "reportlab>=4.2",
+  # Redis client for the KV cache (L2). The L1 in-proc tier works
+  # without it; if redis_url is unset the service falls back to L1 only.
+  "redis>=5.0",
   # LangGraph multi-agent orchestration. langchain-openai gives ChatOpenAI
   # which speaks OpenRouter natively via base_url override.
   "langgraph>=0.2.50",
@@ -38,6 +41,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "ruff>=0.7",
+  "fakeredis>=2.26",
 ]
 # Optional tracing via LangSmith. Off unless LANGSMITH_API_KEY is set.
 tracing = ["langsmith>=0.1"]

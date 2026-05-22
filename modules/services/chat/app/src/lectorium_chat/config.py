@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     stage_timing_enabled: bool = True
     stage_timing_sample_rate: float = 1.0
 
+    # ── cache (Redis L2 + in-proc L1) ──────────────────────────────────
+    # If redis_url is unset, only L1 runs (per-process LRU). cache_enabled
+    # false bypasses both tiers entirely; useful for A/B comparisons.
+    redis_url: str | None = None
+    cache_enabled: bool = True
+
     # ── S3 ──────────────────────────────────────────────────────────────
     s3_bucket: str = "akds-lectorium"
     s3_region: str = "us-east-1"

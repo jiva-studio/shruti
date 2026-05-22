@@ -5,10 +5,18 @@ Reads from the `chunks` table via an injected asyncpg pool. The
 filter so callers don't need to know which embedder produced the
 vector. Composition root in `main.py:lifespan` builds the pool and the
 embedder, then wires them in.
+
+The optional `kv_cache` memoises ANN searches by `(embedding, filters,
+top_k)`. A hit short-circuits the pgvector roundtrip entirely; a miss
+falls through to the live query and writes the result back. The cache
+is L1+L2 (process + Redis), versioned on `embed_model` so a reindex
+silently invalidates everything.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 import asyncpg
@@ -16,12 +24,107 @@ import asyncpg
 from lectorium_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
 
 
+def _embedding_digest(embedding: list[float]) -> str:
+    """blake2b-12 over the float bytes (rounded to 7 sig figs to absorb
+    trivial float jitter from re-quantised embeddings). Two embeddings
+    that agree to 7 sig figs share a cache key."""
+    rounded = [round(x, 7) for x in embedding]
+    payload = json.dumps(rounded, separators=(",", ":"))
+    return hashlib.blake2b(payload.encode("utf-8"), digest_size=12).hexdigest()
+
+
 class PgChunkRepository:
-    def __init__(self, *, pool: asyncpg.Pool, embed_model: str) -> None:
+    def __init__(
+        self,
+        *,
+        pool: asyncpg.Pool,
+        embed_model: str,
+        kv_cache: Any | None = None,
+    ) -> None:
         self._pool = pool
         self._embed_model = embed_model
+        self._cache = kv_cache
 
     async def search_by_embedding(
+        self,
+        embedding: list[float],
+        *,
+        eligible_track_ids: list[str] | None = None,
+        excluded_track_ids: list[str] | None = None,
+        lang: str | None,
+        top_k: int,
+    ) -> list[ScoredChunk]:
+        if self._cache is None:
+            return await self._search_by_embedding_raw(
+                embedding,
+                eligible_track_ids=eligible_track_ids,
+                excluded_track_ids=excluded_track_ids,
+                lang=lang,
+                top_k=top_k,
+            )
+        from lectorium_chat.application.cache_helpers import TTL_6H, make_key
+        key = make_key(
+            "pg_chunk_search",
+            {
+                "emb": _embedding_digest(embedding),
+                "eligible": sorted(eligible_track_ids) if eligible_track_ids else None,
+                "excluded": sorted(excluded_track_ids) if excluded_track_ids else None,
+                "lang": lang,
+                "top_k": top_k,
+            },
+        )
+        cached = await self._cache.get(key)
+        if cached is not None:
+            try:
+                rows = json.loads(cached)
+                return [
+                    ScoredChunk(
+                        chunk=Chunk(
+                            track_id=r["track_id"],
+                            lang=r["lang"],
+                            start_ms=r["start_ms"],
+                            end_ms=r["end_ms"],
+                            text=r["text"],
+                            reference_source_id=r["reference_source_id"],
+                        ),
+                        score=float(r["score"]),
+                    )
+                    for r in rows
+                ]
+            except (UnicodeDecodeError, json.JSONDecodeError, KeyError):
+                pass
+        result = await self._search_by_embedding_raw(
+            embedding,
+            eligible_track_ids=eligible_track_ids,
+            excluded_track_ids=excluded_track_ids,
+            lang=lang,
+            top_k=top_k,
+        )
+        try:
+            payload = json.dumps(
+                [
+                    {
+                        "track_id": r.chunk.track_id,
+                        "lang": r.chunk.lang,
+                        "start_ms": r.chunk.start_ms,
+                        "end_ms": r.chunk.end_ms,
+                        "text": r.chunk.text,
+                        "reference_source_id": r.chunk.reference_source_id,
+                        "score": r.score,
+                    }
+                    for r in result
+                ],
+                ensure_ascii=False,
+            ).encode("utf-8")
+            # ANN result payloads stay well under 32 KB for top_k≤16;
+            # cap defensively to keep Redis usage predictable.
+            if len(payload) <= 32 * 1024:
+                await self._cache.set(key, payload, ttl_s=TTL_6H)
+        except Exception:  # noqa: BLE001 — caching is best-effort
+            pass
+        return result
+
+    async def _search_by_embedding_raw(
         self,
         embedding: list[float],
         *,
@@ -73,6 +176,11 @@ class PgChunkRepository:
                 await conn.execute(
                     "SET LOCAL hnsw.iterative_scan = relaxed_order"
                 )
+                # Default ef_search=40 starves the iterative scan when
+                # WHERE filters prune the top candidates. 80 doubles the
+                # candidate pool at negligible extra cost once the HNSW
+                # index sits in shared_buffers (see compose tuning).
+                await conn.execute("SET LOCAL hnsw.ef_search = 80")
                 rows = await conn.fetch(sql, *params)
         return [
             ScoredChunk(
@@ -90,6 +198,71 @@ class PgChunkRepository:
         ]
 
     async def get_window(
+        self,
+        track_id: str,
+        around_ms: int,
+        *,
+        window_ms: int,
+        lang: str | None,
+        max_chunks: int,
+    ) -> list[Chunk]:
+        if self._cache is None:
+            return await self._get_window_raw(
+                track_id, around_ms, window_ms=window_ms, lang=lang, max_chunks=max_chunks,
+            )
+        from lectorium_chat.application.cache_helpers import TTL_24H, make_key
+        key = make_key(
+            "pg_window",
+            {
+                "track_id": track_id,
+                "around_ms": int(around_ms),
+                "window_ms": int(window_ms),
+                "lang": lang,
+                "max_chunks": int(max_chunks),
+            },
+        )
+        cached = await self._cache.get(key)
+        if cached is not None:
+            try:
+                rows = json.loads(cached)
+                return [
+                    Chunk(
+                        track_id=r["track_id"],
+                        lang=r["lang"],
+                        start_ms=r["start_ms"],
+                        end_ms=r["end_ms"],
+                        text=r["text"],
+                        reference_source_id=r["reference_source_id"],
+                    )
+                    for r in rows
+                ]
+            except (UnicodeDecodeError, json.JSONDecodeError, KeyError):
+                pass
+        result = await self._get_window_raw(
+            track_id, around_ms, window_ms=window_ms, lang=lang, max_chunks=max_chunks,
+        )
+        try:
+            payload = json.dumps(
+                [
+                    {
+                        "track_id": c.track_id,
+                        "lang": c.lang,
+                        "start_ms": c.start_ms,
+                        "end_ms": c.end_ms,
+                        "text": c.text,
+                        "reference_source_id": c.reference_source_id,
+                    }
+                    for c in result
+                ],
+                ensure_ascii=False,
+            ).encode("utf-8")
+            if len(payload) <= 64 * 1024:
+                await self._cache.set(key, payload, ttl_s=TTL_24H)
+        except Exception:  # noqa: BLE001
+            pass
+        return result
+
+    async def _get_window_raw(
         self,
         track_id: str,
         around_ms: int,
@@ -214,6 +387,11 @@ class PgChunkRepository:
                 await conn.execute(
                     "SET LOCAL hnsw.iterative_scan = relaxed_order"
                 )
+                # Default ef_search=40 starves the iterative scan when
+                # WHERE filters prune the top candidates. 80 doubles the
+                # candidate pool at negligible extra cost once the HNSW
+                # index sits in shared_buffers (see compose tuning).
+                await conn.execute("SET LOCAL hnsw.ef_search = 80")
                 rows = await conn.fetch(sql, *params)
         return [
             ScoredLibraryChunk(

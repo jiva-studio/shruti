@@ -76,6 +76,8 @@ async def research_worker_node(
         embed_model=ctx.embed_model,
         request_id=ctx.request_id,
         on_event=on_event,
+        kv_cache=ctx.kv_cache,
+        precomputed_query_embedding_task=ctx.embed_task,
     )
 
     # Flatten authoritative (PINNED) + research_chunks into a single

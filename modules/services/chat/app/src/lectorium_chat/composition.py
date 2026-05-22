@@ -19,6 +19,7 @@ from lectorium_chat.config import Settings
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 from lectorium_chat.domain.ports.chunk_repository import ChunkRepository
 from lectorium_chat.domain.ports.embedder import EmbedderPort
+from lectorium_chat.domain.ports.kv_cache import KVCache
 from lectorium_chat.domain.ports.llm_provider import LLMPort
 from lectorium_chat.domain.ports.outline_cache import OutlineCache
 from lectorium_chat.domain.ports.pdf_storage import PdfStorage
@@ -36,6 +37,7 @@ class AppDeps:
     outline_cache: OutlineCache
     pdf_storage: PdfStorage
     rate_limiter: RateLimiter
+    kv_cache: KVCache
     # LangGraph wiring. `llm` is the injected LLMPort (OpenRouter adapter
     # in production, FakeLLM in tests). `chat_graph` is the compiled
     # Pregel — built once at startup, reused for every chat turn.

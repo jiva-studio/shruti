@@ -242,8 +242,12 @@ async def test_short_path_question_match():
     assert len(result.authoritative_refs) == 1
     # Authoritative envelopes carry canonical_score >= 0.85 so synth doesn't refuse.
     assert result.authoritative_refs[0]["score"] == pytest.approx(0.92)
-    # extract_topics NOT called in SHORT path.
-    assert "TopicExtractionResult" not in llm.calls
+    # Stage 2.8.b makes extract_topics speculative — it fires in parallel
+    # with expand_query and gets cancelled in SHORT path. With FakeLLM
+    # being instant, the call lands before cancel; that's a known
+    # trade-off (we'd rather burn one Flash-Lite call than serialise
+    # the LONG path). What matters here is that topics didn't influence
+    # the result, which `matched_topic_ids == []` already asserts.
 
 
 @pytest.mark.asyncio
