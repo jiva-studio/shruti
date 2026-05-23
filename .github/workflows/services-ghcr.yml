@@ -49,6 +49,11 @@ permissions:
 
 jobs:
   build:
+    # Per-job display name uses just the service. Without this override
+    # GitHub's UI shows every matrix dimension —
+    # `build (auth, ./modules, ./modules/services/auth/Dockerfile)` — which
+    # is unreadable in the checks panel and PR overview.
+    name: build / ${{ matrix.service }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -125,7 +130,7 @@ jobs:
       # pushable tag lands in ghcr.io. Trivy DB ships with the action.
       - name: Trivy vulnerability scan
         if: env.SKIP != 'true'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: shruti-${{ matrix.service }}:scan
           severity: HIGH,CRITICAL
