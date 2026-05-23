@@ -222,6 +222,7 @@ async def _regenerate_queries(
     llm: Any,
     model: str | None,
     on_event: OnEvent | None = None,
+    callbacks: list[Any] | None = None,
 ) -> list[str]:
     """Second-pass query expansion that explicitly avoids the previous
     angles. The query_expander prompt + a follow-up hint."""
@@ -234,7 +235,7 @@ async def _regenerate_queries(
     )
     args = {"_followup": follow_up}
     result: ExpansionResult = await expand_query(
-        question, lang, args, llm=llm, model=model,
+        question, lang, args, llm=llm, model=model, callbacks=callbacks,
     )
     for q in result.queries:
         _emit_question(on_event, q, question)
@@ -261,6 +262,11 @@ async def run_research(
     on_event: OnEvent | None = None,
     kv_cache: Any | None = None,
     precomputed_query_embedding_task: Any | None = None,
+    # Langfuse `CallbackHandler` list, threaded into every LLM call in
+    # the pipeline (query expansion, topic extraction, caption
+    # generation, attribution confirmation). None = no observability;
+    # the LLM adapter then skips the `callbacks` kwarg on each call.
+    callbacks: list[Any] | None = None,
 ) -> ResearchResult:
     """Code-driven research. Called from `research_worker_node` when
     `router.intent == "research"`.
@@ -307,6 +313,7 @@ async def run_research(
             alias_map=alias_map, llm=llm, router_args=router_args,
             boost_by_kind=boost_by_kind, expand_model=expand_model,
             request_id=request_id, on_event=on_event,
+            callbacks=callbacks,
         )
 
     # 1. PARALLEL: expand + question-attribution lookup + speculative
@@ -317,7 +324,10 @@ async def run_research(
     # `expand_task` instead of paying for it sequentially after we
     # confirm no question_match. On SHORT path the result is discarded.
     expand_task = asyncio.create_task(_safe(
-        lambda: expand_query(question, lang, router_args, llm=llm, model=expand_model),
+        lambda: expand_query(
+            question, lang, router_args, llm=llm, model=expand_model,
+            callbacks=callbacks,
+        ),
         default=ExpansionResult(queries=[question]), timeout=TIMEOUT_EXPAND_S,
         name="expand_query", request_id=request_id,
     ))
@@ -335,6 +345,7 @@ async def run_research(
             lambda: extract_topics(
                 question, lang, [],
                 llm=llm, model=topic_model, kv_cache=kv_cache,
+                callbacks=callbacks,
             ),
             default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
             name="extract_topics_speculative", request_id=request_id,
@@ -414,6 +425,7 @@ async def run_research(
         _kick_caption_gen(
             result, alias_map=alias_map, question=question, lang=lang,
             llm=llm, model=expand_model, request_id=request_id,
+            callbacks=callbacks,
         )
         return result
 
@@ -435,10 +447,12 @@ async def run_research(
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
         kv_cache=kv_cache,
+        callbacks=callbacks,
     )
     _kick_caption_gen(
         long_result, alias_map=alias_map, question=question, lang=lang,
         llm=llm, model=expand_model, request_id=request_id,
+        callbacks=callbacks,
     )
     return long_result
 
@@ -452,6 +466,7 @@ def _kick_caption_gen(
     llm: Any,
     model: str | None,
     request_id: str | None,
+    callbacks: list[Any] | None = None,
 ) -> None:
     """Fire-and-forget background Flash-Lite call that fills
     `alias_map.captions` with 2-5 word topic tags for every lecture-
@@ -488,6 +503,7 @@ def _kick_caption_gen(
             llm=llm, model=model,
             captions_out=alias_map.captions,
             request_id=request_id,
+            callbacks=callbacks,
         ),
     )
     # Hold a strong reference on the alias map so the loop doesn't GC
@@ -516,6 +532,7 @@ async def _research_path(
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
     kv_cache: Any | None = None,
+    callbacks: list[Any] | None = None,
 ) -> ResearchResult:
     """LONG path: topic-extract → topic-lookup → boost-aware fanout with
     coverage gate and up to MAX_FANOUT_ROUNDS rounds."""
@@ -534,6 +551,7 @@ async def _research_path(
                 lambda: extract_topics(
                     question, lang, expansion.queries,
                     llm=llm, model=topic_model, kv_cache=kv_cache,
+                    callbacks=callbacks,
                 ),
                 default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
                 name="extract_topics", request_id=request_id,
@@ -650,6 +668,7 @@ async def _research_path(
                 lambda: _regenerate_queries(
                     question, lang, queries, accumulated.chunks,
                     llm=llm, model=expand_model, on_event=on_event,
+                    callbacks=callbacks,
                 ),
                 default=[], timeout=TIMEOUT_REGENERATE_S,
                 name="regenerate_queries", request_id=request_id,

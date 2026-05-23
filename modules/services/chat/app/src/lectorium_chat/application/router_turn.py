@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from lectorium_chat.application.cache_helpers import TTL_7D, cached_llm_json
 from lectorium_chat.domain.entities import Message
 from lectorium_chat.domain.routing import RoutingDecision
+from lectorium_chat.observability.langfuse_client import prompt_with_fallback
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.timing import stage
 
@@ -35,6 +36,7 @@ class _LLMForRouting(Protocol):
         schema: type[T],
         *,
         model: str | None = None,
+        callbacks: list[Any] | None = None,
     ) -> T: ...
 
 
@@ -180,6 +182,11 @@ async def run_router_turn(
     request_id: str | None = None,
     model: str | None = None,
     kv_cache: "Any | None" = None,
+    # Langfuse handler list. When the router result is served from the
+    # KV cache (deterministic hit), no LLM call happens and the
+    # callback is silently unused — that's correct: a cache hit isn't
+    # a model interaction worth tracing.
+    callbacks: list[Any] | None = None,
 ) -> RoutingDecision:
     """Classify the query, return a validated `RoutingDecision`.
 
@@ -197,20 +204,38 @@ async def run_router_turn(
     same question rolls in (router only sees the latest user turn)
     we skip the ~1s call entirely.
     """
+    # Pull the router prompt from Langfuse per-turn so a prompt edit in
+    # the UI propagates within `cache_ttl_seconds=60`. The hardcoded
+    # `_ROUTER_SYSTEM_PROMPT` above stays in the repo as the fallback
+    # path (Langfuse down / `LANGFUSE_FORCE_FALLBACK=1` / eval mode)
+    # AND as the source of truth for the bootstrap script. The
+    # `RoutingDecision` Pydantic schema lives in code, not in Langfuse
+    # — config flow only carries strings, not types.
+    router_prompt = prompt_with_fallback(
+        "chat-router", fallback=_ROUTER_SYSTEM_PROMPT,
+    )
+    effective_model = router_prompt.config.get("model") or model
     messages: list[Message] = [
-        {"role": "system", "content": _ROUTER_SYSTEM_PROMPT},
+        {"role": "system", "content": router_prompt.text},
         {"role": "user", "content": f"[lang={lang}] {user_query}"},
     ]
 
     async def _call() -> RoutingDecision:
         async with stage("router", request_id=request_id):
-            return await llm.structured_output(messages, RoutingDecision, model=model)
+            return await llm.structured_output(
+                messages, RoutingDecision, model=effective_model, callbacks=callbacks,
+            )
 
     if kv_cache is not None:
         decision = await cached_llm_json(
             kv_cache,
             ns="router",
-            key_parts={"q": user_query, "lang": lang, "model": model or ""},
+            # Cache key includes the EFFECTIVE model (post-Langfuse
+            # override) so an A/B model swap in the UI invalidates the
+            # cache automatically. Without this, a model change in
+            # Langfuse would still serve stale `RoutingDecision`s
+            # baked under the previous model for up to TTL_7D.
+            key_parts={"q": user_query, "lang": lang, "model": effective_model or ""},
             ttl_s=TTL_7D,
             schema=RoutingDecision,
             factory=_call,

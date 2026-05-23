@@ -42,6 +42,7 @@ class LLMPort(Protocol):
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[CompletionChunk]:
         """Stream chunks of an LLM completion.
 
@@ -53,6 +54,11 @@ class LLMPort(Protocol):
           model tiering (e.g. router on Haiku, synth on Sonnet).
         - `temperature`: 0 for deterministic output (router classification),
           higher for prose generation (synth).
+        - `callbacks`: LangChain `BaseCallbackHandler` list, threaded
+          into the underlying `ChatOpenAI(callbacks=...)`. Used to
+          attach a Langfuse `CallbackHandler` so the LLM call appears
+          as a span under the per-turn Langfuse trace. `None` =
+          un-instrumented call (no observability overhead).
         """
         ...
 
@@ -62,6 +68,7 @@ class LLMPort(Protocol):
         schema: type[T],
         *,
         model: str | None = None,
+        callbacks: list[Any] | None = None,
     ) -> T:
         """One-shot call returning a validated Pydantic instance.
 
@@ -69,6 +76,13 @@ class LLMPort(Protocol):
         Anthropic's tool-use, etc.). Adapters MUST validate against the
         schema before returning — callers should never see a parsing
         error past this method.
+
+        `callbacks` is forwarded to the underlying `ChatOpenAI` so the
+        call shows up as a span under the active Langfuse trace.
+        Temperature for `structured_output` is forced to 0 inside the
+        adapter — see `infra/llm_provider/openrouter.py` for the
+        rationale; configured `temperature` values from Langfuse
+        prompt-config are intentionally ignored here.
         """
         ...
 

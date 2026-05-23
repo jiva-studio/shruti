@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import Any, AsyncIterator, Awaitable, Callable
+from uuid import uuid4
 
 from lectorium_chat.agent.aliased_tools import build_aliased_tools
 from lectorium_chat.agent.events import AgentEvent
@@ -34,6 +35,7 @@ from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.domain import UserContext
 from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.observability.langfuse_client import with_langfuse_trace
 from lectorium_chat.observability.logging import (
     bind_turn_context,
     clear_turn_context,
@@ -174,8 +176,23 @@ async def run_chat_turn(
         )
 
     trace_id = request_id or "anon"
-    bind_turn_context(trace_id=trace_id, request_id=request_id, agent_role="main")
+    # Langfuse-side trace ID. Always a fresh uuid4 even when request_id
+    # is already a uuid — keeping it distinct from the structlog
+    # `trace_id` lets us evolve `request_id` semantics (e.g. one HTTP
+    # request → N proactive turns each with its own Langfuse trace)
+    # without breaking the cross-link. The same value is bound into
+    # structlog so Grafana's Loki derived field
+    # `langfuse_trace_id=([a-f0-9-]+)` resolves to the right Langfuse
+    # URL.
+    langfuse_trace_id = str(uuid4())
+    bind_turn_context(
+        trace_id=trace_id,
+        request_id=request_id,
+        agent_role="main",
+        langfuse_trace_id=langfuse_trace_id,
+    )
 
+    user_id_for_trace = user_context.user_id if user_context else None
     try:
         # ── Build per-turn services (aliases + expander + tools) ──────
         aliases = TurnAliasMap()
@@ -243,6 +260,7 @@ async def run_chat_turn(
 
         ctx = TurnContext(
             request_id=trace_id,
+            langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
             llm=deps.llm,
@@ -275,44 +293,56 @@ async def run_chat_turn(
         }
 
         # ── Drive the graph; bridge custom events to AgentEvents ─────
+        #
+        # The Langfuse trace stays open across the whole graph
+        # invocation so every node-level CallbackHandler created via
+        # `langfuse_node_callback(langfuse_trace_id, ...)` attaches its
+        # spans under the same root. No-op when the SDK is uninitialised
+        # (LANGFUSE_FORCE_FALLBACK=1 or missing env).
         full_prose: list[str] = []
-        try:
-            async for mode, payload in deps.chat_graph.astream(
-                initial_state,
-                context=ctx,
-                stream_mode=["custom"],
-            ):
-                if mode != "custom":
-                    continue
-                # All node-writer emissions have shape {type, data}.
-                ev_type = payload.get("type")
-                ev_data = payload.get("data", {})
-                if not ev_type:
-                    continue
-                if ev_type == "delta":
-                    full_prose.append(ev_data.get("text", ""))
-                yield AgentEvent(type=ev_type, data=ev_data)
-                # Co-op cancellation if the client closed the SSE.
-                if is_disconnected is not None and await is_disconnected():
-                    log.info(
-                        "chat_cancelled_mid_stream",
-                        request_id=request_id,
-                        prose_chars=sum(len(s) for s in full_prose),
-                    )
-                    return
-        except Exception as exc:
-            log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
-            yield AgentEvent(
-                type="error",
-                data={"code": "agent_error", "message": str(exc)},
-            )
-            return
+        async with with_langfuse_trace(
+            langfuse_trace_id,
+            user_id_for_trace,
+            session_id=None,  # conversation_id lives in DB; threading TBD
+            name="chat_turn",
+        ):
+            try:
+                async for mode, payload in deps.chat_graph.astream(
+                    initial_state,
+                    context=ctx,
+                    stream_mode=["custom"],
+                ):
+                    if mode != "custom":
+                        continue
+                    # All node-writer emissions have shape {type, data}.
+                    ev_type = payload.get("type")
+                    ev_data = payload.get("data", {})
+                    if not ev_type:
+                        continue
+                    if ev_type == "delta":
+                        full_prose.append(ev_data.get("text", ""))
+                    yield AgentEvent(type=ev_type, data=ev_data)
+                    # Co-op cancellation if the client closed the SSE.
+                    if is_disconnected is not None and await is_disconnected():
+                        log.info(
+                            "chat_cancelled_mid_stream",
+                            request_id=request_id,
+                            prose_chars=sum(len(s) for s in full_prose),
+                        )
+                        return
+            except Exception as exc:
+                log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
+                yield AgentEvent(
+                    type="error",
+                    data={"code": "agent_error", "message": str(exc)},
+                )
+                return
 
-        # ── Flush any partial-marker tail still in expander ──────────
-        tail = await expander.flush()
-        if tail:
-            yield AgentEvent(type="delta", data={"text": tail})
-            full_prose.append(tail)
+            # ── Flush any partial-marker tail still in expander ──────────
+            tail = await expander.flush()
+            if tail:
+                yield AgentEvent(type="delta", data={"text": tail})
+                full_prose.append(tail)
 
         # ── Bypass-marker audit (off the hot path) ───────────────────
         await _audit_bypass_markers(

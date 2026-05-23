@@ -37,6 +37,7 @@ class _LLMForSynthesis(Protocol):
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[CompletionChunk]: ...
 
 
@@ -311,6 +312,9 @@ async def run_synthesizer_turn(
     request_id: str | None = None,
     model: str | None = None,
     temperature: float | None = 0.5,
+    # Langfuse callback for the streaming synth call. The whole streaming
+    # generation becomes one span under the per-turn root trace.
+    callbacks: list[Any] | None = None,
 ) -> AsyncIterator[SynthesizerEvent]:
     """Stream the final response. Each yielded `SynthesizerEvent` of
     type `delta` carries already-expanded text — the caller forwards
@@ -380,6 +384,7 @@ async def run_synthesizer_turn(
         messages,
         model=model,
         temperature=temperature,
+        callbacks=callbacks,
     ):
         text = chunk.get("text")
         if not text:

@@ -22,6 +22,7 @@ from lectorium_chat.agent.graph.nodes._worker_common import (
 )
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 from lectorium_chat.research.pipeline import run_research
 
@@ -63,6 +64,12 @@ async def research_worker_node(
     lang = state.get("lang", "ru")
     router_args = state.get("extracted_args", {}) or {}
 
+    cb = (
+        langfuse_node_callback(ctx.langfuse_trace_id, "research_worker")
+        if ctx.langfuse_trace_id
+        else None
+    )
+
     research_result = await run_research(
         question=user_query,
         lang=lang,
@@ -78,6 +85,7 @@ async def research_worker_node(
         on_event=on_event,
         kv_cache=ctx.kv_cache,
         precomputed_query_embedding_task=ctx.embed_task,
+        callbacks=[cb] if cb is not None else None,
     )
 
     # Flatten authoritative (PINNED) + research_chunks into a single

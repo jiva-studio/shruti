@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from lectorium_chat.domain.entities import Message
+from lectorium_chat.observability.langfuse_client import prompt_with_fallback
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.models import ExpansionResult
 
@@ -45,17 +46,25 @@ async def expand_query(
     *,
     llm: Any,
     model: str | None = None,
+    callbacks: list[Any] | None = None,
 ) -> ExpansionResult:
     """Run one structured-output LLM call. On any error returns a degraded
     result with just [question] so the caller's fanout still has something
     to search."""
     try:
+        # Pull the system prompt from Langfuse for hot-reload; fall back
+        # to the bundled .md so a Langfuse outage doesn't drop traffic.
+        # The handle.config["model"] override (if set in Langfuse UI)
+        # wins over the `model` argument — this is what lets us A/B a
+        # cheaper model from the Langfuse playground without a deploy.
+        prompt = prompt_with_fallback("query-expander", fallback=_load_prompt)
+        effective_model = prompt.config.get("model") or model
         messages: list[Message] = [
-            {"role": "system", "content": _load_prompt()},
+            {"role": "system", "content": prompt.text},
             {"role": "user", "content": _format_user(question, lang, router_args or {})},
         ]
         result: ExpansionResult = await llm.structured_output(
-            messages, ExpansionResult, model=model,
+            messages, ExpansionResult, model=effective_model, callbacks=callbacks,
         )
         # Defensive — drop empty / overly long queries.
         cleaned = [q.strip() for q in result.queries if q and q.strip()]

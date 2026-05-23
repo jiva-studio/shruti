@@ -69,8 +69,16 @@ class UserContext:
     """Listening history lives in `recent_tracks` — each entry carries
     `percent` (0..1 fraction listened) and derivation lives on this
     class (`in_progress_tracks`, `completed_tracks`, `tracks_in_window`)
-    rather than being re-implemented in each consumer."""
+    rather than being re-implemented in each consumer.
 
+    `user_id` is the internal UUID from the JWT `sub` claim, propagated
+    through to Langfuse traces (`langfuse.trace(user_id=...)`) so the
+    observability UI can group turns by user without leaking apple_id /
+    google_play_id / email to the LLM provider or the trace store. See
+    `observability/USER_ID.md`.
+    """
+
+    user_id: str | None = None
     current_track_id: str | None = None
     now: datetime | None = None
     recent_tracks: tuple[UserContextTrack, ...] = field(default_factory=tuple)

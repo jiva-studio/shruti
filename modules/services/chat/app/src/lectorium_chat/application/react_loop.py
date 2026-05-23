@@ -71,6 +71,7 @@ class _LLMForResearch(Protocol):
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[CompletionChunk]: ...
 
 
@@ -209,6 +210,11 @@ async def run_react_loop(
     max_turns: int = DEFAULT_MAX_TURNS,
     on_tool_event: ToolLifecycleCallback | None = None,
     yield_event: YieldEventCallback | None = None,
+    # Langfuse `CallbackHandler` instances threaded into every LLM call
+    # in this loop, so each ReAct iteration shows up as a span under
+    # the per-turn root trace. `None` = no observability (off-path or
+    # `LANGFUSE_FORCE_FALLBACK=1`).
+    callbacks: list[Any] | None = None,
 ) -> ResearchResult:
     """Run the multi-step research ReAct loop and return tool results.
 
@@ -246,6 +252,7 @@ async def run_react_loop(
             tool_choice=initial_tool_choice if turn == 0 else None,
             model=model,
             temperature=0.2,
+            callbacks=callbacks,
         ):
             acc.consume(chunk.get("tool_calls"))
             if (fr := chunk.get("finish_reason")):

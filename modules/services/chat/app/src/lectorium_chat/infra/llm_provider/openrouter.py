@@ -55,6 +55,40 @@ def _normalise_model(model: str) -> str:
     return model
 
 
+def _build_model_allowlist(settings: Settings) -> frozenset[str]:
+    """Models the adapter will pass through to ChatOpenAI verbatim.
+
+    Built from `Settings.llm_*` plus an explicit allow set of known-good
+    OpenRouter ids. Guards against typos in Langfuse prompt-config
+    (`{"model": "gemnini-3.1-flash"}` would otherwise reach OpenRouter
+    and 400). On miss we log a warning and fall back to `llm_default`.
+    """
+    base = {
+        settings.llm_default,
+        settings.llm_fallback,
+        settings.llm_premium,
+        settings.llm_outline,
+        settings.llm_query_expander,
+        # Known-good aliases — extend here when adding a new model to
+        # Langfuse prompt-config. Keep curated; the whole point is
+        # rejecting typos before they hit the provider.
+        "openrouter/anthropic/claude-3.5-sonnet",
+        "openrouter/anthropic/claude-3-haiku",
+        "openrouter/google/gemini-2.0-flash-001",
+        "openrouter/google/gemini-3.1-flash-lite",
+        "openrouter/deepseek/deepseek-chat",
+    }
+    # Store both the LiteLLM-prefixed and the normalised forms so the
+    # check is robust regardless of which shape the caller provides.
+    expanded: set[str] = set()
+    for m in base:
+        if not m:
+            continue
+        expanded.add(m)
+        expanded.add(_normalise_model(m))
+    return frozenset(expanded)
+
+
 def _to_langchain_message(m: Message) -> BaseMessage:
     """Domain Message → LangChain BaseMessage. Boundary conversion: we
     keep Message in domain (so application doesn't import langchain),
@@ -134,6 +168,11 @@ class OpenRouterLLMProvider:
 
     Clients are pooled by `(model, temperature)` in a module-level LRU
     so the underlying httpx connection pool survives across calls.
+
+    Per-call `callbacks` (e.g. a Langfuse `CallbackHandler`) are NOT
+    cached with the client — they bind a fresh `ChatOpenAI` via
+    `bind(callbacks=...)` at call time so each turn gets its own trace
+    binding while the underlying httpx pool stays shared.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -143,12 +182,41 @@ class OpenRouterLLMProvider:
             )
         self._api_key = settings.openrouter_api_key
         self._default_model = settings.llm_default
+        self._allowlist = _build_model_allowlist(settings)
         # Pre-warm the default-model client so the first turn doesn't
         # pay the construction cost on the request path.
         _build_client(self._api_key, self._default_model, None)
 
+    def _validate_model(self, model: str | None) -> str:
+        """Whitelist gate. Unknown models fall back to `llm_default` with
+        a warning so a typo in Langfuse prompt-config doesn't 400 the
+        provider call."""
+        if model is None:
+            return self._default_model
+        if model in self._allowlist or _normalise_model(model) in self._allowlist:
+            return model
+        log.warning(
+            "llm_model_not_in_allowlist_fallback",
+            requested_model=model,
+            fallback_model=self._default_model,
+        )
+        return self._default_model
+
     def _client_for(self, model: str, *, temperature: float | None) -> ChatOpenAI:
         return _build_client(self._api_key, model, temperature)
+
+    @staticmethod
+    def _runnable_config(callbacks: list[Any] | None) -> dict[str, Any] | None:
+        """Build the LangChain `RunnableConfig` carrying callbacks. We
+        attach via `astream(config=...)` / `ainvoke(config=...)` rather
+        than `client.bind(callbacks=...)` because `bind` returns a
+        `RunnableBinding` that doesn't expose `with_structured_output`
+        — and structured_output is what the router uses. Per-call
+        config keeps the pooled `ChatOpenAI` instance clean and lets
+        the same client serve unrelated turns concurrently."""
+        if not callbacks:
+            return None
+        return {"callbacks": callbacks}
 
     async def stream_completion(
         self,
@@ -158,8 +226,11 @@ class OpenRouterLLMProvider:
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[CompletionChunk]:
-        client = self._client_for(model or self._default_model, temperature=temperature)
+        client = self._client_for(
+            self._validate_model(model), temperature=temperature,
+        )
         if tools:
             # langchain_openai accepts tool_choice as:
             #   "auto" | "required" | "none" | None  – generic modes
@@ -182,7 +253,9 @@ class OpenRouterLLMProvider:
                 tool_choice=chosen,
             )
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        async for chunk in client.astream(lc_msgs):
+        config = self._runnable_config(callbacks)
+        stream_kwargs: dict[str, Any] = {"config": config} if config else {}
+        async for chunk in client.astream(lc_msgs, **stream_kwargs):
             # ChatOpenAI emits AIMessageChunk; type-narrow defensively in
             # case provider returns something else (Anthropic via OpenRouter
             # has occasionally returned bare AIMessage on tool calls).
@@ -197,11 +270,21 @@ class OpenRouterLLMProvider:
         schema: type[T],
         *,
         model: str | None = None,
+        callbacks: list[Any] | None = None,
     ) -> T:
-        client = self._client_for(model or self._default_model, temperature=0)
+        # temperature is forced to 0 for structured_output regardless of
+        # what a Langfuse prompt-config carries. Routing / topic
+        # extraction / query expansion all rely on deterministic JSON
+        # output; non-zero temperature flaps the parser. The bootstrap
+        # script for Langfuse documents this explicitly so prompt
+        # editors don't expect temperature changes to take effect for
+        # structured_output prompts.
+        client = self._client_for(self._validate_model(model), temperature=0)
         structured = client.with_structured_output(schema)
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        result = await structured.ainvoke(lc_msgs)
+        config = self._runnable_config(callbacks)
+        invoke_kwargs: dict[str, Any] = {"config": config} if config else {}
+        result = await structured.ainvoke(lc_msgs, **invoke_kwargs)
         # `with_structured_output` returns the schema instance directly
         # when method="function_calling" (the default). Type-cast here
         # for callers' benefit.

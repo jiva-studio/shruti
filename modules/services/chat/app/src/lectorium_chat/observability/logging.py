@@ -39,7 +39,40 @@ import structlog
 from lectorium_chat.config import get_settings
 
 
-_TURN_FIELDS = ("trace_id", "request_id", "agent_role", "parent_trace_id")
+# PII keys that MUST NOT reach stdout / Loki / Langfuse traces. The
+# auth service mints opaque UUIDs for `user_id`; nothing downstream
+# should be carrying these fields, but `drop_pii` is belt-and-braces
+# in case a future tool or LLM-result envelope drags one in.
+# Extend this set when introducing a new PII shape — keep the
+# defence at this single choke-point rather than scattering filters
+# across call sites.
+SENSITIVE_KEYS: frozenset[str] = frozenset(
+    {"email", "apple_id", "google_play_id", "ip", "phone", "real_name"}
+)
+
+
+def drop_pii(logger, method_name, event_dict):  # noqa: ANN001 — structlog processor signature
+    """structlog processor — strip PII keys before any other formatter
+    sees the dict. Runs early in `shared_processors` so context-bound
+    PII (via `bind_contextvars(email=...)`) is also caught, not just
+    per-call kwargs."""
+    for k in list(event_dict.keys()):
+        if k in SENSITIVE_KEYS:
+            event_dict.pop(k, None)
+    return event_dict
+
+
+_TURN_FIELDS = (
+    "trace_id",
+    "request_id",
+    "agent_role",
+    "parent_trace_id",
+    # `langfuse_trace_id` is the uuid4 used as the Langfuse root-trace
+    # ID. Bound here so every log line carries it; Grafana's Loki
+    # derived field `langfuse_trace_id=([a-f0-9-]+)` cross-links a log
+    # entry to its Langfuse trace URL.
+    "langfuse_trace_id",
+)
 
 
 def setup_logging() -> None:
@@ -52,6 +85,13 @@ def setup_logging() -> None:
 
     shared_processors: list = [
         structlog.contextvars.merge_contextvars,
+        # PII drop happens BEFORE add_log_level / EventRenamer so the
+        # sanitised dict is what every subsequent processor (and the
+        # JSON renderer) sees. Position 1 = after contextvars merge
+        # (so context-bound PII is also caught), before structlog
+        # formatters. SENSITIVE_KEYS lives at module level — extend
+        # there if a new PII shape is introduced.
+        drop_pii,
         # add_log_level emits `level` which Datadog recognises as severity.
         structlog.stdlib.add_log_level,
         # Rename structlog's default `event` field → `message`. Datadog's
@@ -112,6 +152,7 @@ def bind_turn_context(
     request_id: str | None = None,
     agent_role: str = "main",
     parent_trace_id: str | None = None,
+    langfuse_trace_id: str | None = None,
 ) -> None:
     """Bind multi-agent tracing fields for the lifetime of one chat turn.
 
@@ -119,12 +160,17 @@ def bind_turn_context(
     invoking the graph). The fields are inherited by every log line
     produced inside this async context, including from worker nodes
     that don't explicitly know about logging.
+
+    `langfuse_trace_id` is the Langfuse root-trace UUID; logs carry it
+    so a Grafana Loki query can derive-field jump straight to the
+    matching Langfuse trace URL.
     """
     structlog.contextvars.bind_contextvars(
         trace_id=trace_id,
         request_id=request_id or trace_id,
         agent_role=agent_role,
         parent_trace_id=parent_trace_id or "",
+        langfuse_trace_id=langfuse_trace_id or "",
     )
 
 

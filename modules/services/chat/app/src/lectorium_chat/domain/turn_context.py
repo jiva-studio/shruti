@@ -64,6 +64,15 @@ class TurnContext:
 
     # ── Identity / correlation ─────────────────────────────────────────
     request_id: str = ""
+    # Langfuse root-trace UUID. Bound at turn entry by
+    # `application/chat_turn.run_chat_turn`; each graph node reads it
+    # to build a `CallbackHandler(stateful_client=…, trace_id=…)` so
+    # every LLM span in the turn anchors under the SAME Langfuse
+    # trace (without that, LangChain creates a fresh trace per
+    # callback and the per-turn view in the UI fragments). Empty
+    # string when observability is disabled — node-level helpers
+    # short-circuit on the empty value.
+    langfuse_trace_id: str = ""
 
     # ── Citation pipeline (mutable, shared by reference) ──────────────
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)

@@ -20,7 +20,7 @@ class FakeLLM:
         self.script = script
         self.calls: list[tuple[list[dict], type[BaseModel], str | None]] = []
 
-    async def structured_output(self, messages: list[dict], schema: type[BaseModel], *, model: str | None = None):
+    async def structured_output(self, messages: list[dict], schema: type[BaseModel], *, model: str | None = None, **_extra):
         self.calls.append((messages, schema, model))
         if callable(self.script):
             return self.script(messages, schema, model)

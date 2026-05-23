@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from lectorium_chat.application.cache_helpers import TTL_7D, cached_json
 from lectorium_chat.domain.entities import Message
+from lectorium_chat.observability.langfuse_client import prompt_with_fallback
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import TOPIC_MAX_TOPICS_EXTRACTED
 from lectorium_chat.research.models import TopicExtractionResult
@@ -44,6 +45,7 @@ async def extract_topics(
     llm: Any,
     model: str | None = None,
     kv_cache: Any | None = None,
+    callbacks: list[Any] | None = None,
 ) -> list[str]:
     """Run one structured-output LLM call. On any error or empty output
     returns [] — the caller falls through to fanout without topic-boost.
@@ -60,12 +62,14 @@ async def extract_topics(
 
     async def _call() -> list[str]:
         try:
+            prompt = prompt_with_fallback("topic-extractor", fallback=_load_prompt)
+            effective_model = prompt.config.get("model") or model
             messages: list[Message] = [
-                {"role": "system", "content": _load_prompt()},
+                {"role": "system", "content": prompt.text},
                 {"role": "user", "content": _format_user(question, lang, expansion_queries or [])},
             ]
             result: TopicExtractionResult = await llm.structured_output(
-                messages, TopicExtractionResult, model=model,
+                messages, TopicExtractionResult, model=effective_model, callbacks=callbacks,
             )
             cleaned = [t.strip() for t in result.topics if t and t.strip()]
             return cleaned[:TOPIC_MAX_TOPICS_EXTRACTED]
