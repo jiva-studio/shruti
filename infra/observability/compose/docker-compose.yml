@@ -33,7 +33,7 @@ services:
   # Caddy — reverse proxy + TLS termination (Cloudflare DNS-01)
   # ─────────────────────────────────────────────────────────────────
   caddy:
-    image: ghcr.io/akdasa-studios/shruti-obs-caddy:latest
+    image: ghcr.io/akdasa-studios/shruti-caddy:latest
     ports:
       - "${OBS_TS_IP}:443:443"
       - "${OBS_TS_IP}:80:80"
