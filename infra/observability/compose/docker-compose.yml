@@ -71,6 +71,9 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: "https://grafana.${TAILNET_DOMAIN}"
       GF_INSTALL_PLUGINS: ""
+      # JSON logs so Loki gets structured fields for the level/msg labels.
+      GF_LOG_MODE: console
+      GF_LOG_FORMAT: json
       # Telegram secrets surfaced for provisioning/alerting/contact-points.yml
       TG_BOT_TOKEN: ${TG_BOT_TOKEN}
       TG_CHAT_ID: ${TG_CHAT_ID}
@@ -115,6 +118,7 @@ services:
       - --web.enable-lifecycle
       - --web.console.libraries=/usr/share/prometheus/console_libraries
       - --web.console.templates=/usr/share/prometheus/consoles
+      - --log.format=json
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
       interval: 15s
@@ -337,6 +341,7 @@ services:
       - --path.rootfs=/host
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
       - --web.listen-address=${OBS_TS_IP}:9100
+      - --log.format=json
     volumes:
       - "/:/host:ro,rslave"
     <<: *restart
@@ -376,7 +381,9 @@ services:
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./promtail-self.yaml:/etc/promtail/config.yaml:ro
-    command: -config.file=/etc/promtail/config.yaml
+    command:
+      - -config.file=/etc/promtail/config.yaml
+      - -log.format=json
     <<: *restart
 
   # ─────────────────────────────────────────────────────────────────
