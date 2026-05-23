@@ -183,10 +183,11 @@ services:
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       TELEMETRY_ENABLED: "false"
-      # Bind Next.js on all interfaces so the in-container healthcheck can probe.
-      HOSTNAME: "0.0.0.0"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/public/health"]
+      # Next.js binds the container's bridge IP (HOSTNAME is set to the
+      # docker-assigned container ID, not 0.0.0.0). Probe port presence
+      # via nc — works regardless of which interface the process picked.
+      test: ["CMD-SHELL", "nc -z localhost 3000 || nc -z $(hostname -i) 3000 || exit 1"]
       interval: 10s
       start_period: 180s
       timeout: 5s
