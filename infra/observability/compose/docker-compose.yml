@@ -129,7 +129,16 @@ services:
   # Langfuse — web (UI + ingestion API)
   # ─────────────────────────────────────────────────────────────────
   langfuse-web:
-    image: langfuse/langfuse:3.175.0
+    image: langfuse/langfuse:3
+    labels:
+      # Watchtower opt-in. Tag `3` is a floating major-pin maintained
+      # by upstream — every new 3.x.y is republished under the `3` tag,
+      # Watchtower polls the digest and rolls automatically. We pin to
+      # the major so a future 4.x (likely to ship breaking schema
+      # changes) does NOT roll silently. To freeze further: switch back
+      # to a literal `langfuse/langfuse:3.X.Y` tag and Watchtower stops
+      # touching the container.
+      com.centurylinklabs.watchtower.enable: "true"
     # Inside the container the app listens on :3000 — same as Grafana,
     # hence we map it to :3001 on the Tailscale IP so chat SDK on prod-EU
     # can push traces via http://${OBS_TS_IP}:3001.
@@ -202,7 +211,9 @@ services:
   # Langfuse — worker (async trace processing)
   # ─────────────────────────────────────────────────────────────────
   langfuse-worker:
-    image: langfuse/langfuse-worker:3.175.0
+    image: langfuse/langfuse-worker:3
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     depends_on:
       langfuse-web:
         condition: service_healthy
