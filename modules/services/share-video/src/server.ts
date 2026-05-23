@@ -13,7 +13,7 @@
  */
 
 import * as crypto from 'crypto';
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction, RequestHandler } from 'express';
 import { S3Client } from '@aws-sdk/client-s3';
 import { getPool, closePool } from './db';
 import { assertSchemaReady } from './assertSchema';
@@ -30,11 +30,23 @@ const app = express();
 app.use(httpLogger);
 app.use(express.json({ limit: '32kb' }));
 
+// Express 4 doesn't forward rejected async handler promises to the
+// error middleware automatically — they become unhandledRejection and
+// kill the Node process. Wrap every async handler so any throw lands
+// in app.use(err, …) below as a 500 instead of taking the server down.
+function wrap(
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
+): RequestHandler {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
 app.get('/healthz', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok' });
 });
 
-app.post('/reels', requireAuth, async (req: Request, res: Response) => {
+app.post('/reels', requireAuth, wrap(async (req: Request, res: Response) => {
   let parsed;
   try {
     parsed = parseRenderRequest(req.body);
@@ -98,9 +110,9 @@ app.post('/reels', requireAuth, async (req: Request, res: Response) => {
   );
 
   res.status(202).json({ video_id: videoId, ready: false });
-});
+}));
 
-app.get('/reels/:id', requireAuth, async (req: Request, res: Response) => {
+app.get('/reels/:id', requireAuth, wrap(async (req: Request, res: Response) => {
   const id = req.params.id;
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) && !/^[0-9a-f-]{36}$/.test(id)) {
     return res.status(400).json({ error: 'invalid video_id format' });
@@ -125,10 +137,10 @@ app.get('/reels/:id', requireAuth, async (req: Request, res: Response) => {
     url: row.result?.url,
     error: row.error ?? undefined,
   });
-});
+}));
 
-// Last-resort express error handler. Most paths await await so unhandled
-// promise rejections are caught up the stack; this is for the rest.
+// Last-resort express error handler. `wrap()` above forwards async-handler
+// rejections here; this is also where sync throws land.
 app.use((err: Error, req: Request, res: Response, _next: any) => {
   const reqLog = (req as any).log ?? log;
   reqLog.error({ err: err.message, stack: err.stack }, 'request_error');
