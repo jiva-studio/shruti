@@ -46,16 +46,6 @@
         Access-Control-Expose-Headers "Retry-After, X-Request-Id"
     }
 
-    # CORS preflight short-circuit. Browser sends an OPTIONS before any
-    # POST with a non-simple Content-Type or a custom header. Without
-    # this match, the OPTIONS hits the upstream Go/Node handlers, which
-    # are POST-only and answer 405 — preflight fails and the actual POST
-    # never goes out. Reply 204 with the headers above already attached.
-    @options method OPTIONS
-    handle @options {
-        respond 204
-    }
-
     # Per-IP rate limits. Each zone has its own matcher; a request that
     # matches multiple zones (shouldn't happen with our path partitioning)
     # would be tested against all of them.
@@ -120,47 +110,64 @@
         }
     }
 
-    # ── /auth/* — auth service ─────────────────────────────────────
-    handle /auth/* {
-        reverse_proxy auth:8081
-    }
+    # Routes wrapped in a `route` block so they execute in DECLARATION
+    # order, not Caddy's standard directive order. We need this for two
+    # reasons:
+    #   1. CORS preflight short-circuit (OPTIONS → 204) must run BEFORE
+    #      the path-matched handles. Otherwise `handle /auth/*` claims
+    #      the request and the upstream Go service returns 405 — browser
+    #      cancels the actual POST and the request never lands. The
+    #      CORS headers themselves are set in the global header{} block
+    #      above (`deferred` mode), so the 204 already carries them.
+    #   2. Without `route`, two `handle` blocks without a path matcher
+    #      (the OPTIONS one and the chat catch-all) collide and Caddy
+    #      silently drops one.
+    route {
+        @options method OPTIONS
+        respond @options 204
 
-    # ── /share/audio/* — share-audio service ───────────────────────
-    # handle_path strips the prefix so the FastAPI app sees /excerpts.
-    # Body cap is generous for a JSON envelope (<1KB in practice) but
-    # forbids someone POSTing a multi-MB blob to chew worker memory.
-    handle_path /share/audio/* {
-        request_body {
-            max_size 100KB
+        # ── /auth/* — auth service ─────────────────────────────────
+        handle /auth/* {
+            reverse_proxy auth:8081
         }
-        reverse_proxy share-audio:8082
-    }
 
-    # ── /share/video/* — share-video service ───────────────────────
-    handle_path /share/video/* {
-        request_body {
-            max_size 100KB
+        # ── /share/audio/* — share-audio service ───────────────────
+        # handle_path strips the prefix so the FastAPI app sees /excerpts.
+        # Body cap is generous for a JSON envelope (<1KB in practice) but
+        # forbids someone POSTing a multi-MB blob to chew worker memory.
+        handle_path /share/audio/* {
+            request_body {
+                max_size 100KB
+            }
+            reverse_proxy share-audio:8082
         }
-        reverse_proxy share-video:8083 {
-            transport http {
-                dial_timeout 5s
-                response_header_timeout 30s
+
+        # ── /share/video/* — share-video service ───────────────────
+        handle_path /share/video/* {
+            request_body {
+                max_size 100KB
+            }
+            reverse_proxy share-video:8083 {
+                transport http {
+                    dial_timeout 5s
+                    response_header_timeout 30s
+                }
             }
         }
-    }
 
-    # ── chat (root catch-all) ──────────────────────────────────────
-    # SSE streaming endpoint — flush_interval -1 sends chunks as they
-    # arrive. 1MB body limit fits any reasonable chat turn (history +
-    # current message); a malicious 50MB POST is rejected at the edge.
-    handle {
-        request_body {
-            max_size 1MB
-        }
-        reverse_proxy chat:8080 {
-            flush_interval -1
-            transport http {
-                read_buffer 8192
+        # ── chat (root catch-all) ──────────────────────────────────
+        # SSE streaming endpoint — flush_interval -1 sends chunks as they
+        # arrive. 1MB body limit fits any reasonable chat turn (history +
+        # current message); a malicious 50MB POST is rejected at the edge.
+        handle {
+            request_body {
+                max_size 1MB
+            }
+            reverse_proxy chat:8080 {
+                flush_interval -1
+                transport http {
+                    read_buffer 8192
+                }
             }
         }
     }
