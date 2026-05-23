@@ -5,10 +5,13 @@ name: Services / build images
 # every push to main.
 #
 # Triggers:
-#   - push to main with paths under modules/services/<svc>/ or
-#     infra/compose/caddy/ → tags :latest + :main-<sha>
-#   - workflow_dispatch on any branch → tag :branch-<ref> (slashes in
-#     branch names are sanitized by docker/metadata-action)
+#   - push to main → build only the services whose own subtree (or a
+#     shared trigger path) actually changed in this push. The matrix
+#     is computed dynamically from `dorny/paths-filter` so a touch on
+#     e.g. modules/services/share-audio/ does NOT rebuild auth + chat
+#     + caddy alongside it.
+#   - workflow_dispatch on any branch → user picks which images to
+#     build (input `services`); tags `branch-<ref>`.
 #
 # Visibility: packages are public after first push (operator changes
 # in Settings → Packages → Change visibility). Public = Watchtower
@@ -24,10 +27,8 @@ on:
       - 'modules/services/share-video/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
-      - 'infra/compose/caddy/Dockerfile'    # custom Caddy with caddy-ratelimit
-      - 'infra/db/migrations/**'            # migrator image is upstream, but
-                                            # rebuilding services on schema
-                                            # changes catches assertion drift early
+      - 'infra/compose/caddy/**'            # custom Caddy image
+      - 'infra/db/migrations/**'            # services assert schema at boot
       - '.github/workflows/services-ghcr.yml'
   workflow_dispatch:
     inputs:
@@ -48,60 +49,143 @@ permissions:
   packages: write           # push to ghcr.io/<org>/lectorium-<svc>
 
 jobs:
+  # ------------------------------------------------------------------
+  # detect: figure out which services need rebuilding for THIS event.
+  # ------------------------------------------------------------------
+  detect:
+    name: detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      build_any: ${{ steps.matrix.outputs.build_any }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Per-service filter. dorny/paths-filter does the git diff against
+      # the push's `before` SHA, so it sees exactly what landed in the
+      # commits being processed — no cross-PR or branch-life confusion.
+      # On workflow_dispatch this step still runs but its output is
+      # ignored by the matrix below (dispatch uses the input instead).
+      - id: filter
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            auth:
+              - 'modules/services/auth/**'
+              - 'modules/.dockerignore'
+              - 'infra/db/migrations/**'
+              - '.github/workflows/services-ghcr.yml'
+            chat:
+              - 'modules/services/chat/**'
+              - 'modules/docs/help/**'
+              - 'modules/.dockerignore'
+              - 'infra/db/migrations/**'
+              - '.github/workflows/services-ghcr.yml'
+            share-audio:
+              - 'modules/services/share-audio/**'
+              - 'modules/.dockerignore'
+              - '.github/workflows/services-ghcr.yml'
+            share-video:
+              - 'modules/services/share-video/**'
+              - 'modules/.dockerignore'
+              - 'infra/db/migrations/**'
+              - '.github/workflows/services-ghcr.yml'
+            caddy:
+              - 'infra/compose/caddy/**'
+              - '.github/workflows/services-ghcr.yml'
+
+      # Compose the matrix: for each service the build job knows about,
+      # emit its full entry (context + dockerfile) iff this event wants
+      # it built. Pushed as a JSON array via $GITHUB_OUTPUT.
+      - id: matrix
+        env:
+          EVENT: ${{ github.event_name }}
+          DISPATCH_CHOICE: ${{ github.event.inputs.services }}
+          F_AUTH: ${{ steps.filter.outputs.auth }}
+          F_CHAT: ${{ steps.filter.outputs.chat }}
+          F_SHARE_AUDIO: ${{ steps.filter.outputs.share-audio }}
+          F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
+          F_CADDY: ${{ steps.filter.outputs.caddy }}
+        run: |
+          # Service catalogue. Keep in sync with the dorny filters above.
+          declare -A CTX=(
+            [auth]=./modules
+            [chat]=./modules
+            [share-audio]=./modules
+            [share-video]=./modules
+            [caddy]=./infra/compose/caddy
+          )
+          declare -A DOCKERFILE=(
+            [auth]=./modules/services/auth/Dockerfile
+            [chat]=./modules/services/chat/Dockerfile
+            [share-audio]=./modules/services/share-audio/Dockerfile
+            [share-video]=./modules/services/share-video/Dockerfile
+            [caddy]=./infra/compose/caddy/Dockerfile
+          )
+
+          wants() {
+            local svc="$1"
+            case "$EVENT" in
+              workflow_dispatch)
+                [ "$DISPATCH_CHOICE" = "all" ] || [ "$DISPATCH_CHOICE" = "$svc" ]
+                ;;
+              push)
+                local var
+                # bash doesn't allow `-` in variable names — translate.
+                var="F_$(echo "$svc" | tr 'a-z-' 'A-Z_')"
+                [ "${!var}" = "true" ]
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          entries=()
+          for svc in auth chat share-audio share-video caddy; do
+            if wants "$svc"; then
+              entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
+                '{service:$s, context:$c, dockerfile:$d}')")
+            fi
+          done
+
+          if [ "${#entries[@]}" -eq 0 ]; then
+            echo "build_any=false" >> "$GITHUB_OUTPUT"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "::notice::No services need rebuilding for this event"
+          else
+            printf -v joined '%s,' "${entries[@]}"
+            echo "build_any=true" >> "$GITHUB_OUTPUT"
+            echo "matrix=[${joined%,}]" >> "$GITHUB_OUTPUT"
+            echo "::notice::Will build: $(printf '%s ' "${entries[@]}" | jq -rs 'map(.service) | join(", ")')"
+          fi
+
+  # ------------------------------------------------------------------
+  # build: per-service image. Matrix is the JSON array from `detect`,
+  # so the job only spawns for services that actually changed.
+  # ------------------------------------------------------------------
   build:
-    # Per-job display name uses just the service. Without this override
-    # GitHub's UI shows every matrix dimension —
-    # `build (auth, ./modules, ./modules/services/auth/Dockerfile)` — which
-    # is unreadable in the checks panel and PR overview.
+    needs: detect
+    if: needs.detect.outputs.build_any == 'true'
     name: build / ${{ matrix.service }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # `include:` lets each entry have its own build context + Dockerfile
-        # path. App images all build from ./modules; caddy builds from its
-        # own dir under infra/.
-        include:
-          - service: auth
-            context: ./modules
-            dockerfile: ./modules/services/auth/Dockerfile
-          - service: chat
-            context: ./modules
-            dockerfile: ./modules/services/chat/Dockerfile
-          - service: share-audio
-            context: ./modules
-            dockerfile: ./modules/services/share-audio/Dockerfile
-          - service: share-video
-            context: ./modules
-            dockerfile: ./modules/services/share-video/Dockerfile
-          - service: caddy
-            context: ./infra/compose/caddy
-            dockerfile: ./infra/compose/caddy/Dockerfile
+        include: ${{ fromJSON(needs.detect.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
 
-      # workflow_dispatch input filter: skip services not chosen.
-      - name: Filter by chosen service
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          chosen='${{ github.event.inputs.services }}'
-          if [ "$chosen" != "all" ] && [ "$chosen" != "${{ matrix.service }}" ]; then
-            echo "::notice::Skipping ${{ matrix.service }} (dispatch chose $chosen)"
-            echo "SKIP=true" >> "$GITHUB_ENV"
-          fi
-
       - uses: docker/setup-buildx-action@v3
-        if: env.SKIP != 'true'
 
       - uses: docker/login-action@v3
-        if: env.SKIP != 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: meta
-        if: env.SKIP != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/lectorium-${{ matrix.service }}
@@ -114,7 +198,6 @@ jobs:
             type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' }},prefix=branch-
 
       - name: Build image (load locally for Trivy scan)
-        if: env.SKIP != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -137,7 +220,6 @@ jobs:
       # continue-on-error) once the dep tree is clean — Trivy itself
       # already runs at every push so the report stays current.
       - name: Trivy vulnerability scan
-        if: env.SKIP != 'true'
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
@@ -147,7 +229,6 @@ jobs:
           exit-code: '1'
 
       - name: Push image
-        if: env.SKIP != 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
