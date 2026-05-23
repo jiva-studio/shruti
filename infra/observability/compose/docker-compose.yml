@@ -33,11 +33,10 @@ services:
   # Caddy — reverse proxy + TLS termination (Cloudflare DNS-01)
   # ─────────────────────────────────────────────────────────────────
   caddy:
-    # Built locally — `caddy:2.8.4-builder` + xcaddy + caddy-dns/cloudflare.
-    # See ./caddy/Dockerfile. Bump tag there to upgrade.
-    build:
-      context: ./caddy
-    image: lectorium/caddy-cloudflare:2.8.4
+    # Built by .github/workflows/services-ghcr.yml from ./caddy/Dockerfile
+    # (caddy:2.10-builder + xcaddy + caddy-dns/cloudflare). Pulled from GHCR,
+    # NOT built on the obs host. Bump Dockerfile + push to main → CI rebuilds.
+    image: ghcr.io/akdasa-studios/lectorium-obs-caddy:latest
     ports:
       - "${OBS_TS_IP}:443:443"
       - "${OBS_TS_IP}:80:80"

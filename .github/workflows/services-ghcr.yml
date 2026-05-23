@@ -27,7 +27,8 @@ on:
       - 'modules/services/share-video/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
-      - 'infra/app/compose/caddy/**'            # custom Caddy image
+      - 'infra/app/compose/caddy/**'            # custom Caddy image (app)
+      - 'infra/observability/compose/caddy/**'  # custom Caddy image (obs)
       - 'infra/app/db/migrations/**'            # services assert schema at boot
       - '.github/workflows/services-ghcr.yml'
   workflow_dispatch:
@@ -35,7 +36,7 @@ on:
       services:
         description: 'Which images to build'
         type: choice
-        options: [all, auth, chat, share-audio, share-video, caddy]
+        options: [all, auth, chat, share-audio, share-video, caddy, obs-caddy]
         default: all
 
 concurrency:
@@ -94,6 +95,9 @@ jobs:
             caddy:
               - 'infra/app/compose/caddy/**'
               - '.github/workflows/services-ghcr.yml'
+            obs-caddy:
+              - 'infra/observability/compose/caddy/**'
+              - '.github/workflows/services-ghcr.yml'
 
       # Compose the matrix: for each service the build job knows about,
       # emit its full entry (context + dockerfile) iff this event wants
@@ -107,6 +111,7 @@ jobs:
           F_SHARE_AUDIO: ${{ steps.filter.outputs.share-audio }}
           F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
           F_CADDY: ${{ steps.filter.outputs.caddy }}
+          F_OBS_CADDY: ${{ steps.filter.outputs.obs-caddy }}
         run: |
           # Service catalogue. Keep in sync with the dorny filters above.
           declare -A CTX=(
@@ -115,6 +120,7 @@ jobs:
             [share-audio]=./modules
             [share-video]=./modules
             [caddy]=./infra/app/compose/caddy
+            [obs-caddy]=./infra/observability/compose/caddy
           )
           declare -A DOCKERFILE=(
             [auth]=./modules/services/auth/Dockerfile
@@ -122,6 +128,7 @@ jobs:
             [share-audio]=./modules/services/share-audio/Dockerfile
             [share-video]=./modules/services/share-video/Dockerfile
             [caddy]=./infra/app/compose/caddy/Dockerfile
+            [obs-caddy]=./infra/observability/compose/caddy/Dockerfile
           )
 
           wants() {
@@ -143,7 +150,7 @@ jobs:
           }
 
           entries=()
-          for svc in auth chat share-audio share-video caddy; do
+          for svc in auth chat share-audio share-video caddy obs-caddy; do
             if wants "$svc"; then
               entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
                 '{service:$s, context:$c, dockerfile:$d}')")

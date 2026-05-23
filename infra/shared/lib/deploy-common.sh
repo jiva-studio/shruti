@@ -152,9 +152,9 @@ REMOTE
 compose_up() {
   local remote_dir="$1"; shift
   log "docker compose up -d in $remote_dir"
-  # `--ignore-buildable` skips images that have a build: section (e.g. our
-  # locally-built caddy). `up -d --build` then builds them before launch.
-  ssh_run "cd '$remote_dir/compose' && docker compose pull --quiet --ignore-buildable && docker compose up -d --build $*"
+  # All images pulled from GHCR (built in CI by services-ghcr.yml).
+  # No build: sections in compose → no on-host build step.
+  ssh_run "cd '$remote_dir/compose' && docker compose pull --quiet && docker compose up -d $*"
   ok "compose up complete"
 }
 
