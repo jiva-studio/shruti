@@ -107,6 +107,7 @@ rsync_to_target() {
   rsync -az --delete \
     -e "ssh ${SSH_OPTS[*]}" \
     --exclude='.git' --exclude='secrets/' --exclude='*.local.env' \
+    --exclude='config/*.env' --exclude='config/*.env.example' \
     "$@" \
     "$src/" "$SSH_TARGET:$dst/"
   ok "rsync done"
@@ -152,9 +153,9 @@ REMOTE
 compose_up() {
   local remote_dir="$1"; shift
   log "docker compose up -d in $remote_dir"
-  # Private GHCR packages — docker reads auth from $remote_dir/docker-auth/config.json
+  # Private GHCR packages — docker reads auth from $remote_dir/config/config.json
   # (operator seeds it once: see infra/observability/README.md → "GHCR pull credentials").
-  ssh_run "cd '$remote_dir/compose' && DOCKER_CONFIG='$remote_dir/docker-auth' docker compose pull --quiet && DOCKER_CONFIG='$remote_dir/docker-auth' docker compose up -d $*"
+  ssh_run "cd '$remote_dir/compose' && DOCKER_CONFIG='$remote_dir/config' docker compose pull --quiet && DOCKER_CONFIG='$remote_dir/config' docker compose up -d $*"
   ok "compose up complete"
 }
 
