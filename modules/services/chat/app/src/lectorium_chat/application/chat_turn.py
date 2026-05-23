@@ -451,7 +451,7 @@ async def run_chat_turn(
                 intent=detected_intent,
                 final_text=joined_prose,
             )
-            emit_turn_scores(get_langfuse(), summary, audit)
+            emit_turn_scores(get_langfuse(), langfuse_trace_id, summary, audit)
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "auto_scores_failed",

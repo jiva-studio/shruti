@@ -218,21 +218,32 @@ class TurnSummary:
 
 def emit_turn_scores(
     langfuse: Any | None,
+    trace_id: str,
     summary: TurnSummary,
     audit: MarkerAudit,
 ) -> None:
     """Fire-and-forget scoring at the very end of a turn.
 
-    Each `score_current_trace` is wrapped in its own try/except so one
-    bad value (e.g. langfuse rejecting an out-of-range NUMERIC because
-    the config moved) doesn't suppress the rest.
+    Uses `create_score(trace_id=...)` with an explicit trace id rather
+    than `score_current_trace()`, so it works after the
+    `with_langfuse_trace` context has already exited — which is exactly
+    when this is called (the with-block closes when the SSE stream is
+    fully drained, but turn-summary metrics are only complete after
+    that point). Each emit is wrapped so one bad value (e.g. a
+    NUMERIC out of the config range) doesn't suppress the rest.
     """
     if langfuse is None:
         return
 
     def _emit(name: str, value: Any, data_type: str) -> None:
         try:
-            langfuse.score_current_trace(name=name, value=value, data_type=data_type)
+            langfuse.create_score(
+                name=name,
+                value=value,
+                data_type=data_type,
+                trace_id=trace_id,
+                score_id=f"{trace_id}:{name}",
+            )
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "auto_score_emit_failed",
