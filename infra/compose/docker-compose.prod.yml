@@ -70,7 +70,15 @@ services:
     environment:
       # Talk to docker via the proxy, not raw socket.
       DOCKER_HOST: tcp://docker-socket-proxy:2375
-      # ghcr public images → no auth credentials needed.
+      # Reads ghcr.io credentials from /config/config.json (mounted below).
+      # Docker convention: DOCKER_CONFIG points at a DIRECTORY containing
+      # config.json, not the file itself.
+      DOCKER_CONFIG: /config
+    volumes:
+      # Mount the host's docker config so Watchtower inherits the ghcr.io
+      # login the operator did with `docker login ghcr.io -u <user>
+      # --password-stdin <PAT>`. Read-only — Watchtower never writes back.
+      - /root/.docker/config.json:/config/config.json:ro
     command:
       - --label-enable          # only touch containers with the watchtower.enable label
       - --interval=60           # poll ghcr every 60s
