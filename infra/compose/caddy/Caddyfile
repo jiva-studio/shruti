@@ -19,7 +19,10 @@
 }
 
 {$DOMAIN} {
-    encode zstd gzip
+    # No `encode` — /chat is SSE (zstd/gzip buffers byte-frames before
+    # flushing, which breaks per-event streaming and was felt as
+    # noticeable lag in the mobile chat UI). /auth and /share/* return
+    # short JSON bodies (<1KB) where compression saves nothing useful.
 
     # Baseline browser security headers. Applied to every response.
     # HSTS: TLS-only once seen; X-Frame-Options blocks clickjacking;
