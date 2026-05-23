@@ -26,15 +26,3 @@ render_templates_in() {
 }
 
 # ──────────────────────────────────────────────────────────────────────
-# require_vars <var1> [var2 ...]
-# ──────────────────────────────────────────────────────────────────────
-require_vars() {
-  local v missing=0
-  for v in "$@"; do
-    if [ -z "${!v:-}" ]; then
-      echo "✗ required env var unset: $v" >&2
-      missing=1
-    fi
-  done
-  [ "$missing" -eq 0 ] || return 1
-}

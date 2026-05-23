@@ -109,7 +109,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   # Postgres metrics. Joins the chat-stack network so it can reach
-  # `postgres` by service DNS — no Tailscale round-trip. The `pg_exporter`
+  # `postgres` by service DNS — no Tailscale round-trip. The `shruti_exporter`
   # role with `pg_monitor` is created by infra/app/compose/postgres/init.sql
   # (see README for retrofitting an existing prod volume).
   # Custom queries (queue depth + oldest pending age) come from
@@ -120,7 +120,7 @@ services:
     restart: unless-stopped
     labels: *no-watchtower
     environment:
-      DATA_SOURCE_NAME: "postgresql://pg_exporter:${PG_EXPORTER_PASSWORD:?PG_EXPORTER_PASSWORD must be set}@postgres:5432/shruti?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://shruti_exporter:${PG_EXPORTER_PASSWORD:?PG_EXPORTER_PASSWORD must be set}@postgres:5432/shruti?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
       PG_EXPORTER_AUTO_DISCOVER_DATABASES: "false"
     volumes:
