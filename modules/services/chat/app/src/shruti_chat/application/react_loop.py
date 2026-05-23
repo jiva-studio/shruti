@@ -153,14 +153,53 @@ async def _dispatch_tool_call(
         return {"error": f"bad JSON in tool args: {exc}"}
     if name in EMITS_EVENTS and yield_event is not None:
         args["yield_event"] = yield_event
+    # Lazy import to avoid circular dep on agent boot path.
+    from shruti_chat.observability.langfuse_client import get_langfuse
+
+    langfuse = get_langfuse()
+    # Strip the yield_event callback from the langfuse input — it's an
+    # unserialisable closure and not a real tool argument, just a side-
+    # channel we inject for tools that emit SSE events.
+    langfuse_input = {k: v for k, v in args.items() if k != "yield_event"}
+
     t0 = time.monotonic()
     try:
-        result = await fn(**args)
-    except TypeError as exc:
-        result = {"error": f"bad args: {exc}"}
-    except Exception as exc:
-        log.exception("tool_call_failed", request_id=request_id, tool=name, error=str(exc))
-        result = {"error": str(exc)}
+        if langfuse is not None:
+            with langfuse.start_as_current_observation(
+                as_type="tool",
+                name=name,
+                input=langfuse_input,
+            ) as tool_span:
+                try:
+                    result = await fn(**args)
+                except TypeError as exc:
+                    result = {"error": f"bad args: {exc}"}
+                except Exception as exc:
+                    log.exception("tool_call_failed", request_id=request_id, tool=name, error=str(exc))
+                    result = {"error": str(exc)}
+                try:
+                    tool_span.update(output=result)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            try:
+                result = await fn(**args)
+            except TypeError as exc:
+                result = {"error": f"bad args: {exc}"}
+            except Exception as exc:
+                log.exception("tool_call_failed", request_id=request_id, tool=name, error=str(exc))
+                result = {"error": str(exc)}
+    except Exception as exc:  # noqa: BLE001
+        # Defensive: if the observation context itself blows up
+        # (e.g. Langfuse transport error mid-dispatch), don't break the
+        # turn — run the tool without instrumentation as a fallback.
+        log.warning("langfuse_tool_span_failed", tool=name, error=str(exc))
+        try:
+            result = await fn(**args)
+        except Exception as inner:  # noqa: BLE001
+            log.exception("tool_call_failed", request_id=request_id, tool=name, error=str(inner))
+            result = {"error": str(inner)}
+
     # agent_role is picked up from the contextvar bound by the node
     # via `bind_node_role(...)` — research/catalog/action/help all call
     # this same use-case but the log line must reflect the actual node.
