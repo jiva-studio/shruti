@@ -1,5 +1,27 @@
 <template>
   <div class="message-actions">
+    <button
+      v-if="traceId"
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'up' }"
+      :aria-label="t('chat.feedback.thumbsUp')"
+      :disabled="feedbackInFlight"
+      @click="onThumbsUp"
+    >
+      <IconThumbUp :size="16" stroke-width="2" />
+    </button>
+    <button
+      v-if="traceId"
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'down' }"
+      :aria-label="t('chat.feedback.thumbsDown')"
+      :disabled="feedbackInFlight"
+      @click="onThumbsDown"
+    >
+      <IconThumbDown :size="16" stroke-width="2" />
+    </button>
     <button type="button" class="message-action" :aria-label="t('chat.copyAction')" @click="onCopy">
       <IconCopy :size="16" stroke-width="2" />
     </button>
@@ -21,14 +43,26 @@
     >
       <IconRefresh :size="16" stroke-width="2" />
     </button>
+
+    <FeedbackSheet
+      :open="sheetOpen"
+      :submitting="feedbackInFlight"
+      @submit="onSheetSubmit"
+      @cancel="onSheetCancel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IconCopy, IconRefresh, IconShare } from "@tabler/icons-vue"
+import { IconCopy, IconRefresh, IconShare, IconThumbDown, IconThumbUp } from "@tabler/icons-vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@shruti/services/useToast.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
+import type { ChatMessageId } from "@lib/domain/core.js"
+import type { FeedbackCategory } from "@shruti/services/chatClient.js"
+import FeedbackSheet from "./FeedbackSheet.vue"
 
 const props = defineProps<{
   /** Plain-Markdown rendering of the message, already widget-stripped
@@ -43,6 +77,15 @@ const props = defineProps<{
   /** Disable the Retry icon while the store is busy (sending: true) or
    *  the bubble is no longer the last item. */
   retryDisabled?: boolean
+  /** Persisted on the assistant message. Drives whether thumbs are
+   *  selected on rehydrate and is the key the store uses to update
+   *  the message after the POST succeeds. */
+  messageId: ChatMessageId
+  /** Langfuse trace id received from the SSE `meta` event. Thumbs are
+   *  hidden when absent (legacy assistant messages predating the
+   *  feedback rollout). */
+  traceId?: string
+  feedbackState?: "up" | "down"
 }>()
 
 const emit = defineEmits<{
@@ -53,6 +96,10 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const app = useShruti()
 const toast = useToast()
+const chat = useChatStore()
+
+const sheetOpen = ref(false)
+const feedbackInFlight = ref(false)
 
 async function onCopy(): Promise<void> {
   const md = props.markdown.trim()
@@ -73,6 +120,49 @@ async function onShare(): Promise<void> {
 function onRetry(): void {
   if (props.retryDisabled) return
   emit("retry")
+}
+
+async function onThumbsUp(): Promise<void> {
+  if (!props.traceId || feedbackInFlight.value) return
+  feedbackInFlight.value = true
+  try {
+    await chat.submitFeedback(props.messageId, { state: "up" })
+    void toast.info(t("chat.feedback.thanks"))
+  } catch {
+    void toast.error(t("chat.feedback.failed"))
+  } finally {
+    feedbackInFlight.value = false
+  }
+}
+
+function onThumbsDown(): void {
+  if (!props.traceId || feedbackInFlight.value) return
+  sheetOpen.value = true
+}
+
+async function onSheetSubmit(args: {
+  category?: FeedbackCategory
+  comment?: string
+}): Promise<void> {
+  if (!props.traceId) return
+  feedbackInFlight.value = true
+  sheetOpen.value = false
+  try {
+    await chat.submitFeedback(props.messageId, {
+      state: "down",
+      category: args.category,
+      comment: args.comment,
+    })
+    void toast.info(t("chat.feedback.thanks"))
+  } catch {
+    void toast.error(t("chat.feedback.failed"))
+  } finally {
+    feedbackInFlight.value = false
+  }
+}
+
+function onSheetCancel(): void {
+  sheetOpen.value = false
 }
 </script>
 
@@ -118,5 +208,11 @@ function onRetry(): void {
 .message-action:disabled {
   opacity: 0.25;
   cursor: not-allowed;
+}
+
+.message-action.selected {
+  opacity: 1;
+  color: var(--ion-color-primary, #3880ff);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 </style>

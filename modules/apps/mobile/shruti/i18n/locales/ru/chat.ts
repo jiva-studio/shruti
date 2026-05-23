@@ -144,6 +144,31 @@ export default {
   /** Aria-label для inline-кнопки Share под сообщением. */
   shareAction: "Поделиться сообщением",
 
+  /** Фидбэк (👍/👎 + причина при 👎). */
+  feedback: {
+    thumbsUp: "Хороший ответ",
+    thumbsDown: "Плохой ответ",
+    thanks: "Спасибо за отзыв",
+    failed: "Не удалось отправить — попробуйте ещё раз",
+    sheet: {
+      title: "Что было не так?",
+      hint: "Все поля необязательные. Нажмите «Отправить», когда готово.",
+      categoryLabel: "Тип",
+      categoryPlaceholder: "Выберите (необязательно)",
+      commentLabel: "Комментарий",
+      commentPlaceholder: "Что-нибудь ещё? (необязательно)",
+      submit: "Отправить",
+    },
+    categories: {
+      off_topic: "Не по теме",
+      no_results: "Ничего не нашлось",
+      bad_citations: "Плохие цитаты",
+      wrong_language: "Неверный язык",
+      factually_wrong: "Фактически неверно",
+      other: "Другое",
+    },
+  },
+
   // Заголовки автономных tutorial-сессий, которые scheduler создаёт
   // когда правило срабатывает первый раз для пользователя.
   proactiveSessionTitleEnableReminder: "Ежедневное напоминание",

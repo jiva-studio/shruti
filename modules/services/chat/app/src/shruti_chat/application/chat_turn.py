@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from time import perf_counter
 from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
@@ -35,7 +36,15 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.composition import AppDeps
 from shruti_chat.domain import UserContext
 from shruti_chat.domain.turn_context import TurnContext
-from shruti_chat.observability.langfuse_client import with_langfuse_trace
+from shruti_chat.observability.auto_scores import (
+    TurnSummary,
+    audit_post_expansion_text,
+    emit_turn_scores,
+)
+from shruti_chat.observability.langfuse_client import (
+    get_langfuse,
+    with_langfuse_trace,
+)
 from shruti_chat.observability.logging import (
     bind_turn_context,
     clear_turn_context,
@@ -195,7 +204,26 @@ async def run_chat_turn(
     )
 
     user_id_for_trace = user_context.user_id if user_context else None
+
+    # End-of-turn metrics fed into emit_turn_scores in `finally`. Stay
+    # local to the function so the bookkeeping has zero cost when
+    # Langfuse is force-disabled (singleton None → emit_turn_scores no-ops).
+    turn_started = perf_counter()
+    first_token_at: float | None = None
+    tool_calls_count = 0
+    had_error = False
+    detected_intent: str | None = None
+    full_prose: list[str] = []
+
     try:
+        # ── First event: hand the trace id to the client ──────────────
+        # Mobile uses it as the message identifier when POSTing feedback
+        # to /chat/feedback. Old clients ignore unknown SSE event types
+        # (see events.py docstring on additive evolution), so no protocol
+        # bump needed. Also echoed on `done` below as a fallback for the
+        # rare case the client missed `meta` on an unstable reconnect.
+        yield AgentEvent(type="meta", data={"trace_id": langfuse_trace_id})
+
         # ── Build per-turn services (aliases + expander + tools) ──────
         aliases = TurnAliasMap()
         # Pre-mint refs for `current_track_id` and `focus.track_id` so
@@ -301,7 +329,6 @@ async def run_chat_turn(
         # `langfuse_node_callback(langfuse_trace_id, ...)` attaches its
         # spans under the same root. No-op when the SDK is uninitialised
         # (LANGFUSE_FORCE_FALLBACK=1 or missing env).
-        full_prose: list[str] = []
         user_query_for_trace = _extract_latest_user_query(history)
         async with with_langfuse_trace(
             langfuse_trace_id,
@@ -326,6 +353,22 @@ async def run_chat_turn(
                         continue
                     if ev_type == "delta":
                         full_prose.append(ev_data.get("text", ""))
+                        if first_token_at is None:
+                            first_token_at = perf_counter()
+                    elif ev_type == "tool_start":
+                        tool_calls_count += 1
+                    elif ev_type == "status":
+                        # Router decision arrives as `status` with
+                        # `key=router_decision` and `params.intent=…`
+                        # — only on the main chat path, not proactive.
+                        # Captured purely for the `router_intent` score.
+                        if ev_data.get("key") == "router_decision":
+                            params = ev_data.get("params") or {}
+                            maybe = params.get("intent")
+                            if isinstance(maybe, str):
+                                detected_intent = maybe
+                    elif ev_type == "error":
+                        had_error = True
                     yield AgentEvent(type=ev_type, data=ev_data)
                     # Co-op cancellation if the client closed the SSE.
                     if is_disconnected is not None and await is_disconnected():
@@ -337,6 +380,7 @@ async def run_chat_turn(
                         return
             except Exception as exc:
                 log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
+                had_error = True
                 yield AgentEvent(
                     type="error",
                     data={"code": "agent_error", "message": str(exc)},
@@ -367,10 +411,6 @@ async def run_chat_turn(
                         error=str(exc),
                     )
                 try:
-                    from shruti_chat.observability.langfuse_client import (
-                        get_langfuse,
-                    )
-
                     lf = get_langfuse()
                     if lf is not None:
                         lf.update_current_trace(output=final_output)
@@ -382,18 +422,51 @@ async def run_chat_turn(
                     )
 
         # ── Bypass-marker audit (off the hot path) ───────────────────
-        await _audit_bypass_markers(
-            "".join(full_prose),
-            deps=deps,
-            request_id=request_id,
-        )
+        # Logs structlog `chat_marker_bypassed_tool` events — kept as-is
+        # for the Loki/Grafana dashboards built on top of it. The same
+        # bypass count also lands in Langfuse via auto-scores below.
+        joined_prose = "".join(full_prose)
+        await _audit_bypass_markers(joined_prose, deps=deps, request_id=request_id)
+
+        # ── Heuristic auto-scores on the Langfuse trace ──────────────
+        # Wrapped in its own try/except because none of these signals
+        # should be allowed to break the `done` terminator below.
+        try:
+            audit = await audit_post_expansion_text(
+                joined_prose,
+                llm_raw_prose=joined_prose,
+                malformed_dropped_count=expander.malformed_count,
+                catalog_repo=deps.catalog_repo if deps else None,
+                library_db_path=deps.settings.library_db_path if deps else None,
+            )
+            total_ms = int((perf_counter() - turn_started) * 1000)
+            first_token_ms: int | None = None
+            if first_token_at is not None:
+                first_token_ms = int((first_token_at - turn_started) * 1000)
+            summary = TurnSummary(
+                request_lang=lang,
+                latency_total_ms=total_ms,
+                first_token_ms=first_token_ms,
+                tool_calls_count=tool_calls_count,
+                response_length_chars=len(joined_prose),
+                had_error=had_error,
+                intent=detected_intent,
+                final_text=joined_prose,
+            )
+            emit_turn_scores(get_langfuse(), summary, audit)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "auto_scores_failed",
+                request_id=request_id,
+                error=str(exc),
+            )
 
         # ── Terminal `done` carries the alias map inline ─────────────
         # v1 protocol: client persists `done.data.aliases` on the
         # freshly-finalised assistant message and ships it back on the
         # next turn so `_fold_prior_assistant_content` rewrites chip
         # markers in history into `[^N]` form.
-        done_data: dict[str, Any] = {}
+        done_data: dict[str, Any] = {"trace_id": langfuse_trace_id}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()
         yield AgentEvent(type="done", data=done_data)

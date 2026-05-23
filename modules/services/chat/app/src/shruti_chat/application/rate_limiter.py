@@ -50,6 +50,8 @@ class RateLimiter:
             return s.title_anon_per_day if anonymous else s.title_signed_in_per_day
         if scope == "questions":
             return s.questions_anon_per_day if anonymous else s.questions_signed_in_per_day
+        if scope == "feedback":
+            return s.feedback_anon_per_day if anonymous else s.feedback_signed_in_per_day
         # default → chat
         return s.chat_anon_per_day if anonymous else s.chat_signed_in_per_day
 

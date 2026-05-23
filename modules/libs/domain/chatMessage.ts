@@ -144,7 +144,31 @@ export interface ChatMessage {
    *  (history → LLM stays a vanilla user turn); the renderer branches
    *  on this field to draw a focus card instead of the normal bubble. */
   focus?: ChatFocusPayload
+  /** Langfuse trace identifier minted by the chat-service for this
+   *  assistant message. Used as the message id when POSTing
+   *  `/chat/feedback` so the score lands on the right trace. Absent on
+   *  legacy messages (pre-feedback rollout) and on user-role rows. */
+  traceId?: string
+  /** Local feedback state — last value the user committed (or `null`
+   *  if they haven't acted). When `down`, optional `feedbackCategory`
+   *  and `feedbackComment` carry what was sent. Persisted so the
+   *  thumbs UI is consistent across reloads. */
+  feedbackState?: "up" | "down"
+  feedbackCategory?: ChatFeedbackCategory
+  feedbackComment?: string
 }
+
+/** Categories surfaced in the thumbs-down bottom-sheet. Wire format
+ *  (snake_case English) — localisation lives in mobile i18n. Must stay
+ *  in sync with `FeedbackCategory` enum in
+ *  `services/chat/.../api/feedback.py`. */
+export type ChatFeedbackCategory =
+  | "off_topic"
+  | "no_results"
+  | "bad_citations"
+  | "wrong_language"
+  | "factually_wrong"
+  | "other"
 
 /** One row of the integer→chunk alias map. `startMs`/`endMs` are
  *  present only for cite-level aliases (chunks); card- and outline-
