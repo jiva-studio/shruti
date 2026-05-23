@@ -1,0 +1,186 @@
+# observability-agent — lightweight metrics + log collectors on prod-EU.
+#
+# Pushes logs (promtail) and exposes metrics endpoints (node-exporter,
+# cAdvisor, postgres-exporter, redis-exporter, blackbox-exporter) for the
+# obs host (Tailscale IP ${OBS_TS_IP}) to scrape/receive.
+#
+# Conventions:
+#   - All exporters bind on the Tailscale IP (${PROD_EU_TS_IP}), never on
+#     0.0.0.0 — keeps them off the public Cloud Provider IP. ufw on tailscale0
+#     accepts; default-deny on the public interface drops anything that
+#     slipped through.
+#   - Watchtower is told NOT to auto-update these containers
+#     (com.centurylinklabs.watchtower.enable=false). Image bumps happen
+#     manually via ./scripts/deploy.sh — observability tooling versions
+#     are coupled to the obs-stack on the other host, so we don't want a
+#     surprise minor bump here breaking the dashboards there.
+#   - The chat-stack postgres + redis live on docker network
+#     `shruti_shruti` (project-prefixed name from infra/app/compose).
+#     postgres-exporter and redis-exporter attach to it as an
+#     `external: true` network so they reach chat-postgres / chat-redis
+#     by service DNS, no Tailscale hop.
+
+name: shruti-obs-agent
+
+x-no-watchtower: &no-watchtower
+  com.centurylinklabs.watchtower.enable: "false"
+
+services:
+  # Tails /var/lib/docker/containers/*/*-json.log (every container on the
+  # host) and pushes to Loki on obs. Runs as root because Docker's json log
+  # files are owned by root and not world-readable. WAL buffers up to a few
+  # hours of logs locally if obs is unreachable.
+  promtail:
+    image: grafana/promtail:3.3.0
+    container_name: shruti-promtail
+    restart: unless-stopped
+    user: root
+    labels: *no-watchtower
+    command:
+      - -config.file=/etc/promtail/config.yaml
+      - -config.expand-env=true
+    environment:
+      OBS_TS_IP: ${OBS_TS_IP:?OBS_TS_IP must be set (Tailscale IP of obs host)}
+      HOSTNAME: prod-eu
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail-positions:/var/lib/promtail
+      - promtail-wal:/var/lib/promtail-wal
+    # Bind metrics endpoint on Tailscale IP so prometheus on obs can scrape
+    # promtail itself ({job="promtail"} health metrics).
+    ports:
+      - "${PROD_EU_TS_IP}:9080:9080"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Host metrics: CPU, memory, disk, network, load. network_mode: host is
+  # required for accurate host-level network counters — they'd be wrong from
+  # inside a bridge namespace. --web.listen-address binds on the Tailscale
+  # IP so the metrics endpoint is NOT reachable from the public interface.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: shruti-node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    labels: *no-watchtower
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --web.listen-address=${PROD_EU_TS_IP}:9100
+    volumes:
+      - /:/host:ro,rslave
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Per-container metrics (CPU, memory, network, disk per container).
+  # Port 8090 deliberately — 8080 is taken by chat. Privileged + the mount
+  # set below is what cAdvisor's docs require on Ubuntu 22+ (cgroup v2).
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: shruti-cadvisor
+    restart: unless-stopped
+    privileged: true
+    labels: *no-watchtower
+    command:
+      - --listen_ip=0.0.0.0
+      - --port=8090
+      - --housekeeping_interval=30s
+      - --docker_only=true
+    ports:
+      - "${PROD_EU_TS_IP}:8090:8090"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Postgres metrics. Joins the chat-stack network so it can reach
+  # `postgres` by service DNS — no Tailscale round-trip. The `pg_exporter`
+  # role with `pg_monitor` is created by infra/app/compose/postgres/init.sql
+  # (see README for retrofitting an existing prod volume).
+  # Custom queries (queue depth + oldest pending age) come from
+  # postgres-queries.yaml.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    container_name: shruti-postgres-exporter
+    restart: unless-stopped
+    labels: *no-watchtower
+    environment:
+      DATA_SOURCE_NAME: "postgresql://pg_exporter:${PG_EXPORTER_PASSWORD:?PG_EXPORTER_PASSWORD must be set}@postgres:5432/shruti?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "false"
+    volumes:
+      - ./postgres-queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    ports:
+      - "${PROD_EU_TS_IP}:9187:9187"
+    networks:
+      - shruti
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Redis metrics. Hit-rate, memory, evictions, connected clients. Joins
+  # the chat-stack network for service-DNS access to `redis`.
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    container_name: shruti-redis-exporter
+    restart: unless-stopped
+    labels: *no-watchtower
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "${PROD_EU_TS_IP}:9121:9121"
+    networks:
+      - shruti
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # HTTP /healthz probes for every Go/Python service + TLS expiry check
+  # for the obs Caddy wildcard cert. Without blackbox we wouldn't catch
+  # the "container alive but /healthz returns 500" case.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: shruti-blackbox-exporter
+    restart: unless-stopped
+    labels: *no-watchtower
+    command:
+      - --config.file=/etc/blackbox_exporter/config.yml
+    volumes:
+      - ./blackbox-config.yaml:/etc/blackbox_exporter/config.yml:ro
+    ports:
+      - "${PROD_EU_TS_IP}:9115:9115"
+    # Joined to the chat-stack network so blackbox can reach chat/auth/
+    # share-* by service DNS for /healthz probes. (Public probes via
+    # Caddy domain still work over the bridge default gateway.)
+    networks:
+      - shruti
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  # External — created by infra/app/compose. Project name `shruti` +
+  # network name `shruti` from infra/app/compose/docker-compose.yml
+  # gives the project-prefixed name `shruti_shruti`.
+  shruti:
+    name: shruti_shruti
+    external: true
+
+volumes:
+  promtail-positions:
+  promtail-wal:

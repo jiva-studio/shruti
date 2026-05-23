@@ -1,0 +1,97 @@
+# Promtail config for prod-EU.
+#
+# Tails /var/lib/docker/containers/*/*-json.log on the host. For every line,
+# parses the Docker json-file wrapper { log, stream, time } first, then
+# parses the inner `log` payload as JSON to lift structlog/slog fields
+# (`service`, `level`, `request_id`, `langfuse_trace_id`, `timestamp`) into
+# labels and a precise timestamp.
+#
+# Static labels:
+#   host=prod-eu     — distinguishes from obs host's own promtail
+#   job=docker       — Loki convention for container logs
+#   container_name   — derived from filename via docker SD
+#
+# Promoted dynamic labels: service, level. Kept low-cardinality on purpose
+# (LogQL queries like `{service="chat", level="error"}` stay fast).
+# request_id and langfuse_trace_id are extracted as structured fields, NOT
+# promoted to labels — they're high-cardinality and used via line-filters,
+# not label-matchers.
+
+server:
+  http_listen_address: 0.0.0.0
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://${OBS_TS_IP}:3100/loki/api/v1/push
+    # WAL: buffers locally while obs is unreachable. Without this we lose
+    # any log line emitted during a Loki restart / Tailscale flap.
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+# WAL (write-ahead log) — Promtail 2.8+ persists pending batches to disk
+# and replays on restart / after extended network outage.
+wal:
+  enabled: true
+  dir: /var/lib/promtail-wal
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 30s
+    relabel_configs:
+      # Container name (without leading slash) → label.
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.+)
+        target_label: container_name
+      # Image → label for quick filtering across versions.
+      - source_labels: [__meta_docker_container_log_stream]
+        target_label: stream
+      - target_label: host
+        replacement: prod-eu
+      - target_label: job
+        replacement: docker
+    pipeline_stages:
+      # 1. Strip Docker's json-file wrapper. `output` becomes the inner log
+      #    payload (the structlog/slog JSON line emitted by the app).
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            time: time
+      - output:
+          source: output
+
+      # 2. Parse the app's JSON line — pull service/level/timestamps.
+      #    `expressions` are non-fatal: lines that don't have these keys
+      #    (e.g. caddy access logs, postgres) just fall through unlabeled.
+      - json:
+          expressions:
+            service: service
+            level: level
+            request_id: request_id
+            langfuse_trace_id: langfuse_trace_id
+            timestamp: timestamp
+
+      # 3. Promote service+level to labels (LogQL matchers).
+      #    request_id / langfuse_trace_id stay as structured fields,
+      #    queried via line filter |= "request_id=..."
+      - labels:
+          service:
+          level:
+
+      # 4. Use the app's own timestamp when available — Loki orders by
+      #    this. Falls back to Docker's `time` (parsed in stage 1) when
+      #    the field is missing.
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+          action_on_failure: skip
