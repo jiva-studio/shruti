@@ -281,7 +281,7 @@ async def with_langfuse_trace(
     try:
         with client.start_as_current_span(name=name) as span:
             try:
-                span.update_trace(
+                client.update_current_trace(
                     user_id=user_id,
                     session_id=session_id,
                     input=input,
@@ -289,7 +289,10 @@ async def with_langfuse_trace(
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("langfuse_trace_update_failed", error=str(exc))
-            yield span
+            # Yield the client so the caller can later call
+            # `client.update_current_trace(output=...)` while still
+            # inside the OpenTelemetry span context.
+            yield client
     except Exception as exc:  # noqa: BLE001
         log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
         yield None

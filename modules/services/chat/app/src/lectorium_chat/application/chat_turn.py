@@ -349,7 +349,7 @@ async def run_chat_turn(
             # ── Record final answer on the Langfuse trace ────────────────
             if langfuse_root_span is not None and full_prose:
                 try:
-                    langfuse_root_span.update_trace(
+                    langfuse_root_span.update_current_trace(
                         output={"answer": "".join(full_prose)}
                     )
                 except Exception as exc:  # noqa: BLE001
