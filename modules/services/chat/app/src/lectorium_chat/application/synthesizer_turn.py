@@ -38,6 +38,7 @@ class _LLMForSynthesis(Protocol):
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]: ...
 
 
@@ -385,6 +386,7 @@ async def run_synthesizer_turn(
         model=model,
         temperature=temperature,
         callbacks=callbacks,
+        run_name="synthesizer_stream",
     ):
         text = chunk.get("text")
         if not text:

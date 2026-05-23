@@ -84,6 +84,11 @@ export type RunChatTurnEvent =
 
 export interface RunChatTurnInput {
   readonly sessionId: ChatSessionId
+  /** Optional human-readable title of the active chat session. Forwarded
+   *  to the server so Langfuse can group turns of the same conversation
+   *  in its Sessions tab and label them with the user-visible title
+   *  instead of a UUID. */
+  readonly sessionTitle?: string
   /** Trimmed, non-empty user prompt. */
   readonly text: string
   readonly lang: "ru" | "en"
@@ -181,7 +186,12 @@ export async function* runChatTurn(
     for await (const event of deps.stream.streamChat(
       turnsForServer,
       input.lang,
-      { signal: input.signal, userContext }
+      {
+        signal: input.signal,
+        userContext,
+        sessionId: input.sessionId,
+        sessionTitle: input.sessionTitle,
+      }
     )) {
       if (input.signal.aborted) break
       // Mutate the closure state used by the finalise branch + yield

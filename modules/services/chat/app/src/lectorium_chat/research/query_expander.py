@@ -64,7 +64,9 @@ async def expand_query(
             {"role": "user", "content": _format_user(question, lang, router_args or {})},
         ]
         result: ExpansionResult = await llm.structured_output(
-            messages, ExpansionResult, model=effective_model, callbacks=callbacks,
+            messages, ExpansionResult,
+            model=effective_model, callbacks=callbacks,
+            run_name="query_expander",
         )
         # Defensive — drop empty / overly long queries.
         cleaned = [q.strip() for q in result.queries if q and q.strip()]

@@ -264,6 +264,7 @@ async def run_worker(
         on_tool_event=_on_tool_event,
         yield_event=_yield_event,
         callbacks=callbacks_list,
+        run_name=role,
     )
 
     await flush_verse_payloads(ctx)

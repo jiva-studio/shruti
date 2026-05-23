@@ -318,6 +318,13 @@ export interface StreamChatOptions {
    *  still sends a single placeholder turn so the existing
    *  `min_length=1` validator passes. */
   readonly proactive?: ProactiveTurnOptions
+  /** Local chat_sessions.id — groups this turn with sibling turns of
+   *  the same conversation in Langfuse Sessions. */
+  readonly sessionId?: string
+  /** Human-readable chat session title (from chat_sessions.title).
+   *  Surfaced as metadata on the trace so the Langfuse Sessions view
+   *  shows something more useful than a raw UUID. */
+  readonly sessionTitle?: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -495,6 +502,8 @@ function buildRequestBody(
     return out
   })
   const body: Record<string, unknown> = { messages: wireMessages, lang }
+  if (opts.sessionId !== undefined) body.session_id = opts.sessionId
+  if (opts.sessionTitle !== undefined) body.session_title = opts.sessionTitle
   if (opts.userContext !== undefined) body.user_context = opts.userContext
   if (opts.proactive !== undefined) {
     body.proactive = {

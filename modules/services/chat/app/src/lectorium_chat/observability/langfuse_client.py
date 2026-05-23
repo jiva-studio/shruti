@@ -98,13 +98,19 @@ def init_langfuse() -> None:
         log.warning("langfuse_sdk_import_failed", error=str(exc))
         return
 
+    # Environment label — surfaces in the Langfuse UI dropdown.
+    # `LECTORIUM_ENV` is the existing app-wide env name ("prod", "dev",
+    # "staging"); fall back to "default" so nothing breaks if unset.
+    environment = os.environ.get("LECTORIUM_ENV") or os.environ.get(
+        "LANGFUSE_TRACING_ENVIRONMENT") or "default"
     try:
         _LANGFUSE = Langfuse(
             host=host,
             public_key=public_key,
             secret_key=secret_key,
+            environment=environment,
         )
-        log.info("langfuse_initialised", host=host)
+        log.info("langfuse_initialised", host=host, environment=environment)
     except Exception as exc:  # noqa: BLE001
         log.warning("langfuse_init_failed", error=str(exc), host=host)
         _LANGFUSE = None
@@ -260,6 +266,7 @@ async def with_langfuse_trace(
     *,
     name: str = "chat_turn",
     input: Any | None = None,
+    session_title: str | None = None,
 ) -> AsyncIterator[Any]:
     """Open a Langfuse root span for one chat turn (v3 OpenTelemetry API).
 
@@ -279,20 +286,26 @@ async def with_langfuse_trace(
         yield None
         return
     try:
-        with client.start_as_current_span(name=name) as span:
+        # `input=` and `output=` MUST be passed to start_as_current_span
+        # (and later span.update(output=...)) — the SDK reads the root
+        # span's input/output and surfaces them as trace I/O in the UI.
+        # `client.update_current_trace(input=...)` only adds an
+        # `langfuse.trace.input` ATTRIBUTE that lands in Metadata.
+        with client.start_as_current_span(name=name, input=input) as span:
             try:
+                trace_metadata: dict[str, Any] = {"chat_trace_id": trace_id}
+                if session_title:
+                    trace_metadata["session_title"] = session_title
                 client.update_current_trace(
                     user_id=user_id,
                     session_id=session_id,
-                    input=input,
-                    metadata={"chat_trace_id": trace_id},
+                    metadata=trace_metadata,
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("langfuse_trace_update_failed", error=str(exc))
-            # Yield the client so the caller can later call
-            # `client.update_current_trace(output=...)` while still
-            # inside the OpenTelemetry span context.
-            yield client
+            # Yield the span — caller does `span.update(output=...)` at
+            # end-of-turn before the with-block exits.
+            yield span
     except Exception as exc:  # noqa: BLE001
         log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
         yield None

@@ -117,6 +117,14 @@ class ChatRequestDto(BaseModel):
     lang: Literal["ru", "en"] = "ru"
     user_context: UserContextDto | None = None
     proactive: ProactiveRequestDto | None = None
+    # Client-managed chat session — groups turns of the same conversation
+    # in Langfuse Sessions. `session_id` is the local chat_sessions row PK
+    # (TEXT primary key) on the mobile side; `session_title` is the
+    # user-visible session title (derived first turn, optionally
+    # LLM-rephrased afterwards). Both optional — turns without a session
+    # context (e.g. one-off API calls) still trace.
+    session_id: str | None = None
+    session_title: str | None = None
 
 
 def _parse_iso(s: str | None) -> datetime | None:
