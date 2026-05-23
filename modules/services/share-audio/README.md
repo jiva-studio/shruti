@@ -1,23 +1,20 @@
 # share-audio
 
-Serverless function that cuts a fragment from an MP3 stored in **AWS S3** and
-uploads it back as a public excerpt under `public/shares/audio/`. Same Python
-handler deploys to **AWS Lambda** and **Yandex Cloud Functions** via the
-[Serverless Framework].
-
-Source and excerpt live in the **same single bucket**. The cloud only
-provides compute. Lambda accesses S3 via its IAM role; the YC Function uses
-a dedicated AWS IAM user (YC service accounts can't sign AWS S3 requests).
+Cuts a fragment from an MP3 stored in S3-compatible object storage and
+uploads it back as a public excerpt under `public/shares/audio/`.
+Lives behind Caddy at `/share/audio/` on the host stack.
 
 ## API
+
+`GET /healthz` — `200 {"status":"ok"}`
 
 `POST /excerpts`
 
 ```json
 {
   "source_key": "audio/lectures/2025-01-15.mp3",
-  "start_ms": 125000,
-  "end_ms": 187000,
+  "start_ms":   125000,
+  "end_ms":     187000,
   "excerpt_id": "optional-stable-id"
 }
 ```
@@ -32,59 +29,46 @@ a dedicated AWS IAM user (YC service accounts can't sign AWS S3 requests).
 }
 ```
 
-The function downloads the source, runs `ffmpeg -c copy` to extract
-`[start_ms, end_ms]`, uploads the result with public-read ACL, and returns the
-URL. The mobile client uses the URL directly or `HEAD`s it to confirm
-readiness.
+Validation errors → `400 {"detail": "<msg>"}`. S3 / ffmpeg failures
+→ `502 {"detail": "<msg>"}`.
 
-If the same `excerpt_id` is requested again, the function returns the existing
-URL without re-cutting (idempotent).
+Idempotent on `excerpt_id`: a repeat with the same id returns the
+cached URL without re-cutting. If omitted, a 32-char hex id is minted.
 
-## Limits
+Excerpt length is capped at 10 minutes. `excerpt_id` must match
+`[A-Za-z0-9_-]{1,64}`.
 
-- Excerpt length: ≤ 10 minutes (Yandex Cloud Functions hard timeout).
-- MP3 stream copy only — cuts snap to MP3 frame boundaries (~26 ms).
+## How it works
 
-## Deploy
+`ffmpeg -ss <start> -i <src> -t <dur> -c copy <dst>` — stream copy, no
+re-encode. Cuts snap to the nearest MP3 frame boundary (~26 ms).
+Sub-second wallclock per request.
+
+## Env
+
+| Var | Default | Notes |
+| --- | --- | --- |
+| `PORT` | `8082` | |
+| `BUCKET` (or `SHRUTI_S3_BUCKET`) | required | |
+| `EXCERPTS_PREFIX` | `public/shares/audio` | |
+| `EXCERPTS_PUBLIC_BASE` | (unset) | Optional CDN base, overrides the virtual-hosted URL. |
+| `AWS_REGION` | `us-east-1` | |
+| `S3_ENDPOINT_URL` | (unset) | For S3-compatible (Yandex Object Storage, MinIO). |
+| `FFMPEG_BIN` | `/usr/bin/ffmpeg` | |
+| `ENV`, `SERVICE_VERSION`, `LOG_LEVEL` | `dev`, `dev`, `info` | Log envelope fields. |
+
+AWS credentials are read from the environment
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
+
+## No auth
+
+There is no auth on `/excerpts`. Caddy rate-limits to 60/min/IP.
+Stream-copy is cheap; the abuse surface is S3 egress, not CPU.
+
+## Local dev
 
 ```bash
-npm install
-npm run deploy:aws   # → AWS Lambda + API Gateway
-npm run deploy:yc    # → Yandex Cloud Function + API Gateway
+docker compose -f infra/compose/docker-compose.yml \
+               -f infra/compose/docker-compose.dev.yml \
+               up --build share-audio
 ```
-
-Both deploys use the same `handler.py`, `storage.py`, `event_adapter.py`,
-and `requirements.txt`. Only the `serverless-*.yml` differs.
-
-## Runtime environment variables
-
-| Var                    | AWS Lambda                       | YC Function                      |
-| ---------------------- | -------------------------------- | -------------------------------- |
-| `BUCKET`               | hardcoded `shruti-engine`       | same (single bucket both clouds) |
-| `EXCERPTS_PREFIX`      | default `public/shares/audio`        | same                             |
-| `EXCERPTS_PUBLIC_BASE` | optional CDN base (env)          | same                             |
-| `AWS_REGION`           | from Lambda runtime              | from `AWS_RUNTIME_REGION` var    |
-| AWS credentials        | Lambda IAM role (no env)         | `AWS_RUNTIME_*` secrets          |
-| `FFMPEG_BIN`           | layer-mounted path (default)     | bundled binary path              |
-
-## CI
-
-- `.github/workflows/share-audio-aws.yml` — auto-deploys to AWS on push to
-  `main` (path-filtered). Validates on PRs. Uses `production` environment.
-- `.github/workflows/share-audio-yc.yml` — `workflow_dispatch` only;
-  disabled until YC creds are added (see header comments in the file).
-
-### AWS deploy — already configured
-
-- **Org-level** (`akdasa-studios`) secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` — Lambda deploy target.
-- Bucket name (`shruti-engine`) is hardcoded in `serverless-aws.yml`. No repo vars required for AWS.
-
-### YC deploy — secrets/vars still to add
-
-- **Repo secrets**:
-  - `YC_OAUTH_TOKEN`, `YC_SERVICE_ACCOUNT_ID` — YC deploy + runtime SA.
-  - `AWS_RUNTIME_ACCESS_KEY_ID`, `AWS_RUNTIME_SECRET_ACCESS_KEY` — dedicated IAM user with `s3:GetObject` + `s3:PutObject` + `s3:PutObjectAcl` on `shruti-engine`. Used by boto3 inside the YC function (YC service accounts can't sign AWS S3 requests).
-- **Repo vars**:
-  - `YC_FOLDER_ID`, `AWS_RUNTIME_REGION`.
-
-[Serverless Framework]: https://www.serverless.com/

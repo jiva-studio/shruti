@@ -1,40 +1,32 @@
-# Shruti share-audio service.
+# Shruti share-audio service (Go).
 # Built from the workspace `modules/` context (matches auth/chat).
 
-FROM python:3.12-slim
+# ── Stage 1: build ─────────────────────────────────────────────────────
+FROM golang:1.24-alpine AS build
+WORKDIR /src
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+# Manifest first so the dep-download layer caches across source-only edits.
+COPY services/share-audio/go.mod services/share-audio/go.sum ./
+RUN go mod download
 
-# ffmpeg for the actual cut; curl for the compose healthcheck.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+COPY services/share-audio/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+    -o /out/share-audio ./cmd/share-audio
 
-# Non-root runtime user. Created up front so file ownership lands correctly.
-RUN groupadd --gid 1000 share && \
-    useradd  --uid 1000 --gid 1000 --no-create-home --shell /usr/sbin/nologin share
+# ── Stage 2: runtime ───────────────────────────────────────────────────
+FROM alpine:3.20
 
-WORKDIR /app
+# ffmpeg for the cut, curl for compose healthcheck, ca-certificates for
+# S3 TLS, tini for proper PID-1 signal forwarding to the Go process.
+RUN apk add --no-cache ffmpeg curl ca-certificates tini && \
+    addgroup -g 1000 share && \
+    adduser -D -u 1000 -G share share
 
-# Install deps (cached unless requirements.txt changes).
-COPY services/share-audio/requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r /app/requirements.txt
-
-# Source code. storage.py + the new app/ package live side-by-side; the
-# app imports `storage` as a top-level module, hence the flat /app layout.
-COPY services/share-audio/storage.py  /app/storage.py
-COPY services/share-audio/app/        /app/app/
-
-RUN chown -R share:share /app
+COPY --from=build /out/share-audio /usr/local/bin/share-audio
 
 USER share
 
 EXPOSE 8082
 
-# 4 uvicorn workers → 4 concurrent ffmpeg cuts. Each cut is <1s wallclock,
-# stream-copy only, so this comfortably absorbs CGNAT-spike traffic
-# behind the per-IP Caddy rate-limit (60/min/IP).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8082", "--workers", "4"]
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["/usr/local/bin/share-audio"]
