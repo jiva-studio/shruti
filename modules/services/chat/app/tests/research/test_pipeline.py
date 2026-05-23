@@ -143,7 +143,7 @@ class FakeLLM:
     raise_on_schema: str | None = None
     slow_on_schema: str | None = None
 
-    async def structured_output(self, messages, schema, *, model=None):
+    async def structured_output(self, messages, schema, *, model=None, **_extra):
         name = schema.__name__
         self.calls.append(name)
         if self.raise_on_schema == name:

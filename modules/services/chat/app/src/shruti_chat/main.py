@@ -45,6 +45,12 @@ from shruti_chat.infra.pdf import register_fonts
 from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
 from shruti_chat.infra.storage.s3_pdf_storage import S3PdfStorage
 from shruti_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
+from shruti_chat.observability.langfuse_client import (
+    LANGFUSE_PROMPT_NAMES,
+    init_langfuse,
+    shutdown_langfuse,
+    warm_prompt_cache,
+)
 from shruti_chat.observability.logging import get_logger, setup_logging
 
 
@@ -55,6 +61,15 @@ async def lifespan(app: FastAPI):
     s = get_settings()
     started = time.monotonic()
     log.info("service_starting", version=s.service_version)
+
+    # Langfuse SDK (LLM observability + prompt hot-reload). Initialises
+    # the process-wide singleton from env vars; no-op when
+    # LANGFUSE_HOST/PUBLIC_KEY/SECRET_KEY are unset OR
+    # LANGFUSE_FORCE_FALLBACK=1 (eval / local dev). Warm the prompt
+    # cache so the first chat-turn doesn't pay the network round-trip
+    # to fetch each of the 15 prompts on the hot path.
+    init_langfuse()
+    warm_prompt_cache(list(LANGFUSE_PROMPT_NAMES))
 
     pool = await init_pool(s)
     await assert_schema_ready()
@@ -171,6 +186,10 @@ async def lifespan(app: FastAPI):
         if l2 is not None:
             await l2.close()
         await close_pool()
+        # Flush pending Langfuse traces last — close() above doesn't
+        # block on the SDK's background flusher; if we exit before it
+        # drains, ~1-2 seconds of traces are dropped on every redeploy.
+        shutdown_langfuse()
 
 
 app = FastAPI(

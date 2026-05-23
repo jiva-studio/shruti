@@ -124,7 +124,7 @@ async def test_native_below_accept_falls_to_cross() -> None:
 @pytest.mark.asyncio
 async def test_question_border_zone_triggers_llm_confirm_yes() -> None:
     class YesLLM:
-        async def structured_output(self, messages, schema, *, model=None):
+        async def structured_output(self, messages, schema, *, model=None, **_extra):
             return schema(yes=True)
 
     conn = FakeConn({("ru", "question"): [_row("a1", 0.78)]})
@@ -139,7 +139,7 @@ async def test_question_border_zone_triggers_llm_confirm_yes() -> None:
 @pytest.mark.asyncio
 async def test_question_border_zone_llm_says_no_returns_empty() -> None:
     class NoLLM:
-        async def structured_output(self, messages, schema, *, model=None):
+        async def structured_output(self, messages, schema, *, model=None, **_extra):
             return schema(yes=False)
 
     conn = FakeConn({("ru", "question"): [_row("a1", 0.78)]})

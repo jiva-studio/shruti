@@ -23,6 +23,7 @@ from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
 from shruti_chat.application.synthesizer_turn import run_synthesizer_turn
 from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role
 
 
@@ -59,6 +60,12 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     writer = get_stream_writer()
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
+    cb = (
+        langfuse_node_callback(ctx.langfuse_trace_id, "synthesizer")
+        if ctx.langfuse_trace_id
+        else None
+    )
+
     async for event in run_synthesizer_turn(
         state["user_query"],
         tool_results=state.get("tool_results", []),
@@ -68,6 +75,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         system_prompt=system_prompt,
         history=state.get("history") or None,
         request_id=ctx.request_id,
+        callbacks=[cb] if cb is not None else None,
     ):
         # Bridge use-case events into the SSE writer channel. The
         # transport layer (api/chat.py) consumes these via

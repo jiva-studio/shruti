@@ -13,6 +13,7 @@ from langgraph.runtime import Runtime
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.application.router_turn import run_router_turn
 from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role
 
 
@@ -20,12 +21,14 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     bind_node_role("router")
     ctx = runtime.context
     get_stream_writer()({"type": "status", "data": {"key": "thinking"}})
+    cb = langfuse_node_callback(ctx.langfuse_trace_id, "router") if ctx.langfuse_trace_id else None
     decision = await run_router_turn(
         state["user_query"],
         lang=state["lang"],
         llm=ctx.llm,
         request_id=ctx.request_id,
         kv_cache=ctx.kv_cache,
+        callbacks=[cb] if cb is not None else None,
     )
     # Cancel the speculative embed task for intents that don't consume
     # the embedding. Saves one OpenRouter call per direct_chat / help /

@@ -17,7 +17,7 @@ class _FakeLLM:
     payload: dict[str, str]
     should_raise: bool = False
 
-    async def structured_output(self, messages, model_cls, model=None):
+    async def structured_output(self, messages, model_cls, model=None, **_extra):
         if self.should_raise:
             raise RuntimeError("LLM down")
         return model_cls(captions=self.payload)

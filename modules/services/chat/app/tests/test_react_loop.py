@@ -36,6 +36,7 @@ class ScriptedLLM:
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        callbacks: list[Any] | None = None,
     ) -> AsyncIterator[CompletionChunk]:
         self.seen_calls.append(
             {
