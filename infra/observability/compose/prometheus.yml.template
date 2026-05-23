@@ -47,10 +47,10 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets:
-          - http://${PROD_HOST_TS_IP}:8080/healthz   # chat
-          - http://${PROD_HOST_TS_IP}:8081/healthz   # auth
-          - http://${PROD_HOST_TS_IP}:8082/healthz   # share-audio
-          - http://${PROD_HOST_TS_IP}:8083/healthz   # share-video
+          - http://chat:8080/healthz
+          - http://auth:8081/healthz
+          - http://share-audio:8082/healthz
+          - http://share-video:8083/healthz
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
