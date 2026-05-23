@@ -76,11 +76,11 @@ services:
       DOCKER_CONFIG: /config
     volumes:
       # Mount the project's docker config so Watchtower inherits the
-      # ghcr.io login. /opt/shruti/docker-config/config.json is created
-      # once by the operator via `docker --config /opt/shruti/docker-config
+      # ghcr.io login. /opt/shruti/config/config.json is created
+      # once by the operator via `docker --config /opt/shruti/config
       # login ghcr.io -u <user> --password-stdin <PAT>` — see infra/README.md.
       # Read-only; Watchtower never writes back.
-      - ${SHRUTI_DOCKER_CONFIG_DIR:-/opt/shruti/docker-config}/config.json:/config/config.json:ro
+      - ${SHRUTI_CONFIG_DIR:-/opt/shruti/config}/config.json:/config/config.json:ro
     command:
       - --label-enable          # only touch containers with the watchtower.enable label
       - --interval=60           # poll ghcr every 60s
