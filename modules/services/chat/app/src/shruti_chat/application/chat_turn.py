@@ -309,7 +309,7 @@ async def run_chat_turn(
             session_id=session_id,
             session_title=session_title,
             name="chat_turn",
-            input={"query": user_query_for_trace} if user_query_for_trace else None,
+            input=user_query_for_trace or None,
         ) as langfuse_root_span:
             try:
                 async for mode, payload in deps.chat_graph.astream(
@@ -357,7 +357,7 @@ async def run_chat_turn(
             # generations have already touched trace attributes
             # (langfuse issue #9556).
             if langfuse_root_span is not None and full_prose:
-                final_output = {"answer": "".join(full_prose)}
+                final_output = "".join(full_prose)
                 try:
                     langfuse_root_span.update(output=final_output)
                 except Exception as exc:  # noqa: BLE001
