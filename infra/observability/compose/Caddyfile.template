@@ -10,6 +10,10 @@
 
 {
     email admin@akdasa.studio
+    log {
+        output stdout
+        format json
+    }
 }
 
 *.${TAILNET_DOMAIN} {

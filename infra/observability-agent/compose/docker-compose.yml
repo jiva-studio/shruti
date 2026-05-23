@@ -39,6 +39,7 @@ services:
     command:
       - -config.file=/etc/promtail/config.yaml
       - -config.expand-env=true
+      - -log.format=json
     environment:
       OBS_TS_IP: ${OBS_TS_IP:?OBS_TS_IP must be set (Tailscale IP of obs host)}
       HOSTNAME: prod-eu
@@ -73,6 +74,7 @@ services:
       - --path.sysfs=/host/sys
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
       - --web.listen-address=${PROD_EU_TS_IP}:9100
+      - --log.format=json
     volumes:
       - /:/host:ro,rslave
     logging:
@@ -119,6 +121,8 @@ services:
     container_name: shruti-postgres-exporter
     restart: unless-stopped
     labels: *no-watchtower
+    command:
+      - --log.format=json
     environment:
       DATA_SOURCE_NAME: "postgresql://shruti_exporter:${PG_EXPORTER_PASSWORD:?PG_EXPORTER_PASSWORD must be set}@postgres:5432/shruti?sslmode=disable"
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
@@ -142,6 +146,7 @@ services:
     labels: *no-watchtower
     environment:
       REDIS_ADDR: redis://redis:6379
+      REDIS_EXPORTER_LOG_FORMAT: json
     ports:
       - "${PROD_EU_TS_IP}:9121:9121"
     networks:
@@ -160,6 +165,7 @@ services:
     labels: *no-watchtower
     command:
       - --config.file=/etc/blackbox_exporter/config.yml
+      - --log.format=json
     volumes:
       - ./blackbox-config.yaml:/etc/blackbox_exporter/config.yml:ro
     ports:

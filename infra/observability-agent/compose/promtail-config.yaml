@@ -69,8 +69,9 @@ scrape_configs:
           source: output
 
       # 2. Parse the app's JSON line — pull service/level/timestamps.
-      #    `expressions` are non-fatal: lines that don't have these keys
-      #    (e.g. caddy access logs, postgres) just fall through unlabeled.
+      #    All services in this stack are configured to emit JSON; any
+      #    non-JSON line is a bug in that service's logging config and
+      #    should be fixed at the source, not papered over here.
       - json:
           expressions:
             service: service
@@ -80,8 +81,6 @@ scrape_configs:
             timestamp: timestamp
 
       # 3. Promote service+level to labels (LogQL matchers).
-      #    request_id / langfuse_trace_id stay as structured fields,
-      #    queried via line filter |= "request_id=..."
       - labels:
           service:
           level:
