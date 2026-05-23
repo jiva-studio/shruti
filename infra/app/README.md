@@ -213,13 +213,13 @@ ssh root@<ip> 'chmod 600 /opt/shruti/jwt/private.pem && chmod 644 /opt/shruti/jw
 If this VPS previously ran the legacy `/opt/shruti-chat` stack:
 
 ```bash
-ssh root@<ip> 'bash -s' < infra/scripts/wipe-old.sh
+ssh root@<ip> 'bash -s' < infra/app/scripts/wipe-old.sh
 ```
 
 ### 7. Deploy
 
 ```bash
-SERVER_IP=<ip> ./infra/scripts/deploy.sh
+SERVER_IP=<ip> ./infra/app/scripts/deploy.sh
 ```
 
 Optional overrides: `SERVER_USER` (default `root`), `SSH_KEY` (default
@@ -240,14 +240,14 @@ ssh root@<ip>
 crontab -e
 
 # add:
-0 3 * * * /opt/shruti/infra/scripts/backup.sh >> /var/log/shruti-backup.log 2>&1
+0 3 * * * /opt/shruti/infra/app/scripts/backup.sh >> /var/log/shruti-backup.log 2>&1
 ```
 
 03:00 UTC = 06:00 MSK — typically the lowest-traffic window.
 
 ## Re-deploy
 
-Run `SERVER_IP=<ip> ./infra/scripts/deploy.sh` again. Idempotent.
+Run `SERVER_IP=<ip> ./infra/app/scripts/deploy.sh` again. Idempotent.
 
 ## Auto-updates (Watchtower)
 
@@ -265,8 +265,8 @@ To pin a service to a previous image after a bad push:
 ssh root@<ip>
 # Find the previous :main-<sha> from ghcr or the GitHub Actions run page.
 sed -i 's/^SHRUTI_AUTH_TAG=.*/SHRUTI_AUTH_TAG=main-<prev-sha>/' /opt/shruti/.env
-cd /opt/shruti && docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env pull auth
-docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env up -d auth
+cd /opt/shruti && docker compose -f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml --env-file .env pull auth
+docker compose -f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml --env-file .env up -d auth
 ```
 
 Watchtower will now pin to `:main-<prev-sha>` (Watchtower follows the
@@ -302,12 +302,12 @@ cd /opt/shruti
 #    Identify the failing version (the log line: "Dirty database version N").
 # 2. Fix the SQL on your workstation, commit, push, let CI build.
 # 3. Mark the version clean on the VPS, then re-apply.
-docker compose -f infra/compose/docker-compose.yml \
-               -f infra/compose/docker-compose.prod.yml \
+docker compose -f infra/app/compose/docker-compose.yml \
+               -f infra/app/compose/docker-compose.prod.yml \
                --env-file .env \
                run --rm migrator force <N>
-docker compose -f infra/compose/docker-compose.yml \
-               -f infra/compose/docker-compose.prod.yml \
+docker compose -f infra/app/compose/docker-compose.yml \
+               -f infra/app/compose/docker-compose.prod.yml \
                --env-file .env \
                up -d migrator
 ```
@@ -320,7 +320,7 @@ new migration expects.
 Tokens are signed RS256 with `kid` from `SHRUTI_JWT_KID` (default
 `v1`). To rotate:
 
-1. Generate a new keypair on your workstation: `./infra/scripts/gen-jwt-keys.sh`
+1. Generate a new keypair on your workstation: `./infra/app/scripts/gen-jwt-keys.sh`
    then rename the files locally to `*-v2.{key,pem}`.
 2. Place both old and new on the VPS:
    ```bash
@@ -339,12 +339,12 @@ Tokens are signed RS256 with `kid` from `SHRUTI_JWT_KID` (default
 ```bash
 # One-time: bootstrap infra/.env.dev with a fresh random POSTGRES_PASSWORD
 # (and a few placeholder vars). gitignored, never committed.
-./infra/scripts/gen-dev-env.sh
+./infra/app/scripts/gen-dev-env.sh
 
 # Boot base + dev overlay together.
 docker compose \
-  -f infra/compose/docker-compose.yml \
-  -f infra/compose/docker-compose.dev.yml \
+  -f infra/app/compose/docker-compose.yml \
+  -f infra/app/compose/docker-compose.dev.yml \
   --env-file infra/.env.dev \
   up --build
 # postgres :5432, redis :6379, chat :8080, auth :18081
@@ -374,7 +374,7 @@ symlinks into those dotfiles. `deploy.sh` and the dev compose read the
 workspace path; the symlinks are created idempotently by:
 
 ```bash
-./infra/scripts/gen-jwt-keys.sh
+./infra/app/scripts/gen-jwt-keys.sh
 ```
 
 On first run (no keys in dotfiles yet) it generates them there;
@@ -392,4 +392,4 @@ SHRUTI_APPLE_BUNDLE_IDS=studio.jiva.shruti
 direnv exports them on `cd shruti`. `deploy.sh` rsyncs them onto the
 VPS via the .env (operator controls). The chat and share-video
 containers also need them via `SHRUTI_*` → service-expected names
-(see `infra/compose/docker-compose.yml` `environment:` blocks).
+(see `infra/app/compose/docker-compose.yml` `environment:` blocks).

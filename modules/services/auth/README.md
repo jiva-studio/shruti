@@ -42,7 +42,7 @@ JWT: RS256, `kid="v1"`. Access 15m, refresh 90d (rotated).
 The auth service joins the workspace dev stack:
 
 ```bash
-docker compose -f infra/compose/docker-compose.dev.yml up --build
+docker compose -f infra/app/compose/docker-compose.dev.yml up --build
 curl http://localhost:8081/auth/healthz
 ```
 
@@ -61,7 +61,7 @@ Env vars (all wired through `infra/.env`):
 | `PORT` | Default 8081. |
 
 JWT keys are workspace-wide (`../.config/shruti/jwt/`) so they stay the
-same across hosts — see [`infra/scripts/gen-jwt-keys.sh`](../../../infra/scripts/gen-jwt-keys.sh).
+same across hosts — see [`infra/app/scripts/gen-jwt-keys.sh`](../../../infra/app/scripts/gen-jwt-keys.sh).
 
 ## Layout
 
