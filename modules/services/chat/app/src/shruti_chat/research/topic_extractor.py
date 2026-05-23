@@ -69,7 +69,9 @@ async def extract_topics(
                 {"role": "user", "content": _format_user(question, lang, expansion_queries or [])},
             ]
             result: TopicExtractionResult = await llm.structured_output(
-                messages, TopicExtractionResult, model=effective_model, callbacks=callbacks,
+                messages, TopicExtractionResult,
+                model=effective_model, callbacks=callbacks,
+                run_name="topic_extractor",
             )
             cleaned = [t.strip() for t in result.topics if t and t.strip()]
             return cleaned[:TOPIC_MAX_TOPICS_EXTRACTED]

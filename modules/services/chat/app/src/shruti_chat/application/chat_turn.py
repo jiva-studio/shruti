@@ -162,6 +162,8 @@ async def run_chat_turn(
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
     deps: AppDeps | None = None,
+    session_id: str | None = None,
+    session_title: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
 
@@ -304,7 +306,8 @@ async def run_chat_turn(
         async with with_langfuse_trace(
             langfuse_trace_id,
             user_id_for_trace,
-            session_id=None,  # conversation_id lives in DB; threading TBD
+            session_id=session_id,
+            session_title=session_title,
             name="chat_turn",
             input={"query": user_query_for_trace} if user_query_for_trace else None,
         ) as langfuse_root_span:
@@ -349,7 +352,7 @@ async def run_chat_turn(
             # ── Record final answer on the Langfuse trace ────────────────
             if langfuse_root_span is not None and full_prose:
                 try:
-                    langfuse_root_span.update_current_trace(
+                    langfuse_root_span.update(
                         output={"answer": "".join(full_prose)}
                     )
                 except Exception as exc:  # noqa: BLE001
