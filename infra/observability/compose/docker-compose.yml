@@ -13,6 +13,9 @@ name: lectorium-observability
 networks:
   default:
     driver: bridge
+  watchtower-internal:
+    driver: bridge
+    internal: true
 
 volumes:
   caddy-data:
@@ -43,6 +46,8 @@ services:
       - caddy-config:/config
     environment:
       CF_API_TOKEN: ${CF_API_TOKEN}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:2019/config/"]
       interval: 30s
@@ -367,4 +372,45 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./promtail-self.yaml:/etc/promtail/config.yaml:ro
     command: -config.file=/etc/promtail/config.yaml
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # docker-socket-proxy — mediates Watchtower's docker.sock access
+  # ─────────────────────────────────────────────────────────────────
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [watchtower-internal]
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Watchtower — auto-pulls updated ghcr images on opt-in containers
+  # ─────────────────────────────────────────────────────────────────
+  watchtower:
+    image: nickfedor/watchtower:1.17.1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      DOCKER_CONFIG: /config
+    volumes:
+      - ${LECTORIUM_OBS_CONFIG_DIR:-/opt/lectorium-observability/config}/config.json:/config/config.json:ro
+    command:
+      - --label-enable
+      - --interval=60
+      - --cleanup
+      - --rolling-restart
+    networks: [watchtower-internal, default]
+    depends_on:
+      docker-socket-proxy: { condition: service_started }
     <<: *restart
