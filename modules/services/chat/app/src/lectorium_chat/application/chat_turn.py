@@ -300,12 +300,14 @@ async def run_chat_turn(
         # spans under the same root. No-op when the SDK is uninitialised
         # (LANGFUSE_FORCE_FALLBACK=1 or missing env).
         full_prose: list[str] = []
+        user_query_for_trace = _extract_latest_user_query(history)
         async with with_langfuse_trace(
             langfuse_trace_id,
             user_id_for_trace,
             session_id=None,  # conversation_id lives in DB; threading TBD
             name="chat_turn",
-        ):
+            input={"query": user_query_for_trace} if user_query_for_trace else None,
+        ) as langfuse_root_span:
             try:
                 async for mode, payload in deps.chat_graph.astream(
                     initial_state,
@@ -343,6 +345,19 @@ async def run_chat_turn(
             if tail:
                 yield AgentEvent(type="delta", data={"text": tail})
                 full_prose.append(tail)
+
+            # ── Record final answer on the Langfuse trace ────────────────
+            if langfuse_root_span is not None and full_prose:
+                try:
+                    langfuse_root_span.update_trace(
+                        output={"answer": "".join(full_prose)}
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "langfuse_trace_output_failed",
+                        request_id=request_id,
+                        error=str(exc),
+                    )
 
         # ── Bypass-marker audit (off the hot path) ───────────────────
         await _audit_bypass_markers(

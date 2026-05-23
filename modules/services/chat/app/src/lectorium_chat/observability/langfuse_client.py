@@ -259,55 +259,53 @@ async def with_langfuse_trace(
     session_id: str | None,
     *,
     name: str = "chat_turn",
-) -> AsyncIterator[None]:
-    """Open a Langfuse root trace for one chat turn.
+    input: Any | None = None,
+) -> AsyncIterator[Any]:
+    """Open a Langfuse root span for one chat turn (v3 OpenTelemetry API).
 
-    `trace_id` is the `langfuse_trace_id` (uuid4) bound into structlog
-    context at turn entry — using the same ID for both makes the
-    Grafana → Langfuse derived-field cross-link work without a separate
-    lookup. `user_id` is the internal UUID from the JWT `sub` claim
-    (see `observability/USER_ID.md`); `session_id` is the
-    conversation_id when available (None today — future work threads
-    the conversation through).
+    Yields the root span so the caller can update it with the final
+    output at end-of-turn:
+        async with with_langfuse_trace(...) as span:
+            ...
+            if span is not None:
+                span.update_trace(output=final_text)
 
-    No-op when the singleton is None (fallback mode) — callers don't
-    need to branch on it; the `langfuse_node_callback` calls return
-    None and the LLM adapter skips the callbacks parameter.
+    Nested LangChain CallbackHandlers (`langfuse_node_callback`) attach
+    to this span automatically via OpenTelemetry context propagation —
+    no explicit trace_id threading needed.
     """
     client = _LANGFUSE
     if client is None:
-        yield
+        yield None
         return
     try:
-        client.trace(
-            id=trace_id,
-            name=name,
-            user_id=user_id,
-            session_id=session_id,
-        )
+        with client.start_as_current_span(name=name) as span:
+            try:
+                span.update_trace(
+                    user_id=user_id,
+                    session_id=session_id,
+                    input=input,
+                    metadata={"chat_trace_id": trace_id},
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("langfuse_trace_update_failed", error=str(exc))
+            yield span
     except Exception as exc:  # noqa: BLE001
         log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
-    try:
-        yield
-    finally:
-        # Trace closes implicitly when the SDK flushes — we don't need
-        # to call `trace.end()` for a root trace. The shutdown handler
-        # in `shutdown_langfuse` guarantees outstanding traces flush
-        # before the process exits.
-        pass
+        yield None
 
 
 def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
-    """Build a LangChain `CallbackHandler` bound to `trace_id`.
+    """Build a LangChain `CallbackHandler` (v3) that auto-attaches to
+    the current OpenTelemetry span opened by `with_langfuse_trace`.
 
-    Returns None when the singleton is None (fallback mode) — pass
-    `callbacks=None` through to `LLMPort.stream_completion`. The
-    `stateful_client=_LANGFUSE` kwarg is **critical**: without it the
-    handler creates its OWN trace and the per-turn LangGraph tree
-    splits into N disconnected sub-trees in the Langfuse UI (one per
-    node), which makes the trace unreadable. With it, every node
-    callback writes spans under the SAME root opened by
-    `with_langfuse_trace` above.
+    v3 dropped the `stateful_client=` / `trace_id=` kwargs — the handler
+    inherits the active span context automatically. As long as the LLM
+    call happens inside the `with_langfuse_trace` async-with body,
+    spans nest under the correct root.
+
+    `trace_id` and `span_name` are kept in the signature for log
+    breadcrumbs and a future migration if we need explicit threading.
     """
     client = _LANGFUSE
     if client is None or _force_fallback():
@@ -319,11 +317,7 @@ def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
         return None
 
     try:
-        return CallbackHandler(
-            stateful_client=client,
-            trace_id=trace_id,
-            metadata={"node": span_name},
-        )
+        return CallbackHandler()
     except Exception as exc:  # noqa: BLE001
         log.warning(
             "langfuse_callback_build_failed",
