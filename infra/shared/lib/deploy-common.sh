@@ -107,7 +107,7 @@ rsync_to_target() {
   rsync -az --delete \
     -e "ssh ${SSH_OPTS[*]}" \
     --exclude='.git' --exclude='secrets/' --exclude='*.local.env' \
-    --exclude='config/*.env' --exclude='config/*.env.example' \
+    --exclude='config/' \
     "$@" \
     "$src/" "$SSH_TARGET:$dst/"
   ok "rsync done"
