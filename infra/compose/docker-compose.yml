@@ -37,6 +37,12 @@ services:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
+    # Docker's default /dev/shm of 64 MB is too small for pgvector's
+    # parallel HNSW index build — building chunks_hnsw on the live ~460k
+    # vector corpus needs ~500 MB peak shared memory across the coordinator
+    # + worker processes. 2 GB gives generous headroom; only allocated
+    # on demand, so quiescent postgres uses ~0 of it.
+    shm_size: 2gb
     environment:
       POSTGRES_USER: shruti
       POSTGRES_PASSWORD: ${SHRUTI_POSTGRES_PASSWORD:?SHRUTI_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/scripts/gen-dev-env.sh)}
