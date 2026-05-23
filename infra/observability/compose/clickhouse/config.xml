@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  infra/observability/compose/clickhouse/config.xml
+
+  Mounted at /etc/clickhouse-server/config.d/shruti-limits.xml so it
+  overlays the default config that ships with the image. Without these
+  caps ClickHouse will balloon under load (Langfuse fans out many writes
+  per chat-turn) and the obs VPS will OOM-kill the langfuse-web container
+  first, then ClickHouse itself.
+
+  Sized for a 12 GB host where ClickHouse should occupy ≤3 GB to leave
+  room for Langfuse web+worker (~1.5 GB), Postgres (~0.5 GB),
+  Loki/Prom/Grafana (~1 GB), MinIO/Redis/Caddy/exporters (~0.5 GB), and a
+  generous OS/headroom (~5 GB).
+-->
+<clickhouse>
+    <max_server_memory_usage>3000000000</max_server_memory_usage>
+    <mark_cache_size>536870912</mark_cache_size>
+    <uncompressed_cache_size>268435456</uncompressed_cache_size>
+    <max_concurrent_queries>50</max_concurrent_queries>
+    <background_pool_size>8</background_pool_size>
+
+    <profiles>
+        <default>
+            <max_memory_usage>2000000000</max_memory_usage>
+            <max_bytes_before_external_group_by>1000000000</max_bytes_before_external_group_by>
+            <max_bytes_before_external_sort>1000000000</max_bytes_before_external_sort>
+            <log_queries>1</log_queries>
+        </default>
+    </profiles>
+
+    <logger>
+        <level>warning</level>
+    </logger>
+</clickhouse>

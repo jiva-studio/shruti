@@ -1,0 +1,35 @@
+# infra/observability/compose/grafana/provisioning/alerting/policies.yml
+#
+# Notification routing — three severities, one receiver. P1 re-notifies
+# every 5 minutes until resolved, P2 every hour, P3 every 12 hours. The
+# root policy is intentionally a catch-all so any forgotten severity tag
+# still fires (avoids silent black-hole).
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: telegram-main
+    group_by: ['alertname', 'host']
+    routes:
+      - receiver: telegram-main
+        matchers:
+          - severity = "P1"
+        group_wait: 0s
+        group_interval: 1m
+        repeat_interval: 5m
+        continue: false
+      - receiver: telegram-main
+        matchers:
+          - severity = "P2"
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 1h
+        continue: false
+      - receiver: telegram-main
+        matchers:
+          - severity = "P3"
+        group_wait: 5m
+        group_interval: 30m
+        repeat_interval: 12h
+        continue: false
