@@ -43,6 +43,7 @@ class LLMPort(Protocol):
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
         """Stream chunks of an LLM completion.
 
@@ -69,6 +70,7 @@ class LLMPort(Protocol):
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> T:
         """One-shot call returning a validated Pydantic instance.
 

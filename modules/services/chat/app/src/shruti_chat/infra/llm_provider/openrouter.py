@@ -206,17 +206,32 @@ class OpenRouterLLMProvider:
         return _build_client(self._api_key, model, temperature)
 
     @staticmethod
-    def _runnable_config(callbacks: list[Any] | None) -> dict[str, Any] | None:
+    def _runnable_config(
+        callbacks: list[Any] | None,
+        run_name: str | None = None,
+    ) -> dict[str, Any] | None:
         """Build the LangChain `RunnableConfig` carrying callbacks. We
         attach via `astream(config=...)` / `ainvoke(config=...)` rather
         than `client.bind(callbacks=...)` because `bind` returns a
         `RunnableBinding` that doesn't expose `with_structured_output`
         — and structured_output is what the router uses. Per-call
         config keeps the pooled `ChatOpenAI` instance clean and lets
-        the same client serve unrelated turns concurrently."""
-        if not callbacks:
+        the same client serve unrelated turns concurrently.
+
+        `run_name` becomes the span label in Langfuse via the
+        CallbackHandler. Without it the trace shows raw class names
+        ("ChatOpenAI", "RunnableSequence") which are meaningless when
+        every node is the same LangChain machinery — callers MUST pass
+        a semantic name (e.g. "router_decision", "synthesizer_stream").
+        """
+        if not callbacks and not run_name:
             return None
-        return {"callbacks": callbacks}
+        cfg: dict[str, Any] = {}
+        if callbacks:
+            cfg["callbacks"] = callbacks
+        if run_name:
+            cfg["run_name"] = run_name
+        return cfg
 
     async def stream_completion(
         self,
@@ -227,6 +242,7 @@ class OpenRouterLLMProvider:
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
         client = self._client_for(
             self._validate_model(model), temperature=temperature,
@@ -253,7 +269,7 @@ class OpenRouterLLMProvider:
                 tool_choice=chosen,
             )
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        config = self._runnable_config(callbacks)
+        config = self._runnable_config(callbacks, run_name)
         stream_kwargs: dict[str, Any] = {"config": config} if config else {}
         async for chunk in client.astream(lc_msgs, **stream_kwargs):
             # ChatOpenAI emits AIMessageChunk; type-narrow defensively in
@@ -271,6 +287,7 @@ class OpenRouterLLMProvider:
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> T:
         # temperature is forced to 0 for structured_output regardless of
         # what a Langfuse prompt-config carries. Routing / topic
@@ -282,7 +299,7 @@ class OpenRouterLLMProvider:
         client = self._client_for(self._validate_model(model), temperature=0)
         structured = client.with_structured_output(schema)
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        config = self._runnable_config(callbacks)
+        config = self._runnable_config(callbacks, run_name)
         invoke_kwargs: dict[str, Any] = {"config": config} if config else {}
         result = await structured.ainvoke(lc_msgs, **invoke_kwargs)
         # `with_structured_output` returns the schema instance directly

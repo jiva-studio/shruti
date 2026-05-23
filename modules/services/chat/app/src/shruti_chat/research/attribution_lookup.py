@@ -205,6 +205,7 @@ async def _confirm(
             ],
             Confirm,
             model=model,
+            run_name="attribution_confirm",
         )
         return bool(result.yes)
     except Exception as exc:  # noqa: BLE001 — best-effort

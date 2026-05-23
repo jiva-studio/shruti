@@ -444,6 +444,7 @@ export const useChatStore = defineStore("chat", () => {
       for await (const event of runChatTurn(
         {
           sessionId,
+          sessionTitle: activeSession.value?.title ?? undefined,
           text: clean,
           lang,
           history,

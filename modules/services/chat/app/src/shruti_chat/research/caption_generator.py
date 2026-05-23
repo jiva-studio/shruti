@@ -86,7 +86,9 @@ async def generate_captions(
             {"role": "user", "content": _format_user(user_question, lang, chunks_to_caption)},
         ]
         result: _CaptionResult = await llm.structured_output(
-            messages, _CaptionResult, model=effective_model, callbacks=callbacks,
+            messages, _CaptionResult,
+            model=effective_model, callbacks=callbacks,
+            run_name="caption_generator",
         )
         written = 0
         for k, v in result.captions.items():

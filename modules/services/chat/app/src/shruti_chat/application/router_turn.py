@@ -37,6 +37,7 @@ class _LLMForRouting(Protocol):
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> T: ...
 
 
@@ -223,7 +224,9 @@ async def run_router_turn(
     async def _call() -> RoutingDecision:
         async with stage("router", request_id=request_id):
             return await llm.structured_output(
-                messages, RoutingDecision, model=effective_model, callbacks=callbacks,
+                messages, RoutingDecision,
+                model=effective_model, callbacks=callbacks,
+                run_name="router_decision",
             )
 
     if kv_cache is not None:

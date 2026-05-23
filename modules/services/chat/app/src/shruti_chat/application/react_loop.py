@@ -72,6 +72,7 @@ class _LLMForResearch(Protocol):
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]: ...
 
 
@@ -215,6 +216,11 @@ async def run_react_loop(
     # the per-turn root trace. `None` = no observability (off-path or
     # `LANGFUSE_FORCE_FALLBACK=1`).
     callbacks: list[Any] | None = None,
+    # Logical worker name ("research_worker", "catalog_worker", etc.) —
+    # propagated to the LLM-call span name so the Langfuse trace tree
+    # labels each ReAct iteration with its node + turn instead of
+    # generic "ChatOpenAI". Caller is the per-worker wrapper.
+    run_name: str | None = None,
 ) -> ResearchResult:
     """Run the multi-step research ReAct loop and return tool results.
 
@@ -253,6 +259,10 @@ async def run_react_loop(
             model=model,
             temperature=0.2,
             callbacks=callbacks,
+            run_name=(
+                f"{run_name}_turn{turn + 1}" if run_name
+                else f"react_turn{turn + 1}"
+            ),
         ):
             acc.consume(chunk.get("tool_calls"))
             if (fr := chunk.get("finish_reason")):

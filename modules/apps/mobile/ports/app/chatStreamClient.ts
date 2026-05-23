@@ -157,6 +157,11 @@ export type ChatStreamEvent =
 export interface StreamChatOptions {
   readonly signal?: AbortSignal
   readonly userContext?: unknown
+  /** Local chat_sessions.id — backend forwards as Langfuse session_id
+   *  so all turns of the same conversation group in the Sessions tab. */
+  readonly sessionId?: string
+  /** Human-readable chat session title (chat_sessions.title). */
+  readonly sessionTitle?: string
 }
 
 /**
