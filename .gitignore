@@ -92,4 +92,5 @@ infra/observability/compose/prometheus.yml
 infra/observability/compose/grafana/provisioning/datasources/datasources.yml
 
 # Runtime .env synthesised on the host during deploy
-infra/observability/compose/.env
+infra/observability/compose/.envinfra/.env.dev
+infra/app/.env.dev
