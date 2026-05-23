@@ -1,0 +1,710 @@
+# infra/observability/compose/grafana/provisioning/alerting/rules.yml
+#
+# All Grafana managed-alert rules, grouped by domain. Conditions follow the
+# plan's "Alerts catalog" section. Refs use a simple two-step shape:
+#
+#   refs:
+#     A — raw PromQL/LogQL query
+#     B — threshold expression on $A
+#
+# This keeps the YAML compact and rule editing trivial.
+# Datasource UIDs match those in datasources/datasources.yml.template.
+
+apiVersion: 1
+
+groups:
+  # ─────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: infra
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: host_disk_warning
+        title: host_disk_warning
+        condition: B
+        for: 10m
+        labels: { severity: P2 }
+        annotations:
+          summary: 'Disk free <15% on {{ $labels.host }} {{ $labels.mountpoint }}'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'min by (host,mountpoint) (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.15] }
+
+      - uid: host_disk_critical
+        title: host_disk_critical
+        condition: B
+        for: 2m
+        labels: { severity: P1 }
+        annotations:
+          summary: 'Disk free <5% on {{ $labels.host }} {{ $labels.mountpoint }}'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'min by (host,mountpoint) (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.05] }
+
+      - uid: host_memory_high
+        title: host_memory_high
+        condition: B
+        for: 10m
+        labels: { severity: P2 }
+        annotations:
+          summary: 'Available memory <10% on {{ $labels.host }}'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'avg by (host) (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.10] }
+
+      - uid: host_offline
+        title: host_offline
+        condition: B
+        for: 2m
+        labels: { severity: P1 }
+        annotations:
+          summary: 'node_exporter target down: {{ $labels.instance }}'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'up{job=~"node-.*"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Containers
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: container
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: container_restart_loop
+        title: container_restart_loop
+        condition: B
+        for: 5m
+        labels: { severity: P1 }
+        annotations:
+          summary: 'Container {{ $labels.name }} restarted >3 times in 5m'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'increase(container_last_seen{name!=""}[5m]) and increase(container_start_time_seconds{name!=""}[5m]) > 3'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [3] }
+
+      - uid: container_oom_killed
+        title: container_oom_killed
+        condition: B
+        for: 1m
+        labels: { severity: P1 }
+        annotations:
+          summary: 'Container {{ $labels.name }} OOM-killed'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'increase(container_memory_failures_total{failure_type="oom"}[5m])'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Application health (blackbox probes)
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: app-health
+    folder: Lectorium-Alerts
+    interval: 30s
+    rules:
+      - uid: chat_unhealthy
+        title: chat_unhealthy
+        condition: B
+        for: 2m
+        labels: { severity: P1, service: chat }
+        annotations:
+          summary: 'chat /healthz failing'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_success{instance=~".*:8080/healthz"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: auth_unhealthy
+        title: auth_unhealthy
+        condition: B
+        for: 2m
+        labels: { severity: P1, service: auth }
+        annotations:
+          summary: 'auth /healthz failing'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_success{instance=~".*:8081/healthz"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: share_audio_unhealthy
+        title: share_audio_unhealthy
+        condition: B
+        for: 2m
+        labels: { severity: P2, service: share-audio }
+        annotations:
+          summary: 'share-audio /healthz failing'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_success{instance=~".*:8082/healthz"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: share_video_unhealthy
+        title: share_video_unhealthy
+        condition: B
+        for: 2m
+        labels: { severity: P2, service: share-video }
+        annotations:
+          summary: 'share-video /healthz failing'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_success{instance=~".*:8083/healthz"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: langfuse_unhealthy
+        title: langfuse_unhealthy
+        condition: B
+        for: 5m
+        labels: { severity: P2, service: langfuse }
+        annotations:
+          summary: 'langfuse /api/public/health failing'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_success{instance=~".*langfuse.*health.*"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Postgres
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: postgres
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: pg_connections_high
+        title: pg_connections_high
+        condition: B
+        for: 10m
+        labels: { severity: P2, service: postgres }
+        annotations:
+          summary: 'Postgres connections >80% of max'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'sum(pg_stat_activity_count) by (instance) / max(pg_settings_max_connections) by (instance)'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.80] }
+
+      - uid: pg_long_running_query
+        title: pg_long_running_query
+        condition: B
+        for: 5m
+        labels: { severity: P3, service: postgres }
+        annotations:
+          summary: 'Postgres transaction running >10 minutes'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'max(pg_stat_activity_max_tx_duration) by (instance)'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [600] }
+
+      - uid: pg_deadlocks
+        title: pg_deadlocks
+        condition: B
+        for: 5m
+        labels: { severity: P2, service: postgres }
+        annotations:
+          summary: 'Postgres deadlock rate elevated'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'rate(pg_stat_database_deadlocks[5m])'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.1] }
+
+      - uid: pg_up_down
+        title: pg_up_down
+        condition: B
+        for: 5m
+        labels: { severity: P2, service: postgres }
+        annotations:
+          summary: 'postgres-exporter pg_up == 0'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'pg_up'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # share-video queue depth
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: share-video-queue
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: share_video_queue_growing
+        title: share_video_queue_growing
+        condition: B
+        for: 10m
+        labels: { severity: P2, service: share-video }
+        annotations:
+          summary: 'share-video pending queue >50 for 10m'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'lectorium_share_video_queue_depth'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [50] }
+
+      - uid: share_video_oldest_pending
+        title: share_video_oldest_pending
+        condition: B
+        for: 5m
+        labels: { severity: P2, service: share-video }
+        annotations:
+          summary: 'share-video oldest pending task >10 min'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'lectorium_share_video_oldest_pending_seconds'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [600] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: redis
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: redis_memory_high
+        title: redis_memory_high
+        condition: B
+        for: 10m
+        labels: { severity: P2, service: redis }
+        annotations:
+          summary: 'Redis used / max >90%'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'redis_memory_used_bytes / on(instance) redis_memory_max_bytes'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.90] }
+
+      - uid: redis_evictions
+        title: redis_evictions
+        condition: B
+        for: 5m
+        labels: { severity: P3, service: redis }
+        annotations:
+          summary: 'Redis evicting keys'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'rate(redis_evicted_keys_total[5m])'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [1] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Logs (LogQL via Loki)
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: logs
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: error_rate_spike
+        title: error_rate_spike
+        condition: B
+        for: 5m
+        labels: { severity: P2 }
+        annotations:
+          summary: 'Error log rate spike vs 1h baseline'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'sum(rate({level="error"}[5m])) / clamp_min(sum(rate({level="error"}[1h] offset 1h)), 0.001)'
+              queryType: instant
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [3] }
+
+      - uid: log_silence_chat
+        title: log_silence_chat
+        condition: B
+        for: 10m
+        labels: { severity: P1, service: chat }
+        annotations:
+          summary: 'chat container produced 0 log lines for 10m'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'sum(rate({service="chat"}[10m]))'
+              queryType: instant
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.001] }
+
+      - uid: langfuse_5xx
+        title: langfuse_5xx
+        condition: B
+        for: 5m
+        labels: { severity: P2, service: langfuse }
+        annotations:
+          summary: 'langfuse container error log rate elevated'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'sum(rate({container=~"langfuse.*", level="error"}[5m]))'
+              queryType: instant
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # LLM observability
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: llm
+    folder: Lectorium-Alerts
+    interval: 5m
+    rules:
+      - uid: llm_cost_per_hour_high
+        title: llm_cost_per_hour_high
+        condition: B
+        for: 15m
+        labels: { severity: P3, service: chat }
+        annotations:
+          summary: 'LLM spend >$5/hour over last 15m'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              expr: 'langfuse_cost_per_hour'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [5] }
+
+      - uid: llm_p95_latency_high
+        title: llm_p95_latency_high
+        condition: B
+        for: 15m
+        labels: { severity: P3, service: chat }
+        annotations:
+          summary: 'LLM p95 latency >10s for 15m'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 900, to: 0 }
+            model:
+              refId: A
+              expr: 'langfuse_p95_latency'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }
+
+  # ─────────────────────────────────────────────────────────────────
+  # Generic self-monitoring — exporter survives, certs, queue
+  # ─────────────────────────────────────────────────────────────────
+  - orgId: 1
+    name: generic
+    folder: Lectorium-Alerts
+    interval: 1m
+    rules:
+      - uid: exporter_down
+        title: exporter_down
+        condition: B
+        for: 5m
+        labels: { severity: P2 }
+        annotations:
+          summary: 'exporter target {{ $labels.job }} on {{ $labels.instance }} down'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 300, to: 0 }
+            model:
+              refId: A
+              expr: 'up{job=~"node-.*|cadvisor-.*|blackbox-.*|postgres-.*|redis-.*|promtail-.*"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: tls_cert_expiring_soon
+        title: tls_cert_expiring_soon
+        condition: B
+        for: 1h
+        labels: { severity: P2 }
+        annotations:
+          summary: 'TLS cert for {{ $labels.instance }} expires in <7 days'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 3600, to: 0 }
+            model:
+              refId: A
+              expr: 'probe_ssl_earliest_cert_expiry - time()'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [604800] }
+
+      - uid: langfuse_worker_queue_lag
+        title: langfuse_worker_queue_lag
+        condition: B
+        for: 10m
+        labels: { severity: P2, service: langfuse }
+        annotations:
+          summary: 'langfuse worker queue depth >1000 for 10m'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 600, to: 0 }
+            model:
+              refId: A
+              expr: 'redis_db_keys{db="db0",instance=~".*langfuse.*"}'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [1000] }

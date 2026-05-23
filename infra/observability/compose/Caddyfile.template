@@ -1,0 +1,44 @@
+# infra/observability/compose/Caddyfile.template
+#
+# Rendered by infra/shared/lib/render-templates.sh — ${VARS} substituted at
+# deploy time. The rendered file (Caddyfile) is what Caddy actually reads.
+#
+# Wildcard cert is obtained via Cloudflare DNS-01 (no port 80 required to
+# reach the public internet). Caddy listens only on the Tailscale IP, so
+# the wildcard hostnames are only reachable from inside the Tailnet — DNS
+# resolves publicly, the IP itself isn't routable from the internet.
+
+{
+    email admin@akdasa.studio
+}
+
+*.${TAILNET_DOMAIN} {
+    tls {
+        dns cloudflare {env.CF_API_TOKEN}
+        resolvers 1.1.1.1
+    }
+
+    @grafana host grafana.${TAILNET_DOMAIN}
+    handle @grafana {
+        reverse_proxy grafana:3000
+    }
+
+    @langfuse host langfuse.${TAILNET_DOMAIN}
+    handle @langfuse {
+        reverse_proxy langfuse-web:3000
+    }
+
+    @prometheus host prometheus.${TAILNET_DOMAIN}
+    handle @prometheus {
+        reverse_proxy prometheus:9090
+    }
+
+    @minio host minio.${TAILNET_DOMAIN}
+    handle @minio {
+        reverse_proxy minio:9001
+    }
+
+    handle {
+        respond "lectorium observability — unknown host" 404
+    }
+}
