@@ -1,6 +1,7 @@
 export default {
   groups: {
     subscription: "Subscription",
+    account: "Account",
     appearance: "Appearance",
     contacts: "Contact Us",
     status: "Status",
@@ -9,6 +10,17 @@ export default {
     help: "Help",
     danger: "Danger zone",
     about: "About",
+  },
+
+  account: {
+    signInCta: {
+      title: "Sign in to keep your progress",
+      description: "So you don't lose your library when you switch devices.",
+    },
+    signInWithGoogle: "Sign in with Google",
+    signInWithApple: "Sign in with Apple",
+    signedIn: "Signed in",
+    signOut: "Sign out",
   },
 
   subscription: {

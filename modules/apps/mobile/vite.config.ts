@@ -48,6 +48,23 @@ export default defineConfig({
       process.env.LECTORIUM_CHAT_API_BASE_URL ?? "https://api.shruti.local"
     ),
     __CHAT_APP_TOKEN__: JSON.stringify(process.env.LECTORIUM_CHAT_APP_TOKEN ?? "dev-token"),
+    // Auth service lives on the same host as chat (Caddy routes /auth/* to it).
+    __AUTH_API_BASE_URL__: JSON.stringify(
+      process.env.LECTORIUM_AUTH_API_BASE_URL ??
+        (process.env.LECTORIUM_CHAT_API_BASE_URL ?? "https://api.shruti.local") + "/auth"
+    ),
+    // OAuth client IDs are public by design — Google embeds them in the APK
+    // and they're recoverable via apktool. Hard-coded defaults so a fresh
+    // checkout builds working sign-in without any env setup. Override via
+    // env if staging / multi-tenant ever lands.
+    __GOOGLE_WEB_CLIENT_ID__: JSON.stringify(
+      process.env.LECTORIUM_GOOGLE_WEB_CLIENT_ID ??
+        "315690032552-hn1sgjk1m7fn38q41pupavep7idpnqoq.apps.googleusercontent.com"
+    ),
+    __GOOGLE_IOS_CLIENT_ID__: JSON.stringify(
+      process.env.LECTORIUM_GOOGLE_IOS_CLIENT_ID ??
+        "315690032552-l2vl1h7qqdidpnem255ng6v04j3icq47.apps.googleusercontent.com"
+    ),
   },
   build: {
     minify: true,

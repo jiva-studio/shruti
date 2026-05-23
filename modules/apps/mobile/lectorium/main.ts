@@ -46,6 +46,9 @@ import { useCapacitorNotificationScheduler } from "@infra/notifications/capacito
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
+import { useCapacitorAuth } from "@infra/auth/capacitor/useCapacitorAuth.js"
+import { setAccessTokenProvider } from "@lectorium/services/chatClient.js"
+import { useLectorium } from "@lectorium/lectorium.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
@@ -54,6 +57,7 @@ import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
+import { useAuthStore } from "./stores/useAuthStore.js"
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
@@ -96,6 +100,13 @@ initLectorium({
     iosApiKey: __REVENUECAT_IOS_KEY__,
     androidApiKey: __REVENUECAT_ANDROID_KEY__,
   }),
+  // Auth service — anonymous-by-device bootstrap on first launch; Google /
+  // Apple sign-in upgrades the same user when invoked from Settings.
+  auth: useCapacitorAuth({
+    baseUrl: __AUTH_API_BASE_URL__,
+    googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
+    googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
+  }),
   // Wraps Capacitor.Filesystem + HEAD probe — used by the Notes share
   // workflow to look up / download per-note excerpt files. Single
   // adapter; the operations are all native, the web build never hits
@@ -132,5 +143,18 @@ router.isReady().then(() => {
     .init()
     .catch((e) => {
       console.warn("purchases.init failed", e)
+    })
+  // Wire chatClient's module-level access-token provider to the auth
+  // port. Done before useAuthStore().restore() so even a chat call that
+  // races with restore() (cold-start auto-resume scenarios) finds the
+  // provider — the provider itself awaits initialize() internally.
+  setAccessTokenProvider(() => useLectorium().auth.getAccessToken())
+
+  // Bootstrap anonymous-by-device session. Resolves the persistent
+  // userId asynchronously; the rest of the app reads it via useAuthStore.
+  void useAuthStore()
+    .restore()
+    .catch((e) => {
+      console.warn("auth.restore failed", e)
     })
 })

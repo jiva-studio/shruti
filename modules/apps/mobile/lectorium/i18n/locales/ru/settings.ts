@@ -1,6 +1,7 @@
 export default {
   groups: {
     subscription: "Подписка",
+    account: "Аккаунт",
     appearance: "Внешний вид",
     contacts: "Связаться с нами",
     status: "Статус",
@@ -9,6 +10,17 @@ export default {
     help: "Помощь",
     danger: "Опасная зона",
     about: "О приложении",
+  },
+
+  account: {
+    signInCta: {
+      title: "Войдите, чтобы сохранить прогресс",
+      description: "Чтобы не потерять библиотеку при смене устройства.",
+    },
+    signInWithGoogle: "Войти через Google",
+    signInWithApple: "Войти через Apple",
+    signedIn: "Вы вошли",
+    signOut: "Выйти",
   },
 
   subscription: {

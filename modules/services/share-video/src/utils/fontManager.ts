@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { GlobalFonts } from '@napi-rs/canvas';
+import { log } from '../log';
 
 /**
  * Family-list string fed to canvas as `ctx.font = "bold 80px ${FONT_FAMILY}"`.
@@ -62,9 +63,9 @@ export function registerFonts(assetsDir?: string): void {
     }
   }
 
-  console.warn(
-    `[share-video] no font found at ${baseDir} or system paths; ` +
-      'canvas will use its built-in fallback (limited Cyrillic coverage)',
+  log.warn(
+    { baseDir },
+    'font_fallback — no font found at baseDir or system paths; canvas will use its built-in fallback (limited Cyrillic coverage)',
   );
 }
 

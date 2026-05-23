@@ -1,0 +1,90 @@
+# Production overlay over docker-compose.yml. Adds:
+#   - Caddy (TLS termination, path routing)
+#   - Watchtower (auto-pull updated ghcr images on opt-in containers)
+#   - docker-socket-proxy (mediates Watchtower's docker.sock access)
+#
+# deploy.sh combines this overlay with the base file; this overlay is
+# never run alone.
+
+services:
+  caddy:
+    # Custom build with the rate-limit plugin baked in. Built by
+    # services-ghcr.yml from infra/compose/caddy/Dockerfile.
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-caddy:${LECTORIUM_CADDY_TAG:-latest}
+    restart: unless-stopped
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${LECTORIUM_DOMAIN:?}
+      ACME_EMAIL: ${LECTORIUM_ACME_EMAIL:?}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    networks: [lectorium]
+    depends_on:
+      chat:         { condition: service_healthy }
+      auth:         { condition: service_healthy }
+      share-audio:  { condition: service_healthy }
+      share-video:  { condition: service_healthy }
+    # Caddy is edge — NOT Watchtower-managed. Manual update by bumping
+    # the LECTORIUM_CADDY_TAG in .env and re-deploying.
+
+  # Tightens Watchtower's access to the docker daemon. Without this proxy
+  # Watchtower would mount /var/run/docker.sock directly and have root
+  # over the host (it could spawn arbitrary containers, mount host paths
+  # — full container escape on compromise). The proxy whitelist below
+  # restricts the API to exactly the verbs Watchtower needs: list
+  # containers/images, pull, restart. Everything else returns 403.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]  # haproxy inside the proxy needs these
+    environment:
+      CONTAINERS: 1      # GET /containers/json
+      IMAGES: 1          # GET /images/* (pull check)
+      POST: 1            # POST /containers/<id>/restart, /images/create
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [watchtower-internal]
+
+  watchtower:
+    image: nickfedor/watchtower:1.17.1   # actively maintained fork of containrrr
+    restart: unless-stopped
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    # NO Watchtower-enable label — we don't want it to update itself.
+    environment:
+      # Talk to docker via the proxy, not raw socket.
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      # ghcr public images → no auth credentials needed.
+    command:
+      - --label-enable          # only touch containers with the watchtower.enable label
+      - --interval=60           # poll ghcr every 60s
+      - --cleanup               # remove old images after successful update
+      - --rolling-restart       # one container at a time (cosmetic with 1 replica each)
+    networks: [watchtower-internal, lectorium]
+    depends_on:
+      docker-socket-proxy: { condition: service_started }
+
+networks:
+  watchtower-internal:
+    # Isolated network so the proxy isn't reachable from chat/auth.
+    # Watchtower bridges both networks.
+
+volumes:
+  caddydata:
+  caddyconfig:

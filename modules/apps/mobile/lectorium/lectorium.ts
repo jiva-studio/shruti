@@ -1,6 +1,7 @@
 import { ref, type Ref } from "vue"
 import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
 import type {
+  AuthPort,
   IAudioPlayer,
   IDatabase,
   IDatabaseFetcher,
@@ -80,6 +81,9 @@ export interface Lectorium {
   readonly mediaDownloader: IMediaDownloader
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
+  /** Lectorium auth service. Bootstraps anonymous-by-device on first launch;
+   *  Settings can upgrade to Google / Apple later. */
+  readonly auth: AuthPort
   /** HTTP/SSE adapter for `kind=proactive` chat turns. Used by the
    *  scheduler's content builders for `holiday`, `weekly_digest` and
    *  `inactivity` rules. */
@@ -147,6 +151,7 @@ export interface InitLectoriumSeed {
   readonly purchases: IPurchases
   readonly serverProber: IServerProber
   readonly excerptCache: IExcerptCache
+  readonly auth: AuthPort
   readonly proactiveChat: IProactiveChatService
   /** Factory invoked inside `initLectorium` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
@@ -176,8 +181,15 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   // Same lazy-getter pattern as storagePublicUrl: resolves the
   // per-region cutter endpoint at call time, so a settings flip
   // routes subsequent share-audio calls to the new region.
+  //
+  // share-video also requires a Bearer token (per-user daily quota
+  // enforced server-side). share-audio stays anonymous — its work is
+  // cheap stream-copy, only Caddy edge rate-limit applies.
   const shareAudioService = useHttpShareAudioService(() => activeServer.value.shareAudioUrl)
-  const shareVideoService = useHttpShareVideoService(() => activeServer.value.shareVideoUrl)
+  const shareVideoService = useHttpShareVideoService(
+    () => activeServer.value.shareVideoUrl,
+    () => seed.auth.getAccessToken()
+  )
 
   const self: Lectorium = {
     appConfig: seed.appConfig,
@@ -196,6 +208,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     mediaDownloader: seed.mediaDownloader,
     purchases: seed.purchases,
     serverProber: seed.serverProber,
+    auth: seed.auth,
     proactiveChat: seed.proactiveChat,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,

@@ -1,5 +1,3 @@
-import { useLectorium } from "@lectorium/lectorium.js"
-
 /* -------------------------------------------------------------------------- */
 /*                              Wire-protocol types                           */
 /* -------------------------------------------------------------------------- */
@@ -186,12 +184,24 @@ export interface AliasMapPayload {
 export async function fetchSessionTitle(
   messages: readonly ChatTurn[],
   lang: "ru" | "en",
-  opts: { baseUrl?: string; appToken?: string; clientId?: string; signal?: AbortSignal } = {}
+  opts: {
+    baseUrl?: string
+    appToken?: string
+    getAccessToken?: () => Promise<string | null>
+    signal?: AbortSignal
+  } = {}
 ): Promise<string | null> {
   if (messages.length === 0) return null
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
-  const clientId = opts.clientId ?? (await resolveClientId())
+
+  let token: string
+  try {
+    token = await resolveAccessToken(opts.getAccessToken)
+  } catch {
+    // /title is fire-and-forget; no recovery surface if auth is unrecoverable.
+    return null
+  }
 
   try {
     const response = await fetch(joinUrl(baseUrl, "/title"), {
@@ -199,7 +209,7 @@ export async function fetchSessionTitle(
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        "X-Device-Id": clientId,
+        Authorization: `Bearer ${token}`,
         "X-App-Token": appToken,
         "Idempotency-Key": newIdempotencyKey(),
       },
@@ -245,11 +255,24 @@ export interface QuestionsFocusInput {
 export async function fetchSuggestedQuestions(
   focus: QuestionsFocusInput,
   lang: "ru" | "en",
-  opts: { baseUrl?: string; appToken?: string; clientId?: string; signal?: AbortSignal } = {}
+  opts: {
+    baseUrl?: string
+    appToken?: string
+    getAccessToken?: () => Promise<string | null>
+    signal?: AbortSignal
+  } = {}
 ): Promise<readonly string[]> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
-  const clientId = opts.clientId ?? (await resolveClientId())
+
+  let token: string
+  try {
+    token = await resolveAccessToken(opts.getAccessToken)
+  } catch {
+    // /questions is fire-and-forget; empty chips on auth failure is the
+    // graceful path (caller renders "no chips" without a toast).
+    return []
+  }
 
   try {
     const response = await fetch(joinUrl(baseUrl, "/questions"), {
@@ -257,7 +280,7 @@ export async function fetchSuggestedQuestions(
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        "X-Device-Id": clientId,
+        Authorization: `Bearer ${token}`,
         "X-App-Token": appToken,
         "Idempotency-Key": newIdempotencyKey(),
       },
@@ -285,8 +308,9 @@ export interface StreamChatOptions {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
   readonly appToken?: string
-  /** Override for tests; in production we read from IPreferences. */
-  readonly clientId?: string
+  /** Test override for the JWT provider. In production the module-level
+   *  provider (set via setAccessTokenProvider) is used. */
+  readonly getAccessToken?: () => Promise<string | null>
   /** Snapshot of recent listening + notes for personalization tools. */
   readonly userContext?: unknown
   /** When present, the backend swaps the system prompt for a
@@ -316,7 +340,7 @@ export async function* streamChat(
 ): AsyncGenerator<ChatStreamEvent, void, void> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
-  const clientId = opts.clientId ?? (await resolveClientId())
+  const token = await resolveAccessToken(opts.getAccessToken)
 
   // Transient errors (network blip, 502/503/504 during a server redeploy)
   // get up to 3 retries with exponential backoff, but only as a *fallback*
@@ -336,7 +360,7 @@ export async function* streamChat(
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
-      "X-Device-Id": clientId,
+      Authorization: `Bearer ${token}`,
       "X-App-Token": appToken,
       "X-Chat-Protocol-Version": "1",
       "Idempotency-Key": idempotencyKey,
@@ -482,18 +506,33 @@ function buildRequestBody(
   return body
 }
 
-async function resolveClientId(): Promise<string> {
-  const app = useLectorium()
-  const stored = await app.preferences.get("chat.clientId")
-  if (stored) return stored
-  // bootstrap.ts seeds this on first launch; if it's missing here we're
-  // running pre-bootstrap (tests / debug screens). Mint a transient id so
-  // the request still goes out with a valid header.
-  const transient =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `transient-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  return transient
+/**
+ * Token provider injected at app boot (lectorium.ts wires `useLectorium().auth.getAccessToken`
+ * into here). Pulled out as a module-level slot so the dozens of call-sites
+ * for streamChat / fetchSessionTitle / fetchSuggestedQuestions don't each
+ * have to thread an explicit `getAccessToken` argument through.
+ *
+ * Tests can override via the `getAccessToken` option on each function.
+ */
+type AccessTokenProvider = () => Promise<string | null>
+let _accessTokenProvider: AccessTokenProvider | null = null
+
+export function setAccessTokenProvider(provider: AccessTokenProvider | null): void {
+  _accessTokenProvider = provider
+}
+
+async function resolveAccessToken(override?: AccessTokenProvider): Promise<string> {
+  const provider = override ?? _accessTokenProvider
+  if (!provider) {
+    throw new Error(
+      "chatClient: no access token provider — call setAccessTokenProvider() during app bootstrap"
+    )
+  }
+  const token = await provider()
+  if (!token) {
+    throw new Error("chatClient: auth.getAccessToken returned null (session unrecoverable)")
+  }
+  return token
 }
 
 function joinUrl(base: string, path: string): string {

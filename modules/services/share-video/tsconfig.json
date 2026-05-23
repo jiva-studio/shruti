@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "moduleResolution": "node"
   },
-  "include": ["handler.ts", "eventAdapter.ts", "pipeline.ts", "storage.ts", "src/**/*"],
+  "include": ["pipeline.ts", "storage.ts", "src/**/*"],
   "exclude": ["node_modules", "dist", "scripts"]
 }

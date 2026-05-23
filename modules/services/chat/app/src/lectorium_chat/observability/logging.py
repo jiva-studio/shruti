@@ -45,12 +45,19 @@ _TURN_FIELDS = ("trace_id", "request_id", "agent_role", "parent_trace_id")
 def setup_logging() -> None:
     settings = get_settings()
 
-    timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True)
+    # Datadog auto-parses `timestamp` + `level` + `message`; ISO/UTC is
+    # the format their pipeline expects when no source is declared.
+    timestamper = structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp")
     level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
     shared_processors: list = [
         structlog.contextvars.merge_contextvars,
+        # add_log_level emits `level` which Datadog recognises as severity.
         structlog.stdlib.add_log_level,
+        # Rename structlog's default `event` field → `message`. Datadog's
+        # standard attribute is `message`; everything else gets cleaner
+        # search by aligning here.
+        structlog.processors.EventRenamer("message"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
         timestamper,
@@ -81,9 +88,12 @@ def setup_logging() -> None:
     root.handlers = [handler]
     root.setLevel(level)
 
-    # Bind base context to every log
+    # Bind base context to every log. Field names match Datadog's
+    # reserved attributes (`service`, `env`, `version`) so its tag-from-
+    # log pipeline picks them up without extra processors.
     structlog.contextvars.bind_contextvars(
         service="lectorium-chat",
+        env=settings.env,
         version=settings.service_version,
         pid=os.getpid(),
     )

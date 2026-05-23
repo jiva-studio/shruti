@@ -24,14 +24,20 @@ pytestmark = pytest.mark.asyncio
 
 
 async def _ensure_schema(url: str) -> None:
-    """Apply schema.sql against the integration DB. Idempotent."""
+    """Apply all chat migrations from infra/db/migrations/.
+
+    chat's old idempotent schema.sql is gone; the central migrator owns
+    them now. For integration tests we replay 0010_chat_*.up.sql in order.
+    """
     from pathlib import Path
-    schema_path = Path(__file__).parent.parent.parent / "src" / "lectorium_chat" / "db" / "schema.sql"
-    sql = schema_path.read_text(encoding="utf-8")
+    # tests/integration/ → tests/ → app/ → chat/ → services/ → modules/ → root → infra/db/migrations/
+    migrations_dir = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "infra" / "db" / "migrations"
+    files = sorted(migrations_dir.glob("0010_chat_*.up.sql")) + sorted(migrations_dir.glob("001[1-6]_chat_*.up.sql"))
     conn = await asyncpg.connect(url)
     try:
         async with conn.transaction():
-            await conn.execute(sql)
+            for f in files:
+                await conn.execute(f.read_text(encoding="utf-8"))
     finally:
         await conn.close()
 

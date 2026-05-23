@@ -7,6 +7,16 @@
       @manage="subscription.onManage"
     />
 
+    <SettingsAccountGroup
+      :anonymous="auth.anonymous"
+      :email="auth.email"
+      :name="auth.name"
+      :platform="platform"
+      @sign-in-google="auth.signInGoogle"
+      @sign-in-apple="auth.signInApple"
+      @sign-out="auth.signOut"
+    />
+
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
       v-model:active-server-id="activeServerId"
@@ -65,6 +75,7 @@
       :db-number="dbNumber"
       :db-scheme="dbScheme"
       :app-user-id="debugUnlocked ? subscription.appUserId : undefined"
+      :lectorium-user-id="debugUnlocked ? (auth.userId ?? undefined) : undefined"
       @tap="debugTrigger.onTap"
     />
 
@@ -76,6 +87,7 @@
 import { ref } from "vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
+  SettingsAccountGroup,
   SettingsAppearanceGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
@@ -88,11 +100,15 @@ import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
+import { useLectorium } from "@lectorium/lectorium.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()
 const paywall = usePaywallStore()
+const auth = useAuthStore()
+const platform = useLectorium().platform
 const {
   version,
   buildId,

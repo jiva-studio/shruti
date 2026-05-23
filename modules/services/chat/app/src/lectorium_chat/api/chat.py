@@ -11,11 +11,13 @@ import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
+from lectorium_chat.api._auth import get_current_user
 from lectorium_chat.api.schemas.chat import ChatRequestDto
 from lectorium_chat.application.chat_turn import run_chat_turn
 from lectorium_chat.application.proactive_turn import run_proactive_turn
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
+from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
 from lectorium_chat.observability.logging import get_logger
 
 
@@ -28,12 +30,6 @@ def _check_app_token(token: str | None) -> None:
     expected = get_settings().app_shared_token
     if not token or token != expected:
         raise HTTPException(status_code=401, detail="invalid app token")
-
-
-def _check_device_id(device_id: str | None) -> str:
-    if not device_id:
-        raise HTTPException(status_code=400, detail="missing X-Device-Id header")
-    return device_id
 
 
 _SUPPORTED_PROTOCOL_VERSIONS = ("1",)
@@ -64,19 +60,20 @@ async def chat(
     request: Request,
     body: ChatRequestDto,
     x_app_token: str | None = Header(default=None),
-    x_device_id: str | None = Header(default=None),
     x_chat_protocol_version: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ):
     _check_app_token(x_app_token)
     _check_protocol_version(x_chat_protocol_version)
-    device_id = _check_device_id(x_device_id)
     request_id = uuid.uuid4().hex[:12]
 
-    # Rate-limit gate (per-day per device + per-IP)
+    # Rate-limit gate (per-day per JWT-sub + per-IP).
     ip = request.client.host if request.client else "unknown"
-    rl = await deps.rate_limiter.check_and_increment(device_id, ip)
+    rl = await deps.rate_limiter.check_and_increment(
+        user.id, user.anonymous, ip, scope="chat",
+    )
     if not rl.allowed:
         raise HTTPException(
             status_code=429,
@@ -90,7 +87,7 @@ async def chat(
         )
 
     structlog.contextvars.bind_contextvars(
-        request_id=request_id, device_id=device_id, ip=ip,
+        request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,
     )
     log.info(
         "chat_request",
@@ -146,7 +143,7 @@ async def chat(
                 request_id=request_id,
                 proactive=body.proactive is not None,
             )
-            structlog.contextvars.unbind_contextvars("request_id", "device_id", "ip")
+            structlog.contextvars.unbind_contextvars("request_id", "user_id", "anonymous", "ip")
 
     return EventSourceResponse(
         event_stream(),

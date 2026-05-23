@@ -19,8 +19,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from lectorium_chat.agent.oneshot import run_oneshot
+from lectorium_chat.api._auth import get_current_user
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
+from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -166,32 +168,27 @@ def _check_app_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="invalid app token")
 
 
-def _check_device_id(device_id: str | None) -> str:
-    if not device_id:
-        raise HTTPException(status_code=400, detail="missing X-Device-Id header")
-    return device_id
-
-
 @router.post("/questions", response_model=QuestionsResponse)
 async def questions(
     request: Request,
     body: QuestionsRequest,
     x_app_token: str | None = Header(default=None),
-    x_device_id: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> QuestionsResponse:
     _check_app_token(x_app_token)
-    device_id = _check_device_id(x_device_id)
     settings = get_settings()
     if idempotency_key:
-        log.info("questions_request", device_id=device_id, idempotency_key=idempotency_key)
+        log.info("questions_request", user_id=user.id, idempotency_key=idempotency_key)
 
     # Separate quota bucket — same rationale as /title (see config.py
     # comments). Cheaper per call than /chat but a misbehaving client
     # could fire one per selection drag.
     ip = request.client.host if request.client else "unknown"
-    rl = await deps.rate_limiter.check_and_increment(device_id, ip, scope="questions")
+    rl = await deps.rate_limiter.check_and_increment(
+        user.id, user.anonymous, ip, scope="questions",
+    )
     if not rl.allowed:
         raise HTTPException(
             status_code=429,

@@ -1,0 +1,47 @@
+# Local-dev overlay over docker-compose.yml.
+#
+# Restores `build:` blocks for chat/auth (base config pulls from ghcr.io
+# in prod) and pins images to local tags with `pull_policy: never` so a
+# missing-from-disk image fails fast instead of trying to pull
+# `ghcr.io/akdasa-studios/lectorium-chat:latest` from the public
+# registry every time you boot.
+#
+# Set these in your shell or via infra/.env.dev:
+#   LECTORIUM_ENV_FILE=../.env.dev
+#   LECTORIUM_JWT_KEYS_DIR=../../../.config/lectorium/jwt
+#
+# Usage:
+#   docker compose -f infra/compose/docker-compose.yml \
+#                  -f infra/compose/docker-compose.dev.yml \
+#                  --env-file infra/.env.dev \
+#                  up --build
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  chat:
+    image: lectorium-chat:dev
+    pull_policy: never
+    build:
+      # Context = modules/ so Dockerfile can COPY both services/chat/ and docs/help/.
+      context: ../../modules
+      dockerfile: services/chat/Dockerfile
+    ports:
+      - "8080:8080"
+
+  auth:
+    image: lectorium-auth:dev
+    pull_policy: never
+    build:
+      context: ../../modules
+      dockerfile: services/auth/Dockerfile
+    ports:
+      # Host port shifted to 18081 — local dev shares the box with
+      # lectorium-mcp on 8081.
+      - "18081:8081"

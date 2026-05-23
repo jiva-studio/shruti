@@ -31,7 +31,7 @@ from lectorium_chat.agent.tools import TOOLS, bind_repositories, build_personali
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.config import get_settings
 from lectorium_chat.db.client import get_pool, init_pool
-from lectorium_chat.db.migrate import apply_schema
+from lectorium_chat.db.assert_schema import assert_schema_ready
 from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.domain.user_context import FocusFragment, UserContext, UserContextTrack
 from lectorium_chat.indexer.embed import get_embedder
@@ -218,7 +218,11 @@ async def _build_once() -> EvalChatClient:
     s = get_settings()
 
     pool = await init_pool(s)
-    await apply_schema()
+    # Evals expect the central migrator to have already applied the schema
+    # (CI/dev should `docker compose up migrator` before running evals).
+    # assert_schema_ready exits 1 if not — better than running evals
+    # against an empty DB and getting cryptic asyncpg errors.
+    await assert_schema_ready()
     legacy_llm.configure_providers(s)
     embedder = get_embedder(s)
 
