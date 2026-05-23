@@ -49,9 +49,12 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2019/config/"]
+      # Caddy admin API binds 127.0.0.1:2019 — but the alpine image lacks
+      # netstat/curl reliably; probe TLS port instead (caddy answers any
+      # HTTPS host with a TLS handshake once it's up).
+      test: ["CMD-SHELL", "wget -q -O- --no-check-certificate https://127.0.0.1/ 2>&1 | grep -qE '404|400|301|200' || exit 1"]
       interval: 30s
-      start_period: 30s
+      start_period: 60s
     <<: *restart
 
   # ─────────────────────────────────────────────────────────────────
