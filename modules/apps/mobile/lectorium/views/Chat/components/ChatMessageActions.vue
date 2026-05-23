@@ -1,27 +1,5 @@
 <template>
   <div class="message-actions">
-    <button
-      v-if="traceId"
-      type="button"
-      class="message-action"
-      :class="{ selected: feedbackState === 'up' }"
-      :aria-label="t('chat.feedback.thumbsUp')"
-      :disabled="feedbackInFlight"
-      @click="onThumbsUp"
-    >
-      <IconThumbUp :size="16" stroke-width="2" />
-    </button>
-    <button
-      v-if="traceId"
-      type="button"
-      class="message-action"
-      :class="{ selected: feedbackState === 'down' }"
-      :aria-label="t('chat.feedback.thumbsDown')"
-      :disabled="feedbackInFlight"
-      @click="onThumbsDown"
-    >
-      <IconThumbDown :size="16" stroke-width="2" />
-    </button>
     <button type="button" class="message-action" :aria-label="t('chat.copyAction')" @click="onCopy">
       <IconCopy :size="16" stroke-width="2" />
     </button>
@@ -32,6 +10,26 @@
       @click="onShare"
     >
       <IconShare :size="16" stroke-width="2" />
+    </button>
+    <button
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'up' }"
+      :aria-label="t('chat.feedback.thumbsUp')"
+      :disabled="feedbackInFlight"
+      @click="onThumbsUp"
+    >
+      <IconThumbUp :size="16" stroke-width="2" />
+    </button>
+    <button
+      type="button"
+      class="message-action"
+      :class="{ selected: feedbackState === 'down' }"
+      :aria-label="t('chat.feedback.thumbsDown')"
+      :disabled="feedbackInFlight"
+      @click="onThumbsDown"
+    >
+      <IconThumbDown :size="16" stroke-width="2" />
     </button>
     <button
       v-if="retryVisible"
@@ -77,14 +75,11 @@ const props = defineProps<{
   /** Disable the Retry icon while the store is busy (sending: true) or
    *  the bubble is no longer the last item. */
   retryDisabled?: boolean
-  /** Persisted on the assistant message. Drives whether thumbs are
-   *  selected on rehydrate and is the key the store uses to update
-   *  the message after the POST succeeds. */
+  /** Local primary key of the assistant message. The hyphenless 32-hex
+   *  form is also the Langfuse trace id for the same turn — see
+   *  `chatClient.streamChat` X-Trace-Id wiring. Used both as the
+   *  feedback POST identifier and as the store key for persistence. */
   messageId: ChatMessageId
-  /** Langfuse trace id received from the SSE `meta` event. Thumbs are
-   *  hidden when absent (legacy assistant messages predating the
-   *  feedback rollout). */
-  traceId?: string
   feedbackState?: "up" | "down"
 }>()
 
@@ -123,7 +118,7 @@ function onRetry(): void {
 }
 
 async function onThumbsUp(): Promise<void> {
-  if (!props.traceId || feedbackInFlight.value) return
+  if (feedbackInFlight.value) return
   feedbackInFlight.value = true
   try {
     await chat.submitFeedback(props.messageId, { state: "up" })
@@ -136,7 +131,7 @@ async function onThumbsUp(): Promise<void> {
 }
 
 function onThumbsDown(): void {
-  if (!props.traceId || feedbackInFlight.value) return
+  if (feedbackInFlight.value) return
   sheetOpen.value = true
 }
 
@@ -144,7 +139,6 @@ async function onSheetSubmit(args: {
   category?: FeedbackCategory
   comment?: string
 }): Promise<void> {
-  if (!props.traceId) return
   feedbackInFlight.value = true
   sheetOpen.value = false
   try {
@@ -189,9 +183,7 @@ function onSheetCancel(): void {
   color: var(--ion-color-medium, #777);
   opacity: 0.5;
   cursor: pointer;
-  transition:
-    opacity 120ms ease,
-    background-color 120ms ease;
+  transition: color 120ms ease;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -200,19 +192,16 @@ function onSheetCancel(): void {
   opacity: 1;
 }
 
-.message-action:active {
-  opacity: 1;
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-}
-
 .message-action:disabled {
   opacity: 0.25;
   cursor: not-allowed;
 }
 
+/* Selected = thumb the user picked. Icon takes the primary colour;
+ * no background pill, no opacity change beyond the hover-equivalent
+ * full visibility. */
 .message-action.selected {
   opacity: 1;
   color: var(--ion-color-primary, #3880ff);
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 </style>

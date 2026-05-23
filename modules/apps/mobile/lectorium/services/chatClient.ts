@@ -120,7 +120,6 @@ export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
  * - `error`      terminal failure
  */
 export type ChatStreamEvent =
-  | { readonly type: "meta"; readonly traceId: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "tool_start"; readonly name?: string }
   | { readonly type: "tool_end"; readonly name?: string }
@@ -137,7 +136,7 @@ export type ChatStreamEvent =
       readonly id: string
       readonly label: string
     }
-  | { readonly type: "done"; readonly traceId?: string; readonly aliases?: AliasMapPayload }
+  | { readonly type: "done"; readonly aliases?: AliasMapPayload }
   | {
       readonly type: "error"
       readonly code: string
@@ -313,10 +312,10 @@ export type FeedbackCategory =
   | "other"
 
 export interface FeedbackPayload {
-  /** Langfuse trace id captured on the SSE `meta` event of the same
-   *  assistant message. The server uses it verbatim as the score's
-   *  trace key, so the value must match what the server minted. */
-  readonly traceId: string
+  /** Local `ChatMessage.id` of the assistant message (UUIDv4). Sent on
+   *  the wire as the hyphenless 32-hex form, which is the same value
+   *  that was used as the Langfuse trace_id when the turn streamed. */
+  readonly messageId: string
   readonly value: FeedbackValue
   /** Only meaningful when `value === "down"`. Server silently ignores
    *  it on `up` per state-machine contract. */
@@ -345,8 +344,9 @@ export async function postFeedback(
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
   const token = await resolveAccessToken(opts.getAccessToken)
 
+  const traceId = payload.messageId.replace(/-/g, "").toLowerCase()
   const body: Record<string, unknown> = {
-    trace_id: payload.traceId,
+    trace_id: traceId,
     value: payload.value,
   }
   if (payload.category) body.category = payload.category
@@ -396,6 +396,13 @@ export interface StreamChatOptions {
    *  Surfaced as metadata on the trace so the Langfuse Sessions view
    *  shows something more useful than a raw UUID. */
   readonly sessionTitle?: string
+  /** Pre-minted assistant `ChatMessage.id` (UUIDv4). Sent in
+   *  `X-Trace-Id` header as the hyphenless 32-hex form so the server
+   *  uses it as the Langfuse trace_id. Same value is the local DB
+   *  primary key of the assistant row, which makes message identity
+   *  and trace identity one and the same — a later /chat/feedback
+   *  POST referencing this id lands the score on the right trace. */
+  readonly assistantMessageId?: string
 }
 
 /* -------------------------------------------------------------------------- */
@@ -433,16 +440,27 @@ export async function* streamChat(
   // that already started work would both bill the LLM.
   const idempotencyKey = newIdempotencyKey()
   const url = joinUrl(baseUrl, "/chat")
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+    Authorization: `Bearer ${token}`,
+    "X-App-Token": appToken,
+    "X-Chat-Protocol-Version": "1",
+    "Idempotency-Key": idempotencyKey,
+  }
+  // Use the assistant message id (UUIDv4) as the Langfuse trace id —
+  // hyphenless form matches OTel's 32-hex requirement. Skipped when
+  // the caller didn't pre-mint one (only happens in legacy callers or
+  // tests); the server falls back to its own id in that case.
+  if (opts.assistantMessageId) {
+    const traceId = opts.assistantMessageId.replace(/-/g, "").toLowerCase()
+    if (/^[0-9a-f]{32}$/.test(traceId)) {
+      headers["X-Trace-Id"] = traceId
+    }
+  }
   const requestInit: RequestInit = {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      Authorization: `Bearer ${token}`,
-      "X-App-Token": appToken,
-      "X-Chat-Protocol-Version": "1",
-      "Idempotency-Key": idempotencyKey,
-    },
+    headers,
     body: JSON.stringify(buildRequestBody(messages, lang, opts)),
     signal: opts.signal,
   }
@@ -721,10 +739,6 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
   }
 
   switch (name) {
-    case "meta": {
-      const traceId = typeof payload.trace_id === "string" ? payload.trace_id.trim() : ""
-      return traceId ? { type: "meta", traceId } : null
-    }
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
     case "tool_start":
@@ -745,11 +759,7 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       }
     case "done": {
       const aliases = parseAliasMap(payload.aliases)
-      const traceId = typeof payload.trace_id === "string" ? payload.trace_id.trim() : ""
-      const out: { type: "done"; traceId?: string; aliases?: AliasMapPayload } = { type: "done" }
-      if (traceId) out.traceId = traceId
-      if (aliases) out.aliases = aliases
-      return out
+      return aliases ? { type: "done", aliases } : { type: "done" }
     }
     case "action": {
       const ap = parseActionPayload(payload)

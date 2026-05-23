@@ -1000,12 +1000,16 @@ export const useChatStore = defineStore("chat", () => {
     }
   ): Promise<void> {
     const msg = messages.value.find((m) => m.id === messageId)
-    if (!msg || msg.role !== "assistant" || !msg.traceId) {
-      throw new Error("submitFeedback: message has no trace id")
+    if (!msg || msg.role !== "assistant") {
+      throw new Error("submitFeedback: assistant message not found")
     }
 
+    // messageId IS the trace id — `chatClient.streamChat` shipped its
+    // hyphenless 32-hex form as `X-Trace-Id`, so the Langfuse trace
+    // for this turn is keyed on the same value. `postFeedback` strips
+    // hyphens for the wire payload.
     await postFeedback({
-      traceId: msg.traceId,
+      messageId,
       value: feedback.state,
       category: feedback.state === "down" ? feedback.category : undefined,
       comment: feedback.state === "down" ? feedback.comment : undefined,
