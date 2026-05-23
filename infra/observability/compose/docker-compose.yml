@@ -129,7 +129,7 @@ services:
   # Langfuse — web (UI + ingestion API)
   # ─────────────────────────────────────────────────────────────────
   langfuse-web:
-    image: langfuse/langfuse:3.55.0
+    image: langfuse/langfuse:3.175.0
     # Inside the container the app listens on :3000 — same as Grafana,
     # hence we map it to :3001 on the Tailscale IP so chat SDK on prod-EU
     # can push traces via http://${OBS_TS_IP}:3001.
@@ -202,7 +202,7 @@ services:
   # Langfuse — worker (async trace processing)
   # ─────────────────────────────────────────────────────────────────
   langfuse-worker:
-    image: langfuse/langfuse-worker:3.55.0
+    image: langfuse/langfuse-worker:3.175.0
     depends_on:
       langfuse-web:
         condition: service_healthy
