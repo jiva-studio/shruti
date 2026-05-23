@@ -45,7 +45,8 @@ dependencies = [
   # `prompt_with_fallback` helper falls back to the `.md` files under
   # `agent/prompts/` and the hardcoded `_ROUTER_SYSTEM_PROMPT` so the
   # service still serves traffic.
-  "langfuse>=3.0.0,<4.0.0",
+  "langfuse>=2.60.0,<3.0.0",
+  "langchain>=0.3.0,<0.4.0",
 ]
 
 [project.optional-dependencies]
