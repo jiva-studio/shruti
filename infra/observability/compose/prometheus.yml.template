@@ -1,0 +1,90 @@
+# infra/observability/compose/prometheus.yml.template
+#
+# Rendered by infra/shared/lib/render-templates.sh with ${PROD_HOST_TS_IP}
+# substituted from config/<region>.env. Exporters on prod-EU bind on the
+# Tailscale IP, so the scrape URLs use the Tailscale 100.x.x.x network.
+#
+# `obs` self-scrape goes through the Tailscale interface too — node-exporter
+# and cAdvisor on the obs host bind on ${OBS_TS_IP} (see docker-compose.yml).
+# This keeps the topology symmetric with the prod-EU agent.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: shruti-eu
+    region: ${REGION}
+
+# Alertmanager wiring: Grafana provisions alerts directly via the unified
+# alerting engine, so Prometheus only ships scrapes to it via remote_write
+# would be overkill. Grafana datasources point at this Prometheus.
+
+scrape_configs:
+  # ── prod-EU side ──────────────────────────────────────────────────
+  - job_name: node-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9100']
+        labels: { host: prod-eu }
+
+  - job_name: cadvisor-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:8090']
+        labels: { host: prod-eu }
+
+  - job_name: postgres-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9187']
+        labels: { host: prod-eu, db: shruti }
+
+  - job_name: redis-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9121']
+        labels: { host: prod-eu, instance_kind: chat-redis }
+
+  - job_name: blackbox-prod-eu
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://${PROD_HOST_TS_IP}:8080/healthz   # chat
+          - http://${PROD_HOST_TS_IP}:8081/healthz   # auth
+          - http://${PROD_HOST_TS_IP}:8082/healthz   # share-audio
+          - http://${PROD_HOST_TS_IP}:8083/healthz   # share-video
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: ${PROD_HOST_TS_IP}:9115
+
+  - job_name: promtail-prod-eu
+    static_configs:
+      - targets: ['${PROD_HOST_TS_IP}:9080']
+        labels: { host: prod-eu }
+
+  # ── obs self side ─────────────────────────────────────────────────
+  - job_name: node-obs
+    static_configs:
+      - targets: ['${OBS_TS_IP}:9100']
+        labels: { host: obs }
+
+  - job_name: cadvisor-obs
+    static_configs:
+      - targets: ['${OBS_TS_IP}:8090']
+        labels: { host: obs }
+
+  - job_name: prometheus-self
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: loki-self
+    static_configs:
+      - targets: ['loki:3100']
+    metrics_path: /metrics
+
+  - job_name: promtail-obs
+    static_configs:
+      - targets: ['promtail:9080']
+        labels: { host: obs }

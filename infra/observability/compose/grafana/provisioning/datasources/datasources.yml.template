@@ -1,0 +1,42 @@
+# infra/observability/compose/grafana/provisioning/datasources/datasources.yml
+#
+# Loki + Prometheus datasources. The Loki datasource has a `derivedFields`
+# entry that turns `langfuse_trace_id=<uuid>` log substrings into clickable
+# links straight into Langfuse — this is the Grafana ↔ Langfuse bridge.
+#
+# The Langfuse project ID is the static value `chat-${REGION}` — Langfuse v3
+# provisions it on first start via LANGFUSE_INIT_PROJECT_ID, so the value is
+# known in advance and substituted by render-templates.sh at deploy time.
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 5000
+      derivedFields:
+        - name: langfuse_trace
+          matcherRegex: 'langfuse_trace_id=([a-f0-9-]+)'
+          url: 'https://langfuse.${TAILNET_DOMAIN}/project/chat-${REGION}/traces/${__value.raw}'
+          datasourceUid: ''
+          urlDisplayLabel: 'Open Langfuse trace'
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.55.0

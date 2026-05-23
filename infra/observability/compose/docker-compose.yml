@@ -1,0 +1,374 @@
+# infra/observability/compose/docker-compose.yml
+#
+# Deployed on a dedicated obs VPS (Cloud Provider Cloud VPS 20: 12 GB / 6 vCPU).
+# All UIs are behind Caddy with a Let's Encrypt wildcard cert obtained via
+# Cloudflare DNS-01. Caddy is the ONLY service that binds outside the
+# docker network, and only on the Tailscale IP — public NIC stays closed
+# by ufw (see infra/shared/templates/ufw-rules.sh).
+#
+# Image tags are pinned. Do NOT use `:latest` or floating major tags.
+
+name: shruti-observability
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  caddy-data:
+  caddy-config:
+  grafana-data:
+  loki-data:
+  prometheus-data:
+  clickhouse-data:
+  postgres-lf-data:
+  redis-data:
+  minio-data:
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # Caddy — reverse proxy + TLS termination (Cloudflare DNS-01)
+  # ─────────────────────────────────────────────────────────────────
+  caddy:
+    # Built locally — `caddy:2.8.4-builder` + xcaddy + caddy-dns/cloudflare.
+    # See ./caddy/Dockerfile. Bump tag there to upgrade.
+    build:
+      context: ./caddy
+    image: shruti/caddy-cloudflare:2.8.4
+    ports:
+      - "${OBS_TS_IP}:443:443"
+      - "${OBS_TS_IP}:80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      CF_API_TOKEN: ${CF_API_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:2019/config/"]
+      interval: 30s
+      start_period: 30s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana
+  # ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.4.0
+    expose: ["3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "https://grafana.${TAILNET_DOMAIN}"
+      GF_INSTALL_PLUGINS: ""
+      # Telegram secrets surfaced for provisioning/alerting/contact-points.yml
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN}
+      TG_CHAT_ID: ${TG_CHAT_ID}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 15s
+      start_period: 30s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Loki
+  # ─────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.3.0
+    user: "10001:10001"
+    expose: ["3100"]
+    # Push port — promtail on prod-EU writes here over Tailscale.
+    ports:
+      - "${OBS_TS_IP}:3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 15s
+      start_period: 30s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Prometheus
+  # ─────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    expose: ["9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-lifecycle
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+      interval: 15s
+      start_period: 30s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Langfuse — web (UI + ingestion API)
+  # ─────────────────────────────────────────────────────────────────
+  langfuse-web:
+    image: langfuse/langfuse:3.55.0
+    # Inside the container the app listens on :3000 — same as Grafana,
+    # hence we map it to :3001 on the Tailscale IP so chat SDK on prod-EU
+    # can push traces via http://${OBS_TS_IP}:3001.
+    ports:
+      - "${OBS_TS_IP}:3001:3000"
+    expose: ["3000"]
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      postgres-lf:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NEXTAUTH_URL: "https://langfuse.${TAILNET_DOMAIN}"
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      SALT: ${SALT}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_LF_PASSWORD}@postgres-lf:5432/langfuse"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_CONNECTION_STRING: "redis://redis:6379"
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      AUTH_DISABLE_SIGNUP: "true"
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
+      # Headless org/project/key provisioning. Langfuse v3 creates these on
+      # first start when the DB is empty and ignores them thereafter
+      # (idempotent). API keys are pre-generated on the obs host so the chat
+      # service can read them from secrets/langfuse-keys.env without a
+      # cookie-session bootstrap dance.
+      LANGFUSE_INIT_ORG_ID: shruti
+      LANGFUSE_INIT_ORG_NAME: Shruti
+      LANGFUSE_INIT_PROJECT_ID: chat-${REGION}
+      LANGFUSE_INIT_PROJECT_NAME: chat-${REGION}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      TELEMETRY_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/public/health"]
+      interval: 10s
+      start_period: 180s  # ClickHouse migration takes 60–120s on cold start
+      timeout: 5s
+      retries: 30
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Langfuse — worker (async trace processing)
+  # ─────────────────────────────────────────────────────────────────
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3.55.0
+    depends_on:
+      langfuse-web:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_LF_PASSWORD}@postgres-lf:5432/langfuse"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_CONNECTION_STRING: "redis://redis:6379"
+      SALT: ${SALT}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      LANGFUSE_S3_EVENT_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_ENABLED: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: "http://minio:9000"
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      TELEMETRY_ENABLED: "false"
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # ClickHouse — Langfuse event store
+  # ─────────────────────────────────────────────────────────────────
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.10
+    expose: ["8123", "9000"]
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/shruti-limits.xml:ro
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      start_period: 60s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Postgres — Langfuse metadata
+  # ─────────────────────────────────────────────────────────────────
+  postgres-lf:
+    image: postgres:16-alpine
+    expose: ["5432"]
+    volumes:
+      - postgres-lf-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_LF_PASSWORD}
+      POSTGRES_DB: langfuse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d langfuse"]
+      interval: 10s
+      start_period: 20s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis — Langfuse worker queue
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    expose: ["6379"]
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      start_period: 10s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # MinIO — S3-compatible store (Langfuse v3 requires this)
+  # ─────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+    expose: ["9000", "9001"]
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: ["server", "/data", "--console-address", ":9001"]
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      start_period: 20s
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # MinIO bucket bootstrap (one-shot)
+  # ─────────────────────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
+        mc mb -p local/langfuse-events local/langfuse-media &&
+        mc anonymous set none local/langfuse-events &&
+        mc anonymous set none local/langfuse-media &&
+        echo 'minio buckets ready'
+      "
+    restart: "no"
+
+  # ─────────────────────────────────────────────────────────────────
+  # node-exporter — self-metrics for the obs host
+  # ─────────────────────────────────────────────────────────────────
+  # Binds on the Tailscale IP (not 127.0.0.1) so the Prometheus container
+  # can reach it the same way it reaches the prod-EU node-exporter — through
+  # the Tailscale interface. host network mode is required because we want
+  # host-level metrics, not container metrics.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    network_mode: host
+    pid: host
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+      - --web.listen-address=${OBS_TS_IP}:9100
+    volumes:
+      - "/:/host:ro,rslave"
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # cAdvisor — per-container metrics for the obs host
+  # ─────────────────────────────────────────────────────────────────
+  # Published on the Tailscale IP at :8090 to match the prod-EU agent
+  # (same port; symmetric scrape config).
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    ports:
+      - "${OBS_TS_IP}:8090:8080"
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    devices:
+      - /dev/kmsg
+    <<: *restart
+
+  # ─────────────────────────────────────────────────────────────────
+  # promtail — collects logs of the obs stack itself
+  # ─────────────────────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.3.0
+    user: root
+    expose: ["9080"]
+    depends_on:
+      loki:
+        condition: service_healthy
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-self.yaml:/etc/promtail/config.yaml:ro
+    command: -config.file=/etc/promtail/config.yaml
+    <<: *restart
