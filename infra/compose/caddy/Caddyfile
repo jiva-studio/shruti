@@ -33,6 +33,27 @@
         Referrer-Policy "strict-origin-when-cross-origin"
         # Hide Caddy version in errors.
         -Server
+        # CORS — Capacitor mobile WebView lives at capacitor://localhost,
+        # ionic://localhost, http://localhost (per platform), so it
+        # cross-origins everything. Allow * for headers we accept and the
+        # methods our backends serve. share-audio's FastAPI used to add
+        # these itself; auth (Go) and the share-video Express server
+        # don't, so put them on the edge once and for all.
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-App-Token, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, Accept"
+        Access-Control-Max-Age "600"
+        Access-Control-Expose-Headers "Retry-After, X-Request-Id"
+    }
+
+    # CORS preflight short-circuit. Browser sends an OPTIONS before any
+    # POST with a non-simple Content-Type or a custom header. Without
+    # this match, the OPTIONS hits the upstream Go/Node handlers, which
+    # are POST-only and answer 405 — preflight fails and the actual POST
+    # never goes out. Reply 204 with the headers above already attached.
+    @options method OPTIONS
+    handle @options {
+        respond 204
     }
 
     # Per-IP rate limits. Each zone has its own matcher; a request that
