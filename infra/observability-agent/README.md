@@ -32,7 +32,7 @@ Cloud Provider interface. Watchtower is told not to auto-update these
    it as an `external` network. If `infra/app/` (or current `infra/compose/`)
    isn't deployed first, `deploy.sh` aborts with a clear error.
 
-2. **Postgres `pg_exporter` role must exist** — see "Postgres bootstrap"
+2. **Postgres `shruti_exporter` role must exist** — see "Postgres bootstrap"
    below.
 
 3. **Tailscale must be up** on the host with `tag:shruti-prod-eu`. The agent
@@ -46,7 +46,7 @@ Cloud Provider interface. Watchtower is told not to auto-update these
 
 ## Postgres bootstrap
 
-`postgres-exporter` connects as the role `pg_exporter` with `pg_monitor`.
+`postgres-exporter` connects as the role `shruti_exporter` with `pg_monitor`.
 There are two paths to create this role + `pg_stat_statements` extension,
 depending on whether the prod Postgres volume already exists.
 
