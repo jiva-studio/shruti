@@ -1,0 +1,69 @@
+# blackbox-exporter modules.
+#
+# Probe targets are NOT defined here — they live in the Prometheus
+# scrape config on the obs host (so we can add targets without redeploying
+# the agent). This file only declares the *modules* (probe types) that
+# prometheus selects per-target via `module=` URL param.
+#
+# Usage from Prometheus side:
+#   targets: ['http://chat:8080/healthz', ...]
+#   params: { module: [http_2xx] }
+
+modules:
+  # Standard HTTP healthcheck. Accepts any 2xx response, follows redirects,
+  # 5s timeout. Used for chat:8080/healthz, auth:8081/healthz,
+  # share-audio:8082/healthz, share-video:8083/healthz.
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      valid_http_versions: [HTTP/1.1, HTTP/2.0]
+      method: GET
+      follow_redirects: true
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+
+  # Same as http_2xx but accepts any 2xx — looser, for endpoints that
+  # might 204 etc.
+  http_2xx_any:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200, 204, 301, 302]
+      method: GET
+      follow_redirects: true
+
+  # POST probe for endpoints that don't accept GET (rare here).
+  http_post_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      method: POST
+
+  # Plain TCP connect — confirms the port is open without invoking HTTP.
+  # Useful for Postgres :5432, Redis :6379 if we add internal checks.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  # TLS expiry check. Used by Prometheus to alert when the obs Caddy
+  # wildcard cert (*.obs.eu.shruti.akdasa.studio) has <14 days left.
+  # Prometheus rule: `probe_ssl_earliest_cert_expiry - time() < 14*24*3600`.
+  tls_connect:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      tls: true
+      tls_config:
+        insecure_skip_verify: false
+
+  # ICMP ping (requires CAP_NET_RAW — granted to blackbox-exporter container
+  # by default). Used as a last-resort liveness for the obs host itself.
+  icmp:
+    prober: icmp
+    timeout: 5s
