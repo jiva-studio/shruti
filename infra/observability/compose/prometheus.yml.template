@@ -48,7 +48,7 @@ scrape_configs:
     static_configs:
       - targets:
           - http://chat:8080/healthz
-          - http://auth:8081/healthz
+          - http://auth:8081/auth/healthz
           - http://share-audio:8082/healthz
           - http://share-video:8083/healthz
     relabel_configs:
