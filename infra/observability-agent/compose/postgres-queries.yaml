@@ -1,0 +1,57 @@
+# Custom queries for postgres-exporter (PG_EXPORTER_EXTEND_QUERY_PATH).
+#
+# Standard pg_exporter ships the usual stuff (pg_stat_database, connections,
+# wal, replication). Below we add Lectorium-specific business metrics on top.
+#
+# Each top-level key is the metric namespace; postgres-exporter prepends
+# the metric name with the key + the per-column `metrics[*].usage`.
+#
+# Naming convention: `lectorium_<thing>_<unit>` — keeps our metrics
+# grouped together in PromQL autocomplete.
+
+# Share-video render queue depth. The Go worker pulls from public.tasks
+# with `FOR UPDATE SKIP LOCKED`; pending = waiting work. Grafana alert
+# fires when this stays >50 for >10min.
+lectorium_share_video_queue_depth:
+  query: |
+    SELECT count(*)::bigint AS depth
+      FROM public.tasks
+     WHERE state = 'pending'
+  master: true
+  metrics:
+    - depth:
+        usage: GAUGE
+        description: "Number of share-video render tasks waiting to be picked up"
+
+# Age (in seconds) of the OLDEST pending task. Better SLO signal than raw
+# depth — small queue with one ancient stuck task is worse than 50 fresh
+# tasks. Alert: >300s.
+lectorium_share_video_oldest_pending_seconds:
+  query: |
+    SELECT COALESCE(
+      EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))::bigint,
+      0
+    ) AS age_seconds
+      FROM public.tasks
+     WHERE state = 'pending'
+  master: true
+  metrics:
+    - age_seconds:
+        usage: GAUGE
+        description: "Age (seconds) of the oldest share-video task still pending"
+
+# Tasks by state — useful for dashboards (`pending`, `running`, `done`,
+# `failed`). Cardinality bounded by enum.
+lectorium_share_video_tasks_by_state:
+  query: |
+    SELECT state, count(*)::bigint AS count
+      FROM public.tasks
+     GROUP BY state
+  master: true
+  metrics:
+    - state:
+        usage: LABEL
+        description: "Task state"
+    - count:
+        usage: GAUGE
+        description: "Number of share-video tasks in each state"
