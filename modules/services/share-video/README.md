@@ -1,186 +1,119 @@
 # share-video
 
-Serverless reel renderer. Same deployment shape as `share-audio`: AWS
-Lambda + Yandex Cloud Function, HTTP API in front, idempotent on a stable
-id, reads/writes the shared `akds-lectorium` S3 bucket.
+Renders a 9:16 720×1280 reel from an MP3 fragment plus caller-provided
+text. Words are highlighted in sync with the audio, on a background
+pulled from a theme pack in S3, with an optional title card and a
+trailing logo clip.
 
-The render itself takes 30–90 s for a 60–120 s clip, much longer than AWS
-HTTP API's 30 s integration timeout. So the request/response shape is
-**fire-and-forget**: the HTTP handler validates, checks the cache, and
-either returns immediately or dispatches the work asynchronously and
-returns the predicted URL. The client polls S3 with HEAD until the file
-appears.
+Long-running Go container. HTTP front + queue worker live in the same
+process; concurrency is intentionally 1 (ffmpeg at 720p already eats
+~1.75 vCPU on the host).
 
-```
-POST /reels
+## API
+
+`GET /healthz` — `200 {"status":"ok"}`. No auth.
+
+`POST /reels` — JWT-protected (RS256 Bearer). Body:
+
+```json
 {
-  "source_key": "public/tracks/<id>/audio/original.mp3",
+  "source_key": "public/tracks/<id>/audio/foo.mp3",
   "start_ms":   12000,
   "end_ms":     90000,
   "text":       "Точный транскрипт фрагмента…",
   "lang":       "ru",
   "theme":      "prabhupada",
-  "video_id":   "note_xyz789"        // optional; UUID hex if absent
+  "video_id":   "optional-stable-id",
+  "title":      "optional title"
 }
 ```
 
-Three response cases (status code carries the meaning, body shape is
-identical):
+Cache hit on `video_id` → `200 {"video_id","ready":true,"url"}` if the
+existing task is `done`, otherwise `202 {"video_id","ready":false,"url"?,"error"?}`.
+Fresh enqueue → `202 {"video_id","ready":false}`. The caller polls
+`GET /reels/:id` until `ready:true`.
 
-| Code | `ready` | Meaning | Client action |
-|------|---------|---------|---------------|
-| `200` | `true`  | output already at the URL (cache hit) | use `url` directly |
-| `202` | `false` | render dispatched, output not yet at the URL | poll `HEAD url` until `200` |
-| `400` | n/a     | bad request (validation error) | fix the payload |
-| `502` | n/a     | upstream failure (Whisper, dispatch, etc.) | retry |
+`GET /reels/:id` — JWT-protected. Returns the same envelope as the cache-hit
+response above. Ownership is checked at the SQL level
+(`payload->>'user_id' = sub`); a non-match returns `404 {"error":"not found"}`,
+never `403`, so foreign video_ids cannot be probed via existence checks.
 
-```json
-{
-  "video_id": "note_xyz789",
-  "url":      "https://akds-lectorium.s3.us-east-1.amazonaws.com/public/share/video/note_xyz789.mp4",
-  "ready":    false
-}
-```
+Error envelopes: `{"error": "..."}` for everything except `429`
+(`{code:"rate_limited", limit, current, key_type:"user"}`).
 
-**Async dispatch:** on AWS the HTTP-mode handler invokes itself
-asynchronously via `lambda:InvokeFunction` (InvocationType=Event); the
-worker re-enters the same code under `event.__share_video_worker__: true`
-and runs the render. On YC the handler runs the render inline (YC's API
-Gateway accommodates the function's full 600 s timeout, so blocking is
-fine there) — clients will see `ready: true` (or a 5xx) on every YC
-response.
+### Limits
+
+- Excerpt length: ≤120 s.
+- `text`: ≤5000 chars.
+- `title`: ≤120 chars.
+- Daily per-user quota: anon `3`, signed-in `20` (env-tunable). Quota
+  is checked AFTER the `video_id` idempotency lookup so client retries
+  with the same id don't double-spend.
 
 ## Pipeline
 
-1. Cut source MP3 to `[start_ms, end_ms]` (ffmpeg stream-copy).
-2. List `private/share/video/backgrounds/<theme>/` via `ListObjectsV2`,
-   deterministically shuffle (sha256(`video_id`) seed), pick
-   `ceil(duration / 5)` clips, download in parallel, concat with the ffmpeg
-   `concat` demuxer, scaled+cropped to 1080×1920.
-3. Whisper word-level transcription of the cut MP3 with `language` hint.
-4. Force-align caller `text` to Whisper word boundaries (LCS with
-   interpolated gaps; falls back to even distribution on >50% size
-   mismatch). Group words into slides ≤60 chars.
-5. Render per-word PNG frames (`@napi-rs/canvas`, bundled NotoSans), build
-   transparent text-overlay video (qtrle), composite onto background, mix
-   in cut audio.
-6. Append the bundled app logo (`assets/logo.mp4`) at the tail.
-7. Upload to `public/share/video/<video_id>.mp4` with
+1. Download the source MP3 from S3.
+2. `ffmpeg -ss/-t -c copy` to cut `[start_ms, end_ms)`.
+3. In parallel:
+   - List the theme prefix on S3 → SHA256(`video_id`)-seeded
+     Fisher-Yates → take `ceil(dur/5)` clips → 4-way parallel download
+     → ffmpeg concat-demuxer with `-c copy -an`.
+   - Transcribe the cut audio (OpenAI Whisper or Yandex SpeechKit v3,
+     selected via `TRANSCRIBER`).
+4. Force-align the caller's punctuated text to the recogniser's word
+   timings (LCS + interpolation; even-distribution fallback when the
+   alignment is implausible).
+5. Group aligned words into ≤60-char slides; render one PNG per word
+   (NotoSans Bold 53 px, 5 px black outline, gold highlight on the
+   current word) plus an optional title card for the first 0.5 s.
+6. ffmpeg three-pass: text frames → qtrle .mov (alpha) → composite +
+   audio (libx264 veryfast / zerolatency / crf 23 / 30 fps + AAC
+   44.1 k stereo) → optional logo append (concat-demuxer stream-copy).
+7. Upload the final MP4 to `public/share/video/<video_id>.mp4` with
    `Cache-Control: public, max-age=31536000, immutable`.
 
-Idempotency: HEAD on the expected output key short-circuits the whole
-pipeline if a previous invocation already wrote it.
+## Env
 
-## Configuration
+| Var | Default | Notes |
+| --- | --- | --- |
+| `PORT` | `8083` | |
+| `DATABASE_URL` | required | Postgres URI for `public.tasks` / `public.usage`. |
+| `LECTORIUM_S3_BUCKET` (or `BUCKET`) | required | |
+| `LECTORIUM_S3_BACKGROUNDS_PREFIX` | `private/share/video/backgrounds` | |
+| `LECTORIUM_S3_VIDEO_PREFIX` | `public/share/video` | |
+| `OUTPUT_PUBLIC_BASE` | (unset) | CDN base override for the public URL. |
+| `TRANSCRIBE_SCRATCH_PREFIX` | `private/share/video/transcribe-scratch` | SpeechKit only. |
+| `AWS_REGION` | `us-east-1` | |
+| `S3_ENDPOINT_URL` | (unset) | For S3-compatible (Yandex Object Storage, MinIO). |
+| `OPENAI_API_KEY` | required if `TRANSCRIBER=whisper` | |
+| `SPEECHKIT_API_KEY` | required if `TRANSCRIBER=speechkit` | |
+| `TRANSCRIBER` | `whisper` | `whisper` \| `speechkit`. |
+| `JWT_PUBLIC_KEY_PATH` | `/secrets/public.pem` | RS256 public key auth-service emits with. |
+| `SHARE_VIDEO_ANON_PER_DAY` | `3` | |
+| `SHARE_VIDEO_SIGNED_IN_PER_DAY` | `20` | |
+| `FFMPEG_BIN` | `/usr/bin/ffmpeg` | |
+| `FFPROBE_BIN` | `/usr/bin/ffprobe` | |
+| `TEMP_ROOT` | `/tmp/render` | |
+| `ENV`, `SERVICE_VERSION`, `LOG_LEVEL` | `dev`, `dev`, `info` | Log envelope fields. |
 
-| Env var | Default | Source |
-|---|---|---|
-| `BUCKET` | `akds-lectorium` | yml |
-| `OUTPUT_PREFIX` | `public/share/video` | yml |
-| `BACKGROUNDS_PREFIX` | `private/share/video/backgrounds` | yml |
-| `OUTPUT_PUBLIC_BASE` | (unset) | yml — CDN override; falls back to virtual-hosted S3 URL |
-| `FFMPEG_BIN` / `FFPROBE_BIN` | `/opt/bin/ffmpeg`, `/opt/bin/ffprobe` (AWS); `/function/code/layers/ffmpeg/bin/...` (YC) | yml |
-| `OPENAI_API_KEY` | — | Whisper auth (AWS only). GH secret `LECTORIUM_OPENAI_API_KEY` is renamed to this generic name by the workflow before injection. |
-| `SPEECHKIT_API_KEY` | — | SpeechKit auth (YC only). GH secret `LECTORIUM_YC_SPEECHKIT_API_KEY` is renamed by the workflow. |
-| `TRANSCRIBER` | `whisper` | Pick provider. AWS sets `whisper`, YC sets `speechkit`. |
-| `RENDER_DISPATCH` | `inline` | `self-invoke` on AWS (handler dispatches the render to itself async), `inline` on YC and local |
-| `S3_ENDPOINT_URL` | — | YC only — `https://storage.yandexcloud.net`. AWS leaves it unset → SDK uses real AWS S3 endpoint. |
-| `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | — | Inside the function the AWS SDK reads these regardless of cloud. AWS gets nothing here (uses Lambda's IAM role); YC gets YC static keys via `LECTORIUM_YC_RUNTIME_*` translated by the workflow. |
+AWS credentials are read from the environment
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
 
-### Secrets (one-time setup)
+## Worker semantics
 
-GH secrets are cloud-prefixed; the workflow renames them to generic in-function names before injection.
+- Concurrency 1 per process.
+- Tasks polled every 2.5 s from `public.tasks` using
+  `SELECT FOR UPDATE SKIP LOCKED`.
+- 10-min lease; `ReviveExpired` at boot flips lapsed `running` rows
+  back to `pending` (covers crash-mid-render).
+- Retries up to the `max_attempts` column default; `Fail` uses a
+  background context with a 10 s budget so the UPDATE still goes
+  through if the cause was a ctx cancel mid-render.
 
-```sh
-gh secret set LECTORIUM_OPENAI_API_KEY        -R akdasa-studios/lectorium -b'<openai-key>'
-gh secret set LECTORIUM_YC_RUNTIME_ACCESS_KEY_ID    -R akdasa-studios/lectorium -b'<YC static key id>'
-gh secret set LECTORIUM_YC_RUNTIME_SECRET_ACCESS_KEY -R akdasa-studios/lectorium -b'<YC static secret>'
-gh secret set LECTORIUM_YC_SPEECHKIT_API_KEY  -R akdasa-studios/lectorium -b'<YC SpeechKit API key>'
-```
+## Local dev
 
-All other secrets (`LECTORIUM_AWS_*` for AWS deploy, `LECTORIUM_YC_ACCESS_KEY_ID/SECRET` + `LECTORIUM_YC_SA_KEY_JSON` + `LECTORIUM_YC_SERVICE_ACCOUNT_ID` for YC deploy) are reused from `share-audio`.
-
-## Asset prep
-
-1. **Background packs** are produced by the standalone Python CLI at
-   `modules/tools/share-video-backgrounds/` (download URL → cut into
-   normalised 5 s clips → upload to S3). Codec/fps/resolution match this
-   service's `concat`-demuxer requirements 1:1 (libx264 high@4.0,
-   yuv420p, 30 fps, GOP 60, 1080×1920, audio stripped). See that tool's
-   README for usage. The `prabhupada` pack is already live in
-   `s3://akds-lectorium/private/share/video/backgrounds/prabhupada/`
-   (131 clips, ~305 MB).
-
-2. **Logo.** Drop `assets/logo.mp4` (the canonical app branding clip; ≤5
-   MB) into the repo. It ships inside the deployment package — no S3
-   round-trip per invocation.
-
-3. **Font.** `npm install` runs `scripts/copy-bundled-font.js` which copies
-   the Latin + Cyrillic NotoSans woff2 subsets out of
-   `@fontsource-variable/noto-sans/files/` into `assets/fonts/`. Both files
-   are registered together under one family in `fontManager.ts`, canvas
-   falls through to whichever subset has the glyph.
-
-## Build & deploy
-
-```sh
-npm install            # also runs postinstall: copy bundled font
-npm run build          # tsc → dist/
-npm run deploy:aws     # AWS Lambda
-npm run deploy:yc      # Yandex Cloud Function
-```
-
-CI: `.github/workflows/share-video-aws.yml` deploys on push to `main` (paths
-under `modules/services/share-video/`); `share-video-yc.yml` is manual
-(`workflow_dispatch`) only. ffmpeg + ffprobe static binaries are fetched at
-CI time into `layers/ffmpeg/bin/`.
-
-## Limits & gotchas
-
-- **120 s max excerpt** (validated in `eventAdapter.ts`). Render time ~30–90
-  s on warm Lambda, ~60–120 s on YC.
-- **Lambda `/tmp` is bumped to 4 GB** (`ephemeralStorageSize: 4096`); YC's
-  `/tmp` is fixed at 512 MB and can't be raised. If YC blows the budget,
-  drop to 720×1280 in `pipeline.ts:SLIDE_WIDTH/HEIGHT`.
-- **Background pack must be pre-normalised** to identical codec params (the
-  upload script enforces this). Mixed codecs break the concat demuxer.
-- **Whisper non-determinism.** OpenAI doesn't guarantee identical word
-  boundaries across calls; a re-render after the cached output has been
-  deleted may produce slightly different timings.
-- **No auth on the endpoint.** Same gap as share-audio. Anyone with the URL
-  can drive Whisper traffic and ffmpeg compute.
-- **Predictable output URLs.** Outputs at `public/share/video/<video_id>.mp4`;
-  if the caller uses note id as `video_id`, anyone who knows the note id
-  can fetch the rendered video. Acceptable for share semantics.
-- **Concurrent invocations with the same `video_id`** both run the full
-  pipeline and both upload (last write wins). Output is deterministic
-  (seeded shuffle); just compute is wasted.
-
-## Files
-
-```
-modules/services/share-video/
-├── handler.ts                 # Lambda/YC entry; CORS, idempotency, error envelope
-├── eventAdapter.ts            # request parsing + validation
-├── storage.ts                 # S3 client + head/get/put/buildUrl
-├── pipeline.ts                # cut → whisper → align → bg → render → upload
-├── src/
-│   ├── ReelGenerator.ts       # text-overlay + audio-mix + logo append
-│   ├── types.ts
-│   ├── index.ts               # public exports
-│   └── utils/
-│       ├── transcription.ts   # OpenAI Whisper word-level
-│       ├── forceAlign.ts      # caller text ↔ whisper LCS alignment
-│       ├── s3Backgrounds.ts   # ListObjectsV2 + seeded shuffle + concat
-│       ├── videoBackgrounds.ts# concatClips helper
-│       ├── videoGenerator.ts  # canvas frame rendering
-│       └── fontManager.ts     # bundled NotoSans registration
-├── assets/
-│   ├── fonts/                 # populated by postinstall
-│   └── logo.mp4               # bundled, app-wide
-├── scripts/
-│   └── copy-bundled-font.js   # postinstall hook
-├── serverless-aws.yml
-├── serverless-yc.yml
-└── tsconfig.json
+```bash
+docker compose -f infra/compose/docker-compose.yml \
+               -f infra/compose/docker-compose.dev.yml \
+               up --build share-video
 ```

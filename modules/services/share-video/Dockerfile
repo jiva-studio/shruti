@@ -1,53 +1,39 @@
-# Lectorium share-video service. Long-running Node container that pulls
+# Lectorium share-video service (Go). Long-running container that pulls
 # render jobs from public.tasks (postgres queue) and produces 720p mp4
-# reels. Replaces the previous AWS Lambda / YC Cloud Function flow.
+# reels.
 
-# ── Stage 1: build TypeScript ───────────────────────────────────────────
-FROM node:20-alpine AS build
+# ── Stage 1: build ─────────────────────────────────────────────────────
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+
+# Manifest first so the dep-download layer caches across source-only edits.
+COPY services/share-video/go.mod services/share-video/go.sum ./
+RUN go mod download
+
+COPY services/share-video/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+    -o /out/share-video ./cmd/share-video
+
+# ── Stage 2: runtime ───────────────────────────────────────────────────
+FROM alpine:3.20
+
+# ffmpeg for the three render passes, curl for compose healthcheck,
+# ca-certificates for outbound TLS (OpenAI / SpeechKit / S3), tini for
+# proper PID-1 signal forwarding.
+RUN apk add --no-cache ffmpeg curl ca-certificates tini && \
+    addgroup -g 1000 share && \
+    adduser -D -u 1000 -G share share && \
+    mkdir -p /tmp/render && chown share:share /tmp/render
+
 WORKDIR /app
 
-# Build needs the dev-deps (typescript, ts-node, type defs) — they don't
-# travel into the runtime stage. `npm ci` runs a `postinstall` hook that
-# copies font subsets out of node_modules/@fontsource/noto-sans into
-# assets/fonts/ via scripts/copy-bundled-font.js, so scripts/ + assets/
-# must land before `npm ci` even though they're not needed for the
-# dependency tree itself.
-COPY services/share-video/package.json services/share-video/package-lock.json ./
-COPY services/share-video/tsconfig.json ./
-COPY services/share-video/scripts/    ./scripts/
-COPY services/share-video/assets/     ./assets/
-RUN npm ci --no-audit --no-fund
+COPY --from=build /out/share-video /usr/local/bin/share-video
+# Assets (logo.mp4, icon.png, NotoSans-Bold.ttf) are looked up relative
+# to cwd by main; keep them under /app/assets so the binary finds them.
+COPY --from=build /src/assets/ /app/assets/
 
-COPY services/share-video/src/        ./src/
-COPY services/share-video/pipeline.ts ./pipeline.ts
-COPY services/share-video/storage.ts  ./storage.ts
+USER share
 
-RUN npm run build
-
-# Drop dev deps for the runtime stage (smaller image).
-RUN npm prune --omit=dev
-
-# ── Stage 2: runtime ────────────────────────────────────────────────────
-FROM node:20-alpine
-WORKDIR /app
-
-# ffmpeg for the render pipeline; curl for compose healthcheck; tini for
-# proper signal forwarding to the node process.
-RUN apk add --no-cache ffmpeg curl tini
-
-# node:20-alpine ships a `node` user (uid 1000); we just need a writable
-# scratch dir on the volume mount path.
-RUN mkdir -p /tmp/render && chown -R node:node /tmp/render /app
-
-USER node
-
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist         ./dist
-COPY --from=build --chown=node:node /app/assets       ./assets
-COPY --from=build --chown=node:node /app/package.json ./package.json
-
-# Default to bundled binaries (alpine apk installs there). Overridable in
-# compose if needed.
 ENV FFMPEG_BIN=/usr/bin/ffmpeg \
     FFPROBE_BIN=/usr/bin/ffprobe \
     TEMP_ROOT=/tmp/render
@@ -55,4 +41,4 @@ ENV FFMPEG_BIN=/usr/bin/ffmpeg \
 EXPOSE 8083
 
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/src/server.js"]
+CMD ["/usr/local/bin/share-video"]
