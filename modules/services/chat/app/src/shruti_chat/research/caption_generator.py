@@ -20,6 +20,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from shruti_chat.domain.entities import Message
+from shruti_chat.observability.langfuse_client import prompt_with_fallback
 from shruti_chat.observability.logging import get_logger
 
 
@@ -63,6 +64,7 @@ async def generate_captions(
     captions_out: dict[int, str],
     model: str | None = None,
     request_id: str | None = None,
+    callbacks: list[Any] | None = None,
 ) -> None:
     """Fire-and-forget: one Flash-Lite call covers all chunks, results
     are written into `captions_out` (the shared `TurnAliasMap.captions`
@@ -77,12 +79,14 @@ async def generate_captions(
         return
 
     try:
+        prompt = prompt_with_fallback("caption-generator", fallback=_load_prompt)
+        effective_model = prompt.config.get("model") or model
         messages: list[Message] = [
-            {"role": "system", "content": _load_prompt()},
+            {"role": "system", "content": prompt.text},
             {"role": "user", "content": _format_user(user_question, lang, chunks_to_caption)},
         ]
         result: _CaptionResult = await llm.structured_output(
-            messages, _CaptionResult, model=model,
+            messages, _CaptionResult, model=effective_model, callbacks=callbacks,
         )
         written = 0
         for k, v in result.captions.items():

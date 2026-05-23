@@ -31,7 +31,12 @@ class FakeLLMForRouter:
     _idx: int = 0
 
     async def structured_output(
-        self, messages: list[Message], schema: type[T], *, model: str | None = None
+        self,
+        messages: list[Message],
+        schema: type[T],
+        *,
+        model: str | None = None,
+        callbacks: list[Any] | None = None,
     ) -> T:
         self.seen_calls.append(messages)
         if self._idx >= len(self.responses):
@@ -110,7 +115,7 @@ async def test_model_override_passes_through() -> None:
     captured_model: list[str | None] = []
 
     class _LLM:
-        async def structured_output(self, messages, schema, *, model=None):
+        async def structured_output(self, messages, schema, *, model=None, **_extra):
             captured_model.append(model)
             return RoutingDecision(intent="help", confidence=0.9)
 

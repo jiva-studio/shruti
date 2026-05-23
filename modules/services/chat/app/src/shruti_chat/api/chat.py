@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from time import perf_counter
@@ -17,6 +18,7 @@ from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.proactive_turn import run_proactive_turn
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.config import get_settings
+from shruti_chat.domain.user_context import UserContext
 from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 from shruti_chat.observability.logging import get_logger
 
@@ -94,7 +96,15 @@ async def chat(
         proactive_rule=body.proactive.rule_kind if body.proactive else None,
     )
 
-    user_ctx = body.user_context.to_domain() if body.user_context else None
+    # Carry the verified UUID into UserContext so the application layer
+    # can bind it to Langfuse `trace.user_id` without re-reading the
+    # JWT or threading an extra parameter through the call chain. The
+    # wire DTO (UserContextDto) intentionally does NOT carry user_id —
+    # the client doesn't know its own UUID, only the JWT does.
+    if body.user_context is not None:
+        user_ctx = dataclasses.replace(body.user_context.to_domain(), user_id=user.id)
+    else:
+        user_ctx = UserContext(user_id=user.id)
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         turn_started = perf_counter()

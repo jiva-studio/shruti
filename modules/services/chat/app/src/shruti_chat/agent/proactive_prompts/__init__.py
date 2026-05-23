@@ -34,8 +34,12 @@ def build_system_prompt(rule_kind: str, lang: str) -> str:
     `prompts/*.md` and layers a rule-specific section on top so the
     LLM knows what kind of message to write.
     """
-    from shruti_chat.agent.prompts import SYSTEM_PROMPT
+    # Build the full system prompt fresh each call — Langfuse
+    # hot-reload only works if the assembly happens per-turn (a cached
+    # module-level constant would freeze the prompts at import time).
+    from shruti_chat.agent.prompts import build_prompt
 
+    full_prompt = build_prompt()
     rule_section = _read(rule_kind)
     lang_name = "Russian" if lang == "ru" else "English"
     lang_directive = (
@@ -43,7 +47,7 @@ def build_system_prompt(rule_kind: str, lang: str) -> str:
         f"RESPONSE LANGUAGE: write the entire reply in {lang_name} ({lang}). "
         "Tool queries can be in any language that improves recall."
     )
-    return SYSTEM_PROMPT + "\n\n" + rule_section + lang_directive
+    return full_prompt + "\n\n" + rule_section + lang_directive
 
 
 def build_synthetic_user_message(rule_kind: str, rule_context: dict[str, Any]) -> str:

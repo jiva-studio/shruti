@@ -33,6 +33,7 @@ from shruti_chat.application.react_loop import (
 )
 from shruti_chat.domain.turn_context import TurnContext
 from shruti_chat.indexer.library.repo import fetch_verse_body
+from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 
@@ -241,6 +242,14 @@ async def run_worker(
 
     writer({"type": "status", "data": {"key": status_key}})
 
+    # Build the Langfuse callback ONCE per worker invocation. Inside
+    # the ReAct loop each iteration calls `stream_completion` with the
+    # SAME callback list — Langfuse aggregates the multi-step LLM
+    # interactions under the worker's span. None when observability is
+    # disabled; the LLM adapter then skips the `callbacks` kwarg.
+    cb = langfuse_node_callback(ctx.langfuse_trace_id, role) if ctx.langfuse_trace_id else None
+    callbacks_list = [cb] if cb is not None else None
+
     result = await run_react_loop(
         extra_user_query or state["user_query"],
         extracted_args=state.get("extracted_args", {}),
@@ -254,6 +263,7 @@ async def run_worker(
         max_turns=max_turns,
         on_tool_event=_on_tool_event,
         yield_event=_yield_event,
+        callbacks=callbacks_list,
     )
 
     await flush_verse_payloads(ctx)
