@@ -3,6 +3,7 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatFeedbackCategory,
   ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
@@ -10,9 +11,19 @@ import type {
 } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import type {
+  ChatFeedbackState,
   CreateChatMessageInput,
   IChatMessageRepository,
 } from "@lib/domain/ports/chatMessageRepository.js"
+
+const FEEDBACK_CATEGORIES: ReadonlySet<ChatFeedbackCategory> = new Set([
+  "off_topic",
+  "no_results",
+  "bad_citations",
+  "wrong_language",
+  "factually_wrong",
+  "other",
+])
 
 /** Schema version of the JSON-blob envelope. Bump when payload shapes
  *  evolve non-additively; `parseMeta` handles `_v > known` by rendering
@@ -36,6 +47,8 @@ interface ParsedMeta {
   readonly error: ChatMessageError | undefined
   readonly aliases: Record<string, ChatAliasEntry> | undefined
   readonly focus: ChatFocusPayload | undefined
+  readonly traceId: string | undefined
+  readonly feedback: ChatFeedbackState | undefined
 }
 
 const EMPTY_META: ParsedMeta = Object.freeze({
@@ -46,6 +59,8 @@ const EMPTY_META: ParsedMeta = Object.freeze({
   error: undefined,
   aliases: undefined,
   focus: undefined,
+  traceId: undefined,
+  feedback: undefined,
 })
 
 function parseMeta(raw: unknown): ParsedMeta {
@@ -75,7 +90,26 @@ function parseMeta(raw: unknown): ParsedMeta {
     error: parseError(data.error),
     aliases: extractAliases(data.aliases),
     focus: extractFocus(data.focus),
+    traceId: typeof data.traceId === "string" && data.traceId.length > 0 ? data.traceId : undefined,
+    feedback: extractFeedback(data.feedback),
   }
+}
+
+function extractFeedback(raw: unknown): ChatFeedbackState | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
+  const o = raw as Record<string, unknown>
+  if (o.state !== "up" && o.state !== "down") return undefined
+  const out: { state: "up" | "down"; category?: ChatFeedbackCategory; comment?: string } = {
+    state: o.state,
+  }
+  if (
+    typeof o.category === "string" &&
+    FEEDBACK_CATEGORIES.has(o.category as ChatFeedbackCategory)
+  ) {
+    out.category = o.category as ChatFeedbackCategory
+  }
+  if (typeof o.comment === "string" && o.comment.length > 0) out.comment = o.comment
+  return out
 }
 
 function extractFocus(raw: unknown): ChatFocusPayload | undefined {
@@ -153,6 +187,8 @@ function wrapMeta(payload: {
   error?: ChatMessageError | undefined
   aliases?: Record<string, ChatAliasEntry>
   focus?: ChatFocusPayload
+  traceId?: string
+  feedback?: ChatFeedbackState
 }): string {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
@@ -163,6 +199,8 @@ function wrapMeta(payload: {
   if (payload.error) data.error = payload.error
   if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
   if (payload.focus) data.focus = payload.focus
+  if (payload.traceId) data.traceId = payload.traceId
+  if (payload.feedback) data.feedback = payload.feedback
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }
 
@@ -170,7 +208,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
   const meta = parseMeta(r.meta)
   // CHECK(role IN ('user','assistant')) on the DB side guarantees a
   // valid value here — cast directly without a silent fallback.
-  return {
+  const msg: ChatMessage = {
     id: r.id as ChatMessageId,
     sessionId: r.session_id as ChatSessionId,
     role: r.role as "user" | "assistant",
@@ -184,6 +222,13 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     aliases: meta.aliases,
     focus: meta.focus,
   }
+  if (meta.traceId) msg.traceId = meta.traceId
+  if (meta.feedback) {
+    msg.feedbackState = meta.feedback.state
+    if (meta.feedback.category) msg.feedbackCategory = meta.feedback.category
+    if (meta.feedback.comment) msg.feedbackComment = meta.feedback.comment
+  }
+  return msg
 }
 
 export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepository {
@@ -215,6 +260,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: input.error,
         aliases: input.aliases,
         focus: input.focus,
+        traceId: input.traceId,
       })
       await db.execute(
         `INSERT INTO chat_messages
@@ -223,7 +269,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         [input.id, input.sessionId, input.role, input.content, input.createdAt, meta]
       )
       await db.save()
-      return {
+      const out: ChatMessage = {
         id: input.id,
         sessionId: input.sessionId,
         role: input.role,
@@ -237,6 +283,8 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
         focus: input.focus,
       }
+      if (input.traceId) out.traceId = input.traceId
+      return out
     },
 
     async updateFollowups(id: ChatMessageId, followups: readonly string[]): Promise<void> {
@@ -257,6 +305,8 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: current.error,
         aliases: current.aliases,
         focus: current.focus,
+        traceId: current.traceId,
+        feedback: current.feedback,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       await db.save()
@@ -280,6 +330,30 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: current.error,
         aliases: current.aliases,
         focus: current.focus,
+        traceId: current.traceId,
+        feedback: current.feedback,
+      })
+      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
+      await db.save()
+    },
+
+    async updateFeedback(id: ChatMessageId, feedback: ChatFeedbackState): Promise<void> {
+      const rows = await db.query<{ meta: string | null }>(
+        "SELECT meta FROM chat_messages WHERE id = ?",
+        [id]
+      )
+      if (rows.length === 0) return
+      const current = parseMeta(rows[0].meta)
+      const next = wrapMeta({
+        actions: current.actions,
+        outlines: current.outlines,
+        actionStates: current.actionStates,
+        followups: current.followups,
+        error: current.error,
+        aliases: current.aliases,
+        focus: current.focus,
+        traceId: current.traceId,
+        feedback,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
       await db.save()

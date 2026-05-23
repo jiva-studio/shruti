@@ -2,6 +2,7 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatFeedbackCategory,
   ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
@@ -29,6 +30,17 @@ export interface CreateChatMessageInput {
    *  "Ask Sadhu" flow on a transcript selection. Determines whether
    *  the bubble renders as a focus card. */
   readonly focus?: ChatFocusPayload
+  /** Langfuse trace id captured from the SSE `meta` event. Persisted so
+   *  the feedback flow can identify this message after a reload. */
+  readonly traceId?: string
+}
+
+/** Local feedback state persisted on an assistant message after the
+ *  user taps 👍/👎. Matches the `ChatMessage` fields of the same name. */
+export interface ChatFeedbackState {
+  readonly state: "up" | "down"
+  readonly category?: ChatFeedbackCategory
+  readonly comment?: string
 }
 
 /**
@@ -69,4 +81,11 @@ export interface IChatMessageRepository {
 
   /** Wipe every message — paired with session.clearAll(). */
   clearAll(): Promise<void>
+
+  /** Persist the user's feedback selection (👍/👎 + optional category +
+   *  comment) on an assistant message. Read-modify-writes the `meta`
+   *  envelope so the thumbs UI stays consistent across reloads. The
+   *  network call to `/chat/feedback` is the caller's concern — this is
+   *  pure local persistence. */
+  updateFeedback(id: ChatMessageId, feedback: ChatFeedbackState): Promise<void>
 }

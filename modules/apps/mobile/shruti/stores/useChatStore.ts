@@ -29,6 +29,7 @@ import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@shruti/services/chat/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@shruti/services/chat/httpChatTitleService.js"
 import { createHttpChatQuestionsService } from "@shruti/services/chat/httpChatQuestionsService.js"
+import { postFeedback, type FeedbackCategory } from "@shruti/services/chatClient.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
@@ -974,6 +975,61 @@ export const useChatStore = defineStore("chat", () => {
     return sessions.value.filter((s) => (s.title ?? "").toLowerCase().includes(needle))
   }
 
+  /**
+   * Persist a thumbs-up/down (with optional category + comment) for an
+   * assistant message and ship it to the backend. Throws on POST
+   * failure — the UI catches and toasts; local state is only mutated
+   * on success so a network blip doesn't desync the bubble from the
+   * server.
+   *
+   * State-machine notes:
+   *   - flipping up ↔ down upserts the `user_feedback` score on the
+   *     trace via deterministic score_id (server side);
+   *   - category/comment scores are written ONLY when value=down. When
+   *     a user later flips down→up, those orphan rows stay (Langfuse
+   *     SDK has no delete). The bubble's `feedbackCategory` /
+   *     `feedbackComment` are dropped on `up` so the UI is consistent
+   *     locally.
+   */
+  async function submitFeedback(
+    messageId: ChatMessageId,
+    feedback: {
+      state: "up" | "down"
+      category?: FeedbackCategory
+      comment?: string
+    }
+  ): Promise<void> {
+    const msg = messages.value.find((m) => m.id === messageId)
+    if (!msg || msg.role !== "assistant" || !msg.traceId) {
+      throw new Error("submitFeedback: message has no trace id")
+    }
+
+    await postFeedback({
+      traceId: msg.traceId,
+      value: feedback.state,
+      category: feedback.state === "down" ? feedback.category : undefined,
+      comment: feedback.state === "down" ? feedback.comment : undefined,
+    })
+
+    const repos = chatRepos()
+    await repos.messages.updateFeedback(messageId, feedback)
+
+    // Reflect on the in-memory message so the bubble re-renders with
+    // the selected thumb without needing a full session reload.
+    const idx = messages.value.findIndex((m) => m.id === messageId)
+    if (idx >= 0) {
+      const next = [...messages.value]
+      const cur = next[idx]
+      next[idx] = {
+        ...cur,
+        feedbackState: feedback.state,
+        feedbackCategory: feedback.state === "down" ? feedback.category : undefined,
+        feedbackComment: feedback.state === "down" ? feedback.comment : undefined,
+      }
+      messages.value = next
+    }
+  }
+
   return {
     sessions,
     activeSession,
@@ -997,5 +1053,6 @@ export const useChatStore = defineStore("chat", () => {
     deleteSession,
     clearAll,
     searchSessions,
+    submitFeedback,
   }
 })

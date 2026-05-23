@@ -47,6 +47,7 @@ class FakeLLM:
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> T:
         resp = self.router_responses[self._ridx]
         self._ridx += 1
@@ -62,6 +63,7 @@ class FakeLLM:
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
         self.seen_streams.append(
             {
