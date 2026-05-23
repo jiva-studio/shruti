@@ -104,10 +104,6 @@ export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
  *  variants track the wire-level event names; consumers pattern-match
  *  on `type`. */
 export type ChatStreamEvent =
-  /** Turn-metadata, first event of the SSE stream. Carries the Langfuse
-   *  `trace_id` the client uses to identify this assistant message
-   *  when POSTing feedback later. Additive — old clients ignore. */
-  | { readonly type: "meta"; readonly traceId: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "tool_start"; readonly name?: string }
   | { readonly type: "tool_end"; readonly name?: string }
@@ -136,10 +132,6 @@ export type ChatStreamEvent =
     }
   | {
       readonly type: "done"
-      /** Fallback echo of the `meta` event's trace_id — set so a client
-       *  that missed the initial event (e.g. an SSE reconnect) still
-       *  recovers the message identifier on stream close. */
-      readonly traceId?: string
       /** Alias map for the chip markers in this turn's accumulated
        *  prose. Wire shape kept snake_case to match the agent's
        *  `serialize()` payload; use-case maps to camelCase
@@ -170,6 +162,11 @@ export interface StreamChatOptions {
   readonly sessionId?: string
   /** Human-readable chat session title (chat_sessions.title). */
   readonly sessionTitle?: string
+  /** Pre-minted assistant `ChatMessage.id` (UUIDv4). Adapter strips
+   *  hyphens and ships the 32-hex form in `X-Trace-Id` so the server
+   *  uses it as the Langfuse trace_id. This makes message identity ==
+   *  trace identity, which is what the feedback endpoint relies on. */
+  readonly assistantMessageId?: string
 }
 
 /**

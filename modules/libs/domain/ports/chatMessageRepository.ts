@@ -30,9 +30,6 @@ export interface CreateChatMessageInput {
    *  "Ask Sadhu" flow on a transcript selection. Determines whether
    *  the bubble renders as a focus card. */
   readonly focus?: ChatFocusPayload
-  /** Langfuse trace id captured from the SSE `meta` event. Persisted so
-   *  the feedback flow can identify this message after a reload. */
-  readonly traceId?: string
 }
 
 /** Local feedback state persisted on an assistant message after the

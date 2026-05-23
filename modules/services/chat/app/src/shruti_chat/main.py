@@ -230,6 +230,12 @@ app.add_middleware(
         # this in the allow-list, every browser preflight fails — the
         # actual POST never lands.
         "Idempotency-Key",
+        # Client-minted Langfuse trace id (hyphenless 32-hex form of
+        # the assistant ChatMessage.id). Same allowlist constraint:
+        # Capacitor WebView issues a CORS preflight on any non-simple
+        # header, and a missing entry here means the actual POST never
+        # fires — the mobile UI shows "connection lost".
+        "X-Trace-Id",
     ],
     expose_headers=["Retry-After"],
     max_age=86400,
