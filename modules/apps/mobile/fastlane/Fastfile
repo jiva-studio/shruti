@@ -228,16 +228,6 @@ platform :android do
   def version_properties
     props = { "versionName" => mobile_version }
     props["versionCode"] = ci_build_id unless ci_build_id.empty?
-    # `@capgo/capacitor-social-login` ships its own gradle.properties
-    # under node_modules with `socialLogin.facebook.include=true` and
-    # `socialLogin.twitter.include=true`, which a root-level
-    # gradle.properties can't override (subproject wins). Pass `-P`
-    # explicitly so the Facebook + Twitter SDKs are excluded — we only
-    # wire Google + Apple in `useCapacitorAuth.ts`, and Facebook SDK 17+
-    # ships `com.google.android.gms.permission.AD_ID` which Play Console
-    # rejects unless we declare advertising-ID usage.
-    props["socialLogin.facebook.include"] = "false"
-    props["socialLogin.twitter.include"]  = "false"
     props
   end
 
