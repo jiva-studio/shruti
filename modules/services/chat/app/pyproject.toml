@@ -34,6 +34,9 @@ dependencies = [
   "langgraph>=0.2.50",
   "langchain-core>=0.3",
   "langchain-openai>=0.2",
+  # JWT verification for the Authorization: Bearer header. Public key
+  # only — the auth service holds the private half. RS256 forced.
+  "PyJWT[crypto]>=2.8",
 ]
 
 [project.optional-dependencies]

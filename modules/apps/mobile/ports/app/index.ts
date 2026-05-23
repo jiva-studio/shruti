@@ -45,6 +45,7 @@ export type {
   StreamChatOptions,
 } from "./chatStreamClient.js"
 export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"
+export type { AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
 export type {
   IChatQuestionsService,
   ChatQuestionsFocusInput,

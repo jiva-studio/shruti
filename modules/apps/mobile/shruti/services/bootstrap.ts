@@ -1,4 +1,4 @@
-import type { IDatabase, IPreferences } from "@ports/app/index.js"
+import type { IDatabase } from "@ports/app/index.js"
 import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
 import type { useShruti } from "@shruti/shruti.js"
 
@@ -6,9 +6,6 @@ export interface BootstrapUserDatabaseDeps {
   readonly userDbPath: string
   readonly openUserDatabase: (path: string) => Promise<IDatabase>
   readonly userDatabase: () => IDatabase | undefined
-  /** Optional — when provided, ensure `chat.clientId` is seeded after
-   *  migrations. Skipping the field keeps the helper usable from tests. */
-  readonly preferences?: IPreferences
 }
 
 /**
@@ -32,47 +29,6 @@ export async function bootstrapUserDatabase(deps: BootstrapUserDatabaseDeps): Pr
     throw new Error("openUserDatabase resolved without exposing the user database handle")
   }
   await runUserMigrations(db)
-
-  if (deps.preferences) {
-    await ensureChatClientId(deps.preferences)
-  }
-}
-
-/**
- * Chat backend tracks per-device usage by a stable UUID we ship as
- * `X-Device-Id`. Generated lazily on first bootstrap after migrations
- * and persisted via `IPreferences` so it survives reinstalls of the
- * user DB (e.g. import flow). Idempotent.
- */
-export async function ensureChatClientId(preferences: IPreferences): Promise<string> {
-  const existing = await preferences.get("chat.clientId")
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : fallbackUuid()
-  await preferences.set("chat.clientId", fresh)
-  return fresh
-}
-
-function fallbackUuid(): string {
-  // RFC4122 v4-ish; only used in environments without crypto.randomUUID
-  // (older Capacitor WebViews would crash on the call site). Good enough
-  // for an opaque device id — never used as a security primitive.
-  const hex = "0123456789abcdef"
-  let out = ""
-  for (let i = 0; i < 36; i++) {
-    if (i === 8 || i === 13 || i === 18 || i === 23) {
-      out += "-"
-    } else if (i === 14) {
-      out += "4"
-    } else if (i === 19) {
-      out += hex[8 + Math.floor(Math.random() * 4)]
-    } else {
-      out += hex[Math.floor(Math.random() * 16)]
-    }
-  }
-  return out
 }
 
 /**
@@ -85,6 +41,5 @@ export function bootstrapUserDatabaseFromApp(app: ReturnType<typeof useShruti>):
     userDbPath: app.appConfig.database.userLocalPath,
     openUserDatabase: (path) => app.openUserDatabase(path),
     userDatabase: (): IDatabase | undefined => app.databases.user ?? undefined,
-    preferences: app.preferences,
   })
 }

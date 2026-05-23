@@ -1,0 +1,151 @@
+# Caddy edge config for shruti.
+#
+# - Auto-acquires Let's Encrypt cert via HTTP-01 for $DOMAIN.
+#   For sslip.io: <ip-dashed>.sslip.io resolves to this server.
+# - rate_limit is the mholt/caddy-ratelimit plugin (compiled in by
+#   infra/compose/caddy/Dockerfile). One server-level directive with
+#   per-path matchers — zones share the same in-memory bucket store.
+# - handle_path strips the matched prefix before reverse_proxy so each
+#   service sees its own internal paths (`/excerpts`, `/reels`, `/auth/...`).
+# - request_body limits cap PUT/POST payload size at the edge.
+
+{
+    email {$ACME_EMAIL}
+
+    log {
+        output stderr
+        level WARN
+    }
+}
+
+{$DOMAIN} {
+    encode zstd gzip
+
+    # Baseline browser security headers. Applied to every response.
+    # HSTS: TLS-only once seen; X-Frame-Options blocks clickjacking;
+    # X-Content-Type-Options blocks MIME sniffing; Referrer-Policy
+    # keeps URLs from leaking on cross-origin navigations.
+    # We don't serve a web UI, so CSP isn't worth the maintenance cost.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Hide Caddy version in errors.
+        -Server
+    }
+
+    # Per-IP rate limits. Each zone has its own matcher; a request that
+    # matches multiple zones (shouldn't happen with our path partitioning)
+    # would be tested against all of them.
+    rate_limit {
+        # /auth/anonymous — CGNAT-tolerant. Carrier IP can serve hundreds
+        # of subscribers; 30/hour is wide enough for viral install spikes.
+        # The real cost-cap lives on /chat/* below.
+        zone auth_anonymous {
+            match {
+                path /auth/anonymous
+            }
+            key {client_ip}
+            events 30
+            window 1h
+        }
+        # /auth/signin/* — brute-force defence. A legit signin happens 1-2
+        # times in a user's lifetime; bot attempts come in bursts.
+        zone auth_signin {
+            match {
+                path /auth/signin/*
+            }
+            key {client_ip}
+            events 20
+            window 1m
+        }
+        # /share/audio/* — cheap stream-copy (<1s each), keep loose for
+        # CGNAT-shared IPs. Idempotent on excerpt_id so retries are free.
+        zone share_audio {
+            match {
+                path /share/audio/*
+            }
+            key {client_ip}
+            events 60
+            window 1m
+        }
+        # /share/video/* — expensive (~30-90s render + Whisper API). 20/hour
+        # is plenty for a CGNAT IP; further per-user caps land in P6.5.
+        zone share_video {
+            match {
+                path /share/video/*
+            }
+            key {client_ip}
+            events 20
+            window 1h
+        }
+        # /chat/* root — main LLM cost surface. 200/hour/IP × 24h = 4800/day
+        # ceiling per IP, ≈ $5-50/day at typical token cost. This rate is
+        # the actual abuse cap even if an attacker mints many anon JWTs
+        # from one IP.
+        zone chat {
+            match {
+                # Negative match so this fires on the root catch-all but
+                # NOT on /auth/* or /share/*. Order matters: more specific
+                # zones above were already checked.
+                not {
+                    path /auth/* /share/*
+                }
+            }
+            key {client_ip}
+            events 200
+            window 1h
+        }
+    }
+
+    # ── /auth/* — auth service ─────────────────────────────────────
+    handle /auth/* {
+        reverse_proxy auth:8081
+    }
+
+    # ── /share/audio/* — share-audio service ───────────────────────
+    # handle_path strips the prefix so the FastAPI app sees /excerpts.
+    # Body cap is generous for a JSON envelope (<1KB in practice) but
+    # forbids someone POSTing a multi-MB blob to chew worker memory.
+    handle_path /share/audio/* {
+        request_body {
+            max_size 100KB
+        }
+        reverse_proxy share-audio:8082
+    }
+
+    # ── /share/video/* — share-video service ───────────────────────
+    handle_path /share/video/* {
+        request_body {
+            max_size 100KB
+        }
+        reverse_proxy share-video:8083 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+            }
+        }
+    }
+
+    # ── chat (root catch-all) ──────────────────────────────────────
+    # SSE streaming endpoint — flush_interval -1 sends chunks as they
+    # arrive. 1MB body limit fits any reasonable chat turn (history +
+    # current message); a malicious 50MB POST is rejected at the edge.
+    handle {
+        request_body {
+            max_size 1MB
+        }
+        reverse_proxy chat:8080 {
+            flush_interval -1
+            transport http {
+                read_buffer 8192
+            }
+        }
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

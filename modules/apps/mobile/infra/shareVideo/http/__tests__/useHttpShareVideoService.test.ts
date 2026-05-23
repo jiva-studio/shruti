@@ -27,7 +27,10 @@ describe("useHttpShareVideoService", () => {
       ok({ video_id: "note-1", url: "https://cdn/share/video/note-1.mp4", ready: true })
     )
 
-    const svc = useHttpShareVideoService(() => "https://aws/reels")
+    const svc = useHttpShareVideoService(
+      () => "https://aws/reels",
+      async () => "test-token"
+    )
     const result = await svc.cut({
       sourceKey: "public/tracks/t1/audio/original.mp3",
       startMs: 1000,
@@ -64,8 +67,12 @@ describe("useHttpShareVideoService", () => {
     )
 
     let region: "global" | "russia" = "global"
-    const svc = useHttpShareVideoService(() =>
-      region === "global" ? "https://aws.example/reels" : "https://yc.example/d4er0qjat23q6ic6dt0p"
+    const svc = useHttpShareVideoService(
+      () =>
+        region === "global"
+          ? "https://aws.example/reels"
+          : "https://yc.example/d4er0qjat23q6ic6dt0p",
+      async () => "test-token"
     )
 
     await svc.cut({
@@ -93,7 +100,10 @@ describe("useHttpShareVideoService", () => {
   it("omits video_id from the body when not provided (server generates one)", async () => {
     fetchMock.mockResolvedValueOnce(ok({ video_id: "auto", url: "u", ready: true }))
 
-    const svc = useHttpShareVideoService(() => "https://endpoint")
+    const svc = useHttpShareVideoService(
+      () => "https://endpoint",
+      async () => "test-token"
+    )
     await svc.cut({
       sourceKey: "k",
       startMs: 0,
@@ -133,7 +143,10 @@ describe("useHttpShareVideoService", () => {
       })
     })
 
-    const svc = useHttpShareVideoService(() => "https://yc.example/reels")
+    const svc = useHttpShareVideoService(
+      () => "https://yc.example/reels",
+      async () => "test-token"
+    )
     const promise = svc.cut({
       sourceKey: "k",
       startMs: 0,
@@ -155,7 +168,10 @@ describe("useHttpShareVideoService", () => {
       new Response("nope", { status: 504, statusText: "Gateway Timeout" })
     )
 
-    const svc = useHttpShareVideoService(() => "https://endpoint")
+    const svc = useHttpShareVideoService(
+      () => "https://endpoint",
+      async () => "test-token"
+    )
     await expect(
       svc.cut({
         sourceKey: "k",

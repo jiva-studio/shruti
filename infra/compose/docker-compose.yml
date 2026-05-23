@@ -1,0 +1,275 @@
+# Base stack for shruti services — postgres, redis, migrator, chat, auth.
+# Caddy + Watchtower live in docker-compose.prod.yml; host port mappings and
+# local builds live in docker-compose.dev.yml. Never run this base file
+# alone — always pair it with a prod or dev overlay (see infra/README.md).
+#
+# Convention: every value coming from a .env file is namespaced SHRUTI_*
+# at the file level; this compose translates each into the variable name
+# the underlying image expects (POSTGRES_PASSWORD, DOMAIN, DATABASE_URL…)
+# inside the container. The `:?` suffix on POSTGRES_PASSWORD means the
+# stack refuses to start if it's missing — no insecure defaults sneak in.
+
+name: shruti
+
+# Shared log driver config — caps json-file rotation at 10MB × 5 files per
+# container so the host's /var/lib/docker doesn't grow unbounded between
+# deploys. Applied to every long-running service via the `<<: *default-logging`
+# YAML anchor below. Postgres/Redis emit much less than apps, so it's still
+# fine for them.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+# Hardening baseline applied to app containers (chat, auth, share-*). These
+# don't need privilege escalation or any capabilities — the binaries bind on
+# >1024 ports, talk DB+S3+HTTP, do filesystem I/O on their own volumes.
+# Postgres/Redis/Caddy are deliberately NOT under this anchor because they
+# may need specific caps (e.g. caddy needs NET_BIND_SERVICE for :443).
+x-app-hardening: &app-hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: shruti
+      POSTGRES_PASSWORD: ${SHRUTI_POSTGRES_PASSWORD:?SHRUTI_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/scripts/gen-dev-env.sh)}
+      POSTGRES_DB: shruti
+    # HNSW is RAM-hungry: default shared_buffers=128 MB pushes the index to
+    # disk and ANN p50 balloons to 300-1000 ms. 2 GB pins the chunks-table
+    # HNSW index in memory on 8 GB VPS and drops ANN to 30-150 ms p50.
+    # (Stage 2 perf, PR #560.)
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=5GB
+      - -c
+      - work_mem=64MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - max_connections=50
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - jit=off
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shruti -d shruti"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Single source of truth for all SQL migrations across services.
+  # Runs once on every `up`, applies forward-only migrations from
+  # infra/db/migrations/, exits 0. Service containers `depends_on` this
+  # with `service_completed_successfully` so they never start against
+  # an unmigrated DB. On a dirty state from a prior failed apply, the
+  # exit code is non-zero — `docker compose logs migrator` shows where.
+  # Recovery: `docker compose run --rm migrator force <N>` after fixup.
+  migrator:
+    image: migrate/migrate:v4.18.1
+    restart: "no"
+    logging: *default-logging
+    volumes:
+      - ../db/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti?sslmode=disable
+      - up
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # L2 cache for chat (router / title / embed_query / topic).
+  # AOF on so hot caches survive restarts; 1 GB cap with allkeys-lru fits
+  # ~250k embed_query entries.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 1gb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redisdata:/data
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  chat:
+    # Production: image comes from ghcr.io built by services-ghcr.yml.
+    # Dev override (docker-compose.dev.yml) replaces this with a build:
+    # block + pull_policy: never so local hacking doesn't try to pull.
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-chat:${SHRUTI_CHAT_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      # Opt-in to Watchtower. Watchtower itself runs without the label so
+      # it doesn't try to update its own container.
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      # Default resolves to <project-root>/.env relative to this compose file:
+      # /opt/shruti/infra/compose/../../.env = /opt/shruti/.env in prod.
+      # Dev gen-dev-env.sh overrides to ../.env.dev.
+      - ${SHRUTI_ENV_FILE:-../../.env}
+    environment:
+      DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      CATALOG_DIR: /var/lib/chat
+      REDIS_URL: redis://redis:6379/0
+      JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      # SHRUTI_ENV comes from /opt/shruti/.env on the VPS (set to
+      # "prod" there); local dev gets the "dev" default. SERVICE_VERSION
+      # mirrors the running image tag so Datadog can correlate logs to
+      # a specific ghcr build.
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_CHAT_TAG:-latest}
+    volumes:
+      - chatdata:/var/lib/chat
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 60s
+
+  auth:
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-auth:${SHRUTI_AUTH_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../.env}
+    environment:
+      DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      JWT_PRIVATE_KEY_PATH: /secrets/private.pem
+      JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      JWT_KID: v1
+      GOOGLE_CLIENT_IDS: ${SHRUTI_GOOGLE_CLIENT_IDS:-}
+      APPLE_BUNDLE_IDS: ${SHRUTI_APPLE_BUNDLE_IDS:-studio.jiva.shruti}
+      PORT: "8081"
+      # Datadog log enrichment — service/env/version make it into every
+      # slog line via internal/logging/logging.go.
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_AUTH_TAG:-latest}
+    volumes:
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "/auth", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  # share-audio: synchronous MP3 cut + S3 upload. No DB, no queue.
+  # 4 uvicorn workers per container, Caddy edge rate-limit caps spikes.
+  share-audio:
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../.env}
+    environment:
+      # storage.py reads BUCKET (legacy name); compose translates from
+      # the SHRUTI_* namespace.
+      BUCKET: ${SHRUTI_S3_BUCKET:?SHRUTI_S3_BUCKET must be set}
+      EXCERPTS_PREFIX: ${SHRUTI_S3_EXCERPTS_PREFIX:-public/shares/audio}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_SHARE_AUDIO_TAG:-latest}
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # share-video: long-running renders pulled from public.tasks queue
+  # (postgres FOR UPDATE SKIP LOCKED). One render at a time per container
+  # (ffmpeg at 720p already pulls ~1.75 vCPU). JWT middleware + per-user
+  # daily quotas land in P6.5.
+  share-video:
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-video:${SHRUTI_SHARE_VIDEO_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../.env}
+    environment:
+      DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      SHRUTI_S3_BUCKET: ${SHRUTI_S3_BUCKET:?}
+      SHRUTI_S3_BACKGROUNDS_PREFIX: ${SHRUTI_S3_BACKGROUNDS_PREFIX:-private/share/video/backgrounds}
+      SHRUTI_S3_VIDEO_PREFIX: ${SHRUTI_S3_VIDEO_PREFIX:-public/share/video}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
+      TRANSCRIBER: ${SHRUTI_TRANSCRIBER:-whisper}
+      # Anchor for JWT verification (added in P6.5). Mount the same
+      # /opt/shruti/jwt directory auth uses; only public.pem is read.
+      JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      SHARE_VIDEO_ANON_PER_DAY: ${SHRUTI_SHARE_VIDEO_ANON_PER_DAY:-3}
+      SHARE_VIDEO_SIGNED_IN_PER_DAY: ${SHRUTI_SHARE_VIDEO_SIGNED_IN_PER_DAY:-20}
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_SHARE_VIDEO_TAG:-latest}
+    volumes:
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
+      - share_video_scratch:/tmp/render
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+
+networks:
+  shruti:
+
+volumes:
+  pgdata:
+  chatdata:
+  redisdata:
+  share_video_scratch:

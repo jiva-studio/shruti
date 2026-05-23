@@ -48,6 +48,23 @@ export default defineConfig({
       process.env.SHRUTI_CHAT_API_BASE_URL ?? "https://api.shruti.local"
     ),
     __CHAT_APP_TOKEN__: JSON.stringify(process.env.SHRUTI_CHAT_APP_TOKEN ?? "dev-token"),
+    // Auth service lives on the same host as chat (Caddy routes /auth/* to it).
+    __AUTH_API_BASE_URL__: JSON.stringify(
+      process.env.SHRUTI_AUTH_API_BASE_URL ??
+        (process.env.SHRUTI_CHAT_API_BASE_URL ?? "https://api.shruti.local") + "/auth"
+    ),
+    // OAuth client IDs are public by design — Google embeds them in the APK
+    // and they're recoverable via apktool. Hard-coded defaults so a fresh
+    // checkout builds working sign-in without any env setup. Override via
+    // env if staging / multi-tenant ever lands.
+    __GOOGLE_WEB_CLIENT_ID__: JSON.stringify(
+      process.env.SHRUTI_GOOGLE_WEB_CLIENT_ID ??
+        ""
+    ),
+    __GOOGLE_IOS_CLIENT_ID__: JSON.stringify(
+      process.env.SHRUTI_GOOGLE_IOS_CLIENT_ID ??
+        ""
+    ),
   },
   build: {
     minify: true,

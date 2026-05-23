@@ -1,37 +1,50 @@
-# Context root for the chat service is `modules/`. Only `services/chat/app`
-# and `docs/help` are needed in the build — everything else is excluded so
-# the daemon doesn't haul the whole monorepo into the build.
+# Build context for ALL service images is `modules/`. Each Dockerfile
+# COPYs only its own subtree (services/<svc>/) plus shared sources
+# where applicable (docs/help/ for chat). We exclude only what no
+# service container needs, never specific service directories.
 
-# Top-level dirs we never need.
+# Mobile / web apps and libs — no backend service needs these.
 apps/
 libs/
 plugins/
 tools/
 web/
+mobile
 
-# Other services live next to chat/ but aren't part of this image.
-services/share-audio/
-services/share-video/
+# Per-service noise that should never end up in any image.
+# Note: services/*/scripts/ stays — share-video has a postinstall hook
+# that copies font subsets; auth/chat don't ship scripts/ so excluding
+# would be a no-op for them anyway.
+services/*/compose/
+services/*/README.md
+services/*/fly.toml
+services/*/.env
+services/*/.env.*
+services/*/.povtorenie-work
+services/*/*.tsv
 
-# Inside services/chat/ — keep only what the Dockerfile COPYs.
-services/chat/compose/
-services/chat/scripts/
-services/chat/README.md
-services/chat/fly.toml
-services/chat/.env
-services/chat/.env.*
-services/chat/.povtorenie-work
-services/chat/*.tsv
+# Serverless leftovers — share-* services migrating to containers.
+# Their serverless-*.yml / event_adapter.* / layers/ get deleted in a
+# follow-up commit; until then, don't ship them into images.
+services/*/serverless-*.yml
+services/*/layers/
 
-# Generic noise.
+# Build artifacts and language caches.
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
 **/.venv
 **/*.egg-info
 **/node_modules
+**/dist/
+**/build/
 **/.airflow
 **/.vscode
 **/logs
+**/coverage
+**/.next
+**/target/
+
+# Git + IDE.
 .git
 .gitignore

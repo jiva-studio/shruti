@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     port: int = 8080
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     service_version: str = "dev"
+    # Deployment environment. Surfaces in every log line as `env` so
+    # Datadog can tag and route by stage. compose/.env should override
+    # to "prod" on the VPS.
+    env: Literal["dev", "staging", "prod"] = "dev"
 
     # ── observability ──────────────────────────────────────────────────
     # Per-stage `stage_ms` timing logs. Enabled for baseline collection;
@@ -87,22 +91,31 @@ class Settings(BaseSettings):
 
     # ── Abuse mitigation ────────────────────────────────────────────────
     app_shared_token: str = ""
-    device_rate_limit_per_day: int = 50
-    ip_rate_limit_per_day: int = 200
-    # /title is a separate cheap call (~40 tokens out, gemini-flash) so it
-    # gets a smaller quota with a separate bucket — heavier than /chat per
-    # device because a user starting many sessions in a row is normal, but
-    # not infinite. A leaked app_shared_token (it's baked into every APK)
-    # without this gate gives an attacker free billable LLM access.
-    title_device_rate_limit_per_day: int = 60
-    title_ip_rate_limit_per_day: int = 300
-    # /questions is the "suggest 3-4 chips" call fired when the user
-    # asks Sadhu about a transcript fragment. Same cost profile as
-    # /title (gemini-flash, ~400 tokens out) but slightly noisier on
-    # the device side — one selection drag fires one call. Bucket is
-    # sized accordingly.
-    questions_device_rate_limit_per_day: int = 100
-    questions_ip_rate_limit_per_day: int = 500
+
+    # ── JWT verification ────────────────────────────────────────────────
+    # Path to the auth service's public key. Mounted into the container
+    # at /secrets/public.pem by compose (read-only). RS256 only.
+    jwt_public_key_path: Path = Path("/secrets/public.pem")
+
+    # Per-(scope, user) daily limits. Anonymous users (those carrying an
+    # /auth/anonymous-minted JWT with `anonymous=true`) get tighter quotas
+    # than signed-in users; the difference is the main reason we did the
+    # whole JWT migration. Tuning starting points — revise from telemetry.
+    chat_anon_per_day: int = 50
+    chat_signed_in_per_day: int = 500
+    # /title is a separate cheap call (~40 tokens out, gemini-flash);
+    # higher cap because a user starting many sessions in a row is normal.
+    title_anon_per_day: int = 60
+    title_signed_in_per_day: int = 300
+    # /questions = "suggest 3-4 chips" fired on transcript fragment
+    # selection. ~400 tokens out; noisier on the device than /title.
+    questions_anon_per_day: int = 100
+    questions_signed_in_per_day: int = 500
+    # Per-IP cap (uniform across scopes). Defence-in-depth on top of the
+    # per-user cap — covers an attacker spinning up many anon-JWTs from
+    # one IP. Caddy edge has its own per-IP limit (200/hour); this is the
+    # daily budget that survives short bursts.
+    ip_rate_limit_per_day: int = 2000
 
     # ── CORS ────────────────────────────────────────────────────────────
     # Comma-separated list of allowed origins. Default `*` keeps dev easy;

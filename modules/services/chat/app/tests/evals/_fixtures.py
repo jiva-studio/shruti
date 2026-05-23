@@ -31,7 +31,7 @@ from shruti_chat.agent.tools import TOOLS, bind_repositories, build_personalized
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.config import get_settings
 from shruti_chat.db.client import get_pool, init_pool
-from shruti_chat.db.migrate import apply_schema
+from shruti_chat.db.assert_schema import assert_schema_ready
 from shruti_chat.domain.turn_context import TurnContext
 from shruti_chat.domain.user_context import FocusFragment, UserContext, UserContextTrack
 from shruti_chat.indexer.embed import get_embedder
@@ -218,7 +218,11 @@ async def _build_once() -> EvalChatClient:
     s = get_settings()
 
     pool = await init_pool(s)
-    await apply_schema()
+    # Evals expect the central migrator to have already applied the schema
+    # (CI/dev should `docker compose up migrator` before running evals).
+    # assert_schema_ready exits 1 if not — better than running evals
+    # against an empty DB and getting cryptic asyncpg errors.
+    await assert_schema_ready()
     legacy_llm.configure_providers(s)
     embedder = get_embedder(s)
 

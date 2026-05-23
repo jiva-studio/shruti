@@ -3,15 +3,17 @@
  * reachable one. `{path}` is substituted with the storage key (full path
  * from the bucket root, including the `public/` prefix).
  *
- * `shareAudioUrl` is the per-region endpoint of the share-audio cutter
- * function (AWS Lambda HTTP API for `global`, Yandex Cloud Function for
- * `russia`). Both return the same `public/shares/audio/<id>.mp3` URL on
- * the underlying S3 bucket; the consumer only needs to pick the
- * geographically-closer compute endpoint.
+ * After the move to self-hosted containers (P5.1 / P5.2 / P6.x), the
+ * `shareAudioUrl` and `shareVideoUrl` endpoints both point at our
+ * Caddy-fronted backend — `/share/audio/excerpts` and `/share/video/reels`
+ * respectively. The reverse-proxy strips the prefix before the request
+ * reaches the FastAPI / Express handlers.
  *
- * `shareVideoUrl` is the analogous per-region endpoint of the share-video
- * reel renderer. Returns `public/share/video/<id>.mp4`. Placeholder URLs
- * below are replaced with real ones after the first AWS / YC deploy.
+ * `urlTemplate` stays per-region — that's the public S3 bucket the
+ * mobile client streams lecture audio from directly (AWS S3 us-east-1
+ * for `global`, Yandex Object Storage for `russia`). Until a Russia VPS
+ * exists, both regions' share-* URLs share the same Cloud Provider box; the
+ * Russia entry will get its own host name once that lands.
  */
 
 export interface CdnServer {
@@ -22,20 +24,28 @@ export interface CdnServer {
   readonly shareVideoUrl: string
 }
 
+// Single host until we stand up a Russia VPS; sslip.io resolves
+// <ip-dashed>.sslip.io → 31.220.80.248 without us owning a domain.
+const HOST = "https://api.shruti.local"
+
 export const SERVERS: readonly CdnServer[] = [
   {
     id: "global",
     name: "Global",
     urlTemplate: "https://cdn-s3.shruti.local/{path}",
-    shareAudioUrl: "https://7hl2sboutd.execute-api.us-east-1.amazonaws.com/excerpts",
-    shareVideoUrl: "https://rl1sq2aa2m.execute-api.us-east-1.amazonaws.com/reels",
+    shareAudioUrl: `${HOST}/share/audio/excerpts`,
+    shareVideoUrl: `${HOST}/share/video/reels`,
   },
   {
     id: "russia",
     name: "Russia",
     urlTemplate: "https://cdn-ru.shruti.local/{path}",
-    shareAudioUrl: "https://functions.yandexcloud.net/d4er0qjat23q6ic6dt0p",
-    shareVideoUrl: "https://functions.yandexcloud.net/d4ejoscqdtsma2g73pg1",
+    // TODO: replace with a Russia-side host once the RU VPS is live. Until
+    // then Russia users hit the same backend as Global; their CDN reads
+    // (urlTemplate above) still resolve to Yandex Object Storage so big
+    // assets stay close, but share-* round-trips through Germany.
+    shareAudioUrl: `${HOST}/share/audio/excerpts`,
+    shareVideoUrl: `${HOST}/share/video/reels`,
   },
 ]
 

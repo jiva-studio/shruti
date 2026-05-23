@@ -14,9 +14,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shruti_chat.agent import llm
+from shruti_chat.api._auth import get_current_user
 from shruti_chat.application.cache_helpers import TTL_30D, cached_str
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.config import get_settings
+from shruti_chat.infra.auth.jwt_verifier import VerifiedUser
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -86,12 +88,6 @@ def _check_app_token(token: str | None) -> None:
         raise HTTPException(status_code=401, detail="invalid app token")
 
 
-def _check_device_id(device_id: str | None) -> str:
-    if not device_id:
-        raise HTTPException(status_code=400, detail="missing X-Device-Id header")
-    return device_id
-
-
 def _clean(raw: str) -> str:
     """Strip quotes, trailing punctuation, control whitespace."""
     s = raw.strip()
@@ -108,22 +104,21 @@ async def title(
     request: Request,
     body: TitleRequest,
     x_app_token: str | None = Header(default=None),
-    x_device_id: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> TitleResponse:
     _check_app_token(x_app_token)
-    device_id = _check_device_id(x_device_id)
     settings = get_settings()
     if idempotency_key:
-        log.info("title_request", device_id=device_id, idempotency_key=idempotency_key)
+        log.info("title_request", user_id=user.id, idempotency_key=idempotency_key)
 
     # Separate quota bucket from /chat so heavy title traffic from a flaky
-    # client retrying many fresh sessions can't drain the main chat quota,
-    # and a leaked app_shared_token (it ships in every APK) can't be used
-    # to bill unlimited /title calls.
+    # client retrying many fresh sessions can't drain the main chat quota.
     ip = request.client.host if request.client else "unknown"
-    rl = await deps.rate_limiter.check_and_increment(device_id, ip, scope="title")
+    rl = await deps.rate_limiter.check_and_increment(
+        user.id, user.anonymous, ip, scope="title",
+    )
     if not rl.allowed:
         raise HTTPException(
             status_code=429,
