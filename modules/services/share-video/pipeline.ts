@@ -3,11 +3,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { S3Client } from '@aws-sdk/client-s3';
 import { ReelGenerator } from './src/ReelGenerator';
+import { log as rootLog } from './src/log';
 import { getTranscriber } from './src/utils/transcribers';
 import { forceAlign, wordsToSlides } from './src/utils/forceAlign';
 import { listAndConcatBackgrounds } from './src/utils/s3Backgrounds';
 import { downloadToFile, uploadFile, buildPublicUrl } from './storage';
-import { RenderRequest } from './eventAdapter';
+import { RenderRequest } from './src/validate';
 
 // 720x1280 (9:16). The pack source clips are archival 70s footage, so 1080p
 // was carrying upscaled noise without any real detail; dropping to 720 has no
@@ -26,10 +27,13 @@ function guessFfprobe(ffmpegPath: string): string {
   return fs.existsSync(cand) ? cand : 'ffprobe';
 }
 
-// Single-line JSON event log; flushes immediately so CloudWatch / YC Logging
-// see phase boundaries while the worker is still running, not only at the end.
+// Phase-level structured log for the render pipeline. Each call lands as
+// a {"message":"<phase>",...} JSON line — `phase` (kept as a separate
+// field for backward compatibility with any Datadog dashboard built
+// during the Lambda era) doubles as the human-readable event name.
+const log = rootLog.child({ component: 'pipeline' });
 function logPhase(phase: string, fields: Record<string, unknown> = {}): void {
-  console.log(JSON.stringify({ phase, t_ms: Date.now(), ...fields }));
+  log.info({ phase, ...fields }, phase);
 }
 
 export interface RenderArgs {

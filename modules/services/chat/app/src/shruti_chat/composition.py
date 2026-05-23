@@ -16,6 +16,7 @@ from fastapi import Request
 
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.config import Settings
+from shruti_chat.infra.auth.jwt_verifier import JwtVerifier
 from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
@@ -37,6 +38,7 @@ class AppDeps:
     outline_cache: OutlineCache
     pdf_storage: PdfStorage
     rate_limiter: RateLimiter
+    jwt_verifier: JwtVerifier
     kv_cache: KVCache
     # LangGraph wiring. `llm` is the injected LLMPort (OpenRouter adapter
     # in production, FakeLLM in tests). `chat_graph` is the compiled

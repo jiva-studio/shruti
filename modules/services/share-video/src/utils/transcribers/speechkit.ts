@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { log } from '../../log';
 import { Transcriber, TranscribeOptions, TranscriptionResult, WordTimestamp } from './types';
 
 const RECOGNIZE_URL = 'https://stt.api.cloud.yandex.net/stt/v3/recognizeFileAsync';
@@ -120,7 +121,7 @@ export function createSpeechKitTranscriber(opts: SpeechKitOptions): Transcriber 
         try {
           await opts.s3.send(new DeleteObjectCommand({ Bucket: opts.bucket, Key: scratchKey }));
         } catch (e: any) {
-          console.warn(`speechkit scratch cleanup failed for ${scratchKey}: ${e?.message}`);
+          log.warn({ scratchKey, err: e?.message }, 'speechkit_scratch_cleanup_failed');
         }
       }
     },

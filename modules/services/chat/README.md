@@ -1,19 +1,23 @@
 # Shruti chat backend
 
 Semantic chat over Shruti lecture transcripts. Python service deployed on a
-Cloud Provider VPS via docker-compose. HTTPS via Caddy + sslip.io (auto Let's Encrypt
-cert, no domain purchase needed). Periodically pulls the catalog DB and
+VPS as one of several shruti services behind a shared `infra/` stack
+(Postgres + Caddy + chat + auth). Periodically pulls the catalog DB and
 reviewed transcripts from S3, embeds chunks into pgvector via OpenAI
 text-embedding-3-small through OpenRouter, exposes `/chat` with an LLM agent.
 
 ## Local dev
 
+Whole stack (postgres + chat) via the workspace-level dev compose:
+
 ```bash
-cd modules/services/chat
-cp .env.example .env
+cp infra/.env.example infra/.env.dev
 # fill: AWS_*, OPENROUTER_API_KEY, APP_SHARED_TOKEN
 
-docker compose -f compose/docker-compose.dev.yml up --build
+docker compose \
+  -f infra/compose/docker-compose.yml \
+  -f infra/compose/docker-compose.dev.yml \
+  up --build
 # wait for service_ready (~few seconds)
 # indexer chews the corpus in the background
 
@@ -24,42 +28,14 @@ curl -fsS -N -X POST http://localhost:8080/chat \
   -d '{"messages":[{"role":"user","content":"что Прабхупада говорил про варнашраму?"}],"lang":"ru"}'
 ```
 
-## Production deploy (Cloud Provider)
+## Production deploy
 
-### One-time: provision the VPS
-
-In Cloud Provider's panel <https://my.contabo.com>:
-
-1. **Cloud VPS** → **Cloud VPS 10** (or higher) — 4 vCPU, 8 GB RAM, 75 GB NVMe — **€3.60/mo**
-2. **Region**: Düsseldorf / Nuremberg (EU, low-latency to S3)
-3. **Image**: Ubuntu 24.04
-4. **SSH key**: upload `~/.ssh/id_ed25519.pub` (Cloud Provider emails a root password too)
-5. Create. After ~2 minutes you get a public IPv4.
-
-### Deploy
+Deployment is workspace-level — see `infra/README.md`. One command brings
+up Postgres + chat + auth + Caddy on the target VPS:
 
 ```bash
-SERVER_IP=YOUR.IP.HERE ./scripts/deploy.sh
+SERVER_IP=YOUR.IP.HERE ./infra/scripts/deploy.sh
 ```
-
-`deploy.sh`:
-- Waits for SSH on the IP
-- Installs docker + compose plugin if missing (via cloud-init or apt)
-- Generates a strong `POSTGRES_PASSWORD` on the server (one-shot, persisted in `/opt/shruti-chat/.pg_password`)
-- Auto-derives `DOMAIN` = `<ip-dashed>.sslip.io`
-- rsync's code + `.env` (with prod values injected)
-- `docker compose up -d --build`
-- Waits for `/healthz` over HTTPS (Caddy issues LE cert on first run, ~60s)
-- Prints `/readyz` and `/status`
-
-### Redeploy after code changes
-
-```bash
-SERVER_IP=YOUR.IP.HERE ./scripts/deploy.sh
-```
-
-Idempotent. Reuses the existing Postgres password, only rebuilds the chat
-container; postgres + caddy keep running.
 
 ## Endpoints
 
@@ -94,14 +70,12 @@ indexer detects mismatch and re-embeds.
 ## Layout
 
 ```
-agent/
+modules/services/chat/
 ├── Dockerfile                       # python:3.12-slim, no torch
-├── compose/
-│   ├── docker-compose.yml           # prod: postgres + chat + caddy
-│   ├── docker-compose.dev.yml       # dev: postgres + chat (no caddy)
-│   └── caddy/Caddyfile              # auto-TLS via sslip.io
 ├── app/                             # FastAPI app + indexer + agent
 └── scripts/
-    ├── deploy.sh                    # rsync + ssh + compose up + probes
     └── smoke_chunker.py             # local chunker sanity check
 ```
+
+Compose, Caddy, and deploy live under workspace `infra/` (shared by all
+services). See `infra/README.md`.

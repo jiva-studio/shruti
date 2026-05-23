@@ -2,7 +2,8 @@
   <p class="build-info" @click="emit('tap')">
     v{{ version }} ({{ buildId }})
     <span class="build-info-db"> DB {{ dbNumber ?? "—" }} · scheme {{ dbScheme }} </span>
-    <span v-if="appUserId" class="build-info-user"> uid {{ appUserId }} </span>
+    <span v-if="shrutiUserId" class="build-info-user"> uid {{ shrutiUserId }} </span>
+    <span v-if="appUserId" class="build-info-user"> rc {{ appUserId }} </span>
   </p>
 </template>
 
@@ -14,6 +15,8 @@ defineProps<{
   dbScheme: number
   /** RC customer id, shown only in debug mode. Caller passes `undefined` otherwise. */
   appUserId?: string | undefined
+  /** Shruti auth-service user id, shown only in debug mode. */
+  shrutiUserId?: string | undefined
 }>()
 
 const emit = defineEmits<{

@@ -27,7 +27,7 @@ from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.composition import AppDeps
 from shruti_chat.config import get_settings
 from shruti_chat.db.client import close_pool, init_pool
-from shruti_chat.db.migrate import apply_schema
+from shruti_chat.db.assert_schema import assert_schema_ready
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.embed import get_embedder
 from shruti_chat.infra.rate_limit.pg_rate_limit_store import PgRateLimitStore
@@ -40,6 +40,7 @@ from shruti_chat.infra.cache.cached_embedder import CachedEmbedder
 from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from shruti_chat.infra.cache.redis_kv_cache import RedisKVCache
 from shruti_chat.infra.cache.tiered_kv_cache import TieredKVCache
+from shruti_chat.infra.auth.jwt_verifier import JwtVerifier
 from shruti_chat.infra.pdf import register_fonts
 from shruti_chat.infra.storage.s3_outline_cache import S3OutlineCache
 from shruti_chat.infra.storage.s3_pdf_storage import S3PdfStorage
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
     log.info("service_starting", version=s.service_version)
 
     pool = await init_pool(s)
-    await apply_schema()
+    await assert_schema_ready()
     llm.configure_providers(s)
     embedder = get_embedder(s)
 
@@ -102,6 +103,7 @@ async def lifespan(app: FastAPI):
     rate_limiter = RateLimiter(
         store=PgRateLimitStore(pool=pool), settings=s,
     )
+    jwt_verifier = JwtVerifier(public_key_path=s.jwt_public_key_path)
 
     # LangGraph wiring. Compile the chat graph once and stash on deps —
     # node fns are async and stateless, the compiled graph is reused
@@ -122,6 +124,7 @@ async def lifespan(app: FastAPI):
         outline_cache=outline_cache,
         pdf_storage=pdf_storage,
         rate_limiter=rate_limiter,
+        jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,
         llm=llm_provider,
         chat_graph=chat_graph,
@@ -188,7 +191,9 @@ app.add_middleware(
     allow_headers=[
         "Content-Type",
         "Accept",
-        "X-Device-Id",
+        # JWT for user identity + per-user rate-limit keying. Replaces
+        # the legacy X-Device-Id header.
+        "Authorization",
         "X-App-Token",
         # SSE v1 handshake — client MUST send `X-Chat-Protocol-Version: 1`
         # on every /chat call (see api/chat.py:_check_protocol_version).
