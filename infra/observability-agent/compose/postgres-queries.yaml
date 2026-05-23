@@ -16,7 +16,7 @@ lectorium_share_video_queue_depth:
   query: |
     SELECT count(*)::bigint AS depth
       FROM public.tasks
-     WHERE state = 'pending'
+     WHERE status = 'pending'
   master: true
   metrics:
     - depth:
@@ -33,7 +33,7 @@ lectorium_share_video_oldest_pending_seconds:
       0
     ) AS age_seconds
       FROM public.tasks
-     WHERE state = 'pending'
+     WHERE status = 'pending'
   master: true
   metrics:
     - age_seconds:
@@ -44,14 +44,14 @@ lectorium_share_video_oldest_pending_seconds:
 # `failed`). Cardinality bounded by enum.
 lectorium_share_video_tasks_by_state:
   query: |
-    SELECT state, count(*)::bigint AS count
+    SELECT status, count(*)::bigint AS count
       FROM public.tasks
-     GROUP BY state
+     GROUP BY status
   master: true
   metrics:
-    - state:
+    - status:
         usage: LABEL
-        description: "Task state"
+        description: "Task status"
     - count:
         usage: GAUGE
         description: "Number of share-video tasks in each state"
