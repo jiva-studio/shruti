@@ -286,25 +286,28 @@ async def with_langfuse_trace(
         yield None
         return
     try:
-        # `input=` and `output=` MUST be passed to start_as_current_span
-        # (and later span.update(output=...)) — the SDK reads the root
-        # span's input/output and surfaces them as trace I/O in the UI.
-        # `client.update_current_trace(input=...)` only adds an
-        # `langfuse.trace.input` ATTRIBUTE that lands in Metadata.
+        # Root span carries the turn timing; trace-level input/output
+        # are set EXPLICITLY below via `update_current_trace` because
+        # Langfuse v3's "trace I/O mirrors root observation" behaviour
+        # is unreliable when nested observations exist (issue #9556) —
+        # child generations overwrite trace.input/output attributes.
+        # Setting them on the trace directly survives those rewrites.
         with client.start_as_current_span(name=name, input=input) as span:
             try:
                 trace_metadata: dict[str, Any] = {"chat_trace_id": trace_id}
                 if session_title:
                     trace_metadata["session_title"] = session_title
                 client.update_current_trace(
+                    name=name,
                     user_id=user_id,
                     session_id=session_id,
+                    input=input,
                     metadata=trace_metadata,
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("langfuse_trace_update_failed", error=str(exc))
-            # Yield the span — caller does `span.update(output=...)` at
-            # end-of-turn before the with-block exits.
+            # Yield the span — caller does `update_current_trace(
+            # output=...)` at end-of-turn before the with-block exits.
             yield span
     except Exception as exc:  # noqa: BLE001
         log.warning("langfuse_trace_open_failed", trace_id=trace_id, error=str(exc))
@@ -312,33 +315,24 @@ async def with_langfuse_trace(
 
 
 def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
-    """Build a LangChain `CallbackHandler` (v3) that auto-attaches to
-    the current OpenTelemetry span opened by `with_langfuse_trace`.
+    """Deprecated. Always returns None.
 
-    v3 dropped the `stateful_client=` / `trace_id=` kwargs — the handler
-    inherits the active span context automatically. As long as the LLM
-    call happens inside the `with_langfuse_trace` async-with body,
-    spans nest under the correct root.
+    Originally returned a LangChain `CallbackHandler` so node-level LLM
+    calls could attach to the active trace. We removed it in favour of
+    explicit `langfuse.start_as_current_observation(as_type="generation",
+    ...)` wraps inside `infra/llm_provider/openrouter.py` because the
+    handler:
+      - emitted `type=span` instead of `type=generation` for inner
+        ChatOpenAI calls in LangGraph-wrapped nodes (no model attribute,
+        no usage_details, no cost),
+      - produced unnamed nested children (`ChatOpenAI`, `RunnableLambda`)
+        that cluttered the trace tree below our semantic `router_decision`
+        / `query_expander` / `synthesizer` spans.
 
-    `trace_id` and `span_name` are kept in the signature for log
-    breadcrumbs and a future migration if we need explicit threading.
+    The stub is retained so existing call sites that still build a
+    `callbacks=[cb] if cb is not None else None` list don't need to be
+    edited — they end up passing `callbacks=None` which is a no-op in
+    the adapter.
     """
-    client = _LANGFUSE
-    if client is None or _force_fallback():
-        return None
-    try:
-        from langfuse.langchain import CallbackHandler  # type: ignore
-    except ImportError as exc:
-        log.warning("langfuse_callback_import_failed", error=str(exc))
-        return None
-
-    try:
-        return CallbackHandler()
-    except Exception as exc:  # noqa: BLE001
-        log.warning(
-            "langfuse_callback_build_failed",
-            trace_id=trace_id,
-            span_name=span_name,
-            error=str(exc),
-        )
-        return None
+    del trace_id, span_name  # unused — see docstring
+    return None
