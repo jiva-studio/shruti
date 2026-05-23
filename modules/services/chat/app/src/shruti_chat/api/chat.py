@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import uuid
 from time import perf_counter
 from typing import Any, AsyncIterator
@@ -26,6 +27,15 @@ from shruti_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 router = APIRouter()
+
+
+# OpenTelemetry trace_id: 32 lowercase hex chars, non-zero. A UUIDv4
+# stripped of its hyphens fits this exactly — that's what the mobile
+# client sends (the assistant ChatMessage.id minus hyphens). Validate
+# the header before honouring it so junk values can't flow into the
+# trace store.
+_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_TRACE_ID_ZERO = "0" * 32
 
 
 _SUPPORTED_PROTOCOL_VERSIONS = ("1",)
@@ -57,11 +67,25 @@ async def chat(
     body: ChatRequestDto,
     x_chat_protocol_version: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
+    x_trace_id: str | None = Header(default=None),
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ):
     _check_protocol_version(x_chat_protocol_version)
     request_id = uuid.uuid4().hex[:12]
+
+    # Client mints an assistant ChatMessage.id (UUIDv4) before opening
+    # the stream and sends its hyphenless 32-hex form as X-Trace-Id so
+    # message identity == Langfuse trace identity. Score writes from a
+    # later /chat/feedback POST can then reference the same id. If the
+    # header is missing or malformed (legacy client), we fall back to a
+    # server-minted id and just don't echo it back — the dependent UI
+    # (thumbs feedback) degrades gracefully on those rows.
+    client_trace_id: str | None = None
+    if x_trace_id and _TRACE_ID_RE.match(x_trace_id) and x_trace_id != _TRACE_ID_ZERO:
+        client_trace_id = x_trace_id
+    elif x_trace_id:
+        log.info("chat_x_trace_id_invalid", value=x_trace_id[:64])
 
     # Rate-limit gate (per-day per JWT-sub + per-IP).
     ip = request.client.host if request.client else "unknown"
@@ -132,6 +156,7 @@ async def chat(
                     deps=deps,
                     session_id=body.session_id,
                     session_title=body.session_title,
+                    client_trace_id=client_trace_id,
                 )
             async for ev in stream:
                 yield {

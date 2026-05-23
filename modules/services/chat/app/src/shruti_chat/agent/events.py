@@ -9,14 +9,8 @@ bumping the protocol version handshake in `api/chat.py`.
 
 The client and server negotiate protocol version via the
 `X-Chat-Protocol-Version` header (the request fails with 426 if
-absent or unsupported). The current set is **10 event types**:
+absent or unsupported). The current set is **9 event types**:
 
-- `meta`       — turn metadata, first event  `{trace_id: str}`
-                 Emitted before any `delta` so the client can persist
-                 the Langfuse trace id alongside the assistant message
-                 (used as the message identifier when POSTing
-                 `/chat/feedback`). Additive — old clients ignore.
-                 Also echoed on `done.data.trace_id` as a fallback.
 - `delta`      — text fragment            `{text: str}`
 - `tool_start` — about to dispatch tool   `{name?: str}`
 - `tool_end`   — dispatch completed       `{name?: str}`
@@ -44,10 +38,8 @@ absent or unsupported). The current set is **10 event types**:
                  `{kind: "verse"|"lecture_chunk"|"library_doc",
                    id: str, label: str}`. Same ephemeral lifecycle
                  as `research_question`.
-- `done`       — final terminator         `{trace_id: str, aliases?: dict, tokens?: int}`
-                 `trace_id` repeats the `meta` value as a fallback for
-                 clients that missed the initial event. Aliases map
-                 embedded inline (no separate event).
+- `done`       — final terminator         `{aliases?: dict, tokens?: int}`
+                 Aliases map embedded here (no separate event).
 - `error`      — error payload            `{code, message, retry_after?}`
 
 The two `research_*` events are additive — old clients ignore

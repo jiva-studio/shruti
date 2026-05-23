@@ -173,12 +173,21 @@ async def run_chat_turn(
     deps: AppDeps | None = None,
     session_id: str | None = None,
     session_title: str | None = None,
+    client_trace_id: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
 
     Same shape as the legacy monolithic loop: takes history + lang +
     request_id, yields `AgentEvent`s. The graph internals are hidden
     behind the `astream` event bridge below.
+
+    `client_trace_id` is the hyphenless 32-hex form of the client's
+    assistant `ChatMessage.id` (validated upstream in `api/chat.py`).
+    When present, it becomes the Langfuse trace_id so a later
+    `/chat/feedback` POST referencing the same message id lands the
+    score on the right trace. When absent (legacy client), a fresh
+    server-side trace id is generated and never exposed to the client
+    — the feedback UI on that row stays hidden.
     """
     if deps is None or deps.chat_graph is None or deps.llm is None:
         raise RuntimeError(
@@ -187,15 +196,12 @@ async def run_chat_turn(
         )
 
     trace_id = request_id or "anon"
-    # Langfuse-side trace ID. Always a fresh uuid4 even when request_id
-    # is already a uuid — keeping it distinct from the structlog
-    # `trace_id` lets us evolve `request_id` semantics (e.g. one HTTP
-    # request → N proactive turns each with its own Langfuse trace)
-    # without breaking the cross-link. The same value is bound into
+    # Langfuse-side trace ID. Prefer the client-supplied one so message
+    # identity == trace identity for the feedback flow; otherwise fall
+    # back to a fresh server-minted id. The same value is bound into
     # structlog so Grafana's Loki derived field
-    # `langfuse_trace_id=([a-f0-9-]+)` resolves to the right Langfuse
-    # URL.
-    langfuse_trace_id = str(uuid4())
+    # `langfuse_trace_id=([a-f0-9]+)` resolves to the right Langfuse URL.
+    langfuse_trace_id = client_trace_id or uuid4().hex
     bind_turn_context(
         trace_id=trace_id,
         request_id=request_id,
@@ -216,14 +222,6 @@ async def run_chat_turn(
     full_prose: list[str] = []
 
     try:
-        # ── First event: hand the trace id to the client ──────────────
-        # Mobile uses it as the message identifier when POSTing feedback
-        # to /chat/feedback. Old clients ignore unknown SSE event types
-        # (see events.py docstring on additive evolution), so no protocol
-        # bump needed. Also echoed on `done` below as a fallback for the
-        # rare case the client missed `meta` on an unstable reconnect.
-        yield AgentEvent(type="meta", data={"trace_id": langfuse_trace_id})
-
         # ── Build per-turn services (aliases + expander + tools) ──────
         aliases = TurnAliasMap()
         # Pre-mint refs for `current_track_id` and `focus.track_id` so
@@ -466,7 +464,7 @@ async def run_chat_turn(
         # freshly-finalised assistant message and ships it back on the
         # next turn so `_fold_prior_assistant_content` rewrites chip
         # markers in history into `[^N]` form.
-        done_data: dict[str, Any] = {"trace_id": langfuse_trace_id}
+        done_data: dict[str, Any] = {}
         if len(aliases) > 0:
             done_data["aliases"] = aliases.serialize()
         yield AgentEvent(type="done", data=done_data)

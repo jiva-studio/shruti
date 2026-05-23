@@ -47,7 +47,6 @@ interface ParsedMeta {
   readonly error: ChatMessageError | undefined
   readonly aliases: Record<string, ChatAliasEntry> | undefined
   readonly focus: ChatFocusPayload | undefined
-  readonly traceId: string | undefined
   readonly feedback: ChatFeedbackState | undefined
 }
 
@@ -59,7 +58,6 @@ const EMPTY_META: ParsedMeta = Object.freeze({
   error: undefined,
   aliases: undefined,
   focus: undefined,
-  traceId: undefined,
   feedback: undefined,
 })
 
@@ -90,7 +88,6 @@ function parseMeta(raw: unknown): ParsedMeta {
     error: parseError(data.error),
     aliases: extractAliases(data.aliases),
     focus: extractFocus(data.focus),
-    traceId: typeof data.traceId === "string" && data.traceId.length > 0 ? data.traceId : undefined,
     feedback: extractFeedback(data.feedback),
   }
 }
@@ -187,7 +184,6 @@ function wrapMeta(payload: {
   error?: ChatMessageError | undefined
   aliases?: Record<string, ChatAliasEntry>
   focus?: ChatFocusPayload
-  traceId?: string
   feedback?: ChatFeedbackState
 }): string {
   const data: Record<string, unknown> = {}
@@ -199,7 +195,6 @@ function wrapMeta(payload: {
   if (payload.error) data.error = payload.error
   if (payload.aliases && Object.keys(payload.aliases).length > 0) data.aliases = payload.aliases
   if (payload.focus) data.focus = payload.focus
-  if (payload.traceId) data.traceId = payload.traceId
   if (payload.feedback) data.feedback = payload.feedback
   return JSON.stringify({ _v: CURRENT_META_V, data })
 }
@@ -222,7 +217,6 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     aliases: meta.aliases,
     focus: meta.focus,
   }
-  if (meta.traceId) msg.traceId = meta.traceId
   if (meta.feedback) {
     msg.feedbackState = meta.feedback.state
     if (meta.feedback.category) msg.feedbackCategory = meta.feedback.category
@@ -260,7 +254,6 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: input.error,
         aliases: input.aliases,
         focus: input.focus,
-        traceId: input.traceId,
       })
       await db.execute(
         `INSERT INTO chat_messages
@@ -283,7 +276,6 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         aliases: input.aliases && Object.keys(input.aliases).length > 0 ? input.aliases : undefined,
         focus: input.focus,
       }
-      if (input.traceId) out.traceId = input.traceId
       return out
     },
 
@@ -305,7 +297,6 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: current.error,
         aliases: current.aliases,
         focus: current.focus,
-        traceId: current.traceId,
         feedback: current.feedback,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
@@ -330,7 +321,6 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: current.error,
         aliases: current.aliases,
         focus: current.focus,
-        traceId: current.traceId,
         feedback: current.feedback,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
@@ -352,7 +342,6 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         error: current.error,
         aliases: current.aliases,
         focus: current.focus,
-        traceId: current.traceId,
         feedback,
       })
       await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])

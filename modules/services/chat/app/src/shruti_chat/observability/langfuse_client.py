@@ -286,15 +286,24 @@ async def with_langfuse_trace(
         yield None
         return
     try:
+        # `trace_context` forces Langfuse to use OUR `trace_id` for the
+        # OTel trace instead of generating its own — that way the value
+        # the client sent in `X-Trace-Id` (the assistant message id,
+        # hyphenless) IS the Langfuse trace_id, and a later
+        # /chat/feedback POST with the same id lands on the right trace.
         # Root span carries the turn timing; trace-level input/output
         # are set EXPLICITLY below via `update_current_trace` because
         # Langfuse v3's "trace I/O mirrors root observation" behaviour
         # is unreliable when nested observations exist (issue #9556) —
         # child generations overwrite trace.input/output attributes.
         # Setting them on the trace directly survives those rewrites.
-        with client.start_as_current_span(name=name, input=input) as span:
+        with client.start_as_current_span(
+            name=name,
+            input=input,
+            trace_context={"trace_id": trace_id},
+        ) as span:
             try:
-                trace_metadata: dict[str, Any] = {"chat_trace_id": trace_id}
+                trace_metadata: dict[str, Any] = {}
                 if session_title:
                     trace_metadata["session_title"] = session_title
                 client.update_current_trace(
@@ -302,7 +311,7 @@ async def with_langfuse_trace(
                     user_id=user_id,
                     session_id=session_id,
                     input=input,
-                    metadata=trace_metadata,
+                    metadata=trace_metadata or None,
                 )
             except Exception as exc:  # noqa: BLE001
                 log.warning("langfuse_trace_update_failed", error=str(exc))

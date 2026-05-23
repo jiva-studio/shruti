@@ -144,11 +144,6 @@ export interface ChatMessage {
    *  (history → LLM stays a vanilla user turn); the renderer branches
    *  on this field to draw a focus card instead of the normal bubble. */
   focus?: ChatFocusPayload
-  /** Langfuse trace identifier minted by the chat-service for this
-   *  assistant message. Used as the message id when POSTing
-   *  `/chat/feedback` so the score lands on the right trace. Absent on
-   *  legacy messages (pre-feedback rollout) and on user-role rows. */
-  traceId?: string
   /** Local feedback state — last value the user committed (or `null`
    *  if they haven't acted). When `down`, optional `feedbackCategory`
    *  and `feedbackComment` carry what was sent. Persisted so the
