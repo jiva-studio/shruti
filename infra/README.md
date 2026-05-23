@@ -169,11 +169,36 @@ leaked key can't run up an unbounded bill:
 - OpenRouter: <https://openrouter.ai/settings/credits> — load a fixed
   prepaid balance instead of auto-recharge.
 
-### 5. Bootstrap the VPS
+### 5. ghcr pull credentials  *(operator)*
+
+Packages on ghcr.io are kept **private**. The VPS needs a long-lived
+docker login so both `docker compose pull` and Watchtower can fetch
+images. We store credentials inside the project tree (under
+`/opt/shruti/docker-config/`) — not in `/root/.docker/` — so every
+piece of state for one VPS lives in one directory.
+
+1. Create a **classic** Personal Access Token at
+   <https://github.com/settings/tokens/new> with **only** the
+   `read:packages` scope. (Fine-grained PATs for ghcr container packages
+   are still beta and don't expose an Org-level "Packages" permission;
+   classic is the working path.)
+2. Place it via stdin so it never lands in shell history:
+
+   ```bash
+   ssh root@<ip> 'mkdir -p /opt/shruti/docker-config'
+   echo "$GHCR_PAT" | ssh root@<ip> 'docker --config /opt/shruti/docker-config login ghcr.io -u <github-user> --password-stdin'
+   ssh root@<ip> 'chmod 600 /opt/shruti/docker-config/config.json'
+   ```
+
+The next `deploy.sh` run reads the file via `DOCKER_CONFIG`; the
+Watchtower service in the prod overlay bind-mounts it at
+`/config/config.json:ro`.
+
+### 6. Bootstrap the VPS
 
 ```bash
 # SSH in and prepare directories
-ssh root@<ip> 'mkdir -p /opt/shruti/jwt && chmod 700 /opt/shruti /opt/shruti/jwt'
+ssh root@<ip> 'mkdir -p /opt/shruti/jwt /opt/shruti/docker-config && chmod 700 /opt/shruti /opt/shruti/jwt /opt/shruti/docker-config'
 
 # Place .env (copy infra/.env.example, fill in real values, scp)
 scp infra/.env.example root@<ip>:/opt/shruti/.env
@@ -191,7 +216,7 @@ If this VPS previously ran the legacy `/opt/shruti-chat` stack:
 ssh root@<ip> 'bash -s' < infra/scripts/wipe-old.sh
 ```
 
-### 6. Deploy
+### 7. Deploy
 
 ```bash
 SERVER_IP=<ip> ./infra/scripts/deploy.sh

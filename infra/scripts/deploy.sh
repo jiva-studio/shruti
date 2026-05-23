@@ -80,14 +80,20 @@ rsync -avz --delete \
   "$SSH_TARGET:$REMOTE_DIR/infra/"
 
 # ── 4. Pull latest images and bring stack up. ────────────────────────
-# Note `docker compose pull` honours image tags from .env (e.g. if the
+# `docker compose pull` honours image tags from .env (e.g. if the
 # operator pinned SHRUTI_AUTH_TAG=main-<sha> for a rollback, that's
 # what gets pulled, not :latest).
+#
+# Override DOCKER_CONFIG so the daemon reads ghcr credentials from the
+# project tree (/opt/shruti/docker-config/config.json) rather than
+# /root/.docker — keeps all per-project state under $REMOTE_DIR.
+COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/docker-config docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env"
+
 echo "→ docker compose pull..."
-ssh_run "cd $REMOTE_DIR && docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env pull"
+ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD pull"
 
 echo "→ docker compose up -d..."
-ssh_run "cd $REMOTE_DIR && docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env up -d"
+ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d"
 
 # ── 5. Health-check. ─────────────────────────────────────────────────
 DOMAIN=$(ssh_run "grep -E '^SHRUTI_DOMAIN=' $REMOTE_DIR/.env | head -1 | cut -d= -f2-")
