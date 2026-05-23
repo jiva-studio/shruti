@@ -145,20 +145,32 @@ def _chunk_to_domain(chunk: AIMessageChunk) -> CompletionChunk:
 
 
 @lru_cache(maxsize=32)
-def _build_client(api_key: str, model: str, temperature_key: float | None) -> ChatOpenAI:
-    """Module-level LRU cache of `ChatOpenAI` by (model, temperature).
+def _build_client(
+    api_key: str,
+    model: str,
+    temperature_key: float | None,
+    streaming: bool = True,
+) -> ChatOpenAI:
+    """Module-level LRU cache of `ChatOpenAI` by (model, temperature, streaming).
 
     Each `ChatOpenAI` owns an httpx client with a persistent connection
     pool — recreating it per call meant a fresh TLS handshake on every
     LLM hop (50-150 ms × ~5-8 calls per research turn = up to a second
     of pure connection overhead). The instance is async-safe and stateless
     apart from its conn pool, so sharing is trivially correct.
+
+    `streaming=False` is used for `structured_output()` calls — when the
+    OpenAI-compatible provider streams, `AIMessage.usage_metadata` is
+    None on the final aggregated message (tokens only land per-chunk on
+    `AIMessageChunk` during the stream, which `with_structured_output`
+    discards). Non-streaming gives us a complete AIMessage with
+    `usage_metadata` populated, which we feed to Langfuse.
     """
     kwargs: dict[str, Any] = {
         "model": _normalise_model(model),
         "base_url": _OPENROUTER_BASE_URL,
         "api_key": api_key,
-        "streaming": True,
+        "streaming": streaming,
     }
     if temperature_key is not None:
         kwargs["temperature"] = temperature_key
@@ -204,8 +216,14 @@ class OpenRouterLLMProvider:
         )
         return self._default_model
 
-    def _client_for(self, model: str, *, temperature: float | None) -> ChatOpenAI:
-        return _build_client(self._api_key, model, temperature)
+    def _client_for(
+        self,
+        model: str,
+        *,
+        temperature: float | None,
+        streaming: bool = True,
+    ) -> ChatOpenAI:
+        return _build_client(self._api_key, model, temperature, streaming)
 
     @staticmethod
     def _generation_ctx(
@@ -355,7 +373,11 @@ class OpenRouterLLMProvider:
         # editors don't expect temperature changes to take effect for
         # structured_output prompts.
         validated_model = self._validate_model(model)
-        client = self._client_for(validated_model, temperature=0)
+        # `streaming=False`: see `_build_client` docstring — streaming
+        # clients drop `usage_metadata` from the final AIMessage, which
+        # we need to feed Langfuse generation tokens. Structured output
+        # is one-shot anyway; no value lost by not streaming.
+        client = self._client_for(validated_model, temperature=0, streaming=False)
         # `include_raw=True` so we can read `usage_metadata` off the
         # underlying AIMessage and feed it to the Langfuse generation.
         # Without it `with_structured_output` returns the parsed Pydantic
