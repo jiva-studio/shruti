@@ -152,9 +152,9 @@ REMOTE
 compose_up() {
   local remote_dir="$1"; shift
   log "docker compose up -d in $remote_dir"
-  # All images pulled from GHCR (built in CI by services-ghcr.yml).
-  # No build: sections in compose → no on-host build step.
-  ssh_run "cd '$remote_dir/compose' && docker compose pull --quiet && docker compose up -d $*"
+  # Private GHCR packages — docker reads auth from $remote_dir/docker-auth/config.json
+  # (operator seeds it once: see infra/observability/README.md → "GHCR pull credentials").
+  ssh_run "cd '$remote_dir/compose' && DOCKER_CONFIG='$remote_dir/docker-auth' docker compose pull --quiet && DOCKER_CONFIG='$remote_dir/docker-auth' docker compose up -d $*"
   ok "compose up complete"
 }
 
