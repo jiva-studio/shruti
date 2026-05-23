@@ -350,11 +350,30 @@ async def run_chat_turn(
                 full_prose.append(tail)
 
             # ── Record final answer on the Langfuse trace ────────────────
+            # Write to BOTH the root span (latency / span output pane) AND
+            # the trace itself (Trace row + Sessions tab). Trace-level
+            # write goes through `update_current_trace` because span
+            # output does NOT mirror to trace I/O reliably once nested
+            # generations have already touched trace attributes
+            # (langfuse issue #9556).
             if langfuse_root_span is not None and full_prose:
+                final_output = {"answer": "".join(full_prose)}
                 try:
-                    langfuse_root_span.update(
-                        output={"answer": "".join(full_prose)}
+                    langfuse_root_span.update(output=final_output)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "langfuse_span_output_failed",
+                        request_id=request_id,
+                        error=str(exc),
                     )
+                try:
+                    from shruti_chat.observability.langfuse_client import (
+                        get_langfuse,
+                    )
+
+                    lf = get_langfuse()
+                    if lf is not None:
+                        lf.update_current_trace(output=final_output)
                 except Exception as exc:  # noqa: BLE001
                     log.warning(
                         "langfuse_trace_output_failed",

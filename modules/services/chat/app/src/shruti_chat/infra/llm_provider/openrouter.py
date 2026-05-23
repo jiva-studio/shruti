@@ -15,6 +15,7 @@ google/gemini-3.1-flash-lite (default) and Claude (premium tier).
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from functools import lru_cache
 from typing import Any, AsyncIterator, TypeVar
 
@@ -31,6 +32,7 @@ from pydantic import BaseModel
 
 from shruti_chat.config import Settings
 from shruti_chat.domain.entities import CompletionChunk, Message, ToolCallDelta
+from shruti_chat.observability.langfuse_client import get_langfuse
 from shruti_chat.observability.logging import get_logger
 
 
@@ -206,32 +208,46 @@ class OpenRouterLLMProvider:
         return _build_client(self._api_key, model, temperature)
 
     @staticmethod
-    def _runnable_config(
-        callbacks: list[Any] | None,
-        run_name: str | None = None,
-    ) -> dict[str, Any] | None:
-        """Build the LangChain `RunnableConfig` carrying callbacks. We
-        attach via `astream(config=...)` / `ainvoke(config=...)` rather
-        than `client.bind(callbacks=...)` because `bind` returns a
-        `RunnableBinding` that doesn't expose `with_structured_output`
-        — and structured_output is what the router uses. Per-call
-        config keeps the pooled `ChatOpenAI` instance clean and lets
-        the same client serve unrelated turns concurrently.
+    def _generation_ctx(
+        *,
+        name: str | None,
+        model: str,
+        messages: list[Message],
+        model_parameters: dict[str, Any] | None,
+    ) -> Any:
+        """Open a Langfuse `generation` observation around one LLM call.
 
-        `run_name` becomes the span label in Langfuse via the
-        CallbackHandler. Without it the trace shows raw class names
-        ("ChatOpenAI", "RunnableSequence") which are meaningless when
-        every node is the same LangChain machinery — callers MUST pass
-        a semantic name (e.g. "router_decision", "synthesizer_stream").
+        We register every LLM call as a typed `generation` (NOT a plain
+        `span`) so the UI gets:
+          - model attribute → Langfuse pricing lookup → real cost
+          - usage_details (set on `.update()` after the call completes)
+          - input/output rendered in the dedicated panes, not metadata
+
+        Why not the LangChain CallbackHandler: in our stack (LangGraph +
+        OpenRouter, LLM lives inside a LangGraph node wrapped runnable),
+        the handler's `on_chat_model_start` is unreliable — calls land
+        as `type=span` not `type=generation` (langfuse issue #8025, by
+        design for non-canonical chains). Wrapping here at the only two
+        actual LLM call sites is exact and complete.
+
+        Returns the SDK's own context manager when a singleton exists,
+        otherwise a `nullcontext(None)` so the call site stays branch-
+        free. The caller MUST do `if gen is not None: gen.update(...)`.
         """
-        if not callbacks and not run_name:
-            return None
-        cfg: dict[str, Any] = {}
-        if callbacks:
-            cfg["callbacks"] = callbacks
-        if run_name:
-            cfg["run_name"] = run_name
-        return cfg
+        lf = get_langfuse()
+        if lf is None:
+            return nullcontext(None)
+        try:
+            return lf.start_as_current_observation(
+                as_type="generation",
+                name=name or "llm_call",
+                model=model,
+                input=messages,
+                model_parameters=model_parameters or None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("langfuse_generation_open_failed", error=str(exc))
+            return nullcontext(None)
 
     async def stream_completion(
         self,
@@ -241,12 +257,15 @@ class OpenRouterLLMProvider:
         tool_choice: str | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        # Legacy param: callers may still pass a list. We no longer
+        # propagate it to LangChain — the Langfuse CallbackHandler
+        # was producing `type=span` (not `generation`) and unnamed
+        # nested children. Manual `generation` wrap below replaces it.
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
-        client = self._client_for(
-            self._validate_model(model), temperature=temperature,
-        )
+        validated_model = self._validate_model(model)
+        client = self._client_for(validated_model, temperature=temperature)
         if tools:
             # langchain_openai accepts tool_choice as:
             #   "auto" | "required" | "none" | None  – generic modes
@@ -269,16 +288,54 @@ class OpenRouterLLMProvider:
                 tool_choice=chosen,
             )
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        config = self._runnable_config(callbacks, run_name)
-        stream_kwargs: dict[str, Any] = {"config": config} if config else {}
-        async for chunk in client.astream(lc_msgs, **stream_kwargs):
-            # ChatOpenAI emits AIMessageChunk; type-narrow defensively in
-            # case provider returns something else (Anthropic via OpenRouter
-            # has occasionally returned bare AIMessage on tool calls).
-            if isinstance(chunk, AIMessageChunk):
-                domain_chunk = _chunk_to_domain(chunk)
-                if domain_chunk:
+        gen_ctx = self._generation_ctx(
+            name=run_name,
+            model=validated_model,
+            messages=messages,
+            model_parameters=(
+                {"temperature": temperature} if temperature is not None else None
+            ),
+        )
+        # Accumulate text + token totals locally; the generation needs
+        # to know the FULL output, not per-chunk deltas, plus final
+        # usage counts (OpenRouter sends usage_metadata in the last
+        # chunk only, mirroring OpenAI's stream protocol).
+        text_acc: list[str] = []
+        tool_call_acc: list[dict[str, Any]] = []
+        usage_in = 0
+        usage_out = 0
+        with gen_ctx as gen:
+            try:
+                async for chunk in client.astream(lc_msgs):
+                    # ChatOpenAI emits AIMessageChunk; type-narrow
+                    # defensively — Anthropic via OpenRouter has been
+                    # observed returning bare AIMessage on tool calls.
+                    if not isinstance(chunk, AIMessageChunk):
+                        continue
+                    domain_chunk = _chunk_to_domain(chunk)
+                    if not domain_chunk:
+                        continue
+                    if (t := domain_chunk.get("text")):
+                        text_acc.append(t)
+                    if (tc := domain_chunk.get("tool_calls")):
+                        tool_call_acc.extend(tc)
+                    if (pt := domain_chunk.get("prompt_tokens")) is not None:
+                        usage_in = pt
+                    if (ct := domain_chunk.get("completion_tokens")) is not None:
+                        usage_out = ct
                     yield domain_chunk
+            finally:
+                if gen is not None:
+                    try:
+                        gen_output: dict[str, Any] = {"text": "".join(text_acc)}
+                        if tool_call_acc:
+                            gen_output["tool_calls"] = tool_call_acc
+                        gen.update(
+                            output=gen_output,
+                            usage_details={"input": usage_in, "output": usage_out},
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("langfuse_generation_update_failed", error=str(exc))
 
     async def structured_output(
         self,
@@ -286,6 +343,7 @@ class OpenRouterLLMProvider:
         schema: type[T],
         *,
         model: str | None = None,
+        # See `stream_completion`: legacy param, no longer threaded.
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> T:
@@ -296,18 +354,45 @@ class OpenRouterLLMProvider:
         # script for Langfuse documents this explicitly so prompt
         # editors don't expect temperature changes to take effect for
         # structured_output prompts.
-        client = self._client_for(self._validate_model(model), temperature=0)
-        structured = client.with_structured_output(schema)
+        validated_model = self._validate_model(model)
+        client = self._client_for(validated_model, temperature=0)
+        # `include_raw=True` so we can read `usage_metadata` off the
+        # underlying AIMessage and feed it to the Langfuse generation.
+        # Without it `with_structured_output` returns the parsed Pydantic
+        # instance only — we lose tokens / model attribution.
+        structured = client.with_structured_output(schema, include_raw=True)
         lc_msgs = [_to_langchain_message(m) for m in messages]
-        config = self._runnable_config(callbacks, run_name)
-        invoke_kwargs: dict[str, Any] = {"config": config} if config else {}
-        result = await structured.ainvoke(lc_msgs, **invoke_kwargs)
-        # `with_structured_output` returns the schema instance directly
-        # when method="function_calling" (the default). Type-cast here
-        # for callers' benefit.
-        if not isinstance(result, schema):
-            raise RuntimeError(
-                f"structured_output: provider returned {type(result).__name__}, "
-                f"expected {schema.__name__}"
-            )
-        return result
+        gen_ctx = self._generation_ctx(
+            name=run_name,
+            model=validated_model,
+            messages=messages,
+            model_parameters={"temperature": 0},
+        )
+        with gen_ctx as gen:
+            raw_and_parsed: Any = await structured.ainvoke(lc_msgs)
+            parsed = raw_and_parsed.get("parsed") if isinstance(raw_and_parsed, dict) else raw_and_parsed
+            if not isinstance(parsed, schema):
+                raise RuntimeError(
+                    f"structured_output: provider returned {type(parsed).__name__}, "
+                    f"expected {schema.__name__}"
+                )
+            if gen is not None:
+                try:
+                    usage_in = 0
+                    usage_out = 0
+                    raw_msg = (
+                        raw_and_parsed.get("raw")
+                        if isinstance(raw_and_parsed, dict)
+                        else None
+                    )
+                    if raw_msg is not None:
+                        usage_meta = getattr(raw_msg, "usage_metadata", None) or {}
+                        usage_in = usage_meta.get("input_tokens") or 0
+                        usage_out = usage_meta.get("output_tokens") or 0
+                    gen.update(
+                        output=parsed.model_dump(),
+                        usage_details={"input": usage_in, "output": usage_out},
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("langfuse_generation_update_failed", error=str(exc))
+            return parsed
