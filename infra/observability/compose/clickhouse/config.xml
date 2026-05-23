@@ -18,7 +18,6 @@
     <mark_cache_size>536870912</mark_cache_size>
     <uncompressed_cache_size>268435456</uncompressed_cache_size>
     <max_concurrent_queries>50</max_concurrent_queries>
-    <background_pool_size>8</background_pool_size>
 
     <profiles>
         <default>
