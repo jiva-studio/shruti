@@ -82,12 +82,6 @@ def _fallback_title(lang: str) -> str:
     return "New chat" if lang == "en" else "Новый чат"
 
 
-def _check_app_token(token: str | None) -> None:
-    expected = get_settings().app_shared_token
-    if not token or token != expected:
-        raise HTTPException(status_code=401, detail="invalid app token")
-
-
 def _clean(raw: str) -> str:
     """Strip quotes, trailing punctuation, control whitespace."""
     s = raw.strip()
@@ -103,12 +97,10 @@ def _clean(raw: str) -> str:
 async def title(
     request: Request,
     body: TitleRequest,
-    x_app_token: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> TitleResponse:
-    _check_app_token(x_app_token)
     settings = get_settings()
     if idempotency_key:
         log.info("title_request", user_id=user.id, idempotency_key=idempotency_key)

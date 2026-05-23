@@ -26,12 +26,6 @@ log = get_logger(__name__)
 router = APIRouter()
 
 
-def _check_app_token(token: str | None) -> None:
-    expected = get_settings().app_shared_token
-    if not token or token != expected:
-        raise HTTPException(status_code=401, detail="invalid app token")
-
-
 _SUPPORTED_PROTOCOL_VERSIONS = ("1",)
 
 
@@ -59,13 +53,11 @@ def _check_protocol_version(version: str | None) -> None:
 async def chat(
     request: Request,
     body: ChatRequestDto,
-    x_app_token: str | None = Header(default=None),
     x_chat_protocol_version: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ):
-    _check_app_token(x_app_token)
     _check_protocol_version(x_chat_protocol_version)
     request_id = uuid.uuid4().hex[:12]
 

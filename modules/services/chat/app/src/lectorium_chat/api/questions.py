@@ -162,22 +162,14 @@ def _parse_questions(raw: str, *, max_count: int = 4) -> list[str]:
     return out
 
 
-def _check_app_token(token: str | None) -> None:
-    expected = get_settings().app_shared_token
-    if not token or token != expected:
-        raise HTTPException(status_code=401, detail="invalid app token")
-
-
 @router.post("/questions", response_model=QuestionsResponse)
 async def questions(
     request: Request,
     body: QuestionsRequest,
-    x_app_token: str | None = Header(default=None),
     idempotency_key: str | None = Header(default=None),
     user: VerifiedUser = Depends(get_current_user),
     deps: AppDeps = Depends(get_deps),
 ) -> QuestionsResponse:
-    _check_app_token(x_app_token)
     settings = get_settings()
     if idempotency_key:
         log.info("questions_request", user_id=user.id, idempotency_key=idempotency_key)
