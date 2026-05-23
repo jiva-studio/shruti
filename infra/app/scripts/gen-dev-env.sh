@@ -6,11 +6,11 @@
 # image expects (POSTGRES_PASSWORD, DOMAIN, DATABASE_URL…) at container
 # start-time.
 #
-# Idempotent: skips if infra/.env.dev already exists.
+# Idempotent: skips if infra/app/.env.dev already exists.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="$ROOT/infra/.env.dev"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+ENV_FILE="$ROOT/infra/app/.env.dev"
 
 if [ -f "$ENV_FILE" ]; then
   echo "✓ $ENV_FILE already exists — leaving it alone."
@@ -25,7 +25,7 @@ cat > "$ENV_FILE" <<EOF
 
 SHRUTI_POSTGRES_PASSWORD=postgres
 SHRUTI_ENV_FILE=../.env.dev
-SHRUTI_JWT_KEYS_DIR=../../../.config/shruti/jwt
+SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
 SHRUTI_IMAGE_TAG=dev
 
 OPENROUTER_API_KEY=

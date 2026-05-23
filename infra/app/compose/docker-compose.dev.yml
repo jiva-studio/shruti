@@ -6,14 +6,14 @@
 # `ghcr.io/jiva-studio/shruti-chat:latest` from the public
 # registry every time you boot.
 #
-# Set these in your shell or via infra/.env.dev:
+# Set these in your shell or via infra/app/.env.dev:
 #   SHRUTI_ENV_FILE=../.env.dev
-#   SHRUTI_JWT_KEYS_DIR=../../../.config/shruti/jwt
+#   SHRUTI_JWT_KEYS_DIR=../../../../.config/shruti/jwt
 #
 # Usage:
-#   docker compose -f infra/compose/docker-compose.yml \
-#                  -f infra/compose/docker-compose.dev.yml \
-#                  --env-file infra/.env.dev \
+#   docker compose -f infra/app/compose/docker-compose.yml \
+#                  -f infra/app/compose/docker-compose.dev.yml \
+#                  --env-file infra/app/.env.dev \
 #                  up --build
 
 services:

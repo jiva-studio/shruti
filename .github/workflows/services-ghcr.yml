@@ -27,8 +27,8 @@ on:
       - 'modules/services/share-video/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
       - 'modules/.dockerignore'             # affects every service build
-      - 'infra/compose/caddy/**'            # custom Caddy image
-      - 'infra/db/migrations/**'            # services assert schema at boot
+      - 'infra/app/compose/caddy/**'            # custom Caddy image
+      - 'infra/app/db/migrations/**'            # services assert schema at boot
       - '.github/workflows/services-ghcr.yml'
   workflow_dispatch:
     inputs:
@@ -74,13 +74,13 @@ jobs:
             auth:
               - 'modules/services/auth/**'
               - 'modules/.dockerignore'
-              - 'infra/db/migrations/**'
+              - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             chat:
               - 'modules/services/chat/**'
               - 'modules/docs/help/**'
               - 'modules/.dockerignore'
-              - 'infra/db/migrations/**'
+              - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             share-audio:
               - 'modules/services/share-audio/**'
@@ -89,10 +89,10 @@ jobs:
             share-video:
               - 'modules/services/share-video/**'
               - 'modules/.dockerignore'
-              - 'infra/db/migrations/**'
+              - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
             caddy:
-              - 'infra/compose/caddy/**'
+              - 'infra/app/compose/caddy/**'
               - '.github/workflows/services-ghcr.yml'
 
       # Compose the matrix: for each service the build job knows about,
@@ -114,14 +114,14 @@ jobs:
             [chat]=./modules
             [share-audio]=./modules
             [share-video]=./modules
-            [caddy]=./infra/compose/caddy
+            [caddy]=./infra/app/compose/caddy
           )
           declare -A DOCKERFILE=(
             [auth]=./modules/services/auth/Dockerfile
             [chat]=./modules/services/chat/Dockerfile
             [share-audio]=./modules/services/share-audio/Dockerfile
             [share-video]=./modules/services/share-video/Dockerfile
-            [caddy]=./infra/compose/caddy/Dockerfile
+            [caddy]=./infra/app/compose/caddy/Dockerfile
           )
 
           wants() {

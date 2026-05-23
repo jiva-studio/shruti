@@ -9,7 +9,7 @@
 services:
   caddy:
     # Custom build with the rate-limit plugin baked in. Built by
-    # services-ghcr.yml from infra/compose/caddy/Dockerfile.
+    # services-ghcr.yml from infra/app/compose/caddy/Dockerfile.
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-caddy:${SHRUTI_CADDY_TAG:-latest}
     restart: unless-stopped
     logging: &default-logging
