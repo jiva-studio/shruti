@@ -68,7 +68,7 @@ Stream-copy is cheap; the abuse surface is S3 egress, not CPU.
 ## Local dev
 
 ```bash
-docker compose -f infra/compose/docker-compose.yml \
-               -f infra/compose/docker-compose.dev.yml \
+docker compose -f infra/app/compose/docker-compose.yml \
+               -f infra/app/compose/docker-compose.dev.yml \
                up --build share-audio
 ```

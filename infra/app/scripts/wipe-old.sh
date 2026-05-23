@@ -6,7 +6,7 @@
 # after a clean state is a no-op.
 #
 # Run ON THE VPS (not from the workstation). Best invocation:
-#   ssh root@<ip> 'bash -s' < infra/scripts/wipe-old.sh
+#   ssh root@<ip> 'bash -s' < infra/app/scripts/wipe-old.sh
 #
 # Safety:
 #   - Only touches volumes whose names start with explicit legacy

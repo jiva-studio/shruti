@@ -45,7 +45,7 @@ services:
     shm_size: 2gb
     environment:
       POSTGRES_USER: lectorium
-      POSTGRES_PASSWORD: ${LECTORIUM_POSTGRES_PASSWORD:?LECTORIUM_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/scripts/gen-dev-env.sh)}
+      POSTGRES_PASSWORD: ${LECTORIUM_POSTGRES_PASSWORD:?LECTORIUM_POSTGRES_PASSWORD must be set in .env (deploy.sh generates it; for dev use infra/app/scripts/gen-dev-env.sh)}
       POSTGRES_DB: lectorium
     # HNSW is RAM-hungry: default shared_buffers=128 MB pushes the index to
     # disk and ANN p50 balloons to 300-1000 ms. 2 GB pins the chunks-table
@@ -80,7 +80,7 @@ services:
 
   # Single source of truth for all SQL migrations across services.
   # Runs once on every `up`, applies forward-only migrations from
-  # infra/db/migrations/, exits 0. Service containers `depends_on` this
+  # infra/app/db/migrations/, exits 0. Service containers `depends_on` this
   # with `service_completed_successfully` so they never start against
   # an unmigrated DB. On a dirty state from a prior failed apply, the
   # exit code is non-zero — `docker compose logs migrator` shows where.
@@ -139,9 +139,9 @@ services:
       com.centurylinklabs.watchtower.enable: "true"
     env_file:
       # Default resolves to <project-root>/.env relative to this compose file:
-      # /opt/lectorium/infra/compose/../../.env = /opt/lectorium/.env in prod.
-      # Dev gen-dev-env.sh overrides to ../.env.dev.
-      - ${LECTORIUM_ENV_FILE:-../../.env}
+      # /opt/lectorium/infra/app/compose/../../../.env = /opt/lectorium/.env in prod.
+      # Dev gen-dev-env.sh overrides to ../.env.dev (= infra/app/.env.dev).
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
       CATALOG_DIR: /var/lib/chat
@@ -176,7 +176,7 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     env_file:
-      - ${LECTORIUM_ENV_FILE:-../../.env}
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
       JWT_PRIVATE_KEY_PATH: /secrets/private.pem
@@ -212,7 +212,7 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     env_file:
-      - ${LECTORIUM_ENV_FILE:-../../.env}
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
     environment:
       # storage.py reads BUCKET (legacy name); compose translates from
       # the LECTORIUM_* namespace.
@@ -241,7 +241,7 @@ services:
     labels:
       com.centurylinklabs.watchtower.enable: "true"
     env_file:
-      - ${LECTORIUM_ENV_FILE:-../../.env}
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
       LECTORIUM_S3_BUCKET: ${LECTORIUM_S3_BUCKET:?}

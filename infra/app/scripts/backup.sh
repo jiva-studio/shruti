@@ -15,7 +15,7 @@
 # enforced here.
 #
 # Cron entry (root crontab on the VPS, set up once by operator):
-#   0 3 * * * /opt/lectorium/infra/scripts/backup.sh >> /var/log/lectorium-backup.log 2>&1
+#   0 3 * * * /opt/lectorium/infra/app/scripts/backup.sh >> /var/log/lectorium-backup.log 2>&1
 #
 # 03:00 UTC = 06:00 MSK = low-traffic window.
 

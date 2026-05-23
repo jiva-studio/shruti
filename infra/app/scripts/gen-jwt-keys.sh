@@ -16,7 +16,7 @@
 # Idempotent: skips generation if keys already exist in dotfiles.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WORKSPACE="$(cd "$ROOT/../.." && pwd)"
 WS_KEYS_DIR="${WORKSPACE}/.config/lectorium/jwt"
 AUTH_SRC="${ROOT}/modules/services/auth"

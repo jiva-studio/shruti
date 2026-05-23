@@ -7,7 +7,7 @@
 #      infra/.env.example for shape)
 #   3. scp the JWT keypair to /opt/lectorium/jwt/{private,public}.pem
 #   4. chmod 600 on .env and jwt/private.pem
-#   5. If migrating from /opt/lectorium-chat: run infra/scripts/wipe-old.sh
+#   5. If migrating from /opt/lectorium-chat: run infra/app/scripts/wipe-old.sh
 #      from the VPS once to remove legacy compose + volumes.
 #
 # What this script does each run, idempotently:
@@ -18,11 +18,11 @@
 #   - docker compose up -d (starts migrator → services → caddy in order)
 #   - wait for health-checks of chat + auth
 #
-# Required:   SERVER_IP=<ipv4>  ./infra/scripts/deploy.sh
+# Required:   SERVER_IP=<ipv4>  ./infra/app/scripts/deploy.sh
 # Optional:   SERVER_USER (root), SSH_KEY (~/.ssh/id_ed25519)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 INFRA="$ROOT/infra"
 
 SERVER_IP="${SERVER_IP:?SERVER_IP env var required}"
@@ -55,7 +55,7 @@ for i in $(seq 1 60); do
 done
 
 echo "→ Ensuring docker on host..."
-ssh_pipe < "$INFRA/scripts/bootstrap.sh"
+ssh_pipe < "$INFRA/app/scripts/bootstrap.sh"
 
 # ── 2. Confirm operator has placed secrets in /opt/lectorium/. ───────
 # This script never touches secrets. Operator scp's .env and JWT keys
@@ -87,7 +87,7 @@ rsync -avz --delete \
 # Override DOCKER_CONFIG so the daemon reads ghcr credentials from the
 # project tree (/opt/lectorium/config/config.json) rather than
 # /root/.docker — keeps all per-project state under $REMOTE_DIR.
-COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/config docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env"
+COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/config docker compose -f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml --env-file .env"
 
 echo "→ docker compose pull..."
 ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD pull"
@@ -119,4 +119,4 @@ done
 echo
 echo "✓ Deployed: $URL"
 echo "  ssh $SERVER_USER@$SERVER_IP"
-echo "  logs: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml logs -f'"
+echo "  logs: ssh $SERVER_USER@$SERVER_IP 'cd $REMOTE_DIR && docker compose -f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml logs -f'"

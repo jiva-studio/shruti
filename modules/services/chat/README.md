@@ -15,8 +15,8 @@ cp infra/.env.example infra/.env.dev
 # fill: AWS_*, OPENROUTER_API_KEY, APP_SHARED_TOKEN
 
 docker compose \
-  -f infra/compose/docker-compose.yml \
-  -f infra/compose/docker-compose.dev.yml \
+  -f infra/app/compose/docker-compose.yml \
+  -f infra/app/compose/docker-compose.dev.yml \
   up --build
 # wait for service_ready (~few seconds)
 # indexer chews the corpus in the background
@@ -34,7 +34,7 @@ Deployment is workspace-level — see `infra/README.md`. One command brings
 up Postgres + chat + auth + Caddy on the target VPS:
 
 ```bash
-SERVER_IP=YOUR.IP.HERE ./infra/scripts/deploy.sh
+SERVER_IP=YOUR.IP.HERE ./infra/app/scripts/deploy.sh
 ```
 
 ## Endpoints
