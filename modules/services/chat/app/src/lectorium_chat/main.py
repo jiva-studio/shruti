@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from lectorium_chat.agent import llm
 from lectorium_chat.agent.tools import bind_repositories
-from lectorium_chat.api import admin, chat, questions, title
+from lectorium_chat.api import admin, chat, feedback, questions, title
 from lectorium_chat.application.rate_limiter import RateLimiter
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.config import get_settings
@@ -45,8 +45,10 @@ from lectorium_chat.infra.pdf import register_fonts
 from lectorium_chat.infra.storage.s3_outline_cache import S3OutlineCache
 from lectorium_chat.infra.storage.s3_pdf_storage import S3PdfStorage
 from lectorium_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
+from lectorium_chat.observability.bootstrap import bootstrap_score_configs
 from lectorium_chat.observability.langfuse_client import (
     LANGFUSE_PROMPT_NAMES,
+    get_langfuse,
     init_langfuse,
     shutdown_langfuse,
     warm_prompt_cache,
@@ -70,6 +72,11 @@ async def lifespan(app: FastAPI):
     # to fetch each of the 15 prompts on the hot path.
     init_langfuse()
     warm_prompt_cache(list(LANGFUSE_PROMPT_NAMES))
+    # Register every score config declared in `score_configs.py`. Self-
+    # heals a wiped Langfuse DB; idempotent on every other boot. Non-
+    # fatal — if it fails the service still serves traffic, scores just
+    # ingest without UI-side validation.
+    bootstrap_score_configs(get_langfuse())
 
     pool = await init_pool(s)
     await assert_schema_ready()
@@ -232,3 +239,4 @@ app.include_router(chat.router)
 app.include_router(admin.router)
 app.include_router(title.router)
 app.include_router(questions.router)
+app.include_router(feedback.router)

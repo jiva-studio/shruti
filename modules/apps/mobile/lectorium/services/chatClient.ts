@@ -120,6 +120,7 @@ export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
  * - `error`      terminal failure
  */
 export type ChatStreamEvent =
+  | { readonly type: "meta"; readonly traceId: string }
   | { readonly type: "delta"; readonly text: string }
   | { readonly type: "tool_start"; readonly name?: string }
   | { readonly type: "tool_end"; readonly name?: string }
@@ -136,7 +137,7 @@ export type ChatStreamEvent =
       readonly id: string
       readonly label: string
     }
-  | { readonly type: "done"; readonly aliases?: AliasMapPayload }
+  | { readonly type: "done"; readonly traceId?: string; readonly aliases?: AliasMapPayload }
   | {
       readonly type: "error"
       readonly code: string
@@ -295,6 +296,76 @@ export async function fetchSuggestedQuestions(
       .map((q) => q.trim())
   } catch {
     return []
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          POST /chat/feedback client                        */
+/* -------------------------------------------------------------------------- */
+
+export type FeedbackValue = "up" | "down"
+export type FeedbackCategory =
+  | "off_topic"
+  | "no_results"
+  | "bad_citations"
+  | "wrong_language"
+  | "factually_wrong"
+  | "other"
+
+export interface FeedbackPayload {
+  /** Langfuse trace id captured on the SSE `meta` event of the same
+   *  assistant message. The server uses it verbatim as the score's
+   *  trace key, so the value must match what the server minted. */
+  readonly traceId: string
+  readonly value: FeedbackValue
+  /** Only meaningful when `value === "down"`. Server silently ignores
+   *  it on `up` per state-machine contract. */
+  readonly category?: FeedbackCategory
+  /** Optional free-form text (≤500 chars). Server truncates to 500;
+   *  we don't enforce the limit here so a copy-paste of a long
+   *  paragraph still uploads (just truncated). */
+  readonly comment?: string
+}
+
+/**
+ * Persist the user's thumbs-up/down (with optional category + comment)
+ * to the backend. Throws on non-2xx HTTP or network failure — the
+ * caller is responsible for revert + retry.
+ */
+export async function postFeedback(
+  payload: FeedbackPayload,
+  opts: {
+    baseUrl?: string
+    appToken?: string
+    getAccessToken?: () => Promise<string | null>
+    signal?: AbortSignal
+  } = {}
+): Promise<void> {
+  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
+  const token = await resolveAccessToken(opts.getAccessToken)
+
+  const body: Record<string, unknown> = {
+    trace_id: payload.traceId,
+    value: payload.value,
+  }
+  if (payload.category) body.category = payload.category
+  if (payload.comment) body.comment = payload.comment
+
+  const response = await fetch(joinUrl(baseUrl, "/chat/feedback"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "X-App-Token": appToken,
+    },
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => "")
+    throw new Error(`feedback failed: ${response.status} ${text || response.statusText}`)
   }
 }
 
@@ -650,6 +721,10 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
   }
 
   switch (name) {
+    case "meta": {
+      const traceId = typeof payload.trace_id === "string" ? payload.trace_id.trim() : ""
+      return traceId ? { type: "meta", traceId } : null
+    }
     case "delta":
       return { type: "delta", text: typeof payload.text === "string" ? payload.text : "" }
     case "tool_start":
@@ -670,7 +745,11 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
       }
     case "done": {
       const aliases = parseAliasMap(payload.aliases)
-      return aliases ? { type: "done", aliases } : { type: "done" }
+      const traceId = typeof payload.trace_id === "string" ? payload.trace_id.trim() : ""
+      const out: { type: "done"; traceId?: string; aliases?: AliasMapPayload } = { type: "done" }
+      if (traceId) out.traceId = traceId
+      if (aliases) out.aliases = aliases
+      return out
     }
     case "action": {
       const ap = parseActionPayload(payload)

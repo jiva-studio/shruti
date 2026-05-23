@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     # selection. ~400 tokens out; noisier on the device than /title.
     questions_anon_per_day: int = 100
     questions_signed_in_per_day: int = 500
+    # /chat/feedback = thumbs up/down + optional category/comment on
+    # any assistant message. The POST itself is cheap (3× Langfuse score
+    # ingests at most); cap is generous to allow a user re-flipping
+    # judgement across many messages without hitting a wall.
+    feedback_anon_per_day: int = 200
+    feedback_signed_in_per_day: int = 2000
     # Per-IP cap (uniform across scopes). Defence-in-depth on top of the
     # per-user cap — covers an attacker spinning up many anon-JWTs from
     # one IP. Caddy edge has its own per-IP limit (200/hour); this is the

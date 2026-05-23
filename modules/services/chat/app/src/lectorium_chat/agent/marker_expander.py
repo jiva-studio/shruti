@@ -63,6 +63,29 @@ _FOOTNOTE_RE = re.compile(r"^\[\^(\d+)(?:\|s=([0-9,]+))?\]$")
 # Catch-all `[^anything]` — non-integer string-stuffed hallucination.
 _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
 
+# Bracket whose first token is one of our six marker keywords. The LLM
+# only writes `[^N]` for citations — anything matching this pattern in
+# the raw prose is the BYPASS-PROTOCOL form (LLM wrote the expanded
+# marker directly). Two sub-cases:
+#   - matches the strict per-kind grammar → pass through verbatim,
+#     bypass audit elsewhere logs it for prompt tuning;
+#   - doesn't match strict (malformed payload like
+#     `[cite:track_X@bad-format]`) → drop + count, so the client
+#     never renders the garbage in the bubble.
+# Any bracket whose first token is NOT one of the six marker keywords
+# doesn't match this and passes through verbatim.
+_KEYWORD_BRACKET_RE = re.compile(
+    r"^\[(?:cite|card|outline|verse|action|followup)[:|]"
+)
+_STRICT_PATTERNS = (
+    re.compile(r"^\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|[^\]\n]*)?\]$"),
+    re.compile(r"^\[card:[A-Za-z0-9_.-]+\]$"),
+    re.compile(r"^\[outline:[A-Za-z0-9_.-]+\]$"),
+    re.compile(r"^\[verse:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
+    re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]$"),
+    re.compile(r"^\[followup:[^\]|\n]+\]$"),
+)
+
 # Runaway buffer cap — if we don't see `]` after this many chars, it
 # wasn't a marker.
 _MAX_BUFFER = 200
@@ -100,6 +123,13 @@ class MarkerExpander:
         # Aliases successfully expanded so far — used by single-
         # candidate recovery in `_format_ref`.
         self._emitted: set[int] = set()
+
+        # Count of `[<keyword>...]` brackets we DROPPED because they
+        # looked like one of our marker types but didn't match the
+        # strict grammar (visible-garbage protection — the client
+        # would render them as raw text in the bubble). Read at
+        # end-of-turn by auto-scoring as `malformed_markers_count`.
+        self._malformed_count: int = 0
 
         # Pending whitespace seen after the last non-ws emit. May get
         # forwarded as-is (next char is non-ws or another marker) or
@@ -311,9 +341,39 @@ class MarkerExpander:
             )
             return self._format_ref(None, None)
 
-        # Anything else (`[action:...]`, `[followup:...]`, plain
-        # bracketed text) passes through verbatim.
+        # `[<word>...]` where `<word>` looks like one of our marker
+        # keywords (exact or 3-char typo prefix). Two sub-cases:
+        #   * any of the strict per-kind grammars accepts it →
+        #     pass through verbatim (bypass-protocol; the bypass audit
+        #     elsewhere logs it, the client renders fine);
+        #   * else → DROP and count. LLM hallucinations like
+        #     `[cite:track_X@notanumber-...]`, typos like
+        #     `[citataion:...]`, unclosed `[verse:` etc. Sending them
+        #     to the client would surface as visible garbage inside
+        #     the bubble. Counted via `_malformed_count` and surfaced
+        #     as the `malformed_markers_count` score at end-of-turn.
+        if _KEYWORD_BRACKET_RE.match(marker):
+            for pattern in _STRICT_PATTERNS:
+                if pattern.match(marker):
+                    return marker
+            self._malformed_count += 1
+            log.info(
+                "chat_marker_malformed_dropped",
+                request_id=self._request_id,
+                marker=marker[:120],
+            )
+            return ""
+
+        # Anything else (plain bracketed prose like `[см. БГ 2.13]`)
+        # passes through verbatim.
         return marker
+
+    @property
+    def malformed_count(self) -> int:
+        """Number of keyword-prefixed brackets dropped because they
+        didn't match the strict marker grammar. Read at end-of-turn
+        by `emit_turn_scores`."""
+        return self._malformed_count
 
     def _format_ref(self, n: int | None, sentence_indices: list[int] | None = None) -> str:
         """Resolve alias N. If N is None or unknown, try single-

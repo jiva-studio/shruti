@@ -37,6 +37,7 @@ class FakeLLMForRouter:
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        run_name: str | None = None,
     ) -> T:
         self.seen_calls.append(messages)
         if self._idx >= len(self.responses):

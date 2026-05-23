@@ -129,6 +129,9 @@
       :markdown="exportMarkdown"
       :retry-visible="truncatedRetryVisible"
       :retry-disabled="!canRetry"
+      :message-id="message.id"
+      :trace-id="message.traceId"
+      :feedback-state="message.feedbackState"
       @retry="onRetry"
     />
   </div>

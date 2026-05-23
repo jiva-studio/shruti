@@ -171,6 +171,10 @@ export async function* runChatTurn(
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
   let aliases: Record<string, ChatAliasEntry> | undefined
+  // Captured from the server `meta` SSE event (first event of the turn)
+  // or from `done.traceId` as a fallback. Persisted on the finalised
+  // message so the thumbs feedback flow can POST it back to the server.
+  let traceId: string | undefined
 
   // The history passed by the caller is the conversation BEFORE this
   // turn (caller has no clean way to splice the new user message in
@@ -198,6 +202,14 @@ export async function* runChatTurn(
       // the consumer-facing event so the store can reflect on the
       // reactive bubble immediately.
       switch (event.type) {
+        case "meta":
+          // First event of the turn — carries the Langfuse trace id we
+          // need to identify the message when sending feedback later.
+          // Use-case does not yield a domain event for it (no consumer
+          // needs reactive awareness mid-stream); the value is folded
+          // into the finalised message below.
+          traceId = event.traceId
+          break
         case "delta":
           acc += event.text
           yield { kind: "delta", text: event.text }
@@ -274,6 +286,11 @@ export async function* runChatTurn(
           break
         }
         case "done":
+          // Belt-and-suspenders: server also echoes the trace id on
+          // `done` so a client that missed `meta` (unstable reconnect)
+          // still recovers it. First-write-wins — we already captured
+          // it from `meta` if it arrived.
+          if (!traceId && event.traceId) traceId = event.traceId
           // v1: alias map ships inline with `done`. Persist on the
           // finalised message so the next turn can ship it back and
           // the LLM sees one numbering scheme across the conversation.
@@ -331,6 +348,7 @@ export async function* runChatTurn(
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
       aliases,
+      traceId,
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }

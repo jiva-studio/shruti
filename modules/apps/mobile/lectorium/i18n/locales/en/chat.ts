@@ -132,6 +132,31 @@ export default {
   /** Aria-label for the inline message Share button. */
   shareAction: "Share message",
 
+  /** Feedback (thumbs up/down + reason sheet on thumbs-down). */
+  feedback: {
+    thumbsUp: "Good answer",
+    thumbsDown: "Bad answer",
+    thanks: "Thanks for the feedback",
+    failed: "Couldn't send feedback — try again",
+    sheet: {
+      title: "What was wrong?",
+      hint: "All fields are optional. Tap Submit to send.",
+      categoryLabel: "Type",
+      categoryPlaceholder: "Pick one (optional)",
+      commentLabel: "Comment",
+      commentPlaceholder: "Anything else? (optional)",
+      submit: "Submit",
+    },
+    categories: {
+      off_topic: "Off-topic",
+      no_results: "Nothing found",
+      bad_citations: "Bad citations",
+      wrong_language: "Wrong language",
+      factually_wrong: "Factually wrong",
+      other: "Other",
+    },
+  },
+
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Daily reminder",
   proactiveSessionTitleSmartLibrary: "Smart Library",
