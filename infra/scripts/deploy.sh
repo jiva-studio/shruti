@@ -85,9 +85,9 @@ rsync -avz --delete \
 # what gets pulled, not :latest).
 #
 # Override DOCKER_CONFIG so the daemon reads ghcr credentials from the
-# project tree (/opt/lectorium/docker-config/config.json) rather than
+# project tree (/opt/lectorium/config/config.json) rather than
 # /root/.docker — keeps all per-project state under $REMOTE_DIR.
-COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/docker-config docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env"
+COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/config docker compose -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.prod.yml --env-file .env"
 
 echo "→ docker compose pull..."
 ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD pull"

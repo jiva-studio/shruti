@@ -174,7 +174,7 @@ leaked key can't run up an unbounded bill:
 Packages on ghcr.io are kept **private**. The VPS needs a long-lived
 docker login so both `docker compose pull` and Watchtower can fetch
 images. We store credentials inside the project tree (under
-`/opt/lectorium/docker-config/`) — not in `/root/.docker/` — so every
+`/opt/lectorium/config/`) — not in `/root/.docker/` — so every
 piece of state for one VPS lives in one directory.
 
 1. Create a **classic** Personal Access Token at
@@ -185,9 +185,9 @@ piece of state for one VPS lives in one directory.
 2. Place it via stdin so it never lands in shell history:
 
    ```bash
-   ssh root@<ip> 'mkdir -p /opt/lectorium/docker-config'
-   echo "$GHCR_PAT" | ssh root@<ip> 'docker --config /opt/lectorium/docker-config login ghcr.io -u <github-user> --password-stdin'
-   ssh root@<ip> 'chmod 600 /opt/lectorium/docker-config/config.json'
+   ssh root@<ip> 'mkdir -p /opt/lectorium/config'
+   echo "$GHCR_PAT" | ssh root@<ip> 'docker --config /opt/lectorium/config login ghcr.io -u <github-user> --password-stdin'
+   ssh root@<ip> 'chmod 600 /opt/lectorium/config/config.json'
    ```
 
 The next `deploy.sh` run reads the file via `DOCKER_CONFIG`; the
@@ -198,7 +198,7 @@ Watchtower service in the prod overlay bind-mounts it at
 
 ```bash
 # SSH in and prepare directories
-ssh root@<ip> 'mkdir -p /opt/lectorium/jwt /opt/lectorium/docker-config && chmod 700 /opt/lectorium /opt/lectorium/jwt /opt/lectorium/docker-config'
+ssh root@<ip> 'mkdir -p /opt/lectorium/jwt /opt/lectorium/config && chmod 700 /opt/lectorium /opt/lectorium/jwt /opt/lectorium/config'
 
 # Place .env (copy infra/.env.example, fill in real values, scp)
 scp infra/.env.example root@<ip>:/opt/lectorium/.env
