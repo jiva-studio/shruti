@@ -21,7 +21,8 @@
         <p>{{ $t("settings.account.signInCta.description") }}</p>
       </template>
       <template v-else>
-        <h2>{{ name || $t("settings.account.signedIn") }}</h2>
+        <h2>{{ name || email || $t("settings.account.signedIn") }}</h2>
+        <p>{{ $t("settings.account.signedIn") }}</p>
       </template>
     </IonLabel>
   </IonItem>
