@@ -47,7 +47,7 @@ export async function createInMemoryTestDatabase(): Promise<IDatabase> {
 /**
  * Applies the minimal user-DB schema the repositories tests need.
  * Kept inline here so infra tests don't reach up into `@lectorium/*`.
- * Mirrors `lectorium/services/migrations/user/{000,001,002,003,004,005,006}_*.ts` —
+ * Mirrors `infra/persistence/migrations/user/{000,001,002,003,004,005,006}_*.ts` —
  * if a migration changes schema-visible shape, update this too.
  */
 export async function applyUserSchemaForTests(db: IDatabase): Promise<void> {

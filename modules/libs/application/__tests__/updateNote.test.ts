@@ -126,7 +126,7 @@ describe("updateNote", () => {
 
   it("rejects NaN timeStart with invalid-time", async () => {
     const updateSpy = vi.fn<INoteRepository["update"]>()
-    const repo = makeRepo({ update: updateSpy })
+    const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
     const result = await updateNote(
       { id: "n-1" as NoteId, timeStart: NaN },
       { notes: repo, unitOfWork: noopUnitOfWork }
@@ -138,7 +138,7 @@ describe("updateNote", () => {
 
   it("rejects Infinity timeEnd with invalid-time", async () => {
     const updateSpy = vi.fn<INoteRepository["update"]>()
-    const repo = makeRepo({ update: updateSpy })
+    const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
     const result = await updateNote(
       { id: "n-1" as NoteId, timeEnd: Number.POSITIVE_INFINITY },
       { notes: repo, unitOfWork: noopUnitOfWork }
@@ -146,5 +146,47 @@ describe("updateNote", () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toBe("invalid-time")
     expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects text longer than the domain length cap", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, text: "x".repeat(4001) },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("text-too-long")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it("rejects negative timeStart", async () => {
+    const updateSpy = vi.fn<INoteRepository["update"]>()
+    const repo = makeRepo({
+      getById: async () => sample({ timeStart: 0, timeEnd: 10 }),
+      update: updateSpy,
+    })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, timeStart: -1 },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe("invalid-range")
+    expect(updateSpy).not.toHaveBeenCalled()
+  })
+
+  it("trims the persisted text when an update supplies it", async () => {
+    const updateSpy = vi
+      .fn<INoteRepository["update"]>()
+      .mockImplementation(async (input) => ({ ...sample(), text: input.text ?? sample().text }))
+    const repo = makeRepo({ getById: async () => sample(), update: updateSpy })
+    const result = await updateNote(
+      { id: "n-1" as NoteId, text: "  trimmed  " },
+      { notes: repo, unitOfWork: noopUnitOfWork }
+    )
+    expect(result.ok).toBe(true)
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "n-1", text: "trimmed" })
+    )
   })
 })

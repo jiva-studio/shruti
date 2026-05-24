@@ -1,5 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import { runUserMigrations } from "@lectorium/services/migrations/user/runMigrations.js"
+import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import type { useLectorium } from "@lectorium/lectorium.js"
 
 export interface BootstrapUserDatabaseDeps {

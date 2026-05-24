@@ -8,7 +8,7 @@ import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { useNotesStore } from "@lectorium/stores/useNotesStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
-import { pickAudioVariant } from "@lectorium/views/Chat/composables/useCitationSnippet.js"
+import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@lectorium/router/index.js"
 import { buildTranscriptViewData } from "@lectorium/composables/buildTranscriptViewData.js"
 import { formatReference } from "@lectorium/composables/groupReferences.js"
@@ -173,7 +173,7 @@ export function useTranscriptDialogController(
       // disabled player (still useful as a quoted text card).
       const track = hydration.track.value
       const ctx = buildShareTrackContext()
-      const variant = track ? pickAudioVariant(track) : null
+      const variant = track ? pickPlayableVariant(track) : null
       const sourceKey = variant?.audio?.path ?? undefined
       const lang = appLanguage.value
       const location = track?.locationId

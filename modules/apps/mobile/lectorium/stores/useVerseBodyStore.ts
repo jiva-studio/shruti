@@ -1,6 +1,6 @@
-import { Preferences } from "@capacitor/preferences"
 import { defineStore } from "pinia"
 import { ref } from "vue"
+import { useLectorium } from "@lectorium/lectorium.js"
 
 /**
  * Cache of verse bodies streamed from the chat server via the
@@ -9,7 +9,7 @@ import { ref } from "vue"
  * + translation) without re-fetching from the server when the same
  * verse is cited in a future turn or after the app restarts.
  *
- * Persistence uses Capacitor Preferences (NSUserDefaults /
+ * Persistence goes through the `IPreferences` port (NSUserDefaults /
  * SharedPreferences on native, IndexedDB on web). The whole cache lives
  * under one Preferences key and is bounded to MAX_ENTRIES so it can't
  * grow unboundedly across a long-running install.
@@ -34,6 +34,8 @@ function makeKey(sourceId: string, tokens: string): string {
 }
 
 export const useVerseBodyStore = defineStore("verseBody", () => {
+  const app = useLectorium()
+
   const entries = ref<Map<string, StoredEntry>>(new Map())
   let hydrated = false
   let hydrationPromise: Promise<void> | null = null
@@ -44,9 +46,9 @@ export const useVerseBodyStore = defineStore("verseBody", () => {
     if (hydrationPromise) return hydrationPromise
     hydrationPromise = (async () => {
       try {
-        const { value } = await Preferences.get({ key: STORAGE_KEY })
-        if (value) {
-          const parsed = JSON.parse(value) as Record<string, StoredEntry>
+        const raw = await app.preferences.get(STORAGE_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw) as Record<string, StoredEntry>
           const map = new Map<string, StoredEntry>()
           for (const [k, v] of Object.entries(parsed)) {
             if (v && typeof v === "object") map.set(k, v)
@@ -78,7 +80,7 @@ export const useVerseBodyStore = defineStore("verseBody", () => {
     const obj: Record<string, StoredEntry> = {}
     for (const [k, v] of entries.value.entries()) obj[k] = v
     try {
-      await Preferences.set({ key: STORAGE_KEY, value: JSON.stringify(obj) })
+      await app.preferences.set(STORAGE_KEY, JSON.stringify(obj))
     } catch (err) {
       console.warn("[verseBodyStore] persist failed:", err)
     }
