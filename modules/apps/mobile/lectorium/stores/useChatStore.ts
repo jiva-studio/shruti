@@ -10,10 +10,7 @@ import {
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import {
-  extractFollowups,
-  parseChatMarkers,
-} from "@lectorium/views/Chat/composables/useMarkerParser.js"
+import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
