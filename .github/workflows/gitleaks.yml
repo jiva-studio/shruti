@@ -1,0 +1,46 @@
+name: secret scan
+
+# Catches accidental `git add .env` / inline credentials before they
+# reach origin. `.env` is gitignored today, but a slip past that
+# (different filename, copy-pasted token in a comment) would still
+# land — gitleaks scans the actual content.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          VERSION=8.21.2
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar xz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan
+        run: |
+          # --no-git scans the working tree, not history — keeps the
+          # gate focused on what would land on the next push instead of
+          # tripping on deleted-but-historical files.
+          # --redact masks the secret in the public log on a find.
+          gitleaks detect \
+            --source . \
+            --no-git \
+            --config .gitleaks.toml \
+            --no-banner \
+            --redact \
+            --verbose \
+            --exit-code 1

@@ -35,7 +35,7 @@ on:
       services:
         description: 'Which images to build'
         type: choice
-        options: [all, auth, chat, share-audio, share-video, caddy]
+        options: [all, auth, chat, share-audio, share-video, caddy, migrator]
         default: all
 
 concurrency:
@@ -94,6 +94,9 @@ jobs:
             caddy:
               - 'infra/app/compose/caddy/**'
               - '.github/workflows/services-ghcr.yml'
+            migrator:
+              - 'infra/app/db/**'
+              - '.github/workflows/services-ghcr.yml'
 
       # Compose the matrix: for each service the build job knows about,
       # emit its full entry (context + dockerfile) iff this event wants
@@ -107,6 +110,7 @@ jobs:
           F_SHARE_AUDIO: ${{ steps.filter.outputs.share-audio }}
           F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
           F_CADDY: ${{ steps.filter.outputs.caddy }}
+          F_MIGRATOR: ${{ steps.filter.outputs.migrator }}
         run: |
           # Service catalogue. Keep in sync with the dorny filters above.
           declare -A CTX=(
@@ -115,6 +119,7 @@ jobs:
             [share-audio]=./modules
             [share-video]=./modules
             [caddy]=./infra/app/compose/caddy
+            [migrator]=./infra/app/db
           )
           declare -A DOCKERFILE=(
             [auth]=./modules/services/auth/Dockerfile
@@ -122,6 +127,7 @@ jobs:
             [share-audio]=./modules/services/share-audio/Dockerfile
             [share-video]=./modules/services/share-video/Dockerfile
             [caddy]=./infra/app/compose/caddy/Dockerfile
+            [migrator]=./infra/app/db/Dockerfile
           )
 
           wants() {
@@ -143,7 +149,7 @@ jobs:
           }
 
           entries=()
-          for svc in auth chat share-audio share-video caddy; do
+          for svc in auth chat share-audio share-video caddy migrator; do
             if wants "$svc"; then
               entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
                 '{service:$s, context:$c, dockerfile:$d}')")
