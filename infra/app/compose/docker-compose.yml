@@ -93,11 +93,14 @@ services:
   migrator:
     # Migrations are baked into the image (see infra/app/db/Dockerfile),
     # so there is no bind-mount here. CI rebuilds and pushes a new tag
-    # whenever infra/app/db/migrations/** or the Dockerfile changes;
-    # the next `docker compose up -d migrator` runs them.
+    # whenever infra/app/db/migrations/** or the Dockerfile changes.
+    # Watchtower re-runs this stopped container when a new image lands
+    # (needs --include-stopped + --revive-stopped on Watchtower itself).
     image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-migrator:${SHRUTI_MIGRATOR_TAG:-latest}
     restart: "no"
     logging: *default-logging
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     command:
       - -path=/migrations
       - -database=postgres://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti?sslmode=disable
