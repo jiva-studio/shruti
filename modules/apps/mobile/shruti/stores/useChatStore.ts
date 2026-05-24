@@ -23,10 +23,10 @@ import type {
   SmartLibraryFiltersPayload,
 } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import { createHttpChatStreamClient } from "@shruti/services/chat/httpChatStreamClient.js"
-import { createHttpChatTitleService } from "@shruti/services/chat/httpChatTitleService.js"
-import { createHttpChatQuestionsService } from "@shruti/services/chat/httpChatQuestionsService.js"
-import { createHttpChatFeedbackService } from "@shruti/services/chat/httpChatFeedbackService.js"
+import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
+import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
+import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
+import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
