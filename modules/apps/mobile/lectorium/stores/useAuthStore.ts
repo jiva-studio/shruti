@@ -13,6 +13,7 @@ export const useAuthStore = defineStore("auth", () => {
   const userId = ref<string | null>(null)
   const email = ref<string | null>(null)
   const name = ref<string | null>(null)
+  const picture = ref<string | null>(null)
   const anonymous = ref<boolean>(true)
 
   const signedIn = computed(() => !!userId.value && !anonymous.value)
@@ -22,12 +23,14 @@ export const useAuthStore = defineStore("auth", () => {
       userId.value = s.userId
       email.value = s.email
       name.value = s.name
+      picture.value = s.picture
       anonymous.value = s.anonymous
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
       email.value = null
       name.value = null
+      picture.value = null
       anonymous.value = true
       status.value = "uninitialized"
     }
@@ -104,6 +107,7 @@ export const useAuthStore = defineStore("auth", () => {
     userId,
     email,
     name,
+    picture,
     anonymous,
     signedIn,
     restore,

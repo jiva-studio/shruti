@@ -14,12 +14,12 @@ export default {
 
   account: {
     signInCta: {
-      title: "Войдите, чтобы сохранить прогресс",
-      description: "Чтобы не потерять библиотеку при смене устройства.",
+      title: "Войдите",
+      description: "Сохраните свой прогресс",
     },
-    signInWithGoogle: "Войти через Google",
-    signInWithApple: "Войти через Apple",
-    signedIn: "Вы вошли",
+    signInWithGoogle: "Через Google",
+    signInWithApple: "Через Apple",
+    signedIn: "Вы авторизованы",
     signOut: "Выйти",
   },
 

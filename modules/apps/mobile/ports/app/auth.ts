@@ -26,6 +26,12 @@ export interface AuthSession {
   email: string | null
   /** User-display name (Apple's fullName captured on first signin). */
   name: string | null
+  /**
+   * Profile picture URL captured at sign-in (Google only — Apple doesn't
+   * expose one). Stored client-side; if the URL ever 404s the UI falls
+   * back to initials.
+   */
+  picture: string | null
   anonymous: boolean
   accessTokenExpiresAt: number
 }
