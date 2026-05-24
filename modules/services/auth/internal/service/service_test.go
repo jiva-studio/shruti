@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -29,10 +30,13 @@ func dbDSNFromEnv(t *testing.T) string {
 	return dsn
 }
 
+// Path from this test file's directory to the central migrations folder.
+const migrationsDir = "../../../../../infra/app/db/migrations"
+
 // resetSchema drops the auth schema *and* the migration bookkeeping, then
-// re-applies the auth schema by reading 0001_auth_init.up.sql directly.
-// Auth tests no longer go through golang-migrate — production uses the
-// central `migrator` container; tests just need the schema in place.
+// re-applies every 000N_auth_*.up.sql in order. Auth tests no longer go
+// through golang-migrate — production uses the central `migrator`
+// container; tests just need the schema in place.
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
 	pool, err := store.Connect(context.Background(), dsn)
@@ -42,16 +46,19 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
 	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
 
-	// Load 0001_auth_init.up.sql from the workspace. Path is relative to
-	// this test file: modules/services/auth/internal/service/ → up 4 →
-	// repo root → infra/db/migrations/.
-	sqlPath := filepath.Join("..", "..", "..", "..", "..", "infra", "db", "migrations", "0001_auth_init.up.sql")
-	sqlBytes, err := os.ReadFile(sqlPath)
+	files, err := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
 	if err != nil {
-		t.Fatalf("read migration: %v", err)
+		t.Fatalf("glob migrations: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), string(sqlBytes)); err != nil {
-		t.Fatalf("apply migration: %v", err)
+	sort.Strings(files)
+	for _, p := range files {
+		sqlBytes, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", p, err)
+		}
+		if _, err := pool.Exec(context.Background(), string(sqlBytes)); err != nil {
+			t.Fatalf("apply migration %s: %v", p, err)
+		}
 	}
 	return pool
 }
