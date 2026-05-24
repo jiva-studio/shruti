@@ -40,6 +40,13 @@ type TaskState struct {
 // owner-filtered SELECT.
 var ErrTaskNotFound = errors.New("task not found")
 
+// ErrLeaseLost is returned by Finish / Fail when the row is no longer
+// owned by the caller (status flipped to 'pending' by ReviveExpired,
+// or worker_id changed because another worker picked the task up
+// after the lease expired). The caller must NOT retry the transition
+// — another worker is the source of truth now.
+var ErrLeaseLost = errors.New("lease lost")
+
 // Insert creates a pending row. max_attempts is omitted on purpose so
 // the column default from the migration takes effect.
 func Insert(ctx context.Context, pool *pgxpool.Pool, id string, payload types.TaskPayload) error {
@@ -135,37 +142,62 @@ func LeaseOne(ctx context.Context, pool *pgxpool.Pool, workerID string, leaseMs 
 
 // Finish transitions a running task to done, persisting the result URL
 // and S3 key in the `result` jsonb column.
-func Finish(ctx context.Context, pool *pgxpool.Pool, id string, r types.TaskResult) error {
-	_, err := pool.Exec(ctx,
+//
+// The WHERE clause asserts (status='running' AND worker_id=$4) so a
+// task that's been revived back to 'pending' (lease expired and
+// ReviveExpired flipped it) does NOT get clobbered to 'done' here —
+// the new lease holder is the source of truth. RowsAffected() == 0
+// translates to ErrLeaseLost.
+func Finish(ctx context.Context, pool *pgxpool.Pool, id, workerID string, r types.TaskResult) error {
+	tag, err := pool.Exec(ctx,
 		`UPDATE tasks
 		    SET status='done',
 		        result=jsonb_build_object('url', $2::text, 'output_key', $3::text),
 		        finished_at=now(),
 		        lease_expires_at=NULL
-		  WHERE id=$1`,
-		id, r.URL, r.OutputKey,
+		  WHERE id=$1 AND status='running' AND worker_id=$4`,
+		id, r.URL, r.OutputKey, workerID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrLeaseLost
+	}
+	return nil
 }
 
 // Fail pushes the task back to pending (if retries remain) or to failed
 // terminally. Returns whether a retry was queued (informational).
-func Fail(ctx context.Context, pool *pgxpool.Pool, id string, attempts, maxAttempts int, errorMessage string) (willRetry bool, err error) {
+//
+// Same lease-guard as Finish: only acts if (status='running' AND
+// worker_id=$4). If the lease was revived under the worker's feet
+// (ReviveExpired flipped status to 'pending' and cleared worker_id),
+// the caller has lost ownership and gets ErrLeaseLost — the next
+// worker to lease the task owns its outcome.
+func Fail(ctx context.Context, pool *pgxpool.Pool, id, workerID string, attempts, maxAttempts int, errorMessage string) (willRetry bool, err error) {
 	willRetry = attempts < maxAttempts
 	newStatus := "failed"
 	if willRetry {
 		newStatus = "pending"
 	}
-	_, err = pool.Exec(ctx,
+	tag, err := pool.Exec(ctx,
 		`UPDATE tasks
 		    SET status            = $2,
 		        error             = $3,
 		        finished_at       = CASE WHEN $2='failed' THEN now() ELSE finished_at END,
-		        lease_expires_at  = NULL
-		  WHERE id=$1`,
-		id, newStatus, errorMessage,
+		        lease_expires_at  = NULL,
+		        worker_id         = CASE WHEN $2='pending' THEN NULL ELSE worker_id END
+		  WHERE id=$1 AND status='running' AND worker_id=$4`,
+		id, newStatus, errorMessage, workerID,
 	)
-	return willRetry, err
+	if err != nil {
+		return willRetry, err
+	}
+	if tag.RowsAffected() == 0 {
+		return willRetry, ErrLeaseLost
+	}
+	return willRetry, nil
 }
 
 // ReviveExpired flips any 'running' rows whose lease has expired back
