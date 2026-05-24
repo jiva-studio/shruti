@@ -19,12 +19,18 @@ type Config struct {
 	Bucket             string
 	ExcerptsPrefix     string
 	ExcerptsPublicBase string
+	// SourceKeyPrefix gates POST /excerpts: requests with a source_key
+	// outside this prefix are rejected before any S3 GET. Defense in
+	// depth on top of the bucket-level IAM role (D1) — protects
+	// against IAM drift and stops anonymous probing of sibling
+	// prefixes (private/backups/…, etc.).
+	SourceKeyPrefix string
 
 	AWSRegion     string
 	S3EndpointURL string
 
-	FfmpegBin     string
-	MaxExcerptMs  int64
+	FfmpegBin    string
+	MaxExcerptMs int64
 }
 
 func Load() (Config, error) {
@@ -37,6 +43,7 @@ func Load() (Config, error) {
 		Bucket:             firstNonEmpty(os.Getenv("BUCKET"), os.Getenv("SHRUTI_S3_BUCKET")),
 		ExcerptsPrefix:     env("EXCERPTS_PREFIX", "public/shares/audio"),
 		ExcerptsPublicBase: os.Getenv("EXCERPTS_PUBLIC_BASE"),
+		SourceKeyPrefix:    env("SOURCE_KEY_PREFIX", "public/tracks/"),
 
 		AWSRegion:     env("AWS_REGION", "us-east-1"),
 		S3EndpointURL: os.Getenv("S3_ENDPOINT_URL"),

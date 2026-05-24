@@ -36,11 +36,20 @@ func newServiceError(format string, a ...any) *ServiceError {
 }
 
 type Cutter struct {
-	Storage      *Storage
-	FFmpeg       FFmpeg
-	Bucket       string
-	Prefix       string
-	MaxExcerptMs int64
+	Storage *Storage
+	FFmpeg  FFmpeg
+	Bucket  string
+	// Prefix is where excerpts get uploaded under (e.g.
+	// "public/shares/audio"). The computed upload key is asserted to
+	// live under it — guards against a future code path that
+	// constructs the key elsewhere and bypasses the prefix join.
+	Prefix string
+	// SourceKeyPrefix is the only S3 prefix this service is willing to
+	// read from. Requests with a source_key outside it return 400
+	// before any S3 GET, so anonymous callers can't probe sibling
+	// prefixes in the same bucket (e.g. private/backups/...).
+	SourceKeyPrefix string
+	MaxExcerptMs    int64
 }
 
 // Storage is the subset of storage.Client this package uses, declared as
@@ -73,6 +82,9 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 	if strings.TrimSpace(req.SourceKey) == "" {
 		return Result{}, fmt.Errorf("%w: source_key is required", ErrValidation)
 	}
+	if c.SourceKeyPrefix != "" && !strings.HasPrefix(req.SourceKey, c.SourceKeyPrefix) {
+		return Result{}, fmt.Errorf("%w: source_key must start with %q", ErrValidation, c.SourceKeyPrefix)
+	}
 	if req.StartMs < 0 || req.EndMs <= req.StartMs {
 		return Result{}, fmt.Errorf("%w: end_ms must be greater than start_ms", ErrValidation)
 	}
@@ -88,7 +100,13 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 		// uuid.uuid4().hex parity — 32 hex chars, no dashes.
 		eid = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	key := strings.TrimRight(c.Prefix, "/") + "/" + eid + ".mp3"
+	uploadPrefix := strings.TrimRight(c.Prefix, "/") + "/"
+	key := uploadPrefix + eid + ".mp3"
+	// Sanity: catch a future refactor that builds `key` from anything
+	// other than c.Prefix. Cheap, keeps the invariant local.
+	if !strings.HasPrefix(key, uploadPrefix) {
+		return Result{}, newServiceError("computed excerpt key %q escapes prefix %q", key, uploadPrefix)
+	}
 
 	exists, err := c.Storage.Exists(ctx, key)
 	if err != nil {

@@ -40,11 +40,12 @@ func main() {
 
 	srvHandlers := &httpx.Server{
 		Cutter: pipeline.Cutter{
-			Storage:      s3c,
-			FFmpeg:       pipeline.FromFFmpegBin(cfg.FfmpegBin),
-			Bucket:       cfg.Bucket,
-			Prefix:       cfg.ExcerptsPrefix,
-			MaxExcerptMs: cfg.MaxExcerptMs,
+			Storage:         s3c,
+			FFmpeg:          pipeline.FromFFmpegBin(cfg.FfmpegBin),
+			Bucket:          cfg.Bucket,
+			Prefix:          cfg.ExcerptsPrefix,
+			SourceKeyPrefix: cfg.SourceKeyPrefix,
+			MaxExcerptMs:    cfg.MaxExcerptMs,
 		},
 	}
 
