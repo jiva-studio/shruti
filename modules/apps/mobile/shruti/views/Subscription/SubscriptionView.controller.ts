@@ -1,6 +1,6 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from "vue"
-import { useRoute } from "vue-router"
 import { useI18n } from "vue-i18n"
+import router from "@shruti/router/index.js"
 import {
   FEATURE_SLIDES,
   slideIndexForFeature,
@@ -28,17 +28,26 @@ export interface SubscriptionViewBinding {
 }
 
 export function useSubscriptionViewController(): SubscriptionViewBinding {
-  const route = useRoute()
+  // Use the singleton router's reactive `currentRoute` instead of
+  // `useRoute()`. The vue-router `inject('route location')` symbol can
+  // be unresolved at setup() for this page — IonRouterOutlet instantiates
+  // it during the navigation that triggered the push, before the provide
+  // chain is wired in this component's context — so `useRoute()` returns
+  // `undefined` and accessing `.query` throws. Same workaround as App.vue.
+  const currentRoute = router.currentRoute
   const { t } = useI18n()
   const subscription = useSubscriptionBinding()
 
-  const initialIndex = slideIndexForFeature(
-    typeof route.query.feature === "string" ? route.query.feature : undefined
-  )
+  const featureFromRoute = (): string | undefined => {
+    const f = currentRoute.value?.query?.feature
+    return typeof f === "string" ? f : undefined
+  }
+
+  const initialIndex = slideIndexForFeature(featureFromRoute())
   const index = ref<number>(initialIndex)
 
   watch(
-    () => route.query.feature,
+    () => currentRoute.value?.query?.feature,
     (next) => {
       if (typeof next !== "string") return
       index.value = slideIndexForFeature(next)
