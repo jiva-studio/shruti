@@ -26,6 +26,12 @@ COPY --from=build /out/share-audio /usr/local/bin/share-audio
 
 USER share
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG SHRUTI_BUILD_SHA=dev
+ARG SHRUTI_BUILD_TIME=dev
+ENV SHRUTI_BUILD_SHA=$SHRUTI_BUILD_SHA \
+    SHRUTI_BUILD_TIME=$SHRUTI_BUILD_TIME
+
 EXPOSE 8082
 
 ENTRYPOINT ["/sbin/tini", "--"]

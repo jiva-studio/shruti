@@ -4,6 +4,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 
@@ -41,8 +42,22 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	return r
 }
 
+// buildSHA / buildTime — populated by the image build (Dockerfile ARGs
+// → ENVs). Empty in local-dev binaries; operators hit /healthz post-
+// deploy to confirm Watchtower rolled the new image.
+var (
+	buildSHA  = os.Getenv("SHRUTI_BUILD_SHA")
+	buildTime = os.Getenv("SHRUTI_BUILD_TIME")
+)
+
 func healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"build": map[string]string{
+			"sha":  buildSHA,
+			"time": buildTime,
+		},
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
