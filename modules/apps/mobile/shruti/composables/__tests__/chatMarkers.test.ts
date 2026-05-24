@@ -4,7 +4,7 @@ import {
   messageToMarkdown,
   parseChatMarkers,
   type VerseBodyLike,
-} from "../useMarkerParser.js"
+} from "../chatMarkers.js"
 
 /**
  * Marker grammar coverage. The parser is the bridge between LLM-emitted
