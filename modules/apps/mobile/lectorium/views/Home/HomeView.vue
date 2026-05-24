@@ -130,6 +130,11 @@ const showActivity = computed(
 // first eligible render. The banner only renders when RevenueCat is
 // available — on builds with empty IAP keys the subscription UI is
 // hidden everywhere.
+//
+// Wait for `subscription.ready` so we don't render the nag during the
+// 1–2s RevenueCat takes to fetch customer info — otherwise subscribed
+// users see the banner flash on first home-screen visit and then
+// disappear once entitlements load.
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
 const subscription = useSubscriptionBinding()
 const subscriptionNagDismissedAt = useConfig<number | null>(
@@ -138,6 +143,7 @@ const subscriptionNagDismissedAt = useConfig<number | null>(
 )
 const subscriptionDialogOpen = ref(false)
 const showSubscriptionNag = computed(() => {
+  if (!subscription.ready) return false
   if (!subscription.available || subscription.isSubscribed) return false
   const ts = subscriptionNagDismissedAt.value
   if (!ts) return true

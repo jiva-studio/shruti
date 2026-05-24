@@ -18,6 +18,15 @@ export interface LegalDocument {
 export interface SubscriptionBinding {
   readonly available: boolean
   readonly isSubscribed: boolean
+  /**
+   * `true` once the purchases store has finished its first
+   * `getCustomerState()` round-trip (or has determined the build has no
+   * IAP keys). UI that gates on the *answer* to "is this user
+   * subscribed?" should wait for `ready` to flip — otherwise it renders
+   * the non-subscribed branch during the few seconds RevenueCat takes to
+   * respond, then flickers off once the customer info arrives.
+   */
+  readonly ready: boolean
   readonly packages: PurchasePackage[]
   readonly purchasing: boolean
   readonly restoring: boolean
@@ -124,6 +133,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
   return reactive({
     available: computed(() => store.available),
     isSubscribed: computed(() => store.isSubscribed),
+    ready: computed(() => store.ready),
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),

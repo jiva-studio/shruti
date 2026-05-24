@@ -3,13 +3,22 @@
 The Settings screen is grouped by purpose. Here is what every group and item
 controls.
 
+## Account
+
+- **Sign in** — log in with Google (and Apple on iOS) to keep your library,
+  notes and listening progress in sync when you switch devices. Tap the row
+  again while signed in to sign out.
+- **Subscription** — your "Shruti" Pro subscription. Tap it to open
+  the paywall when you are not subscribed, or to manage / cancel it via the
+  store when you are.
+- **Server** — which content-delivery network the app downloads from. Pick a
+  closer region if downloads feel slow.
+
 ## Appearance
 
 - **Language** — language of the app interface (English / Russian). Changing
   it switches all labels, but does not affect the language of lectures
   themselves.
-- **Server** — which content-delivery network the app downloads from. Pick a
-  closer region if downloads feel slow.
 - **Player progress** — show or hide the progress ring around the play button
   in the floating mini-player.
 - **Notes tab** — show or hide the Notes tab in the bottom navigation. Hidden
