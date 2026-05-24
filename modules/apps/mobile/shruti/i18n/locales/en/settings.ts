@@ -14,12 +14,12 @@ export default {
 
   account: {
     signInCta: {
-      title: "Sign in to keep your progress",
-      description: "So you don't lose your library when you switch devices.",
+      title: "Sign in",
+      description: "Keep your progress",
     },
-    signInWithGoogle: "Sign in with Google",
-    signInWithApple: "Sign in with Apple",
-    signedIn: "Signed in",
+    signInWithGoogle: "Continue with Google",
+    signInWithApple: "Continue with Apple",
+    signedIn: "You are signed in",
     signOut: "Sign out",
   },
 

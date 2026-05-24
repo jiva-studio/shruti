@@ -4,14 +4,7 @@
       <IonLabel>{{ $t("settings.groups.subscription") }}</IonLabel>
     </IonListHeader>
 
-    <IonItem
-      v-if="isSubscribed"
-      button
-      :detail="true"
-      lines="none"
-      color="success"
-      @click="emit('manage')"
-    >
+    <IonItem v-if="isSubscribed" button :detail="true" lines="none" @click="emit('manage')">
       <IconChip slot="start">
         <IconRosetteDiscountCheckFilled />
       </IconChip>

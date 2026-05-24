@@ -1,20 +1,21 @@
 <template>
   <AppPage :reserve-player-space="player.open">
+    <SettingsAccountGroup
+      :anonymous="auth.anonymous"
+      :email="auth.email"
+      :name="auth.name"
+      :picture="auth.picture"
+      :platform="platform"
+      @sign-in-google="auth.signInGoogle"
+      @sign-in-apple="auth.signInApple"
+      @sign-out="auth.signOut"
+    />
+
     <SettingsSubscriptionGroup
       :available="subscription.available"
       :is-subscribed="subscription.isSubscribed"
       @open-paywall="paywall.requestOpen"
       @manage="subscription.onManage"
-    />
-
-    <SettingsAccountGroup
-      :anonymous="auth.anonymous"
-      :email="auth.email"
-      :name="auth.name"
-      :platform="platform"
-      @sign-in-google="auth.signInGoogle"
-      @sign-in-apple="auth.signInApple"
-      @sign-out="auth.signOut"
     />
 
     <SettingsAppearanceGroup

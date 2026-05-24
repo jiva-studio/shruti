@@ -11,6 +11,7 @@ interface StoredTokens {
   userId: string
   email: string | null
   name: string | null
+  picture: string | null
   anonymous: boolean
   accessTokenExpiresAt: number
 }
@@ -85,6 +86,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       userId: t.userId,
       email: t.email,
       name: t.name,
+      picture: t.picture,
       anonymous: t.anonymous,
       accessTokenExpiresAt: t.accessTokenExpiresAt,
     }
@@ -102,15 +104,23 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     }
   }
 
-  async function commitTokenResponse(body: TokenResponseBody): Promise<AuthSession> {
+  async function commitTokenResponse(
+    body: TokenResponseBody,
+    extra?: { picture?: string | null }
+  ): Promise<AuthSession> {
     // Pull display fields from /auth/me so the UI has them right away.
     const me = await fetchMe(body.accessToken)
+    // Picture is client-side only — server doesn't store it. Prefer the
+    // value the caller just captured (fresh sign-in); otherwise keep
+    // whatever's already on disk so a token refresh doesn't lose the avatar.
+    const picture = extra?.picture !== undefined ? extra.picture : (stored?.picture ?? null)
     const next: StoredTokens = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
       userId: body.userId,
       email: me?.email ?? null,
       name: me?.name ?? null,
+      picture,
       anonymous: body.anonymous,
       accessTokenExpiresAt: decodeAccessExpiry(body.accessToken),
     }
@@ -230,7 +240,10 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     const idToken = result.result.idToken
     if (!idToken) return null
     const tokens = await callSignin("google", idToken)
-    return commitTokenResponse(tokens)
+    // capgo exposes the profile picture URL from Google's userinfo. Apple
+    // never returns one — we just leave picture null there.
+    const picture = result.result.profile?.imageUrl ?? null
+    return commitTokenResponse(tokens, { picture })
   }
 
   async function signInWithApple(): Promise<AuthSession | null> {
@@ -251,7 +264,9 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     const { givenName, familyName } = result.result.profile ?? {}
     const fullName = [givenName, familyName].filter(Boolean).join(" ").trim() || undefined
     const tokens = await callSignin("apple", idToken, fullName)
-    return commitTokenResponse(tokens)
+    // Apple Sign-In never returns a profile picture URL — force null so a
+    // previous Google avatar doesn't bleed into an Apple-only session.
+    return commitTokenResponse(tokens, { picture: null })
   }
 
   async function signOut(): Promise<void> {
