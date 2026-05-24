@@ -8,8 +8,12 @@
 
 services:
   caddy:
-    # Custom build with the rate-limit plugin baked in. Built by
-    # services-ghcr.yml from infra/app/compose/caddy/Dockerfile.
+    # Custom build with the rate-limit plugin and the Caddyfile baked in.
+    # Built by services-ghcr.yml from infra/app/compose/caddy/Dockerfile;
+    # the Caddyfile travels inside the image, so a CORS / rate-limit /
+    # route change reaches prod the same way any code change does:
+    # CI rebuilds the image, Watchtower pulls it, container restarts
+    # with the new file. No out-of-band rsync. See issue #577.
     image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-caddy:${LECTORIUM_CADDY_TAG:-latest}
     restart: unless-stopped
     logging: &default-logging
@@ -17,6 +21,10 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    labels:
+      # Watchtower picks this container up on the next 60s poll and
+      # rolling-restarts it when a new image is published to ghcr.
+      com.centurylinklabs.watchtower.enable: "true"
     ports:
       - "80:80"
       - "443:443"
@@ -25,7 +33,6 @@ services:
       DOMAIN: ${LECTORIUM_DOMAIN:?}
       ACME_EMAIL: ${LECTORIUM_ACME_EMAIL:?}
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddydata:/data
       - caddyconfig:/config
     networks: [lectorium]
@@ -34,8 +41,6 @@ services:
       auth:         { condition: service_healthy }
       share-audio:  { condition: service_healthy }
       share-video:  { condition: service_healthy }
-    # Caddy is edge — NOT Watchtower-managed. Manual update by bumping
-    # the LECTORIUM_CADDY_TAG in .env and re-deploying.
 
   # Tightens Watchtower's access to the docker daemon. Without this proxy
   # Watchtower would mount /var/run/docker.sock directly and have root
