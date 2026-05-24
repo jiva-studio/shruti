@@ -46,6 +46,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@shruti/views/Settings/SettingsView.vue"),
       },
       {
+        path: "subscription",
+        name: "subscription",
+        component: () => import("@shruti/views/Subscription/SubscriptionView.vue"),
+      },
+      {
         path: "track/:trackId",
         name: "track",
         component: () => import("@shruti/views/Track/TrackView.vue"),

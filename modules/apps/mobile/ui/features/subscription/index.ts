@@ -1,0 +1,5 @@
+export { default as FeatureCarousel } from "./FeatureCarousel.vue"
+export { default as FeatureSlide } from "./FeatureSlide.vue"
+export { default as SubscriptionFooter } from "./SubscriptionFooter.vue"
+export { FEATURE_SLIDES, slideIndexForFeature } from "./featureKeys.js"
+export type { FeatureSlideDef, SubscriptionFeatureKey } from "./featureKeys.js"

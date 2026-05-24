@@ -6,7 +6,7 @@
     <template v-else>
       <SubscriptionNagBanner
         v-if="showSubscriptionNag"
-        @open="subscriptionDialogOpen = true"
+        @open="paywall.requestOpen()"
         @dismiss="onDismissSubscriptionNag"
       />
       <template v-if="showActivity">
@@ -43,16 +43,6 @@
     <IonInfiniteScroll :disabled="!hasMore" @ion-infinite="onInfinite">
       <IonInfiniteScrollContent />
     </IonInfiniteScroll>
-    <SubscriptionDialog
-      v-model:open="subscriptionDialogOpen"
-      :packages="subscription.packages"
-      :is-subscribed="subscription.isSubscribed"
-      :purchasing="subscription.purchasing"
-      :restoring="subscription.restoring"
-      :legal-documents="subscription.legalDocuments"
-      @subscribe="subscription.onSubscribe"
-      @restore="subscription.onRestore"
-    />
   </AppPage>
 </template>
 
@@ -75,9 +65,9 @@ import {
   PlaylistStarterPacks,
   SubscriptionNagBanner,
 } from "@ui/features/playlist/index.js"
-import { SubscriptionDialog } from "@ui/features/settings/index.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
@@ -136,12 +126,12 @@ const showActivity = computed(
 // users see the banner flash on first home-screen visit and then
 // disappear once entitlements load.
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
+const paywall = usePaywallStore()
 const subscription = useSubscriptionBinding()
 const subscriptionNagDismissedAt = useConfig<number | null>(
   "home.subscriptionNag.dismissedAt",
   null
 )
-const subscriptionDialogOpen = ref(false)
 const showSubscriptionNag = computed(() => {
   if (!subscription.ready) return false
   if (!subscription.available || subscription.isSubscribed) return false

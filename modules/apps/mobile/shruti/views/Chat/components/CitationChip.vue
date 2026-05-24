@@ -219,7 +219,7 @@ async function onAddToPlaylist(): Promise<void> {
  */
 function onOpenInStudio(): void {
   if (!purchases.isSubscribed) {
-    paywall.requestOpen()
+    paywall.requestOpen("notesStudio")
     return
   }
   studioHandoff.setPending({

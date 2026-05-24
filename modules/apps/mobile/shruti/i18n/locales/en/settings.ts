@@ -27,10 +27,11 @@ export default {
     title: "Subscription",
     description: "Subscription management",
     subscriptionIsActive: "Subscription is active",
-    tapToManage: "You are already subscribed",
+    tapToManage: "Tap to view or manage",
     choose: 'Support "Shruti"',
     subscribe: "Subscribe",
     subscribed: "Subscription completed",
+    manage: "Manage Subscription",
     restore: "Restore",
     restored: "Your subscription has been successfully restored!",
     error: "An error occurred during the operation. Please try again.",
@@ -73,6 +74,18 @@ export default {
         title: "Advanced Search",
         description: "Search through lecture texts to quickly find needed moments.",
         icon: "🔍",
+      },
+      autoScroll: {
+        title: "Automatic Scroll",
+        description:
+          "The transcript follows along as audio plays, so the current paragraph is always in view.",
+        icon: "📜",
+      },
+      notesStudio: {
+        title: "Notes Studio",
+        description:
+          "Quote any moment from a lecture, refine it in a focused editor, and share it as a clean note.",
+        icon: "✍️",
       },
     },
     periods: {
