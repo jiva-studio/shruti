@@ -180,17 +180,22 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  // Lazy because `app.auth` is wired by the composition root and the
+  // factories are called from inside reactive setup — using the deps
+  // object directly here would freeze the reference at store-setup
+  // time and miss any auth re-init.
+  const authDeps = { getAccessToken: () => app.auth.getAccessToken() }
   function streamClient() {
-    return createHttpChatStreamClient()
+    return createHttpChatStreamClient(authDeps)
   }
   function titleService() {
-    return createHttpChatTitleService()
+    return createHttpChatTitleService(authDeps)
   }
   function questionsService() {
-    return createHttpChatQuestionsService()
+    return createHttpChatQuestionsService(authDeps)
   }
   function feedbackService() {
-    return createHttpChatFeedbackService()
+    return createHttpChatFeedbackService(authDeps)
   }
 
   async function refreshSessions(): Promise<void> {
