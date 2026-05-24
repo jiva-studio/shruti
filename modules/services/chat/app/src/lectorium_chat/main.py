@@ -220,7 +220,6 @@ app.add_middleware(
         # JWT for user identity + per-user rate-limit keying. Replaces
         # the legacy X-Device-Id header.
         "Authorization",
-        "X-App-Token",
         # SSE v1 handshake — client MUST send `X-Chat-Protocol-Version: 1`
         # on every /chat call (see api/chat.py:_check_protocol_version).
         # Without it on this list, the CORS preflight rejects with 400

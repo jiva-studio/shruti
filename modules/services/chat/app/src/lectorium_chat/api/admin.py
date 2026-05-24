@@ -33,15 +33,15 @@ async def root() -> dict[str, Any]:
         "version": get_settings().service_version,
         "endpoints": {
             "POST /chat": "SSE stream of agent response "
-                          "(requires X-App-Token + Authorization: Bearer <jwt>)",
+                          "(requires Authorization: Bearer <jwt>)",
             "POST /title": "one-shot session title from a short history "
-                           "(requires X-App-Token + Authorization: Bearer <jwt>)",
+                           "(requires Authorization: Bearer <jwt>)",
             "POST /questions": "3-4 suggested questions for a focus fragment "
-                               "(requires X-App-Token + Authorization: Bearer <jwt>)",
-            "POST /reindex": "force indexer run (requires X-App-Token)",
+                               "(requires Authorization: Bearer <jwt>)",
+            "POST /reindex": "force indexer run (admin, requires X-App-Token)",
             "GET /healthz": "liveness",
             "GET /readyz": "readiness (db + embedder + catalog)",
-            "GET /status": "detailed runtime status (requires X-App-Token)",
+            "GET /status": "detailed runtime status (admin, requires X-App-Token)",
             "GET /version": "build info",
         },
     }

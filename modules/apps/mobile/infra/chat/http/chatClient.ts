@@ -186,14 +186,12 @@ export async function fetchSessionTitle(
   lang: "ru" | "en",
   opts: {
     baseUrl?: string
-    appToken?: string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<string | null> {
   if (messages.length === 0) return null
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
-  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
 
   let token: string
   try {
@@ -210,7 +208,6 @@ export async function fetchSessionTitle(
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
-        "X-App-Token": appToken,
         "Idempotency-Key": newIdempotencyKey(),
       },
       body: JSON.stringify({ messages, lang }),
@@ -257,13 +254,11 @@ export async function fetchSuggestedQuestions(
   lang: "ru" | "en",
   opts: {
     baseUrl?: string
-    appToken?: string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<readonly string[]> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
-  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
 
   let token: string
   try {
@@ -281,7 +276,6 @@ export async function fetchSuggestedQuestions(
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: `Bearer ${token}`,
-        "X-App-Token": appToken,
         "Idempotency-Key": newIdempotencyKey(),
       },
       body: JSON.stringify({ focus, lang }),
@@ -335,13 +329,11 @@ export async function postFeedback(
   payload: FeedbackPayload,
   opts: {
     baseUrl?: string
-    appToken?: string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<void> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
-  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
   const token = await resolveAccessToken(opts.getAccessToken)
 
   const traceId = payload.messageId.replace(/-/g, "").toLowerCase()
@@ -358,7 +350,6 @@ export async function postFeedback(
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
-      "X-App-Token": appToken,
     },
     body: JSON.stringify(body),
     signal: opts.signal,
@@ -386,7 +377,6 @@ export interface ProactiveTurnOptions {
 export interface StreamChatRequestInit {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
-  readonly appToken?: string
   /** JWT provider — typically `app.auth.getAccessToken`, injected
    *  through the adapter's constructor. Required: the chatClient
    *  doesn't hold any module-level fallback. */
@@ -433,7 +423,6 @@ export async function* streamChat(
   opts: StreamChatRequestInit
 ): AsyncGenerator<ChatStreamEvent, void, void> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
-  const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
   const token = await resolveAccessToken(opts.getAccessToken)
 
   // Transient errors (network blip, 502/503/504 during a server redeploy)
@@ -453,7 +442,6 @@ export async function* streamChat(
     "Content-Type": "application/json",
     Accept: "text/event-stream",
     Authorization: `Bearer ${token}`,
-    "X-App-Token": appToken,
     "X-Chat-Protocol-Version": "1",
     "Idempotency-Key": idempotencyKey,
   }
