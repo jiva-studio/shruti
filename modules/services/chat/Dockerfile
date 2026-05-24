@@ -35,6 +35,12 @@ RUN mkdir -p /var/lib/chat && chown chat:chat /var/lib/chat /app
 
 USER chat
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG SHRUTI_BUILD_SHA=dev
+ARG SHRUTI_BUILD_TIME=dev
+ENV SHRUTI_BUILD_SHA=$SHRUTI_BUILD_SHA \
+    SHRUTI_BUILD_TIME=$SHRUTI_BUILD_TIME
+
 EXPOSE 8080
 
 CMD ["uvicorn", "shruti_chat.main:app", "--host", "0.0.0.0", "--port", "8080"]

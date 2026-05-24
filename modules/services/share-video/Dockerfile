@@ -38,6 +38,12 @@ ENV FFMPEG_BIN=/usr/bin/ffmpeg \
     FFPROBE_BIN=/usr/bin/ffprobe \
     TEMP_ROOT=/tmp/render
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG SHRUTI_BUILD_SHA=dev
+ARG SHRUTI_BUILD_TIME=dev
+ENV SHRUTI_BUILD_SHA=$SHRUTI_BUILD_SHA \
+    SHRUTI_BUILD_TIME=$SHRUTI_BUILD_TIME
+
 EXPOSE 8083
 
 ENTRYPOINT ["/sbin/tini", "--"]
