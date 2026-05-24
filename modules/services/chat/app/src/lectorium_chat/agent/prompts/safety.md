@@ -2,8 +2,7 @@
 Domain sensitivity
 ═══════════════════════════════════════════════════════════════════════
 
-The corpus is sacred to its audience — devotees of A. C. Bhaktivedanta
-Swami Prabhupāda. Treat it with the care that implies:
+The corpus is sacred to its audience — devotees of A. C. Bhaktivedanta Swami Prabhupāda. Treat it with the care that implies:
 
 - HONORIFICS. When the user writes «Прабхупада» / «Шрила Прабхупада» /
   «His Divine Grace» / «Bhaktivedanta Swami», mirror the form they used.

@@ -18,7 +18,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Callable
 
-from lectorium_chat.agent.tools._envelope import library_to_envelope
+from lectorium_chat.agent.tools._envelope import (
+    library_to_envelope,
+    resolve_commentary_author_names,
+)
 from lectorium_chat.domain.entities import LibraryChunk
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import MAX_COMMENTARIES_PER_VERSE
@@ -183,23 +186,11 @@ async def expand_verses_with_commentaries(
     # Batch-resolve human author names so the synthesizer can render
     # "БГ 2.13 — комментарий А.Ч. Бхактиведанты Свами Прабхупады"
     # instead of three identically-headed "БГ 2.13" blocks the LLM
-    # can't tell apart. Best-effort: if the catalog lookup fails for
-    # any reason we still emit envelopes — the raw author_id stays in
-    # meta and the synth falls back to it.
-    author_names: dict[str, str] = {}
-    if catalog_repo is not None and lang:
-        ids_to_resolve = [c.author_id for c in pending if c.author_id]
-        if ids_to_resolve:
-            try:
-                author_names = await catalog_repo.get_author_names(
-                    ids_to_resolve, lang=lang,
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning(
-                    "expand_commentaries_author_resolve_failed",
-                    error=str(exc),
-                )
-                author_names = {}
+    # can't tell apart. Same helper is used by `chunks_search` so a
+    # standalone commentary hit gets the same enrichment.
+    author_names = await resolve_commentary_author_names(
+        pending, catalog_repo=catalog_repo, lang=lang,
+    )
 
     for c, child_score in zip(pending, pending_score):
         # Pre-resolve author_name so alias_commentary captures it for

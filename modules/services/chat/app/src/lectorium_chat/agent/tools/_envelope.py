@@ -14,11 +14,16 @@ meta so the model can emit `[verse:source_id/tokens|...]` directly.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain.entities import Chunk, LibraryChunk
+from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
+
+
+log = logging.getLogger(__name__)
 
 
 # Cyrillic / Latin sentence terminator (`.` / `!` / `?` / `…`) followed
@@ -38,26 +43,36 @@ def split_into_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def _format_hms(ms: int) -> str:
-    """Milliseconds → `HH:MM:SS` (or `MM:SS` if under an hour)."""
-    total_s = max(0, int(ms)) // 1000
-    h, rem = divmod(total_s, 3600)
-    m, s = divmod(rem, 60)
-    if h:
-        return f"{h:02d}:{m:02d}:{s:02d}"
-    return f"{m:02d}:{s:02d}"
+async def resolve_commentary_author_names(
+    chunks: list[LibraryChunk],
+    *,
+    catalog_repo: CatalogRepository | None,
+    lang: str | None,
+) -> dict[str, str]:
+    """Batch-resolve `author_id` → human full_name for commentary chunks.
 
-
-def _lecture_label(start_ms: int, end_ms: int) -> str:
-    """Time-window label for a lecture chunk.
-
-    Track-level metadata (date, location) isn't joined in here to keep
-    the call cheap — search returns dozens of chunks and we don't want
-    a catalog lookup per row. The label becomes "Lecture [12:00–12:45]"
-    which is enough for the LLM to disambiguate; richer track context
-    is fetched on demand via `chunks_get_window` or list_tracks.
+    Centralises the lookup that previously lived only in
+    `research/commentary_expansion.py`; the same path now runs after
+    `chunks_search`'s library branch so a standalone commentary result
+    arrives at the synthesizer with a real author name rather than a
+    raw `author_id`. Best-effort: if the catalog lookup fails (or no
+    catalog/lang supplied), returns an empty mapping and callers fall
+    back to displaying just the address.
     """
-    return f"Lecture [{_format_hms(start_ms)}–{_format_hms(end_ms)}]"
+    if catalog_repo is None or not lang:
+        return {}
+    ids = [
+        c.author_id
+        for c in chunks
+        if c.author_id and c.item_kind == "commentary"
+    ]
+    if not ids:
+        return {}
+    try:
+        return await catalog_repo.get_author_names(list(set(ids)), lang=lang)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("commentary_author_resolve_failed: %s", exc)
+        return {}
 
 
 def lecture_to_envelope(
@@ -68,6 +83,12 @@ def lecture_to_envelope(
     `track_id` is intentionally NOT in the output — the LLM uses `ref`
     everywhere. The marker expander resolves `[^N]` server-side
     using `alias_map.resolve(N)` to recover the real `track_id`.
+
+    `label` is intentionally empty — the timecode lives in `meta` and
+    rides to the client via alias_map; surfacing it in the LLM-facing
+    header `[^N] Lecture [12:00–12:45]` only primed the model to copy
+    timecodes into its prose, duplicating what the citation chip
+    already shows.
     """
     ref = alias_map.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms)
     meta: dict[str, Any] = {"start_ms": chunk.start_ms, "end_ms": chunk.end_ms}
@@ -76,7 +97,7 @@ def lecture_to_envelope(
     return {
         "type": "lecture",
         "ref": ref,
-        "label": _lecture_label(chunk.start_ms, chunk.end_ms),
+        "label": "",
         "text": chunk.text,
         "lang": chunk.lang,
         "score": score,

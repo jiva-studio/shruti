@@ -24,6 +24,7 @@ from typing import Any
 from lectorium_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
+    resolve_commentary_author_names,
 )
 from lectorium_chat.agent.tools._registry import ToolDef, register_tool
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
@@ -115,10 +116,29 @@ async def chunks_search(
             date_to=date_to,
             top_k=k,
         )
-        return [
-            library_to_envelope(s.chunk, alias_map=alias_map, score=s.score)
-            for s in scored
-        ]
+        # Batch-resolve human author names for commentary results so the
+        # synthesizer renders "БГ 2.13 — комментарий А.Ч. Бхактиведанты"
+        # instead of a raw `author_jcC2O…` opaque id. Mirrors the same
+        # enrichment in `research/commentary_expansion.py` so a
+        # standalone commentary search hit isn't second-class.
+        names = await resolve_commentary_author_names(
+            [s.chunk for s in scored],
+            catalog_repo=catalog_repo,
+            lang=use_lang or lang,
+        )
+        envs: list[dict[str, Any]] = []
+        for s in scored:
+            extra = None
+            if s.chunk.item_kind == "commentary" and s.chunk.author_id:
+                name = names.get(s.chunk.author_id)
+                if name:
+                    extra = {"author_name": name}
+            envs.append(
+                library_to_envelope(
+                    s.chunk, alias_map=alias_map, score=s.score, extra_meta=extra,
+                )
+            )
+        return envs
 
     async def _run(use_lang: str | None) -> list[dict[str, Any]]:
         if type == "lecture":

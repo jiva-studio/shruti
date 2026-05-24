@@ -233,7 +233,6 @@ async def run_react_loop(
     user_query: str,
     *,
     extracted_args: dict[str, Any],
-    lang: str,
     llm: _LLMForResearch,
     tools: dict[str, ToolFn],
     tool_schemas: list[dict[str, Any]],
@@ -272,7 +271,7 @@ async def run_react_loop(
     seed_args = _extracted_args_block(extracted_args)
     messages: list[Message] = [
         {"role": "system", "content": system_prompt + seed_args},
-        {"role": "user", "content": f"[lang={lang}] {user_query}"},
+        {"role": "user", "content": user_query},
     ]
     result = ResearchResult()
 

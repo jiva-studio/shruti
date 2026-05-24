@@ -93,9 +93,11 @@ async def test_unknown_stays_unknown_below_threshold() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lang_is_in_user_message() -> None:
-    """The lang tag flows into the user message so the model can use
-    it as a soft hint for which language's terminology to favour."""
+async def test_lang_substituted_into_system_prompt() -> None:
+    """`lang` is substituted into the `{{LANG}}` placeholder in the
+    router prompt (system message) instead of being prefixed onto the
+    user message — keeps the directive close to the rule that uses
+    it, no per-turn user-content noise."""
     llm = FakeLLMForRouter(
         responses=[RoutingDecision(intent="direct_chat", confidence=0.95)]
     )
@@ -103,9 +105,10 @@ async def test_lang_is_in_user_message() -> None:
     assert len(llm.seen_calls) == 1
     msgs = llm.seen_calls[0]
     assert msgs[0]["role"] == "system"
+    assert "{{LANG}}" not in msgs[0]["content"]
+    assert "`ru`" in msgs[0]["content"] or "ru\n" in msgs[0]["content"]
     assert msgs[1]["role"] == "user"
-    assert "lang=ru" in msgs[1]["content"]
-    assert "привет" in msgs[1]["content"]
+    assert msgs[1]["content"] == "привет"
 
 
 @pytest.mark.asyncio

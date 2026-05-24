@@ -112,7 +112,6 @@ async def test_single_tool_call_then_converge() -> None:
     result = await run_react_loop(
         "найди про карму",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -154,7 +153,6 @@ async def test_multi_step_cross_kind_chain() -> None:
     result = await run_react_loop(
         "найди про карму",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x, "search_y": search_y},
         tool_schemas=_FAKE_SCHEMAS,
@@ -195,7 +193,6 @@ async def test_first_turn_forces_tool_choice() -> None:
     await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm_single,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -215,7 +212,6 @@ async def test_first_turn_forces_tool_choice() -> None:
     await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm_multi,
         tools={"search_x": search_x, "search_y": search_y},
         tool_schemas=_FAKE_SCHEMAS,
@@ -244,7 +240,6 @@ async def test_max_turns_cap_reached() -> None:
     result = await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -277,7 +272,6 @@ async def test_unknown_tool_returns_error_dict() -> None:
     result = await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -305,7 +299,6 @@ async def test_tool_raising_returns_error_dict() -> None:
     result = await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -328,7 +321,6 @@ async def test_extracted_args_appear_in_system_prompt() -> None:
     await run_react_loop(
         "find verses about karma",
         extracted_args={"year": 1976, "location": "Bombay", "source_id": "BG"},
-        lang="en",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
@@ -370,7 +362,6 @@ async def test_tool_lifecycle_callback_fires_around_each_dispatch() -> None:
     await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x, "search_y": search_y},
         tool_schemas=_FAKE_SCHEMAS,
@@ -406,7 +397,6 @@ async def test_tool_lifecycle_fires_even_on_tool_error() -> None:
     await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"broken_tool": broken_tool},
         tool_schemas=_FAKE_SCHEMAS,
@@ -443,7 +433,6 @@ async def test_streamed_prose_dropped_not_returned() -> None:
     result = await run_react_loop(
         "x",
         extracted_args={},
-        lang="ru",
         llm=llm,
         tools={"search_x": search_x},
         tool_schemas=_FAKE_SCHEMAS,
