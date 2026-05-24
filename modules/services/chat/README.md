@@ -12,7 +12,7 @@ Whole stack (postgres + chat) via the workspace-level dev compose:
 
 ```bash
 cp infra/.env.example infra/.env.dev
-# fill: AWS_*, OPENROUTER_API_KEY, APP_SHARED_TOKEN
+# fill: AWS_*, OPENROUTER_API_KEY, APP_SHARED_TOKEN (admin endpoints only)
 
 docker compose \
   -f infra/app/compose/docker-compose.yml \
@@ -21,10 +21,11 @@ docker compose \
 # wait for service_ready (~few seconds)
 # indexer chews the corpus in the background
 
+# User endpoints take a JWT (issued by /auth/anonymous or /auth/signin).
 curl -fsS -N -X POST http://localhost:8080/chat \
-  -H "X-Device-Id: test-001" \
-  -H "X-App-Token: dev-token" \
+  -H "Authorization: Bearer $JWT" \
   -H "Accept: text/event-stream" \
+  -H "X-Chat-Protocol-Version: 1" \
   -d '{"messages":[{"role":"user","content":"что Прабхупада говорил про варнашраму?"}],"lang":"ru"}'
 ```
 
@@ -41,12 +42,20 @@ SERVER_IP=YOUR.IP.HERE ./infra/app/scripts/deploy.sh
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
-| `POST /chat` | `X-App-Token` + `X-Device-Id` | SSE stream of agent response |
-| `POST /reindex` | `X-App-Token` | Force indexer run |
+| `POST /chat` | Bearer JWT | SSE stream of agent response |
+| `POST /title` | Bearer JWT | One-shot session title |
+| `POST /questions` | Bearer JWT | Suggested follow-up chips |
+| `POST /chat/feedback` | Bearer JWT | Thumbs-up/down on a turn |
+| `POST /reindex` | `X-App-Token` (admin) | Force indexer run |
+| `GET /status` | `X-App-Token` (admin) | Detailed runtime status |
 | `GET /healthz` | — | Liveness |
 | `GET /readyz` | — | Readiness (db + embedder + catalog) |
-| `GET /status` | `X-App-Token` | Detailed runtime status |
 | `GET /version` | — | Build info |
+
+JWT comes from the auth service — `/auth/anonymous` for device-bound
+guest sessions, `/auth/signin` for Google/Apple sign-in. `X-App-Token`
+is a separate operator-only shared secret for `/status` + `/reindex`;
+user endpoints don't take it.
 
 ## Cost
 
