@@ -131,6 +131,17 @@ async def lifespan(app: FastAPI):
         else JwtVerifier.from_file(s.jwt_public_key_path)
     )
 
+    # Idempotency gate for /chat. Redis-backed when configured;
+    # otherwise no-op so dev deploys without Redis don't break.
+    if s.redis_url:
+        from shruti_chat.infra.idempotency.redis_idempotency_store import (
+            RedisIdempotencyStore,
+        )
+        idempotency_store = RedisIdempotencyStore(s.redis_url)
+    else:
+        from shruti_chat.infra.idempotency.noop import NoopIdempotencyStore
+        idempotency_store = NoopIdempotencyStore()
+
     # LangGraph wiring. Compile the chat graph once and stash on deps —
     # node fns are async and stateless, the compiled graph is reused
     # for every chat turn.
@@ -152,6 +163,7 @@ async def lifespan(app: FastAPI):
         rate_limiter=rate_limiter,
         jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,
+        idempotency_store=idempotency_store,
         llm=llm_provider,
         chat_graph=chat_graph,
     )
