@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     # Path to the auth service's public key. Mounted into the container
     # at /secrets/public.pem by compose (read-only). RS256 only.
     jwt_public_key_path: Path = Path("/secrets/public.pem")
+    # Optional directory of `<kid>.pub.pem` files. When set the verifier
+    # loads them into a kid → key map so the auth service can rotate
+    # signing keys without invalidating outstanding tokens. The legacy
+    # `public.pem` filename inside the dir is mapped to kid `v1`.
+    jwt_public_keys_dir: Path | None = None
 
     # Per-(scope, user) daily limits. Anonymous users (those carrying an
     # /auth/anonymous-minted JWT with `anonymous=true`) get tighter quotas

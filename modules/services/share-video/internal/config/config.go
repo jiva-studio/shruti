@@ -33,6 +33,10 @@ type Config struct {
 	Transcriber       string
 
 	JWTPublicKeyPath string
+	// JWTPublicKeysDir, if set, opts the verifier into multi-key /
+	// kid-aware mode: every `<kid>.pub.pem` in the directory is
+	// loaded, plus the legacy `public.pem` mapped to kid "v1".
+	JWTPublicKeysDir string
 
 	AnonPerDay     int
 	SignedInPerDay int
@@ -69,6 +73,7 @@ func Load() (Config, error) {
 		Transcriber:     strings.ToLower(env("TRANSCRIBER", "whisper")),
 
 		JWTPublicKeyPath: env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
+		JWTPublicKeysDir: os.Getenv("JWT_PUBLIC_KEYS_DIR"),
 
 		AnonPerDay:     parseInt("SHARE_VIDEO_ANON_PER_DAY", 3),
 		SignedInPerDay: parseInt("SHARE_VIDEO_SIGNED_IN_PER_DAY", 20),

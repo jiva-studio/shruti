@@ -67,7 +67,12 @@ func main() {
 		slog.ErrorContext(bootCtx, "jwt_signer_init_failed", "err", err.Error())
 		os.Exit(1)
 	}
-	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	var verifier *jwt.Verifier
+	if cfg.JWTPublicKeysDir != "" {
+		verifier, err = jwt.NewVerifierFromDir(cfg.JWTPublicKeysDir)
+	} else {
+		verifier, err = jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
+	}
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		os.Exit(1)

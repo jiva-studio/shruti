@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	gjwt "github.com/golang-jwt/jwt/v5"
@@ -30,9 +32,13 @@ type Signer struct {
 	kid  string
 }
 
-// Verifier checks signature/exp of tokens issued by Signer.
+// Verifier checks signature/exp of tokens issued by Signer. Holds a
+// kid → public-key map so an operator can rotate signing keys without
+// invalidating outstanding tokens: drop a `<new-kid>.pub.pem` file
+// next to the old one, flip the signer's `JWT_KID`, and old + new
+// tokens both validate until the old ones age out.
 type Verifier struct {
-	pub *rsa.PublicKey
+	keys map[string]*rsa.PublicKey
 }
 
 // NewSignerFromFile reads a PEM-encoded RSA private key.
@@ -52,17 +58,64 @@ func NewSignerFromFile(path, kid string) (*Signer, error) {
 	return &Signer{priv: priv, kid: kid}, nil
 }
 
-// NewVerifierFromFile reads a PEM-encoded RSA public key.
+// NewVerifierFromFile reads a single PEM-encoded RSA public key and
+// registers it under kid "v1" (the default signer kid). Back-compat
+// path for the single-file deploy.
 func NewVerifierFromFile(path string) (*Verifier, error) {
+	pub, err := loadPublicKey(path)
+	if err != nil {
+		return nil, err
+	}
+	return &Verifier{keys: map[string]*rsa.PublicKey{"v1": pub}}, nil
+}
+
+// NewVerifierFromDir scans `dir` for `*.pub.pem` files and registers
+// each under its filename-derived kid (`v2.pub.pem` → kid "v2"). The
+// legacy `public.pem` filename is mapped to kid "v1" so an operator
+// can opt into multi-key mode by adding files without renaming the
+// existing one.
+func NewVerifierFromDir(dir string) (*Verifier, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.pub.pem"))
+	if err != nil {
+		return nil, fmt.Errorf("scan %s: %w", dir, err)
+	}
+	if legacy := filepath.Join(dir, "public.pem"); fileExists(legacy) {
+		matches = append(matches, legacy)
+	}
+	keys := map[string]*rsa.PublicKey{}
+	for _, f := range matches {
+		base := filepath.Base(f)
+		kid := strings.TrimSuffix(base, ".pub.pem")
+		if base == "public.pem" {
+			kid = "v1"
+		}
+		pub, err := loadPublicKey(f)
+		if err != nil {
+			return nil, err
+		}
+		keys[kid] = pub
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no public keys in %s (expected public.pem or *.pub.pem)", dir)
+	}
+	return &Verifier{keys: keys}, nil
+}
+
+func loadPublicKey(path string) (*rsa.PublicKey, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read public key %s: %w", path, err)
 	}
 	pub, err := gjwt.ParseRSAPublicKeyFromPEM(b)
 	if err != nil {
-		return nil, fmt.Errorf("parse public key: %w", err)
+		return nil, fmt.Errorf("parse public key %s: %w", path, err)
 	}
-	return &Verifier{pub: pub}, nil
+	return pub, nil
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 // Issue signs a JWT. If jti is uuid.Nil a fresh one is generated.
@@ -90,13 +143,26 @@ func (s *Signer) Issue(userID uuid.UUID, anonymous bool, ttl time.Duration, jti 
 }
 
 // Verify parses and checks signature + exp. Returns claims if valid.
+// Looks up the public key by the token's `kid` header; tokens without
+// a kid (or with an unknown one) are rejected. Legacy tokens that
+// pre-date kid emission still validate because the signer has been
+// stamping kid="v1" since day one.
 func (v *Verifier) Verify(token string) (*Claims, error) {
 	claims := &Claims{}
 	_, err := gjwt.ParseWithClaims(token, claims, func(t *gjwt.Token) (any, error) {
 		if _, ok := t.Method.(*gjwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected alg %v", t.Header["alg"])
 		}
-		return v.pub, nil
+		kid, _ := t.Header["kid"].(string)
+		if kid == "" {
+			// Single-key deploys never set kid pre-rotation; assume v1.
+			kid = "v1"
+		}
+		key, ok := v.keys[kid]
+		if !ok {
+			return nil, fmt.Errorf("unknown kid %q", kid)
+		}
+		return key, nil
 	}, gjwt.WithValidMethods([]string{"RS256"}))
 	if err != nil {
 		return nil, err

@@ -98,7 +98,12 @@ func main() {
 	}
 
 	// HTTP layer.
-	verifier := httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
+	var verifier *httpx.JWTVerifier
+	if cfg.JWTPublicKeysDir != "" {
+		verifier = httpx.NewJWTVerifierFromDir(cfg.JWTPublicKeysDir)
+	} else {
+		verifier = httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
+	}
 	srvHandlers := &httpx.Server{
 		Pool:             pool,
 		AnonPerDay:       cfg.AnonPerDay,

@@ -125,7 +125,11 @@ async def lifespan(app: FastAPI):
     rate_limiter = RateLimiter(
         store=PgRateLimitStore(pool=pool), settings=s,
     )
-    jwt_verifier = JwtVerifier(public_key_path=s.jwt_public_key_path)
+    jwt_verifier = (
+        JwtVerifier.from_dir(s.jwt_public_keys_dir)
+        if s.jwt_public_keys_dir is not None
+        else JwtVerifier.from_file(s.jwt_public_key_path)
+    )
 
     # LangGraph wiring. Compile the chat graph once and stash on deps —
     # node fns are async and stateless, the compiled graph is reused
