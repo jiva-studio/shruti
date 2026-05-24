@@ -27,14 +27,19 @@ x-no-watchtower: &no-watchtower
 
 services:
   # Tails /var/lib/docker/containers/*/*-json.log (every container on the
-  # host) and pushes to Loki on obs. Runs as root because Docker's json log
-  # files are owned by root and not world-readable. WAL buffers up to a few
-  # hours of logs locally if obs is unreachable.
+  # host) and pushes to Loki on obs. Runs as root because Docker's json
+  # log files are owned by root and not world-readable; cap_drop:[ALL]
+  # + no-new-privileges takes the kernel-capability surface back down so
+  # a compromised promtail can't escalate (file reads via DAC still
+  # work — UID 0 reads its 0600 root: files without any cap).
   promtail:
     image: grafana/promtail:3.3.0
     container_name: lectorium-promtail
     restart: unless-stopped
     user: root
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     labels: *no-watchtower
     command:
       - -config.file=/etc/promtail/config.yaml

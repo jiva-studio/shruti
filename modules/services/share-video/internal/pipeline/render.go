@@ -81,6 +81,22 @@ func (r *Renderer) Render(ctx context.Context, in Input) (Output, error) {
 		return Output{}, fmt.Errorf("source download: %w", err)
 	}
 
+	// Pre-flight: probe the downloaded source and reject anything that
+	// doesn't look like an mp3/m4a audio file BEFORE the first ffmpeg
+	// invocation. sourceKey is regex-gated at the API layer
+	// (httpx/validate.go: public/(tracks|shares)/...mp3) but content
+	// can drift from the path; this stops misclassified objects
+	// reaching ffmpeg's format parsers.
+	srcInfo, err := ProbeAudio(ctx, r.FFprobeBin, srcPath)
+	if err != nil {
+		return Output{}, fmt.Errorf("source probe: %w", err)
+	}
+	if err := ValidateAudioInfo(srcInfo); err != nil {
+		log.Warn("source_rejected", "key", in.Request.SourceKey, "reason", err.Error(),
+			"format", srcInfo.Format, "codec", srcInfo.AudioCodec, "duration", srcInfo.Duration)
+		return Output{}, fmt.Errorf("source rejected: %w", err)
+	}
+
 	log.Info("audio_cut_start", "start_ms", in.Request.StartMs, "end_ms", in.Request.EndMs)
 	if err := CutAudio(ctx, r.FFmpegBin, srcPath, cutPath, in.Request.StartMs, in.Request.EndMs); err != nil {
 		return Output{}, fmt.Errorf("audio cut: %w", err)
