@@ -1,0 +1,19 @@
+# gitleaks config — extends defaults with project-specific allowlist.
+# Keep entries narrow (path + rule) so a real leak in the same file
+# isn't accidentally masked.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project allowlist: docs examples and lockfile checksums"
+
+# Per-path: CocoaPods Podfile.lock checksums look like API keys to the
+# generic rule but are SHA-1s of the spec, not credentials. The chat
+# README has multi-line curl examples that trip the curl-auth-header
+# rule with the literal placeholder `dev-token`; it's docs, not a
+# secret.
+paths = [
+  '''modules/apps/mobile/ios/App/Podfile\.lock''',
+  '''modules/services/chat/README\.md''',
+]
