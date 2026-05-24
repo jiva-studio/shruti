@@ -11,3 +11,8 @@ RUN xcaddy build \
 
 FROM caddy:2.10-alpine
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+# Bake the app Caddyfile in so CORS / rate-limit / route changes ride
+# the normal CI → Watchtower path without an out-of-band SSH rsync.
+# The obs stack reuses this same image but overrides /etc/caddy/Caddyfile
+# via bind-mount with its own envsubst-rendered file.
+COPY Caddyfile /etc/caddy/Caddyfile
