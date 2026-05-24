@@ -5,12 +5,20 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 
 	"github.com/akdasa-studios/lectorium-share-audio/internal/logx"
 	"github.com/akdasa-studios/lectorium-share-audio/internal/pipeline"
+)
+
+// buildSHA / buildTime — set by the image build (Dockerfile ARG → ENV).
+// Empty in local-dev binaries.
+var (
+	buildSHA  = os.Getenv("LECTORIUM_BUILD_SHA")
+	buildTime = os.Getenv("LECTORIUM_BUILD_TIME")
 )
 
 // Max JSON body for /excerpts. Same surface as FastAPI's default — small
@@ -39,7 +47,13 @@ func (s *Server) Router() http.Handler {
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"build": map[string]string{
+			"sha":  buildSHA,
+			"time": buildTime,
+		},
+	})
 }
 
 type excerptBody struct {

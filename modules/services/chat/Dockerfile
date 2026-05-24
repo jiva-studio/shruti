@@ -35,6 +35,12 @@ RUN mkdir -p /var/lib/chat && chown chat:chat /var/lib/chat /app
 
 USER chat
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG LECTORIUM_BUILD_SHA=dev
+ARG LECTORIUM_BUILD_TIME=dev
+ENV LECTORIUM_BUILD_SHA=$LECTORIUM_BUILD_SHA \
+    LECTORIUM_BUILD_TIME=$LECTORIUM_BUILD_TIME
+
 EXPOSE 8080
 
 CMD ["uvicorn", "lectorium_chat.main:app", "--host", "0.0.0.0", "--port", "8080"]

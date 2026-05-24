@@ -17,5 +17,10 @@ COPY --from=build /out/auth /auth
 # CA roots so /auth can hit Google/Apple JWKS over TLS.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Migrations are embedded in the binary via go:embed — nothing to COPY.
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG LECTORIUM_BUILD_SHA=dev
+ARG LECTORIUM_BUILD_TIME=dev
+ENV LECTORIUM_BUILD_SHA=$LECTORIUM_BUILD_SHA \
+    LECTORIUM_BUILD_TIME=$LECTORIUM_BUILD_TIME
 EXPOSE 8081
 ENTRYPOINT ["/auth"]

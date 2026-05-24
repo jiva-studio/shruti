@@ -191,6 +191,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build stamps baked into every image so /healthz can show which
+      # commit a running container was built from. Operator hits the
+      # endpoint after a push to confirm Watchtower rolled the new image.
+      - id: buildstamp
+        run: |
+          echo "sha=${GITHUB_SHA::10}" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -214,6 +222,9 @@ jobs:
           tags: lectorium-${{ matrix.service }}:scan
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          build-args: |
+            LECTORIUM_BUILD_SHA=${{ steps.buildstamp.outputs.sha }}
+            LECTORIUM_BUILD_TIME=${{ steps.buildstamp.outputs.time }}
 
       # Scan for HIGH / CRITICAL CVEs and post the findings to the run
       # log. INFORMATIONAL — step is `continue-on-error: true`, so a
@@ -245,3 +256,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # Re-use cache from the scan build — second build is ~5s.
           cache-from: type=gha,scope=${{ matrix.service }}
+          build-args: |
+            LECTORIUM_BUILD_SHA=${{ steps.buildstamp.outputs.sha }}
+            LECTORIUM_BUILD_TIME=${{ steps.buildstamp.outputs.time }}

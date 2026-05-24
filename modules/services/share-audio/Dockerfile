@@ -26,6 +26,12 @@ COPY --from=build /out/share-audio /usr/local/bin/share-audio
 
 USER share
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG LECTORIUM_BUILD_SHA=dev
+ARG LECTORIUM_BUILD_TIME=dev
+ENV LECTORIUM_BUILD_SHA=$LECTORIUM_BUILD_SHA \
+    LECTORIUM_BUILD_TIME=$LECTORIUM_BUILD_TIME
+
 EXPOSE 8082
 
 ENTRYPOINT ["/sbin/tini", "--"]

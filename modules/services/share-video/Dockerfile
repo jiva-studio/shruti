@@ -38,6 +38,12 @@ ENV FFMPEG_BIN=/usr/bin/ffmpeg \
     FFPROBE_BIN=/usr/bin/ffprobe \
     TEMP_ROOT=/tmp/render
 
+# Build stamps surfaced on /healthz — CI passes both as --build-arg.
+ARG LECTORIUM_BUILD_SHA=dev
+ARG LECTORIUM_BUILD_TIME=dev
+ENV LECTORIUM_BUILD_SHA=$LECTORIUM_BUILD_SHA \
+    LECTORIUM_BUILD_TIME=$LECTORIUM_BUILD_TIME
+
 EXPOSE 8083
 
 ENTRYPOINT ["/sbin/tini", "--"]

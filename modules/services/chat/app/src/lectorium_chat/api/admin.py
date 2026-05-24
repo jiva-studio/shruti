@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -18,6 +19,12 @@ from lectorium_chat.indexer.embed import get_embedder
 router = APIRouter()
 
 _started_at = time.monotonic()
+
+# Build stamps — set by the image build (Dockerfile ARG → ENV). Empty
+# in local-dev. Operators hit /healthz post-deploy to confirm
+# Watchtower rolled the new image.
+_BUILD_SHA = os.environ.get("LECTORIUM_BUILD_SHA", "")
+_BUILD_TIME = os.environ.get("LECTORIUM_BUILD_TIME", "")
 
 
 def _check_token(token: str | None) -> None:
@@ -49,7 +56,10 @@ async def root() -> dict[str, Any]:
 
 @router.get("/healthz")
 async def healthz() -> dict[str, Any]:
-    return {"ok": True}
+    return {
+        "ok": True,
+        "build": {"sha": _BUILD_SHA, "time": _BUILD_TIME},
+    }
 
 
 class ReadyResponse(BaseModel):
