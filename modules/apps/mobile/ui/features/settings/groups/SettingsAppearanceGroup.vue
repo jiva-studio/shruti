@@ -3,7 +3,6 @@
     <IonLabel>{{ $t("settings.groups.appearance") }}</IonLabel>
   </IonListHeader>
   <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
-  <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
   <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
   <ShowPlayerOnNotesSettingsItem v-model="showPlayerOnNotes" />
   <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
@@ -21,7 +20,6 @@ import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
 import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
 import HighlightCurrentSentenceSettingsItem from "../HighlightCurrentSentenceSettingsItem.vue"
 import OpenTranscriptAutomaticallySettingsItem from "../OpenTranscriptAutomaticallySettingsItem.vue"
-import ServerSettingsItem from "../ServerSettingsItem.vue"
 import ShowPlayerOnNotesSettingsItem from "../ShowPlayerOnNotesSettingsItem.vue"
 import ShowPlayerProgressSettingsItem from "../ShowPlayerProgressSettingsItem.vue"
 
@@ -32,14 +30,12 @@ interface SelectorItem {
 
 defineProps<{
   languageItems: SelectorItem[]
-  serverItems: SelectorItem[]
   isSubscribed: boolean
 }>()
 
 const emit = defineEmits<{ "request-paywall": [] }>()
 
 const appLanguage = defineModel<string>("appLanguage", { required: true })
-const activeServerId = defineModel<string>("activeServerId", { required: true })
 const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
 const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
 const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {
