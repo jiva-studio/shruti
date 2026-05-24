@@ -87,6 +87,24 @@ async def chat(
     elif x_trace_id:
         log.info("chat_x_trace_id_invalid", value=x_trace_id[:64])
 
+    # Idempotency gate — duplicate retries within the TTL window bounce
+    # with 409 instead of replaying the LLM turn. Sits BEFORE the rate
+    # limiter so a duplicate doesn't burn the user's daily quota.
+    # Absent header means the client opts out (legacy); we just skip.
+    if idempotency_key:
+        # 10-minute window: longest plausible chat-turn wallclock + safety.
+        acquired = await deps.idempotency_store.try_acquire(
+            f"chat:{user.id}:{idempotency_key}", ttl_seconds=600,
+        )
+        if not acquired:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "duplicate_request",
+                    "message": "Idempotency-Key already in flight or recently completed",
+                },
+            )
+
     # Rate-limit gate (per-day per JWT-sub + per-IP).
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
