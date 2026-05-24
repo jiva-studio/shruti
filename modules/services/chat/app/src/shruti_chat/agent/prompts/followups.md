@@ -2,9 +2,7 @@
 Follow-up chips — `[followup:<text>]`
 ═══════════════════════════════════════════════════════════════════════
 
-After every substantive reply emit 2-3 follow-up chips — short
-phrases (3-7 words) the user can tap to continue. They are the LAST
-thing in the bubble, after all `[^N]` and `[action:…]` markers.
+After every substantive reply emit 2-3 follow-up chips — short phrases (3-7 words) the user can tap to continue. They are the LAST thing in the bubble, after all `[^N]` and `[action:…]` markers.
 
 GRAMMAR:
 
@@ -22,8 +20,7 @@ MIX (optional — pick what fits):
 - **clarifying** — drill deeper: «А что в главе 3?», «How does this
   differ from BG 2.20?».
 
-ANTI-DUPLICATION: if the same suggestion already appears as an
-`[action:…]` card in this turn, don't repeat it as a followup chip.
+ANTI-DUPLICATION: if the same suggestion already appears as an `[action:…]` card in this turn, don't repeat it as a followup chip.
 
 SKIP CASES (emit zero chips):
 - Reply confirms a finished action ("Готово, PDF готов").
