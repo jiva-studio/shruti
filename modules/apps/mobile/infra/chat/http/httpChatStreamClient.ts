@@ -4,11 +4,11 @@ import type {
   IChatStreamClient,
   StreamChatOptions,
 } from "@ports/app/index.js"
-import { streamChat } from "../chatClient.js"
+import { streamChat } from "./chatClient.js"
 
 /**
- * Adapts the existing fetch+SSE `streamChat` generator (under
- * `@shruti/services/chatClient`) to the `IChatStreamClient` port.
+ * Adapts the fetch+SSE `streamChat` generator in `./chatClient.ts` to
+ * the `IChatStreamClient` port.
  *
  * The port + chatClient already share the wire-protocol type names
  * (delta / tool_start / tool_end / status / action / done / error)

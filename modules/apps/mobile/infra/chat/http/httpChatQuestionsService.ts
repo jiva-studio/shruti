@@ -3,7 +3,7 @@ import type {
   FetchSuggestedQuestionsOptions,
   IChatQuestionsService,
 } from "@ports/app/index.js"
-import { fetchSuggestedQuestions } from "../chatClient.js"
+import { fetchSuggestedQuestions } from "./chatClient.js"
 
 /**
  * `IChatQuestionsService` adapter over the existing
