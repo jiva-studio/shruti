@@ -7,7 +7,7 @@ import type {
   UiTranscriptBlocksGroup,
   UiTranscriptLanguage,
 } from "@ui/features/transcript/index.js"
-import { formatReference, formatReferenceFull } from "./groupReferences.js"
+import { formatReference, formatReferenceFull } from "@lib/domain/services/references.js"
 
 /**
  * One saved note's time range, in **milliseconds** — same unit as the

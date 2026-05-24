@@ -31,11 +31,11 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet } from "@ionic/vue"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { groupReferences } from "@shruti/composables/groupReferences.js"
+import { groupReferences } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
-} from "@shruti/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
 import { useToast } from "@shruti/services/useToast.js"

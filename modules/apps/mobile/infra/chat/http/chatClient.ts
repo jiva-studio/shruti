@@ -187,9 +187,9 @@ export async function fetchSessionTitle(
   opts: {
     baseUrl?: string
     appToken?: string
-    getAccessToken?: () => Promise<string | null>
+    getAccessToken: AccessTokenProvider
     signal?: AbortSignal
-  } = {}
+  }
 ): Promise<string | null> {
   if (messages.length === 0) return null
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
@@ -258,9 +258,9 @@ export async function fetchSuggestedQuestions(
   opts: {
     baseUrl?: string
     appToken?: string
-    getAccessToken?: () => Promise<string | null>
+    getAccessToken: AccessTokenProvider
     signal?: AbortSignal
-  } = {}
+  }
 ): Promise<readonly string[]> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
@@ -336,9 +336,9 @@ export async function postFeedback(
   opts: {
     baseUrl?: string
     appToken?: string
-    getAccessToken?: () => Promise<string | null>
+    getAccessToken: AccessTokenProvider
     signal?: AbortSignal
-  } = {}
+  }
 ): Promise<void> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
@@ -375,13 +375,22 @@ export interface ProactiveTurnOptions {
   readonly ruleContext: Record<string, unknown>
 }
 
-export interface StreamChatOptions {
+/**
+ * Request-init for {@link streamChat}. Carries the transport-level
+ * concerns (auth, base URL, app token, abort signal) plus the per-turn
+ * options (proactive context, idempotency, etc.). Distinct from the
+ * port's `StreamChatOptions` (which is the public surface a use case
+ * sees) — the adapter merges port opts with its DI'd `getAccessToken`
+ * before calling this.
+ */
+export interface StreamChatRequestInit {
   readonly signal?: AbortSignal
   readonly baseUrl?: string
   readonly appToken?: string
-  /** Test override for the JWT provider. In production the module-level
-   *  provider (set via setAccessTokenProvider) is used. */
-  readonly getAccessToken?: () => Promise<string | null>
+  /** JWT provider — typically `app.auth.getAccessToken`, injected
+   *  through the adapter's constructor. Required: the chatClient
+   *  doesn't hold any module-level fallback. */
+  readonly getAccessToken: AccessTokenProvider
   /** Snapshot of recent listening + notes for personalization tools. */
   readonly userContext?: unknown
   /** When present, the backend swaps the system prompt for a
@@ -421,7 +430,7 @@ export interface StreamChatOptions {
 export async function* streamChat(
   messages: readonly ChatTurn[],
   lang: "ru" | "en",
-  opts: StreamChatOptions = {}
+  opts: StreamChatRequestInit
 ): AsyncGenerator<ChatStreamEvent, void, void> {
   const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
   const appToken = opts.appToken ?? __CHAT_APP_TOKEN__
@@ -568,7 +577,7 @@ export async function* streamChat(
 function buildRequestBody(
   messages: readonly ChatTurn[],
   lang: "ru" | "en",
-  opts: StreamChatOptions
+  opts: StreamChatRequestInit
 ): Record<string, unknown> {
   // Wire-format messages: server's ChatMessageDto expects `aliases`
   // entries in snake_case (track_id / start_ms / end_ms). The domain
@@ -605,27 +614,14 @@ function buildRequestBody(
 }
 
 /**
- * Token provider injected at app boot (shruti.ts wires `useShruti().auth.getAccessToken`
- * into here). Pulled out as a module-level slot so the dozens of call-sites
- * for streamChat / fetchSessionTitle / fetchSuggestedQuestions don't each
- * have to thread an explicit `getAccessToken` argument through.
- *
- * Tests can override via the `getAccessToken` option on each function.
+ * Token provider — each chatClient function takes one in its opts.
+ * Adapters thread the auth port through their own constructor, so
+ * there's no module-level state to worry about across tests / multiple
+ * instances. Tests can pass a synthetic provider directly into the opts.
  */
-type AccessTokenProvider = () => Promise<string | null>
-let _accessTokenProvider: AccessTokenProvider | null = null
+export type AccessTokenProvider = () => Promise<string | null>
 
-export function setAccessTokenProvider(provider: AccessTokenProvider | null): void {
-  _accessTokenProvider = provider
-}
-
-async function resolveAccessToken(override?: AccessTokenProvider): Promise<string> {
-  const provider = override ?? _accessTokenProvider
-  if (!provider) {
-    throw new Error(
-      "chatClient: no access token provider — call setAccessTokenProvider() during app bootstrap"
-    )
-  }
+async function resolveAccessToken(provider: AccessTokenProvider): Promise<string> {
   const token = await provider()
   if (!token) {
     throw new Error("chatClient: auth.getAccessToken returned null (session unrecoverable)")
