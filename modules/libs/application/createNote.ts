@@ -1,5 +1,5 @@
 import type { NoteId, TrackId } from "@lib/domain/core.js"
-import type { Note } from "@lib/domain/note.js"
+import { validateNoteFields, type Note } from "@lib/domain/note.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
 
@@ -17,12 +17,7 @@ export interface CreateNoteInput {
   readonly id?: NoteId
 }
 
-export type CreateNoteError =
-  | "empty-text"
-  | "text-too-long"
-  | "invalid-timestamps"
-
-const MAX_NOTE_LENGTH = 4000
+export type CreateNoteError = "empty-text" | "text-too-long" | "invalid-timestamps"
 
 export interface CreateNoteDeps {
   readonly notes: INoteRepository
@@ -32,22 +27,24 @@ export async function createNote(
   input: CreateNoteInput,
   deps: CreateNoteDeps
 ): Promise<Result<Note, CreateNoteError>> {
-  const text = input.text.trim()
-  if (!text) return err("empty-text")
-  if (text.length > MAX_NOTE_LENGTH) return err("text-too-long")
-  if (
-    !Number.isFinite(input.timeStart) ||
-    !Number.isFinite(input.timeEnd) ||
-    input.timeStart < 0 ||
-    input.timeEnd < input.timeStart
-  ) {
+  const validated = validateNoteFields({
+    text: input.text,
+    timeStart: input.timeStart,
+    timeEnd: input.timeEnd,
+  })
+  if (!validated.ok) {
+    // Domain returns fine-grained tags (invalid-time / invalid-range);
+    // createNote's contract still folds both into a single umbrella so
+    // existing UI callers don't have to branch on a new case.
+    if (validated.error === "empty-text") return err("empty-text")
+    if (validated.error === "text-too-long") return err("text-too-long")
     return err("invalid-timestamps")
   }
   const note = await deps.notes.create({
     trackId: input.trackId,
-    text,
-    timeStart: input.timeStart,
-    timeEnd: input.timeEnd,
+    text: validated.value.text,
+    timeStart: validated.value.timeStart,
+    timeEnd: validated.value.timeEnd,
     id: input.id,
   })
   return ok(note)

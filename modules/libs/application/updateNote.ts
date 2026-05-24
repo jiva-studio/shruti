@@ -1,5 +1,5 @@
 import type { NoteId } from "@lib/domain/core.js"
-import type { Note, NoteMeta } from "@lib/domain/note.js"
+import { validateNoteFields, type Note, type NoteMeta } from "@lib/domain/note.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { err, ok, type Result } from "@lib/domain/result.js"
@@ -13,7 +13,12 @@ export interface UpdateNoteInput {
   readonly meta?: NoteMeta | null
 }
 
-export type UpdateNoteError = "not-found" | "empty-text" | "invalid-range" | "invalid-time"
+export type UpdateNoteError =
+  | "not-found"
+  | "empty-text"
+  | "text-too-long"
+  | "invalid-range"
+  | "invalid-time"
 
 export interface UpdateNoteDeps {
   readonly notes: INoteRepository
@@ -22,37 +27,33 @@ export interface UpdateNoteDeps {
 
 /**
  * Update fields on an existing note. Partial — only provided fields are
- * written. Guards against empty text and inverted time ranges so the
- * repository never sees malformed input.
+ * written. Validates the *merged* (existing + patch) field set against
+ * the same `validateNoteFields` invariants as `createNote`, so a
+ * partial update can't sneak past a constraint the original insert
+ * would have rejected (length cap, negative start, inverted range,
+ * NaN/Infinity).
  */
 export async function updateNote(
   input: UpdateNoteInput,
   deps: UpdateNoteDeps
 ): Promise<Result<Note, UpdateNoteError>> {
-  if (input.text !== undefined && input.text.trim().length === 0) {
-    return err("empty-text")
-  }
-  // NaN/±Infinity pass through `<`/`<=` comparisons as false, so the
-  // range guard below would silently accept garbage. Reject explicitly
-  // — mirrors the Number.isFinite check in createNote.
-  if (input.timeStart !== undefined && !Number.isFinite(input.timeStart)) {
-    return err("invalid-time")
-  }
-  if (input.timeEnd !== undefined && !Number.isFinite(input.timeEnd)) {
-    return err("invalid-time")
-  }
   return deps.unitOfWork.run(async () => {
     const existing = await deps.notes.getById(input.id)
     if (!existing) return err("not-found")
-    // Validate the *merged* range, not just the input pair. A partial
-    // update like { timeStart: 150 } against an existing { 0, 100 }
-    // would otherwise persist start > end and break note rendering.
-    const mergedStart = input.timeStart ?? existing.timeStart
-    const mergedEnd = input.timeEnd ?? existing.timeEnd
-    if (mergedEnd < mergedStart) return err("invalid-range")
+    const merged = {
+      text: input.text ?? existing.text,
+      timeStart: input.timeStart ?? existing.timeStart,
+      timeEnd: input.timeEnd ?? existing.timeEnd,
+    }
+    const validated = validateNoteFields(merged)
+    if (!validated.ok) return err(validated.error)
     const updated = await deps.notes.update({
       id: input.id,
-      text: input.text,
+      // Patch payload still uses the per-field "undefined means don't
+      // touch" convention, but the *text* slot writes the trimmed value
+      // when supplied — otherwise the column would drift between the
+      // domain (always trimmed) and a sloppy caller (untrimmed update).
+      text: input.text !== undefined ? validated.value.text : undefined,
       timeStart: input.timeStart,
       timeEnd: input.timeEnd,
       meta: input.meta,

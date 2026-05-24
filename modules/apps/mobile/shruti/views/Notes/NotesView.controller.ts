@@ -8,8 +8,8 @@ import type { Location } from "@lib/domain/location.js"
 import type { NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
+import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
-import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import { formatNoteShare } from "@lib/application/formatNoteShare.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
 import {
@@ -129,7 +129,7 @@ export function useNotesController(): NotesControllerReturn {
 
     return store.filtered.map((n) => {
       const { track, author, location } = trackContextFor(n.trackId as TrackId)
-      const audioVariant = track ? pickAudioVariant(track) : null
+      const audioVariant = track ? pickPlayableVariant(track) : null
       return {
         id: n.id,
         text: wrap ? highlightMatches(n.text, q) : escapeHtml(n.text),
@@ -182,17 +182,6 @@ export function useNotesController(): NotesControllerReturn {
     const payload = buildShareTextForCurrent()
     if (!payload) return
     await shareService.share({ text: payload })
-  }
-
-  /**
-   * Pick the audio source for cutting: prefer the `original` variant, fall
-   * back to the first variant whose `audio` is non-null. Returns `null` if
-   * the track has no audio at all (translation-only).
-   */
-  function pickAudioVariant(track: Track): TrackVariant | null {
-    const original = track.variants.find((v) => v.audio !== null && v.audio.kind === "original")
-    if (original) return original
-    return track.variants.find((v) => v.audio !== null) ?? null
   }
 
   /**
@@ -340,7 +329,7 @@ export function useNotesController(): NotesControllerReturn {
       await toast.error(t("notes.shareAudioErrorNoAudio"))
       return
     }
-    const variant = pickAudioVariant(track)
+    const variant = pickPlayableVariant(track)
     if (!variant || !variant.audio) {
       await toast.error(t("notes.shareAudioErrorNoAudio"))
       return

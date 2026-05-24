@@ -1,5 +1,5 @@
 import type { IDatabase } from "@ports/app/index.js"
-import { runUserMigrations } from "@shruti/services/migrations/user/runMigrations.js"
+import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import type { useShruti } from "@shruti/shruti.js"
 
 export interface BootstrapUserDatabaseDeps {

@@ -37,3 +37,21 @@ export function maxAudioDurationMs(track: Track): number {
   }
   return max
 }
+
+/**
+ * Pick a variant that has playable audio without considering language.
+ * Prefer the "original" recording, then fall back to any variant whose
+ * audio is non-null; returns `null` when the track is translation-only
+ * (no audio anywhere).
+ *
+ * Use this for surfaces that don't have a preferred-language signal —
+ * share/excerpt flows, citation snippets, post-search "play first
+ * audio I can find" affordances. The lecture player itself uses
+ * `pickVariantWithAudio(track, preferredLanguage)` from `playTrack` to
+ * respect the user's language preference; that is a separate concern.
+ */
+export function pickPlayableVariant(track: Track): TrackVariant | null {
+  const original = track.variants.find((v) => v.audio !== null && v.audio.kind === "original")
+  if (original) return original
+  return track.variants.find((v) => v.audio !== null) ?? null
+}
