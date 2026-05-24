@@ -1,33 +1,29 @@
 <template>
   <AppPage :reserve-player-space="player.open">
     <SettingsAccountGroup
+      v-model:active-server-id="activeServerId"
       :anonymous="auth.anonymous"
       :email="auth.email"
       :name="auth.name"
       :picture="auth.picture"
       :platform="platform"
+      :is-subscribed="subscription.isSubscribed"
+      :server-items="serverItems"
       @sign-in-google="auth.signInGoogle"
       @sign-in-apple="auth.signInApple"
       @sign-out="auth.signOut"
-    />
-
-    <SettingsSubscriptionGroup
-      :available="subscription.available"
-      :is-subscribed="subscription.isSubscribed"
       @open-paywall="paywall.requestOpen"
-      @manage="subscription.onManage"
+      @manage-subscription="subscription.onManage"
     />
 
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
-      v-model:active-server-id="activeServerId"
       v-model:show-player-progress="showPlayerProgress"
       v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:auto-scroll="autoScroll"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
-      :server-items="serverItems"
       :is-subscribed="subscription.isSubscribed"
       @request-paywall="paywall.requestOpen"
     />
@@ -94,7 +90,6 @@ import {
   SettingsDataGroup,
   SettingsHelpGroup,
   SettingsSadhanaGroup,
-  SettingsSubscriptionGroup,
   SmartLibraryDialog,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"

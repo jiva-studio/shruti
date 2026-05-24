@@ -26,6 +26,39 @@
     </IonLabel>
   </IonItem>
 
+  <!-- Subscription row sits inside Account so the "who you are + what you've
+       unlocked + where you fetch from" trio reads as one logical block.
+       Always visible — including on builds without RC keys, where tapping
+       it falls through to the paywall stack the same as any other Pro
+       call-to-action. -->
+  <IonItem
+    v-if="isSubscribed"
+    button
+    :detail="true"
+    lines="none"
+    @click="emit('manage-subscription')"
+  >
+    <IconChip slot="start">
+      <IconRosetteDiscountCheckFilled />
+    </IconChip>
+    <IonLabel class="ion-text-nowrap">
+      <h2>{{ $t("settings.subscription.subscriptionIsActive") }}</h2>
+      <p>{{ $t("settings.subscription.tapToManage") }}</p>
+    </IonLabel>
+  </IonItem>
+
+  <IonItem v-else button :detail="true" lines="none" @click="emit('open-paywall')">
+    <IconChip slot="start">
+      <IconRosetteDiscountCheckFilled />
+    </IconChip>
+    <IonLabel class="ion-text-nowrap">
+      <h2>{{ $t("settings.subscription.title") }}</h2>
+      <p>{{ $t("settings.subscription.description") }}</p>
+    </IonLabel>
+  </IonItem>
+
+  <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
+
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
 </template>
 
@@ -33,8 +66,14 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonAvatar, IonItem, IonLabel, IonListHeader } from "@ionic/vue"
-import { IconUserPlus } from "@tabler/icons-vue"
+import { IconRosetteDiscountCheckFilled, IconUserPlus } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
+import ServerSettingsItem from "../ServerSettingsItem.vue"
+
+interface SelectorItem {
+  id: string
+  title: string
+}
 
 const props = defineProps<{
   anonymous: boolean
@@ -43,13 +82,19 @@ const props = defineProps<{
   picture: string | null
   /** Capacitor platform — drives whether the Apple option shows up. */
   platform: "ios" | "android" | "web"
+  isSubscribed: boolean
+  serverItems: SelectorItem[]
 }>()
 
 const emit = defineEmits<{
   "sign-in-google": []
   "sign-in-apple": []
   "sign-out": []
+  "open-paywall": []
+  "manage-subscription": []
 }>()
+
+const activeServerId = defineModel<string>("activeServerId", { required: true })
 
 const { t } = useI18n()
 const busy = ref(false)
