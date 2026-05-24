@@ -35,7 +35,7 @@ import { groupReferences } from "@lectorium/composables/groupReferences.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
-} from "@lectorium/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@lectorium/composables/useTrackRowAsync.js"
 import { useToast } from "@lectorium/services/useToast.js"

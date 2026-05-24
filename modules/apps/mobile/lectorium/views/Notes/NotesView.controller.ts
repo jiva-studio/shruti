@@ -15,7 +15,7 @@ import { formatReference } from "@lectorium/composables/groupReferences.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
-} from "@lectorium/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
