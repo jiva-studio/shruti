@@ -11,7 +11,7 @@ import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@shruti/composables/chatMarkers.js"
-import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
+import { runChatTurn, submitChatFeedback, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -1009,19 +1009,20 @@ export const useChatStore = defineStore("chat", () => {
       throw new Error("submitFeedback: assistant message not found")
     }
 
-    // messageId IS the trace id — `chatClient.streamChat` shipped its
-    // hyphenless 32-hex form as `X-Trace-Id`, so the Langfuse trace
-    // for this turn is keyed on the same value. `postFeedback` strips
-    // hyphens for the wire payload.
-    await feedbackService().submitFeedback({
-      messageId,
-      value: feedback.state,
-      category: feedback.state === "down" ? feedback.category : undefined,
-      comment: feedback.state === "down" ? feedback.comment : undefined,
-    })
-
     const repos = chatRepos()
-    await repos.messages.updateFeedback(messageId, feedback)
+    const port = feedbackService()
+    await submitChatFeedback(
+      {
+        messageId,
+        state: feedback.state,
+        category: feedback.category,
+        comment: feedback.comment,
+      },
+      {
+        messages: repos.messages,
+        post: (payload) => port.submitFeedback(payload),
+      }
+    )
 
     // Reflect on the in-memory message so the bubble re-renders with
     // the selected thumb without needing a full session reload.
