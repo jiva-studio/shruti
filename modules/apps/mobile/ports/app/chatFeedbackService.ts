@@ -35,8 +35,5 @@ export interface SubmitChatFeedbackOptions {
  * network failure — callers are responsible for revert + retry.
  */
 export interface IChatFeedbackService {
-  submitFeedback(
-    payload: FeedbackPayload,
-    opts?: SubmitChatFeedbackOptions
-  ): Promise<void>
+  submitFeedback(payload: FeedbackPayload, opts?: SubmitChatFeedbackOptions): Promise<void>
 }
