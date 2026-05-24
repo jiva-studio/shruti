@@ -10,10 +10,7 @@ import {
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
-import {
-  extractFollowups,
-  parseChatMarkers,
-} from "@shruti/views/Chat/composables/useMarkerParser.js"
+import { extractFollowups, parseChatMarkers } from "@shruti/composables/chatMarkers.js"
 import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
 import type {
   ChatActionPayload,
