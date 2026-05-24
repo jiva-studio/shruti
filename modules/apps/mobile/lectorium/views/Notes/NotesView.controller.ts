@@ -386,7 +386,7 @@ export function useNotesController(): NotesControllerReturn {
     const id = selectedNoteId.value
     if (!id) return
     if (!purchases.isSubscribed) {
-      paywall.requestOpen()
+      paywall.requestOpen("notesStudio")
       return
     }
     studioHandoff.setPending({ kind: "note", noteId: id })

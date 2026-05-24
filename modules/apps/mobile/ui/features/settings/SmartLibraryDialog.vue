@@ -14,7 +14,6 @@
         <IonItem>
           <IonLabel>{{ $t("settings.smartLibrary.enable") }}</IonLabel>
           <IonToggle
-            :key="toggleEpoch"
             slot="end"
             :checked="isEnabled"
             label-placement="start"
@@ -25,7 +24,7 @@
 
       <p class="hint">{{ $t("settings.smartLibrary.hint") }}</p>
 
-      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+      <IonListHeader>
         <IonLabel>{{ $t("settings.smartLibrary.sections.filter") }}</IonLabel>
       </IonListHeader>
       <IonList lines="none" class="ion-no-margin ion-no-padding">
@@ -40,7 +39,7 @@
         </IonItem>
       </IonList>
 
-      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+      <IonListHeader>
         <IonLabel>{{ $t("settings.smartLibrary.sections.target") }}</IonLabel>
       </IonListHeader>
       <IonList lines="none" class="ion-no-margin ion-no-padding">
@@ -53,7 +52,7 @@
         </IonRadioGroup>
       </IonList>
 
-      <IonListHeader :class="{ 'is-disabled': !isEnabled }">
+      <IonListHeader>
         <IonLabel>{{ $t("settings.smartLibrary.sections.archive") }}</IonLabel>
       </IonListHeader>
       <IonList lines="none" class="ion-no-margin ion-no-padding">
@@ -115,10 +114,9 @@ const ARCHIVE_OPTIONS = [
   "3d",
 ] as const satisfies readonly ArchiveOption[]
 
-const props = defineProps<{
+defineProps<{
   open: boolean
   filterSummary: string
-  isSubscribed: boolean
 }>()
 
 const targetSeconds = defineModel<number>("targetSeconds", { required: true, default: 0 })
@@ -130,16 +128,12 @@ const archiveDelay = defineModel<AutoArchiveDelay>("archiveDelay", {
 const emit = defineEmits<{
   "update:open": [open: boolean]
   "open-filters": []
-  "request-paywall": []
 }>()
 
 const lastNonZeroSeconds = ref<number>(targetSeconds.value > 0 ? targetSeconds.value : 0)
 const lastArchive = ref<ArchiveOption>(
   archiveDelay.value !== "off" ? (archiveDelay.value as ArchiveOption) : DEFAULT_ARCHIVE
 )
-// Bumped to force-remount the toggle when we reject the user's flip
-// (see onToggleEnabled paywall branch).
-const toggleEpoch = ref(0)
 
 watch(targetSeconds, (v) => {
   if (v > 0) lastNonZeroSeconds.value = v
@@ -149,10 +143,7 @@ watch(archiveDelay, (v) => {
   if (v !== "off") lastArchive.value = v as ArchiveOption
 })
 
-// Master toggle is OFF for non-subscribers regardless of stored state.
-// Stored values stay intact so a subsequent purchase silently restores
-// the user's previous configuration.
-const isEnabled = computed<boolean>(() => targetSeconds.value > 0 && props.isSubscribed)
+const isEnabled = computed<boolean>(() => targetSeconds.value > 0)
 
 const selectedPreset = computed<PresetId | undefined>(() => {
   const match = TARGET_PRESETS.find((p) => p.seconds === targetSeconds.value)
@@ -169,15 +160,6 @@ function archiveKey(opt: ArchiveOption): string {
 
 function onToggleEnabled(ev: CustomEvent): void {
   const checked = (ev.detail as { checked: boolean }).checked
-  if (checked && !props.isSubscribed) {
-    emit("request-paywall")
-    // The web component already flipped its own DOM state on the tap.
-    // isEnabled stayed false, so Vue won't diff the `checked` prop and
-    // the toggle would visually stick at ON. Bumping the key forces a
-    // fresh IonToggle that boots from `:checked="isEnabled" = false`.
-    toggleEpoch.value++
-    return
-  }
   if (checked) {
     targetSeconds.value = lastNonZeroSeconds.value > 0 ? lastNonZeroSeconds.value : DEFAULT_SECONDS
     if (archiveDelay.value === "off") archiveDelay.value = lastArchive.value
@@ -204,19 +186,6 @@ function onClose(): void {
   emit("update:open", false)
 }
 </script>
-
-<style scoped>
-.hint {
-  margin: 16px 16px 8px;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--ion-color-medium);
-}
-
-.is-disabled {
-  opacity: 0.4;
-}
-</style>
 
 <style>
 .smart-library-dialog ion-header,

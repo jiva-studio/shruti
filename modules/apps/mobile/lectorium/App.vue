@@ -34,9 +34,7 @@
       :allow-multiple-languages="dialog.allowMultipleLanguages.value"
       :should-highlight-current-sentence="dialog.highlightCurrentSentence.value"
       :auto-scroll="
-        dialog.autoScrollCfg.value &&
-        dialog.mirrorsActivePlayer.value &&
-        paywallSubscription.isSubscribed
+        dialog.autoScrollCfg.value && dialog.mirrorsActivePlayer.value && purchases.isSubscribed
       "
       :enable-active-prominence="dialog.mirrorsActivePlayer.value"
       :is-loading="dialog.isLoading.value"
@@ -62,24 +60,6 @@
       @action="onSelectionPopoverAction"
       @dismissed="onSelectionPopoverDismissed"
     />
-    <!--
-      App-level paywall: a single SubscriptionDialog instance shared by
-      every "this is Pro" gate (Settings, Smart Library, Notes Studio…).
-      Trigger is `usePaywallStore().requestOpen()` from anywhere; close
-      flips the same store flag. Mounted here so it survives route
-      changes — a non-Pro user can tap "Open in Studio" on the Notes
-      tab and see the paywall even though SettingsView isn't mounted.
-    -->
-    <SubscriptionDialog
-      v-model:open="paywall.open"
-      :packages="paywallSubscription.packages"
-      :is-subscribed="paywallSubscription.isSubscribed"
-      :purchasing="paywallSubscription.purchasing"
-      :restoring="paywallSubscription.restoring"
-      :legal-documents="paywallSubscription.legalDocuments"
-      @subscribe="paywallSubscription.onSubscribe"
-      @restore="paywallSubscription.onRestore"
-    />
   </IonApp>
 </template>
 
@@ -88,15 +68,13 @@ import { computed, onMounted, onBeforeUnmount, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import router from "@lectorium/router/index.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
-import { SubscriptionDialog } from "@ui/features/settings/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
 import type { SelectionActionEvent } from "@lectorium/composables/transcript/useTranscriptSelectionActions.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
-import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useTutorialStore } from "@lectorium/stores/useTutorialStore.js"
-import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useTranscriptDialogController } from "@lectorium/composables/useTranscriptDialogController.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useAutoArchiveSweep } from "@lectorium/composables/useAutoArchiveSweep.js"
@@ -125,11 +103,7 @@ const player = usePlayerStore()
 const transcriptStore = useTranscriptStore()
 const tutorial = useTutorialStore()
 const overlays = useOverlaysStore()
-const paywall = usePaywallStore()
-// Subscription binding wires RevenueCat actions + i18n into the dialog.
-// Initialised once here so the dialog is fully wired no matter which
-// view triggers `paywall.requestOpen()`.
-const paywallSubscription = useSubscriptionBinding()
+const purchases = usePurchasesStore()
 // Resolve the UI language ref first so the transcript dialog controller
 // can localize the track title + author name reactively (issue #367).
 // Switching language while the dialog is open re-derives the header from

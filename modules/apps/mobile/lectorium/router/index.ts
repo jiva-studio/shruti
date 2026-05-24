@@ -46,6 +46,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Settings/SettingsView.vue"),
       },
       {
+        path: "subscription",
+        name: "subscription",
+        component: () => import("@lectorium/views/Subscription/SubscriptionView.vue"),
+      },
+      {
         path: "track/:trackId",
         name: "track",
         component: () => import("@lectorium/views/Track/TrackView.vue"),

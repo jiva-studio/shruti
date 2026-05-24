@@ -82,7 +82,7 @@ export function useStudioController(): StudioControllerReturn {
    */
   function guardPro(): boolean {
     if (purchases.isSubscribed) return true
-    paywall.requestOpen()
+    paywall.requestOpen("notesStudio")
     void router.replace("/tabs/notes")
     return false
   }
