@@ -8,13 +8,18 @@ import (
 )
 
 type Config struct {
-	Port               string
-	DatabaseURL        string
-	JWTPrivateKeyPath  string
-	JWTPublicKeyPath   string
-	JWTKid             string
-	GoogleClientIDs    []string
-	AppleBundleIDs     []string
+	Port              string
+	DatabaseURL       string
+	JWTPrivateKeyPath string
+	JWTPublicKeyPath  string
+	// JWTPublicKeysDir, if set, opts the verifier into multi-key /
+	// kid-aware mode: every `<kid>.pub.pem` in the directory is
+	// loaded, plus the legacy `public.pem` mapped to kid "v1".
+	// Leave unset to stay on the single-file path.
+	JWTPublicKeysDir string
+	JWTKid           string
+	GoogleClientIDs  []string
+	AppleBundleIDs   []string
 	// Env tags log lines for Datadog tag-from-log pipelines.
 	// "dev" | "staging" | "prod". Defaults to "dev".
 	Env string
@@ -29,6 +34,7 @@ func Load() (*Config, error) {
 		DatabaseURL:       env("DATABASE_URL", ""),
 		JWTPrivateKeyPath: env("JWT_PRIVATE_KEY_PATH", "/secrets/private.pem"),
 		JWTPublicKeyPath:  env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
+		JWTPublicKeysDir:  os.Getenv("JWT_PUBLIC_KEYS_DIR"),
 		JWTKid:            env("JWT_KID", "v1"),
 		GoogleClientIDs:   splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
 		AppleBundleIDs:    splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
