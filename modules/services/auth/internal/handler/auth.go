@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
@@ -105,6 +106,7 @@ func (h *authHandler) signinSocial(
 	}
 	session, err := fn(r.Context(), in)
 	if err != nil {
+		slog.WarnContext(r.Context(), "signin_failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
 		writeErr(w, http.StatusUnauthorized, "signin_failed", err.Error())
 		return
 	}
