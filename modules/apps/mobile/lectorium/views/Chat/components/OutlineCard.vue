@@ -23,7 +23,7 @@ import router from "@lectorium/router/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
-import { resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
+import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 interface OutlineItem {

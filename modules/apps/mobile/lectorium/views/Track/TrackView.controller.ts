@@ -7,7 +7,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lectorium/composables/resolveLocalized.js"
+import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 

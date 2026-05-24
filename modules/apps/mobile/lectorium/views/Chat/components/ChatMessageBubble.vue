@@ -39,7 +39,7 @@
           <template v-for="(token, idx) in tokens" :key="idx">
             <!--
               v-html XSS note: `token.html` is the output of marked.parseInline
-              run on `message.content` inside `useMarkerParser.parseChatMarkers`.
+              run on `message.content` inside `chatMarkers.parseChatMarkers`.
               `marked` HTML-escapes raw text by default (it doesn't run an
               HTML sanitizer, but it never passes through arbitrary tags from
               source unless explicitly enabled). The content itself comes from
@@ -140,7 +140,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import router from "@lectorium/router/index.js"
-import { messageToMarkdown, parseChatMarkers } from "../composables/useMarkerParser.js"
+import { messageToMarkdown, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"

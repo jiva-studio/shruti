@@ -31,11 +31,11 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet } from "@ionic/vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { groupReferences } from "@lectorium/composables/groupReferences.js"
+import { groupReferences } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
-} from "@lectorium/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@lectorium/composables/useTrackRowAsync.js"
 import { useToast } from "@lectorium/services/useToast.js"

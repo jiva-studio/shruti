@@ -4,7 +4,11 @@ import type {
   ProactiveTurnResult,
 } from "@ports/app/index.js"
 
-import { streamChat } from "@lectorium/services/chatClient.js"
+import { streamChat, type AccessTokenProvider } from "./chatClient.js"
+
+export interface HttpProactiveChatServiceDeps {
+  readonly getAccessToken: AccessTokenProvider
+}
 
 /**
  * HTTP-SSE adapter for `IProactiveChatService`. Wraps the existing
@@ -16,7 +20,9 @@ import { streamChat } from "@lectorium/services/chatClient.js"
  * messages don't stream to the user, the scheduler only stores the
  * final result on `chat_messages.content`.
  */
-export function useHttpProactiveChatService(): IProactiveChatService {
+export function useHttpProactiveChatService(
+  deps: HttpProactiveChatServiceDeps
+): IProactiveChatService {
   return {
     async run(req: ProactiveTurnRequest, locale: string): Promise<ProactiveTurnResult> {
       const placeholderMessages = [{ role: "user" as const, content: "<proactive>" }]
@@ -30,6 +36,7 @@ export function useHttpProactiveChatService(): IProactiveChatService {
       const wireLocale: "ru" | "en" = locale.toLowerCase().startsWith("en") ? "en" : "ru"
 
       for await (const event of streamChat(placeholderMessages, wireLocale, {
+        getAccessToken: deps.getAccessToken,
         proactive: {
           ruleKind: req.ruleKind,
           ruleDate: req.ruleDate,

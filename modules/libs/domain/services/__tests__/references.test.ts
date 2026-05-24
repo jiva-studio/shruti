@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { LanguageCode } from "@lib/domain/core.js"
 import type { Reference } from "@lib/domain/reference.js"
 import type { Source } from "@lib/domain/source.js"
-import { groupReferences } from "../groupReferences.js"
+import { groupReferences } from "../references.js"
 
 const LANG: LanguageCode = "en" as LanguageCode
 

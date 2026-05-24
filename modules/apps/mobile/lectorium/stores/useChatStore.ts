@@ -10,11 +10,13 @@ import {
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
+import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import {
-  extractFollowups,
-  parseChatMarkers,
-} from "@lectorium/views/Chat/composables/useMarkerParser.js"
-import { runChatTurn, type RunChatTurnEvent } from "@lib/application"
+  recordInlineHintCooldown as recordInlineHintCooldownUC,
+  runChatTurn,
+  submitChatFeedback,
+  type RunChatTurnEvent,
+} from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -26,15 +28,15 @@ import type {
   SmartLibraryFiltersPayload,
 } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import { createHttpChatStreamClient } from "@lectorium/services/chat/httpChatStreamClient.js"
-import { createHttpChatTitleService } from "@lectorium/services/chat/httpChatTitleService.js"
-import { createHttpChatQuestionsService } from "@lectorium/services/chat/httpChatQuestionsService.js"
-import { postFeedback, type FeedbackCategory } from "@lectorium/services/chatClient.js"
+import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
+import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
+import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
+import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
 } from "@infra/repositories/sql/index.js"
-import type { ChatTurn } from "@ports/app/index.js"
+import type { ChatTurn, FeedbackCategory } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -183,14 +185,22 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  // Lazy because `app.auth` is wired by the composition root and the
+  // factories are called from inside reactive setup — using the deps
+  // object directly here would freeze the reference at store-setup
+  // time and miss any auth re-init.
+  const authDeps = { getAccessToken: () => app.auth.getAccessToken() }
   function streamClient() {
-    return createHttpChatStreamClient()
+    return createHttpChatStreamClient(authDeps)
   }
   function titleService() {
-    return createHttpChatTitleService()
+    return createHttpChatTitleService(authDeps)
   }
   function questionsService() {
-    return createHttpChatQuestionsService()
+    return createHttpChatQuestionsService(authDeps)
+  }
+  function feedbackService() {
+    return createHttpChatFeedbackService(authDeps)
   }
 
   async function refreshSessions(): Promise<void> {
@@ -857,34 +867,20 @@ export const useChatStore = defineStore("chat", () => {
     chatMessageId: string,
     payload: ChatActionPayload
   ): Promise<void> {
-    const ruleKind = inlineHintToRuleKind(payload.kind)
-    if (ruleKind === null) return
     try {
-      const repo = app.repositories().proactiveState
-      const today = new Date()
-      const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-      const ruleDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
-      await repo.attach(
-        chatMessageId as ChatMessageId,
-        ruleKind,
-        ruleDate,
-        "ready",
-        Math.floor(Date.now() / 1000)
+      await recordInlineHintCooldownUC(
+        {
+          chatMessageId: chatMessageId as ChatMessageId,
+          payload,
+          now: new Date(),
+        },
+        { proactiveState: app.repositories().proactiveState }
       )
     } catch (err) {
       // Best-effort — if attach fails the user still sees the inline
       // card, just the autonomous tutorial may double up next month.
       console.debug("[proactive] inline hint attach failed:", err)
     }
-  }
-
-  function inlineHintToRuleKind(
-    kind: ChatActionPayload["kind"]
-  ): "enable_notifications_hint" | "smart_library_hint" | null {
-    if (kind === "enable_daily_reminder") return "enable_notifications_hint"
-    if (kind === "configure_smart_library") return "smart_library_hint"
-    // `upgrade_to_pro` has no autonomous-rule counterpart today.
-    return null
   }
 
   async function applyProactiveDailyReminder(time: string): Promise<void> {
@@ -1004,19 +1000,20 @@ export const useChatStore = defineStore("chat", () => {
       throw new Error("submitFeedback: assistant message not found")
     }
 
-    // messageId IS the trace id — `chatClient.streamChat` shipped its
-    // hyphenless 32-hex form as `X-Trace-Id`, so the Langfuse trace
-    // for this turn is keyed on the same value. `postFeedback` strips
-    // hyphens for the wire payload.
-    await postFeedback({
-      messageId,
-      value: feedback.state,
-      category: feedback.state === "down" ? feedback.category : undefined,
-      comment: feedback.state === "down" ? feedback.comment : undefined,
-    })
-
     const repos = chatRepos()
-    await repos.messages.updateFeedback(messageId, feedback)
+    const port = feedbackService()
+    await submitChatFeedback(
+      {
+        messageId,
+        state: feedback.state,
+        category: feedback.category,
+        comment: feedback.comment,
+      },
+      {
+        messages: repos.messages,
+        post: (payload) => port.submitFeedback(payload),
+      }
+    )
 
     // Reflect on the in-memory message so the bubble re-renders with
     // the selected thumb without needing a full session reload.

@@ -47,12 +47,11 @@ import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
 import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
 import { useCapacitorAuth } from "@infra/auth/capacitor/useCapacitorAuth.js"
-import { setAccessTokenProvider } from "@lectorium/services/chatClient.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
-import { useHttpProactiveChatService } from "@lectorium/services/chat/httpProactiveChatService.js"
+import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
@@ -121,7 +120,13 @@ initLectorium({
   platform,
   initialServer: SERVERS[0],
   serverProber: useHttpServerProber(),
-  proactiveChat: useHttpProactiveChatService(),
+  // Lazy auth-token resolver: useLectorium() returns the composition
+  // root, which is only fully wired after initLectorium() — but the
+  // closure runs at request time (when the scheduler invokes a
+  // proactive turn), well after init has completed.
+  proactiveChat: useHttpProactiveChatService({
+    getAccessToken: () => useLectorium().auth.getAccessToken(),
+  }),
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
@@ -144,12 +149,6 @@ router.isReady().then(() => {
     .catch((e) => {
       console.warn("purchases.init failed", e)
     })
-  // Wire chatClient's module-level access-token provider to the auth
-  // port. Done before useAuthStore().restore() so even a chat call that
-  // races with restore() (cold-start auto-resume scenarios) finds the
-  // provider — the provider itself awaits initialize() internally.
-  setAccessTokenProvider(() => useLectorium().auth.getAccessToken())
-
   // Bootstrap anonymous-by-device session. Resolves the persistent
   // userId asynchronously; the rest of the app reads it via useAuthStore.
   void useAuthStore()
