@@ -144,7 +144,10 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		}
 		if existing != nil {
 			userID = existing.UserID
-			return s.maybeUpdateIdentityEmail(ctx, tx, existing, ident)
+			if err := s.maybeUpdateIdentityEmail(ctx, tx, existing, ident); err != nil {
+				return err
+			}
+			return s.applyProfile(ctx, tx, userID, ident, in.FullName)
 		}
 
 		// 2. Anonymous Bearer in play → upgrade that user.
@@ -193,8 +196,29 @@ func (s *Service) createIdentity(ctx context.Context, tx pgx.Tx, provider string
 	if err := s.Identities.Create(ctx, tx, row); err != nil {
 		return err
 	}
-	if fullName != "" {
-		return s.Users.SetNameIfEmpty(ctx, tx, userID, fullName)
+	return s.applyProfile(ctx, tx, userID, ident, fullName)
+}
+
+// applyProfile is the single place that lands display name + avatar into
+// auth.users. Name follows "set-if-empty" semantics (Apple's fullName is
+// one-shot and we don't want a later Google login clobbering an existing
+// custom name down the line). Picture is always overwritten when the
+// provider hands one back — Google rotates avatar URLs, so the freshest
+// wins. Apple's "no picture" path is a no-op rather than a NULL write.
+func (s *Service) applyProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, ident *providers.Identity, fullName string) error {
+	name := ident.Name
+	if name == "" {
+		name = fullName
+	}
+	if name != "" {
+		if err := s.Users.SetNameIfEmpty(ctx, tx, userID, name); err != nil {
+			return err
+		}
+	}
+	if ident.PictureURL != "" {
+		if err := s.Users.SetPictureURL(ctx, tx, userID, ident.PictureURL); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -306,12 +330,13 @@ func (s *Service) Signout(ctx context.Context, refreshToken string) error {
 // ─── /auth/me ───────────────────────────────────────────────────────────────
 
 type MeResponse struct {
-	UserID     uuid.UUID         `json:"userId"`
-	Email      *string           `json:"email"`
-	Name       *string           `json:"name"`
-	Anonymous  bool              `json:"anonymous"`
-	Identities []MeIdentity      `json:"identities"`
-	CreatedAt  time.Time         `json:"createdAt"`
+	UserID     uuid.UUID    `json:"userId"`
+	Email      *string      `json:"email"`
+	Name       *string      `json:"name"`
+	PictureURL *string      `json:"pictureUrl"`
+	Anonymous  bool         `json:"anonymous"`
+	Identities []MeIdentity `json:"identities"`
+	CreatedAt  time.Time    `json:"createdAt"`
 }
 
 type MeIdentity struct {
@@ -343,11 +368,12 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 		return nil, err
 	}
 	resp := &MeResponse{
-		UserID:    u.ID,
-		Email:     email,
-		Name:      u.Name,
-		Anonymous: anonymous,
-		CreatedAt: u.CreatedAt,
+		UserID:     u.ID,
+		Email:      email,
+		Name:       u.Name,
+		PictureURL: u.PictureURL,
+		Anonymous:  anonymous,
+		CreatedAt:  u.CreatedAt,
 	}
 	for _, i := range idents {
 		resp.Identities = append(resp.Identities, MeIdentity{

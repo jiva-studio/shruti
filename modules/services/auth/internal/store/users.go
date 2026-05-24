@@ -11,9 +11,10 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID
-	Name      *string
-	CreatedAt time.Time
+	ID         uuid.UUID
+	Name       *string
+	PictureURL *string
+	CreatedAt  time.Time
 }
 
 type UserRepo struct{ Pool *pgxpool.Pool }
@@ -29,9 +30,9 @@ func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
 
 func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 	row := r.Pool.QueryRow(ctx,
-		`SELECT id, name, created_at FROM auth.users WHERE id = $1`, id)
+		`SELECT id, name, picture_url, created_at FROM auth.users WHERE id = $1`, id)
 	u := &User{}
-	if err := row.Scan(&u.ID, &u.Name, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -46,6 +47,17 @@ func (r *UserRepo) SetNameIfEmpty(ctx context.Context, tx pgx.Tx, id uuid.UUID, 
 	_, err := exec(ctx, r.Pool, tx,
 		`UPDATE auth.users SET name = $2 WHERE id = $1 AND name IS NULL`,
 		id, name,
+	)
+	return err
+}
+
+// SetPictureURL overwrites the URL on every call — Google rotates avatar
+// URLs, so the last sign-in's value wins. Callers skip the call when the
+// provider didn't return a picture (Apple).
+func (r *UserRepo) SetPictureURL(ctx context.Context, tx pgx.Tx, id uuid.UUID, url string) error {
+	_, err := exec(ctx, r.Pool, tx,
+		`UPDATE auth.users SET picture_url = $2 WHERE id = $1`,
+		id, url,
 	)
 	return err
 }
