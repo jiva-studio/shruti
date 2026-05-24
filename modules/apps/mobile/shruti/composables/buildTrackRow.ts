@@ -4,7 +4,7 @@ import type { Location } from "@lib/domain/location.js"
 import type { Source } from "@lib/domain/source.js"
 import type { Track } from "@lib/domain/track.js"
 import type { UiTrackRow, UiTrackState } from "@ui/components/tracks/list/index.js"
-import { groupReferences } from "./groupReferences.js"
+import { groupReferences } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
