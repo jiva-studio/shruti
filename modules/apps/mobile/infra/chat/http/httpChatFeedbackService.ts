@@ -3,7 +3,7 @@ import type {
   IChatFeedbackService,
   SubmitChatFeedbackOptions,
 } from "@ports/app/index.js"
-import { postFeedback } from "../chatClient.js"
+import { postFeedback } from "./chatClient.js"
 
 /**
  * `IChatFeedbackService` adapter over the existing `postFeedback`

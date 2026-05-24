@@ -4,7 +4,7 @@ import type {
   ProactiveTurnResult,
 } from "@ports/app/index.js"
 
-import { streamChat } from "@lectorium/services/chatClient.js"
+import { streamChat } from "./chatClient.js"
 
 /**
  * HTTP-SSE adapter for `IProactiveChatService`. Wraps the existing
