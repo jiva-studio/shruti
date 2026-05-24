@@ -47,7 +47,6 @@ export default defineConfig({
     __CHAT_API_BASE_URL__: JSON.stringify(
       process.env.SHRUTI_CHAT_API_BASE_URL ?? "https://api.shruti.local"
     ),
-    __CHAT_APP_TOKEN__: JSON.stringify(process.env.SHRUTI_CHAT_APP_TOKEN ?? "dev-token"),
     // Auth service lives on the same host as chat (Caddy routes /auth/* to it).
     __AUTH_API_BASE_URL__: JSON.stringify(
       process.env.SHRUTI_AUTH_API_BASE_URL ??
