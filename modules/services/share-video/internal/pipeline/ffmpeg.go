@@ -13,6 +13,45 @@ import (
 	"time"
 )
 
+// MaxSourceDuration caps the source audio at four hours — longer than
+// any real lecture and well past the cut-window the API accepts.
+// Anything larger is either a configuration mistake or a misclassified
+// non-audio object.
+const MaxSourceDuration = 4 * 60 * 60.0
+
+// ValidateAudioInfo rejects ProbeAudio results that look like something
+// other than an MP3 (or m4a) audio file the renderer is willing to
+// hand to ffmpeg. Run on the downloaded source before any ffmpeg
+// invocation — keeps misclassified objects and obscure formats out of
+// the binary's parser surface.
+func ValidateAudioInfo(info AudioInfo) error {
+	// ffprobe's format_name is a comma-separated list of candidates;
+	// mp3 stays "mp3", mp4-family is "mov,mp4,m4a,3gp,3g2,mj2".
+	allowedFormat := false
+	for _, name := range strings.Split(info.Format, ",") {
+		switch name {
+		case "mp3", "mp4", "m4a":
+			allowedFormat = true
+		}
+	}
+	if !allowedFormat {
+		return fmt.Errorf("unsupported source format %q (expected mp3 or m4a)", info.Format)
+	}
+	switch info.AudioCodec {
+	case "mp3", "aac":
+		// ok
+	default:
+		return fmt.Errorf("unsupported audio codec %q (expected mp3 or aac)", info.AudioCodec)
+	}
+	if info.Duration <= 0 {
+		return fmt.Errorf("source has no audio duration")
+	}
+	if info.Duration > MaxSourceDuration {
+		return fmt.Errorf("source duration %.1fs exceeds cap %.0fs", info.Duration, MaxSourceDuration)
+	}
+	return nil
+}
+
 // CutAudio stream-copies [startMs, endMs) out of src into dst as MP3.
 // Same invocation as share-audio.
 func CutAudio(ctx context.Context, ffmpegBin, src, dst string, startMs, endMs int64) error {
@@ -34,9 +73,29 @@ func CutAudio(ctx context.Context, ffmpegBin, src, dst string, startMs, endMs in
 // ffprobe with json output. Matches videoBackgrounds.ts:getVideoDuration
 // semantics; missing duration → 0 (caller's responsibility to validate).
 func ProbeDuration(ctx context.Context, ffprobeBin, path string) (float64, error) {
+	info, err := ProbeAudio(ctx, ffprobeBin, path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Duration, nil
+}
+
+// AudioInfo carries the fields ProbeAudio returns. Format is ffprobe's
+// `format_name` (e.g. "mp3", or the mp4-family "mov,mp4,m4a,3gp,3g2,mj2");
+// AudioCodec is the codec of the first audio stream (e.g. "mp3", "aac").
+type AudioInfo struct {
+	Format     string
+	Duration   float64
+	AudioCodec string
+}
+
+// ProbeAudio inspects `path` and returns format / duration / first
+// audio-stream codec. Used as a pre-flight gate before invoking
+// ffmpeg on user-influenced inputs — see ValidateAudioInfo.
+func ProbeAudio(ctx context.Context, ffprobeBin, path string) (AudioInfo, error) {
 	args := []string{
 		"-v", "error",
-		"-show_entries", "format=duration",
+		"-show_entries", "format=duration,format_name:stream=codec_type,codec_name",
 		"-of", "json",
 		path,
 	}
@@ -44,24 +103,36 @@ func ProbeDuration(ctx context.Context, ffprobeBin, path string) (float64, error
 	cmd.WaitDelay = 5 * time.Second
 	out, err := cmd.Output()
 	if err != nil {
-		return 0, fmt.Errorf("ffprobe %s: %w", path, err)
+		return AudioInfo{}, fmt.Errorf("ffprobe %s: %w", path, err)
 	}
 	var parsed struct {
 		Format struct {
-			Duration string `json:"duration"`
+			FormatName string `json:"format_name"`
+			Duration   string `json:"duration"`
 		} `json:"format"`
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			CodecName string `json:"codec_name"`
+		} `json:"streams"`
 	}
 	if err := json.Unmarshal(out, &parsed); err != nil {
-		return 0, fmt.Errorf("parse ffprobe output: %w", err)
+		return AudioInfo{}, fmt.Errorf("parse ffprobe output: %w", err)
 	}
-	if parsed.Format.Duration == "" {
-		return 0, nil
+	info := AudioInfo{Format: parsed.Format.FormatName}
+	if parsed.Format.Duration != "" {
+		d, err := strconv.ParseFloat(parsed.Format.Duration, 64)
+		if err != nil {
+			return AudioInfo{}, fmt.Errorf("parse duration %q: %w", parsed.Format.Duration, err)
+		}
+		info.Duration = d
 	}
-	d, err := strconv.ParseFloat(parsed.Format.Duration, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse duration %q: %w", parsed.Format.Duration, err)
+	for _, s := range parsed.Streams {
+		if s.CodecType == "audio" {
+			info.AudioCodec = s.CodecName
+			break
+		}
 	}
-	return d, nil
+	return info, nil
 }
 
 // concatClips concatenates pre-normalised background clips with the
