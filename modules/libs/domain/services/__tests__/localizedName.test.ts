@@ -5,7 +5,7 @@ import {
   resolveLocalizedName,
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
-} from "../resolveLocalized.js"
+} from "../localizedName.js"
 
 function entity(names: Array<[string, string]>): { names: ReadonlyMap<LanguageCode, string> } {
   return { names: new Map(names) as ReadonlyMap<LanguageCode, string> }
