@@ -23,7 +23,7 @@ import router from "@shruti/router/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
-import { resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
+import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 interface OutlineItem {

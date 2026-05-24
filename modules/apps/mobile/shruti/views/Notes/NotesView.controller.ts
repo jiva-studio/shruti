@@ -11,11 +11,11 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
 import { formatNoteShare } from "@lib/application/formatNoteShare.js"
-import { formatReference } from "@shruti/composables/groupReferences.js"
+import { formatReference } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
-} from "@shruti/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"

@@ -7,7 +7,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@shruti/composables/resolveLocalized.js"
+import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 

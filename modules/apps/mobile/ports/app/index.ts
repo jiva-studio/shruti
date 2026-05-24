@@ -56,3 +56,10 @@ export type {
   ProactiveTurnRequest,
   ProactiveTurnResult,
 } from "./proactiveChat.js"
+export type {
+  IChatFeedbackService,
+  FeedbackPayload,
+  FeedbackValue,
+  FeedbackCategory,
+  SubmitChatFeedbackOptions,
+} from "./chatFeedbackService.js"

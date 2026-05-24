@@ -61,7 +61,7 @@ import {
   IonSelectOption,
   IonTextarea,
 } from "@ionic/vue"
-import type { FeedbackCategory } from "@shruti/services/chatClient.js"
+import type { FeedbackCategory } from "@ports/app/index.js"
 
 /** Categories surfaced in the sheet. Wire format mirrors the server's
  *  `FeedbackCategory` enum; i18n keys at `chat.feedback.categories.<value>`
