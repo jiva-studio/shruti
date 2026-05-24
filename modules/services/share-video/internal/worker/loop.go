@@ -6,6 +6,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -117,9 +118,10 @@ func (w *Worker) processOne(parentCtx context.Context, task *db.TaskRow) {
 	taskLog := w.Log.With("task_id", task.ID)
 	ctx := logx.Into(parentCtx, taskLog)
 
+	workerID := hostPidLeaseID()
 	tempDir := filepath.Join(w.TempRoot, "share-video-"+task.ID)
 	if err := os.MkdirAll(tempDir, 0o755); err != nil {
-		w.fail(ctx, task, fmt.Errorf("mkdir tempdir: %w", err))
+		w.fail(ctx, task, workerID, fmt.Errorf("mkdir tempdir: %w", err))
 		return
 	}
 	defer func() {
@@ -134,23 +136,40 @@ func (w *Worker) processOne(parentCtx context.Context, task *db.TaskRow) {
 		TempDir: tempDir,
 	})
 	if err != nil {
-		w.fail(ctx, task, err)
+		w.fail(ctx, task, workerID, err)
 		return
 	}
-	if err := db.Finish(parentCtx, w.Pool, task.ID, types.TaskResult{URL: out.URL, OutputKey: out.OutputKey}); err != nil {
+	if err := db.Finish(parentCtx, w.Pool, task.ID, workerID, types.TaskResult{URL: out.URL, OutputKey: out.OutputKey}); err != nil {
+		if errors.Is(err, db.ErrLeaseLost) {
+			// ReviveExpired flipped this task back to 'pending'
+			// while the render was in flight — another worker
+			// now owns it. Don't clobber its outcome.
+			taskLog.Warn("lease_lost_at_finish", "task_id", task.ID, "url", out.URL)
+			return
+		}
 		taskLog.Error("task_finish_failed", "err", err.Error())
 		return
 	}
 	taskLog.Info("task_done", "dur_ms", time.Since(start).Milliseconds(), "url", out.URL)
 }
 
-func (w *Worker) fail(ctx context.Context, task *db.TaskRow, cause error) {
+func (w *Worker) fail(ctx context.Context, task *db.TaskRow, workerID string, cause error) {
 	msg := cause.Error()
 	// Use parent context (NOT cancelled-ones) so the UPDATE still goes
 	// through if the cause was a ctx cancel mid-render.
 	bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	willRetry, err := db.Fail(bgCtx, w.Pool, task.ID, task.Attempts, task.MaxAttempts, msg)
+	willRetry, err := db.Fail(bgCtx, w.Pool, task.ID, workerID, task.Attempts, task.MaxAttempts, msg)
+	if errors.Is(err, db.ErrLeaseLost) {
+		// Lease was revived under us while we ran. Another worker
+		// owns the retry; do nothing here.
+		logx.From(ctx).Warn("lease_lost_at_fail",
+			"task_id", task.ID,
+			"attempts", task.Attempts,
+			"err", msg,
+		)
+		return
+	}
 	logx.From(ctx).Error("task_fail",
 		"task_id", task.ID,
 		"attempts", task.Attempts,
