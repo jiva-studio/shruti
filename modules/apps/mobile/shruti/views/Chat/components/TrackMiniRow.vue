@@ -35,7 +35,7 @@ import { groupReferences } from "@shruti/composables/groupReferences.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,
-} from "@shruti/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
 import { useToast } from "@shruti/services/useToast.js"

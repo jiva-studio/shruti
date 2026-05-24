@@ -15,7 +15,7 @@ import { formatReference } from "@shruti/composables/groupReferences.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
-} from "@shruti/composables/resolveLocalized.js"
+} from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
