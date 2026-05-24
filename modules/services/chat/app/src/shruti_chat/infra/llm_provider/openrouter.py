@@ -171,6 +171,13 @@ def _build_client(
         "base_url": _OPENROUTER_BASE_URL,
         "api_key": api_key,
         "streaming": streaming,
+        # Hard cap so a vendor stall doesn't hold a DB transaction
+        # (and a Postgres connection) open indefinitely. 180s covers
+        # the slowest legitimate chat turn we've observed (claude-3.7
+        # on a long research pass) with a safety margin; without it
+        # langchain-openai defaults to 600s, which is long enough for
+        # the connection pool to bleed.
+        "timeout": 180.0,
     }
     if temperature_key is not None:
         kwargs["temperature"] = temperature_key
