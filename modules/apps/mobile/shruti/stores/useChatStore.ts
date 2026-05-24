@@ -26,12 +26,12 @@ import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@shruti/services/chat/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@shruti/services/chat/httpChatTitleService.js"
 import { createHttpChatQuestionsService } from "@shruti/services/chat/httpChatQuestionsService.js"
-import { postFeedback, type FeedbackCategory } from "@shruti/services/chatClient.js"
+import { createHttpChatFeedbackService } from "@shruti/services/chat/httpChatFeedbackService.js"
 import {
   createSqlChatSessionRepository,
   createSqlChatMessageRepository,
 } from "@infra/repositories/sql/index.js"
-import type { ChatTurn } from "@ports/app/index.js"
+import type { ChatTurn, FeedbackCategory } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -188,6 +188,9 @@ export const useChatStore = defineStore("chat", () => {
   }
   function questionsService() {
     return createHttpChatQuestionsService()
+  }
+  function feedbackService() {
+    return createHttpChatFeedbackService()
   }
 
   async function refreshSessions(): Promise<void> {
@@ -1005,7 +1008,7 @@ export const useChatStore = defineStore("chat", () => {
     // hyphenless 32-hex form as `X-Trace-Id`, so the Langfuse trace
     // for this turn is keyed on the same value. `postFeedback` strips
     // hyphens for the wire payload.
-    await postFeedback({
+    await feedbackService().submitFeedback({
       messageId,
       value: feedback.state,
       category: feedback.state === "down" ? feedback.category : undefined,
