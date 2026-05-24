@@ -8,7 +8,7 @@ import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
-import { pickAudioVariant } from "@shruti/views/Chat/composables/useCitationSnippet.js"
+import { pickPlayableVariant } from "@lib/domain/track.js"
 import router from "@shruti/router/index.js"
 import { buildTranscriptViewData } from "@shruti/composables/buildTranscriptViewData.js"
 import { formatReference } from "@shruti/composables/groupReferences.js"
@@ -173,7 +173,7 @@ export function useTranscriptDialogController(
       // disabled player (still useful as a quoted text card).
       const track = hydration.track.value
       const ctx = buildShareTrackContext()
-      const variant = track ? pickAudioVariant(track) : null
+      const variant = track ? pickPlayableVariant(track) : null
       const sourceKey = variant?.audio?.path ?? undefined
       const lang = appLanguage.value
       const location = track?.locationId

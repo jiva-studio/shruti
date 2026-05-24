@@ -1,8 +1,7 @@
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
 import { useShruti } from "@shruti/shruti.js"
-import type { Track } from "@lib/domain/track.js"
-import type { TrackVariant } from "@lib/domain/trackVariant.js"
+import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { TrackId } from "@lib/domain/core.js"
 
 /**
@@ -20,17 +19,6 @@ const urlCache = new Map<string, string>()
  */
 function predictedUrl(server: CdnServer, excerptId: string): string {
   return buildServerUrl(server, `public/shares/audio/${excerptId}.mp3`)
-}
-
-/**
- * Same heuristic as NotesView.controller.ts#pickAudioVariant: prefer the
- * original recording, fall back to any variant whose audio is non-null,
- * return null when the track is translation-only.
- */
-export function pickAudioVariant(track: Track): TrackVariant | null {
-  const original = track.variants.find((v) => v.audio !== null && v.audio.kind === "original")
-  if (original) return original
-  return track.variants.find((v) => v.audio !== null) ?? null
 }
 
 export interface CitationSnippetRef {
@@ -74,7 +62,7 @@ export function useCitationSnippet() {
 
     const track = await repositories().tracks.getById(ref.trackId as TrackId)
     if (!track) throw new Error("track-not-found")
-    const variant = pickAudioVariant(track)
+    const variant = pickPlayableVariant(track)
     if (!variant || !variant.audio) throw new Error("no-audio")
 
     const excerptId = citationExcerptId(ref)

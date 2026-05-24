@@ -6,8 +6,7 @@ import { loadTranscript } from "@lib/application"
 import type { LanguageCode, NoteId, TrackId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
-import type { Track } from "@lib/domain/track.js"
-import type { TrackVariant } from "@lib/domain/trackVariant.js"
+import { pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle as resolveTitleForLang } from "@shruti/composables/resolveLocalized.js"
 import { useShruti } from "@shruti/shruti.js"
@@ -175,16 +174,6 @@ export function useStudioController(): StudioControllerReturn {
     return studio as { text?: string; title?: string }
   }
 
-  /**
-   * Pick the source audio variant. Mirrors NotesView controller's helper —
-   * prefer "original", fall back to the first variant with audio.
-   */
-  function pickAudioVariant(t: Track): TrackVariant | null {
-    const original = t.variants.find((v) => v.audio !== null && v.audio.kind === "original")
-    if (original) return original
-    return t.variants.find((v) => v.audio !== null) ?? null
-  }
-
   function localVideoFilename(id: string): string {
     return `share-video-note-${id}.mp4`
   }
@@ -246,7 +235,7 @@ export function useStudioController(): StudioControllerReturn {
       return
     }
     const trimmedTitle = editedTitle.value.trim()
-    const variant = pickAudioVariant(track.value)
+    const variant = pickPlayableVariant(track.value)
     if (!variant?.audio) {
       await toast.error(t("studio.errorNoAudio"))
       return
