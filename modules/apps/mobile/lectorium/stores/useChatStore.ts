@@ -11,7 +11,12 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
-import { runChatTurn, submitChatFeedback, type RunChatTurnEvent } from "@lib/application"
+import {
+  recordInlineHintCooldown as recordInlineHintCooldownUC,
+  runChatTurn,
+  submitChatFeedback,
+  type RunChatTurnEvent,
+} from "@lib/application"
 import type {
   ChatActionPayload,
   ChatActionState,
@@ -862,34 +867,20 @@ export const useChatStore = defineStore("chat", () => {
     chatMessageId: string,
     payload: ChatActionPayload
   ): Promise<void> {
-    const ruleKind = inlineHintToRuleKind(payload.kind)
-    if (ruleKind === null) return
     try {
-      const repo = app.repositories().proactiveState
-      const today = new Date()
-      const pad = (n: number) => (n < 10 ? `0${n}` : String(n))
-      const ruleDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
-      await repo.attach(
-        chatMessageId as ChatMessageId,
-        ruleKind,
-        ruleDate,
-        "ready",
-        Math.floor(Date.now() / 1000)
+      await recordInlineHintCooldownUC(
+        {
+          chatMessageId: chatMessageId as ChatMessageId,
+          payload,
+          now: new Date(),
+        },
+        { proactiveState: app.repositories().proactiveState }
       )
     } catch (err) {
       // Best-effort — if attach fails the user still sees the inline
       // card, just the autonomous tutorial may double up next month.
       console.debug("[proactive] inline hint attach failed:", err)
     }
-  }
-
-  function inlineHintToRuleKind(
-    kind: ChatActionPayload["kind"]
-  ): "enable_notifications_hint" | "smart_library_hint" | null {
-    if (kind === "enable_daily_reminder") return "enable_notifications_hint"
-    if (kind === "configure_smart_library") return "smart_library_hint"
-    // `upgrade_to_pro` has no autonomous-rule counterpart today.
-    return null
   }
 
   async function applyProactiveDailyReminder(time: string): Promise<void> {
