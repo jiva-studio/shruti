@@ -22,6 +22,7 @@ from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
 from shruti_chat.domain.ports.kv_cache import KVCache
 from shruti_chat.domain.ports.llm_provider import LLMPort
+from shruti_chat.domain.ports.idempotency_store import IdempotencyStore
 from shruti_chat.domain.ports.outline_cache import OutlineCache
 from shruti_chat.domain.ports.pdf_storage import PdfStorage
 from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
@@ -40,6 +41,9 @@ class AppDeps:
     rate_limiter: RateLimiter
     jwt_verifier: JwtVerifier
     kv_cache: KVCache
+    # Atomic duplicate-request gate keyed on Idempotency-Key. Implemented
+    # over Redis when configured, no-op otherwise.
+    idempotency_store: IdempotencyStore
     # LangGraph wiring. `llm` is the injected LLMPort (OpenRouter adapter
     # in production, FakeLLM in tests). `chat_graph` is the compiled
     # Pregel — built once at startup, reused for every chat turn.
