@@ -91,6 +91,8 @@ services:
       - --interval=60           # poll ghcr every 60s
       - --cleanup               # remove old images after successful update
       - --rolling-restart       # one container at a time (cosmetic with 1 replica each)
+      - --include-stopped       # also scan exited containers (needed for the one-shot migrator)
+      - --revive-stopped        # docker-start the migrator after pulling a fresh image
     networks: [watchtower-internal, lectorium]
     depends_on:
       docker-socket-proxy: { condition: service_started }
