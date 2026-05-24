@@ -30,17 +30,24 @@ from shruti_chat.observability.logging import bind_node_role
 # The synthesizer's "voice" sections — these shape FINAL prose, which
 # is what the client sees. Workers don't need most of these because
 # their output never reaches the client directly.
+#
+# `grounding` (formerly the in-code `_GROUNDING_INSTRUCTION` constant
+# in `application/synthesizer_turn.py`) ships as a Langfuse-managed
+# section so it gets the same hot-reload as the rest. `note_types` is
+# the renamed `library` after splitting the blockquote rule out into
+# `quoting.md`.
 _SYNTH_PROMPT_SECTIONS = (
     "header",
     "no_narration",
     "citations",
-    "library",
+    "note_types",
     "quoting",
     "response_shape",
     "actions",
     "language",
     "safety",
     "followups",
+    "grounding",
 )
 
 
@@ -56,7 +63,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     if ctx.llm is None:
         raise RuntimeError("synthesizer_node requires runtime.context.llm to be set")
 
-    system_prompt = build_prompt(_SYNTH_PROMPT_SECTIONS)
+    system_prompt = build_prompt(_SYNTH_PROMPT_SECTIONS, lang=state["lang"])
     writer = get_stream_writer()
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
@@ -69,7 +76,6 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     async for event in run_synthesizer_turn(
         state["user_query"],
         tool_results=state.get("tool_results", []),
-        lang=state["lang"],
         llm=ctx.llm,
         expander=ctx.expander,
         system_prompt=system_prompt,

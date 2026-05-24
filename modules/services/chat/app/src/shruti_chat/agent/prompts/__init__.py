@@ -1,19 +1,19 @@
 """System prompt for the Shruti chat agent — assembled from .md sections.
 
-Each section is a separate file so future edits diff at the section level
-instead of the 460-line monolith. Section order matters — it determines
+Each section is a separate file so future edits diff at the section
+level instead of one monolith. Section order matters — it determines
 the order the model reads the rules.
 
-To edit one rule (e.g. citation discipline), edit `citations.md` only.
+Each section is pulled from Langfuse via `prompt_with_fallback` so an
+editor can iterate from the UI without a deploy. The fallback path
+reads the bundled `.md` file (still shipped in the repo); that's also
+what runs in eval mode (`LANGFUSE_FORCE_FALLBACK=1`) and during a
+Langfuse outage.
 
-`SYSTEM_PROMPT` (the full assembly) stays for backward-compat with the
-existing monolithic `chat_turn.py`. The multi-agent graph uses
-`build_prompt(sections=...)` to give each node a tailored subset:
-- router: empty (its prompt is hardcoded in `application/router_turn.py`)
-- workers: `header + tools + quoting` (no citations — synth handles those)
-- synthesizer: `header + citations + library + quoting + response_shape +
-  language + safety + no_narration` (everything that shapes the final
-  prose; no `tools` / `actions` since synth doesn't call tools)
+Per-node section subsets live with the node:
+- router       → `chat-router` standalone, fetched in `router_turn.py`.
+- workers      → `WORKER_PROMPT_SECTIONS` in `agent/graph/nodes/_worker_common.py`.
+- synthesizer  → `_SYNTH_PROMPT_SECTIONS` in `agent/graph/nodes/synthesizer.py`.
 """
 
 from __future__ import annotations
@@ -24,39 +24,27 @@ from typing import Iterable
 from shruti_chat.observability.langfuse_client import prompt_with_fallback
 
 
-_SECTIONS = (
-    "header",
-    "tools",
-    "actions",
-    "followups",
-    "no_narration",
-    "citations",
-    "library",
-    "quoting",
-    "response_shape",
-    "language",
-    "safety",
-)
-
-
 def _section_to_langfuse_name(name: str) -> str:
     """`header` → `chat-section-header`. Bootstrap script publishes
     each section under this exact prefix."""
     return f"chat-section-{name}"
 
 
-def build_prompt(sections: Iterable[str] = _SECTIONS) -> str:
+def build_prompt(
+    sections: Iterable[str],
+    *,
+    lang: str | None = None,
+) -> str:
     """Assemble the system prompt from the named sections in order.
 
-    Each section is pulled from Langfuse with `prompt_with_fallback`
-    so an editor can iterate on `quoting` or `library` from the UI
-    without a deploy. The fallback path reads the bundled `.md`
-    file (still shipped in the repo) — that's also what runs in eval
-    mode (`LANGFUSE_FORCE_FALLBACK=1`) and during a Langfuse outage.
+    `lang` (when provided) substitutes the `{{LANG}}` placeholder in
+    any section that carries it (currently `language.md`). The
+    placeholder lets us put the language directive ONCE in a prompt
+    section instead of prepending `[lang=ru]` to every user message.
 
     Section order matters — it determines the order the model reads
-    the rules — so the iterator MUST be deterministic. The default
-    `_SECTIONS` is a tuple for that reason.
+    the rules — so the iterator MUST be deterministic. Section
+    subsets at the call site MUST be tuples for that reason.
     """
     base = Path(__file__).parent
     parts: list[str] = []
@@ -74,13 +62,7 @@ def build_prompt(sections: Iterable[str] = _SECTIONS) -> str:
             fallback=_fallback,
         )
         parts.append(prompt.text)
-    return "".join(parts)
-
-
-# NB: `SYSTEM_PROMPT` (the full assembly) was previously evaluated at
-# import time. That broke hot-reload — once imported, every later
-# `get_prompt` would have been bypassed. We now build per-call inside
-# `build_prompt`. Callers that still want the legacy export should
-# invoke `build_prompt()` themselves; nothing in-tree does, so we
-# don't export the stale name any more.
-
+    text = "".join(parts)
+    if lang:
+        text = text.replace("{{LANG}}", lang)
+    return text

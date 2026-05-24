@@ -173,7 +173,12 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # the picked sentences verbatim from alias storage —
             # neither the LLM nor any prompt instruction can fabricate
             # a quote that isn't really there.
-            author = meta.get("author_name") or meta.get("author_id") or ""
+            # author_name is resolved by `chunks_search` /
+            # `commentary_expansion` via a batch catalog lookup before
+            # the envelope reaches synth. If it's still missing we render
+            # without an author rather than leaking the raw id (which is
+            # opaque to the LLM and to anyone reading the trace).
+            author = meta.get("author_name") or ""
             tag = (
                 f"{attribution} — комментарий, {author}"
                 if author and attribution
@@ -199,113 +204,10 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     return f"{header}\n{text}".rstrip() if header else text
 
 
-_GROUNDING_INSTRUCTION = """\
-HARD RULE — never narrate your tools.
-
-Your output is rendered verbatim to the end user. They must NEVER see
-internal tool-protocol shapes such as `[tool_use]`, `[tool_result]`,
-`tool_call`, JSON envelopes, or the words "calling chunks_search" /
-"I will search" / "based on the search results". The research notes
-above are private context — do NOT mention that you have them, do
-NOT echo their formatting, do NOT prefix your answer with a summary
-of what you searched. Begin your reply with the first word of the
-actual answer to the user's question.
-
-Compose the final answer ONLY from the research notes above. Each
-note's header begins with `[^N]` — copy that EXACT marker into your
-prose when you cite the note. The integer is opaque; never guess
-one, never increment, never use position.
-
-ONE CITE PER THESIS: each `[^N]` appears AT MOST ONCE in your
-reply. If one note supports several related points, group them into
-ONE paragraph and place `[^N]` at the end. Do not sprinkle the same
-`[^N]` across multiple paragraphs — see response_shape.md.
-
-NEVER write `> text` blockquotes by hand. The ONLY way a blockquote
-can land in the final reply is via the `[^N|s=...]` commentary marker
-(below) — server inserts the verbatim sentences. Any hand-typed `>`
-line you write is stripped from the output before the user sees it,
-because hand-written quotes inevitably paraphrase the source and ship
-with fake attribution. This applies to ALL note kinds — commentaries,
-prose chapters, letters, verses. If you want a reader to see a quote,
-emit the marker; if no marker fits, summarise in your own prose
-WITHOUT trying to make it look like a citation.
-
-COMMENTARIES (purports on shlokas) — REQUIRED when present.
-
-The notes you got may include `commentary` entries. They look like this:
-
-  [^7] БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада
-  [s=0] Каждое живое существо, воплотившееся в материальном теле…
-  [s=1] Однако сама душа при этом остаётся неизменной.
-  [s=2] После смерти тела индивидуальная душа меняет его на другое…
-
-When the user is asking about a shloka (or about a topic and a
-commentary note IS in the research notes), you MUST surface at least
-one purport excerpt by emitting `[^7|s=0,1]` on its OWN line in your
-prose. The server pulls sentences 0 and 1 VERBATIM and renders them
-as a markdown blockquote with the author attribution from the note
-header. You do NOT type the `>` characters, you do NOT type the
-quoted text — you only emit the marker with the sentence indices
-most relevant to the user's question.
-
-Why required: the LLM can't write purport text in a way that's actually
-faithful (it paraphrases). Surfacing the author's own words via this
-marker is the ONLY way the user gets authentic scriptural commentary.
-Skipping it on a verse-related answer means the user reads only your
-prose with lecture cites and never sees the canonical purport — which
-is what they asked for when they mention a shloka.
-
-  - Pick 1-3 sentence indices most directly addressing the question.
-  - `[^7]` alone (no `|s=...`) defaults to the first 2 sentences.
-  - `[^7|s=99]` (out of range) renders nothing — verify indices
-    against the `[s=…]` markers shown in the note.
-  - Multiple purports on the same verse from different authors →
-    emit one `[^N|s=…]` per author, on separate lines, so each renders
-    as its own blockquote.
-
-Do NOT compose `> text` blockquotes by hand for commentary — there is
-NO way to do it correctly, since you'd be writing the quoted text
-yourself. Only the `[^N|s=...]` marker produces authentic quotes.
-
-NEVER fabricate refs. NEVER invent track_ids or verse addresses.
-
-EMPTY-RESULT DISCIPLINE (very strict — ignoring this breaks user trust):
-
-Read the `score` field on every note before composing. The score is
-cosine similarity 0..1; relevant matches sit at 0.5+, mid-relevance
-at 0.45-0.5, junk at <0.45.
-
-If ANY of the following is true, you MUST refuse to answer and
-explicitly say you didn't find material — do NOT compose paragraphs
-from low-score chunks just because they exist:
-
-  1. tool_results is empty (worker returned nothing).
-  2. EVERY note has `score < 0.45` (max score across all notes is
-     below 0.45). This means the search returned junk, not matches.
-  3. The notes are clearly off-topic for the user's question (e.g.
-     user asks about quantum computers / aliens / modern science and
-     the only notes are unrelated verses about devotion).
-
-Refusal phrasing, in the user's language:
-  ru: «Не нашёл в корпусе материалов на эту тему. Прабхупада, как
-      правило, не касался X напрямую — попробуй уточнить запрос или
-      назвать конкретное место в писании.»
-  en: "I couldn't find any matching material on this topic.
-      Prabhupāda did not directly address X — try a different
-      phrasing or reference a specific scripture."
-
-NEVER soften this with "however, the closest material I found is …"
-followed by a paragraph from low-score chunks. The refusal is the
-whole answer when the search came up empty.
-"""
-
-
 async def run_synthesizer_turn(
     user_query: str,
     *,
     tool_results: list[dict[str, Any]],
-    lang: str,
     llm: _LLMForSynthesis,
     expander: MarkerExpander,
     system_prompt: str,
@@ -349,32 +251,22 @@ async def run_synthesizer_turn(
     # opening of their response, leaking JSON envelopes to the user.
     # Putting the notes in `system` reframes them as ambient context,
     # not a prior turn to continue.
+    _SEP = "─" * 66
     system_block = (
-        system_prompt
-        + "\n\n"
-        + _GROUNDING_INSTRUCTION
-        + "\n\n"
-        + "Research notes already gathered by your tools (use ONLY these "
-        + "to ground every claim; do NOT mention this block, do NOT echo "
-        + "its formatting):\n"
-        + notes
+        f"{system_prompt}\n\n"
+        f"{_SEP}\n"
+        f"RESEARCH NOTES (private context — do NOT mention or echo)\n"
+        f"{_SEP}\n"
+        f"{notes}"
     )
     messages: list[Message] = [
         {"role": "system", "content": system_block},
     ]
     folded = fold_history(history) if history else []
     if folded:
-        # Tag the current language for the conversation thread once,
-        # at the most recent user message. Keeps the directive close
-        # to the question instead of buried in the system prompt.
-        if folded[-1].get("role") == "user":
-            folded[-1] = {
-                "role": "user",
-                "content": f"[lang={lang}] {folded[-1]['content']}",
-            }
         messages.extend(folded)  # type: ignore[arg-type]
     else:
-        messages.append({"role": "user", "content": f"[lang={lang}] {user_query}"})
+        messages.append({"role": "user", "content": user_query})
 
     prose_chars = 0
     full_prose: list[str] = []

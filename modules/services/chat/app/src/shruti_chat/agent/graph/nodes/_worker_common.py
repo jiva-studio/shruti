@@ -219,7 +219,7 @@ async def run_worker(
     ctx = runtime.context
 
     prompt_prefix = anchor_block(state) if include_anchors else ""
-    system_prompt = prompt_prefix + build_prompt(WORKER_PROMPT_SECTIONS)
+    system_prompt = prompt_prefix + build_prompt(WORKER_PROMPT_SECTIONS, lang=state["lang"])
     schemas = tool_schemas_from(tools)
 
     writer = get_stream_writer()
@@ -253,7 +253,6 @@ async def run_worker(
     result = await run_react_loop(
         extra_user_query or state["user_query"],
         extracted_args=state.get("extracted_args", {}),
-        lang=state["lang"],
         llm=ctx.llm,
         tools=tools,
         tool_schemas=schemas,

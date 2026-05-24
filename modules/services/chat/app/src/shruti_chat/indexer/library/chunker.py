@@ -146,14 +146,21 @@ def walk_verses(
     *,
     langs: list[str],
 ) -> Iterator[LibraryChunk]:
-    """Emit one chunk per (verse, lang) with text + IAST + translation."""
+    """Emit one chunk per (verse, lang) — translation only.
+
+    Sanskrit + transliteration live in their own columns in
+    `library_verses` and ride to the client through the separate
+    verse-payload SSE event (rendered by `VerseCard`). They are NOT
+    mashed into `text` here — the chunk text is purely the translation
+    so research notes stay short and the synthesizer doesn't echo
+    IAST in its prose. Requires `library_index` re-run for existing
+    rows: persisted `text` column doesn't auto-update.
+    """
     with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
         cur = conn.execute(
-            "SELECT id, source_id, tokens, COALESCE(text,''), COALESCE(transliteration,'') "
-            "FROM library_verses"
+            "SELECT id, source_id, tokens FROM library_verses"
         )
-        for vid, source_id, tokens, text, translit in cur:
-            # Pre-fetch all translation variants for this verse
+        for vid, source_id, tokens in cur:
             tr_rows = conn.execute(
                 "SELECT language, translation FROM library_verse_variants WHERE verse_id=?",
                 (vid,),
@@ -161,16 +168,13 @@ def walk_verses(
             translations = {lang: tr for lang, tr in tr_rows}
             for lang in langs:
                 translation = translations.get(lang, "")
-                if not (text or translit or translation):
+                if not translation:
                     continue
                 short = short_names.get((source_id, lang))
                 addr_label = _verse_addr(short, source_id, tokens)
-                parts = [f"{addr_label}:"]
-                if translation:
-                    parts.append(translation)
-                if translit:
-                    parts.append(f"IAST: {translit}")
-                body = "\n".join(parts).strip()
+                # `addr_label` prefix kept for the ANN signal — queries
+                # that name a book/canto still match by string overlap.
+                body = f"{addr_label}:\n{translation}".strip()
                 yield LibraryChunk(
                     item_id=vid,
                     item_kind="verse",

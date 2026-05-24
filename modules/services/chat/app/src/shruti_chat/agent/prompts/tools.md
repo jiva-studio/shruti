@@ -149,9 +149,6 @@ Tools and when to use them
 `track_pdf_generate(track_ids, lang)` — see actions.md for protocol.
     `track_ids` is a LIST OF INTEGER REFS (e.g. `[2, 5]`).
 
-NOTE: there's no playlist tool. «собери плейлист» / «make a playlist»
-requests route to `tracks_list` (catalog worker) — return a stack of
-`[^N]` cards and the client offers "add to playlist" itself.
+NOTE: there's no playlist tool. «собери плейлист» / «make a playlist» requests route to `tracks_list` (catalog worker) — return a stack of `[^N]` cards and the client offers "add to playlist" itself.
 
-NOTE: there is no `search_my_notes` tool. If the user asks about
-their notes, say you can't access them yet and offer the Notes view.
+NOTE: there is no `search_my_notes` tool. If the user asks about their notes, say you can't access them yet and offer the Notes view.
