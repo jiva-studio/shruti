@@ -13,10 +13,24 @@
 # What this script does each run, idempotently:
 #   - SSH bootstrap of docker + compose plugin (no-op if already there)
 #   - rsync ONLY infra/ to /opt/lectorium/ (no service source — images
-#     come from ghcr.io)
+#     come from ghcr.io; Caddyfile and SQL migrations are baked into
+#     their images, not shipped via rsync)
 #   - docker compose pull (fetches the :latest tag of each service image)
 #   - docker compose up -d (starts migrator → services → caddy in order)
 #   - wait for health-checks of chat + auth
+#
+# When to run:
+#   - First-time setup of a VPS.
+#   - Changes to docker-compose.yml / docker-compose.prod.yml structure.
+#   - After a migration is published: migrator is a one-shot container,
+#     so Watchtower can't auto-restart it; re-run this script (or
+#     `docker compose up -d migrator` on the host) to apply.
+#
+# When NOT needed:
+#   - Caddyfile edits — baked into the lectorium-caddy image, Watchtower
+#     rolls the container after CI publishes (#577).
+#   - Service code edits — baked into per-service images, Watchtower
+#     rolls them after CI publishes.
 #
 # Required:   SERVER_IP=<ipv4>  ./infra/app/scripts/deploy.sh
 # Optional:   SERVER_USER (root), SSH_KEY (~/.ssh/id_ed25519)

@@ -86,11 +86,13 @@ services:
   # exit code is non-zero — `docker compose logs migrator` shows where.
   # Recovery: `docker compose run --rm migrator force <N>` after fixup.
   migrator:
-    image: migrate/migrate:v4.18.1
+    # Migrations are baked into the image (see infra/app/db/Dockerfile),
+    # so there is no bind-mount here. CI rebuilds and pushes a new tag
+    # whenever infra/app/db/migrations/** or the Dockerfile changes;
+    # the next `docker compose up -d migrator` runs them.
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-migrator:${LECTORIUM_MIGRATOR_TAG:-latest}
     restart: "no"
     logging: *default-logging
-    volumes:
-      - ../db/migrations:/migrations:ro
     command:
       - -path=/migrations
       - -database=postgres://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium?sslmode=disable
