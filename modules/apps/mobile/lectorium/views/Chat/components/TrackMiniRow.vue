@@ -31,7 +31,7 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet } from "@ionic/vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
-import { groupReferences } from "@lectorium/composables/groupReferences.js"
+import { groupReferences } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedNameOrEmpty,
   resolveTrackTitle,

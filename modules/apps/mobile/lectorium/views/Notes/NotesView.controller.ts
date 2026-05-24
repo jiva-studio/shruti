@@ -11,7 +11,7 @@ import { buildServerUrl } from "@lib/domain/servers.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
 import { formatNoteShare } from "@lib/application/formatNoteShare.js"
-import { formatReference } from "@lectorium/composables/groupReferences.js"
+import { formatReference } from "@lib/domain/services/references.js"
 import {
   resolveLocalizedName,
   resolveTrackTitle as resolveTitleForLang,
