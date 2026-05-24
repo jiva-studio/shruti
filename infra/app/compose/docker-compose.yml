@@ -62,7 +62,12 @@ services:
       - -c
       - maintenance_work_mem=512MB
       - -c
-      - max_connections=50
+      # Headroom: chat's asyncpg pool tops out at 25, auth/pgx + share-
+      # video pools are ~10 each, plus the migrator + monitoring +
+      # operator psql sessions. 50 leaves no slack when a vendor hang
+      # holds connections inside a transaction; 200 is safe at 8 GB
+      # RAM with shared_buffers=2GB.
+      - max_connections=200
       - -c
       - random_page_cost=1.1
       - -c
