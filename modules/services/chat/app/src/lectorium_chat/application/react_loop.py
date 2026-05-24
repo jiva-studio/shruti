@@ -26,6 +26,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Callable, Literal, Protocol, TypeVar
 
+from pydantic import BaseModel
+
+from lectorium_chat.agent.tools._registry import ToolFn
+from lectorium_chat.agent.turn_aliases import TurnAliasMap
+from lectorium_chat.domain.entities import CompletionChunk, Message
+from lectorium_chat.observability.logging import get_logger
+
 
 # Callback signature for tool lifecycle events. Workers bridge this to
 # the SSE writer so the client shows "thinking" UI while a tool runs.
@@ -40,13 +47,6 @@ ToolLifecycleCallback = Callable[[Literal["tool_start", "tool_end"], str], None]
 # type (always "action" today, kept generic for future channels), and
 # the second is the JSON-serializable event data.
 YieldEventCallback = Callable[[str, dict[str, Any]], None]
-
-from pydantic import BaseModel
-
-from lectorium_chat.agent.tools._registry import ToolFn
-from lectorium_chat.agent.turn_aliases import TurnAliasMap
-from lectorium_chat.domain.entities import CompletionChunk, Message
-from lectorium_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
