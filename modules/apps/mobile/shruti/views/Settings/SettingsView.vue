@@ -12,8 +12,8 @@
       @sign-in-google="auth.signInGoogle"
       @sign-in-apple="auth.signInApple"
       @sign-out="auth.signOut"
-      @open-paywall="paywall.requestOpen"
-      @manage-subscription="subscription.onManage"
+      @open-paywall="paywall.requestOpen()"
+      @manage-subscription="paywall.requestOpen()"
     />
 
     <SettingsAppearanceGroup
@@ -25,7 +25,7 @@
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
       :is-subscribed="subscription.isSubscribed"
-      @request-paywall="paywall.requestOpen"
+      @request-paywall="paywall.requestOpen('autoScroll')"
     />
 
     <SettingsSadhanaGroup
@@ -33,7 +33,7 @@
       v-model:notifications-enabled="notificationsEnabled"
       v-model:notifications-time="notificationsTime"
       :smart-library-subtitle="smartLibrary.subtitle.value"
-      @open-smart-library="smartLibraryDialogOpen = true"
+      @open-smart-library="onSmartLibraryEntry"
     />
 
     <SmartLibraryDialog
@@ -41,10 +41,8 @@
       v-model:archive-delay="autoArchiveDelay"
       :open="smartLibraryDialogOpen"
       :filter-summary="smartLibrary.filterSummary.value"
-      :is-subscribed="subscription.isSubscribed"
       @update:open="smartLibraryDialogOpen = $event"
       @open-filters="smartLibraryFiltersOpen = true"
-      @request-paywall="paywall.requestOpen"
     />
 
     <SearchFiltersSheet
@@ -138,4 +136,9 @@ const debugUnlocked = debugTrigger.unlocked
 const helpOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
+
+function onSmartLibraryEntry(): void {
+  if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
+  else paywall.requestOpen("smartLibrary")
+}
 </script>

@@ -1,26 +1,17 @@
 import { defineStore } from "pinia"
-import { ref } from "vue"
+import router from "@shruti/router/index.js"
+import type { SubscriptionFeatureKey } from "@ui/features/subscription/index.js"
 
 /**
- * Global open/close gate for the subscription paywall. Multiple call
- * sites (Settings, Smart Library, Studio, …) all share one dialog
- * instance mounted at the tabs layout — they don't carry their own
- * `open` ref, they just call `paywall.requestOpen()` when they need it.
- *
- * Keeping this as a store (not a composable with module-level state)
- * lets it survive Vue's HMR cleanly and stays consistent with the
- * `usePurchasesStore` / `useShareJobStore` pattern already in use.
+ * Single global entry point for the paywall. Pushes the dedicated
+ * /tabs/subscription route — optionally with ?feature=… so the carousel
+ * snaps to the slide that prompted the upsell. Kept as a store so
+ * existing call sites like `usePaywallStore().requestOpen()` keep
+ * compiling unchanged.
  */
 export const usePaywallStore = defineStore("paywall", () => {
-  const open = ref<boolean>(false)
-
-  function requestOpen(): void {
-    open.value = true
+  function requestOpen(feature?: SubscriptionFeatureKey): void {
+    void router.push({ name: "subscription", query: feature ? { feature } : {} })
   }
-
-  function close(): void {
-    open.value = false
-  }
-
-  return { open, requestOpen, close }
+  return { requestOpen }
 })

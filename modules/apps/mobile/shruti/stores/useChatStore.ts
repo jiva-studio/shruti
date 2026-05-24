@@ -845,9 +845,6 @@ export const useChatStore = defineStore("chat", () => {
       } else if (action.kind === "configure_smart_library") {
         await applyProactiveSmartLibrary(action.filters)
       } else if (action.kind === "upgrade_to_pro") {
-        // The paywall store handles its own dialog mounting; we just
-        // request open and pretend the action completed (the user will
-        // engage or dismiss the paywall separately).
         const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
         usePaywallStore().requestOpen()
       } else if (action.kind === "queue_next_track") {
@@ -919,7 +916,7 @@ export const useChatStore = defineStore("chat", () => {
       // Not subscribed → bounce through the paywall. The user can
       // re-tap the same card after they upgrade.
       const { usePaywallStore } = await import("@shruti/stores/usePaywallStore.js")
-      usePaywallStore().requestOpen()
+      usePaywallStore().requestOpen("smartLibrary")
       return
     }
     const { useAutoDownloadFiltersStore } =
