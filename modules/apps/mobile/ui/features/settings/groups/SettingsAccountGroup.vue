@@ -165,6 +165,10 @@ function handleSignOut(): void {
   width: 32px;
   height: 32px;
   margin-inline-end: 16px;
+  /* ion-avatar's host sets border-radius:50% but no overflow clip — the
+     initials <div> fallback (not an <img>) leaks past the rounded corners
+     and renders square. */
+  overflow: hidden;
 }
 .account-avatar__initials {
   display: flex;
