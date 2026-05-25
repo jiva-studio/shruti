@@ -31,29 +31,41 @@ PR #612 for the app-stack equivalent.
 
 ## Execution context
 
-Unlike the app stack hooks (which run **on** the remote host inside an SSH
-session), observability hooks run **from the operator's machine** as part of
-`deploy.sh`. This is intentional:
+Hooks run **on the observability host** (the same VPS that `deploy.sh`
+targets), invoked over SSH by the `deploy.sh` wrapper after `docker compose
+up -d`. They have direct access to the host's docker socket, so
+`docker exec lectorium-observability-clickhouse-1 …` and similar work
+directly — no `ssh_run` indirection required from inside the hook.
 
-- The lib scripts they wrap (`lib/bootstrap-langfuse-ttl.sh`,
-  `lib/bootstrap-grafana-contacts.sh`) already use `ssh_run` to reach the
-  observability host and `docker exec` containers there.
-- Some hooks need operator-local config (`CF_API_TOKEN`, `GRAFANA_ADMIN_PASSWORD`,
-  `TG_BOT_TOKEN`) loaded from `config/<region>.env` before invocation.
+This mirrors the app-stack pattern: each hook is self-contained and assumes
+the deployed layout (`/opt/lectorium-observability/scripts/post-deploy/…`).
+Hooks DO NOT reach for `infra/shared/lib/` — that path doesn't exist on the
+host (the shared lib lands at `$REMOTE_DIR/_shared/`, but hooks are meant to
+work without it anyway).
 
-The deploy.sh wrapper exports the needed env vars and `SSH_TARGET` / `SSH_OPTS`
-/ `REMOTE_DIR` before iterating the hooks.
+Hook-visible state on the host:
+
+- Container names follow compose v2 naming with the project name set in
+  `compose/docker-compose.yml` (`name: lectorium-observability`), e.g.
+  `lectorium-observability-grafana-1`, `lectorium-observability-clickhouse-1`.
+- The runtime `.env` written by `deploy.sh` step 5 lives at
+  `$REMOTE_DIR/compose/.env` (relative to a hook: `../../compose/.env`).
+  Hooks that need `GRAFANA_ADMIN_PASSWORD` / `TG_BOT_TOKEN` / etc. should
+  read this file directly rather than relying on the operator's env.
+- If a hook needs a sibling helper, prefer co-deploying it under
+  `scripts/lib/` and sourcing via `"$HERE/../lib/<lib>.sh"` (paths resolve
+  against the deployed layout). Don't reach into `_shared/`.
 
 ## Adding a new hook
 
 1. Create `NNN-short-name.sh` (executable, `#!/usr/bin/env bash`, `set -euo pipefail`).
-2. Source `infra/shared/lib/deploy-common.sh` (for `log`/`ok`/`warn`/`fail` and
-   `ssh_run`).
-3. Source the lib that does the work; call its function.
-4. Make the underlying change idempotent at the engine level (CREATE IF NOT EXISTS,
-   `ALTER … MODIFY TTL` with same value is a no-op, etc.).
-5. Validate with `bash -n infra/observability/scripts/post-deploy/NNN-short-name.sh`.
-6. Run a deploy twice and confirm the second hook execution is a no-op.
+2. Keep it self-contained: `docker exec` against named containers, read
+   secrets from `$REMOTE_DIR/compose/.env` if needed, no library sourcing
+   beyond `scripts/lib/`.
+3. Make the underlying change idempotent at the engine level (CREATE IF
+   NOT EXISTS, `ALTER … MODIFY TTL` with same value is a no-op, etc.).
+4. Validate with `bash -n infra/observability/scripts/post-deploy/NNN-short-name.sh`.
+5. Run a deploy twice and confirm the second hook execution is a no-op.
 
 ## Relationship to `configure.sh`
 
