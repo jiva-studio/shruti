@@ -26,6 +26,10 @@ export default {
       confirmWipe: "Delete account and wipe data",
       confirmKeep: "Delete account, keep my data",
       errorToast: "Could not delete account. Please try again.",
+      alreadyDeletedToast: "Your account is already deleted.",
+      rateLimitedToast: "Please wait a bit before trying again.",
+      networkErrorToast: "No connection. Check your internet and try again.",
+      serverErrorToast: "Something went wrong on our end. Please try again in a moment.",
       subscriptionToast:
         "Subscription stays active on this device. Cancel via App Store/Play if you want to stop it.",
     },

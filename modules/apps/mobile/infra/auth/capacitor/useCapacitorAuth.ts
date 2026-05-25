@@ -5,6 +5,24 @@ import { SocialLogin } from "@capgo/capacitor-social-login"
 
 import type { AuthConfig, AuthPort, AuthSession, MeView } from "@ports/app/auth.js"
 
+export type AccountDeleteErrorKind =
+  | "already-deleted"
+  | "rate-limited"
+  | "server"
+  | "network"
+  | "unauthorized"
+  | "unknown"
+
+export class AccountDeleteError extends Error {
+  constructor(
+    public readonly kind: AccountDeleteErrorKind,
+    public readonly status?: number
+  ) {
+    super(`account/delete: ${kind}${status ? ` (${status})` : ""}`)
+    this.name = "AccountDeleteError"
+  }
+}
+
 interface StoredTokens {
   accessToken: string
   refreshToken: string
@@ -299,14 +317,19 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     // deletion. The upstream caller follows up with wipeLocalUserData()
     // when wipeLocal=true; if we cleared on a 5xx the user would lose
     // notes/chats/downloads while their server account still exists.
-    const doDelete = async (token: string): Promise<Response> =>
-      fetch(`${cfg.baseUrl}/account/delete`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
+    const doDelete = async (token: string): Promise<Response> => {
+      try {
+        return await fetch(`${cfg.baseUrl}/account/delete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        })
+      } catch {
+        throw new AccountDeleteError("network")
+      }
+    }
 
     let res = await doDelete(stored.accessToken)
     if (res.status === 401) {
@@ -314,10 +337,21 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       // handles the refresh-coalesce and clears tokens on refresh
       // failure, so a null return means the session is already gone.
       const refreshed = await getAccessToken()
-      if (!refreshed) throw new Error("account/delete: refresh failed")
+      if (!refreshed) throw new AccountDeleteError("unauthorized", 401)
       res = await doDelete(refreshed)
+      if (res.status === 401) throw new AccountDeleteError("unauthorized", 401)
     }
-    if (!res.ok) throw new Error(`account/delete: HTTP ${res.status}`)
+    if (!res.ok) {
+      if (res.status === 410) {
+        // Server says the account is already gone — drop local tokens
+        // so the caller's wipe/restore lands on a clean anonymous slate.
+        await clearTokens()
+        throw new AccountDeleteError("already-deleted", 410)
+      }
+      if (res.status === 429) throw new AccountDeleteError("rate-limited", 429)
+      if (res.status >= 500) throw new AccountDeleteError("server", res.status)
+      throw new AccountDeleteError("unknown", res.status)
+    }
     await clearTokens()
   }
 
