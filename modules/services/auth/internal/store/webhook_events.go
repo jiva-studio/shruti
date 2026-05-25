@@ -86,3 +86,20 @@ func (r *WebhookEventRepo) RecordError(ctx context.Context, eventID, msg string)
 	)
 	return err
 }
+
+// MarkProcessedWithError seals the event row as processed=now() but with
+// a non-nil error string. Used for "permanent failure, stop retrying"
+// outcomes (e.g. RC REST returns 401/403). Distinct from MarkProcessed
+// which clears the error field; here we want to preserve the cause so
+// ops can grep the table for why a given event never reached the
+// `subscription.changed` outbox.
+func (r *WebhookEventRepo) MarkProcessedWithError(ctx context.Context, eventID, msg string) error {
+	_, err := r.Pool.Exec(ctx,
+		`UPDATE auth.rc_webhook_events
+		    SET processed_at = now(),
+		        error = $2
+		  WHERE event_id = $1`,
+		eventID, msg,
+	)
+	return err
+}

@@ -26,15 +26,27 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/akdasa-studios/shruti/auth/internal/metrics"
 	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
 	"github.com/akdasa-studios/shruti/auth/internal/service"
 	"github.com/akdasa-studios/shruti/auth/internal/store"
 )
+
+// permanentSkipDuration is how long we stay away from a user whose RC
+// REST call returned a permanent failure (typically 401/403 from a
+// misconfigured API key, or RC explicitly refusing the app_user_id).
+// 24h is long enough that operators have time to notice the alert and
+// rotate the key; short enough that a rogue skip won't strand a user
+// for weeks if the underlying cause was a fluke.
+const permanentSkipDuration = 24 * time.Hour
 
 // Reconciler is the cron struct — the binary holds one per process.
 type Reconciler struct {
@@ -45,6 +57,23 @@ type Reconciler struct {
 	Interval   time.Duration // tick cadence; defaults to 6h
 	StaleAfter time.Duration // user is stale if tier_updated_at older than this; defaults to 24h
 	BatchSize  int           // users per tick; defaults to 100
+
+	// Clock is injected for tests; defaults to time.Now. The skip table
+	// uses it both to record skip-until timestamps and to evaluate
+	// whether a user is still within their skip window.
+	Clock func() time.Time
+
+	// SkipDuration overrides permanentSkipDuration for tests. Zero
+	// falls back to the package default.
+	SkipDuration time.Duration
+
+	// skipUntil maps user_id → "don't touch before this time". Entries
+	// are written when GetSubscriber returns ErrPermanent and read at
+	// the top of reconcileOne. Pure in-process state — a restart clears
+	// it (acceptable: on restart the first sweep will re-hit RC, see
+	// the same permanent error, log + skip again).
+	skipUntil   map[uuid.UUID]time.Time
+	skipUntilMu sync.Mutex
 }
 
 // Run blocks until ctx is cancelled. Safe to call once per process;
@@ -90,6 +119,43 @@ func (r *Reconciler) applyDefaults() {
 	if r.BatchSize <= 0 {
 		r.BatchSize = 100
 	}
+	if r.Clock == nil {
+		r.Clock = time.Now
+	}
+	if r.SkipDuration <= 0 {
+		r.SkipDuration = permanentSkipDuration
+	}
+	if r.skipUntil == nil {
+		r.skipUntil = make(map[uuid.UUID]time.Time)
+	}
+}
+
+// shouldSkip reports whether `uid` is currently within a permanent-error
+// skip window. The check is best-effort: a stale entry doesn't matter
+// for correctness, the next sweep just retries.
+func (r *Reconciler) shouldSkip(uid uuid.UUID) (bool, time.Time) {
+	r.skipUntilMu.Lock()
+	defer r.skipUntilMu.Unlock()
+	until, ok := r.skipUntil[uid]
+	if !ok {
+		return false, time.Time{}
+	}
+	if r.Clock().Before(until) {
+		return true, until
+	}
+	// Window elapsed — clear so the map doesn't grow unbounded for
+	// long-lived processes.
+	delete(r.skipUntil, uid)
+	return false, time.Time{}
+}
+
+// markSkip records a permanent-failure skip window for `uid`.
+func (r *Reconciler) markSkip(uid uuid.UUID) time.Time {
+	until := r.Clock().Add(r.SkipDuration)
+	r.skipUntilMu.Lock()
+	r.skipUntil[uid] = until
+	r.skipUntilMu.Unlock()
+	return until
 }
 
 // tick is one sweep. Errors are logged but never bubbled — the loop
@@ -106,12 +172,47 @@ func (r *Reconciler) tick(ctx context.Context) {
 		return
 	}
 
-	var processed, failed int
+	var processed, failed, skipped int
 	for _, s := range stale {
 		if ctx.Err() != nil {
 			break
 		}
+		// Skip users whose RC call returned a permanent failure
+		// recently. The skip window is per-user so an API-key
+		// misconfiguration doesn't burn quota on the whole batch
+		// every tick.
+		if skip, until := r.shouldSkip(s.UserID); skip {
+			skipped++
+			slog.DebugContext(ctx, "reconcile_skip_permanent",
+				slog.String("user_id", s.UserID.String()),
+				slog.Time("until", until),
+			)
+			continue
+		}
 		if err := r.reconcileOne(ctx, s); err != nil {
+			if errors.Is(err, rcclient.ErrPermanent) {
+				// Permanent → arm the skip window, bump the counter,
+				// log loudly. Doesn't count as a "failed" tick — the
+				// failure is RC's, not ours.
+				until := r.markSkip(s.UserID)
+				metrics.RCAPIPermanentTotal.Inc()
+				metrics.RCAPIAuthFailedTotal.Inc()
+				slog.ErrorContext(ctx, "reconcile_permanent_failure",
+					slog.String("user_id", s.UserID.String()),
+					slog.String("rc_app_user_id", s.RCAppUserID),
+					slog.Time("skip_until", until),
+					slog.String("err", err.Error()),
+				)
+				skipped++
+				continue
+			}
+			if errors.Is(err, rcclient.ErrRateLimited) {
+				// 429 → leave the user for the next sweep, count it
+				// separately. Don't arm the skip window; the next tick
+				// (6h by default) is well past any reasonable RC
+				// Retry-After.
+				metrics.RCAPIRateLimitedTotal.Inc()
+			}
 			failed++
 			slog.WarnContext(ctx, "reconcile_one_failed",
 				slog.String("user_id", s.UserID.String()),
@@ -125,16 +226,21 @@ func (r *Reconciler) tick(ctx context.Context) {
 	slog.InfoContext(ctx, "reconcile_tick_done",
 		slog.Int("processed", processed),
 		slog.Int("failed", failed),
+		slog.Int("skipped", skipped),
 		slog.Duration("elapsed", time.Since(started)),
 	)
 }
 
 func (r *Reconciler) reconcileOne(ctx context.Context, s store.StaleSubscriber) error {
 	resp, err := r.RC.GetSubscriber(ctx, s.RCAppUserID)
-	if err != nil {
+	if err != nil && !errors.Is(err, rcclient.ErrSubscriberNotFound) {
+		// 404 is a soft success — apply with the empty body so the
+		// user reverts to tier=free if RC has no record. Anything
+		// else is bubbled up so tick() can classify and decide skip
+		// vs retry.
 		return err
 	}
-	snap := service.SnapshotFromRCResponse(s.RCAppUserID, resp, time.Now())
+	snap := service.SnapshotFromRCResponse(s.RCAppUserID, resp, r.Clock())
 	// Synthetic event id — `reconcile:<user>:<unix>` is unique per
 	// (user, tick) so the dedup table never short-circuits the apply.
 	// Doesn't collide with real RC `event.id` because of the prefix.
