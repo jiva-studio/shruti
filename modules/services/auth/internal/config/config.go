@@ -20,6 +20,18 @@ type Config struct {
 	JWTKid           string
 	GoogleClientIDs  []string
 	AppleBundleIDs   []string
+	// RCWebhookSecret is the Bearer value RevenueCat sends in the
+	// Authorization header of every webhook delivery (configured in
+	// the RC dashboard → Project → Webhooks). Empty means the handler
+	// rejects every request — required in any env that wires the
+	// webhook endpoint.
+	RCWebhookSecret string
+	// RCRestAPIKey is the RC project's public-side API key used to
+	// call `GET /v1/subscribers/{app_user_id}` after a webhook fires.
+	// We do this REST refetch instead of trusting webhook payload
+	// fields — RC themselves recommend it (covers out-of-order delivery,
+	// refund/grace semantics, etc).
+	RCRestAPIKey string
 	// Env tags log lines for Datadog tag-from-log pipelines.
 	// "dev" | "staging" | "prod". Defaults to "dev".
 	Env string
@@ -38,6 +50,8 @@ func Load() (*Config, error) {
 		JWTKid:            env("JWT_KID", "v1"),
 		GoogleClientIDs:   splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
 		AppleBundleIDs:    splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
+		RCWebhookSecret:   os.Getenv("RC_WEBHOOK_SECRET"),
+		RCRestAPIKey:      os.Getenv("RC_REST_API_KEY"),
 		Env:               env("ENV", "dev"),
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
 	}

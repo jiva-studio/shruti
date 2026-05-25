@@ -134,6 +134,14 @@
             reverse_proxy auth:8081
         }
 
+        # ── /webhooks/revenuecat — RC webhook → auth service ───────
+        # Carries its own Bearer secret (from the RC dashboard), not a
+        # user JWT. Sits outside /auth/* on purpose so the user-token
+        # middleware in the auth service doesn't try to validate it.
+        handle /webhooks/revenuecat {
+            reverse_proxy auth:8081
+        }
+
         # ── /share/audio/* — share-audio service ───────────────────
         # handle_path strips the prefix so the FastAPI app sees /excerpts.
         # Body cap is generous for a JSON envelope (<1KB in practice) but
