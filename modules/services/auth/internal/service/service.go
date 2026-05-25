@@ -389,8 +389,31 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 
 // ─── Account delete ─────────────────────────────────────────────────────────
 
+// DeleteAccount removes the user and everything that hangs off them:
+//
+//   - auth.identities + auth.refresh_tokens go via ON DELETE CASCADE on the
+//     auth.users row.
+//   - Rate-limit rows in `usage` (keys like `<scope>:user:<uuid>`) have no FK
+//     back to auth.users, so we DELETE them explicitly inside the same tx.
+//   - Downstream cleanup outside this service's data (Langfuse traces, S3
+//     prefixes, …) is NOT this service's job. The trigger installed by
+//     migration 0023_outbox enqueues a `user.deleted` row into app.outbox in
+//     the same transaction and pg_notify's the `outbox` channel; the
+//     cleanup-worker service consumes from there.
+//
+// Wrapping all of the above in pgx.BeginFunc keeps it atomic: if anything
+// fails, neither the usage rows nor the user row disappear, and the outbox
+// row is rolled back too, so the worker never sees a phantom event.
 func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
-	return s.Users.Delete(ctx, userID)
+	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM usage WHERE key LIKE '%:user:' || $1`,
+			userID.String(),
+		); err != nil {
+			return fmt.Errorf("delete usage rows: %w", err)
+		}
+		return s.Users.Delete(ctx, tx, userID)
+	})
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

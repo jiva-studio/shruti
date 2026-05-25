@@ -62,8 +62,12 @@ func (r *UserRepo) SetPictureURL(ctx context.Context, tx pgx.Tx, id uuid.UUID, u
 	return err
 }
 
-// Delete cascades to identities and refresh_tokens via FK ON DELETE CASCADE.
-func (r *UserRepo) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.Pool.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, id)
+// Delete cascades to identities and refresh_tokens via FK ON DELETE CASCADE,
+// and fires the app.emit_user_deleted trigger which enqueues a `user.deleted`
+// row into app.outbox in the same transaction. Pass a non-nil tx when the
+// caller also needs to clean up rows outside the auth schema (e.g. the
+// rate-limit `usage` table) atomically with the user row removal.
+func (r *UserRepo) Delete(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	_, err := exec(ctx, r.Pool, tx, `DELETE FROM auth.users WHERE id = $1`, id)
 	return err
 }
