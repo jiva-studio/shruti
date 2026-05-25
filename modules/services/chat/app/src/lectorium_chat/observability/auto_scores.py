@@ -50,17 +50,25 @@ log = get_logger(__name__)
 # Malformed markers are not regex'd here: the `MarkerExpander` drops
 # them inline before they hit `final_text` and reports the count via
 # `malformed_dropped_count`.
-_CITE_RE    = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]")
-_CARD_RE    = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
+_CITE_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]")
+_CARD_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
 _OUTLINE_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
-_VERSE_RE   = re.compile(r"\[verse:([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|([^\]\n]*))?\]")
+_VERSE_RE = re.compile(r"\[verse:([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|([^\]\n]*))?\]")
 
 # Bypass-protocol markers — LLM wrote the expanded form directly in the
 # prose instead of the numbered `[^N]` protocol. Reuses the regexes
 # from `application/chat_turn.py::_audit_bypass_markers`.
-_BYPASS_CITE_RE    = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
-_BYPASS_CARD_RE    = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
+_BYPASS_CITE_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
+_BYPASS_CARD_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
 _BYPASS_OUTLINE_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
+
+# Standalone `[s=…]` sentence-suffix tokens. The `|s=N,…` payload is
+# only valid as a SUFFIX inside `[^N|s=…]`; if the LLM emits a bare
+# `[s=0,1]` (no `^N` wrapper, no leading `^`) the MarkerExpander has
+# nothing to attach it to and it ends up in `final_text` as visible
+# garbage. We measure the leak so the prompt regression is observable
+# without waiting for user feedback.
+_SENTENCE_MARKER_LEAK_RE = re.compile(r"\[s=[0-9,]+\]")
 
 
 @dataclass(frozen=True)
@@ -69,6 +77,7 @@ class MarkerAudit:
     broken: int
     bypass: int
     cite_count: int
+    sentence_marker_leak: int
 
 
 async def audit_post_expansion_text(
@@ -141,16 +150,27 @@ async def audit_post_expansion_text(
     )
 
     cite_count = len(cite_track_ids)
+
+    # Sentence-marker leak: bare `[s=0,1]` tokens in the finalised
+    # text. The `|s=…` payload is only legal as a suffix inside
+    # `[^N|s=…]` — anything standalone is producer-side garbage that
+    # the expander passed through as plain-bracket prose. Count is on
+    # `final_text` (post-expansion), so it ONLY counts the visible
+    # leak users actually see.
+    sentence_marker_leak = sum(1 for _ in _SENTENCE_MARKER_LEAK_RE.finditer(final_text))
+
     return MarkerAudit(
         malformed=malformed_dropped_count,
         broken=broken,
         bypass=bypass,
         cite_count=cite_count,
+        sentence_marker_leak=sentence_marker_leak,
     )
 
 
 def _count_missing_verses(
-    library_db: Path, refs: Iterable[tuple[str, str]],
+    library_db: Path,
+    refs: Iterable[tuple[str, str]],
 ) -> int:
     """Return how many `(source_id, tokens)` pairs are NOT in library_verses.
 
@@ -206,14 +226,14 @@ def _detect_language(text: str) -> str | None:
 
 @dataclass
 class TurnSummary:
-    request_lang: str            # "ru" / "en" — what the client asked for
+    request_lang: str  # "ru" / "en" — what the client asked for
     latency_total_ms: int
-    first_token_ms: int | None   # None if no delta was emitted
+    first_token_ms: int | None  # None if no delta was emitted
     tool_calls_count: int
     response_length_chars: int
     had_error: bool
-    intent: str | None           # router intent, may be missing on non-graph paths
-    final_text: str              # post-expansion, used for language_match
+    intent: str | None  # router intent, may be missing on non-graph paths
+    final_text: str  # post-expansion, used for language_match
 
 
 def emit_turn_scores(
@@ -247,7 +267,8 @@ def emit_turn_scores(
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "auto_score_emit_failed",
-                name=name, error=str(exc),
+                name=name,
+                error=str(exc),
             )
 
     _emit("latency_total_ms", summary.latency_total_ms, "NUMERIC")
@@ -261,9 +282,12 @@ def emit_turn_scores(
     _emit("malformed_markers_count", audit.malformed, "NUMERIC")
     _emit("broken_refs_count", audit.broken, "NUMERIC")
     _emit("bypass_markers_count", audit.bypass, "NUMERIC")
+    _emit("sentence_marker_leak_count", audit.sentence_marker_leak, "NUMERIC")
     _emit(
         "marker_validity",
-        1 if (audit.malformed == 0 and audit.broken == 0) else 0,
+        1
+        if (audit.malformed == 0 and audit.broken == 0 and audit.sentence_marker_leak == 0)
+        else 0,
         "BOOLEAN",
     )
 
