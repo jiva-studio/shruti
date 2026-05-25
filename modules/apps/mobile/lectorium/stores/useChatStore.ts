@@ -8,6 +8,7 @@ import {
   useTrackUserState,
   type FocusFragmentPayload,
 } from "@lectorium/composables/useTrackUserState.js"
+import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
@@ -459,6 +460,20 @@ export const useChatStore = defineStore("chat", () => {
     const clean = text.trim()
     if (!clean || sending.value) return
     sending.value = true
+
+    // Resume race: if the app was backgrounded long enough for a tier
+    // flip to happen server-side (webhook on another device, expiry),
+    // make sure we hit the network with the current claim before
+    // attaching it to the SSE stream. `ensureFresh` is a cheap no-op
+    // when we synced in the last 5 min and never throws on its own.
+    try {
+      await useAuthStore().ensureFresh()
+    } catch (e) {
+      // Defensive — `ensureFresh` swallows its own errors, but a
+      // store-access throw (e.g. Pinia not active in a test) must not
+      // sink the whole send.
+      console.warn("[chat] ensureFresh threw unexpectedly", e)
+    }
 
     const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
     abort = new AbortController()

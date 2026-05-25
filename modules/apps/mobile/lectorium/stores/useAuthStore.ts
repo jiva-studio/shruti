@@ -24,6 +24,15 @@ export const useAuthStore = defineStore("auth", () => {
   const isPro = computed(() => tier.value === "pro")
 
   let resumeHandle: { remove(): Promise<void> } | undefined
+  /**
+   * Wall-clock at the last successful `/auth/me` round-trip. Used by
+   * `ensureFresh()` to cheaply skip the request when we already pulled
+   * a fresh tier within the last 5 minutes — the foreground-resume
+   * watcher pushes this forward on every resume, so the chat composer
+   * doesn't redundantly fetch /auth/me on every send.
+   */
+  let lastSyncAt = 0
+  const ENSURE_FRESH_MAX_AGE_MS = 5 * 60 * 1000
 
   // Identity-change watcher: signin (null→id), signout (id→null), and
   // switch-account (idA→idB) all invalidate any composer lockdown the
@@ -93,6 +102,7 @@ export const useAuthStore = defineStore("auth", () => {
     try {
       const me = await auth.fetchMe()
       if (!me) return
+      lastSyncAt = Date.now()
       if (me.tier !== tier.value) {
         await auth.refreshTokens()
       }
@@ -101,6 +111,48 @@ export const useAuthStore = defineStore("auth", () => {
       // requests just leave the cached tier in place until next
       // natural rotation.
       console.warn("[auth] resume tier sync failed", e)
+    }
+  }
+
+  /**
+   * Ensure the cached session is "recent enough" before a tier-sensitive
+   * action (chat send, paywall open, etc). Cheap no-op when we synced
+   * within the last 5 min; otherwise probes `/auth/me` once and forces
+   * a token refresh when the server tier diverges from the cached JWT
+   * claim.
+   *
+   * Race we're closing: app backgrounded 1h → resume → user taps Send
+   * in the same frame as the resume listener fires. Without this guard
+   * the send goes out under a stale JWT (free) even though the server
+   * already knows the user is Pro (webhook landed while the app was
+   * suspended).
+   *
+   * Never throws. On timeout / network error we log and let the caller
+   * proceed — sending under the stale tier is preferable to blocking
+   * the UI on a dead network.
+   */
+  async function ensureFresh({ timeoutMs = 3000 }: { timeoutMs?: number } = {}): Promise<void> {
+    if (Date.now() - lastSyncAt < ENSURE_FRESH_MAX_AGE_MS) return
+    const auth = useLectorium().auth
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), timeoutMs)
+    })
+    try {
+      const result = await Promise.race([auth.fetchMe(), timeout])
+      if (result === "timeout") {
+        console.warn("[auth] ensureFresh timed out", { timeoutMs })
+        return
+      }
+      if (!result) return
+      lastSyncAt = Date.now()
+      if (result.tier !== tier.value) {
+        await auth.refreshTokens()
+      }
+    } catch (e) {
+      console.warn("[auth] ensureFresh failed", e)
+    } finally {
+      if (timer) clearTimeout(timer)
     }
   }
 
@@ -202,5 +254,6 @@ export const useAuthStore = defineStore("auth", () => {
     signOut,
     deleteAccount,
     refreshTokens,
+    ensureFresh,
   }
 })
