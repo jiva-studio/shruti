@@ -1,5 +1,6 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
+import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
@@ -16,8 +17,12 @@ export const useAuthStore = defineStore("auth", () => {
   const name = ref<string | null>(null)
   const picture = ref<string | null>(null)
   const anonymous = ref<boolean>(true)
+  const tier = ref<string>("free")
 
   const signedIn = computed(() => !!userId.value && !anonymous.value)
+  const isPro = computed(() => tier.value === "pro")
+
+  let resumeHandle: { remove(): Promise<void> } | undefined
 
   function applySession(s: AuthSession | null): void {
     if (s) {
@@ -26,6 +31,7 @@ export const useAuthStore = defineStore("auth", () => {
       name.value = s.name
       picture.value = s.picture
       anonymous.value = s.anonymous
+      tier.value = s.tier || "free"
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
@@ -33,6 +39,7 @@ export const useAuthStore = defineStore("auth", () => {
       name.value = null
       picture.value = null
       anonymous.value = true
+      tier.value = "free"
       status.value = "uninitialized"
     }
   }
@@ -44,9 +51,46 @@ export const useAuthStore = defineStore("auth", () => {
       const session = await auth.initialize()
       applySession(session)
       auth.onSessionChange(applySession)
+      // Foreground-resume tier sync. Webhook-driven tier flips (purchase
+      // on another device, subscription expired, refund) reach the server
+      // immediately but the running JWT carries the stale value until
+      // natural rotation (~15 min). On resume, ask /auth/me for the
+      // canonical tier; if it diverges, force a refresh now.
+      if (!resumeHandle) {
+        resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
+          if (!state.isActive) return
+          void syncTierOnResume()
+        })
+      }
     } catch (e) {
       console.error("[auth] restore failed:", e)
       status.value = "error"
+    }
+  }
+
+  async function syncTierOnResume(): Promise<void> {
+    const auth = useLectorium().auth
+    try {
+      const me = await auth.fetchMe()
+      if (!me) return
+      if (me.tier !== tier.value) {
+        await auth.refreshTokens()
+      }
+    } catch (e) {
+      // Silent: this is a best-effort sync, not blocking. Failed
+      // requests just leave the cached tier in place until next
+      // natural rotation.
+      console.warn("[auth] resume tier sync failed", e)
+    }
+  }
+
+  async function refreshTokens(): Promise<void> {
+    const auth = useLectorium().auth
+    try {
+      const next = await auth.refreshTokens()
+      if (next) applySession(next)
+    } catch (e) {
+      console.warn("[auth] refreshTokens failed", e)
     }
   }
 
@@ -120,11 +164,14 @@ export const useAuthStore = defineStore("auth", () => {
     name,
     picture,
     anonymous,
+    tier,
+    isPro,
     signedIn,
     restore,
     signInGoogle,
     signInApple,
     signOut,
     deleteAccount,
+    refreshTokens,
   }
 })
