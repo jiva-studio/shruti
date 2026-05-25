@@ -183,14 +183,29 @@ export const useChatStore = defineStore("chat", () => {
   const isComposeBlocked = computed<boolean>(
     () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
   )
-  /** Clear the composer lockdown. Called from `useAuthStore`'s `userId`
-   *  watcher on signin / signout / switch-account — the new identity
-   *  has its own quota bucket on the server (`quota_id` is derived
-   *  from `user_id`), so the old deadline is meaningless for them.
-   *  Tier-change within the same user_id is NOT a trigger: the bucket
-   *  stays the same and the lockdown is still authoritative. */
+  /** Clear the composer lockdown AND wipe any stale rate_limit error
+   *  bubble in the current message list. Called from `useAuthStore`'s
+   *  `userId` watcher on signin / signout / switch-account — the new
+   *  identity has its own quota bucket on the server (`quota_id` is
+   *  derived from `user_id`), so the old deadline and the upsell
+   *  banner attached to it are meaningless for them. Tier-change
+   *  within the same user_id is NOT a trigger: the bucket stays the
+   *  same and the lockdown is still authoritative. */
   function resetComposeLock(): void {
     composeBlockedUntil.value = null
+    // Also drop the inline "limit exhausted" failed bubble — keeping
+    // the upsell card mounted after a signin would be confusing
+    // (anonymous → authed share no quota state). Anonymous-tier
+    // 429 bubbles are the common case here; we clear other tiers too
+    // because the new identity could legitimately retry.
+    const idx = messages.value.findIndex(
+      (m) => m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
+    )
+    if (idx >= 0) {
+      const next = [...messages.value]
+      next[idx] = { ...next[idx], error: undefined }
+      messages.value = next
+    }
   }
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
    *  session header above the message list (track title / author /
