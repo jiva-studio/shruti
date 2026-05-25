@@ -295,13 +295,29 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
 
   async function deleteAccount(): Promise<void> {
     if (!stored) return
-    await fetch(`${cfg.baseUrl}/account/delete`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${stored.accessToken}`,
-      },
-    })
+    // CRITICAL: only clear local tokens after the server confirms the
+    // deletion. The upstream caller follows up with wipeLocalUserData()
+    // when wipeLocal=true; if we cleared on a 5xx the user would lose
+    // notes/chats/downloads while their server account still exists.
+    const doDelete = async (token: string): Promise<Response> =>
+      fetch(`${cfg.baseUrl}/account/delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+    let res = await doDelete(stored.accessToken)
+    if (res.status === 401) {
+      // Stale access token — try one refresh + retry. getAccessToken()
+      // handles the refresh-coalesce and clears tokens on refresh
+      // failure, so a null return means the session is already gone.
+      const refreshed = await getAccessToken()
+      if (!refreshed) throw new Error("account/delete: refresh failed")
+      res = await doDelete(refreshed)
+    }
+    if (!res.ok) throw new Error(`account/delete: HTTP ${res.status}`)
     await clearTokens()
   }
 

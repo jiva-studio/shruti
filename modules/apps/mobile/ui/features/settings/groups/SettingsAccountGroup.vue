@@ -143,17 +143,19 @@ const sheetButtons = computed(() => {
 })
 
 // Both delete options are irreversible, so both get the destructive role —
-// Ionic paints both red, which matches their weight.
+// Ionic paints both red, which matches their weight. withBusy() gates the
+// emit so a laggy network can't be double-tapped into two server-side
+// deletes (see useAuthStore.deleteAccount → /account/delete).
 const deleteSheetButtons = computed(() => [
   {
     text: t("settings.account.deleteAccount.confirmWipe"),
     role: "destructive" as const,
-    handler: () => emit("delete-account", { wipeLocal: true }),
+    handler: () => withBusy(() => emit("delete-account", { wipeLocal: true })),
   },
   {
     text: t("settings.account.deleteAccount.confirmKeep"),
     role: "destructive" as const,
-    handler: () => emit("delete-account", { wipeLocal: false }),
+    handler: () => withBusy(() => emit("delete-account", { wipeLocal: false })),
   },
   { text: t("app.cancel"), role: "cancel" as const },
 ])
