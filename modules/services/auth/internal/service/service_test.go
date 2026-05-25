@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
@@ -33,10 +34,13 @@ func dbDSNFromEnv(t *testing.T) string {
 // Path from this test file's directory to the central migrations folder.
 const migrationsDir = "../../../../../infra/app/db/migrations"
 
-// resetSchema drops the auth schema *and* the migration bookkeeping, then
-// re-applies every 000N_auth_*.up.sql in order. Auth tests no longer go
-// through golang-migrate — production uses the central `migrator`
-// container; tests just need the schema in place.
+// resetSchema drops the auth + app schemas *and* the migration bookkeeping,
+// then re-applies every auth_*.up.sql, the outbox migration (which installs
+// the AFTER DELETE trigger on auth.users), and a stand-in `usage` table
+// matching 0013_chat_usage.up.sql so DeleteAccount's rate-limit cleanup has
+// something to delete from. Auth tests no longer go through golang-migrate —
+// production uses the central `migrator` container; tests just need the
+// schema in place.
 func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	t.Helper()
 	pool, err := store.Connect(context.Background(), dsn)
@@ -44,14 +48,25 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 		t.Fatalf("connect: %v", err)
 	}
 	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
+	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS app CASCADE`)
+	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.usage`)
 	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
 
-	files, err := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
+	// Auth schema first — the outbox migration's trigger targets auth.users.
+	authFiles, err := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
 	if err != nil {
-		t.Fatalf("glob migrations: %v", err)
+		t.Fatalf("glob auth migrations: %v", err)
 	}
-	sort.Strings(files)
-	for _, p := range files {
+	// 0022_auth_user_picture lives in the 002N range and is also auth-owned.
+	moreAuth, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth...)
+	// Outbox + the usage table the chat service owns in prod. We just need
+	// the shape — chat's full set isn't required for these tests.
+	authFiles = append(authFiles,
+		filepath.Join(migrationsDir, "0023_outbox.up.sql"),
+	)
+	sort.Strings(authFiles)
+	for _, p := range authFiles {
 		sqlBytes, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("read migration %s: %v", p, err)
@@ -59,6 +74,16 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 		if _, err := pool.Exec(context.Background(), string(sqlBytes)); err != nil {
 			t.Fatalf("apply migration %s: %v", p, err)
 		}
+	}
+	// usage stand-in matches 0013_chat_usage.up.sql exactly.
+	if _, err := pool.Exec(context.Background(), `
+		CREATE TABLE usage (
+			key   TEXT NOT NULL,
+			day   DATE NOT NULL,
+			count INT NOT NULL DEFAULT 0,
+			PRIMARY KEY (key, day)
+		)`); err != nil {
+		t.Fatalf("create usage: %v", err)
 	}
 	return pool
 }
@@ -313,6 +338,101 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 	}
 	if again.Anonymous {
 		t.Error("must not flip back to anonymous")
+	}
+}
+
+// TestDeleteAccountWipesUsageAndEmitsOutbox covers the three observable
+// effects of DeleteAccount in one go:
+//
+//  1. the auth.users row (and its FK-cascaded identities / refresh_tokens)
+//     is gone;
+//  2. every `usage` row keyed `<scope>:user:<deleted_uuid>` is gone, while a
+//     bystander user's row survives;
+//  3. an app.outbox row appears with event_type='user.deleted' and
+//     aggregate_id=<deleted_uuid>, courtesy of the AFTER DELETE trigger
+//     installed by migration 0023_outbox.
+//
+// The trigger also pg_notify's the `outbox` channel — that part is verified
+// by the cleanup-worker integration suite (sister PR), not here.
+func TestDeleteAccountWipesUsageAndEmitsOutbox(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	first, err := svc.Anonymous(ctx, "dev-del", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	target := first.UserID
+
+	// Seed: two scopes for the target user + one row for an innocent user
+	// that must NOT be touched.
+	other := uuid.New()
+	rows := [][2]string{
+		{"chat:user:" + target.String(), "5"},
+		{"title:user:" + target.String(), "2"},
+		{"chat:user:" + other.String(), "9"},
+	}
+	for _, r := range rows {
+		if _, err := svc.Pool.Exec(ctx,
+			`INSERT INTO usage(key, day, count) VALUES ($1, CURRENT_DATE, $2)`,
+			r[0], r[1],
+		); err != nil {
+			t.Fatalf("seed %s: %v", r[0], err)
+		}
+	}
+
+	if err := svc.DeleteAccount(ctx, target); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// (1) auth.users row gone.
+	if u, _ := svc.Users.Get(ctx, target); u != nil {
+		t.Error("auth.users row should be deleted")
+	}
+
+	// (2) target usage rows gone; bystander survives.
+	var nTarget, nOther int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM usage WHERE key LIKE '%:user:' || $1`, target.String(),
+	).Scan(&nTarget); err != nil {
+		t.Fatalf("count target usage: %v", err)
+	}
+	if nTarget != 0 {
+		t.Errorf("expected 0 usage rows for deleted user, got %d", nTarget)
+	}
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM usage WHERE key LIKE '%:user:' || $1`, other.String(),
+	).Scan(&nOther); err != nil {
+		t.Fatalf("count bystander usage: %v", err)
+	}
+	if nOther != 1 {
+		t.Errorf("bystander usage row was wrongly deleted (count=%d)", nOther)
+	}
+
+	// (3) outbox row exists with the right shape.
+	var (
+		nOutbox     int
+		evt, aggID  string
+	)
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM app.outbox
+		  WHERE event_type = 'user.deleted'
+		    AND aggregate_id = $1`,
+		target.String(),
+	).Scan(&nOutbox); err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if nOutbox != 1 {
+		t.Fatalf("expected exactly 1 user.deleted outbox row, got %d", nOutbox)
+	}
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT event_type, aggregate_id FROM app.outbox
+		  WHERE aggregate_id = $1`, target.String(),
+	).Scan(&evt, &aggID); err != nil {
+		t.Fatalf("scan outbox: %v", err)
+	}
+	if evt != "user.deleted" || aggID != target.String() {
+		t.Errorf("outbox row mismatch: event_type=%q aggregate_id=%q", evt, aggID)
 	}
 }
 
