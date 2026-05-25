@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -114,12 +115,22 @@ func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse,
 // and marks the corresponding rc_webhook_events row processed — all in
 // one transaction.
 //
+// Concurrency: the tx opens by taking an advisory lock keyed on
+// rc_app_user_id. Serialises webhook + reconcile cron mutual exclusion
+// on the same RC customer without blocking unrelated users; released
+// automatically on commit/rollback. Plan 1.4.
+//
 // Returns:
-//   - (userID, true, nil) → matched a user, state updated, outbox event written
+//   - (userID, true, nil) → matched a user, state updated, outbox event
+//     written, webhook row marked processed.
 //   - (uuid.Nil, false, nil) → no auth.users row for this rc_app_user_id
-//     (webhook arrived before client called Purchases.logIn). The webhook
-//     event is still marked processed so RC stops retrying; the
-//     reconciliation cron (Phase 8) will re-fetch when the client links.
+//     (webhook arrived before client called Purchases.logIn). The
+//     webhook row stays unprocessed (processed_at IS NULL) so RC keeps
+//     retrying within its 80-min budget — by then the client should
+//     have called logIn and the retry will match. After that, the
+//     reconciliation cron's orphan sweep (7-day cutoff) stamps the row
+//     with error='orphaned_no_link' so it doesn't accumulate forever.
+//     Plan 1.3.
 //   - (uuid.Nil, false, err) → DB error; caller leaves the event unprocessed
 //     so RC / cron can retry.
 func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
@@ -128,6 +139,52 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		matched bool
 	)
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		// Per-rc_app_user_id advisory lock: two webhook retries (or a
+		// webhook + reconcile cron) targeting the same customer will
+		// serialise here, so they never both write conflicting
+		// snapshots or fan out two outbox rows. hashtext gives Postgres
+		// the two int4 halves of the lock key — combined with the
+		// constant tag they don't collide with other advisory locks
+		// (e.g. handler.waitForSibling on event_id).
+		if _, err := tx.Exec(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext('rc-subscription'), hashtext($1))`,
+			snap.AppUserID,
+		); err != nil {
+			return fmt.Errorf("acquire subscription lock: %w", err)
+		}
+
+		// Inside the lock: short-circuit if a sibling already marked
+		// this event_id processed. The InsertOrLookup handler check is
+		// racy (the check + insert run before this tx exists); the
+		// rc-subscription lock is the canonical serialisation point
+		// for plan 1.2's "exactly one outbox row per event_id"
+		// invariant. Without this re-check, ten concurrent retries
+		// would queue up here and each one would re-emit the outbox.
+		var processedAt *time.Time
+		if err := tx.QueryRow(ctx,
+			`SELECT processed_at FROM auth.rc_webhook_events WHERE event_id = $1`,
+			eventID,
+		).Scan(&processedAt); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("event_id lookup: %w", err)
+		}
+		if processedAt != nil {
+			// Sibling finished first — read back the user we touched
+			// so the caller's matched=true / userID contract still
+			// holds. Failing softly to (uuid.Nil, false) is also OK
+			// because the handler responds 200/duplicate either way.
+			var uid string
+			if err := tx.QueryRow(ctx,
+				`SELECT id FROM auth.users WHERE rc_app_user_id = $1`,
+				snap.AppUserID,
+			).Scan(&uid); err == nil {
+				if parsed, perr := uuid.Parse(uid); perr == nil {
+					userID = parsed
+					matched = true
+				}
+			}
+			return nil
+		}
+
 		id, ok, err := s.Users.UpsertSubscriptionState(ctx, tx, snap)
 		if err != nil {
 			return fmt.Errorf("upsert subscription: %w", err)
@@ -135,32 +192,40 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		matched = ok
 		userID = id
 
-		if ok {
-			payload, err := json.Marshal(map[string]any{
-				"tier":            snap.Tier,
-				"tier_expires_at": snap.TierExpiresAt,
-				"rc_app_user_id":  snap.AppUserID,
-			})
-			if err != nil {
-				return fmt.Errorf("marshal outbox payload: %w", err)
-			}
-			// Dedup: source_event_id = RC eventID, paired with event_type
-			// 'subscription.changed' via outbox_dedup_idx (migration 0026).
-			// If the same RC event somehow reaches this INSERT twice
-			// (auth.rc_webhook_events idempotency torn between SELECT and
-			// INSERT — see Tier 1.2 in the improvement plan), the unique
-			// partial index turns the second attempt into a silent no-op
-			// instead of double-fanning the consumer side.
-			if _, err := tx.Exec(ctx,
-				`INSERT INTO app.outbox(event_type, aggregate_id, payload, source_event_id)
-				 VALUES ('subscription.changed', $1::text, $2::jsonb, $3::text)
-				 ON CONFLICT (event_type, source_event_id)
-				   WHERE source_event_id IS NOT NULL
-				   DO NOTHING`,
-				userID.String(), payload, eventID,
-			); err != nil {
-				return fmt.Errorf("insert outbox: %w", err)
-			}
+		if !ok {
+			// Leave processed_at NULL and record the cause so the
+			// orphan sweep (or the next RC retry) can pick this up.
+			// Done OUTSIDE the tx via RecordError (the failure log
+			// must land even if a later error rolls this tx back).
+			return nil
+		}
+
+		payload, err := json.Marshal(map[string]any{
+			"tier":            snap.Tier,
+			"tier_expires_at": snap.TierExpiresAt,
+			"rc_app_user_id":  snap.AppUserID,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal outbox payload: %w", err)
+		}
+		// Dedup: source_event_id = RC eventID, paired with event_type
+		// 'subscription.changed' via outbox_dedup_idx (migration 0026).
+		// If the same RC event somehow reaches this INSERT twice
+		// (auth.rc_webhook_events idempotency torn between SELECT and
+		// INSERT — see Tier 1.2 in the improvement plan), the unique
+		// partial index turns the second attempt into a silent no-op
+		// instead of double-fanning the consumer side. The intra-tx
+		// processed_at re-check above already short-circuits the
+		// common race; this guard handles the edge cases.
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO app.outbox(event_type, aggregate_id, payload, source_event_id)
+			 VALUES ('subscription.changed', $1::text, $2::jsonb, $3::text)
+			 ON CONFLICT (event_type, source_event_id)
+			   WHERE source_event_id IS NOT NULL
+			   DO NOTHING`,
+			userID.String(), payload, eventID,
+		); err != nil {
+			return fmt.Errorf("insert outbox: %w", err)
 		}
 
 		if err := s.WebhookEvents.MarkProcessed(ctx, tx, eventID); err != nil {
@@ -172,10 +237,15 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 		return uuid.Nil, false, err
 	}
 	if !matched {
-		slog.WarnContext(ctx, "rc_subscriber_no_match",
+		slog.InfoContext(ctx, "rc_subscriber_no_match",
 			"event_id", eventID,
 			"rc_app_user_id", snap.AppUserID,
 		)
+		// Best-effort: record the cause on the unprocessed row.
+		// RecordError runs in its own tx and is a no-op once
+		// processed_at is non-NULL, so it's safe under concurrent
+		// orphan-sweep activity.
+		_ = s.WebhookEvents.RecordError(ctx, eventID, "no rc_app_user_id match")
 	}
 	return userID, matched, nil
 }

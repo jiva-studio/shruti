@@ -111,10 +111,11 @@ func main() {
 		// RC's 5-retry budget. Only wired when RC creds are configured;
 		// no point ticking without a way to call /subscribers.
 		reconciler := &reconcile.Reconciler{
-			Pool:  pool,
-			Users: svc.Users,
-			Svc:   svc,
-			RC:    rc,
+			Pool:          pool,
+			Users:         svc.Users,
+			WebhookEvents: svc.WebhookEvents,
+			Svc:           svc,
+			RC:            rc,
 		}
 		go func() {
 			if err := reconciler.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {

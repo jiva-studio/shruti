@@ -3,10 +3,13 @@
 // JWT shape:
 //
 //	header:  { alg: "RS256", typ: "JWT", kid: "v1" }
-//	payload: { sub, anonymous, tier, exp, iat, jti }
+//	payload: { sub, anonymous, tier, tier_expires_at, exp, iat, jti }
 //
 // `tier` is the subscription tier mirrored from RevenueCat ("free" | "pro").
 // Empty / missing on old in-flight tokens — consumers default to "free".
+// `tier_expires_at` is UNIX-epoch seconds; 0 means lifetime or free. Chat-side
+// rate limiter downgrades a "pro" claim whose expiry is in the past, so a
+// stale RENEWAL/EXPIRATION webhook can't keep a free user on Pro past expiry.
 package jwt
 
 import (
@@ -37,6 +40,12 @@ type Claims struct {
 	Anonymous bool   `json:"anonymous"`
 	Tier      string `json:"tier,omitempty"`
 	QuotaID   string `json:"quota_id,omitempty"`
+	// TierExpiresAt is the UNIX-epoch (seconds) at which the embedded
+	// `tier` expires. 0 means lifetime (Pro that never expires) or free
+	// (no expiry concept). Chat-side verifier coerces `tier="pro"` with
+	// a past `tier_expires_at` to "free" so a missed EXPIRATION webhook
+	// can't extend Pro past its real boundary.
+	TierExpiresAt int64 `json:"tier_expires_at,omitempty"`
 	gjwt.RegisteredClaims
 }
 
@@ -137,18 +146,23 @@ func fileExists(p string) bool {
 // `tier` is the user's subscription tier ("free" | "pro"); empty string
 // is fine — the chat-side verifier defaults to "free".
 //
+// `tierExpiresAt` is UNIX-epoch seconds at which `tier` expires. 0 means
+// lifetime / free (no expiry). The chat-side limiter coerces an expired
+// "pro" claim back to free limits.
+//
 // `quotaID` is a stable hash of the user's earliest non-device identity
 // (see internal/identityhash). Empty for anonymous users — the chat
 // limiter falls back to `sub` in that case.
-func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier, quotaID string, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
+func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier, quotaID string, tierExpiresAt int64, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
 	if jti == uuid.Nil {
 		jti = uuid.New()
 	}
 	now := time.Now().UTC()
 	claims := Claims{
-		Anonymous: anonymous,
-		Tier:      tier,
-		QuotaID:   quotaID,
+		Anonymous:     anonymous,
+		Tier:          tier,
+		QuotaID:       quotaID,
+		TierExpiresAt: tierExpiresAt,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   userID.String(),
 			IssuedAt:  gjwt.NewNumericDate(now),
