@@ -97,13 +97,15 @@ func main() {
 	// Cancelled when the process catches SIGTERM/SIGINT.
 	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
 	defer reconcileCancel()
-	if cfg.RCWebhookSecret != "" && cfg.RCRestAPIKey != "" {
+	hasWebhookSecret := cfg.RCWebhookSecretPrimary != "" || cfg.RCWebhookSecretSecondary != ""
+	if hasWebhookSecret && cfg.RCRestAPIKey != "" {
 		rc := rcclient.New(cfg.RCRestAPIKey)
 		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
-			Secret: cfg.RCWebhookSecret,
-			IsProd: cfg.Env == "prod",
-			Svc:    svc,
-			RC:     rc,
+			SecretPrimary:   cfg.RCWebhookSecretPrimary,
+			SecretSecondary: cfg.RCWebhookSecretSecondary,
+			IsProd:          cfg.Env == "prod",
+			Svc:             svc,
+			RC:              rc,
 		})
 		// Backfill cron — picks up users whose webhook got dropped past
 		// RC's 5-retry budget. Only wired when RC creds are configured;
@@ -119,9 +121,11 @@ func main() {
 				slog.Error("reconcile_loop_exited", "err", err.Error())
 			}
 		}()
-		slog.Info("rc_webhook_enabled")
+		slog.Info("rc_webhook_enabled",
+			"primary_set", cfg.RCWebhookSecretPrimary != "",
+			"secondary_set", cfg.RCWebhookSecretSecondary != "")
 	} else {
-		slog.Info("rc_webhook_disabled", "reason", "RC_WEBHOOK_SECRET or RC_REST_API_KEY unset")
+		slog.Info("rc_webhook_disabled", "reason", "RC_WEBHOOK_SECRET_PRIMARY/SECONDARY or RC_REST_API_KEY unset")
 	}
 
 	srv := &http.Server{

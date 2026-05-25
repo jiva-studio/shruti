@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,19 +12,41 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
 	"github.com/akdasa-studios/lectorium/auth/internal/service"
 )
 
+// rcWebhookAuthTotal counts every Bearer check on the RC webhook endpoint,
+// labelled by which configured secret matched (or `invalid` if neither did).
+// During a rotation we expect `secondary` to climb once the RC dashboard
+// flips to the new secret — see runbooks/rc-webhook-secret-rotation.md.
+var rcWebhookAuthTotal = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "rc_webhook_auth_total",
+		Help: "RevenueCat webhook Bearer-auth attempts, labelled by which secret matched (primary/secondary/invalid).",
+	},
+	[]string{"key"},
+)
+
 // RCWebhookHandler exposes POST /webhooks/revenuecat. Wired into the
-// router only when the operator configured RCWebhookSecret + RC client.
+// router only when the operator configured at least one webhook secret
+// and an RC REST client.
+//
+// Two secrets are accepted (`SecretPrimary` and `SecretSecondary`) so the
+// operator can rotate without a window of dropped deliveries: stage the new
+// secret as `SecretSecondary`, flip RC's dashboard to the new value, then
+// promote secondary → primary and clear secondary on the next deploy. Both
+// slots are compared in constant time.
 type RCWebhookHandler struct {
-	Secret  string
-	IsProd  bool // skips environment=SANDBOX deliveries when true
-	Svc     *service.Service
-	RC      *rcclient.Client
-	Clock   func() time.Time // injectable for tests; default time.Now
+	SecretPrimary   string
+	SecretSecondary string
+	IsProd          bool // skips environment=SANDBOX deliveries when true
+	Svc             *service.Service
+	RC              *rcclient.Client
+	Clock           func() time.Time // injectable for tests; default time.Now
 }
 
 // Minimal subset of the RC webhook payload we actually read. Everything
@@ -145,15 +168,28 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RCWebhookHandler) checkBearer(r *http.Request) bool {
-	if h.Secret == "" {
-		return false
-	}
 	auth := r.Header.Get("Authorization")
 	const prefix = "Bearer "
 	if !strings.HasPrefix(auth, prefix) {
+		rcWebhookAuthTotal.WithLabelValues("invalid").Inc()
 		return false
 	}
-	return auth[len(prefix):] == h.Secret
+	token := []byte(auth[len(prefix):])
+
+	// Constant-time compare against both slots. Skip empty secrets so an
+	// unset rotation slot can't be matched by an empty Bearer value.
+	if h.SecretPrimary != "" &&
+		subtle.ConstantTimeCompare(token, []byte(h.SecretPrimary)) == 1 {
+		rcWebhookAuthTotal.WithLabelValues("primary").Inc()
+		return true
+	}
+	if h.SecretSecondary != "" &&
+		subtle.ConstantTimeCompare(token, []byte(h.SecretSecondary)) == 1 {
+		rcWebhookAuthTotal.WithLabelValues("secondary").Inc()
+		return true
+	}
+	rcWebhookAuthTotal.WithLabelValues("invalid").Inc()
+	return false
 }
 
 // svcLookupProcessed and svcInsertEvent are thin wrappers so the

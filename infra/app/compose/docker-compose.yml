@@ -195,8 +195,17 @@ services:
       GOOGLE_CLIENT_IDS: ${LECTORIUM_GOOGLE_CLIENT_IDS:-}
       APPLE_BUNDLE_IDS: ${LECTORIUM_APPLE_BUNDLE_IDS:-studio.jiva.shruti}
       # RevenueCat webhook: shared Bearer secret from the RC dashboard
-      # and the project's REST API key. Both unset → webhook endpoint
-      # stays disabled (auth boots fine without them).
+      # and the project's REST API key. All webhook-secret slots unset →
+      # endpoint stays disabled (auth boots fine without them).
+      #
+      # Two rotation slots are passed through (PRIMARY + SECONDARY) so
+      # the operator can stage a new secret, flip the RC dashboard, and
+      # promote without dropping deliveries. See
+      # docs/runbooks/rc-webhook-secret-rotation.md. The legacy single-
+      # secret variable still works: if PRIMARY/SECONDARY are both unset
+      # auth/internal/config promotes it into the primary slot.
+      RC_WEBHOOK_SECRET_PRIMARY: ${LECTORIUM_RC_WEBHOOK_SECRET_PRIMARY:-}
+      RC_WEBHOOK_SECRET_SECONDARY: ${LECTORIUM_RC_WEBHOOK_SECRET_SECONDARY:-}
       RC_WEBHOOK_SECRET: ${LECTORIUM_RC_WEBHOOK_SECRET:-}
       RC_REST_API_KEY: ${LECTORIUM_RC_REST_API_KEY:-}
       PORT: "8081"
