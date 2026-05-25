@@ -45,3 +45,12 @@ services:
       # Host port shifted to 18081 — local dev shares the box with
       # shruti-mcp on 8081.
       - "18081:8081"
+
+  cleanup-worker:
+    image: shruti-cleanup-worker:dev
+    pull_policy: never
+    build:
+      context: ../../modules
+      dockerfile: services/cleanup-worker/Dockerfile
+    # No host port mapping: cleanup-worker has no API surface beyond
+    # /healthz, and the in-container HEALTHCHECK dogfoods the binary.

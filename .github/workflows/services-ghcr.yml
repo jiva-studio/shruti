@@ -23,6 +23,7 @@ on:
     paths:
       - 'modules/services/auth/**'
       - 'modules/services/chat/**'
+      - 'modules/services/cleanup-worker/**'
       - 'modules/services/share-audio/**'
       - 'modules/services/share-video/**'
       - 'modules/docs/help/**'              # chat COPYs the help corpus
@@ -35,7 +36,7 @@ on:
       services:
         description: 'Which images to build'
         type: choice
-        options: [all, auth, chat, share-audio, share-video, caddy, migrator]
+        options: [all, auth, chat, cleanup-worker, share-audio, share-video, caddy, migrator]
         default: all
 
 concurrency:
@@ -82,6 +83,11 @@ jobs:
               - 'modules/.dockerignore'
               - 'infra/app/db/migrations/**'
               - '.github/workflows/services-ghcr.yml'
+            cleanup-worker:
+              - 'modules/services/cleanup-worker/**'
+              - 'modules/.dockerignore'
+              - 'infra/app/db/migrations/**'
+              - '.github/workflows/services-ghcr.yml'
             share-audio:
               - 'modules/services/share-audio/**'
               - 'modules/.dockerignore'
@@ -107,6 +113,7 @@ jobs:
           DISPATCH_CHOICE: ${{ github.event.inputs.services }}
           F_AUTH: ${{ steps.filter.outputs.auth }}
           F_CHAT: ${{ steps.filter.outputs.chat }}
+          F_CLEANUP_WORKER: ${{ steps.filter.outputs.cleanup-worker }}
           F_SHARE_AUDIO: ${{ steps.filter.outputs.share-audio }}
           F_SHARE_VIDEO: ${{ steps.filter.outputs.share-video }}
           F_CADDY: ${{ steps.filter.outputs.caddy }}
@@ -116,6 +123,7 @@ jobs:
           declare -A CTX=(
             [auth]=./modules
             [chat]=./modules
+            [cleanup-worker]=./modules
             [share-audio]=./modules
             [share-video]=./modules
             [caddy]=./infra/app/compose/caddy
@@ -124,6 +132,7 @@ jobs:
           declare -A DOCKERFILE=(
             [auth]=./modules/services/auth/Dockerfile
             [chat]=./modules/services/chat/Dockerfile
+            [cleanup-worker]=./modules/services/cleanup-worker/Dockerfile
             [share-audio]=./modules/services/share-audio/Dockerfile
             [share-video]=./modules/services/share-video/Dockerfile
             [caddy]=./infra/app/compose/caddy/Dockerfile
@@ -149,7 +158,7 @@ jobs:
           }
 
           entries=()
-          for svc in auth chat share-audio share-video caddy migrator; do
+          for svc in auth chat cleanup-worker share-audio share-video caddy migrator; do
             if wants "$svc"; then
               entries+=("$(jq -nc --arg s "$svc" --arg c "${CTX[$svc]}" --arg d "${DOCKERFILE[$svc]}" \
                 '{service:$s, context:$c, dockerfile:$d}')")
