@@ -1,8 +1,21 @@
 package handler
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/akdasa-studios/lectorium/auth/internal/metrics"
+	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
+	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
 
 // TestBearerCheck covers the matrix:
@@ -72,4 +85,263 @@ func TestBearerCheckBothEmpty(t *testing.T) {
 	if h.checkBearer(r) {
 		t.Fatal("empty secrets must reject an empty-token bearer too")
 	}
+}
+
+// stubApplier records the calls the handler makes against the
+// idempotency + apply surface. Used to assert that the permanent-error
+// path does NOT proceed to Apply.
+type stubApplier struct {
+	mu              sync.Mutex
+	lookupProcessed bool
+	lookupErr       error
+	insertErr       error
+	applyCalls      int
+	applyUserID     uuid.UUID
+	applyMatched    bool
+	applyErr        error
+}
+
+func (s *stubApplier) LookupProcessed(_ context.Context, _ string) (bool, error) {
+	return s.lookupProcessed, s.lookupErr
+}
+func (s *stubApplier) InsertEvent(_ context.Context, _ string) error { return s.insertErr }
+func (s *stubApplier) Apply(_ context.Context, _ string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
+	s.mu.Lock()
+	s.applyCalls++
+	s.mu.Unlock()
+	return s.applyUserID, s.applyMatched, s.applyErr
+}
+
+// stubEvents records the calls the handler makes against the webhook-
+// events store. We care about which "seal" path got hit.
+type stubEvents struct {
+	mu                      sync.Mutex
+	recordErrCalls          int
+	recordErrLastMsg        string
+	markProcessedErrCalls   int
+	markProcessedErrLastMsg string
+}
+
+func (s *stubEvents) RecordError(_ context.Context, _ string, msg string) error {
+	s.mu.Lock()
+	s.recordErrCalls++
+	s.recordErrLastMsg = msg
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *stubEvents) MarkProcessedWithError(_ context.Context, _ string, msg string) error {
+	s.mu.Lock()
+	s.markProcessedErrCalls++
+	s.markProcessedErrLastMsg = msg
+	s.mu.Unlock()
+	return nil
+}
+
+// stubFetcher returns a canned response/error from GetSubscriber.
+type stubFetcher struct {
+	resp *rcclient.SubscriberResponse
+	err  error
+}
+
+func (s *stubFetcher) GetSubscriber(_ context.Context, _ string) (*rcclient.SubscriberResponse, error) {
+	return s.resp, s.err
+}
+
+// mkRequest builds a POST /webhooks/revenuecat request with the given
+// event payload and the secret pre-set on the handler.
+func mkRequest(t *testing.T, secret string, payload map[string]any) *http.Request {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(payload); err != nil {
+		t.Fatalf("encode payload: %v", err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/webhooks/revenuecat", buf)
+	r.Header.Set("Authorization", "Bearer "+secret)
+	r.Header.Set("Content-Type", "application/json")
+	return r
+}
+
+// TestRCWebhookPermanentError200AndMarkProcessed — when GetSubscriber
+// returns ErrPermanent (e.g. 401), the handler must:
+//   - return 200 (so RC stops retrying)
+//   - call MarkProcessedWithError with a "permanent: …" prefix
+//   - NOT call Apply (no DB churn)
+//   - bump the auth-failed counter
+func TestRCWebhookPermanentError200AndMarkProcessed(t *testing.T) {
+	const secret = "rc-secret"
+	beforeCounter := metrics.RCAPIAuthFailedTotal.Value()
+	beforePermanent := metrics.RCAPIPermanentTotal.Value()
+
+	applier := &stubApplier{}
+	events := &stubEvents{}
+	fetcher := &stubFetcher{
+		err: fmt.Errorf("%w: status=401 body={\"message\":\"invalid api key\"}", rcclient.ErrPermanent),
+	}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":          "evt_test_permanent_1",
+			"type":        "INITIAL_PURCHASE",
+			"app_user_id": "rc_user_1",
+			"environment": "PRODUCTION",
+		},
+	}))
+
+	if w.Code != http.StatusOK {
+		body, _ := io.ReadAll(w.Body)
+		t.Fatalf("want 200 (so RC stops retrying), got %d body=%s", w.Code, string(body))
+	}
+	if applier.applyCalls != 0 {
+		t.Fatalf("apply must NOT run on permanent error, got %d calls", applier.applyCalls)
+	}
+	if events.markProcessedErrCalls != 1 {
+		t.Fatalf("expected MarkProcessedWithError called once, got %d", events.markProcessedErrCalls)
+	}
+	if !startsWith(events.markProcessedErrLastMsg, "permanent: ") {
+		t.Fatalf("expected message to start with 'permanent: ', got %q", events.markProcessedErrLastMsg)
+	}
+	if got := metrics.RCAPIAuthFailedTotal.Value() - beforeCounter; got != 1 {
+		t.Fatalf("expected rc_api_auth_failed_total +1, got +%d", got)
+	}
+	if got := metrics.RCAPIPermanentTotal.Value() - beforePermanent; got != 1 {
+		t.Fatalf("expected rc_api_permanent_total +1, got +%d", got)
+	}
+}
+
+// TestRCWebhookRateLimited500AndRecordError — 429 is transient; the
+// handler must return 500 (so RC retries) and call RecordError (not
+// MarkProcessedWithError), and bump the rate-limited counter.
+func TestRCWebhookRateLimited500AndRecordError(t *testing.T) {
+	const secret = "rc-secret"
+	beforeCounter := metrics.RCAPIRateLimitedTotal.Value()
+
+	applier := &stubApplier{}
+	events := &stubEvents{}
+	fetcher := &stubFetcher{err: &rcclient.RateLimitError{Status: 429}}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":          "evt_test_429",
+			"type":        "INITIAL_PURCHASE",
+			"app_user_id": "rc_user_2",
+			"environment": "PRODUCTION",
+		},
+	}))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500 (RC retries), got %d", w.Code)
+	}
+	if events.recordErrCalls != 1 {
+		t.Fatalf("expected RecordError called once, got %d", events.recordErrCalls)
+	}
+	if events.markProcessedErrCalls != 0 {
+		t.Fatalf("MarkProcessedWithError must NOT fire on 429, got %d calls",
+			events.markProcessedErrCalls)
+	}
+	if got := metrics.RCAPIRateLimitedTotal.Value() - beforeCounter; got != 1 {
+		t.Fatalf("expected rc_api_rate_limited_total +1, got +%d", got)
+	}
+}
+
+// TestRCWebhookSubscriberNotFoundProceeds — 404 is a soft success: the
+// handler must NOT mark the event errored, NOT skip Apply, and return
+// 200. The Apply call should see an empty snapshot (tier=free).
+func TestRCWebhookSubscriberNotFoundProceeds(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &stubApplier{
+		applyUserID:  uuid.New(),
+		applyMatched: true,
+	}
+	events := &stubEvents{}
+	fetcher := &stubFetcher{
+		resp: &rcclient.SubscriberResponse{},
+		err:  rcclient.ErrSubscriberNotFound,
+	}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":          "evt_test_404",
+			"type":        "INITIAL_PURCHASE",
+			"app_user_id": "rc_user_3",
+			"environment": "PRODUCTION",
+		},
+	}))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 for 404 soft-success, got %d", w.Code)
+	}
+	if applier.applyCalls != 1 {
+		t.Fatalf("apply must run on 404 with empty snapshot, got %d calls", applier.applyCalls)
+	}
+	if events.markProcessedErrCalls != 0 {
+		t.Fatalf("MarkProcessedWithError must NOT fire on 404, got %d", events.markProcessedErrCalls)
+	}
+	if events.recordErrCalls != 0 {
+		t.Fatalf("RecordError must NOT fire on 404, got %d", events.recordErrCalls)
+	}
+}
+
+// TestRCWebhookGenericServerError500 — 5xx from RC is plain-error
+// (no sentinel match); same 500 + RecordError path as 429 minus the
+// rate-limit counter bump.
+func TestRCWebhookGenericServerError500(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &stubApplier{}
+	events := &stubEvents{}
+	fetcher := &stubFetcher{err: fmt.Errorf("rcclient: 502 Bad Gateway")}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":          "evt_test_5xx",
+			"type":        "INITIAL_PURCHASE",
+			"app_user_id": "rc_user_4",
+			"environment": "PRODUCTION",
+		},
+	}))
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", w.Code)
+	}
+	if events.recordErrCalls != 1 {
+		t.Fatalf("expected RecordError called once, got %d", events.recordErrCalls)
+	}
+	if events.markProcessedErrCalls != 0 {
+		t.Fatalf("MarkProcessedWithError must NOT fire on 5xx, got %d", events.markProcessedErrCalls)
+	}
+	if applier.applyCalls != 0 {
+		t.Fatalf("apply must NOT run on 5xx, got %d", applier.applyCalls)
+	}
+}
+
+func startsWith(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
