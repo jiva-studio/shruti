@@ -194,6 +194,11 @@ services:
       JWT_KID: v1
       GOOGLE_CLIENT_IDS: ${LECTORIUM_GOOGLE_CLIENT_IDS:-}
       APPLE_BUNDLE_IDS: ${LECTORIUM_APPLE_BUNDLE_IDS:-studio.jiva.shruti}
+      # RevenueCat webhook: shared Bearer secret from the RC dashboard
+      # and the project's REST API key. Both unset → webhook endpoint
+      # stays disabled (auth boots fine without them).
+      RC_WEBHOOK_SECRET: ${LECTORIUM_RC_WEBHOOK_SECRET:-}
+      RC_REST_API_KEY: ${LECTORIUM_RC_REST_API_KEY:-}
       PORT: "8081"
       # Datadog log enrichment — service/env/version make it into every
       # slog line via internal/logging/logging.go.

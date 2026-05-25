@@ -22,6 +22,7 @@ import (
 	logpkg "github.com/akdasa-studios/lectorium/auth/internal/logging"
 	"github.com/akdasa-studios/lectorium/auth/internal/providers/apple"
 	"github.com/akdasa-studios/lectorium/auth/internal/providers/google"
+	"github.com/akdasa-studios/lectorium/auth/internal/rcclient"
 	"github.com/akdasa-studios/lectorium/auth/internal/service"
 	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
@@ -82,15 +83,29 @@ func main() {
 		Users:          &store.UserRepo{Pool: pool},
 		Identities:     &store.IdentityRepo{Pool: pool},
 		RefreshTokens:  &store.RefreshTokenRepo{Pool: pool},
+		WebhookEvents:  &store.WebhookEventRepo{Pool: pool},
 		Signer:         signer,
 		Verifier:       verifier,
 		GoogleVerifier: google.NewVerifier(cfg.GoogleClientIDs),
 		AppleVerifier:  apple.NewVerifier(cfg.AppleBundleIDs),
 	}
 
+	root := handler.NewRouter(svc, verifier)
+	if cfg.RCWebhookSecret != "" && cfg.RCRestAPIKey != "" {
+		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
+			Secret: cfg.RCWebhookSecret,
+			IsProd: cfg.Env == "prod",
+			Svc:    svc,
+			RC:     rcclient.New(cfg.RCRestAPIKey),
+		})
+		slog.Info("rc_webhook_enabled")
+	} else {
+		slog.Info("rc_webhook_disabled", "reason", "RC_WEBHOOK_SECRET or RC_REST_API_KEY unset")
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           handler.NewRouter(svc, verifier),
+		Handler:           root,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
