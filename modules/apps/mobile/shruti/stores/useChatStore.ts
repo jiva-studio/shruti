@@ -182,6 +182,15 @@ export const useChatStore = defineStore("chat", () => {
   const isComposeBlocked = computed<boolean>(
     () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
   )
+  /** Clear the composer lockdown. Called from `useAuthStore`'s `userId`
+   *  watcher on signin / signout / switch-account — the new identity
+   *  has its own quota bucket on the server (`quota_id` is derived
+   *  from `user_id`), so the old deadline is meaningless for them.
+   *  Tier-change within the same user_id is NOT a trigger: the bucket
+   *  stays the same and the lockdown is still authoritative. */
+  function resetComposeLock(): void {
+    composeBlockedUntil.value = null
+  }
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
    *  session header above the message list (track title / author /
    *  date) and any other code that needs to know whether the current
@@ -1077,6 +1086,7 @@ export const useChatStore = defineStore("chat", () => {
     inputFocusToken,
     composeBlockedUntil,
     isComposeBlocked,
+    resetComposeLock,
     unseenProactiveSessionIds,
     refreshSessions,
     openSession,
