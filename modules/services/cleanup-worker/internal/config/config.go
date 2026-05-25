@@ -26,6 +26,18 @@ type Config struct {
 	// pipelines (Datadog) tag every line consistently across the stack.
 	Env            string
 	ServiceVersion string
+
+	// AnonCleanupTTL is how long an anonymous (device-only) account may sit
+	// idle before the cron deletes it. Activity proxy: the newest
+	// auth.refresh_tokens.created_at for the user — older than this means
+	// the user hasn't opened the app in TTL. Default 8760h (365 days).
+	// Zero disables the cron entirely (handy in tests / dev).
+	AnonCleanupTTL time.Duration
+
+	// AnonCleanupInterval drives the cron ticker. The DELETE statement is
+	// cheap (partial index on refresh_tokens.user_id) so a once-a-day cadence
+	// is plenty; tighter only buys faster expiry, never throughput.
+	AnonCleanupInterval time.Duration
 }
 
 func Load() (*Config, error) {
@@ -48,6 +60,29 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("CLEANUP_SWEEP_INTERVAL must be > 0, got %s", sweep)
 	}
 	cfg.SweepInterval = d
+
+	// Anonymous-account cleanup cron. TTL=0 disables (cron skipped at boot);
+	// otherwise both values must parse and be non-negative. Interval=0 with
+	// TTL>0 is rejected — silent "never tick" would be a footgun.
+	ttlStr := env("CLEANUP_ANON_TTL", "8760h")
+	ttl, err := time.ParseDuration(ttlStr)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_ANON_TTL: %w", err)
+	}
+	if ttl < 0 {
+		return nil, fmt.Errorf("CLEANUP_ANON_TTL must be >= 0, got %s", ttlStr)
+	}
+	cfg.AnonCleanupTTL = ttl
+
+	intStr := env("CLEANUP_ANON_INTERVAL", "24h")
+	interval, err := time.ParseDuration(intStr)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_ANON_INTERVAL: %w", err)
+	}
+	if ttl > 0 && interval <= 0 {
+		return nil, fmt.Errorf("CLEANUP_ANON_INTERVAL must be > 0 when CLEANUP_ANON_TTL > 0, got %s", intStr)
+	}
+	cfg.AnonCleanupInterval = interval
 
 	return cfg, nil
 }

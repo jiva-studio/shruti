@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/config"
+	"github.com/jiva-studio/shruti/cleanup-worker/internal/cron"
 	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/handlers"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/logging"
@@ -112,6 +113,31 @@ func main() {
 			runCancel()
 		}
 	}()
+
+	// Scheduled anonymous-account cleanup. TTL=0 disables — handy for tests
+	// and dev where we never want the cron mutating data. The DELETE here
+	// triggers app.outbox writes via the auth.users AFTER DELETE trigger,
+	// which the worker goroutine above will pick up to purge Langfuse
+	// traces — closed loop, no extra wiring needed.
+	if cfg.AnonCleanupTTL > 0 {
+		c := &cron.AnonCleanup{
+			Pool:     pool,
+			Interval: cfg.AnonCleanupInterval,
+			TTL:      cfg.AnonCleanupTTL,
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := c.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.ErrorContext(runCtx, "anon_cleanup_run_failed", slog.String("err", err.Error()))
+				runCancel()
+			}
+		}()
+	} else {
+		slog.InfoContext(bootCtx, "anon_cleanup_disabled",
+			slog.String("reason", "CLEANUP_ANON_TTL=0"),
+		)
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)

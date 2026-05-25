@@ -235,6 +235,10 @@ services:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
       # LANGFUSE_HOST / PUBLIC_KEY / SECRET_KEY come from env_file (.env), same as chat.
       CLEANUP_SWEEP_INTERVAL: ${SHRUTI_CLEANUP_SWEEP_INTERVAL:-5m}
+      # Anonymous-account TTL cron. CLEANUP_ANON_TTL=0 disables the cron
+      # entirely (test/dev escape hatch). Default 8760h = 365 days.
+      CLEANUP_ANON_TTL: ${SHRUTI_CLEANUP_ANON_TTL:-8760h}
+      CLEANUP_ANON_INTERVAL: ${SHRUTI_CLEANUP_ANON_INTERVAL:-24h}
       PORT: "8090"
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_CLEANUP_WORKER_TAG:-latest}
