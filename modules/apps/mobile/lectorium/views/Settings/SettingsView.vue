@@ -14,6 +14,7 @@
       @sign-out="auth.signOut"
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
+      @delete-account="onDeleteAccountConfirm"
     />
 
     <SettingsAppearanceGroup
@@ -94,6 +95,7 @@ import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { useToast } from "@lectorium/services/useToast.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()
@@ -101,6 +103,8 @@ const paywall = usePaywallStore()
 const auth = useAuthStore()
 const platform = useLectorium().platform
 const i18n = useI18n()
+const { t } = i18n
+const toast = useToast()
 const {
   version,
   buildId,
@@ -133,6 +137,21 @@ const debugUnlocked = debugTrigger.unlocked
 const helpOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
+
+async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<void> {
+  // The action sheet that produced this emit has already dismissed
+  // itself, so on success there's nothing to close — the Settings
+  // screen reactively swaps the signed-in block for the sign-in CTA
+  // once the auth store re-bootstraps anonymous. On failure the user
+  // is still signed in with local data intact; the toast surfaces the
+  // error and they can try again.
+  try {
+    await auth.deleteAccount(opts)
+  } catch (e) {
+    console.warn("[settings] delete account failed:", e)
+    await toast.error(t("settings.account.deleteAccount.errorToast"))
+  }
+}
 
 function onSmartLibraryEntry(): void {
   if (subscription.isSubscribed) smartLibraryDialogOpen.value = true

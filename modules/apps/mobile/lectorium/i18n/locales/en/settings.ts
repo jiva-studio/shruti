@@ -21,6 +21,12 @@ export default {
     signInWithApple: "Continue with Apple",
     signedIn: "You are signed in",
     signOut: "Sign out",
+    deleteAccount: {
+      title: "Delete account",
+      confirmWipe: "Delete account and wipe data",
+      confirmKeep: "Delete account, keep my data",
+      errorToast: "Could not delete account. Please try again.",
+    },
   },
 
   subscription: {

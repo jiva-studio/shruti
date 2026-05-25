@@ -21,6 +21,12 @@ export default {
     signInWithApple: "Через Apple",
     signedIn: "Вы авторизованы",
     signOut: "Выйти",
+    deleteAccount: {
+      title: "Удалить аккаунт",
+      confirmWipe: "Удалить аккаунт и стереть данные",
+      confirmKeep: "Удалить аккаунт, оставить данные",
+      errorToast: "Не удалось удалить аккаунт. Попробуйте ещё раз.",
+    },
   },
 
   subscription: {
