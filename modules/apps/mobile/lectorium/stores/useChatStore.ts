@@ -1110,6 +1110,7 @@ export const useChatStore = defineStore("chat", () => {
     requestSuggestions,
     requestInputFocus,
     startNewSession,
+    ensureActiveSession,
     sendMessage,
     cancelStream,
     retryLast,

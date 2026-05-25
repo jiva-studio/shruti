@@ -69,6 +69,7 @@ export interface ChatControllerReturn {
   onDeleteSession: (id: string) => Promise<void>
   onDeleteAllSessions: () => Promise<void>
   onPickChapter: (pick: OutlineChapterPick) => Promise<void>
+  onPickSuggestion: (text: string) => Promise<void>
   onRetry: (messageId: string) => Promise<void>
 }
 
@@ -241,6 +242,27 @@ export function useChatController(): ChatControllerReturn {
       ],
     })
     await dialog.present()
+  }
+
+  /**
+   * Empty-state suggestion pill tapped. Each tap spawns a brand-new
+   * free-form session and dispatches the question immediately — the
+   * user must NEVER see the prompt flash into the input bar.
+   *
+   * Order matters: clear any current session, create the session row
+   * + claim the id via `ensureActiveSession`, push the URL so the
+   * route watcher's idempotent `openSession(activeSessionId)` is a
+   * no-op, THEN kick off the streaming turn. Two quick taps yield two
+   * separate sessions because the first tap leaves `activeSessionId`
+   * populated only briefly — `startNewSession()` at the top of the
+   * second handler resets it before the next `ensureActiveSession`
+   * runs.
+   */
+  async function onPickSuggestion(text: string): Promise<void> {
+    store.startNewSession()
+    const sessionId = await store.ensureActiveSession(text)
+    await router.push({ name: "chat-session", params: { sessionId } })
+    void store.sendMessage(text)
   }
 
   /** Default chapter window when there's no "next" item to bound it. */
@@ -463,6 +485,7 @@ export function useChatController(): ChatControllerReturn {
     onDeleteSession,
     onDeleteAllSessions,
     onPickChapter,
+    onPickSuggestion,
     onRetry,
   }
 }
