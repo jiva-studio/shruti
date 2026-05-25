@@ -21,10 +21,19 @@
 <h1>Privacy Policy</h1>
 <p class="meta">Effective date: May 25, 2026</p>
 
-<p>This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription. This service is intended for use "AS IS".</p>
+<p>This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription and an optional user account. This service is intended for use "AS IS".</p>
 
 <strong class="section">What information does the Application obtain and how is it used?</strong>
-<p>The Application does not collect personally identifiable information such as your name, email address, phone number, or photos. Registration is not required to use the free features.</p>
+<p>The Application does not require registration to use the free features. Personal data is processed only when you opt in to a specific feature — purchasing a subscription, signing in with Apple or Google, or using the in-app chat.</p>
+
+<p>If you choose to sign in with Apple or Google, the following data is processed:</p>
+<ul>
+  <li><strong>Email address</strong> — returned by the identity provider and stored on our backend to identify your account on subsequent sign-ins and across devices.</li>
+  <li><strong>Name</strong> — returned by Apple on first sign-in only (Apple Sign in allows you to share or hide your real name; what you choose there is what we receive). Stored once and not overwritten on subsequent sign-ins. Google does not provide a name unless granted by you.</li>
+  <li><strong>Profile picture URL</strong> — Google only, used to display your avatar in the app.</li>
+  <li><strong>Provider identity</strong> — the opaque user id from Apple or Google, used to link future sign-ins to the same account.</li>
+</ul>
+<p>Signing in is fully optional. The Application works anonymously without an account.</p>
 <p>If you choose to purchase or restore a subscription, the following data is processed:</p>
 <ul>
   <li><strong>Purchase history</strong> — which subscription products you have bought, renewed, or cancelled. Used to grant access to paid features and to restore your subscription after reinstalling the Application.</li>
@@ -53,21 +62,34 @@
 </ul>
 <p>Both Grafana / Loki and Langfuse run on infrastructure operated by the Service Provider — chat content and logs are <em>not</em> sent to a third-party SaaS observability vendor.</p>
 
-<strong class="section">Do third parties see and/or have access to information obtained by the Application?</strong>
-<p>For subscription processing, purchase and identifier data described above is shared with the following processors:</p>
+<strong class="section">Sub-processors</strong>
+<p>The Application relies on a small set of third parties — each is engaged only for the feature noted, and only the data listed is shared. No other third party receives any data from the Application.</p>
 <ul>
-  <li><strong>RevenueCat, Inc.</strong> — handles in-app purchase verification, entitlement management, and restore-purchase flow. <a href="https://www.revenuecat.com/privacy">RevenueCat Privacy Policy</a>.</li>
-  <li><strong>Apple Inc.</strong> (on iOS) and <strong>Google LLC</strong> (on Android) — process the actual purchase transaction and provide the verification receipts. Their handling is governed by their respective privacy policies.</li>
+  <li><strong>RevenueCat, Inc.</strong> (subscriptions) — verifies in-app purchases, manages entitlements, and powers the restore-purchase flow. Receives the purchase receipt and an anonymous random identifier minted on your device (<code>$RCAnonymousID:...</code>). This identifier is <em>not</em> linked to your Shruti account id, name, or email. <a href="https://www.revenuecat.com/privacy">RevenueCat Privacy Policy</a>.</li>
+  <li><strong>Apple Inc.</strong> (on iOS) and <strong>Google LLC</strong> (on Android) — process the actual purchase transaction and issue the verification receipts. <strong>Apple</strong> additionally provides the Sign in with Apple flow when you choose it. <strong>Google</strong> additionally provides the Sign in with Google flow when you choose it. Their handling of this data is governed by their respective privacy policies.</li>
+  <li><strong>OpenRouter, Inc.</strong> (in-app chat) — LLM gateway that forwards your chat prompts and the retrieved lecture excerpts from our backend to the underlying model provider, and returns the reply. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
+  <li><strong>Google LLC</strong> (in-app chat) — operates the Google Gemini models that currently generate the chat reply downstream of OpenRouter. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
 </ul>
-<p>For the in-app chat feature, your messages and the retrieved lecture excerpts are additionally shared with:</p>
+<p>Diagnostic logs (Grafana / Loki) and chat traces (Langfuse) run on infrastructure operated by the Service Provider — they are <em>not</em> third-party sub-processors.</p>
+
+<strong class="section">Account deletion</strong>
+<p>If you signed in with Apple or Google, you can delete your account at any time from inside the Application: <strong>Settings → Account → Delete Account</strong>. The button is shown only while you are signed in.</p>
+<p>What gets deleted from our servers <em>immediately</em>:</p>
 <ul>
-  <li><strong>OpenRouter, Inc.</strong> — routes the request from our backend to the selected LLM provider. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
-  <li><strong>Google LLC</strong> — operates the Google Gemini models that generate the reply. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
+  <li>Your account record (id, email, name, picture URL).</li>
+  <li>The Apple and Google identity links attached to that account.</li>
+  <li>All refresh tokens — every device signed in to the account is logged out.</li>
+  <li>Chat rate-limit counters tied to your user id.</li>
 </ul>
-<p>No other third party receives any data from the Application.</p>
+<p>What gets purged on a best-effort basis, completing within ~90 days:</p>
+<ul>
+  <li>Chat traces (prompts, retrieved excerpts, model responses) recorded in our self-hosted Langfuse instance. At deletion time we issue a per-user purge request via Langfuse's API; any traces not purged synchronously rotate out automatically under the 90-day retention TTL applied to all chat traces.</li>
+</ul>
+<p>What stays on your device — and is your choice during the deletion flow — is the local data the Application has cached for you: chats, notes, playlists, downloaded audio, and listening history. You can wipe this local data as part of account deletion, or keep it and continue using the Application anonymously.</p>
+<p>What cannot be deleted on demand: prompts and replies already forwarded to OpenRouter and the underlying LLM provider during chat use, which are governed by those providers' own retention policies (typically up to 30 days for abuse-monitoring purposes). Purchase records retained by Apple or Google for the duration mandated by those platforms are likewise outside our control.</p>
 
 <strong class="section">What are my opt-out rights?</strong>
-<p>You can stop all collection of information by the Application easily by uninstalling it. You may use the standard uninstall processes as may be available as part of your mobile device or via the mobile application marketplace or network. You may also request deletion of subscription-related data by contacting the Service Provider at <a href="mailto:support@akdasa.studio">support@akdasa.studio</a>; note that records required by Apple or Google for purchase verification cannot be removed for the duration mandated by those platforms.</p>
+<p>You can stop all collection of information by the Application easily by uninstalling it. You may use the standard uninstall processes as may be available as part of your mobile device or via the mobile application marketplace or network. If you signed in with Apple or Google, you can additionally delete your account and associated server-side data from inside the Application — see the <em>Account deletion</em> section above. You may also email the Service Provider at <a href="mailto:support@akdasa.studio">support@akdasa.studio</a> for any other data-removal request; note that records required by Apple or Google for purchase verification cannot be removed for the duration mandated by those platforms.</p>
 
 <strong class="section">Subscription management</strong>
 <p>Subscriptions are managed entirely by Apple or Google. To view, cancel, or change a subscription, use the subscription settings of your App Store or Google Play account. Cancelling does not delete the subscription history retained by Apple or Google.</p>
