@@ -2,7 +2,7 @@ export type SubscriptionFeatureKey =
   | "newLectures"
   | "bookmarks"
   | "smartLibrary"
-  | "advancedSearch"
+  | "chat"
   | "autoScroll"
   | "notesStudio"
 
@@ -14,11 +14,11 @@ export interface FeatureSlideDef {
 
 export const FEATURE_SLIDES: readonly FeatureSlideDef[] = [
   { key: "newLectures", i18nKey: "benefit0", soon: false },
+  { key: "chat", i18nKey: "chat", soon: false },
   { key: "bookmarks", i18nKey: "benefit1", soon: false },
   { key: "smartLibrary", i18nKey: "benefit2", soon: false },
   { key: "autoScroll", i18nKey: "autoScroll", soon: false },
   { key: "notesStudio", i18nKey: "notesStudio", soon: false },
-  { key: "advancedSearch", i18nKey: "benefit5", soon: true },
 ] as const
 
 export function slideIndexForFeature(feature: string | undefined): number {

@@ -147,6 +147,16 @@ export type ChatStreamEvent =
       readonly code: string
       readonly message: string
       readonly retryAfter?: number
+      /** Subscription tier (anonymous|free|pro) the server's rate-limit
+       *  decision was made under. Set only on `code: "rate_limited"`;
+       *  absent on other codes and on old servers (pre-Phase 4) that
+       *  haven't started emitting the extended 429 body yet. */
+      readonly tier?: string
+      /** Server-side reset boundary in UTC Unix-seconds. Same caveats
+       *  as `tier`. The store converts this to an absolute UnixMs and
+       *  pins it to the failed bubble so countdowns don't drift across
+       *  app backgrounding. */
+      readonly resetsAtEpoch?: number
     }
 
 /**

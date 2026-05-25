@@ -142,6 +142,14 @@ export type ChatStreamEvent =
       readonly code: string
       readonly message: string
       readonly retryAfter?: number
+      /** Subscription tier the limit was looked up under. "anonymous" |
+       *  "free" | "pro". Set only on rate_limited; absent on
+       *  network/server/auth errors. Old servers (pre-Phase 4) omit
+       *  this; the consumer falls back to a tier-agnostic message. */
+      readonly tier?: string
+      /** UTC Unix-seconds epoch of the next reset. Set only on
+       *  rate_limited; absent on old servers. */
+      readonly resetsAtEpoch?: number
     }
 
 /** Wire shape of a verse body — carried by an `action` event with
@@ -497,11 +505,30 @@ export async function* streamChat(
     if (response.status === 429) {
       const retryHeader = response.headers.get("Retry-After")
       const retryAfter = retryHeader ? Number(retryHeader) : 60
+      // Phase 4 added `tier` and `resets_at_epoch` to the 429 JSON body
+      // (under `detail`). Old servers omit them — we still get a usable
+      // generic "rate limited" message via the header.
+      let tier: string | undefined
+      let resetsAtEpoch: number | undefined
+      try {
+        const json = (await response.clone().json()) as {
+          detail?: { tier?: string; resets_at_epoch?: number }
+        } | null
+        const d = json?.detail
+        if (d) {
+          if (typeof d.tier === "string") tier = d.tier
+          if (typeof d.resets_at_epoch === "number") resetsAtEpoch = d.resets_at_epoch
+        }
+      } catch {
+        // Body wasn't JSON / detail missing — fall back to header-only.
+      }
       yield {
         type: "error",
         code: "rate_limited",
         message: "Too many requests",
         retryAfter: Number.isFinite(retryAfter) ? retryAfter : 60,
+        ...(tier !== undefined ? { tier } : {}),
+        ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
       }
       return
     }

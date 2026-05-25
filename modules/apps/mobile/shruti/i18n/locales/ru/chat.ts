@@ -56,6 +56,24 @@ export default {
   retryInSeconds: "через {n} с",
   retryInMinutes: "через {n} мин",
   retryAtTime: "в {time}",
+  retryNow: "сейчас",
+
+  // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
+  // Без конкретных чисел в строке — серверная конфигурация может
+  // меняться, не хочется ловить расхождения. «{when}» подставляет
+  // реальное время сброса.
+  errQuotaAnonTitle: "Дневной лимит исчерпан",
+  errQuotaAnonBody: "Войдите, чтобы получать больше сообщений в день. Обновится {when}.",
+  errQuotaFreeTitle: "Дневной лимит исчерпан",
+  errQuotaFreeBody: "С подпиской «Слушай Садху Pro» дневной лимит больше. Обновится {when}.",
+  errQuotaProTitle: "Дневной лимит исчерпан",
+  errQuotaProBody: "Сегодня сообщения в чате закончились. Обновится {when}.",
+  signInForMoreCta: "Войти",
+  upgradeToProCta: "Слушай Садху Pro",
+
+  // ── Composer lockdown (Phase 6) ───────────────────────────────────────
+  composeLimitedPlaceholder: "Лимит обновится в {time}",
+  composeLimitedPlaceholderNoTime: "Лимит исчерпан — попробуйте позже",
 
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.
   // Keep them 2-4 words so they fit one line.
@@ -205,7 +223,7 @@ export default {
   actionConfigureSmartLibraryChipLocations: "{n} мест",
   actionConfigureSmartLibraryChipLanguages: "{n} языков",
 
-  actionUpgradeToProTitle: "Shruti Pro",
+  actionUpgradeToProTitle: "Слушай Садху Pro",
   actionUpgradeToProBody: "Открой умную библиотеку, Студию заметок и остальные возможности Pro.",
   actionUpgradeToProConfirm: "Посмотреть Pro",
   actionUpgradeToProDone: "Окно подписки открыто.",

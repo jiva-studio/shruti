@@ -100,9 +100,21 @@ export type ChatActionState =
  *   `rate_limited`) — converted from the 429 `Retry-After` header at
  *   the moment the error is received, so countdowns don't drift.
  */
+/** Subscription tier the rate-limit decision was made under. Echoed
+ *  by the server in the 429 body so the UI can pick the right copy
+ *  and CTA (anonymous → sign-in, free → buy Pro, pro → just wait). */
+export type QuotaTier = "anonymous" | "free" | "pro"
+
 export type ChatMessageError =
   | { kind: "truncated"; reason: "stream" | "turns" }
-  | { kind: "failed"; code: string; retryAfterAt?: UnixMs }
+  | {
+      kind: "failed"
+      code: string
+      retryAfterAt?: UnixMs
+      /** Set only when `code === "rate_limited"` and the server returned
+       *  the Phase 4 tier-aware 429 body. Absent on older servers. */
+      tier?: QuotaTier
+    }
 
 export interface ChatMessage {
   readonly id: ChatMessageId
