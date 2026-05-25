@@ -15,8 +15,8 @@ export interface UseDataSettingsReturn {
 /**
  * UI plumbing for the Settings → Data group. Wraps `app.databaseTransfer`
  * with: a confirm dialog before destructive import, a player stop (symmetric
- * to `useDangerActions.onClearUserData`), and a user-visible error alert
- * when the underlying SQLite / share operation throws.
+ * to `wipeLocalUserData`), and a user-visible error alert when the underlying
+ * SQLite / share operation throws.
  */
 export function useDataSettings(app: Shruti): UseDataSettingsReturn {
   const { t } = useI18n()
@@ -43,10 +43,10 @@ export function useDataSettings(app: Shruti): UseDataSettingsReturn {
     const { role } = await alert.onDidDismiss()
     if (role !== "destructive") return
 
-    // Mirror `useDangerActions.onClearUserData`: the audio engine could be
-    // mid-playback on a track whose row is about to be wiped + replaced,
-    // leaving the floating player pointing at a ghost. `stop()` is a no-op
-    // when nothing is open, so it's safe unconditionally.
+    // Mirror `wipeLocalUserData`: the audio engine could be mid-playback
+    // on a track whose row is about to be wiped + replaced, leaving the
+    // floating player pointing at a ghost. `stop()` is a no-op when
+    // nothing is open, so it's safe unconditionally.
     if (player.open) await player.stop()
 
     try {

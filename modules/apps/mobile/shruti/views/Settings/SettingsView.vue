@@ -58,11 +58,7 @@
 
     <SettingsHelpGroup @open-help="helpOpen = true" />
 
-    <SettingsDangerGroup
-      v-if="debugUnlocked"
-      @clear-cache="onClearCache"
-      @clear-user-data="onClearUserData"
-    />
+    <SettingsDangerGroup v-if="debugUnlocked" @clear-cache="onClearCache" />
 
     <BuildInfo
       :version="version"
@@ -124,7 +120,6 @@ const {
   serverItems,
   languageItems,
   onClearCache,
-  onClearUserData,
   onExportDatabase,
   onImportFileSelected,
   subscription,

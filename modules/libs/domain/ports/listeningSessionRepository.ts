@@ -88,4 +88,12 @@ export interface IListeningSessionRepository {
    * the SQL adapter cleans up its IN-list size accordingly.
    */
   listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]>
+
+  /**
+   * Wipe every session row. Used by the "delete account" / "clear user
+   * data" flow — without this, listening progress and activity-heatmap
+   * stats would survive a full account wipe because they live in their
+   * own table separate from playlist_items.
+   */
+  clearAll(): Promise<void>
 }
