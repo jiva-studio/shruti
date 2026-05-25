@@ -17,11 +17,25 @@ Verification surface is intentionally tight:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
 import jwt
+
+from lectorium_chat.observability.logging import get_logger
+
+
+log = get_logger(__name__)
+
+# Auth signs `quota_id` as either a sha256 hex digest (64 lower-case hex
+# chars) or the empty string (anonymous / pre-Phase-3 tokens). Anything
+# else is malformed — likely a producer bug or token tampering — and
+# must not flow into the rate-limiter key, since a garbled value would
+# either fragment a user's quota across multiple buckets or collide
+# with another identity's bucket.
+_QUOTA_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True)
@@ -112,10 +126,22 @@ class JwtVerifier:
         # if somehow absent is the safe choice (lowest quota).
         anon_raw = claims.get("anonymous", True)
         tier_raw = claims.get("tier") or "free"
-        quota_id_raw = claims.get("quota_id") or ""
+        quota_id_raw = str(claims.get("quota_id") or "")
+        # Empty is the documented "no OAuth identity yet" signal; the
+        # rate-limiter falls back to `sub` in that case. Anything that
+        # isn't empty and isn't a 64-char hex digest is garbage — treat
+        # it the same as empty so the limiter degrades to user_id rather
+        # than keying on a corrupted bucket.
+        if quota_id_raw and not _QUOTA_ID_RE.fullmatch(quota_id_raw):
+            log.warning(
+                "quota_id_invalid_format",
+                sub=sub,
+                quota_id_len=len(quota_id_raw),
+            )
+            quota_id_raw = ""
         return VerifiedUser(
             id=sub,
             anonymous=bool(anon_raw),
             tier=str(tier_raw),
-            quota_id=str(quota_id_raw),
+            quota_id=quota_id_raw,
         )
