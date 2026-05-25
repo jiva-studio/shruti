@@ -94,6 +94,11 @@ services:
       - --interval=60           # poll ghcr every 60s
       - --cleanup               # remove old images after successful update
       - --include-stopped       # also scan exited containers (needed for the one-shot migrator)
+      - --include-restarting    # crashlooping containers too — without this a bad release
+                                # deadlocks: container restarts forever on the broken image
+                                # while Watchtower skips it because it's "Restarting", so
+                                # the fix image never gets pulled. Witnessed 2026-05-25 with
+                                # share-video #620; needed manual `docker stop` to break out.
       - --revive-stopped        # docker-start the migrator after pulling a fresh image
     networks: [watchtower-internal, shruti]
     depends_on:
