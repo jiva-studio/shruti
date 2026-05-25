@@ -19,7 +19,7 @@
 
 <p class="lang"><a href="ru.html">Русский</a></p>
 <h1>Privacy Policy</h1>
-<p class="meta">Effective date: May 15, 2026</p>
+<p class="meta">Effective date: May 25, 2026</p>
 
 <p>This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription. This service is intended for use "AS IS".</p>
 
@@ -36,11 +36,33 @@
 <strong class="section">Does the Application collect precise real time location information of the device?</strong>
 <p>This Application does not collect precise information about the location of your mobile device.</p>
 
+<strong class="section">In-app chat ("Ask Sadhu") and AI features</strong>
+<p>The Application includes an optional chat feature that answers questions about the lecture library using a large language model (LLM). When you send a message, the following is processed:</p>
+<ul>
+  <li><strong>Message text</strong> — the question you typed, plus relevant excerpts retrieved from the lecture library, are sent to the LLM to generate an answer.</li>
+  <li><strong>Session identifier</strong> — a random per-conversation id used to keep the dialogue coherent across turns. It is not linked to your name or email.</li>
+  <li><strong>Optional feedback</strong> — if you tap thumbs-up / thumbs-down on a reply, that rating is stored alongside the corresponding turn.</li>
+</ul>
+<p>Chat traffic is routed through <strong>OpenRouter, Inc.</strong> (the LLM gateway) to <strong>Google Gemini</strong> models operated by Google. No other LLM provider currently receives your chat messages. Chat content is used solely to produce the reply you see and to improve the quality of the feature; it is not used for advertising or profiling.</p>
+
+<strong class="section">Diagnostic logs and chat tracing</strong>
+<p>To keep the service running and to debug failures, the Application's backend records:</p>
+<ul>
+  <li><strong>Service logs</strong> — HTTP request metadata, error stack traces, and performance timings, retained on our self-hosted Grafana / Loki stack. These logs do not include your chat messages.</li>
+  <li><strong>Chat traces</strong> — the prompts, retrieved excerpts, model responses, and token usage for each chat turn, retained on our self-hosted Langfuse instance. Traces are used to diagnose answer-quality issues and to tune prompts.</li>
+</ul>
+<p>Both Grafana / Loki and Langfuse run on infrastructure operated by the Service Provider — chat content and logs are <em>not</em> sent to a third-party SaaS observability vendor.</p>
+
 <strong class="section">Do third parties see and/or have access to information obtained by the Application?</strong>
 <p>For subscription processing, purchase and identifier data described above is shared with the following processors:</p>
 <ul>
   <li><strong>RevenueCat, Inc.</strong> — handles in-app purchase verification, entitlement management, and restore-purchase flow. <a href="https://www.revenuecat.com/privacy">RevenueCat Privacy Policy</a>.</li>
   <li><strong>Apple Inc.</strong> (on iOS) and <strong>Google LLC</strong> (on Android) — process the actual purchase transaction and provide the verification receipts. Their handling is governed by their respective privacy policies.</li>
+</ul>
+<p>For the in-app chat feature, your messages and the retrieved lecture excerpts are additionally shared with:</p>
+<ul>
+  <li><strong>OpenRouter, Inc.</strong> — routes the request from our backend to the selected LLM provider. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
+  <li><strong>Google LLC</strong> — operates the Google Gemini models that generate the reply. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
 </ul>
 <p>No other third party receives any data from the Application.</p>
 
@@ -59,7 +81,7 @@
 
 <strong class="section">Changes</strong>
 <p>This Privacy Policy may be updated from time to time for any reason. The Service Provider will notify you of any changes to their Privacy Policy by updating this page with the new Privacy Policy. You are advised to consult this Privacy Policy regularly for any changes, as continued use is deemed approval of all changes.</p>
-<p>This privacy policy is effective as of May 15, 2026.</p>
+<p>This privacy policy is effective as of May 25, 2026.</p>
 
 <strong class="section">Your Consent</strong>
 <p>By using the Application, you are consenting to the processing of your information as set forth in this Privacy Policy now and as amended by the Service Provider.</p>
