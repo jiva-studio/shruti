@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import { useShruti } from "@shruti/shruti.js"
+import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
@@ -95,9 +96,19 @@ export const useAuthStore = defineStore("auth", () => {
     await restore()
   }
 
-  async function deleteAccount(): Promise<void> {
-    const auth = useShruti().auth
-    await auth.deleteAccount()
+  /**
+   * Delete the server-side account, then optionally wipe local user
+   * data. Order matters: if the server call fails (network, 5xx) we
+   * MUST NOT touch local data — otherwise the user loses their
+   * notes/chats/downloads while still being signed in. On success we
+   * drop to anonymous via a fresh bootstrap, same as signOut.
+   */
+  async function deleteAccount(opts: { wipeLocal: boolean }): Promise<void> {
+    const app = useShruti()
+    await app.auth.deleteAccount()
+    if (opts.wipeLocal) {
+      await wipeLocalUserData(app)
+    }
     applySession(null)
     await restore()
   }
