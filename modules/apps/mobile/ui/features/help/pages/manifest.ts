@@ -9,6 +9,7 @@ import {
   IconPlay,
   IconRosetteDiscountCheckFilled,
   IconSettings,
+  TrashIcon,
 } from "@ui/icons/index.js"
 
 import HelpIndicatorsPage from "./components/HelpIndicatorsPage.vue"
@@ -27,6 +28,8 @@ import smartLibraryEn from "@docs/help/smart-library.en.md?raw"
 import smartLibraryRu from "@docs/help/smart-library.ru.md?raw"
 import exportImportEn from "@docs/help/export-import.en.md?raw"
 import exportImportRu from "@docs/help/export-import.ru.md?raw"
+import deleteAccountEn from "@docs/help/delete-account.en.md?raw"
+import deleteAccountRu from "@docs/help/delete-account.ru.md?raw"
 
 export type HelpPageId =
   | "what-is-sadhana"
@@ -37,6 +40,7 @@ export type HelpPageId =
   | "settings-overview"
   | "smart-library"
   | "export-import"
+  | "delete-account"
 
 export type HelpCategoryId = "features" | "settings" | "data"
 
@@ -119,6 +123,13 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(IconDownload),
         en: smartLibraryEn,
         ru: smartLibraryRu,
+      },
+      {
+        id: "delete-account",
+        type: "markdown",
+        icon: markRaw(TrashIcon),
+        en: deleteAccountEn,
+        ru: deleteAccountRu,
       },
     ],
   },
