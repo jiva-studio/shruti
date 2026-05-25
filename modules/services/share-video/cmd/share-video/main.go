@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/akdasa-studios/shruti-share-video/internal/config"
 	"github.com/akdasa-studios/shruti-share-video/internal/db"
 	"github.com/akdasa-studios/shruti-share-video/internal/httpx"
@@ -43,6 +45,19 @@ func main() {
 	defer pool.Close()
 	if err := db.AssertSchemaReady(ctx, pool); err != nil {
 		log.Error("schema_not_migrated", "err", err.Error())
+		os.Exit(1)
+	}
+
+	// Redis (daily quota counters).
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Error("redis_url_invalid", "err", err.Error())
+		os.Exit(1)
+	}
+	rdb := redis.NewClient(redisOpts)
+	defer rdb.Close()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Error("redis_ping_failed", "err", err.Error())
 		os.Exit(1)
 	}
 
@@ -106,6 +121,7 @@ func main() {
 	}
 	srvHandlers := &httpx.Server{
 		Pool:             pool,
+		Redis:            rdb,
 		AnonPerDay:       cfg.AnonPerDay,
 		SignedInPerDay:   cfg.SignedInPerDay,
 		OutputPrefix:     cfg.OutputPrefix,

@@ -19,6 +19,7 @@ type Config struct {
 	Port           string
 
 	DatabaseURL string
+	RedisURL    string
 
 	Bucket             string
 	BackgroundsPrefix  string
@@ -59,6 +60,7 @@ func Load() (Config, error) {
 		Port:           env("PORT", "8083"),
 
 		DatabaseURL: os.Getenv("DATABASE_URL"),
+		RedisURL:    os.Getenv("REDIS_URL"),
 
 		Bucket:            firstNonEmpty(os.Getenv("SHRUTI_S3_BUCKET"), os.Getenv("BUCKET")),
 		BackgroundsPrefix: env("SHRUTI_S3_BACKGROUNDS_PREFIX", "private/share/video/backgrounds"),
@@ -91,6 +93,9 @@ func Load() (Config, error) {
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")
+	}
+	if c.RedisURL == "" {
+		return c, fmt.Errorf("REDIS_URL is required")
 	}
 	return c, nil
 }

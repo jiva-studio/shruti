@@ -20,10 +20,10 @@ from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
 
-# Pillars of chat's data model. If `chunks` or `usage` is missing, the
-# migrator hasn't run; the rest are creatd in the same migration set so
-# checking one of each surface is enough.
-_REQUIRED_TABLES = ("chunks", "usage")
+# Pillars of chat's data model. If `chunks` is missing, the migrator
+# hasn't run; the rest are created in the same migration set so checking
+# one of each surface is enough. (Rate-limit usage lives in Redis now.)
+_REQUIRED_TABLES = ("chunks",)
 
 
 async def assert_schema_ready() -> None:

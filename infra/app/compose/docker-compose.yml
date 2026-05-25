@@ -125,7 +125,7 @@ services:
       - --maxmemory
       - 1gb
       - --maxmemory-policy
-      - allkeys-lru
+      - volatile-lru
     volumes:
       - redisdata:/data
     networks: [shruti]
@@ -286,6 +286,7 @@ services:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      REDIS_URL: redis://redis:6379/0
       SHRUTI_S3_BUCKET: ${SHRUTI_S3_BUCKET:?}
       SHRUTI_S3_BACKGROUNDS_PREFIX: ${SHRUTI_S3_BACKGROUNDS_PREFIX:-private/share/video/backgrounds}
       SHRUTI_S3_VIDEO_PREFIX: ${SHRUTI_S3_VIDEO_PREFIX:-public/share/video}
@@ -305,6 +306,7 @@ services:
     networks: [shruti]
     depends_on:
       postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
       migrator: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8083/healthz"]
