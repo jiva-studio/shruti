@@ -93,6 +93,33 @@ template / dashboard changes. Secrets are generated once and reused on
 subsequent runs (overwriting `ENCRYPTION_KEY` would destroy at-rest
 data).
 
+## Langfuse data retention
+
+Every Langfuse ClickHouse table (`traces`, `observations`, `scores`,
+`event_log`) carries a 90-day TTL, applied on each `configure.sh` run by
+`scripts/lib/bootstrap-langfuse-ttl.sh`:
+
+```sql
+ALTER TABLE langfuse.<table>
+  MODIFY TTL toDateTime(<timestamp_col>) + INTERVAL 90 DAY DELETE;
+```
+
+Timestamp columns are `timestamp` (traces, scores), `start_time`
+(observations) and `created_at` (event_log). Re-running the script is a
+metadata-only no-op once the TTL is in place.
+
+This is the corpus-wide safety-net retention policy. It complements the
+per-user purge issued through the Langfuse API when an account is
+deleted: even if that best-effort call fails or pre-dates a user, every
+trace row tied to a deleted user disappears within 90 days. It also caps
+ClickHouse disk growth on the 100 GB VPS — without it the only bound on
+trace volume is operator intervention. To change the window, bump
+`LANGFUSE_TTL_DAYS` in `bootstrap-langfuse-ttl.sh` and re-run
+`./scripts/configure.sh --region <r>`.
+
+Note: Langfuse OSS project-level retention is enterprise-only; the
+ClickHouse-native TTL above is the supported lever for self-hosted.
+
 ## Troubleshooting
 
 **Langfuse won't start, healthcheck times out.**

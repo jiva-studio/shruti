@@ -78,6 +78,12 @@ bootstrap_cloudflare_dns
 source "$UNIT/scripts/lib/bootstrap-langfuse.sh"
 bootstrap_langfuse
 
+# 2b. 90-day ClickHouse TTL on Langfuse tables (account-deletion safety net
+#     + cost cap; see README → "Langfuse data retention").
+# shellcheck source=lib/bootstrap-langfuse-ttl.sh
+source "$UNIT/scripts/lib/bootstrap-langfuse-ttl.sh"
+bootstrap_langfuse_ttl
+
 # 3. Grafana Telegram contact point — provisioning already covers this,
 #    but the lib also handles the case where the operator wants to update
 #    the chat ID after the stack is already running.
