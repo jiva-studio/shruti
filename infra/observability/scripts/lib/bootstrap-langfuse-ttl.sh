@@ -34,7 +34,11 @@ LANGFUSE_TTL_DAYS="${LANGFUSE_TTL_DAYS:-90}"
 bootstrap_langfuse_ttl() {
   require_vars REGION REMOTE_DIR || return 1
 
-  local db="langfuse"
+  # Langfuse OSS writes its ClickHouse tables to the `default` database, not
+  # to a `langfuse`-named one — verified via SHOW CREATE TABLE on prod. The
+  # earlier `langfuse` value caused the existence-precheck below to never
+  # match, so this routine silently no-op'd on every deploy.
+  local db="default"
   local days="$LANGFUSE_TTL_DAYS"
 
   log "Applying ${days}-day TTL on Langfuse ClickHouse tables (db=${db})"
