@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sse_starlette.sse import EventSourceResponse
 
 from shruti_chat.api._auth import get_current_user
+from shruti_chat.api._rate_limit import raise_429
 from shruti_chat.api.schemas.chat import ChatRequestDto
 from shruti_chat.application.chat_turn import run_chat_turn
 from shruti_chat.application.proactive_turn import run_proactive_turn
@@ -108,19 +109,10 @@ async def chat(
     # Rate-limit gate (per-day per JWT-sub + per-IP).
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="chat",
+        user.id, user.anonymous, ip, scope="chat", tier=user.tier,
     )
     if not rl.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": rl.code,
-                "limit": rl.limit,
-                "current": rl.current,
-                "key_type": rl.key_type,
-            },
-            headers={"Retry-After": str(rl.retry_after or 60)},
-        )
+        raise_429(rl, scope="chat")
 
     structlog.contextvars.bind_contextvars(
         request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,

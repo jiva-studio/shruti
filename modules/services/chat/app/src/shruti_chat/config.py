@@ -102,26 +102,34 @@ class Settings(BaseSettings):
     # `public.pem` filename inside the dir is mapped to kid `v1`.
     jwt_public_keys_dir: Path | None = None
 
-    # Per-(scope, user) daily limits. Anonymous users (those carrying an
-    # /auth/anonymous-minted JWT with `anonymous=true`) get tighter quotas
-    # than signed-in users; the difference is the main reason we did the
-    # whole JWT migration. Tuning starting points — revise from telemetry.
-    chat_anon_per_day: int = 50
-    chat_signed_in_per_day: int = 500
+    # Per-(scope, user) daily limits. Three tiers:
+    #   anon     — /auth/anonymous-minted JWT (`anonymous=true`)
+    #   free     — signed-in but no active RC entitlement
+    #   pro      — signed-in with active entitlement (`tier="pro"`)
+    # Anon vs free is a meaningful step (signin = +7 daily chat messages)
+    # so the user has a reason to bother with OAuth. Tuning starting
+    # points — revise from telemetry (ratelimit_blocked_total metric in
+    # Phase 9).
+    chat_anon_per_day: int = 3
+    chat_free_per_day: int = 10
+    chat_pro_per_day: int = 200
     # /title is a separate cheap call (~40 tokens out, gemini-flash);
-    # higher cap because a user starting many sessions in a row is normal.
-    title_anon_per_day: int = 60
-    title_signed_in_per_day: int = 300
+    # session-starts are normal multi-per-day, so headroom is generous.
+    title_anon_per_day: int = 10
+    title_free_per_day: int = 50
+    title_pro_per_day: int = 500
     # /questions = "suggest 3-4 chips" fired on transcript fragment
     # selection. ~400 tokens out; noisier on the device than /title.
-    questions_anon_per_day: int = 100
-    questions_signed_in_per_day: int = 500
+    questions_anon_per_day: int = 10
+    questions_free_per_day: int = 50
+    questions_pro_per_day: int = 500
     # /chat/feedback = thumbs up/down + optional category/comment on
     # any assistant message. The POST itself is cheap (3× Langfuse score
     # ingests at most); cap is generous to allow a user re-flipping
     # judgement across many messages without hitting a wall.
-    feedback_anon_per_day: int = 200
-    feedback_signed_in_per_day: int = 2000
+    feedback_anon_per_day: int = 30
+    feedback_free_per_day: int = 200
+    feedback_pro_per_day: int = 2000
     # Per-IP cap (uniform across scopes). Defence-in-depth on top of the
     # per-user cap — covers an attacker spinning up many anon-JWTs from
     # one IP. Caddy edge has its own per-IP limit (200/hour); this is the
