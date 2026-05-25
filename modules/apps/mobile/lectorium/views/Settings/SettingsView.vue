@@ -91,7 +91,6 @@ import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
-import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useToast } from "@lectorium/services/useToast.js"
@@ -101,7 +100,6 @@ import { useSettingsController } from "./SettingsView.controller.js"
 const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
-const purchases = usePurchasesStore()
 const i18n = useI18n()
 const { t } = i18n
 const toast = useToast()
@@ -170,13 +168,6 @@ async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<voi
     }
     await toast.error(t(key))
     return
-  }
-  // RevenueCat ties the subscription to the device (App Store / Play
-  // account), not to the lectorium account we just deleted. Surface
-  // that only when the user actually had a subscription, so non-Pro
-  // users aren't confused by a reminder that doesn't apply to them.
-  if (purchases.isSubscribed) {
-    await toast.info(t("settings.account.deleteAccount.subscriptionToast"))
   }
 }
 
