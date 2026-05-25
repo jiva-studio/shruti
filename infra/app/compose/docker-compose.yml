@@ -212,6 +212,43 @@ services:
       retries: 40
       start_period: 10s
 
+  # cleanup-worker: consumes domain events from app.outbox (LISTEN/NOTIFY
+  # + periodic sweep) and runs the cross-service side effects nobody else
+  # owns. Today: purge Langfuse traces on user.deleted. Single Go binary,
+  # no inbound traffic beyond /healthz on 8090 (kept off the well-known
+  # service ports). See modules/services/cleanup-worker/README.md.
+  cleanup-worker:
+    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-cleanup-worker:${SHRUTI_CLEANUP_WORKER_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      # Langfuse REST endpoints used by the user.deleted handler. Empty
+      # host turns the purge into a logged no-op (useful when running
+      # the stack without Langfuse for dev/staging).
+      LANGFUSE_HOST: ${SHRUTI_LANGFUSE_HOST:-}
+      LANGFUSE_PUBLIC_KEY: ${SHRUTI_LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${SHRUTI_LANGFUSE_SECRET_KEY:-}
+      CLEANUP_SWEEP_INTERVAL: ${SHRUTI_CLEANUP_SWEEP_INTERVAL:-5m}
+      PORT: "8090"
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_CLEANUP_WORKER_TAG:-latest}
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrator: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "/cleanup-worker", "healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
   # share-audio: synchronous MP3 cut + S3 upload. No DB, no queue.
   # 4 uvicorn workers per container, Caddy edge rate-limit caps spikes.
   share-audio:
