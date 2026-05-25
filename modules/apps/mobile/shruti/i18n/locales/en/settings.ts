@@ -30,8 +30,6 @@ export default {
       rateLimitedToast: "Please wait a bit before trying again.",
       networkErrorToast: "No connection. Check your internet and try again.",
       serverErrorToast: "Something went wrong on our end. Please try again in a moment.",
-      subscriptionToast:
-        "Subscription stays active on this device. Cancel via App Store/Play if you want to stop it.",
     },
   },
 
