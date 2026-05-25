@@ -9,14 +9,55 @@ package rcclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 )
 
 const defaultBaseURL = "https://api.revenuecat.com/v1"
+
+// Sentinel errors returned by GetSubscriber. Callers fan out on these
+// with `errors.Is` (sentinels) or `errors.As` (typed values that carry
+// extra context, like Retry-After).
+//
+// Classification:
+//   - 404            → ErrSubscriberNotFound (soft success, RC creates
+//                      subscribers lazily on first event)
+//   - 401, 403       → ErrPermanent (wrapped via fmt.Errorf %w) — API key
+//                      invalid or revoked, retrying won't help
+//   - 429            → *RateLimitError (wraps ErrRateLimited) carrying
+//                      the Retry-After header value, if any
+//   - other 4xx      → ErrPermanent (we don't know what RC means by them
+//                      but they aren't going to resolve themselves)
+//   - 5xx, network   → plain error (retryable; existing webhook /
+//                      reconcile retry budgets cover these)
+var (
+	ErrSubscriberNotFound = errors.New("rcclient: subscriber not found")
+	ErrPermanent          = errors.New("rcclient: permanent failure")
+	ErrRateLimited        = errors.New("rcclient: rate limited")
+)
+
+// RateLimitError is the typed form of ErrRateLimited. Callers can
+// `errors.As(err, &re)` to read RetryAfter for honest backoff. Wraps
+// ErrRateLimited so `errors.Is(err, ErrRateLimited)` works too.
+type RateLimitError struct {
+	RetryAfter time.Duration // 0 if RC didn't supply a Retry-After header
+	Status     int
+}
+
+func (e *RateLimitError) Error() string {
+	if e.RetryAfter > 0 {
+		return fmt.Sprintf("rcclient: rate limited (status=%d, retry_after=%s)", e.Status, e.RetryAfter)
+	}
+	return fmt.Sprintf("rcclient: rate limited (status=%d)", e.Status)
+}
+
+func (e *RateLimitError) Unwrap() error { return ErrRateLimited }
 
 type Client struct {
 	BaseURL string // override for tests
@@ -50,15 +91,18 @@ type SubscriberResponse struct {
 // purchases — treat null as "never expires", which still maps to
 // active.
 type Entitlement struct {
-	ExpiresDate     *time.Time `json:"expires_date"`
-	PurchaseDate    *time.Time `json:"purchase_date"`
-	ProductIdentifier string   `json:"product_identifier"`
+	ExpiresDate       *time.Time `json:"expires_date"`
+	PurchaseDate      *time.Time `json:"purchase_date"`
+	ProductIdentifier string     `json:"product_identifier"`
 }
 
 // GetSubscriber fetches the current state for an RC app_user_id. The
-// caller treats a 404 ("subscriber not found") as a soft success —
-// RC creates the subscriber lazily on first event, so a webhook can
-// race ahead. We surface it as a non-error empty response.
+// caller treats ErrSubscriberNotFound (404) as a soft success — RC
+// creates the subscriber lazily on first event, so a webhook can race
+// ahead. Permanent errors (401/403) come back as ErrPermanent so the
+// webhook handler can mark the event processed and the reconcile cron
+// can skip the user; 429 comes back as *RateLimitError carrying the
+// Retry-After header.
 func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*SubscriberResponse, error) {
 	if c.APIKey == "" {
 		return nil, fmt.Errorf("rcclient: API key not configured")
@@ -78,12 +122,43 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*Subscrib
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return &SubscriberResponse{}, nil
-	}
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("rcclient: %s: %s", resp.Status, string(body))
+	switch {
+	case resp.StatusCode == http.StatusNotFound:
+		// 404 is the only 4xx with a defined non-error meaning: RC
+		// hasn't seen this app_user_id yet. Return an empty body so the
+		// caller writes `tier=free` via the same path as a regular
+		// "no active entitlements" response.
+		return &SubscriberResponse{}, ErrSubscriberNotFound
+
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		// 401/403 — API key is misconfigured, revoked, or scoped wrong.
+		// Retrying won't fix it; surface as ErrPermanent so the webhook
+		// handler can stop RC's retry loop and the reconcile cron can
+		// skip affected users.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return nil, fmt.Errorf("%w: status=%d body=%s", ErrPermanent,
+			resp.StatusCode, sanitizeBody(body))
+
+	case resp.StatusCode == http.StatusTooManyRequests:
+		// 429 — RC throttle. Honour Retry-After if present (RC sends it
+		// as seconds-integer per their docs). Caller decides whether to
+		// retry inline or back off the whole cron tick.
+		retry := parseRetryAfter(resp.Header.Get("Retry-After"))
+		return nil, &RateLimitError{Status: resp.StatusCode, RetryAfter: retry}
+
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		// Any other 4xx — unexpected from RC, but not retryable on its
+		// own. Bundle into ErrPermanent so it surfaces the same way as
+		// 401/403 (stop retries, log loudly).
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return nil, fmt.Errorf("%w: status=%d body=%s", ErrPermanent,
+			resp.StatusCode, sanitizeBody(body))
+
+	case resp.StatusCode >= 500:
+		// 5xx → plain error, retryable. RC's webhook retries + our
+		// reconcile cron eventually pick the user back up.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return nil, fmt.Errorf("rcclient: %s: %s", resp.Status, sanitizeBody(body))
 	}
 
 	var out SubscriberResponse
@@ -91,4 +166,32 @@ func (c *Client) GetSubscriber(ctx context.Context, appUserID string) (*Subscrib
 		return nil, fmt.Errorf("rcclient: decode: %w", err)
 	}
 	return &out, nil
+}
+
+// parseRetryAfter accepts the integer-seconds form of the Retry-After
+// header. RC always sends seconds; HTTP-date form is permitted by the
+// spec but we don't see it from RC in practice. Returns 0 on parse
+// failure — caller falls back to its own default backoff.
+func parseRetryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
+}
+
+// sanitizeBody trims whitespace and collapses anything beyond the first
+// line — RC error bodies are short JSON like `{"code":7224,"message":
+// "Invalid API key"}`, no need to log multi-line dumps that might carry
+// transient identifiers.
+func sanitizeBody(b []byte) string {
+	s := strings.TrimSpace(string(b))
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	return s
 }
