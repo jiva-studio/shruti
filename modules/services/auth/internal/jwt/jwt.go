@@ -23,13 +23,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// Claims is the JWT payload we issue. `Tier` was added 2026-05; tokens
-// minted before that release omit it. The omitempty tag keeps them
-// byte-identical for the free path so the chat-side verifier (which
-// defaults missing tier to "free") sees no behaviour change.
+// Claims is the JWT payload we issue. `Tier` and `QuotaID` were added
+// 2026-05; tokens minted before that release omit them. The omitempty
+// tag keeps the free / anonymous path byte-identical so the chat-side
+// verifier (which defaults missing tier to "free" and falls back to
+// `sub` when quota_id is empty) sees no behaviour change.
+//
+// QuotaID is a sha256 of the user's earliest non-device identity
+// (`provider:subject`). The chat rate-limiter keys per-user counters
+// on it instead of `sub` so a delete+recreate doesn't refresh today's
+// quota — see internal/identityhash and issue #626.
 type Claims struct {
 	Anonymous bool   `json:"anonymous"`
 	Tier      string `json:"tier,omitempty"`
+	QuotaID   string `json:"quota_id,omitempty"`
 	gjwt.RegisteredClaims
 }
 
@@ -126,9 +133,14 @@ func fileExists(p string) bool {
 }
 
 // Issue signs a JWT. If jti is uuid.Nil a fresh one is generated.
+//
 // `tier` is the user's subscription tier ("free" | "pro"); empty string
 // is fine — the chat-side verifier defaults to "free".
-func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier string, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
+//
+// `quotaID` is a stable hash of the user's earliest non-device identity
+// (see internal/identityhash). Empty for anonymous users — the chat
+// limiter falls back to `sub` in that case.
+func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier, quotaID string, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
 	if jti == uuid.Nil {
 		jti = uuid.New()
 	}
@@ -136,6 +148,7 @@ func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier string, ttl time.D
 	claims := Claims{
 		Anonymous: anonymous,
 		Tier:      tier,
+		QuotaID:   quotaID,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   userID.String(),
 			IssuedAt:  gjwt.NewNumericDate(now),
