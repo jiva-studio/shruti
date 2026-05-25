@@ -130,6 +130,24 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
+# ── 6. Post-deploy hooks. Each is idempotent; failure halts the deploy. ──
+# See infra/app/scripts/post-deploy/README.md for the contract.
+echo "→ Running post-deploy hooks..."
+HOOKS=$(ssh_run "ls $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh 2>/dev/null || true")
+if [ -z "$HOOKS" ]; then
+  echo "  (none)"
+else
+  ssh_run "
+    set -e
+    for s in $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh; do
+      [ -f \"\$s\" ] || continue
+      echo \"  • \$(basename \$s)\"
+      bash \"\$s\"
+    done
+  "
+fi
+echo "✓ Post-deploy hooks done"
+
 echo
 echo "✓ Deployed: $URL"
 echo "  ssh $SERVER_USER@$SERVER_IP"
