@@ -1,5 +1,3 @@
-# Deleting your account
-
 In **Settings**, tap the row with your account and pick **Delete account**.
 The app then asks what to do with the data on this device.
 

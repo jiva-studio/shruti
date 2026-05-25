@@ -1,5 +1,3 @@
-# Smart library
-
 Smart library keeps fresh lectures ready on your device and removes them
 once you finish listening. It does the work of two manual habits — adding
 new tracks and archiving the listened ones — in the background.

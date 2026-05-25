@@ -1,5 +1,3 @@
-# Notifications and reminders
-
 The app sends **one** local notification per day — a gentle reminder to keep
 up your practice. There are no marketing pushes, no server-side notifications,
 and no tracking.
