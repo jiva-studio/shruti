@@ -56,6 +56,67 @@ lectorium_share_video_tasks_by_state:
         usage: GAUGE
         description: "Number of share-video tasks in each state"
 
+# ── Subscription / RevenueCat ─────────────────────────────────────────
+# Three metrics covering the three things that can rot silently:
+#   - tier_count:     product signal — free/pro split. Drives the
+#                     conversion dashboard.
+#   - webhook_stuck:  operational signal — RC webhooks that hit our
+#                     handler but never reached processed_at past RC's
+#                     retry budget (~80 min). Phase-8 reconciler should
+#                     keep this near 0 within 6h of any stall.
+#   - tier_stale:     operational signal — users with rc_app_user_id set
+#                     but tier_updated_at older than 24h (or NULL).
+#                     Indicates the reconciler is falling behind or RC
+#                     /v1/subscribers is unreachable.
+
+# Per-tier user counts. Free vs pro is the headline funnel metric.
+lectorium_subscription_tier_count:
+  query: |
+    SELECT tier, count(*)::bigint AS count
+      FROM auth.users
+     GROUP BY tier
+  master: true
+  metrics:
+    - tier:
+        usage: LABEL
+        description: "Subscription tier — free | pro"
+    - count:
+        usage: GAUGE
+        description: "Number of auth.users rows in each tier"
+
+# Webhooks RC has delivered but our handler never marked processed.
+# >15 min old means RC has likely given up retrying (5 retries / 80 min).
+# Without the Phase-8 reconciler this would grow unbounded; with it,
+# steady-state should be 0.
+lectorium_rc_webhook_unprocessed_count:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM auth.rc_webhook_events
+     WHERE processed_at IS NULL
+       AND received_at < now() - interval '15 min'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "RC webhook events past their RC retry budget (>15 min) and still unprocessed"
+
+# Users whose subscription state is older than the reconciliation
+# threshold. Phase-8 reconciler should never let this grow past one or
+# two sweep windows (12-18h). Steady-state spike means the cron isn't
+# running or RC API is consistently failing.
+lectorium_subscription_tier_stale_count:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM auth.users
+     WHERE rc_app_user_id IS NOT NULL
+       AND (tier_updated_at IS NULL
+            OR tier_updated_at < now() - interval '24 hours')
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "Users with rc_app_user_id set but tier_updated_at >24h old or NULL"
+
 # Cleanup-worker outbox backlog. The Go worker LISTENs on the `outbox`
 # channel + sweeps every CLEANUP_SWEEP_INTERVAL (default 5m) and stamps
 # `processed_at` once side-effects (Langfuse purge, etc.) succeed. Anything
