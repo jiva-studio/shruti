@@ -158,6 +158,36 @@ describe("listeningSessionsRepository.sql", () => {
     expect(result.get(ITEM_B)).toBeNull()
   })
 
+  it("clearAll deletes every row", async () => {
+    // Two sessions across two items — both must vanish so that
+    // wipeLocalUserData leaves no trace in the activity heatmap or
+    // resume-position lookups.
+    await rawInsert(db, {
+      id: "a1",
+      itemId: ITEM_A,
+      startedAt: 100,
+      endedAt: 200,
+      fromPosition: 0,
+      toPosition: 100,
+    })
+    await rawInsert(db, {
+      id: "b1",
+      itemId: ITEM_B,
+      startedAt: 150,
+      endedAt: 250,
+      fromPosition: 0,
+      toPosition: 50,
+    })
+
+    const repo = createSqlListeningSessionRepository(db)
+    await repo.clearAll()
+
+    const rows = await db.query<{ c: number }>("SELECT COUNT(*) AS c FROM listening_sessions")
+    expect(rows[0].c).toBe(0)
+    expect(await repo.getLastSessionForItem(ITEM_A)).toBeNull()
+    expect(await repo.getTotalListenedSeconds()).toBe(0)
+  })
+
   it("getDailyTotals sums to_position - from_position grouped by local-date", async () => {
     // Two sessions on 2026-04-15 (uses now-ish unix seconds).
     const day1 = Math.floor(new Date("2026-04-15T10:00:00Z").getTime() / 1000)

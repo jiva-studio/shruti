@@ -50,7 +50,6 @@ export interface SettingsControllerReturn {
   languageItems: Ref<SelectorItem[]>
   /* Danger handlers */
   onClearCache: () => Promise<void>
-  onClearUserData: () => Promise<void>
   /* Data export/import handlers */
   onExportDatabase: () => Promise<void>
   onImportFileSelected: (file: File) => Promise<void>
@@ -129,7 +128,7 @@ export function useSettingsController(): SettingsControllerReturn {
     { immediate: true }
   )
 
-  const { onClearCache, onClearUserData } = useDangerActions(app)
+  const { onClearCache } = useDangerActions(app)
   const { onExportDatabase, onImportFileSelected } = useDataSettings(app)
 
   return {
@@ -155,7 +154,6 @@ export function useSettingsController(): SettingsControllerReturn {
     serverItems,
     languageItems,
     onClearCache,
-    onClearUserData,
     onExportDatabase,
     onImportFileSelected,
     subscription,

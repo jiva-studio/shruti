@@ -187,5 +187,10 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         positionSec: Number(r.position),
       }))
     },
+
+    async clearAll(): Promise<void> {
+      await db.execute("DELETE FROM listening_sessions")
+      await db.save()
+    },
   }
 }

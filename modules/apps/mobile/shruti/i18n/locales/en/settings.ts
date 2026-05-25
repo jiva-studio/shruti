@@ -238,17 +238,6 @@ export default {
       title: "Clear cache",
       description: "Removes downloaded transcripts",
     },
-    clearUserData: {
-      title: "Clear user data",
-      description: "Deletes all tracks, playlists, notes, bookmarks and chats",
-    },
-    confirmClearUserData: {
-      header: "Clear all user data?",
-      message:
-        "Notes, playlist, downloaded tracks, chats and search filters will be permanently deleted. This cannot be undone.",
-      cancel: "Cancel",
-      confirm: "Delete everything",
-    },
   },
 
   appVersion: "App version",
