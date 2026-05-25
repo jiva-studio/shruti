@@ -21,3 +21,12 @@ GRANT pg_monitor TO shruti_exporter;
 -- read public.tasks for share-video queue depth — pg_monitor does not
 -- cover user tables, so grant SELECT explicitly.
 GRANT SELECT ON public.tasks TO shruti_exporter;
+
+-- Same exporter also reads app.outbox to count rows the cleanup-worker
+-- has not stamped processed_at on yet (cleanup-worker stuck / Langfuse
+-- unreachable alarm). Needs USAGE on the schema in addition to SELECT
+-- on the table — app schema is created by migration 0023, not by this
+-- bootstrap, so existing prod volumes need both GRANTs applied manually
+-- (see observability-agent/README.md, "Existing prod volume" section).
+GRANT USAGE ON SCHEMA app TO shruti_exporter;
+GRANT SELECT ON app.outbox TO shruti_exporter;

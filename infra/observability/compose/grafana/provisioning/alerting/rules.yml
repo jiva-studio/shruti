@@ -564,6 +564,59 @@ groups:
     noDataState: OK
     execErrState: OK
 - orgId: 1
+  name: cleanup-worker
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  - uid: cleanup_worker_outbox_stuck
+    title: cleanup_worker_outbox_stuck
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: cleanup-worker
+    annotations:
+      summary: cleanup-worker has {{ $values.A }} outbox event(s) unprocessed for >1h
+      description: |
+        app.outbox rows with processed_at IS NULL and occurred_at older than
+        1 hour. Healthy steady-state is 0 — the worker LISTENs on the `outbox`
+        channel and also sweeps every CLEANUP_SWEEP_INTERVAL (default 5m), so
+        any backlog this old means it is wedged or Langfuse is unreachable.
+
+        Runbook:
+          1. ssh prod-eu 'docker logs --tail=200 shruti-cleanup-worker-1'
+             — look for repeated Langfuse 4xx/5xx or DB connection errors.
+          2. Probe Langfuse: curl -fsS https://langfuse.<domain>/api/public/health
+          3. If the worker is crash-looping, `docker compose restart cleanup-worker`
+             on the app host; outbox rows are idempotent so a restart is safe.
+          4. Backlog also visible via:
+             docker exec -i shruti-postgres-1 psql -U shruti -d shruti \
+               -c "SELECT id, event_type, occurred_at FROM app.outbox \
+                   WHERE processed_at IS NULL ORDER BY occurred_at LIMIT 20;"
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_outbox_unprocessed_count)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+- orgId: 1
   name: redis
   folder: Shruti-Alerts
   interval: 1m
