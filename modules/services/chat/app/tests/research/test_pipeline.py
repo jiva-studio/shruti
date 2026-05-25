@@ -510,6 +510,11 @@ async def test_on_event_emits_research_questions_short_path():
     by_id = {s["id"]: s for s in sources}
     assert by_id["verse:verse_BG_2_13"]["kind"] == "verse"
     assert by_id["library:doc_letter_42"]["kind"] == "library_doc"
+    # Issue #660: the pre-fetch source emission must NOT leak the raw
+    # target_id as the user-visible label. Use a kind-aware generic
+    # string until the DB round-trip surfaces the real addr_label.
+    assert by_id["verse:verse_BG_2_13"]["label"] == "verse"
+    assert by_id["library:doc_letter_42"]["label"] == "library document"
 
 
 @pytest.mark.asyncio

@@ -95,8 +95,14 @@ def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
 
 def _emit_source_for_ref(on_event: OnEvent | None, ref: "AttributionRef") -> None:
     """Emit one `research_source` event for an attribution ref BEFORE we
-    pull its chunks — gives the user immediate "now consulting BG 2.13"
-    feedback instead of waiting on the DB round-trip."""
+    pull its chunks — gives the user immediate "now consulting … " feedback
+    instead of waiting on the DB round-trip.
+
+    `target_id` is an opaque UUID (`verse_<uuid>` / a library doc id) — it
+    must NEVER be the user-visible label (issue #660). We have no addr_label
+    in scope yet (that's what the DB fetch is for), so emit a generic
+    kind-aware label here. The downstream chunk emission via
+    `_emit_research_source` carries the real addr_label once chunks load."""
     if on_event is None:
         return
     target_id = (ref.target_id or "").strip()
@@ -105,11 +111,13 @@ def _emit_source_for_ref(on_event: OnEvent | None, ref: "AttributionRef") -> Non
     if ref.ref_kind == "verse":
         kind = "verse"
         source_id = f"verse:{target_id}"
+        label = "verse"
     else:
         kind = "library_doc"
         source_id = f"library:{target_id}"
+        label = "library document"
     try:
-        on_event("research_source", {"kind": kind, "id": source_id, "label": target_id})
+        on_event("research_source", {"kind": kind, "id": source_id, "label": label})
     except Exception:  # noqa: BLE001
         log.warning("on_event_research_source_failed", target_id=target_id)
 

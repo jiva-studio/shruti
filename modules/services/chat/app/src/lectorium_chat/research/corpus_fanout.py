@@ -37,11 +37,35 @@ def _label_for_lecture_chunk(c: Any) -> str:
 
 
 def _label_for_library_chunk(c: Any) -> str:
-    addr = getattr(c, "addr_label", "") or ""
-    addr = addr.strip()
+    """Human-readable label for a library chunk's pill in the chat status.
+
+    Order of preference:
+      1. `addr_label` produced by the indexer (e.g. "BG 2.13",
+         "Letter to Brahmananda, 1972-10-04") — the canonical short form.
+      2. Compose `source_id + tokens` when addr_label was lost — same
+         pattern `_verse_addr` uses in the indexer, so e.g. a verse with
+         source_id="BG" and tokens="2.13" renders as "BG 2.13".
+      3. `doc_date` for letters with no source/tokens.
+      4. Generic kind-aware fallback ("verse" / "library document") —
+         NEVER the raw `item_id`. Raw UUID-like ids leaking into the
+         status pill is issue #660.
+    """
+    addr = (getattr(c, "addr_label", "") or "").strip()
     if addr:
         return addr
-    return getattr(c, "item_id", "") or "library"
+    source_id = (getattr(c, "source_id", "") or "").strip()
+    tokens = (getattr(c, "tokens", "") or "").strip()
+    if source_id and tokens:
+        return f"{source_id} {tokens}"
+    if source_id:
+        return source_id
+    doc_date = (getattr(c, "doc_date", "") or "").strip()
+    item_kind = (getattr(c, "item_kind", "") or "").strip()
+    if item_kind == "letter":
+        return f"Letter, {doc_date}" if doc_date else "Letter"
+    if item_kind == "verse":
+        return "verse"
+    return "library document"
 
 
 def _emit_research_source(on_event: OnEvent | None, r: "_RawScored") -> None:
