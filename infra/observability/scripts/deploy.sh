@@ -174,28 +174,25 @@ ssh_run "for i in \$(seq 1 60); do docker exec langfuse-web wget --spider -q htt
 # ──────────────────────────────────────────────────────────────────────
 # 8. Post-deploy hooks (idempotent infra-config re-asserts).
 #     See infra/observability/scripts/post-deploy/README.md for the contract.
+#     Hooks run ON THE HOST (already rsynced to $REMOTE_DIR/scripts/post-deploy)
+#     so paths like `compose/.env` and `docker exec shruti-observability-*-1`
+#     resolve against the deployed layout. Each is idempotent; failure halts.
 # ──────────────────────────────────────────────────────────────────────
-HOOKS_DIR="$UNIT/scripts/post-deploy"
-if [ -d "$HOOKS_DIR" ]; then
-  log "Running post-deploy hooks..."
-  # Hooks are sourced inside a subshell so they inherit the SSH_OPTS bash
-  # array (which doesn't survive env-export across a fresh `bash $hook`
-  # process) while still getting isolated exit-status semantics. SSH_TARGET /
-  # REMOTE_DIR / REGION / TG_* / GRAFANA_ADMIN_PASSWORD / CF_* are already
-  # in the environment (exported earlier by `set -a` and the deploy flow).
-  shopt -s nullglob
-  hooks=("$HOOKS_DIR"/[0-9]*.sh)
-  shopt -u nullglob
-  if [ "${#hooks[@]}" -eq 0 ]; then
-    log "  (none)"
-  else
-    for hook in "${hooks[@]}"; do
-      log "  • $(basename "$hook")"
-      ( source "$hook" )
+log "Running post-deploy hooks..."
+HOOKS=$(ssh_run "ls $REMOTE_DIR/scripts/post-deploy/[0-9]*.sh 2>/dev/null || true")
+if [ -z "$HOOKS" ]; then
+  log "  (none)"
+else
+  ssh_run "
+    set -e
+    for s in $REMOTE_DIR/scripts/post-deploy/[0-9]*.sh; do
+      [ -f \"\$s\" ] || continue
+      echo \"  • \$(basename \$s)\"
+      bash \"\$s\"
     done
-  fi
-  ok "Post-deploy hooks done"
+  "
 fi
+ok "Post-deploy hooks done"
 
 # ──────────────────────────────────────────────────────────────────────
 # 9. Report
