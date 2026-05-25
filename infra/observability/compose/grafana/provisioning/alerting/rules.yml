@@ -721,6 +721,272 @@ groups:
             - 0
     noDataState: OK
     execErrState: OK
+  - uid: rc_webhook_unprocessed_critical
+    title: rc_webhook_unprocessed_critical
+    condition: B
+    for: 1h
+    labels:
+      severity: P1
+      service: auth
+    annotations:
+      summary: auth has {{ $values.A }} RC webhook event(s) unprocessed for >1h (reconciler stalled)
+      description: |
+        Stronger variant of rc_webhook_stuck — the Phase-8 reconciler should
+        catch up backlogged webhook rows within one 6h sweep. If the count is
+        still non-zero after a full hour, the reconciler is wedged (not just
+        a single RC outage). Paging severity because every minute of delay
+        keeps real paid users on tier='free' in the limiter.
+
+        Runbook:
+          1. Same as rc_webhook_stuck (see below). Start with auth logs
+             grepping for `reconcile_tick_done` — if the tick has been silent
+             for >6h, the reconciler isn't running.
+          2. If the reconciler IS ticking but rows still aren't draining,
+             inspect per-row errors:
+               docker exec -i shruti-postgres-1 psql -U shruti \
+                 -d shruti -c "SELECT event_id, error, received_at \
+                   FROM auth.rc_webhook_events WHERE processed_at IS NULL \
+                   ORDER BY received_at LIMIT 20;"
+          3. Permanent errors (auth-fail from RC, malformed payload) will
+             never drain on their own — needs manual decision per row.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_rc_webhook_unprocessed_count)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  - uid: subscription_tier_stale_critical
+    title: subscription_tier_stale_critical
+    condition: B
+    for: 1h
+    labels:
+      severity: P1
+      service: auth
+    annotations:
+      summary: '{{ $values.A }} user(s) stuck on stale subscription_state >24h (reconciler stalled)'
+      description: |
+        Stronger variant of subscription_tier_stale — page when the stale-tier
+        count climbs above 5 AND stays elevated for a full hour. Threshold of
+        5 (not 0) absorbs the natural long-tail of users whose RC /v1/subscribers
+        call fails transiently; the hour-long window absorbs one full reconciler
+        sweep delay. If we're still here after that, the cron is genuinely
+        not catching up.
+
+        Runbook:
+          1. Same as subscription_tier_stale — confirm reconciler is ticking,
+             then look for per-user errors in logs.
+          2. If errors are concentrated on a small subset of users, inspect
+             whether their rc_app_user_id is malformed or 404s in RC.
+          3. If errors are corpus-wide, treat as RC outage / API-key issue
+             (see rc_api_auth_failed alert).
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_subscription_tier_stale_count)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 5
+    noDataState: OK
+    execErrState: OK
+  - uid: subscription_changed_silent
+    title: subscription_changed_silent
+    condition: B
+    for: 30m
+    labels:
+      severity: P2
+      service: auth
+    annotations:
+      summary: No subscription_changed events processed in 6h while Pro users exist
+      description: |
+        Silent-pipe detector. The cleanup-worker processes outbox row of type
+        `subscription.changed` whenever a tier flips — births, renewals, lapses,
+        cancellations. With a non-empty Pro cohort, the long-window rate over
+        6h should never literally be zero (renewal churn alone keeps it tickled).
+        A flat zero means either:
+          - the webhook pipe is dead end-to-end (RC → auth → outbox → worker), or
+          - all outbox writes are silently failing (DB constraint, NOTIFY drop), or
+          - the cleanup-worker subscription.changed handler is wedged.
+
+        Companion to rc_webhook_unprocessed_critical: that one fires on backlog,
+        this one fires on absence-of-traffic — which catches the case where
+        webhooks aren't even reaching us (RC dashboard misconfigured, secret
+        rotated without our knowledge, etc.).
+
+        Runbook:
+          1. Confirm RC is delivering: RC dashboard → Integrations → Webhooks
+             → Recent deliveries column.
+          2. If RC IS delivering, check auth ingress:
+               docker logs --tail=200 shruti-auth-1 | grep rc_webhook
+          3. If auth IS receiving but outbox is empty, the apply path is
+             dropping silently — look for `outbox_insert_failed` in auth logs.
+          4. If outbox has rows but worker isn't processing, see
+             cleanup_worker_outbox_stuck.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 21600
+        to: 0
+      model:
+        refId: A
+        expr: |
+          (sum(shruti_subscription_tier_count{tier="pro"}) > 0)
+          and on()
+          (sum(rate(subscription_changed_total[6h])) == 0)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  - uid: rc_webhook_unmatched_high
+    title: rc_webhook_unmatched_high
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: auth
+    annotations:
+      summary: '>1 RC webhook(s) failed to match a user in the last hour'
+      description: |
+        Counts webhook events that arrived before mobile got around to calling
+        Purchases.logIn — the rc_app_user_id link doesn't exist in auth.users
+        yet, so ApplyRCSubscriberState can't find a row to update. A trickle is
+        expected (the race window is real, ~seconds to ~minutes); >1 per hour
+        is elevated and suggests mobile-side logIn ordering broke or RC is
+        delivering events for app_user_ids we never see.
+
+        Tier 2 — typically self-heals because RC retries for ~80 min and the
+        Phase-8 reconciler picks up orphans. The alert exists so a sustained
+        unmatched rate (mobile build regression, identity-link bug) surfaces
+        within an hour instead of via support tickets.
+
+        Runbook:
+          1. Inspect representative unmatched rows:
+               docker exec -i shruti-postgres-1 psql -U shruti \
+                 -d shruti -c "SELECT event_id, error, received_at \
+                   FROM auth.rc_webhook_events \
+                   WHERE error LIKE '%no_rc_app_user_id_match%' \
+                   ORDER BY received_at DESC LIMIT 20;"
+          2. Pick a stuck app_user_id and check if it ever appears in auth.users:
+               psql ... "SELECT id, rc_app_user_id FROM auth.users \
+                 WHERE rc_app_user_id = '<...>';"
+             Empty result = mobile never called Purchases.logIn for this user.
+          3. If the cohort is large and recent, suspect a mobile release with
+             broken usePurchasesStore identity-tracking watcher.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 3600
+        to: 0
+      model:
+        refId: A
+        expr: sum(increase(shruti_rc_webhook_unmatched_total[1h]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 1
+    noDataState: OK
+    execErrState: OK
+  - uid: rc_api_auth_failed
+    title: rc_api_auth_failed
+    condition: B
+    for: 1m
+    labels:
+      severity: P1
+      service: auth
+    annotations:
+      summary: RC REST API returned 401/403 — API key invalid or revoked
+      description: |
+        rcclient classified at least one RC REST response as permanent auth
+        failure (401/403). Either RC_REST_API_KEY in auth's environment is
+        stale (rotated in dashboard, not pushed to prod) or revoked. Every
+        subsequent webhook refetch and every reconcile-cron sweep will hit
+        the same wall — Pro users will silently flip to tier='free' as their
+        cached state expires.
+
+        P1 because the blast radius is the entire paying cohort and there is
+        no automatic recovery: someone has to update the secret.
+
+        Runbook:
+          1. Confirm: docker logs --tail=50 shruti-auth-1 | grep rc_api_auth_failed
+          2. Test the current key:
+               curl -fsS -H "Authorization: Bearer ${RC_REST_API_KEY}" \
+                 https://api.revenuecat.com/v1/subscribers/<known-app-user-id>
+             401/403 → key dead, log in to RC dashboard and re-issue.
+          3. After rotating: update infra/app/compose docker-compose env,
+             redeploy auth, watch the counter stop incrementing.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: sum(rc_api_auth_failed_total)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
 - orgId: 1
   name: redis
   folder: Shruti-Alerts
@@ -788,6 +1054,114 @@ groups:
             type: gt
             params:
             - 1
+    noDataState: OK
+    execErrState: OK
+  - uid: redis_evictions_quota_leak
+    title: redis_evictions_quota_leak
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: redis
+    annotations:
+      summary: Redis evicting keys (any rate) — quota counters at risk of resetting
+      description: |
+        Chat rate-limiter counters live in Redis with `volatile-lru` eviction.
+        Once Redis starts evicting, those counters silently disappear mid-day
+        and users receive fresh budget for free. The existing redis_evictions
+        alert (P3, rate>1) catches sustained pressure; this one catches ANY
+        non-zero eviction over a 15-min window so we know the moment quota
+        integrity breaks, not after it's been happening for hours.
+
+        P2 because the immediate user-visible damage is small (some users get
+        bonus messages), but it's a sign Redis maxmemory is too small for
+        current traffic — left alone it escalates to redis_memory_critical.
+
+        Runbook:
+          1. Check current memory + maxmemory:
+               docker exec shruti-redis-1 redis-cli INFO memory | \
+                 grep -E "used_memory_human|maxmemory_human|maxmemory_policy"
+          2. Inspect what's filling Redis — quota: prefixes vs langfuse keys:
+               docker exec shruti-redis-1 redis-cli --scan --pattern 'quota:*' | wc -l
+               docker exec shruti-redis-1 redis-cli --scan --pattern 'bull:*' | wc -l
+          3. If quota: keys are a small share, bump maxmemory in
+             infra/app/compose/docker-compose.yml redis command.
+          4. If quota: keys dominate, suspects: TTL missing on a code path,
+             or daily key cardinality has outgrown the original budget.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 900
+        to: 0
+      model:
+        refId: A
+        expr: sum(rate(redis_evicted_keys_total[15m]))
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  - uid: redis_memory_critical
+    title: redis_memory_critical
+    condition: B
+    for: 5m
+    labels:
+      severity: P1
+      service: redis
+    annotations:
+      summary: Redis used / max >85% — eviction imminent
+      description: |
+        Paging variant of redis_memory_high. Triggered earlier (>85% vs >90%)
+        so we get a chance to react BEFORE the LRU evictor starts deleting
+        quota counters. The existing P2 redis_memory_high stays as a wider
+        net; this one wakes someone up.
+
+        P1 because once eviction starts:
+          - quota counters reset mid-day → unlimited free messages until cron
+          - langfuse worker queue (also in this Redis instance) drops jobs →
+            traces are lost
+        Both are silent, both are irreversible, both undermine product
+        guarantees we make to users.
+
+        Runbook:
+          1. Same diagnostic flow as redis_evictions_quota_leak:
+               docker exec shruti-redis-1 redis-cli INFO memory
+          2. Fast mitigation: bump `--maxmemory` in the redis container command
+             (infra/app/compose/docker-compose.yml) and `docker compose up -d redis`.
+             It's safe to grow online; shrinking requires forethought.
+          3. Root cause: post-mortem after the immediate fire. Likely candidates
+             are langfuse queue backlog or a code path inserting un-TTL'd keys.
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: redis_memory_used_bytes / on(instance) redis_memory_max_bytes
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0.85
     noDataState: OK
     execErrState: OK
 - orgId: 1
