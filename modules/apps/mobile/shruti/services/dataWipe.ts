@@ -1,10 +1,13 @@
 import type { Shruti } from "../shruti.js"
+import { useAutoDownloadFiltersStore } from "../stores/useAutoDownloadFiltersStore.js"
 import { useChatStore } from "../stores/useChatStore.js"
 import { useDownloadStore } from "../stores/useDownloadStore.js"
 import { useNotesStore } from "../stores/useNotesStore.js"
 import { usePlayerStore } from "../stores/usePlayerStore.js"
 import { usePlaylistStore } from "../stores/usePlaylistStore.js"
 import { useSearchFiltersStore } from "../stores/useSearchFiltersStore.js"
+
+const PLAYER_STOP_TIMEOUT_MS = 5000
 
 /**
  * Wipe every byte of local user state — notes, playlist, listening
@@ -34,9 +37,24 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   const notes = useNotesStore()
   const downloads = useDownloadStore()
   const searchFilters = useSearchFiltersStore()
+  const autoDownloadFilters = useAutoDownloadFiltersStore()
   const chat = useChatStore()
 
-  if (player.open) await player.stop()
+  // Bounded so a stalled audio engine (broken plugin state, native bug)
+  // can't trap the whole wipe — better to leave a ghost track row than
+  // to leave the user without a way to recover short of force-quitting.
+  if (player.open) {
+    try {
+      await Promise.race([
+        player.stop(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("player.stop timeout")), PLAYER_STOP_TIMEOUT_MS)
+        ),
+      ])
+    } catch (err) {
+      console.warn("[wipeLocalUserData] player.stop did not complete in 5s, continuing", err)
+    }
+  }
 
   // 1. On-disk wipe.
   await repos.notes.clearAll()
@@ -54,16 +72,19 @@ export async function wipeLocalUserData(app: Shruti): Promise<void> {
   await app.preferences.remove("search.filters.v3")
   // Legacy key from before #411; harmless if it doesn't exist.
   await app.preferences.remove("search.filters.v2")
+  await app.preferences.remove("autoDownload.filters.v1")
 
   // 2. In-memory Pinia caches that mirror the wiped repos.
   //    - playlist & notes: refresh re-reads the (now empty) repos.
   //    - downloads: drop the per-track state map and force a
   //      re-hydrate from the (now empty) media-items repo on next
   //      access.
-  //    - searchFilters: clear in-memory selection without re-writing
-  //      preferences (we just removed the key on disk).
+  //    - searchFilters / autoDownloadFilters: clear in-memory selection
+  //      without re-writing preferences (we just removed the keys on
+  //      disk); resetting `loaded` forces a re-hydrate on next access.
   //    - chat: already reset by chat.clearAll() above.
   await Promise.all([playlist.refresh(), notes.refresh()])
   downloads.reset()
   searchFilters.reset()
+  autoDownloadFilters.reset()
 }
