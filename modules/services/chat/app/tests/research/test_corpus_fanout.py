@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from shruti_chat.research.corpus_fanout import (
+    _label_for_library_chunk,
     fanout_search_with_boost,
     merge_fanout,
 )
@@ -247,6 +248,89 @@ async def test_boost_on_library_item_id():
     by_text = {env["text"]: env for env in res.chunks}
     assert by_text["BOOST"]["score"] == pytest.approx(0.70)
     assert by_text["BOOST"]["topic_boosted"] is True
+
+
+# ---- _label_for_library_chunk (issue #660) --------------------------------
+
+
+def test_label_uses_addr_label_when_present():
+    c = _LibChunk(
+        item_id="verse_abc", item_kind="verse", text="t", lang="ru",
+        addr_label="BG 2.13", source_id="BG", tokens="2.13",
+    )
+    assert _label_for_library_chunk(c) == "BG 2.13"
+
+
+def test_label_strips_whitespace_in_addr_label():
+    c = _LibChunk(
+        item_id="verse_abc", item_kind="verse", text="t", lang="ru",
+        addr_label="  BG 2.13  ", source_id="BG", tokens="2.13",
+    )
+    assert _label_for_library_chunk(c) == "BG 2.13"
+
+
+def test_label_composes_from_source_and_tokens_when_addr_label_empty():
+    """Issue #660: addr_label missing — must NOT fall back to `item_id`
+    (raw UUID like `verse_<uuid>`). Compose a short form from source+tokens."""
+    c = _LibChunk(
+        item_id="verse_abc-uuid", item_kind="verse", text="t", lang="ru",
+        addr_label="", source_id="BG", tokens="2.13",
+    )
+    assert _label_for_library_chunk(c) == "BG 2.13"
+    assert "verse_abc-uuid" not in _label_for_library_chunk(c)
+
+
+def test_label_composes_from_source_and_tokens_for_commentary():
+    c = _LibChunk(
+        item_id="doc_xyz-uuid", item_kind="commentary", text="t", lang="ru",
+        addr_label="", source_id="SB", tokens="1.1.1",
+    )
+    assert _label_for_library_chunk(c) == "SB 1.1.1"
+
+
+def test_label_falls_back_to_source_only():
+    c = _LibChunk(
+        item_id="doc_xyz", item_kind="prose_chapter", text="t", lang="ru",
+        addr_label="", source_id="NoI", tokens="",
+    )
+    assert _label_for_library_chunk(c) == "NoI"
+
+
+def test_label_letter_with_date_only():
+    c = _LibChunk(
+        item_id="doc_xyz", item_kind="letter", text="t", lang="en",
+        addr_label="", source_id="", tokens="", doc_date="1972-10-04",
+    )
+    assert _label_for_library_chunk(c) == "Letter, 1972-10-04"
+
+
+def test_label_letter_with_nothing():
+    c = _LibChunk(
+        item_id="doc_xyz", item_kind="letter", text="t", lang="en",
+        addr_label="", source_id="", tokens="",
+    )
+    assert _label_for_library_chunk(c) == "Letter"
+
+
+def test_label_generic_verse_fallback_when_metadata_missing():
+    """All metadata missing → generic localized label, NEVER `item_id`."""
+    c = _LibChunk(
+        item_id="verse_abc-uuid", item_kind="verse", text="t", lang="ru",
+        addr_label="", source_id="", tokens="",
+    )
+    label = _label_for_library_chunk(c)
+    assert label == "verse"
+    assert "verse_abc-uuid" not in label
+
+
+def test_label_generic_library_doc_fallback_when_metadata_missing():
+    c = _LibChunk(
+        item_id="doc_abc-uuid", item_kind="commentary", text="t", lang="ru",
+        addr_label="", source_id="", tokens="",
+    )
+    label = _label_for_library_chunk(c)
+    assert label == "library document"
+    assert "doc_abc-uuid" not in label
 
 
 def test_merge_fanout_dedupes_by_internal_key():
