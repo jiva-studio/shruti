@@ -15,7 +15,8 @@ import (
 // NewRouter wires every /auth/* endpoint.
 //
 // If svc is nil the router still serves /auth/healthz (boot probe before deps
-// are wired).
+// are wired). The RC webhook route is wired separately by AttachRCWebhook
+// — main.go enables it only when the secret + REST API key are configured.
 func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	r := chi.NewRouter()
 	r.Use(requestLogger)
@@ -40,6 +41,21 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 		r.Post("/auth/account/delete", h.deleteAccount)
 	})
 	return r
+}
+
+// AttachRCWebhook adds the RevenueCat webhook endpoint to an existing
+// router. Called from main.go after the secret + REST client are
+// resolved, so the route is only live when properly configured.
+//
+// The endpoint is intentionally outside /auth/* — it carries its own
+// Bearer auth (the secret from the RC dashboard), not a user JWT.
+func AttachRCWebhook(r http.Handler, h *RCWebhookHandler) http.Handler {
+	chiR, ok := r.(chi.Router)
+	if !ok {
+		return r
+	}
+	chiR.Post("/webhooks/revenuecat", h.ServeHTTP)
+	return chiR
 }
 
 // buildSHA / buildTime — populated by the image build (Dockerfile ARGs

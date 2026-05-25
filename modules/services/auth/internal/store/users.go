@@ -15,6 +15,14 @@ type User struct {
 	Name       *string
 	PictureURL *string
 	CreatedAt  time.Time
+	// Subscription state mirrored from RevenueCat. Defaults to "free" /
+	// nil for users who never had Pro. Updated by the webhook handler
+	// (Phase 2) and the reconciliation cron (Phase 8); the JWT signer
+	// reads `Tier` at session issuance and embeds it as a claim.
+	Tier            string
+	TierExpiresAt   *time.Time
+	TierUpdatedAt   *time.Time
+	RCAppUserID     *string
 }
 
 type UserRepo struct{ Pool *pgxpool.Pool }
@@ -30,15 +38,64 @@ func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
 
 func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 	row := r.Pool.QueryRow(ctx,
-		`SELECT id, name, picture_url, created_at FROM auth.users WHERE id = $1`, id)
+		`SELECT id, name, picture_url, created_at,
+		        tier, tier_expires_at, tier_updated_at, rc_app_user_id
+		   FROM auth.users WHERE id = $1`, id)
 	u := &User{}
-	if err := row.Scan(&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt); err != nil {
+	if err := row.Scan(
+		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
+		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
+	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
 	return u, nil
+}
+
+// SubscriptionSnapshot is the canonical subscription state derived
+// from a RevenueCat `GET /subscribers/{app_user_id}` response. Built
+// by the webhook handler and applied via UpsertSubscriptionState.
+type SubscriptionSnapshot struct {
+	AppUserID     string
+	Tier          string // "free" | "pro"
+	TierExpiresAt *time.Time
+}
+
+// UpsertSubscriptionState writes the subscription columns for the
+// user that owns the given rc_app_user_id. Returns (id, true) if a
+// row matched and was updated; (uuid.Nil, false) if no row matched
+// (webhook arrived before the client called Purchases.logIn — the
+// reconciliation cron will pick it up later).
+func (r *UserRepo) UpsertSubscriptionState(ctx context.Context, tx pgx.Tx, snap SubscriptionSnapshot) (uuid.UUID, bool, error) {
+	var id uuid.UUID
+	q := `UPDATE auth.users
+	         SET tier = $2,
+	             tier_expires_at = $3,
+	             tier_updated_at = now()
+	       WHERE rc_app_user_id = $1
+	   RETURNING id`
+	if err := selectRow(ctx, r.Pool, tx, q, snap.AppUserID, snap.Tier, snap.TierExpiresAt).Scan(&id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, false, nil
+		}
+		return uuid.Nil, false, err
+	}
+	return id, true, nil
+}
+
+// BindRCAppUserID associates a freshly-seen rc_app_user_id with our
+// auth.users row. Called by the webhook handler when it can resolve
+// the user via some other path (e.g. an existing rc_app_user_id is
+// re-asserted) but the column is currently NULL — preserves the
+// link for future events.
+func (r *UserRepo) BindRCAppUserID(ctx context.Context, tx pgx.Tx, userID uuid.UUID, appUserID string) error {
+	_, err := exec(ctx, r.Pool, tx,
+		`UPDATE auth.users SET rc_app_user_id = $2 WHERE id = $1 AND rc_app_user_id IS NULL`,
+		userID, appUserID,
+	)
+	return err
 }
 
 // SetNameIfEmpty writes name only when the existing column is NULL.

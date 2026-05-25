@@ -44,6 +44,7 @@ type Service struct {
 	Users            *store.UserRepo
 	Identities       *store.IdentityRepo
 	RefreshTokens    *store.RefreshTokenRepo
+	WebhookEvents    *store.WebhookEventRepo
 	Signer           *jwt.Signer
 	Verifier         *jwt.Verifier
 	GoogleVerifier   ProviderVerifier

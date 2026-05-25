@@ -72,6 +72,7 @@ func main() {
 	lf := observability.NewClientFromEnv()
 	reg := handlers.NewRegistry()
 	reg.Register("user.deleted", handlers.UserDeleted(lf))
+	reg.Register("subscription.changed", handlers.SubscriptionChanged())
 	slog.InfoContext(bootCtx, "handlers_registered",
 		slog.Any("event_types", reg.KnownEventTypes()),
 	)
