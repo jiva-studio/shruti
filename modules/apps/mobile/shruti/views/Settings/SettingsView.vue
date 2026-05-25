@@ -150,7 +150,14 @@ async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<voi
   } catch (e) {
     console.warn("[settings] delete account failed:", e)
     await toast.error(t("settings.account.deleteAccount.errorToast"))
+    return
   }
+  // RevenueCat ties the subscription to the device (App Store / Play
+  // account), not to the shruti account we just deleted. Surface
+  // that so a user who deletes hoping to cancel billing doesn't think
+  // they're done. Shown for both wipe and keep paths — the RC link
+  // outlives the shruti account either way.
+  await toast.info(t("settings.account.deleteAccount.subscriptionToast"))
 }
 
 function onSmartLibraryEntry(): void {
