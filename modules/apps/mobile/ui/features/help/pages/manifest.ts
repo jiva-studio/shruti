@@ -1,6 +1,7 @@
 import { markRaw, type Component } from "vue"
 
 import {
+  AnnotationIcon,
   BellIcon,
   BookIcon,
   DatabaseExportIcon,
@@ -9,6 +10,8 @@ import {
   IconPlay,
   IconRosetteDiscountCheckFilled,
   IconSettings,
+  MessageIcon,
+  TranscriptIcon,
   TrashIcon,
 } from "@ui/icons/index.js"
 
@@ -18,6 +21,12 @@ import sadhanaEn from "@docs/help/what-is-sadhana.en.md?raw"
 import sadhanaRu from "@docs/help/what-is-sadhana.ru.md?raw"
 import activityEn from "@docs/help/activity-tracker.en.md?raw"
 import activityRu from "@docs/help/activity-tracker.ru.md?raw"
+import chatAskSadhuEn from "@docs/help/chat-ask-sadhu.en.md?raw"
+import chatAskSadhuRu from "@docs/help/chat-ask-sadhu.ru.md?raw"
+import transcriptsEn from "@docs/help/transcripts.en.md?raw"
+import transcriptsRu from "@docs/help/transcripts.ru.md?raw"
+import notesEn from "@docs/help/notes.en.md?raw"
+import notesRu from "@docs/help/notes.ru.md?raw"
 import notificationsEn from "@docs/help/notifications.en.md?raw"
 import notificationsRu from "@docs/help/notifications.ru.md?raw"
 import playerControlsEn from "@docs/help/player-controls.en.md?raw"
@@ -34,6 +43,9 @@ import deleteAccountRu from "@docs/help/delete-account.ru.md?raw"
 export type HelpPageId =
   | "what-is-sadhana"
   | "activity-tracker"
+  | "chat-ask-sadhu"
+  | "transcripts"
+  | "notes"
   | "notifications"
   | "player-controls"
   | "indicators"
@@ -79,6 +91,34 @@ export const helpManifest: HelpCategory[] = [
         ru: sadhanaRu,
       },
       {
+        id: "chat-ask-sadhu",
+        type: "markdown",
+        icon: markRaw(MessageIcon),
+        en: chatAskSadhuEn,
+        ru: chatAskSadhuRu,
+      },
+      {
+        id: "player-controls",
+        type: "markdown",
+        icon: markRaw(IconPlay),
+        en: playerControlsEn,
+        ru: playerControlsRu,
+      },
+      {
+        id: "transcripts",
+        type: "markdown",
+        icon: markRaw(TranscriptIcon),
+        en: transcriptsEn,
+        ru: transcriptsRu,
+      },
+      {
+        id: "notes",
+        type: "markdown",
+        icon: markRaw(AnnotationIcon),
+        en: notesEn,
+        ru: notesRu,
+      },
+      {
         id: "activity-tracker",
         type: "markdown",
         icon: markRaw(FlameIcon),
@@ -91,13 +131,6 @@ export const helpManifest: HelpCategory[] = [
         icon: markRaw(BellIcon),
         en: notificationsEn,
         ru: notificationsRu,
-      },
-      {
-        id: "player-controls",
-        type: "markdown",
-        icon: markRaw(IconPlay),
-        en: playerControlsEn,
-        ru: playerControlsRu,
       },
       {
         id: "indicators",

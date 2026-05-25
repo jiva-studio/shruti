@@ -1,5 +1,3 @@
-# Player gestures and controls
-
 The floating player at the bottom of the screen is a 3-panel vertical
 carousel. Swipe up or down between panels to switch what the player
 exposes, tap the central play button to start or pause, and tap the

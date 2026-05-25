@@ -14,6 +14,22 @@ export default {
       title: "What is sadhana",
       summary: "Daily spiritual practice and how the app supports it",
     },
+    "chat-ask-sadhu": {
+      title: "Ask Sadhu",
+      summary: "AI assistant that searches the lectures and cites the source",
+    },
+    "player-controls": {
+      title: "Player gestures and controls",
+      summary: "Swipe between panels, playback speed, and stereo→mono balance",
+    },
+    transcripts: {
+      title: "Transcripts",
+      summary: "Read along, jump by sentence, and select fragments to save",
+    },
+    notes: {
+      title: "Notes",
+      summary: "Save passages from lectures, replay the excerpt, share or export",
+    },
     "activity-tracker": {
       title: "Activity tracker",
       summary: "Heatmap, day streak and total listening time",
@@ -21,10 +37,6 @@ export default {
     notifications: {
       title: "Notifications and reminders",
       summary: "Daily reminder, time, and system permissions",
-    },
-    "player-controls": {
-      title: "Player gestures and controls",
-      summary: "Swipe between panels, playback speed, and stereo→mono balance",
     },
     indicators: {
       title: "Track indicators",

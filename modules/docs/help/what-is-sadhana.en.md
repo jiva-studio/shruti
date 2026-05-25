@@ -1,5 +1,3 @@
-# What is sadhana
-
 **Sadhana** is the steady, daily spiritual practice that anchors a devotee's life.
 Listening to lectures from a spiritual master is one of the most accessible forms
 of sadhana: it does not require special conditions, can fit into a walk or the

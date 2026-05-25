@@ -1,5 +1,3 @@
-# Export and import
-
 Your **personal data** lives in a local database on the device. It is never
 sent to a server. To carry it between devices or keep a backup, the app
 supports export and import.
