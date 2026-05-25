@@ -111,6 +111,10 @@ export default {
       title: "Open help",
       description: "Indicators, settings and features explained",
     },
+    privacyPolicy: {
+      title: "Privacy Policy",
+      description: "What we collect, sub-processors, account deletion",
+    },
   },
 
   appLanguage: {
