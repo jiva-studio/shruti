@@ -202,8 +202,22 @@ export function useTranscriptDialogController(
         // which the card interprets as "fall back to static i18n").
         void chatStore.requestSuggestions(focusMessageId, focus)
         chatStore.requestInputFocus()
-        transcriptStore.close()
+        // Navigate FIRST, then close the modal (issue #662). The old
+        // order — close, then `await router.push` — let the modal-
+        // dismiss reactivity slip a frame in before the route swap
+        // resolved. If the user was already on the chat tab, that
+        // window was long enough for ChatView's route watcher to
+        // re-fire `ensureSessionFromRoute` against the stale `/tabs/
+        // chat` path (no `sessionId`), which called
+        // `store.startNewSession()` and wiped the active session the
+        // controller had just set up — leaving the user staring at
+        // the empty chat list instead of the per-track session.
+        // Awaiting the push first guarantees `route.params.sessionId`
+        // matches the freshly-created session before ChatView's
+        // watcher or onMounted reads it; the modal then dismisses
+        // over the already-correct chat view.
         await router.push({ name: "chat-session", params: { sessionId } })
+        transcriptStore.close()
       } catch (err) {
         console.warn("[transcript] ask-sadhu dispatch failed:", err)
         loader.error.value = err instanceof Error ? err.message : String(err)
