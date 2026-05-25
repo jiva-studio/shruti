@@ -406,6 +406,12 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 
 // ─── Account delete ─────────────────────────────────────────────────────────
 
+// ErrUserAlreadyDeleted is returned by DeleteAccount when the DELETE
+// affected zero rows — i.e. the user id is unknown OR a previous concurrent
+// delete already removed it. The handler maps this to 410 Gone so a client
+// double-tapping "Delete account" doesn't see a misleading 200.
+var ErrUserAlreadyDeleted = errors.New("user already deleted")
+
 // DeleteAccount removes the user and everything that hangs off them:
 //
 //   - auth.identities + auth.refresh_tokens go via ON DELETE CASCADE on the
@@ -418,9 +424,33 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 //     migration 0023_outbox enqueues a `user.deleted` row into app.outbox in
 //     the same transaction and pg_notify's the `outbox` channel; the
 //     cleanup-worker service consumes from there.
+//
+// Concurrency contract: BEFORE deleting auth.users we explicitly revoke all
+// of the user's refresh tokens with a single UPDATE. That UPDATE takes
+// row-level locks on every refresh_tokens row for the user. A concurrent
+// /auth/refresh sitting in LockAndRotate on one of those jtis will block
+// until our tx commits, then observe revoked_at != NULL and reject the
+// rotation. Without this step, MVCC could let the in-flight refresh see
+// the pre-cascade snapshot and issue a fresh token after the user row is
+// already gone — a stranded session that outlives its account.
 func (s *Service) DeleteAccount(ctx context.Context, userID uuid.UUID) error {
 	return pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		return s.Users.Delete(ctx, tx, userID)
+		if _, err := tx.Exec(ctx,
+			`UPDATE auth.refresh_tokens
+			    SET revoked_at = now()
+			  WHERE user_id = $1 AND revoked_at IS NULL`,
+			userID,
+		); err != nil {
+			return fmt.Errorf("revoke refresh tokens: %w", err)
+		}
+		rows, err := s.Users.Delete(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return ErrUserAlreadyDeleted
+		}
+		return nil
 	})
 }
 

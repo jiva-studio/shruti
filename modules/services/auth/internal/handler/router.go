@@ -5,12 +5,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
 	"github.com/akdasa-studios/lectorium/auth/internal/service"
 )
+
+// deleteAccountWindow is the cooldown between two /auth/account/delete
+// attempts from the same user. Set per the threat model: a normal user
+// triggers delete once; anything more is either a confused tap or a
+// stolen-token loop. 24h is enough to be safe even if the cleanup-worker
+// is mid-purge from the first hit.
+const deleteAccountWindow = 24 * time.Hour
 
 // NewRouter wires every /auth/* endpoint.
 //
@@ -28,6 +36,7 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	}
 
 	h := &authHandler{svc: svc, verifier: verifier}
+	deleteLimiter := newUserRateLimiter(deleteAccountWindow)
 
 	r.Post("/auth/anonymous", h.anonymous)
 	r.Post("/auth/signin/google", h.signinGoogle)
@@ -38,7 +47,14 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 		r.Use(requireBearer(verifier))
 		r.Post("/auth/signout", h.signout)
 		r.Get("/auth/me", h.me)
-		r.Post("/auth/account/delete", h.deleteAccount)
+
+		// Per-user throttle scoped to the delete endpoint only —
+		// signout/me are normal-frequency calls and must not pick up
+		// the 24h cooldown. The limiter records on entry, so an attempt
+		// that ultimately returns 204, 410 or 5xx all count: a stolen
+		// token can't spam the cleanup-worker by triggering errors.
+		r.With(rateLimitPerUser(deleteLimiter)).
+			Post("/auth/account/delete", h.deleteAccount)
 	})
 	return r
 }

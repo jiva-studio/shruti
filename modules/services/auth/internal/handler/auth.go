@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -165,6 +166,14 @@ func (h *authHandler) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.svc.DeleteAccount(r.Context(), uid); err != nil {
+		// Second concurrent / repeat call: the user row is already gone,
+		// so 410 Gone is the honest answer. The rate limiter blocks repeat
+		// hits in normal usage; this branch covers true races and stale
+		// Bearers that outlived a successful previous delete.
+		if errors.Is(err, service.ErrUserAlreadyDeleted) {
+			writeErr(w, http.StatusGone, "already_deleted", "account is already deleted")
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, "delete_failed", err.Error())
 		return
 	}
