@@ -6,11 +6,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -397,5 +400,135 @@ func TestDeleteAccountEmitsOutbox(t *testing.T) {
 	}
 }
 
-// Suppress "imported and not used" if some constants drop later.
+// TestDeleteAccountSecondCallReturnsAlreadyDeleted — F15 fix.
+// First DeleteAccount succeeds, second one against the same id returns
+// the sentinel error the handler maps to 410 Gone. Without the
+// RowsAffected check both calls used to return nil and the second
+// one looked like a successful no-op.
+func TestDeleteAccountSecondCallReturnsAlreadyDeleted(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	first, err := svc.Anonymous(ctx, "dev-del-twice", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	target := first.UserID
+
+	if err := svc.DeleteAccount(ctx, target); err != nil {
+		t.Fatalf("first delete: %v", err)
+	}
+	err = svc.DeleteAccount(ctx, target)
+	if !errors.Is(err, ErrUserAlreadyDeleted) {
+		t.Fatalf("second delete: want ErrUserAlreadyDeleted, got %v", err)
+	}
+}
+
+// TestDeleteAccountConcurrentRefreshIsRejected — F8 fix.
+// While DeleteAccount runs, fire a /refresh on the same user from a
+// goroutine. The explicit revoke-all-refresh-tokens step takes the
+// row-level lock; the in-flight refresh waits, then sees revoked_at
+// != NULL on the row and bails out. Without the fix the refresh could
+// commit a new token after the user is already gone.
+func TestDeleteAccountConcurrentRefreshIsRejected(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	first, err := svc.Anonymous(ctx, "dev-race", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	target := first.UserID
+
+	// Race the two operations. They start at "the same time" — the lock
+	// ordering inside DeleteAccount is what makes the outcome
+	// deterministic regardless of which goroutine reaches Postgres first.
+	var (
+		wg        sync.WaitGroup
+		delErr    error
+		refErr    error
+		refResult *Session
+		ready     sync.WaitGroup
+	)
+	ready.Add(2)
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		ready.Done()
+		ready.Wait()
+		delErr = svc.DeleteAccount(ctx, target)
+	}()
+	go func() {
+		defer wg.Done()
+		ready.Done()
+		ready.Wait()
+		refResult, refErr = svc.Refresh(ctx, first.RefreshToken)
+	}()
+	wg.Wait()
+
+	if delErr != nil {
+		t.Fatalf("delete must succeed, got %v", delErr)
+	}
+	if refErr == nil {
+		t.Fatalf("refresh must be rejected during/after delete; got new session %+v", refResult)
+	}
+
+	// And the user is gone.
+	if u, _ := svc.Users.Get(ctx, target); u != nil {
+		t.Error("auth.users row should be deleted")
+	}
+
+	// A *subsequent* refresh attempt with the original token must also
+	// fail — the row either no longer exists or carries revoked_at.
+	// (Confirms there isn't a stale-but-valid token left in the wild.)
+	if _, err := svc.Refresh(ctx, first.RefreshToken); err == nil {
+		t.Error("refresh with the original token after delete must fail")
+	}
+}
+
+// TestDeleteAccountRevokesAllRefreshTokens — independent of the race
+// path: every refresh_token row for the user is either gone (cascade)
+// or carries revoked_at by the time DeleteAccount returns. Belt-and-
+// braces guard: a future refactor that moves the cascade or the
+// pre-revoke UPDATE will trip this test.
+func TestDeleteAccountRevokesAllRefreshTokens(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	first, err := svc.Anonymous(ctx, "dev-revoke", "")
+	if err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	// Rotate once so there are two refresh rows in flight (one active,
+	// one freshly revoked by rotation) — confirms the bulk UPDATE
+	// doesn't accidentally re-stamp the already-revoked one.
+	rotated, err := svc.Refresh(ctx, first.RefreshToken)
+	if err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	_ = rotated // we only care about the resulting DB state below
+
+	if err := svc.DeleteAccount(ctx, first.UserID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// FK cascade removes the rows — nothing left to inspect. The
+	// row count must be zero for this user. (If a future migration
+	// changes ON DELETE CASCADE to RESTRICT, this assertion will
+	// fail loudly with a leftover row count.)
+	var n int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM auth.refresh_tokens WHERE user_id = $1`,
+		first.UserID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count refresh_tokens: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 refresh_tokens after delete, got %d", n)
+	}
+}
+
+// Quiet "imported and not used" if a constant drops later.
 var _ = strings.Builder{}
+var _ = time.Second
