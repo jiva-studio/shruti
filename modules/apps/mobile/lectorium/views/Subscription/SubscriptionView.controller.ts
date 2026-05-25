@@ -57,7 +57,7 @@ export function useSubscriptionViewController(): SubscriptionViewBinding {
   const slides = computed<SlideView[]>(() =>
     FEATURE_SLIDES.map((s: FeatureSlideDef) => ({
       key: s.key,
-      icon: t(`settings.subscription.benefits.${s.i18nKey}.icon`),
+      icon: s.icon,
       title: t(`settings.subscription.benefits.${s.i18nKey}.title`),
       description: t(`settings.subscription.benefits.${s.i18nKey}.description`),
       soon: s.soon,

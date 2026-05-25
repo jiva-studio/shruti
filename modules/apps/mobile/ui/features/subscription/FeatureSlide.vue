@@ -1,7 +1,7 @@
 <template>
   <div class="slide">
     <div class="slide-hero">
-      <div class="slide-icon">{{ icon }}</div>
+      <img class="slide-icon" :src="icon" :alt="title" />
       <div v-if="soon" class="slide-badge">{{ $t("app.soon") }}</div>
     </div>
     <div class="slide-body">
@@ -25,15 +25,16 @@ defineProps<{
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
+  gap: 20px;
   height: 100%;
-  padding: 16px 20px 32px;
+  padding: 16px 20px 24px;
   box-sizing: border-box;
 }
 
 .slide-hero {
   position: relative;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,8 +43,10 @@ defineProps<{
 }
 
 .slide-icon {
-  font-size: 4.5rem;
-  line-height: 1;
+  width: clamp(120px, 36vw, 200px);
+  max-height: 100%;
+  height: auto;
+  display: block;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08));
 }
 
