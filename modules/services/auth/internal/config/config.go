@@ -20,12 +20,18 @@ type Config struct {
 	JWTKid           string
 	GoogleClientIDs  []string
 	AppleBundleIDs   []string
-	// RCWebhookSecret is the Bearer value RevenueCat sends in the
-	// Authorization header of every webhook delivery (configured in
-	// the RC dashboard → Project → Webhooks). Empty means the handler
-	// rejects every request — required in any env that wires the
-	// webhook endpoint.
-	RCWebhookSecret string
+	// RCWebhookSecretPrimary / RCWebhookSecretSecondary are the Bearer
+	// values RevenueCat sends in the Authorization header of every webhook
+	// delivery (configured in the RC dashboard → Project → Webhooks). Two
+	// slots are accepted so secrets can be rotated without dropping
+	// deliveries — see runbooks/rc-webhook-secret-rotation.md. Both slots
+	// empty disables the webhook endpoint entirely.
+	//
+	// Legacy `RC_WEBHOOK_SECRET` (single-secret deployments pre-rotation)
+	// is still honoured: if neither PRIMARY nor SECONDARY is set, the
+	// legacy value populates PRIMARY at boot.
+	RCWebhookSecretPrimary   string
+	RCWebhookSecretSecondary string
 	// RCRestAPIKey is the RC project's public-side API key used to
 	// call `GET /v1/subscribers/{app_user_id}` after a webhook fires.
 	// We do this REST refetch instead of trusting webhook payload
@@ -50,13 +56,21 @@ func Load() (*Config, error) {
 		JWTKid:            env("JWT_KID", "v1"),
 		GoogleClientIDs:   splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
 		AppleBundleIDs:    splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
-		RCWebhookSecret:   os.Getenv("RC_WEBHOOK_SECRET"),
-		RCRestAPIKey:      os.Getenv("RC_REST_API_KEY"),
+		RCWebhookSecretPrimary:   os.Getenv("RC_WEBHOOK_SECRET_PRIMARY"),
+		RCWebhookSecretSecondary: os.Getenv("RC_WEBHOOK_SECRET_SECONDARY"),
+		RCRestAPIKey:             os.Getenv("RC_REST_API_KEY"),
 		Env:               env("ENV", "dev"),
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+	// Legacy single-secret deployments: promote RC_WEBHOOK_SECRET into the
+	// primary slot when neither rotation slot is wired. Anything that sets
+	// PRIMARY/SECONDARY wins — the new envs are the source of truth once
+	// rotation has happened.
+	if cfg.RCWebhookSecretPrimary == "" && cfg.RCWebhookSecretSecondary == "" {
+		cfg.RCWebhookSecretPrimary = os.Getenv("RC_WEBHOOK_SECRET")
 	}
 	return cfg, nil
 }

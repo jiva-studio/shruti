@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/akdasa-studios/shruti/auth/internal/jwt"
 	"github.com/akdasa-studios/shruti/auth/internal/service"
@@ -30,6 +31,11 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	r.Use(requestLogger)
 
 	r.Get("/auth/healthz", healthz)
+	// /metrics is on the same chi mux so observability scrapers don't need
+	// a second port. Currently exposes the default Go process collectors
+	// plus rc_webhook_auth_total (see rc_webhook.go); other services in the
+	// stack still scrape postgres-exporter for DB-derived metrics.
+	r.Handle("/metrics", promhttp.Handler())
 
 	if svc == nil {
 		return r
