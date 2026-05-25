@@ -21,4 +21,6 @@ export {
   IconHelpCircleFilled as HelpIcon,
   IconBookFilled as BookIcon,
   IconShieldFilled as ShieldIcon,
+  IconMessageFilled as MessageIcon,
+  IconArticleFilled as TranscriptIcon,
 } from "@tabler/icons-vue"

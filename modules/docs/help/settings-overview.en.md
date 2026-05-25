@@ -1,5 +1,3 @@
-# Settings overview
-
 The Settings screen is grouped by purpose. Here is what every group and item
 controls.
 

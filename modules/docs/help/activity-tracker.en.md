@@ -1,5 +1,3 @@
-# Activity tracker
-
 The activity tracker on the home screen turns your listening into a visible
 pattern. It can be hidden in **Settings → Sadhana → Activity tracker** if you
 do not want it on the home screen.
