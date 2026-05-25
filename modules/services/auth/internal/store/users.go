@@ -85,6 +85,47 @@ func (r *UserRepo) UpsertSubscriptionState(ctx context.Context, tx pgx.Tx, snap 
 	return id, true, nil
 }
 
+// StaleSubscriber is one (user_id, rc_app_user_id) row whose subscription
+// state is older than the reconciliation cron's threshold. The cron
+// re-fetches each from RC and applies the snapshot to catch up.
+type StaleSubscriber struct {
+	UserID      uuid.UUID
+	RCAppUserID string
+}
+
+// ListStaleSubscribers returns rows where `rc_app_user_id IS NOT NULL`
+// AND either `tier_updated_at IS NULL` (never synced) OR
+// `tier_updated_at < now() - staleAfter`. Used by the reconciliation
+// cron to catch users whose webhooks got dropped between RC's retry
+// budget and our backfill window.
+//
+// Bounded to `limit` rows per call — same rationale as
+// WebhookEventRepo.ListUnprocessedOlderThan.
+func (r *UserRepo) ListStaleSubscribers(ctx context.Context, staleAfter time.Duration, limit int) ([]StaleSubscriber, error) {
+	rows, err := r.Pool.Query(ctx,
+		`SELECT id, rc_app_user_id FROM auth.users
+		  WHERE rc_app_user_id IS NOT NULL
+		    AND (tier_updated_at IS NULL
+		         OR tier_updated_at < now() - ($1 || ' seconds')::interval)
+		  ORDER BY tier_updated_at NULLS FIRST
+		  LIMIT $2`,
+		int(staleAfter.Seconds()), limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]StaleSubscriber, 0, limit)
+	for rows.Next() {
+		var s StaleSubscriber
+		if err := rows.Scan(&s.UserID, &s.RCAppUserID); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // BindRCAppUserID associates a freshly-seen rc_app_user_id with our
 // auth.users row. Called by the webhook handler when it can resolve
 // the user via some other path (e.g. an existing rc_app_user_id is

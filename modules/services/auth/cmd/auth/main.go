@@ -23,6 +23,7 @@ import (
 	"github.com/akdasa-studios/shruti/auth/internal/providers/apple"
 	"github.com/akdasa-studios/shruti/auth/internal/providers/google"
 	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
+	"github.com/akdasa-studios/shruti/auth/internal/reconcile"
 	"github.com/akdasa-studios/shruti/auth/internal/service"
 	"github.com/akdasa-studios/shruti/auth/internal/store"
 )
@@ -91,13 +92,33 @@ func main() {
 	}
 
 	root := handler.NewRouter(svc, verifier)
+	// Reconciliation cron context — separate from the bootCtx (which has
+	// a 15s deadline) and from the HTTP shutdown ctx (which cancels last).
+	// Cancelled when the process catches SIGTERM/SIGINT.
+	reconcileCtx, reconcileCancel := context.WithCancel(context.Background())
+	defer reconcileCancel()
 	if cfg.RCWebhookSecret != "" && cfg.RCRestAPIKey != "" {
+		rc := rcclient.New(cfg.RCRestAPIKey)
 		root = handler.AttachRCWebhook(root, &handler.RCWebhookHandler{
 			Secret: cfg.RCWebhookSecret,
 			IsProd: cfg.Env == "prod",
 			Svc:    svc,
-			RC:     rcclient.New(cfg.RCRestAPIKey),
+			RC:     rc,
 		})
+		// Backfill cron — picks up users whose webhook got dropped past
+		// RC's 5-retry budget. Only wired when RC creds are configured;
+		// no point ticking without a way to call /subscribers.
+		reconciler := &reconcile.Reconciler{
+			Pool:  pool,
+			Users: svc.Users,
+			Svc:   svc,
+			RC:    rc,
+		}
+		go func() {
+			if err := reconciler.Run(reconcileCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("reconcile_loop_exited", "err", err.Error())
+			}
+		}()
 		slog.Info("rc_webhook_enabled")
 	} else {
 		slog.Info("rc_webhook_disabled", "reason", "RC_WEBHOOK_SECRET or RC_REST_API_KEY unset")
@@ -121,6 +142,10 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	slog.Info("shutdown_start")
+
+	// Tell the reconcile goroutine to bail before draining HTTP — the
+	// HTTP shutdown waits for in-flight handlers, the cron has none.
+	reconcileCancel()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
