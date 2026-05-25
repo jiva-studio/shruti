@@ -31,6 +31,28 @@ export default {
    *  far out the 429 `Retry-After` lands. */
   errRateAfter: "Too many requests. Try again {when}.",
   errNetwork: "Couldn't reach the chat service. Check your connection.",
+  /** Device-offline failure (navigator.onLine === false). Distinct from
+   *  `errNetwork` (server unreachable while online) and `errServiceNotReady`
+   *  (5xx) — the bubble auto-retries when the OS reports the connection
+   *  is back, so the CTA reads as automatic rather than manual. */
+  errOffline: {
+    title: "No internet",
+    body: "Will retry when you're back online.",
+    cta: "Retry (auto)",
+  },
+  /** Generic server-unreachable copy used for http_5xx responses, kept
+   *  separate from `errServiceNotReady` so we can iterate the warming-up
+   *  wording without affecting plain 5xx UX. */
+  errServer: {
+    title: "Couldn't reach server",
+    body: "Try again in a moment.",
+  },
+  /** Unknown-tier fallback. Shown when the server returns a 429 with a
+   *  tier value the client doesn't recognise (schema drift, typo,
+   *  enterprise tier added server-side before the mobile bump). Keeps
+   *  the user out of an "empty title + generic body" half-state. */
+  errQuotaUnknownTitle: "Rate limit",
+  errQuotaUnknownBody: "Daily limit reached, try later.",
   errServiceNotReady: "Chat service is warming up. Try again shortly.",
   /** Server-side exception inside the LLM loop (provider timeout, key
    *  expired, tool crash). Distinct from `errNetwork` — the connection
@@ -82,6 +104,12 @@ export default {
   // open. The textarea is disabled too, so this is purely informational.
   composeLimitedPlaceholder: "Limit resets at {time}",
   composeLimitedPlaceholderNoTime: "Daily limit reached — try again later",
+  /** aria-label set on the textarea + send button while the composer is
+   *  locked. Screen readers announce this in place of the rotating
+   *  placeholder copy, which they normally don't surface. `{time}` is the
+   *  same HH:MM the placeholder shows. */
+  composeLimitedAriaLabel: "Composing paused, daily limit resets at {time}",
+  composeLimitedAriaLabelNoTime: "Composing paused, daily limit reached",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
