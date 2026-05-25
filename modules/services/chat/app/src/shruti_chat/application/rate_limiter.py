@@ -95,6 +95,7 @@ class RateLimiter:
         *,
         scope: str = "chat",
         tier: str = "free",
+        quota_id: str = "",
     ) -> RateLimitResult:
         user_limit = self._user_limit_for(scope, anonymous, tier)
         ip_limit = self._ip_limit()
@@ -104,6 +105,11 @@ class RateLimiter:
         # "anonymous" is more informative than tier="free" when anonymous=True
         # — the UI picks different copy.
         echoed_tier = "anonymous" if anonymous else tier
+        # Per-user key: quota_id (stable across delete+recreate via the
+        # OAuth identity hash) when present; falls back to user_id for
+        # anonymous users (no OAuth identity yet) and for old in-flight
+        # tokens that lack the claim. See issue #626.
+        user_key = quota_id or user_id
 
         def reject(rec, key_type: str) -> RateLimitResult:
             log.warning(
@@ -123,7 +129,7 @@ class RateLimiter:
         # Pass 1: per-user (the primary cap, JWT-derived). If they're over,
         # don't also blow the IP counter — that would let a single bad
         # actor poison CGNAT peers' quota.
-        scoped_user_key = f"{scope}:user:{user_id}"
+        scoped_user_key = f"{scope}:user:{user_key}"
         rec = await self._store.increment(
             scoped_key=scoped_user_key, key_type="user", limit=user_limit, day=today,
         )

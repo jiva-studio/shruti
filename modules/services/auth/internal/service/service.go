@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/akdasa-studios/shruti/auth/internal/identityhash"
 	"github.com/akdasa-studios/shruti/auth/internal/jwt"
 	"github.com/akdasa-studios/shruti/auth/internal/providers"
 	"github.com/akdasa-studios/shruti/auth/internal/store"
@@ -281,13 +282,17 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 		if err != nil {
 			return fmt.Errorf("load tier: %w", err)
 		}
+		quotaID, err := s.loadQuotaID(ctx, row.UserID)
+		if err != nil {
+			return fmt.Errorf("load quota_id: %w", err)
+		}
 
-		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, AccessTTL, uuid.Nil)
+		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, AccessTTL, uuid.Nil)
 		if err != nil {
 			return err
 		}
 		newJTI := uuid.New()
-		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, RefreshTTL, newJTI)
+		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, RefreshTTL, newJTI)
 		if err != nil {
 			return err
 		}
@@ -485,18 +490,34 @@ func (s *Service) loadTier(ctx context.Context, userID uuid.UUID) (string, error
 	return u.Tier, nil
 }
 
+// loadQuotaID derives the rate-limit key for `userID`. See
+// internal/identityhash for the algorithm. Empty string for anonymous
+// users (only device-provider identities) — the chat-side limiter
+// falls back to JWT `sub` in that case.
+func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, error) {
+	idents, err := s.Identities.ListForUser(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	return identityhash.Compute(idents), nil
+}
+
 // issueSession mints fresh access + refresh and persists the refresh row.
 func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous bool, deviceID string) (*Session, error) {
 	tier, err := s.loadTier(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("load tier: %w", err)
 	}
-	access, _, err := s.Signer.Issue(userID, anonymous, tier, AccessTTL, uuid.Nil)
+	quotaID, err := s.loadQuotaID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load quota_id: %w", err)
+	}
+	access, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, AccessTTL, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
 	newJTI := uuid.New()
-	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, RefreshTTL, newJTI)
+	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, RefreshTTL, newJTI)
 	if err != nil {
 		return nil, err
 	}

@@ -34,6 +34,13 @@ class VerifiedUser:
     # Tokens minted before Phase 3 lack the claim entirely; verify() maps
     # missing/blank to "free" so the rate-limiter degrades safely.
     tier: str = "free"
+    # Stable per-OAuth-identity hash auth derives from the user's earliest
+    # non-device identity (sha256(provider:subject)). Used as the rate-limit
+    # key for authed users so a delete+recreate cycle doesn't refresh
+    # today's quota — see issue #626. Empty string for anonymous users
+    # (no OAuth identity yet) and for old in-flight tokens; the limiter
+    # falls back to `sub` in that case.
+    quota_id: str = ""
 
 
 class JwtVerifyError(Exception):
@@ -105,4 +112,10 @@ class JwtVerifier:
         # if somehow absent is the safe choice (lowest quota).
         anon_raw = claims.get("anonymous", True)
         tier_raw = claims.get("tier") or "free"
-        return VerifiedUser(id=sub, anonymous=bool(anon_raw), tier=str(tier_raw))
+        quota_id_raw = claims.get("quota_id") or ""
+        return VerifiedUser(
+            id=sub,
+            anonymous=bool(anon_raw),
+            tier=str(tier_raw),
+            quota_id=str(quota_id_raw),
+        )

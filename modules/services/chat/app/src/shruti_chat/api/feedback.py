@@ -84,7 +84,7 @@ async def post_feedback(
 ) -> FeedbackOut:
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="feedback", tier=user.tier,
+        user.id, user.anonymous, ip, scope="feedback", tier=user.tier, quota_id=user.quota_id,
     )
     if not rl.allowed:
         raise_429(rl, scope="feedback")

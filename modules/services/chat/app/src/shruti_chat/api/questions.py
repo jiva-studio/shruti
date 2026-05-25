@@ -180,20 +180,11 @@ async def questions(
     # could fire one per selection drag.
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="questions",
+        user.id, user.anonymous, ip,
+        scope="questions", tier=user.tier, quota_id=user.quota_id,
     )
     if not rl.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": rl.code,
-                "limit": rl.limit,
-                "current": rl.current,
-                "key_type": rl.key_type,
-                "scope": "questions",
-            },
-            headers={"Retry-After": str(rl.retry_after or 60)},
-        )
+        raise_429(rl, scope="questions")
 
     sys_msg = _SYSTEM.get(body.lang, _SYSTEM["en"])
     user_msg = _format_user_prompt(body.focus, body.lang)
