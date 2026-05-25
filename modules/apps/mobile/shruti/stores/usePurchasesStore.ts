@@ -1,8 +1,9 @@
 import { defineStore } from "pinia"
-import { computed, ref } from "vue"
+import { computed, ref, watch, type WatchStopHandle } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useShruti } from "@shruti/shruti.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
+import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 
 /**
  * Reactive view over RevenueCat. State here is derived live from the
@@ -23,6 +24,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const ready = ref(false)
   let unsubscribe: (() => void) | undefined
   let resumeHandle: { remove(): Promise<void> } | undefined
+  let stopAuthWatch: WatchStopHandle | undefined
 
   const available = computed(() => useShruti().purchases.available)
   // Dev-build override: treat every dev build as Pro so we can test
@@ -80,6 +82,39 @@ export const usePurchasesStore = defineStore("purchases", () => {
       resumeHandle = await App.addListener("appStateChange", (state: AppState) => {
         if (state.isActive) void refresh()
       })
+
+      // Bind RC's appUserID to our JWT `sub`. With `immediate: true` the
+      // watcher fires once at registration: if auth has already restored
+      // (race-y, auth.restore runs in parallel with this init), we logIn
+      // straight away; otherwise the first non-null userId wins. Every
+      // subsequent sign-in / sign-out / deleteAccount funnels through
+      // useAuthStore.applySession(...), so this single watcher covers
+      // all auth transitions. RC will emit SUBSCRIBER_ALIAS on the
+      // anon→authed transition so the backend can reconcile any
+      // purchases the user made while anonymous.
+      const auth = useAuthStore()
+      stopAuthWatch = watch(
+        () => auth.userId,
+        (newId, oldId) => {
+          if (newId && newId !== oldId) {
+            void purchases
+              .logIn(newId)
+              .then(applyState)
+              .catch((e) => {
+                console.warn("[purchases] logIn failed", e)
+              })
+          } else if (!newId && oldId) {
+            void purchases
+              .logOut()
+              .then(applyState)
+              .catch((e) => {
+                console.warn("[purchases] logOut failed", e)
+              })
+          }
+        },
+        { immediate: true }
+      )
+
       ready.value = true
     } finally {
       loading.value = false
@@ -115,6 +150,8 @@ export const usePurchasesStore = defineStore("purchases", () => {
     unsubscribe = undefined
     void resumeHandle?.remove()
     resumeHandle = undefined
+    stopAuthWatch?.()
+    stopAuthWatch = undefined
     ready.value = false
   }
 
