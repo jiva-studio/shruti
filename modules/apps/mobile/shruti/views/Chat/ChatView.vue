@@ -122,6 +122,7 @@ const {
   onDeleteSession,
   onDeleteAllSessions,
   onPickChapter,
+  onPickSuggestion,
   onRetry,
 } = useChatController()
 
@@ -130,10 +131,6 @@ watch(inputFocusToken, () => {
   // so the user can type immediately after the Ask-Sadhu navigation.
   inputBarRef.value?.focus()
 })
-
-function onPickSuggestion(text: string): void {
-  inputBarRef.value?.setText(text)
-}
 
 const headerTitle = computed<string>(() => {
   const active = sessions.value.find((s) => s.id === activeSessionId.value)
