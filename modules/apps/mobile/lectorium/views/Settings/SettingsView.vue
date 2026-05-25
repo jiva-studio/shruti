@@ -6,11 +6,9 @@
       :email="auth.email"
       :name="auth.name"
       :picture="auth.picture"
-      :platform="platform"
       :is-subscribed="subscription.isSubscribed"
       :server-items="serverItems"
-      @sign-in-google="auth.signInGoogle"
-      @sign-in-apple="auth.signInApple"
+      @sign-in-anonymous="triggerSignIn"
       @sign-out="auth.signOut"
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
@@ -94,8 +92,8 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
+import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
-import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@lectorium/services/useToast.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
@@ -104,7 +102,6 @@ const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
 const purchases = usePurchasesStore()
-const platform = useLectorium().platform
 const i18n = useI18n()
 const { t } = i18n
 const toast = useToast()
@@ -136,6 +133,7 @@ const {
 
 const debugTrigger = useDebugUnlockTrigger()
 const debugUnlocked = debugTrigger.unlocked
+const { triggerSignIn } = useAnonymousSignInFlow()
 
 const helpOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)

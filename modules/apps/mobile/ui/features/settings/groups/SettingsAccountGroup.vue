@@ -104,15 +104,17 @@ const props = defineProps<{
   email: string | null
   name: string | null
   picture: string | null
-  /** Capacitor platform — drives whether the Apple option shows up. */
-  platform: "ios" | "android" | "web"
   isSubscribed: boolean
   serverItems: SelectorItem[]
 }>()
 
 const emit = defineEmits<{
-  "sign-in-google": []
-  "sign-in-apple": []
+  /**
+   * Anonymous user tapped the row. Parent (composition root) routes
+   * this through the shared `useAnonymousSignInFlow` composable so the
+   * chat limit banner and this row hit the exact same provider flow.
+   */
+  "sign-in-anonymous": []
   "sign-out": []
   "open-paywall": []
   "manage-subscription": []
@@ -136,25 +138,17 @@ const initials = computed(() => {
   return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase()
 })
 
-const sheetButtons = computed(() => {
-  if (props.anonymous) {
-    // iOS surfaces Apple first by platform convention. Android skips the
-    // sheet entirely — see onItemClick.
-    const apple = { text: t("settings.account.signInWithApple"), handler: handleApple }
-    const google = { text: t("settings.account.signInWithGoogle"), handler: handleGoogle }
-    const cancel = { text: t("app.cancel"), role: "cancel" as const }
-    return props.platform === "ios" ? [apple, google, cancel] : [google, cancel]
-  }
-  return [
-    { text: t("settings.account.signOut"), role: "destructive" as const, handler: handleSignOut },
-    {
-      text: t("settings.account.deleteAccount.title"),
-      role: "destructive" as const,
-      handler: handleDeleteAccount,
-    },
-    { text: t("app.cancel"), role: "cancel" as const },
-  ]
-})
+// Signed-in-only sheet. The anonymous branch presents its own sheet
+// imperatively via the composable.
+const sheetButtons = computed(() => [
+  { text: t("settings.account.signOut"), role: "destructive" as const, handler: handleSignOut },
+  {
+    text: t("settings.account.deleteAccount.title"),
+    role: "destructive" as const,
+    handler: handleDeleteAccount,
+  },
+  { text: t("app.cancel"), role: "cancel" as const },
+])
 
 // Both delete options are irreversible, so both get the destructive role —
 // Ionic paints both red, which matches their weight. withBusy() gates the
@@ -176,15 +170,11 @@ const deleteSheetButtons = computed(() => [
 
 function onItemClick(): void {
   if (busy.value) return
-  // Only iOS has a real choice (Apple + Google). Android and web both
-  // come down to Google-only — skip the one-option sheet and trigger it
-  // directly. Same for the signed-in case there's no point either, but
-  // logout always benefits from the confirm tap, so we keep the sheet
-  // for signed-in regardless of platform.
-  if (props.anonymous && props.platform !== "ios") {
-    handleGoogle()
+  if (props.anonymous) {
+    withBusy(() => emit("sign-in-anonymous"))
     return
   }
+  // Signed-in users always see the sheet (sign-out / delete confirm).
   sheetOpen.value = true
 }
 
@@ -198,12 +188,6 @@ function withBusy(fn: () => void): void {
   }
 }
 
-function handleGoogle(): void {
-  withBusy(() => emit("sign-in-google"))
-}
-function handleApple(): void {
-  withBusy(() => emit("sign-in-apple"))
-}
 function handleSignOut(): void {
   withBusy(() => emit("sign-out"))
 }
