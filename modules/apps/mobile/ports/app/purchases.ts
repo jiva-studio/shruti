@@ -54,5 +54,17 @@ export interface IPurchases {
   getCustomerState(): Promise<CustomerState>
   purchase(packageId: string): Promise<CustomerState>
   restore(): Promise<CustomerState>
+  /**
+   * Bind the install to a stable app user id (our JWT `sub`). RC will
+   * alias the current anonymous `$RCAnonymousID:…` to the new id and
+   * emit a `SUBSCRIBER_ALIAS` webhook so the server can reconcile
+   * pre-login purchases to the now-signed-in account.
+   */
+  logIn(appUserId: string): Promise<CustomerState>
+  /**
+   * Drop the install back to an anonymous id. Called when the user
+   * signs out; subsequent purchases are scoped to a fresh anon id.
+   */
+  logOut(): Promise<CustomerState>
   onCustomerInfoChanged(listener: CustomerInfoListener): () => void
 }

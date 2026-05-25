@@ -115,6 +115,22 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
       return await toCustomerState(result.customerInfo)
     },
 
+    async logIn(appUserId: string) {
+      if (!available) return EMPTY_STATE
+      await ensureConfigured()
+      const result = await Purchases.logIn({ appUserID: appUserId })
+      console.log("[purchases] logIn", `appUserId=${appUserId}`, `created=${result.created}`)
+      return await toCustomerState(result.customerInfo)
+    },
+
+    async logOut() {
+      if (!available) return EMPTY_STATE
+      await ensureConfigured()
+      const result = await Purchases.logOut()
+      console.log("[purchases] logOut")
+      return await toCustomerState(result.customerInfo)
+    },
+
     onCustomerInfoChanged(listener: CustomerInfoListener) {
       if (!available) return NOOP_UNSUB
       const handlePromise = Purchases.addCustomerInfoUpdateListener((info) => {
