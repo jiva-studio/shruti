@@ -228,12 +228,7 @@ services:
       - ${SHRUTI_ENV_FILE:-../../../.env}
     environment:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
-      # Langfuse REST endpoints used by the user.deleted handler. Empty
-      # host turns the purge into a logged no-op (useful when running
-      # the stack without Langfuse for dev/staging).
-      LANGFUSE_HOST: ${SHRUTI_LANGFUSE_HOST:-}
-      LANGFUSE_PUBLIC_KEY: ${SHRUTI_LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${SHRUTI_LANGFUSE_SECRET_KEY:-}
+      # LANGFUSE_HOST / PUBLIC_KEY / SECRET_KEY come from env_file (.env), same as chat.
       CLEANUP_SWEEP_INTERVAL: ${SHRUTI_CLEANUP_SWEEP_INTERVAL:-5m}
       PORT: "8090"
       ENV: ${SHRUTI_ENV:-dev}
