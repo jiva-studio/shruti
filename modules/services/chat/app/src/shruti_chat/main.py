@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from shruti_chat.agent import llm
 from shruti_chat.agent.tools import bind_repositories
@@ -256,6 +257,21 @@ app.add_middleware(
     ],
     expose_headers=["Retry-After"],
     max_age=86400,
+)
+
+# X-Forwarded-For trust. Caddy sits in front of us on the docker bridge
+# network and always sets XFF; without this middleware every request
+# would log/rate-limit against the proxy's bridge IP instead of the real
+# client IP, collapsing the per-IP defence into one shared bucket. The
+# trusted CIDR list is locked to RFC1918 docker ranges by default, so an
+# attacker who reaches the service from outside the cluster can't spoof
+# their source by injecting the header directly. Added LAST so it wraps
+# CORS and is the OUTERMOST middleware — by the time CORS / route
+# handlers / structlog `bind_contextvars(ip=...)` read `request.client`,
+# the rewrite has already happened.
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=get_settings().trusted_proxy_cidrs,
 )
 
 app.include_router(chat.router)

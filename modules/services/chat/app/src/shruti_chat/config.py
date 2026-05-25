@@ -7,10 +7,10 @@ unused providers stay inert because their keys are empty.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -141,6 +141,31 @@ class Settings(BaseSettings):
     # production override pins to the real app origin via env
     # (CORS_ALLOW_ORIGINS=https://app.shruti.example,ionic://localhost).
     cors_allow_origins: str = "*"
+
+    # ── Trusted proxy ───────────────────────────────────────────────────
+    # Source IPs / CIDRs whose `X-Forwarded-For` header we honour when
+    # rewriting `request.client.host`. Anything outside this list keeps
+    # the raw peer IP, so an attacker can't spoof their source by
+    # injecting the header directly. Defaults cover the RFC1918 docker
+    # private ranges — Caddy sits in the same compose network and
+    # reaches us via the bridge gateway, which is always inside one of
+    # these. Override via env (comma-separated) when fronting from a
+    # different proxy topology.
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"],
+    )
+
+    @field_validator("trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def _split_trusted_proxy_cidrs(cls, value):
+        """Accept the env-var form (comma-separated string) and trim entries.
+
+        pydantic-settings parses `TRUSTED_PROXY_CIDRS=10.0.0.0/8,192.168.0.0/16`
+        as a single string; without this validator the default list would
+        be replaced by `["10.0.0.0/8,192.168.0.0/16"]` (one bad entry)."""
+        if isinstance(value, str):
+            return [s.strip() for s in value.split(",") if s.strip()]
+        return value
 
     # ── Derived helpers ────────────────────────────────────────────────
     @property
