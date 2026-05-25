@@ -172,7 +172,33 @@ ssh_run "for i in \$(seq 1 60); do docker exec langfuse-web wget --spider -q htt
   && ok "langfuse-web healthy" || warn "langfuse-web not yet healthy (ClickHouse migration may still be running)"
 
 # ──────────────────────────────────────────────────────────────────────
-# 8. Report
+# 8. Post-deploy hooks (idempotent infra-config re-asserts).
+#     See infra/observability/scripts/post-deploy/README.md for the contract.
+# ──────────────────────────────────────────────────────────────────────
+HOOKS_DIR="$UNIT/scripts/post-deploy"
+if [ -d "$HOOKS_DIR" ]; then
+  log "Running post-deploy hooks..."
+  # Hooks are sourced inside a subshell so they inherit the SSH_OPTS bash
+  # array (which doesn't survive env-export across a fresh `bash $hook`
+  # process) while still getting isolated exit-status semantics. SSH_TARGET /
+  # REMOTE_DIR / REGION / TG_* / GRAFANA_ADMIN_PASSWORD / CF_* are already
+  # in the environment (exported earlier by `set -a` and the deploy flow).
+  shopt -s nullglob
+  hooks=("$HOOKS_DIR"/[0-9]*.sh)
+  shopt -u nullglob
+  if [ "${#hooks[@]}" -eq 0 ]; then
+    log "  (none)"
+  else
+    for hook in "${hooks[@]}"; do
+      log "  • $(basename "$hook")"
+      ( source "$hook" )
+    done
+  fi
+  ok "Post-deploy hooks done"
+fi
+
+# ──────────────────────────────────────────────────────────────────────
+# 9. Report
 # ──────────────────────────────────────────────────────────────────────
 report_urls "Observability stack deployed ($REGION)" \
   "https://grafana.${TAILNET_DOMAIN}" \
@@ -184,8 +210,11 @@ report_urls "Observability stack deployed ($REGION)" \
 cat <<NEXT
 
 Next steps:
-  1. Run ./scripts/configure.sh --region $REGION to bootstrap DNS, the
-     Langfuse project, and the Grafana Telegram contact point.
+  1. On a brand-new host: run ./scripts/configure.sh --region $REGION
+     to bootstrap Cloudflare DNS, materialise Langfuse API keys for the
+     chat service, and run the 10-point smoke verification. Recurring
+     config (Langfuse TTL, Grafana contact-point re-check) is now applied
+     automatically by post-deploy hooks on every deploy.
   2. Then deploy the observability-agent unit on prod-EU so metrics and
      logs start flowing.
 NEXT
