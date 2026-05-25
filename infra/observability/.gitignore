@@ -18,3 +18,4 @@ compose/.env
 # Misc local
 *.local.env
 *.bak
+compose/grafana/provisioning/alerting/contact-points.yml
