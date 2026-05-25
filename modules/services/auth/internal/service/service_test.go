@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
@@ -341,20 +340,18 @@ func TestAnonymousReturnsExistingSessionForSignedInBearer(t *testing.T) {
 	}
 }
 
-// TestDeleteAccountWipesUsageAndEmitsOutbox covers the three observable
-// effects of DeleteAccount in one go:
+// TestDeleteAccountEmitsOutbox covers the two observable effects of
+// DeleteAccount in one go:
 //
 //  1. the auth.users row (and its FK-cascaded identities / refresh_tokens)
 //     is gone;
-//  2. every `usage` row keyed `<scope>:user:<deleted_uuid>` is gone, while a
-//     bystander user's row survives;
-//  3. an app.outbox row appears with event_type='user.deleted' and
+//  2. an app.outbox row appears with event_type='user.deleted' and
 //     aggregate_id=<deleted_uuid>, courtesy of the AFTER DELETE trigger
 //     installed by migration 0023_outbox.
 //
-// The trigger also pg_notify's the `outbox` channel — that part is verified
-// by the cleanup-worker integration suite (sister PR), not here.
-func TestDeleteAccountWipesUsageAndEmitsOutbox(t *testing.T) {
+// Rate-limit counters live in Redis with day-bucketed TTL; the cleanup-worker
+// integration suite (sister PR) covers downstream cleanup.
+func TestDeleteAccountEmitsOutbox(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := context.Background()
 
@@ -363,23 +360,6 @@ func TestDeleteAccountWipesUsageAndEmitsOutbox(t *testing.T) {
 		t.Fatalf("anon: %v", err)
 	}
 	target := first.UserID
-
-	// Seed: two scopes for the target user + one row for an innocent user
-	// that must NOT be touched.
-	other := uuid.New()
-	rows := [][2]string{
-		{"chat:user:" + target.String(), "5"},
-		{"title:user:" + target.String(), "2"},
-		{"chat:user:" + other.String(), "9"},
-	}
-	for _, r := range rows {
-		if _, err := svc.Pool.Exec(ctx,
-			`INSERT INTO usage(key, day, count) VALUES ($1, CURRENT_DATE, $2)`,
-			r[0], r[1],
-		); err != nil {
-			t.Fatalf("seed %s: %v", r[0], err)
-		}
-	}
 
 	if err := svc.DeleteAccount(ctx, target); err != nil {
 		t.Fatalf("delete: %v", err)
@@ -390,26 +370,7 @@ func TestDeleteAccountWipesUsageAndEmitsOutbox(t *testing.T) {
 		t.Error("auth.users row should be deleted")
 	}
 
-	// (2) target usage rows gone; bystander survives.
-	var nTarget, nOther int
-	if err := svc.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM usage WHERE key LIKE '%:user:' || $1`, target.String(),
-	).Scan(&nTarget); err != nil {
-		t.Fatalf("count target usage: %v", err)
-	}
-	if nTarget != 0 {
-		t.Errorf("expected 0 usage rows for deleted user, got %d", nTarget)
-	}
-	if err := svc.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM usage WHERE key LIKE '%:user:' || $1`, other.String(),
-	).Scan(&nOther); err != nil {
-		t.Fatalf("count bystander usage: %v", err)
-	}
-	if nOther != 1 {
-		t.Errorf("bystander usage row was wrongly deleted (count=%d)", nOther)
-	}
-
-	// (3) outbox row exists with the right shape.
+	// (2) outbox row exists with the right shape.
 	var (
 		nOutbox     int
 		evt, aggID  string

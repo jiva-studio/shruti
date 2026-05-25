@@ -30,7 +30,7 @@ from lectorium_chat.db.client import close_pool, init_pool
 from lectorium_chat.db.assert_schema import assert_schema_ready
 from lectorium_chat.indexer import run as indexer_run
 from lectorium_chat.indexer.embed import get_embedder
-from lectorium_chat.infra.rate_limit.pg_rate_limit_store import PgRateLimitStore
+from lectorium_chat.infra.rate_limit.redis_rate_limit_store import RedisRateLimitStore
 from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
@@ -122,9 +122,10 @@ async def lifespan(app: FastAPI):
     transcript_storage = S3TranscriptStorage(settings=s)
     outline_cache = S3OutlineCache(settings=s)
     pdf_storage = S3PdfStorage(settings=s)
-    rate_limiter = RateLimiter(
-        store=PgRateLimitStore(pool=pool), settings=s,
-    )
+    if not s.redis_url:
+        raise RuntimeError("REDIS_URL is required for the rate-limit store")
+    rate_limit_store = RedisRateLimitStore(s.redis_url)
+    rate_limiter = RateLimiter(store=rate_limit_store, settings=s)
     jwt_verifier = (
         JwtVerifier.from_dir(s.jwt_public_keys_dir)
         if s.jwt_public_keys_dir is not None
@@ -208,6 +209,7 @@ async def lifespan(app: FastAPI):
             pass
         if l2 is not None:
             await l2.close()
+        await rate_limit_store.close()
         await close_pool()
         # Flush pending Langfuse traces last — close() above doesn't
         # block on the SDK's background flusher; if we exit before it
