@@ -60,7 +60,7 @@
   <li><strong>Service logs</strong> — request metadata, error records, and performance timing. These do not include your chat messages.</li>
   <li><strong>Chat records</strong> — your messages, the excerpts we found, and the model's reply for each turn. Used to debug answer quality and improve the system.</li>
 </ul>
-<p>Both live on infrastructure we operate ourselves — they are not shared with any third-party analytics or observability service. We do not keep these records longer than needed to operate and improve the service (at most 90 days). When you delete your account, your chat records are removed right away — see the <em>Account deletion</em> section below.</p>
+<p>Both live on infrastructure we operate ourselves — they are not shared with any third-party analytics or observability service. Service logs are kept for up to 30 days; chat records for up to 90 days. When you delete your account, your chat records are removed right away — see the <em>Account deletion</em> section below.</p>
 
 <strong class="section">Sub-processors</strong>
 <p>The Application relies on a small set of third parties — each is engaged only for the feature noted, and only the data listed is shared. No other third party receives any data from the Application.</p>
@@ -71,6 +71,9 @@
   <li><strong>Google LLC</strong> (in-app chat) — operates the Google Gemini models that currently generate the chat reply downstream of OpenRouter. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
 </ul>
 <p>Our own diagnostic logs and chat records run on infrastructure we operate ourselves — they are <em>not</em> third-party sub-processors.</p>
+
+<strong class="section">Anonymous use</strong>
+<p>If you use the app without signing in, we still need a stable device-only identifier to recognise you across sessions (for example, to remember your subscription receipts). That identifier and any server-side data tied to it are automatically deleted after 12 months of inactivity. If you sign in at any point, this data becomes part of your account and is governed by the <em>Account deletion</em> rules below.</p>
 
 <strong class="section">Account deletion</strong>
 <p>If you signed in with Apple or Google, you can delete your account at any time from inside the Application: <strong>Settings → Account → Delete Account</strong>. The button is shown only while you are signed in.</p>
@@ -92,7 +95,7 @@
 
 <strong class="section">Children</strong>
 <p>The Application is not used to knowingly solicit data from or market to children under the age of 13.</p>
-<p>The Service Provider does not knowingly collect personally identifiable information from children. The Service Provider encourages all children to never submit any personally identifiable information through the Application and/or Services. The Service Provider encourages parents and legal guardians to monitor their children's Internet usage and to help enforce this Policy by instructing their children never to provide personally identifiable information through the Application and/or Services without their permission. If you have reason to believe that a child has provided personally identifiable information to the Service Provider through the Application and/or Services, please contact the Service Provider (<a href="mailto:support@akdasa.studio">support@akdasa.studio</a>) so that they will be able to take the necessary actions. You must also be at least 16 years of age to consent to the processing of your personally identifiable information in your country (in some countries we may allow your parent or guardian to do so on your behalf).</p>
+<p>The Service Provider does not knowingly collect personally identifiable information from children. The Service Provider encourages all children to never submit any personally identifiable information through the Application and/or Services. The Service Provider encourages parents and legal guardians to monitor their children's Internet usage and to help enforce this Policy by instructing their children never to provide personally identifiable information through the Application and/or Services without their permission. If you have reason to believe that a child has provided personally identifiable information to the Service Provider through the Application and/or Services, please contact the Service Provider (<a href="mailto:support@akdasa.studio">support@akdasa.studio</a>) so that they will be able to take the necessary actions.</p>
 
 <strong class="section">Security</strong>
 <p>The Service Provider is concerned about safeguarding the confidentiality of your information. All data transferred to subscription processors is encrypted in transit over HTTPS. The Application stores no payment card data — payments are handled exclusively by Apple and Google.</p>
