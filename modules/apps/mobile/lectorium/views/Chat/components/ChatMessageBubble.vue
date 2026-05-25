@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import router from "@lectorium/router/index.js"
 import { messageToMarkdown, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
@@ -275,6 +275,64 @@ watch(
 
 onBeforeUnmount(stopTick)
 
+/* -------------------------------------------------------------------- */
+/*  Offline vs server-error differentiation (Plan 3.7)                  */
+/* -------------------------------------------------------------------- */
+
+/** Cached `navigator.onLine`. Kept reactive so the bubble can flip from
+ *  the "No internet — will retry when you're back online" copy to a
+ *  manual-retry state as soon as the OS reports the connection is
+ *  back. We don't import a shared composable for this — only this
+ *  bubble cares, and adding a singleton just for one consumer is more
+ *  code than the watcher pair below. */
+const isOffline = ref<boolean>(typeof navigator !== "undefined" && navigator.onLine === false)
+
+function onOnline(): void {
+  isOffline.value = false
+  // Auto-retry exactly when:
+  //   - this is the last bubble (earlier failures are frozen history),
+  //   - the failure was diagnosed as `network` (we infer offline from
+  //     the same code path),
+  //   - the chat store is idle (no in-flight turn from another path).
+  // Anything else we leave for the user to drive — auto-retrying a
+  // 401 or rate_limited on reconnect would surprise them.
+  if (!props.isLast) return
+  const e = props.message.error
+  if (!e || e.kind !== "failed") return
+  if (e.code !== "network") return
+  if (!canRetry.value) return
+  emit("retry", props.message.id)
+}
+
+function onOffline(): void {
+  isOffline.value = true
+}
+
+onMounted(() => {
+  if (typeof window === "undefined") return
+  window.addEventListener("online", onOnline)
+  window.addEventListener("offline", onOffline)
+})
+
+onBeforeUnmount(() => {
+  if (typeof window === "undefined") return
+  window.removeEventListener("online", onOnline)
+  window.removeEventListener("offline", onOffline)
+})
+
+/** True iff THIS bubble's failure should render as the offline variant.
+ *  We can't tell offline-at-send from server-unreachable purely from the
+ *  error code — the network layer reports both as `"network"` — so we
+ *  combine the code with the current `navigator.onLine` state at render
+ *  time. If the device is online but the server is down, we fall
+ *  through to the http_5xx-style copy below. */
+const isOfflineFailure = computed<boolean>(() => {
+  const e = props.message.error
+  if (!e || e.kind !== "failed") return false
+  if (e.code !== "network") return false
+  return isOffline.value
+})
+
 const failedKind = computed<boolean>(() => {
   const e = props.message.error
   return !!(e && e.kind === "failed" && !props.message.streaming)
@@ -340,20 +398,63 @@ const failedError = computed(() => {
   return e && e.kind === "failed" ? e : null
 })
 
-/** Quota errors render as an upsell card; everything else is a plain
- *  red-tinted error. Pro at the day-cap is a "warning" — nothing for
- *  them to do but wait, no CTA. */
-const noticeKind = computed<"error" | "warning" | "upsell">(() => {
+/** Set of recognised quota tiers — keep in sync with the `QuotaTier`
+ *  union in `@lib/domain/chatMessage`. Used so a server tier we don't
+ *  know about (`enterprise`, future addition, schema drift) drops into
+ *  the unknown-tier fallback below instead of rendering as an empty
+ *  title + generic body. */
+const KNOWN_TIERS = new Set(["anonymous", "free", "pro"])
+
+/** True iff the server returned `rate_limited` with a tier value this
+ *  client release doesn't recognise (Plan 3.12). Renders as a neutral
+ *  warning notice so the user gets a usable explanation rather than the
+ *  cosmetic half-state of empty title + raw error body. */
+const isUnknownQuotaTier = computed<boolean>(() => {
+  const e = failedError.value
+  if (!e || e.code !== "rate_limited") return false
+  if (typeof e.tier !== "string") return false
+  return !KNOWN_TIERS.has(e.tier)
+})
+
+// Side-effecting watcher: log once per bubble when we hit the
+// unknown-tier path. Useful in dev / via remote logging so we notice
+// schema drift instead of silently swallowing it.
+watch(
+  isUnknownQuotaTier,
+  (unknown) => {
+    if (!unknown) return
+    const tier = failedError.value?.tier
+    // eslint-disable-next-line no-console
+    console.warn("[InlineNotice] unknown tier:", tier)
+  },
+  { immediate: true }
+)
+
+/** Quota errors render as an upsell card; offline gets the neutral info
+ *  tint; everything else is a plain red-tinted error. Pro-at-cap is a
+ *  warning — nothing for them to do but wait, no CTA. Unknown-tier is
+ *  also "warning" so it doesn't shout "error" for a state we can't
+ *  fully explain. */
+const noticeKind = computed<"error" | "warning" | "upsell" | "info">(() => {
   const e = failedError.value
   if (!e) return "error"
+  if (isOfflineFailure.value) return "info"
   if (e.code !== "rate_limited") return "error"
+  if (isUnknownQuotaTier.value) return "warning"
   if (e.tier === "pro") return "warning"
   return "upsell"
 })
 
 const noticeTitle = computed<string>(() => {
   const e = failedError.value
-  if (!e || e.code !== "rate_limited") return ""
+  if (!e) return ""
+  if (isOfflineFailure.value) return t("chat.errOffline.title")
+  // Server unreachable (5xx) gets its own dedicated copy now — split out
+  // from the previous "errServiceNotReady" so we can iterate the
+  // "warming up" wording without affecting the plain 5xx case.
+  if (e.code.startsWith("http_5")) return t("chat.errServer.title")
+  if (e.code !== "rate_limited") return ""
+  if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownTitle")
   if (e.tier === "anonymous") return t("chat.errQuotaAnonTitle")
   if (e.tier === "pro") return t("chat.errQuotaProTitle")
   if (e.tier === "free") return t("chat.errQuotaFreeTitle")
@@ -363,11 +464,16 @@ const noticeTitle = computed<string>(() => {
 const noticeBody = computed<string>(() => {
   const e = failedError.value
   if (!e) return ""
-  if (e.code === "rate_limited" && e.tier) {
-    const when = formatResetWhen(e.retryAfterAt)
-    if (e.tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
-    if (e.tier === "free") return t("chat.errQuotaFreeBody", { when })
-    if (e.tier === "pro") return t("chat.errQuotaProBody", { when })
+  if (isOfflineFailure.value) return t("chat.errOffline.body")
+  if (e.code.startsWith("http_5")) return t("chat.errServer.body")
+  if (e.code === "rate_limited") {
+    if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownBody")
+    if (e.tier) {
+      const when = formatResetWhen(e.retryAfterAt)
+      if (e.tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
+      if (e.tier === "free") return t("chat.errQuotaFreeBody", { when })
+      if (e.tier === "pro") return t("chat.errQuotaProBody", { when })
+    }
   }
   // Pre-Phase-4 server, or non-quota error — fall through to the legacy
   // failedText computation so the user still gets something readable.
@@ -377,7 +483,22 @@ const noticeBody = computed<string>(() => {
 const noticeCta = computed(() => {
   const e = failedError.value
   if (!e) return undefined
+  if (isOfflineFailure.value) {
+    // Auto-retry on `online` is handled by the window listener above;
+    // the CTA is informational ("Retry (auto)") and disabled so the
+    // user can't double-tap their way into a duplicate turn while we
+    // wait for the network to come back. canRetry stays in the gating
+    // expression so the label flips to enabled once we're online +
+    // idle, which gives the user a manual escape hatch if the OS
+    // event was missed.
+    return {
+      label: t("chat.errOffline.cta"),
+      action: onRetry,
+      disabled: !canRetry.value || isOffline.value,
+    }
+  }
   if (e.code === "rate_limited") {
+    if (isUnknownQuotaTier.value) return undefined
     if (e.tier === "anonymous") {
       return {
         label: t("chat.signInForMoreCta"),

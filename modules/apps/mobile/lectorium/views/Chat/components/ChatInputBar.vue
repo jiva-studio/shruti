@@ -6,6 +6,7 @@
         v-model="text"
         rows="1"
         :placeholder="placeholder"
+        :aria-label="ariaLabel"
         :disabled="sending || quotaLocked"
         class="input"
         @keydown="onKeydown"
@@ -17,7 +18,7 @@
         type="button"
         class="send"
         :class="{ visible: canSend || sending }"
-        :aria-label="$t('chat.send')"
+        :aria-label="sendAriaLabel"
         :disabled="(!canSend && !sending) || quotaLocked"
         :tabindex="canSend && !quotaLocked ? 0 : -1"
         @click="onSendClick"
@@ -88,6 +89,44 @@ const placeholder = computed<string>(() => {
   const pool = placeholderPool.value
   if (pool.length === 0) return t("chat.placeholder")
   return pool[placeholderIndex.value % pool.length] ?? t("chat.placeholder")
+})
+
+/** Screen-reader label. The rotating placeholder ("Where did I stop?",
+ *  "What is karma?", …) is decorative copy that SRs typically don't
+ *  announce. When the quota lock kicks in we want VoiceOver/TalkBack to
+ *  read the lock state out loud — otherwise a sighted user sees the
+ *  "Limit resets at HH:MM" placeholder but a non-sighted user just
+ *  hears "edit text, dimmed" with no explanation.
+ *
+ *  In the normal state we fall back to the generic Compose label so
+ *  the textarea still has an accessible name. */
+const ariaLabel = computed<string>(() => {
+  if (props.quotaLocked) {
+    if (typeof props.quotaResetsAt === "number") {
+      const d = new Date(props.quotaResetsAt)
+      const hh = d.getHours().toString().padStart(2, "0")
+      const mm = d.getMinutes().toString().padStart(2, "0")
+      return t("chat.composeLimitedAriaLabel", { time: `${hh}:${mm}` })
+    }
+    return t("chat.composeLimitedAriaLabelNoTime")
+  }
+  return t("chat.placeholder")
+})
+
+/** Send-button label mirrors the lock state so a SR user who tabs onto
+ *  the disabled button still gets the explanation, not just "Send,
+ *  dimmed". */
+const sendAriaLabel = computed<string>(() => {
+  if (props.quotaLocked) {
+    if (typeof props.quotaResetsAt === "number") {
+      const d = new Date(props.quotaResetsAt)
+      const hh = d.getHours().toString().padStart(2, "0")
+      const mm = d.getMinutes().toString().padStart(2, "0")
+      return t("chat.composeLimitedAriaLabel", { time: `${hh}:${mm}` })
+    }
+    return t("chat.composeLimitedAriaLabelNoTime")
+  }
+  return t("chat.send")
 })
 
 let rotationTimer: ReturnType<typeof setTimeout> | null = null
