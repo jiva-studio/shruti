@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,6 +59,33 @@ type rcSubscriptionApplier interface {
 	InsertEvent(ctx context.Context, eventID string) error
 	Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error)
 }
+
+// sanitizeRCError strips PII from an error string before it lands in
+// the database or structured logs. RC bodies can carry an end-user's
+// email or phone number on auth failures; we never want either in
+// auth.rc_webhook_events.error_message or in stdout logs ingested by
+// the log pipeline. We keep the wrapped prefix (typically
+// "rcclient: <status>: <body-fragment>"), truncate to 200 chars to
+// bound DB row width, then mask anything that looks like an email or
+// a long digit run.
+func sanitizeRCError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+	const maxLen = 200
+	if len(s) > maxLen {
+		s = s[:maxLen]
+	}
+	s = rcErrEmailRE.ReplaceAllString(s, "<email>")
+	s = rcErrPhoneRE.ReplaceAllString(s, "<phone>")
+	return s
+}
+
+var (
+	rcErrEmailRE = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
+	rcErrPhoneRE = regexp.MustCompile(`\+?\d{7,}`)
+)
 
 // RCWebhookHandler exposes POST /webhooks/revenuecat. Wired into the
 // router only when the operator configured at least one webhook secret
@@ -252,13 +280,14 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// and a 200 response.
 			metrics.RCAPIPermanentTotal.Inc()
 			metrics.RCAPIAuthFailedTotal.Inc()
+			safeErr := sanitizeRCError(err)
 			slog.ErrorContext(ctx, "rc_refetch_permanent_failure",
 				"event_id", p.Event.ID,
 				"rc_app_user_id", p.Event.AppUserID,
-				"err", err.Error(),
+				"err", safeErr,
 			)
 			if sealErr := h.events().MarkProcessedWithError(ctx,
-				p.Event.ID, "permanent: "+err.Error()); sealErr != nil {
+				p.Event.ID, "permanent: "+safeErr); sealErr != nil {
 				slog.ErrorContext(ctx, "rc_webhook_seal_failed",
 					"event_id", p.Event.ID, "err", sealErr.Error())
 			}
@@ -271,9 +300,10 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if errors.Is(err, rcclient.ErrRateLimited) {
 				metrics.RCAPIRateLimitedTotal.Inc()
 			}
+			safeErr := sanitizeRCError(err)
 			slog.ErrorContext(ctx, "rc_refetch_failed",
-				"event_id", p.Event.ID, "err", err.Error())
-			_ = h.events().RecordError(ctx, p.Event.ID, err.Error())
+				"event_id", p.Event.ID, "err", safeErr)
+			_ = h.events().RecordError(ctx, p.Event.ID, safeErr)
 			writeErr(w, http.StatusInternalServerError, "rc_unavailable", "refetch failed")
 			return
 		}
@@ -282,9 +312,10 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	snap := service.SnapshotFromRCResponse(p.Event.AppUserID, resp, h.now())
 	userID, matched, err := h.applier().Apply(ctx, p.Event.ID, snap)
 	if err != nil {
+		safeErr := sanitizeRCError(err)
 		slog.ErrorContext(ctx, "rc_apply_failed",
-			"event_id", p.Event.ID, "err", err.Error())
-		_ = h.events().RecordError(ctx, p.Event.ID, err.Error())
+			"event_id", p.Event.ID, "err", safeErr)
+		_ = h.events().RecordError(ctx, p.Event.ID, safeErr)
 		writeErr(w, http.StatusInternalServerError, "db_error", "apply failed")
 		return
 	}

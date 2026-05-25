@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,22 +23,74 @@ const (
 	TierPro  = "pro"
 )
 
+// rcResponseMalformedTotal counts RC `GET /subscribers/{id}` payloads
+// where a required field was missing (no `subscriber` object, or no
+// `original_app_user_id` on it). We treat these as recoverable — fall
+// back to a free-tier snapshot — but log + count so an operator can
+// spot a contract regression (RC field rename, new RC API version,
+// etc.) before it silently demotes paying users.
+//
+// Exported via RCResponseMalformedTotal so tests can read it. We
+// deliberately do not wire a Prometheus registry yet — the broader
+// observability work in Phase 9 will register the variable; for now
+// it's a process-lifetime atomic, good enough for tests and easy to
+// expose later via /metrics.
+var rcResponseMalformedTotal atomic.Int64
+
+// RCResponseMalformedTotal returns the current count of malformed RC
+// responses observed by SnapshotFromRCResponse this process.
+func RCResponseMalformedTotal() int64 {
+	return rcResponseMalformedTotal.Load()
+}
+
 // SnapshotFromRCResponse derives the durable tier state from a fresh
 // RC `GET /subscribers/{id}` body. Pro iff any entitlement is currently
 // active (ExpiresDate in the future OR nil for lifetime). tier_expires_at
 // is the latest active entitlement's expiry, NULL for free or lifetime.
+//
+// Robustness contract: nil response, nil Subscriber, nil/empty
+// Entitlements, and missing required fields all yield a clean free-tier
+// snapshot — never a panic. Malformed bodies (nil Subscriber, blank
+// OriginalAppUserID) bump rc_response_malformed_total and log INFO so
+// we can spot contract drift.
 //
 // Lives next to the consumer (not in rcclient) so the rcclient package
 // stays a pure REST shim — easier to test, easier to swap.
 func SnapshotFromRCResponse(appUserID string, resp *rcclient.SubscriberResponse, now time.Time) store.SubscriptionSnapshot {
 	snap := store.SubscriptionSnapshot{AppUserID: appUserID, Tier: TierFree}
 	if resp == nil {
+		// nil resp on a 404 ("subscriber not found") is normal — the
+		// rcclient returns &SubscriberResponse{} for that, not nil — so
+		// reaching here usually means a programming error upstream. Log
+		// INFO but don't count it as malformed payload; treat as free.
+		slog.Info("rc_response_nil", "app_user_id", appUserID)
+		return snap
+	}
+	if resp.Subscriber == nil {
+		rcResponseMalformedTotal.Add(1)
+		slog.Info("rc_response_malformed",
+			"app_user_id", appUserID, "reason", "subscriber_nil")
+		return snap
+	}
+	if resp.Subscriber.OriginalAppUserID == "" {
+		rcResponseMalformedTotal.Add(1)
+		slog.Info("rc_response_malformed",
+			"app_user_id", appUserID, "reason", "missing_original_app_user_id")
+		// Don't bail — entitlements may still be derivable; the missing
+		// field tells us the contract drifted, not that the body is
+		// useless.
+	}
+	if resp.Subscriber.Entitlements == nil {
 		return snap
 	}
 	var latest *time.Time
 	for _, ent := range resp.Subscriber.Entitlements {
 		// Lifetime entitlements have a nil ExpiresDate → always active.
-		if ent.ExpiresDate == nil {
+		// RC has also been observed to emit the zero time on synthetic
+		// test payloads; treat that as "unset" too (otherwise a zero
+		// time looks like a 0001-01-01 expiry, which is before any
+		// `now`, and we'd silently demote the user to free).
+		if ent.ExpiresDate == nil || ent.ExpiresDate.IsZero() {
 			snap.Tier = TierPro
 			latest = nil // a nil among any active → "never expires" wins
 			break
