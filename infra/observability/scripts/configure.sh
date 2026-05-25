@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # infra/observability/scripts/configure.sh
 #
-# Post-deploy one-time configuration:
+# First-time / on-demand configuration of the observability stack:
 #   1. Create wildcard Cloudflare DNS A record.
-#   2. Wait for Langfuse, create the "chat-<region>" project + API keys.
-#   3. Patch the Loki derived field with the real Langfuse project ID.
-#   4. Reload Grafana so it picks the patched datasource up.
+#   2. Wait for Langfuse, materialise secrets/langfuse-keys.env for the
+#      chat service on prod-EU.
+#   3. Re-apply the 90-day Langfuse ClickHouse TTL.
+#   4. Re-verify the Grafana Telegram contact point.
+#   5. Run the 10-point smoke verification.
 #
 # Re-runnable; each lib script is itself idempotent (skips on duplicates).
 #
@@ -13,6 +15,18 @@
 #
 # Reads config/<region>.env + config/shared.env. Writes secrets/langfuse-keys.env
 # on the target host with the issued API keys.
+#
+# Relationship to deploy.sh post-deploy hooks:
+#   The recurring pieces (Langfuse TTL re-apply, Grafana contact-point
+#   re-verify) are also invoked by deploy.sh after every deploy via
+#   infra/observability/scripts/post-deploy/*.sh — so operators no longer
+#   need to remember to re-run configure.sh after a deploy just to keep
+#   TTL drift at bay. This script is preserved for:
+#     - First-time host setup (Cloudflare DNS bootstrap; not idempotent
+#       across regions / not re-asserted on every deploy).
+#     - Materialising secrets/langfuse-keys.env after the initial Langfuse
+#       headless init lands.
+#     - On-demand re-verification with the verify-stack smoke checks.
 
 set -euo pipefail
 
