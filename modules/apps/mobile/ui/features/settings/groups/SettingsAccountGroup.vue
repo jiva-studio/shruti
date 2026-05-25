@@ -10,10 +10,24 @@
     <IconChip v-if="anonymous" slot="start">
       <IconUserPlus />
     </IconChip>
-    <IonAvatar v-else slot="start" class="account-avatar">
-      <img v-if="picture && !pictureFailed" :src="picture" @error="pictureFailed = true" />
-      <div v-else class="account-avatar__initials">{{ initials }}</div>
-    </IonAvatar>
+    <!-- Signed-in avatar shares the square-rounded-corners chip shape with
+         every other Settings row (see IconChip.vue / .settings-item-icon).
+         IonAvatar's circular crop made the avatar pop out visually; this
+         host is a plain div sized identically to the chip. The image fills
+         it edge-to-edge with the same border-radius, and the initials
+         fallback reuses the chip's neutral palette so a failed image looks
+         like just another chip rather than a broken portrait. -->
+    <div v-else slot="start" class="account-avatar settings-item-icon">
+      <img
+        v-if="picture && !pictureFailed"
+        :src="picture"
+        alt=""
+        referrerpolicy="no-referrer"
+        class="account-avatar__img"
+        @error="pictureFailed = true"
+      />
+      <span v-else class="account-avatar__initials">{{ initials }}</span>
+    </div>
 
     <IonLabel class="ion-text-wrap">
       <template v-if="anonymous">
@@ -75,7 +89,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonActionSheet, IonAvatar, IonItem, IonLabel, IonListHeader } from "@ionic/vue"
+import { IonActionSheet, IonItem, IonLabel, IonListHeader } from "@ionic/vue"
 import { IconRosetteDiscountCheckFilled, IconUserPlus } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ServerSettingsItem from "../ServerSettingsItem.vue"
@@ -202,14 +216,22 @@ function handleDeleteAccount(): void {
 </script>
 
 <style scoped>
+/* Match the size of every other Settings chip (IconChip + .settings-item-icon).
+   The chip's own padding is meant for an SVG icon — override to 0 so the
+   portrait fills the rounded square edge-to-edge. The .settings-item-icon
+   class still supplies the background, border-radius and ion-item slot
+   alignment, so the avatar lines up pixel-perfect with neighbouring rows. */
 .account-avatar {
   width: 32px;
   height: 32px;
-  margin-inline-end: 16px;
-  /* ion-avatar's host sets border-radius:50% but no overflow clip — the
-     initials <div> fallback (not an <img>) leaks past the rounded corners
-     and renders square. */
+  padding: 0;
   overflow: hidden;
+}
+.account-avatar__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .account-avatar__initials {
   display: flex;
@@ -217,9 +239,8 @@ function handleDeleteAccount(): void {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: var(--ion-color-step-200, #eee);
-  color: var(--ion-color-step-700, #555);
   font-size: 13px;
   font-weight: 600;
+  color: var(--ion-color-medium);
 }
 </style>
