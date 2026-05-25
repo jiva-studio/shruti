@@ -128,6 +128,12 @@ export const usePurchasesStore = defineStore("purchases", () => {
     try {
       const state = await purchases.purchase(packageId)
       applyState(state)
+      // RC sends the INITIAL_PURCHASE webhook almost immediately; by the
+      // time we get back here the server-side tier has likely flipped to
+      // 'pro'. Force a token refresh now so the new claim lands in the
+      // access JWT — otherwise the chat rate-limiter sees the old tier
+      // for up to 15 min.
+      await useAuthStore().refreshTokens()
     } finally {
       purchasing.value = false
     }
@@ -140,6 +146,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     try {
       const state = await purchases.restore()
       applyState(state)
+      await useAuthStore().refreshTokens()
     } finally {
       restoring.value = false
     }

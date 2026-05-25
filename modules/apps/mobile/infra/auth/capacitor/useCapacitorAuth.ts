@@ -3,7 +3,7 @@ import { Device } from "@capacitor/device"
 import { Preferences } from "@capacitor/preferences"
 import { SocialLogin } from "@capgo/capacitor-social-login"
 
-import type { AuthConfig, AuthPort, AuthSession } from "@ports/app/auth.js"
+import type { AuthConfig, AuthPort, AuthSession, MeView } from "@ports/app/auth.js"
 
 interface StoredTokens {
   accessToken: string
@@ -14,6 +14,7 @@ interface StoredTokens {
   picture: string | null
   anonymous: boolean
   accessTokenExpiresAt: number
+  tier: string
 }
 
 const PREFERENCES_KEY = "auth.tokens"
@@ -31,6 +32,8 @@ interface MeBody {
   name: string | null
   pictureUrl: string | null
   anonymous: boolean
+  tier?: string
+  tierExpiresAt?: string | null
 }
 
 /**
@@ -72,13 +75,16 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     await Preferences.remove({ key: PREFERENCES_KEY })
   }
 
-  function decodeAccessExpiry(accessToken: string): number {
+  function decodeAccessClaims(accessToken: string): { expMs: number; tier: string } {
     try {
       const [, payloadB64] = accessToken.split(".")
       const json = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")))
-      return typeof json.exp === "number" ? json.exp * 1000 : 0
+      return {
+        expMs: typeof json.exp === "number" ? json.exp * 1000 : 0,
+        tier: typeof json.tier === "string" ? json.tier : "free",
+      }
     } catch {
-      return 0
+      return { expMs: 0, tier: "free" }
     }
   }
 
@@ -90,10 +96,11 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       picture: t.picture,
       anonymous: t.anonymous,
       accessTokenExpiresAt: t.accessTokenExpiresAt,
+      tier: t.tier || "free",
     }
   }
 
-  async function fetchMe(accessToken: string): Promise<MeBody | null> {
+  async function fetchMeBody(accessToken: string): Promise<MeBody | null> {
     try {
       const res = await fetch(`${cfg.baseUrl}/me`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -106,7 +113,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   }
 
   async function commitTokenResponse(body: TokenResponseBody): Promise<AuthSession> {
-    const me = await fetchMe(body.accessToken)
+    const me = await fetchMeBody(body.accessToken)
+    const claims = decodeAccessClaims(body.accessToken)
     const next: StoredTokens = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
@@ -115,7 +123,11 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       name: me?.name ?? null,
       picture: me?.pictureUrl ?? null,
       anonymous: body.anonymous,
-      accessTokenExpiresAt: decodeAccessExpiry(body.accessToken),
+      accessTokenExpiresAt: claims.expMs,
+      // Trust the JWT claim primarily — /me is best-effort, JWT is what
+      // the chat service will actually see. /me's `tier` is a tie-breaker
+      // when JWT lacks the claim (older tokens in flight).
+      tier: claims.tier || me?.tier || "free",
     }
     await persistTokens(next)
     const sess = sessionFromTokens(next)
@@ -302,6 +314,41 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return () => listeners.delete(listener)
   }
 
+  async function refreshTokens(): Promise<AuthSession | null> {
+    if (!stored) return null
+    // Coalesce with the lazy-refresh path so a foreground sync that
+    // races a getAccessToken() doesn't fire /auth/refresh twice.
+    if (!refreshInFlight) {
+      refreshInFlight = (async () => {
+        try {
+          const tr = await callRefresh(stored!.refreshToken)
+          if (!tr) {
+            await clearTokens()
+            return null
+          }
+          await commitTokenResponse(tr)
+          return stored!.accessToken
+        } finally {
+          refreshInFlight = null
+        }
+      })()
+    }
+    const tok = await refreshInFlight
+    if (!tok) return null
+    return session
+  }
+
+  async function fetchMe(): Promise<MeView | null> {
+    const tok = await getAccessToken()
+    if (!tok) return null
+    const me = await fetchMeBody(tok)
+    if (!me) return null
+    return {
+      tier: me.tier ?? "free",
+      tierExpiresAt: me.tierExpiresAt ? Date.parse(me.tierExpiresAt) : null,
+    }
+  }
+
   return {
     initialize,
     signInWithGoogle,
@@ -310,6 +357,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     deleteAccount,
     getSession,
     getAccessToken,
+    refreshTokens,
+    fetchMe,
     onSessionChange,
   }
 }
