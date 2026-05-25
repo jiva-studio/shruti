@@ -617,6 +617,111 @@ groups:
     noDataState: OK
     execErrState: OK
 - orgId: 1
+  name: subscription
+  folder: Shruti-Alerts
+  interval: 1m
+  rules:
+  - uid: rc_webhook_stuck
+    title: rc_webhook_stuck
+    condition: B
+    for: 5m
+    labels:
+      severity: P2
+      service: auth
+    annotations:
+      summary: auth has {{ $values.A }} RC webhook event(s) past the retry budget
+      description: |
+        auth.rc_webhook_events rows with processed_at IS NULL and received_at
+        older than 15 minutes. RC retries 5x over ~80 min and then gives up;
+        anything still stuck after the 15-minute observation window has likely
+        exhausted RC's retries. The Phase-8 reconciler should backfill these
+        within 6h via the user-sweep path — sustained backlog means either
+        the reconciler is not running, or RC's /v1/subscribers is consistently
+        failing.
+
+        Runbook:
+          1. ssh prod-eu 'docker logs --tail=200 shruti-auth-1 | grep -E "rc_(webhook|refetch|apply)"'
+             — look for repeated `rc_refetch_failed` or `rc_apply_failed`.
+          2. Confirm reconciler is alive: same logs should show `reconcile_tick_done` every 6h.
+          3. Probe RC: curl -fsS -H "Authorization: Bearer ${RC_REST_API_KEY}" \
+             https://api.revenuecat.com/v1/subscribers/<some-id>
+          4. Stuck events visible via:
+             docker exec -i shruti-postgres-1 psql -U shruti -d shruti \
+               -c "SELECT event_id, received_at, error FROM auth.rc_webhook_events \
+                   WHERE processed_at IS NULL ORDER BY received_at LIMIT 20;"
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 600
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_rc_webhook_unprocessed_count)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+  - uid: subscription_tier_stale
+    title: subscription_tier_stale
+    condition: B
+    for: 30m
+    labels:
+      severity: P3
+      service: auth
+    annotations:
+      summary: '{{ $values.A }} user(s) have a subscription_state older than 24h'
+      description: |
+        Users with rc_app_user_id set but tier_updated_at NULL or older than
+        24h. The Phase-8 reconciler sweeps every 6h with a 24h staleness
+        threshold — a sustained non-zero gauge means the cron is not running
+        or its calls to RC are failing for these specific subscribers.
+
+        P3 (not P2) because subscription state is also lazily refreshed on the
+        client via /auth/me at app foreground; the user-facing impact is small
+        for someone who opens the app regularly. The alert exists so the long
+        tail of less-engaged paying users doesn't get stuck on tier='free'.
+
+        Runbook:
+          1. Verify reconciler activity:
+             docker logs shruti-auth-1 --since=12h | grep reconcile_tick_done
+          2. If reconciler isn't ticking, restart auth (`docker compose restart auth`).
+          3. If it IS ticking but the gauge is non-zero, check per-user errors:
+             docker logs shruti-auth-1 --since=12h | grep reconcile_one_failed
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 1800
+        to: 0
+      model:
+        refId: A
+        expr: max(shruti_subscription_tier_stale_count)
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: OK
+    execErrState: OK
+- orgId: 1
   name: redis
   folder: Shruti-Alerts
   interval: 1m
