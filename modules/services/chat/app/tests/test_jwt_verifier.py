@@ -36,9 +36,18 @@ def _keypair() -> tuple[str, str]:
     return priv, pub
 
 
-def _sign(priv: str, kid: str, sub: str = "user-1", anonymous: bool = False) -> str:
+def _sign(
+    priv: str,
+    kid: str,
+    sub: str = "user-1",
+    anonymous: bool = False,
+    quota_id: str | None = None,
+) -> str:
+    claims: dict[str, object] = {"sub": sub, "anonymous": anonymous, "exp": 9999999999}
+    if quota_id is not None:
+        claims["quota_id"] = quota_id
     return pyjwt.encode(
-        {"sub": sub, "anonymous": anonymous, "exp": 9999999999},
+        claims,
         priv,
         algorithm="RS256",
         headers={"kid": kid},
@@ -93,3 +102,75 @@ def test_foreign_key_signature_rejected(tmp_path: Path) -> None:
     v = JwtVerifier.from_dir(tmp_path)
     with pytest.raises(JwtVerifyError):
         v.verify(_sign(privB, "v1"))
+
+
+# ── quota_id format validation ───────────────────────────────────────────
+
+
+def _verifier(tmp_path: Path) -> tuple[JwtVerifier, str]:
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    return JwtVerifier.from_file(tmp_path / "public.pem"), priv
+
+
+def test_quota_id_valid_hex_passes_through(tmp_path: Path) -> None:
+    v, priv = _verifier(tmp_path)
+    qid = "a" * 64
+    user = v.verify(_sign(priv, "v1", quota_id=qid))
+    assert user.quota_id == qid
+
+
+def test_quota_id_mixed_hex_digits_passes_through(tmp_path: Path) -> None:
+    v, priv = _verifier(tmp_path)
+    # Plausible sha256 hex: lower-case [0-9a-f], exactly 64 chars.
+    qid = "0123456789abcdef" * 4
+    user = v.verify(_sign(priv, "v1", quota_id=qid))
+    assert user.quota_id == qid
+
+
+def test_quota_id_empty_string_passes_through(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    v, priv = _verifier(tmp_path)
+    user = v.verify(_sign(priv, "v1", quota_id=""))
+    assert user.quota_id == ""
+    # Empty is the documented "no OAuth identity" case — must NOT warn.
+    out = capsys.readouterr()
+    assert "quota_id_invalid_format" not in (out.out + out.err)
+
+
+def test_quota_id_missing_claim_passes_through(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Pre-Phase-3 tokens lack the claim entirely — same shape as empty.
+    v, priv = _verifier(tmp_path)
+    user = v.verify(_sign(priv, "v1", quota_id=None))
+    assert user.quota_id == ""
+    out = capsys.readouterr()
+    assert "quota_id_invalid_format" not in (out.out + out.err)
+
+
+@pytest.mark.parametrize(
+    "bad_qid",
+    [
+        "abc",                  # too short
+        "X" * 64,                # right length, non-hex
+        "A" * 64,                # right length, upper-case hex (we accept only lower)
+        "g" * 64,                # right length, 'g' is not a hex digit
+        "0" * 63 + "G",          # 64 chars but contains uppercase non-hex
+        "0" * 65,                # too long
+        " " + "a" * 63,          # leading whitespace
+        "a" * 63 + " ",          # trailing whitespace
+    ],
+)
+def test_quota_id_invalid_falls_back_to_empty_and_warns(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], bad_qid: str
+) -> None:
+    v, priv = _verifier(tmp_path)
+    user = v.verify(_sign(priv, "v1", quota_id=bad_qid))
+    assert user.quota_id == ""
+    # structlog (default config) renders to stdout/stderr via PrintLogger,
+    # so capsys is the right fixture here. The marker is the event name
+    # in the rendered line.
+    out = capsys.readouterr()
+    assert "quota_id_invalid_format" in (out.out + out.err)
