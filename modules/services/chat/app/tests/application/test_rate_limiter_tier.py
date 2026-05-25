@@ -117,3 +117,63 @@ async def test_pro_user_gets_the_big_limit(limiter):
             "u-pro", anonymous=False, ip="3.3.3.3", scope="chat", tier="pro",
         )
         assert rl.allowed, f"pro should sail past {i+1}"
+
+
+# ─── quota_id (anti-abuse against delete+recreate, issue #626) ──────────
+
+
+@pytest.mark.asyncio
+async def test_quota_id_survives_user_id_change(limiter):
+    # Simulate delete+recreate: the same OAuth identity (apple sub "abc")
+    # produces the same quota_id, but auth.users.id is different on the
+    # new account. With quota_id keying, the counter persists; without
+    # it (the pre-#626 behaviour), it would refresh.
+    quota = "sha256-of-apple-abc"
+    for _ in range(10):
+        await limiter.check_and_increment(
+            "user-A", anonymous=False, ip="1.1.1.1",
+            scope="chat", tier="free", quota_id=quota,
+        )
+    # User deletes, recreates with same Apple sub → fresh user_id, SAME quota_id.
+    rl = await limiter.check_and_increment(
+        "user-B-fresh", anonymous=False, ip="1.1.1.1",
+        scope="chat", tier="free", quota_id=quota,
+    )
+    assert not rl.allowed, "delete+recreate should NOT refresh the counter"
+    assert rl.current == 11
+    assert rl.limit == 10
+
+
+@pytest.mark.asyncio
+async def test_different_quota_ids_are_independent(limiter):
+    # Two genuinely different users (different OAuth identities) must
+    # NOT share a counter. This is the inverse invariant: quota_id
+    # collisions are the bug we're guarding against.
+    for _ in range(10):
+        await limiter.check_and_increment(
+            "user-A", anonymous=False, ip="1.1.1.1",
+            scope="chat", tier="free", quota_id="quota-apple",
+        )
+    rl = await limiter.check_and_increment(
+        "user-B", anonymous=False, ip="1.1.1.1",
+        scope="chat", tier="free", quota_id="quota-google",
+    )
+    assert rl.allowed, "different quota_ids must have separate counters"
+
+
+@pytest.mark.asyncio
+async def test_empty_quota_id_falls_back_to_user_id(limiter):
+    # Old in-flight tokens lack the claim → quota_id is empty string.
+    # The limiter must fall back to user_id so the existing behaviour
+    # holds during the rollout window. Two distinct users with no
+    # quota_id should have independent counters keyed by user_id.
+    for _ in range(10):
+        await limiter.check_and_increment(
+            "user-X", anonymous=False, ip="1.1.1.1",
+            scope="chat", tier="free", quota_id="",
+        )
+    rl = await limiter.check_and_increment(
+        "user-Y", anonymous=False, ip="1.1.1.1",
+        scope="chat", tier="free", quota_id="",
+    )
+    assert rl.allowed, "different user_ids without quota_id must stay independent"
