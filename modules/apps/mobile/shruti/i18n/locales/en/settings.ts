@@ -57,47 +57,40 @@ export default {
       benefit0: {
         title: "New Lectures",
         description: "Your subscription helps us continue adding new lectures.",
-        icon: "🌟",
       },
       benefit1: {
         title: "Bookmarks",
-        description: "Save important moments from lectures to return to them later.",
-        icon: "🔖",
+        description:
+          "Save important moments from the text and audio of lectures to revisit later or share with friends.",
       },
       benefit2: {
         title: "Smart Library",
         description:
           "The app keeps fresh lectures on your device and automatically clears finished ones.",
-        icon: "📥",
       },
       benefit3: {
         title: "Seminars and Courses",
         description:
           "Add seminars and courses to your playlist to listen to them in a convenient order.",
-        icon: "📚",
       },
       benefit4: {
         title: "Dynamic Collections",
         description:
           "Create collections for lectures that will automatically update based on specified criteria.",
-        icon: "🗃️",
       },
-      chat: {
-        title: "More AI chat messages",
-        description: "A bigger daily allowance for chatting with the lectures.",
-        icon: "💬",
+      sakha: {
+        title: "Sakhā — AI Companion",
+        description:
+          "Searches lectures, audio and books, finds shlokas, generates PDFs, and helps you make sense of the teachings. A bigger daily allowance comes with a subscription.",
       },
       autoScroll: {
         title: "Automatic Scroll",
         description:
           "The transcript follows along as audio plays, so the current paragraph is always in view.",
-        icon: "📜",
       },
       notesStudio: {
         title: "Notes Studio",
-        description:
-          "Quote any moment from a lecture, refine it in a focused editor, and share it as a clean note.",
-        icon: "✍️",
+        description: "Turn your notes from lectures into short videos and share them with friends.",
       },
     },
     periods: {

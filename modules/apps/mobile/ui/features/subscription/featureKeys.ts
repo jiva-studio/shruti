@@ -9,16 +9,22 @@ export type SubscriptionFeatureKey =
 export interface FeatureSlideDef {
   readonly key: SubscriptionFeatureKey
   readonly i18nKey: string
+  readonly icon: string
   readonly soon: boolean
 }
 
 export const FEATURE_SLIDES: readonly FeatureSlideDef[] = [
-  { key: "newLectures", i18nKey: "benefit0", soon: false },
-  { key: "chat", i18nKey: "chat", soon: false },
-  { key: "bookmarks", i18nKey: "benefit1", soon: false },
-  { key: "smartLibrary", i18nKey: "benefit2", soon: false },
-  { key: "autoScroll", i18nKey: "autoScroll", soon: false },
-  { key: "notesStudio", i18nKey: "notesStudio", soon: false },
+  { key: "newLectures", i18nKey: "benefit0", icon: "/subscription/newLectures.png", soon: false },
+  { key: "chat", i18nKey: "sakha", icon: "/subscription/sakha.png", soon: false },
+  { key: "bookmarks", i18nKey: "benefit1", icon: "/subscription/bookmarks.png", soon: false },
+  { key: "smartLibrary", i18nKey: "benefit2", icon: "/subscription/smartLibrary.png", soon: false },
+  { key: "autoScroll", i18nKey: "autoScroll", icon: "/subscription/autoScroll.png", soon: false },
+  {
+    key: "notesStudio",
+    i18nKey: "notesStudio",
+    icon: "/subscription/notesStudio.png",
+    soon: false,
+  },
 ] as const
 
 export function slideIndexForFeature(feature: string | undefined): number {
