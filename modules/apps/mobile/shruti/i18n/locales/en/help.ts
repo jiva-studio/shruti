@@ -38,6 +38,10 @@ export default {
       title: "Smart library",
       summary: "Auto-update lectures and clean up after listening (PRO)",
     },
+    "delete-account": {
+      title: "Deleting your account",
+      summary: "What gets removed from our servers and from this device",
+    },
     "export-import": {
       title: "Export and import",
       summary: "Backup and restore your personal data",
