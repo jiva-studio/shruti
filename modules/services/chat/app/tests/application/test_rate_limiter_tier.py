@@ -1,0 +1,119 @@
+"""Unit tests for the tier-aware rate-limit matrix.
+
+Pure logic — no DB. Uses an in-memory fake `RateLimitStore` so the
+test focuses on tier resolution and the 429-result fields, not on the
+INSERT-ON-CONFLICT round-trip (covered by the Redis store's own
+contract).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+
+import pytest
+
+from shruti_chat.application.rate_limiter import RateLimiter
+from shruti_chat.config import Settings
+from shruti_chat.domain.ports.rate_limit_store import CounterRecord
+
+
+@dataclass
+class _FakeStore:
+    """Each call returns count = (previous + 1). Mirrors atomic INCR."""
+
+    counts: dict[tuple[str, date], int]
+
+    async def increment(
+        self,
+        *,
+        scoped_key: str,
+        key_type: str,
+        limit: int,
+        day: date,
+    ) -> CounterRecord:
+        key = (scoped_key, day)
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return CounterRecord(key_type=key_type, count=self.counts[key], limit=limit)
+
+
+def _settings() -> Settings:
+    # Pull defaults straight from the model — the rate-limiter uses them
+    # as-is, so we don't override anything here.
+    return Settings(
+        database_url="postgres://test",
+        s3_bucket="x",
+        s3_region="us-east-1",
+    )
+
+
+@pytest.fixture
+def limiter():
+    return RateLimiter(store=_FakeStore(counts={}), settings=_settings())
+
+
+@pytest.mark.parametrize(
+    "anonymous,tier,scope,expected_limit",
+    [
+        (True, "free", "chat", 3),
+        (False, "free", "chat", 10),
+        (False, "pro", "chat", 200),
+        # anonymous always wins — a Pro claim on an anon JWT (impossible
+        # in practice) still gets the anon limit.
+        (True, "pro", "chat", 3),
+        # Other scopes follow the same shape.
+        (True, "free", "title", 10),
+        (False, "free", "title", 50),
+        (False, "pro", "title", 500),
+        (False, "pro", "questions", 500),
+        (False, "pro", "feedback", 2000),
+    ],
+)
+def test_user_limit_for_tier_matrix(limiter, anonymous, tier, scope, expected_limit):
+    assert limiter._user_limit_for(scope, anonymous, tier) == expected_limit
+
+
+@pytest.mark.asyncio
+async def test_429_carries_tier_and_resets_at(limiter):
+    # Burn through the free-chat limit of 10, then trip on the 11th.
+    for _ in range(10):
+        rec = await limiter.check_and_increment(
+            "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+        )
+        assert rec.allowed
+    rl = await limiter.check_and_increment(
+        "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+    )
+    assert not rl.allowed
+    assert rl.code == "rate_limited"
+    assert rl.key_type == "user"
+    assert rl.tier == "free"
+    assert rl.limit == 10
+    assert rl.current == 11
+    assert rl.resets_at_iso is not None and rl.resets_at_iso.endswith("Z")
+    assert rl.resets_at_epoch is not None and rl.resets_at_epoch > 0
+
+
+@pytest.mark.asyncio
+async def test_429_echoes_anonymous_over_tier(limiter):
+    for _ in range(3):
+        await limiter.check_and_increment(
+            "u-anon", anonymous=True, ip="2.2.2.2", scope="chat", tier="free",
+        )
+    rl = await limiter.check_and_increment(
+        "u-anon", anonymous=True, ip="2.2.2.2", scope="chat", tier="free",
+    )
+    assert not rl.allowed
+    # The mobile UX picks "Войти" copy off this — anonymous wins over
+    # whatever tier the (anonymous) JWT happened to carry.
+    assert rl.tier == "anonymous"
+
+
+@pytest.mark.asyncio
+async def test_pro_user_gets_the_big_limit(limiter):
+    # Should NOT trip at 11. Spot-check a few.
+    for i in range(20):
+        rl = await limiter.check_and_increment(
+            "u-pro", anonymous=False, ip="3.3.3.3", scope="chat", tier="pro",
+        )
+        assert rl.allowed, f"pro should sail past {i+1}"

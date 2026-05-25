@@ -30,6 +30,10 @@ class VerifiedUser:
 
     id: str           # `sub` claim — uuid string
     anonymous: bool   # `anonymous` claim — true for /auth/anonymous bootstrap
+    # Subscription tier mirrored from RevenueCat via the auth-side webhook.
+    # Tokens minted before Phase 3 lack the claim entirely; verify() maps
+    # missing/blank to "free" so the rate-limiter degrades safely.
+    tier: str = "free"
 
 
 class JwtVerifyError(Exception):
@@ -100,4 +104,5 @@ class JwtVerifier:
         # Auth's signer sets `anonymous` explicitly. Defaulting to True
         # if somehow absent is the safe choice (lowest quota).
         anon_raw = claims.get("anonymous", True)
-        return VerifiedUser(id=sub, anonymous=bool(anon_raw))
+        tier_raw = claims.get("tier") or "free"
+        return VerifiedUser(id=sub, anonymous=bool(anon_raw), tier=str(tier_raw))

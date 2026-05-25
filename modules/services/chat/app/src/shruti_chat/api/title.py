@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from shruti_chat.agent import llm
 from shruti_chat.api._auth import get_current_user
+from shruti_chat.api._rate_limit import raise_429
 from shruti_chat.application.cache_helpers import TTL_30D, cached_str
 from shruti_chat.composition import AppDeps, get_deps
 from shruti_chat.config import get_settings
@@ -109,20 +110,10 @@ async def title(
     # client retrying many fresh sessions can't drain the main chat quota.
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="title",
+        user.id, user.anonymous, ip, scope="title", tier=user.tier,
     )
     if not rl.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": rl.code,
-                "limit": rl.limit,
-                "current": rl.current,
-                "key_type": rl.key_type,
-                "scope": "title",
-            },
-            headers={"Retry-After": str(rl.retry_after or 60)},
-        )
+        raise_429(rl, scope="title")
 
     convo = "\n\n".join(
         f"{m.role.upper()}: {m.content.strip()}"
