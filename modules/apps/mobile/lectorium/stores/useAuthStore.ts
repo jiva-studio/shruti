@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
@@ -24,6 +24,25 @@ export const useAuthStore = defineStore("auth", () => {
   const isPro = computed(() => tier.value === "pro")
 
   let resumeHandle: { remove(): Promise<void> } | undefined
+
+  // Identity-change watcher: signin (null→id), signout (id→null), and
+  // switch-account (idA→idB) all invalidate any composer lockdown the
+  // chat store may be holding — the deadline was bound to the previous
+  // identity's quota bucket and means nothing for the new one. Tier-
+  // change within the same user_id is intentionally NOT a trigger: the
+  // server-side quota_id is keyed by user_id, so the same bucket (and
+  // therefore the same deadline) keeps applying.
+  //
+  // `useChatStore` is imported lazily here so this module doesn't pull
+  // the chat store graph at auth-store registration time, which would
+  // race Pinia's init order (chat store depends on `useLectorium()`
+  // wiring that lands after auth restore kicks off).
+  watch(userId, (newId, oldId) => {
+    if (newId === oldId) return
+    void import("@lectorium/stores/useChatStore.js").then(({ useChatStore }) => {
+      useChatStore().resetComposeLock()
+    })
+  })
 
   function applySession(s: AuthSession | null): void {
     if (s) {
