@@ -79,6 +79,16 @@ export type RunChatTurnEvent =
       readonly code: string
       readonly message: string
       readonly retryAfter?: number
+      /** Quota tier the limit was looked up under ("anonymous" | "free"
+       *  | "pro"). Set only on `code: "rate_limited"`; absent for other
+       *  error codes and for old servers (pre-Phase 4) that don't yet
+       *  emit this field. The store keys the inline-notice copy + CTA
+       *  off this. */
+      readonly tier?: string
+      /** Server-side reset boundary in UTC Unix-seconds. Same caveats
+       *  as `tier`. Store converts to absolute UnixMs before persisting
+       *  on the ChatMessageError so countdowns survive backgrounding. */
+      readonly resetsAtEpoch?: number
     }
   | { readonly kind: "title-updated"; readonly title: string }
 
@@ -167,7 +177,13 @@ export async function* runChatTurn(
   let acc = ""
   let sawDone = false
   let sawTurnsLimit = false
-  let lastError: { code: string; message: string; retryAfter?: number } | null = null
+  let lastError: {
+    code: string
+    message: string
+    retryAfter?: number
+    tier?: string
+    resetsAtEpoch?: number
+  } | null = null
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
   let aliases: Record<string, ChatAliasEntry> | undefined
@@ -304,6 +320,8 @@ export async function* runChatTurn(
             code: event.code,
             message: event.message,
             retryAfter: event.retryAfter,
+            tier: event.tier,
+            resetsAtEpoch: event.resetsAtEpoch,
           }
           break
       }
@@ -346,6 +364,8 @@ export async function* runChatTurn(
       code: lastError.code,
       message: lastError.message,
       retryAfter: lastError.retryAfter,
+      ...(lastError.tier !== undefined ? { tier: lastError.tier } : {}),
+      ...(lastError.resetsAtEpoch !== undefined ? { resetsAtEpoch: lastError.resetsAtEpoch } : {}),
     }
   } else {
     // No text and no error — empty `done`. Store drops the placeholder.

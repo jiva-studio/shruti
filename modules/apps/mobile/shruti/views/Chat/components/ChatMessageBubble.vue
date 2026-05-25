@@ -14,18 +14,12 @@
         <span class="user-text">{{ message.content }}</span>
       </template>
       <template v-else-if="failedKind">
-        <div class="error-card">
-          <span class="error-text">{{ failedText }}</span>
-          <button
-            v-if="failedRetryAllowed"
-            type="button"
-            class="btn primary retry"
-            :disabled="!failedRetryEnabled || !canRetry"
-            @click="onRetry"
-          >
-            {{ failedRetryLabel }}
-          </button>
-        </div>
+        <InlineNotice
+          :kind="noticeKind"
+          :title="noticeTitle || undefined"
+          :body="noticeBody"
+          :cta="noticeCta"
+        />
       </template>
       <template v-else>
         <StatusPill
@@ -156,6 +150,8 @@ import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.v
 import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 import StatusPill from "./StatusPill.vue"
+import InlineNotice from "@ui/shared/InlineNotice.vue"
+import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import ChatFocusCard from "./ChatFocusCard.vue"
 
 const props = withDefaults(
@@ -332,6 +328,90 @@ const failedText = computed<string>(() => {
 })
 
 const failedRetryLabel = computed<string>(() => t("chat.actionRetry"))
+
+/* -------------------------------------------------------------------------- */
+/*                        InlineNotice (quota + errors)                       */
+/* -------------------------------------------------------------------------- */
+
+const paywall = usePaywallStore()
+
+const failedError = computed(() => {
+  const e = props.message.error
+  return e && e.kind === "failed" ? e : null
+})
+
+/** Quota errors render as an upsell card; everything else is a plain
+ *  red-tinted error. Pro at the day-cap is a "warning" — nothing for
+ *  them to do but wait, no CTA. */
+const noticeKind = computed<"error" | "warning" | "upsell">(() => {
+  const e = failedError.value
+  if (!e) return "error"
+  if (e.code !== "rate_limited") return "error"
+  if (e.tier === "pro") return "warning"
+  return "upsell"
+})
+
+const noticeTitle = computed<string>(() => {
+  const e = failedError.value
+  if (!e || e.code !== "rate_limited") return ""
+  if (e.tier === "anonymous") return t("chat.errQuotaAnonTitle")
+  if (e.tier === "pro") return t("chat.errQuotaProTitle")
+  if (e.tier === "free") return t("chat.errQuotaFreeTitle")
+  return ""
+})
+
+const noticeBody = computed<string>(() => {
+  const e = failedError.value
+  if (!e) return ""
+  if (e.code === "rate_limited" && e.tier) {
+    const when = formatResetWhen(e.retryAfterAt)
+    if (e.tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
+    if (e.tier === "free") return t("chat.errQuotaFreeBody", { when })
+    if (e.tier === "pro") return t("chat.errQuotaProBody", { when })
+  }
+  // Pre-Phase-4 server, or non-quota error — fall through to the legacy
+  // failedText computation so the user still gets something readable.
+  return failedText.value
+})
+
+const noticeCta = computed(() => {
+  const e = failedError.value
+  if (!e) return undefined
+  if (e.code === "rate_limited") {
+    if (e.tier === "anonymous") {
+      return {
+        label: t("chat.signInForMoreCta"),
+        action: () => router.push({ name: "settings" }),
+      }
+    }
+    if (e.tier === "free") {
+      return {
+        label: t("chat.upgradeToProCta"),
+        action: () => paywall.requestOpen("chat"),
+      }
+    }
+    return undefined // pro tier → no CTA, just wait
+  }
+  // Plain errors keep the existing Retry button, gated by the same
+  // disabled-while-counting-down / canRetry logic as before.
+  if (!failedRetryAllowed.value) return undefined
+  return {
+    label: failedRetryLabel.value,
+    action: onRetry,
+    disabled: !failedRetryEnabled.value || !canRetry.value,
+  }
+})
+
+/** Reset-time helper for the quota body strings. Same three-bucket
+ *  output as `formatRetryWhen` (seconds / minutes / time), but reads
+ *  the reactive `now` so the body re-renders every second while the
+ *  countdown is visible. */
+function formatResetWhen(retryAfterAt: number | undefined): string {
+  if (typeof retryAfterAt !== "number") return ""
+  const remainingMs = retryAfterAt - now.value
+  if (remainingMs <= 0) return t("chat.retryNow")
+  return formatRetryWhen(remainingMs, retryAfterAt)
+}
 
 /**
  * Format a "{when}" fragment for `errRateAfter`:
@@ -571,28 +651,6 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   font-style: italic;
   font-size: 0.85em;
   white-space: pre;
-}
-
-/* Failed-bubble: replaces the assistant content when the turn died with
- * no streamed text. Block-level so the Retry button can sit on its own
- * line under the explanation. Matches the action-card error styling
- * (rounded danger-tinted block + flat primary button) so the user
- * recognises it as an inline status, not a stray paragraph. */
-.bubble.assistant .error-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.32);
-  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
-}
-
-.bubble.assistant .error-card .error-text {
-  color: var(--ion-color-danger, #eb445a);
-  font-size: 0.92em;
-  line-height: 1.35;
 }
 
 .bubble.assistant .btn.primary.retry {
