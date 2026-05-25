@@ -139,6 +139,24 @@ func main() {
 		)
 	}
 
+	// Retention sweep over processed bookkeeping rows (app.outbox +
+	// auth.rc_webhook_events). Independent of the consumer loop — pure
+	// daily DELETE on rows already past their TTL.
+	ret := &handlers.Retention{
+		Pool:             pool,
+		Interval:         cfg.RetentionInterval,
+		WebhookEventsTTL: cfg.RetentionWebhookEventsTTL,
+		OutboxTTL:        cfg.RetentionOutboxTTL,
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := ret.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+			slog.ErrorContext(runCtx, "retention_run_failed", slog.String("err", err.Error()))
+			runCancel()
+		}
+	}()
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	select {
