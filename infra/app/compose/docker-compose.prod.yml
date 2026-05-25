@@ -23,7 +23,7 @@ services:
         max-file: "5"
     labels:
       # Watchtower picks this container up on the next 60s poll and
-      # rolling-restarts it when a new image is published to ghcr.
+      # restarts it when a new image is published to ghcr.
       com.centurylinklabs.watchtower.enable: "true"
     ports:
       - "80:80"
@@ -64,6 +64,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [watchtower-internal]
 
+  # --rolling-restart is intentionally omitted: caddy hard-depends_on auth/chat/share-*
+  # via condition: service_healthy, which the rolling strategy refuses to break.
+  # Default stop-then-start strategy gives ~10s per-service downtime per upgrade — acceptable.
   watchtower:
     image: nickfedor/watchtower:1.17.1   # actively maintained fork of containrrr
     restart: unless-stopped
@@ -90,7 +93,6 @@ services:
       - --label-enable          # only touch containers with the watchtower.enable label
       - --interval=60           # poll ghcr every 60s
       - --cleanup               # remove old images after successful update
-      - --rolling-restart       # one container at a time (cosmetic with 1 replica each)
       - --include-stopped       # also scan exited containers (needed for the one-shot migrator)
       - --revive-stopped        # docker-start the migrator after pulling a fresh image
     networks: [watchtower-internal, lectorium]
