@@ -61,6 +61,15 @@
   <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
 
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
+
+  <!-- Second sheet asks WHICH delete (wipe device data or keep it) before
+       we emit upward. Kept as an action sheet for visual parity with the
+       sign-out / sign-in sheet above — no header, no body text. -->
+  <IonActionSheet
+    :is-open="deleteSheetOpen"
+    :buttons="deleteSheetButtons"
+    @did-dismiss="deleteSheetOpen = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -93,6 +102,7 @@ const emit = defineEmits<{
   "sign-out": []
   "open-paywall": []
   "manage-subscription": []
+  "delete-account": [opts: { wipeLocal: boolean }]
 }>()
 
 const activeServerId = defineModel<string>("activeServerId", { required: true })
@@ -100,6 +110,7 @@ const activeServerId = defineModel<string>("activeServerId", { required: true })
 const { t } = useI18n()
 const busy = ref(false)
 const sheetOpen = ref(false)
+const deleteSheetOpen = ref(false)
 const pictureFailed = ref(false)
 
 const initials = computed(() => {
@@ -122,9 +133,30 @@ const sheetButtons = computed(() => {
   }
   return [
     { text: t("settings.account.signOut"), role: "destructive" as const, handler: handleSignOut },
+    {
+      text: t("settings.account.deleteAccount.title"),
+      role: "destructive" as const,
+      handler: handleDeleteAccount,
+    },
     { text: t("app.cancel"), role: "cancel" as const },
   ]
 })
+
+// Both delete options are irreversible, so both get the destructive role —
+// Ionic paints both red, which matches their weight.
+const deleteSheetButtons = computed(() => [
+  {
+    text: t("settings.account.deleteAccount.confirmWipe"),
+    role: "destructive" as const,
+    handler: () => emit("delete-account", { wipeLocal: true }),
+  },
+  {
+    text: t("settings.account.deleteAccount.confirmKeep"),
+    role: "destructive" as const,
+    handler: () => emit("delete-account", { wipeLocal: false }),
+  },
+  { text: t("app.cancel"), role: "cancel" as const },
+])
 
 function onItemClick(): void {
   if (busy.value) return
@@ -158,6 +190,12 @@ function handleApple(): void {
 }
 function handleSignOut(): void {
   withBusy(() => emit("sign-out"))
+}
+function handleDeleteAccount(): void {
+  // Hop straight from the first sheet to the confirm sheet — no
+  // intermediate state, no busy gate; the second sheet is itself the
+  // confirmation step.
+  deleteSheetOpen.value = true
 }
 </script>
 
