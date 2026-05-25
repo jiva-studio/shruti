@@ -93,14 +93,17 @@ import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@lectorium/services/useToast.js"
+import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
+const purchases = usePurchasesStore()
 const platform = useLectorium().platform
 const i18n = useI18n()
 const { t } = i18n
@@ -149,15 +152,34 @@ async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<voi
     await auth.deleteAccount(opts)
   } catch (e) {
     console.warn("[settings] delete account failed:", e)
-    await toast.error(t("settings.account.deleteAccount.errorToast"))
+    let key = "settings.account.deleteAccount.errorToast"
+    if (e instanceof AccountDeleteError) {
+      switch (e.kind) {
+        case "already-deleted":
+          key = "settings.account.deleteAccount.alreadyDeletedToast"
+          break
+        case "rate-limited":
+          key = "settings.account.deleteAccount.rateLimitedToast"
+          break
+        case "network":
+          key = "settings.account.deleteAccount.networkErrorToast"
+          break
+        case "server":
+          key = "settings.account.deleteAccount.serverErrorToast"
+          break
+        // "unauthorized" and "unknown" fall through to the generic toast
+      }
+    }
+    await toast.error(t(key))
     return
   }
   // RevenueCat ties the subscription to the device (App Store / Play
   // account), not to the lectorium account we just deleted. Surface
-  // that so a user who deletes hoping to cancel billing doesn't think
-  // they're done. Shown for both wipe and keep paths — the RC link
-  // outlives the lectorium account either way.
-  await toast.info(t("settings.account.deleteAccount.subscriptionToast"))
+  // that only when the user actually had a subscription, so non-Pro
+  // users aren't confused by a reminder that doesn't apply to them.
+  if (purchases.isSubscribed) {
+    await toast.info(t("settings.account.deleteAccount.subscriptionToast"))
+  }
 }
 
 function onSmartLibraryEntry(): void {

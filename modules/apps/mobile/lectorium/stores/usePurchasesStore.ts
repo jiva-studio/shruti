@@ -152,6 +152,23 @@ export const usePurchasesStore = defineStore("purchases", () => {
     }
   }
 
+  /**
+   * Explicit RC SDK sign-out. Called from useAuthStore.deleteAccount
+   * BEFORE the session flips, so the userId watcher's anonymous logIn
+   * doesn't race the in-flight SDK logOut. Swallows SDK errors — the
+   * server account is already gone, so a flaky RC call here must not
+   * block the caller.
+   */
+  async function logOut(): Promise<void> {
+    if (!available.value) return
+    try {
+      const state = await useLectorium().purchases.logOut()
+      applyState(state)
+    } catch (e) {
+      console.warn("[purchases] logOut failed", e)
+    }
+  }
+
   function dispose(): void {
     unsubscribe?.()
     unsubscribe = undefined
@@ -177,6 +194,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     purchase,
     restore,
     refresh,
+    logOut,
     dispose,
   }
 })

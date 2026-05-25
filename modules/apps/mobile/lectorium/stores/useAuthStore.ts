@@ -3,6 +3,7 @@ import { computed, ref } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
@@ -152,6 +153,15 @@ export const useAuthStore = defineStore("auth", () => {
     await app.auth.deleteAccount()
     if (opts.wipeLocal) {
       await wipeLocalUserData(app)
+    }
+    // Detach RC binding BEFORE flipping the session so the watcher's
+    // subsequent logIn(newAnonId) doesn't race the SDK's in-flight
+    // logOut. RC SDK failure here is non-fatal — the server account is
+    // already gone; local SDK state will recover on next sign-in.
+    try {
+      await usePurchasesStore().logOut()
+    } catch (e) {
+      console.warn("[auth] RC logOut on delete failed:", e)
     }
     applySession(null)
     await restore()
