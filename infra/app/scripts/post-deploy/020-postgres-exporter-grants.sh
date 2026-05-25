@@ -7,11 +7,14 @@
 # Currently grants:
 #   - SELECT on app.outbox  (feeds lectorium_outbox_unprocessed_count
 #     used by the cleanup_worker_outbox_stuck Grafana alert)
+#
+# Uses `docker exec` directly (not `docker compose exec`) so the hook
+# doesn't need LECTORIUM_POSTGRES_PASSWORD in its env — compose would
+# re-evaluate the full service graph and fail to interpolate, but the
+# container itself is already running with credentials baked in.
 set -euo pipefail
 
-cd "$(dirname "$0")/../../../.."
-
-docker compose -f infra/app/compose/docker-compose.yml exec -T postgres \
+docker exec -i lectorium-postgres-1 \
   psql -U lectorium -d lectorium -v ON_ERROR_STOP=1 <<'SQL'
 GRANT USAGE ON SCHEMA app TO lectorium_exporter;
 GRANT SELECT ON app.outbox TO lectorium_exporter;
