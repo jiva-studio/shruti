@@ -54,13 +54,13 @@
 </ul>
 <p>Chat traffic is routed through <strong>OpenRouter, Inc.</strong> (the LLM gateway) to <strong>Google Gemini</strong> models operated by Google. No other LLM provider currently receives your chat messages. Chat content is used solely to produce the reply you see and to improve the quality of the feature; it is not used for advertising or profiling.</p>
 
-<strong class="section">Diagnostic logs and chat tracing</strong>
-<p>To keep the service running and to debug failures, the Application's backend records:</p>
+<strong class="section">Diagnostic logs and chat records</strong>
+<p>To keep the service running and to improve answer quality, the Application's backend keeps:</p>
 <ul>
-  <li><strong>Service logs</strong> — HTTP request metadata, error stack traces, and performance timings, retained on our self-hosted Grafana / Loki stack. These logs do not include your chat messages.</li>
-  <li><strong>Chat traces</strong> — the prompts, retrieved excerpts, model responses, and token usage for each chat turn, retained on our self-hosted Langfuse instance. Traces are used to diagnose answer-quality issues and to tune prompts.</li>
+  <li><strong>Service logs</strong> — request metadata, error records, and performance timing. These do not include your chat messages.</li>
+  <li><strong>Chat records</strong> — your messages, the excerpts we found, and the model's reply for each turn. Used to debug answer quality and improve the system.</li>
 </ul>
-<p>Both Grafana / Loki and Langfuse run on infrastructure operated by the Service Provider — chat content and logs are <em>not</em> sent to a third-party SaaS observability vendor.</p>
+<p>Both live on infrastructure we operate ourselves — they are not shared with any third-party analytics or observability service. We do not keep these records longer than needed to operate and improve the service (at most 90 days). When you delete your account, your chat records are removed right away — see the <em>Account deletion</em> section below.</p>
 
 <strong class="section">Sub-processors</strong>
 <p>The Application relies on a small set of third parties — each is engaged only for the feature noted, and only the data listed is shared. No other third party receives any data from the Application.</p>
@@ -70,23 +70,19 @@
   <li><strong>OpenRouter, Inc.</strong> (in-app chat) — LLM gateway that forwards your chat prompts and the retrieved lecture excerpts from our backend to the underlying model provider, and returns the reply. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
   <li><strong>Google LLC</strong> (in-app chat) — operates the Google Gemini models that currently generate the chat reply downstream of OpenRouter. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
 </ul>
-<p>Diagnostic logs (Grafana / Loki) and chat traces (Langfuse) run on infrastructure operated by the Service Provider — they are <em>not</em> third-party sub-processors.</p>
+<p>Our own diagnostic logs and chat records run on infrastructure we operate ourselves — they are <em>not</em> third-party sub-processors.</p>
 
 <strong class="section">Account deletion</strong>
 <p>If you signed in with Apple or Google, you can delete your account at any time from inside the Application: <strong>Settings → Account → Delete Account</strong>. The button is shown only while you are signed in.</p>
-<p>What gets deleted from our servers <em>immediately</em>:</p>
+<p>What we delete from our servers when you tap Delete Account:</p>
 <ul>
-  <li>Your account record (id, email, name, picture URL).</li>
-  <li>The Apple and Google identity links attached to that account.</li>
-  <li>All refresh tokens — every device signed in to the account is logged out.</li>
-  <li>Chat rate-limit counters tied to your user id.</li>
-</ul>
-<p>What gets purged on a best-effort basis, completing within ~90 days:</p>
-<ul>
-  <li>Chat traces (prompts, retrieved excerpts, model responses) recorded in our self-hosted Langfuse instance. At deletion time we issue a per-user purge request via Langfuse's API; any traces not purged synchronously rotate out automatically under the 90-day retention TTL applied to all chat traces.</li>
+  <li>Your account (id, email, name, profile picture link).</li>
+  <li>The Apple and Google sign-in links attached to that account.</li>
+  <li>All active sessions — every device signed in to the account is logged out.</li>
+  <li>Your chat history with our service (your messages, the excerpts we found, the model's replies) and any related counters.</li>
 </ul>
 <p>What stays on your device — and is your choice during the deletion flow — is the local data the Application has cached for you: chats, notes, playlists, downloaded audio, and listening history. You can wipe this local data as part of account deletion, or keep it and continue using the Application anonymously.</p>
-<p>What cannot be deleted on demand: prompts and replies already forwarded to OpenRouter and the underlying LLM provider during chat use, which are governed by those providers' own retention policies (typically up to 30 days for abuse-monitoring purposes). Purchase records retained by Apple or Google for the duration mandated by those platforms are likewise outside our control.</p>
+<p>What we cannot delete on demand: messages sent during chat use travel through <a href="https://openrouter.ai/privacy">OpenRouter</a> to the language-model provider — currently <a href="https://policies.google.com/privacy">Google's Gemini models</a>. Those providers keep the messages for a short period (typically up to 30 days) under their own anti-abuse policies. Purchase records that Apple or Google retain for the duration of those platforms' own policies are likewise outside our control.</p>
 
 <strong class="section">What are my opt-out rights?</strong>
 <p>You can stop all collection of information by the Application easily by uninstalling it. You may use the standard uninstall processes as may be available as part of your mobile device or via the mobile application marketplace or network. If you signed in with Apple or Google, you can additionally delete your account and associated server-side data from inside the Application — see the <em>Account deletion</em> section above. You may also email the Service Provider at <a href="mailto:support@akdasa.studio">support@akdasa.studio</a> for any other data-removal request; note that records required by Apple or Google for purchase verification cannot be removed for the duration mandated by those platforms.</p>
