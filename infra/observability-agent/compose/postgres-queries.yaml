@@ -55,3 +55,21 @@ shruti_share_video_tasks_by_state:
     - count:
         usage: GAUGE
         description: "Number of share-video tasks in each state"
+
+# Cleanup-worker outbox backlog. The Go worker LISTENs on the `outbox`
+# channel + sweeps every CLEANUP_SWEEP_INTERVAL (default 5m) and stamps
+# `processed_at` once side-effects (Langfuse purge, etc.) succeed. Anything
+# still NULL after an hour means the worker is wedged or its downstream
+# (Langfuse) is unreachable — silent data-deletion debt piling up. Grafana
+# alert fires when this >0 for >5m.
+shruti_outbox_unprocessed_count:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM app.outbox
+     WHERE processed_at IS NULL
+       AND occurred_at < now() - interval '1 hour'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "Outbox rows pending processing for >1 hour"
