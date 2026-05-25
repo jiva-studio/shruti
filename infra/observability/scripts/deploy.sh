@@ -159,17 +159,39 @@ compose_up "$REMOTE_DIR"
 
 # ──────────────────────────────────────────────────────────────────────
 # 7. Healthchecks
+#
+# All probes must run ON the obs host, not on the operator workstation.
+# Caddy admin API (2019) is not enabled; Prometheus (9090) is only
+# `expose`d to the docker network; Loki (3100) is bound to the Tailscale
+# IP only. So host-`localhost` probes all fail. We use `docker compose
+# exec` from inside $REMOTE_DIR/compose so service names resolve via
+# compose's project naming (avoids the `docker exec <short-name>` foot-
+# gun where the real container is `lectorium-observability-<svc>-1`).
 # ──────────────────────────────────────────────────────────────────────
-wait_healthcheck "http://localhost:2019/config/"                    60  caddy
-wait_healthcheck "http://localhost:9090/-/ready"                    60  prometheus
-wait_healthcheck "http://localhost:3100/ready"                      60  loki
-wait_healthcheck "http://${OBS_TS_IP}:3100/ready"                   30  "loki ingest (Tailscale)"
-# Grafana via docker exec — port 3000 is not bound on host.
-ssh_run "docker exec grafana wget --spider -q http://localhost:3000/api/health" \
-  && ok "grafana healthy" || warn "grafana not yet healthy"
+COMPOSE_REMOTE="cd '$REMOTE_DIR/compose' && DOCKER_CONFIG='$REMOTE_DIR/config' docker compose"
+
+# wait_in_container <service> <label> <max_seconds> <probe-cmd...>
+# Polls the probe-cmd inside the named compose service until success or timeout.
+wait_in_container() {
+  local svc="$1" label="$2" max="$3"; shift 3
+  log "Waiting for $label (≤ ${max}s) → $svc"
+  if ssh_run "for i in \$(seq 1 $((max / 3))); do $COMPOSE_REMOTE exec -T $svc $* >/dev/null 2>&1 && exit 0; sleep 3; done; exit 1"; then
+    ok "$label healthy"
+  else
+    warn "$label not yet healthy"
+  fi
+}
+
+# Caddy admin API isn't enabled (see compose comment); match the in-container
+# healthcheck and just verify the proxy is listening on :443.
+wait_in_container caddy      caddy      60  sh -c 'nc -z localhost 443'
+wait_in_container prometheus prometheus 60  wget --spider -q http://localhost:9090/-/ready
+wait_in_container loki       loki       60  wget --spider -q http://localhost:3100/ready
+wait_healthcheck "http://${OBS_TS_IP}:3100/ready" 30 "loki ingest (Tailscale)"
+# Grafana — port 3000 is not bound on host, only behind Caddy.
+wait_in_container grafana grafana 60 wget --spider -q http://localhost:3000/api/health
 # Langfuse migrations may still be in flight — give 180s.
-ssh_run "for i in \$(seq 1 60); do docker exec langfuse-web wget --spider -q http://localhost:3000/api/public/health 2>/dev/null && break || sleep 3; done" \
-  && ok "langfuse-web healthy" || warn "langfuse-web not yet healthy (ClickHouse migration may still be running)"
+wait_in_container langfuse-web langfuse-web 180 wget --spider -q http://localhost:3000/api/public/health
 
 # ──────────────────────────────────────────────────────────────────────
 # 8. Post-deploy hooks (idempotent infra-config re-asserts).
