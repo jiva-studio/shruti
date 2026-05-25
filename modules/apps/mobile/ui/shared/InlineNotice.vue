@@ -1,5 +1,5 @@
 <template>
-  <section :class="['inline-notice', kind]">
+  <section :class="['inline-notice', kind]" :role="ariaRole">
     <p v-if="title" class="title">{{ title }}</p>
     <p v-if="body" class="body">{{ body }}</p>
     <slot name="body" />
@@ -32,18 +32,36 @@
  *               ActionCardUpgradeToPro so the user reads it as
  *               "tap to unlock", not "something's wrong".
  */
+import { computed } from "vue"
+
 interface CtaSpec {
   readonly label: string
   readonly action: () => void
   readonly disabled?: boolean
 }
 
-defineProps<{
+const props = defineProps<{
   kind: "error" | "warning" | "info" | "upsell"
   title?: string
   body?: string
   cta?: CtaSpec
 }>()
+
+/**
+ * ARIA live-region role per kind:
+ *  - `error`   — `role="alert"`. Assistive tech interrupts the current
+ *                read-out to announce it (matches the user's mental
+ *                model: "something just broke, tell me now").
+ *  - `warning` — `role="alert"` too. Quota-at-cap for Pro is still a
+ *                "you can't proceed" message worth interrupting for.
+ *  - `info`    — `role="status"`. Polite announcement — no interruption.
+ *  - `upsell`  — `role="status"`. Conversion prompt, not an error;
+ *                surfaces under the failed user message so SR users
+ *                hear it announced but their flow isn't broken.
+ */
+const ariaRole = computed<"alert" | "status">(() =>
+  props.kind === "error" || props.kind === "warning" ? "alert" : "status"
+)
 </script>
 
 <style scoped>
