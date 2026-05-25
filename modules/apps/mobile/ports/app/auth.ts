@@ -37,6 +37,15 @@ export interface AuthSession {
   /** Subscription tier mirrored from RevenueCat ("free" | "pro"). Defaults
    * to "free" on stale tokens that pre-date this field. */
   tier: string
+  /**
+   * UNIX-epoch (ms) at which the Pro entitlement expires. `null` means
+   * lifetime Pro (or free, where the concept doesn't apply) — never
+   * coerce by date. The store coerces a "pro" tier whose expiry slid
+   * into the past back to "free" via the public `tier` getter, so a
+   * dropped EXPIRATION webhook can't keep stale Pro past the real
+   * boundary.
+   */
+  tierExpiresAt: number | null
 }
 
 export interface AuthPort {

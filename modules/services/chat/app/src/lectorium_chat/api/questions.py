@@ -182,6 +182,7 @@ async def questions(
     rl = await deps.rate_limiter.check_and_increment(
         user.id, user.anonymous, ip,
         scope="questions", tier=user.tier, quota_id=user.quota_id,
+        tier_expires_at=user.tier_expires_at,
     )
     if not rl.allowed:
         raise_429(rl, scope="questions")

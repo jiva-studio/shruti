@@ -174,3 +174,38 @@ def test_quota_id_invalid_falls_back_to_empty_and_warns(
     # in the rendered line.
     out = capsys.readouterr()
     assert "quota_id_invalid_format" in (out.out + out.err)
+
+
+# ── tier_expires_at parsing (plan 1.7) ───────────────────────────────────
+
+
+def test_tier_expires_at_parsed(tmp_path: Path) -> None:
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    tok = pyjwt.encode(
+        {
+            "sub": "user-1",
+            "anonymous": False,
+            "tier": "pro",
+            "tier_expires_at": 1700000000,
+            "exp": 9999999999,
+        },
+        priv,
+        algorithm="RS256",
+        headers={"kid": "v1"},
+    )
+    user = v.verify(tok)
+    assert user.tier == "pro"
+    assert user.tier_expires_at == 1700000000
+
+
+def test_tier_expires_at_missing_defaults_to_zero(tmp_path: Path) -> None:
+    # Old in-flight tokens that pre-date 1.7 lack the claim entirely.
+    # Verifier must default to 0 (lifetime / no-expiry) so existing
+    # Pro users don't get falsely downgraded mid-rollout.
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    user = v.verify(_sign(priv, "v1"))
+    assert user.tier_expires_at == 0

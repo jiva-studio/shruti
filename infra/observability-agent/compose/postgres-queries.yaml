@@ -100,6 +100,40 @@ lectorium_rc_webhook_unprocessed_count:
         usage: GAUGE
         description: "RC webhook events past their RC retry budget (>15 min) and still unprocessed"
 
+# Plan 1.3 — unprocessed rows whose snapshot couldn't match a user.
+# Webhook arrived before Purchases.logIn → processed_at stays NULL with
+# error='no rc_app_user_id match'. RC keeps retrying for 80 min; rows
+# past that window mean the client never linked and need the reconcile
+# cron's orphan sweep to clean them up. Steady-state should be ≤ a
+# handful (transient race between webhook + logIn).
+lectorium_rc_webhook_unmatched_count:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM auth.rc_webhook_events
+     WHERE processed_at IS NULL
+       AND error = 'no rc_app_user_id match'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "RC webhook rows with no matching auth.users row (webhook beat Purchases.logIn)"
+
+# Plan 1.3 — rows the orphan sweep has buried: client never linked
+# within OrphanAfter (default 7d), so we stamped processed_at + set
+# error='orphaned_no_link' to drop them out of unprocessed_count.
+# Cumulative; sudden growth means a lot of installs receive webhooks
+# but never call Purchases.logIn (tester accounts, abandoned installs).
+lectorium_rc_webhook_orphaned_count:
+  query: |
+    SELECT count(*)::bigint AS count
+      FROM auth.rc_webhook_events
+     WHERE error = 'orphaned_no_link'
+  master: true
+  metrics:
+    - count:
+        usage: GAUGE
+        description: "RC webhook rows buried by the orphan sweep (no client-side link within 7 days)"
+
 # Users whose subscription state is older than the reconciliation
 # threshold. Phase-8 reconciler should never let this grow past one or
 # two sweep windows (12-18h). Steady-state spike means the cron isn't

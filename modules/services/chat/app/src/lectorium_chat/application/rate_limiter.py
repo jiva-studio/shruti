@@ -11,6 +11,7 @@ singleton.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -60,12 +61,24 @@ class RateLimiter:
         self._store = store
         self._settings = settings
 
-    def _user_limit_for(self, scope: str, anonymous: bool, tier: str) -> int:
+    def _user_limit_for(
+        self,
+        scope: str,
+        anonymous: bool,
+        tier: str,
+        tier_expires_at: int = 0,
+    ) -> int:
         """Three-way tier matrix. Anonymous trumps tier — an anonymous
         JWT can never carry a Pro entitlement (the OAuth identity that
         receipts the purchase doesn't exist yet). After signin RC's
         SUBSCRIBER_ALIAS event moves the entitlement to the new user_id
-        and the next refresh issues a JWT with tier='pro'."""
+        and the next refresh issues a JWT with tier='pro'.
+
+        `tier_expires_at` is the UNIX-epoch claim minted by auth. 0 means
+        lifetime / free (no expiry concept) — never coerce. A non-zero
+        value in the past means the auth-side `tier="pro"` is stale (a
+        dropped EXPIRATION webhook); we fall back to free limits without
+        waiting for the next reconcile cycle to repair the column."""
         s = self._settings
         if scope == "title":
             anon, free, pro = s.title_anon_per_day, s.title_free_per_day, s.title_pro_per_day
@@ -78,6 +91,9 @@ class RateLimiter:
         if anonymous:
             return anon
         if tier == "pro":
+            if tier_expires_at != 0 and tier_expires_at < int(time.time()):
+                # Stale Pro claim — refuse to honour it past the real expiry.
+                return free
             return pro
         return free
 
@@ -96,15 +112,26 @@ class RateLimiter:
         scope: str = "chat",
         tier: str = "free",
         quota_id: str = "",
+        tier_expires_at: int = 0,
     ) -> RateLimitResult:
-        user_limit = self._user_limit_for(scope, anonymous, tier)
+        user_limit = self._user_limit_for(scope, anonymous, tier, tier_expires_at)
         ip_limit = self._ip_limit()
         now = datetime.now(timezone.utc)
         today = now.date()
         reset_at = _next_midnight_utc(now)
         # "anonymous" is more informative than tier="free" when anonymous=True
-        # — the UI picks different copy.
-        echoed_tier = "anonymous" if anonymous else tier
+        # — the UI picks different copy. If we just downgraded a stale Pro to
+        # free limits, the echoed tier must reflect that — the mobile UX
+        # uses it to pick the right CTA copy.
+        effective_tier = tier
+        if (
+            not anonymous
+            and tier == "pro"
+            and tier_expires_at != 0
+            and tier_expires_at < int(time.time())
+        ):
+            effective_tier = "free"
+        echoed_tier = "anonymous" if anonymous else effective_tier
         # Per-user key: quota_id (stable across delete+recreate via the
         # OAuth identity hash) when present; falls back to user_id for
         # anonymous users (no OAuth identity yet) and for old in-flight

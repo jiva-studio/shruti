@@ -109,7 +109,9 @@ async def chat(
     # Rate-limit gate (per-day per JWT-sub + per-IP).
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="chat", tier=user.tier, quota_id=user.quota_id,
+        user.id, user.anonymous, ip, scope="chat",
+        tier=user.tier, quota_id=user.quota_id,
+        tier_expires_at=user.tier_expires_at,
     )
     if not rl.allowed:
         raise_429(rl, scope="chat")

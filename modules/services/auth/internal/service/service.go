@@ -278,7 +278,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 		if err != nil {
 			return err
 		}
-		tier, err := s.loadTier(ctx, row.UserID)
+		tier, tierExp, err := s.loadTierAndExpiry(ctx, row.UserID, time.Now().UTC())
 		if err != nil {
 			return fmt.Errorf("load tier: %w", err)
 		}
@@ -287,12 +287,12 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 			return fmt.Errorf("load quota_id: %w", err)
 		}
 
-		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, AccessTTL, uuid.Nil)
+		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, tierExp, AccessTTL, uuid.Nil)
 		if err != nil {
 			return err
 		}
 		newJTI := uuid.New()
-		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, RefreshTTL, newJTI)
+		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, tierExp, RefreshTTL, newJTI)
 		if err != nil {
 			return err
 		}
@@ -387,6 +387,14 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 	if tier == "" {
 		tier = TierFree
 	}
+	// View-side coerce: a stale Pro row whose expiry slid into the past
+	// must not be reported as Pro to the client. The DB stays as-is
+	// (reconcile cron / next webhook fixes the column); the JWT and /me
+	// response always reflect "real now". Lifetime entitlements
+	// (TierExpiresAt == nil) keep the original tier.
+	if tier == TierPro && u.TierExpiresAt != nil && !u.TierExpiresAt.After(time.Now().UTC()) {
+		tier = TierFree
+	}
 	resp := &MeResponse{
 		UserID:        u.ID,
 		Email:         email,
@@ -475,19 +483,35 @@ func (s *Service) userIsAnonymous(ctx context.Context, _ pgx.Tx, userID uuid.UUI
 	return true, nil
 }
 
-// loadTier reads the user's current subscription tier from auth.users.
-// Returns TierFree (the column default) if the row is missing; the
-// Signer treats an empty string the same way, but defaulting here
-// keeps the log line readable.
-func (s *Service) loadTier(ctx context.Context, userID uuid.UUID) (string, error) {
+// loadTierAndExpiry reads the user's subscription tier + UNIX-epoch
+// expiry from auth.users in one round trip and returns a view-only
+// coercion: if `tier_expires_at` is in the past, the returned tier is
+// "free" regardless of what the column says. Defence-in-depth against
+// a dropped EXPIRATION webhook leaving stale `tier="pro"` until the
+// next reconcile cycle.
+//
+// Lifetime entitlements (tier="pro", tier_expires_at IS NULL) pass
+// through as-is — they never expire.
+//
+// Does NOT mutate auth.users. The DB-side correction is the
+// reconcile cron's job; this function just keeps the issued JWT from
+// lying to the chat service.
+func (s *Service) loadTierAndExpiry(ctx context.Context, userID uuid.UUID, now time.Time) (tier string, expiresAtEpoch int64, err error) {
 	u, err := s.Users.Get(ctx, userID)
 	if err != nil {
-		return TierFree, err
+		return TierFree, 0, err
 	}
 	if u == nil || u.Tier == "" {
-		return TierFree, nil
+		return TierFree, 0, nil
 	}
-	return u.Tier, nil
+	tier = u.Tier
+	if u.TierExpiresAt != nil {
+		expiresAtEpoch = u.TierExpiresAt.Unix()
+		if tier == TierPro && !u.TierExpiresAt.After(now) {
+			tier = TierFree
+		}
+	}
+	return tier, expiresAtEpoch, nil
 }
 
 // loadQuotaID derives the rate-limit key for `userID`. See
@@ -504,7 +528,7 @@ func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, er
 
 // issueSession mints fresh access + refresh and persists the refresh row.
 func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous bool, deviceID string) (*Session, error) {
-	tier, err := s.loadTier(ctx, userID)
+	tier, tierExp, err := s.loadTierAndExpiry(ctx, userID, time.Now().UTC())
 	if err != nil {
 		return nil, fmt.Errorf("load tier: %w", err)
 	}
@@ -512,12 +536,12 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous 
 	if err != nil {
 		return nil, fmt.Errorf("load quota_id: %w", err)
 	}
-	access, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, AccessTTL, uuid.Nil)
+	access, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, tierExp, AccessTTL, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
 	newJTI := uuid.New()
-	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, RefreshTTL, newJTI)
+	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, tierExp, RefreshTTL, newJTI)
 	if err != nil {
 		return nil, err
 	}

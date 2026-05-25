@@ -54,9 +54,15 @@ type webhookEventStore interface {
 // handler uses for the idempotency + apply flow. The DB-touching ops
 // (lookup, insert, apply) sit behind small methods so tests can swap
 // in an in-memory fake.
+//
+// InsertOrLookup + WaitForSibling replace the old two-step lookup-then-
+// insert path (plan 1.2). The new shape is atomic against concurrent RC
+// retries: either we inserted (proceed to apply), or we hit a conflict
+// and read back processed_at. When processed_at is still NULL the caller
+// takes the per-event advisory lock until the sibling commits.
 type rcSubscriptionApplier interface {
-	LookupProcessed(ctx context.Context, eventID string) (bool, error)
-	InsertEvent(ctx context.Context, eventID string) error
+	InsertOrLookup(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error)
+	WaitForSibling(ctx context.Context, eventID string) (processed bool, err error)
 	Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error)
 }
 
@@ -139,31 +145,48 @@ func (h *RCWebhookHandler) fetcher() rcSubscriberFetcher {
 }
 
 // defaultApplier wraps *service.Service so the production wiring keeps
-// working unchanged while tests inject a fake. Holds the same DB
-// transaction semantics the handler had inline before the refactor.
+// working unchanged while tests inject a fake.
 type defaultApplier struct{ svc *service.Service }
 
-func (d defaultApplier) LookupProcessed(ctx context.Context, eventID string) (bool, error) {
-	var processed bool
-	err := pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
-		got, err := d.svc.WebhookEvents.LookupProcessed(ctx, tx, eventID)
-		if err != nil {
-			return err
+// InsertOrLookup runs the atomic INSERT-or-conflict-and-read path inside
+// its own short tx. The apply step takes a fresh tx of its own.
+func (d defaultApplier) InsertOrLookup(ctx context.Context, eventID, appUserID string) (inserted, processed bool, err error) {
+	err = pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
+		ins, proc, e := d.svc.WebhookEvents.InsertOrLookup(ctx, tx, eventID, appUserID)
+		if e != nil {
+			return e
 		}
-		processed = got
+		inserted, processed = ins, proc
 		return nil
 	})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
-	}
-	return processed, nil
+	return inserted, processed, err
 }
 
-func (d defaultApplier) InsertEvent(ctx context.Context, eventID string) error {
-	return pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
-		_, err := d.svc.WebhookEvents.Insert(ctx, tx, eventID)
-		return err
+// WaitForSibling serialises on the event_id advisory lock until the
+// concurrent attempt commits or rolls back, then re-reads processed_at.
+// The lock is released on tx commit/rollback so we always exit the
+// function with the lock held by no one. Returns whether the sibling
+// completed the apply step (processed_at is non-NULL).
+func (d defaultApplier) WaitForSibling(ctx context.Context, eventID string) (bool, error) {
+	var processed bool
+	err := pgx.BeginFunc(ctx, d.svc.Pool, func(tx pgx.Tx) error {
+		if _, e := tx.Exec(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext('rc-webhook'), hashtext($1))`,
+			eventID,
+		); e != nil {
+			return e
+		}
+		var processedAt *time.Time
+		if e := tx.QueryRow(ctx,
+			`SELECT processed_at FROM auth.rc_webhook_events WHERE event_id = $1`,
+			eventID,
+		).Scan(&processedAt); e != nil {
+			return e
+		}
+		processed = processedAt != nil
+		return nil
 	})
+	return processed, err
 }
 
 func (d defaultApplier) Apply(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
@@ -226,38 +249,63 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "skipped": true})
 		return
 	}
-
-	// Idempotency: check processed_at first, INSERT if absent. Doing
-	// it in two steps (rather than ON CONFLICT-and-return) lets us
-	// distinguish "already done" from "first sighting OR retry of a
-	// failed attempt" — the second case must continue processing,
-	// otherwise a transient REST error during the first attempt would
-	// leave the event stuck until the reconciliation cron.
-	if processed, err := h.applier().LookupProcessed(ctx, p.Event.ID); err != nil {
-		slog.ErrorContext(ctx, "rc_webhook_lookup_failed",
-			"event_id", p.Event.ID, "err", err.Error())
-		writeErr(w, http.StatusInternalServerError, "db_error", "lookup failed")
+	if p.Event.AppUserID == "" {
+		// No app_user_id → nothing to refetch and nothing the orphan
+		// sweep can resolve. Refuse with 400 so RC stops retrying.
+		slog.WarnContext(ctx, "rc_webhook_no_app_user_id", "event_id", p.Event.ID)
+		writeErr(w, http.StatusBadRequest, "bad_request", "missing app_user_id")
 		return
-	} else if processed {
+	}
+
+	// Idempotency: one atomic INSERT ... ON CONFLICT DO NOTHING
+	// RETURNING (xmax = 0). The old two-step lookup-then-insert path
+	// had a window where two concurrent RC retries could both miss
+	// the row and proceed to fan-out two outbox writes.
+	//
+	// Outcomes:
+	//   - inserted=true              → first sighting, proceed.
+	//   - inserted=false, processed=true → previous attempt finished, return 200.
+	//   - inserted=false, processed=false → previous attempt still in
+	//     flight or crashed before MarkProcessed. Acquire the advisory
+	//     lock keyed on event_id; the in-flight attempt holds it (or
+	//     will release on rollback). Once we have it, re-read
+	//     processed_at — if NULL we retry the apply step.
+	inserted, processed, err := h.applier().InsertOrLookup(ctx, p.Event.ID, p.Event.AppUserID)
+	if err != nil {
+		slog.ErrorContext(ctx, "rc_webhook_idempotency_failed",
+			"event_id", p.Event.ID, "err", err.Error())
+		writeErr(w, http.StatusInternalServerError, "db_error", "idempotency probe failed")
+		return
+	}
+	if !inserted && processed {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
 		return
 	}
-	if err := h.applier().InsertEvent(ctx, p.Event.ID); err != nil {
-		slog.ErrorContext(ctx, "rc_webhook_insert_failed",
-			"event_id", p.Event.ID, "err", err.Error())
-		writeErr(w, http.StatusInternalServerError, "db_error", "insert failed")
-		return
+	if !inserted && !processed {
+		// Sibling retry already mid-flight (or its tx rolled back without
+		// MarkProcessed). Serialise on event_id — the lock is released
+		// when the sibling commits, after which we re-read processed_at.
+		// If sibling succeeded, return 200 duplicate; if it left
+		// processed_at NULL we fall through and re-run the apply step.
+		processedNow, err := h.applier().WaitForSibling(ctx, p.Event.ID)
+		if err != nil {
+			slog.ErrorContext(ctx, "rc_webhook_sibling_wait_failed",
+				"event_id", p.Event.ID, "err", err.Error())
+			writeErr(w, http.StatusInternalServerError, "db_error", "sibling wait failed")
+			return
+		}
+		if processedNow {
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "duplicate": true})
+			return
+		}
+		// Fall through to re-attempt; the unique constraint on event_id
+		// + the apply tx still guarantee one outbox row per event.
 	}
 
 	// REST refetch — authoritative state. Failure here leaves
 	// processed_at=NULL with an error message; RC will retry the
 	// webhook (and we'll fall back through the idempotency path
 	// taking the "unprocessed → retry" branch).
-	if p.Event.AppUserID == "" {
-		_ = h.events().RecordError(ctx, p.Event.ID, "empty app_user_id")
-		writeErr(w, http.StatusBadRequest, "bad_request", "missing app_user_id")
-		return
-	}
 	resp, err := h.fetcher().GetSubscriber(ctx, p.Event.AppUserID)
 	if err != nil {
 		// 404 is a soft success — RC creates the subscriber lazily on
@@ -317,6 +365,22 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"event_id", p.Event.ID, "err", safeErr)
 		_ = h.events().RecordError(ctx, p.Event.ID, safeErr)
 		writeErr(w, http.StatusInternalServerError, "db_error", "apply failed")
+		return
+	}
+	if !matched {
+		// Webhook arrived before the client called Purchases.logIn —
+		// rc_app_user_id isn't bound to any auth.users row yet.
+		// processed_at stays NULL (set by ApplyRCSubscriberState only
+		// when matched=true) so RC keeps retrying within its 80-min
+		// budget. By that point the client should have called logIn;
+		// after the budget the reconciliation cron's orphan sweep
+		// stamps the row processed if the link still hasn't appeared.
+		slog.InfoContext(ctx, "rc_webhook_unmatched",
+			"event_id", p.Event.ID,
+			"event_type", p.Event.Type,
+			"rc_app_user_id", p.Event.AppUserID,
+		)
+		writeErr(w, http.StatusInternalServerError, "unmatched", "rc_app_user_id not bound yet")
 		return
 	}
 

@@ -62,6 +62,10 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	// 0022_auth_user_picture lives in the 002N range and is also auth-owned.
 	moreAuth, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
 	authFiles = append(authFiles, moreAuth...)
+	// 0027_rc_webhook_app_user_id is also auth-owned but uses the
+	// `rc_webhook` slug instead of `auth_` so the glob above misses it.
+	moreWebhook, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_rc_webhook_*.up.sql"))
+	authFiles = append(authFiles, moreWebhook...)
 	// Outbox + the usage table the chat service owns in prod. We just need
 	// the shape — chat's full set isn't required for these tests. 0026 layers
 	// the dedup column onto app.outbox and must run after 0023.

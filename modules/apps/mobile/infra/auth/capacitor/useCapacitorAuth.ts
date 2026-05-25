@@ -33,6 +33,8 @@ interface StoredTokens {
   anonymous: boolean
   accessTokenExpiresAt: number
   tier: string
+  // UNIX-epoch ms; null = lifetime Pro or free. See AuthSession docs.
+  tierExpiresAt: number | null
 }
 
 const PREFERENCES_KEY = "auth.tokens"
@@ -93,16 +95,25 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     await Preferences.remove({ key: PREFERENCES_KEY })
   }
 
-  function decodeAccessClaims(accessToken: string): { expMs: number; tier: string } {
+  function decodeAccessClaims(accessToken: string): {
+    expMs: number
+    tier: string
+    tierExpiresAtMs: number | null
+  } {
     try {
       const [, payloadB64] = accessToken.split(".")
       const json = JSON.parse(atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/")))
+      // JWT carries tier_expires_at as UNIX seconds; 0 / missing means
+      // lifetime Pro or free — expose as null so the store's `tier`
+      // getter never coerces by date in those cases.
+      const rawExp = typeof json.tier_expires_at === "number" ? json.tier_expires_at : 0
       return {
         expMs: typeof json.exp === "number" ? json.exp * 1000 : 0,
         tier: typeof json.tier === "string" ? json.tier : "free",
+        tierExpiresAtMs: rawExp > 0 ? rawExp * 1000 : null,
       }
     } catch {
-      return { expMs: 0, tier: "free" }
+      return { expMs: 0, tier: "free", tierExpiresAtMs: null }
     }
   }
 
@@ -115,6 +126,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       anonymous: t.anonymous,
       accessTokenExpiresAt: t.accessTokenExpiresAt,
       tier: t.tier || "free",
+      tierExpiresAt: t.tierExpiresAt ?? null,
     }
   }
 
@@ -133,6 +145,13 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   async function commitTokenResponse(body: TokenResponseBody): Promise<AuthSession> {
     const me = await fetchMeBody(body.accessToken)
     const claims = decodeAccessClaims(body.accessToken)
+    // tier_expires_at: JWT claim wins (integer epoch), /me's ISO string
+    // is the tie-breaker for pre-1.7 tokens that lack the JWT claim.
+    let tierExpiresAt = claims.tierExpiresAtMs
+    if (tierExpiresAt === null && me?.tierExpiresAt) {
+      const parsed = Date.parse(me.tierExpiresAt)
+      tierExpiresAt = Number.isFinite(parsed) ? parsed : null
+    }
     const next: StoredTokens = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
@@ -146,6 +165,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       // the chat service will actually see. /me's `tier` is a tie-breaker
       // when JWT lacks the claim (older tokens in flight).
       tier: claims.tier || me?.tier || "free",
+      tierExpiresAt,
     }
     await persistTokens(next)
     const sess = sessionFromTokens(next)

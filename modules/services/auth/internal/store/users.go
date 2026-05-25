@@ -107,10 +107,10 @@ func (r *UserRepo) ListStaleSubscribers(ctx context.Context, staleAfter time.Dur
 		`SELECT id, rc_app_user_id FROM auth.users
 		  WHERE rc_app_user_id IS NOT NULL
 		    AND (tier_updated_at IS NULL
-		         OR tier_updated_at < now() - ($1 || ' seconds')::interval)
+		         OR tier_updated_at < now() - make_interval(secs => $1))
 		  ORDER BY tier_updated_at NULLS FIRST
 		  LIMIT $2`,
-		int(staleAfter.Seconds()), limit,
+		staleAfter.Seconds(), limit,
 	)
 	if err != nil {
 		return nil, err
