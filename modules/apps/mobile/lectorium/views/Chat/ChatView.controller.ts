@@ -54,6 +54,13 @@ export interface ChatControllerReturn {
   /** Reactive ping the view watches to focus the textarea after the
    *  Ask-Sadhu navigation. */
   inputFocusToken: ComputedRef<number>
+  /** True while the chat rate-limit window from the last 429 is still
+   *  open. Drives the composer disabled state + "limit resets at HH:MM"
+   *  placeholder so the user can't burn another quota-rejected send. */
+  isComposeBlocked: ComputedRef<boolean>
+  /** UnixMs deadline backing `isComposeBlocked`. Forwarded to the
+   *  composer so the placeholder can show a wall-clock reset time. */
+  composeBlockedUntil: ComputedRef<number | null>
   onSend: (text: string) => Promise<void>
   onNewSession: () => void
   onOpenHistory: () => Promise<void>
@@ -446,6 +453,8 @@ export function useChatController(): ChatControllerReturn {
     loadingFocusIds: computed(() => store.loadingFocusIds),
     sessionHeader,
     inputFocusToken: computed(() => store.inputFocusToken),
+    isComposeBlocked: computed(() => store.isComposeBlocked),
+    composeBlockedUntil: computed(() => store.composeBlockedUntil),
     onSend,
     onNewSession,
     onOpenHistory,

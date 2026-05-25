@@ -1,5 +1,6 @@
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
+import { useNow } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -25,6 +26,7 @@ import type {
   ChatMessageError,
   ChatOutlinePayload,
   ChatSession as DomainChatSession,
+  QuotaTier,
   SmartLibraryFiltersPayload,
 } from "@lib/domain"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
@@ -89,6 +91,15 @@ function deriveTitle(text: string, max = 48): string {
   const trimmed = text.replace(/\s+/g, " ").trim()
   if (trimmed.length <= max) return trimmed
   return trimmed.slice(0, max - 1).trimEnd() + "…"
+}
+
+/** Narrow the server's `tier` string ("anonymous" | "free" | "pro")
+ *  into the typed union. Anything else (typo, future tier we don't know
+ *  about yet, missing field) collapses to undefined so the UI falls
+ *  back to a tier-agnostic message. */
+function parseQuotaTier(raw: string | undefined): QuotaTier | undefined {
+  if (raw === "anonymous" || raw === "free" || raw === "pro") return raw
+  return undefined
 }
 
 /**
@@ -158,6 +169,19 @@ export const useChatStore = defineStore("chat", () => {
    *  and calls `inputBarRef.focus()` so the keyboard comes up without
    *  the user having to tap the textarea after the router lands. */
   const inputFocusToken = ref<number>(0)
+  /** UnixMs deadline until which the chat composer stays disabled
+   *  after a `rate_limited` 429. Set from the server's `resets_at_epoch`
+   *  (or `Retry-After` as fallback). Not persisted across cold-starts —
+   *  on app restart the first send re-hits the limiter and the store
+   *  re-arms this from the fresh 429. */
+  const composeBlockedUntil = ref<number | null>(null)
+  /** Reactive clock for `isComposeBlocked` — ticks every second while
+   *  any consumer subscribes. @vueuse handles the timer lifecycle
+   *  (visibility-aware, cleaned up on unmount). */
+  const now = useNow({ interval: 1000 })
+  const isComposeBlocked = computed<boolean>(
+    () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
+  )
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
    *  session header above the message list (track title / author /
    *  date) and any other code that needs to know whether the current
@@ -680,18 +704,33 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "error": {
-        // Convert relative `Retry-After` (seconds, only set on the 429
-        // path inside chatClient.ts) into an absolute deadline at the
-        // moment we receive it. Without this the bubble's countdown
-        // would drift if the user backgrounds the app — relative-seconds
-        // captured at this point would be stale on next render.
-        const retryAfterAt: number | undefined =
-          typeof event.retryAfter === "number" && event.retryAfter > 0
-            ? Date.now() + event.retryAfter * 1000
+        // Prefer the absolute resets_at_epoch from the Phase-4 429 body
+        // when present — it's authoritative server time, no clock-drift
+        // pinning. Fall back to relative `Retry-After` if the server
+        // hasn't rolled that out yet (or the error isn't rate_limited).
+        const resetsAtMs =
+          typeof event.resetsAtEpoch === "number" && event.resetsAtEpoch > 0
+            ? event.resetsAtEpoch * 1000
             : undefined
-        const failedErr: ChatMessageError = retryAfterAt
-          ? { kind: "failed", code: event.code, retryAfterAt }
-          : { kind: "failed", code: event.code }
+        const retryAfterAt: number | undefined =
+          resetsAtMs ??
+          (typeof event.retryAfter === "number" && event.retryAfter > 0
+            ? Date.now() + event.retryAfter * 1000
+            : undefined)
+        const tier = parseQuotaTier(event.tier)
+        const failedErr: ChatMessageError = {
+          kind: "failed",
+          code: event.code,
+          ...(retryAfterAt !== undefined ? { retryAfterAt } : {}),
+          ...(tier !== undefined ? { tier } : {}),
+        }
+        // Phase 6 compose-lockdown — keep the input disabled until the
+        // server-side counter resets, so the user can't queue more
+        // requests just to bounce them off another 429. Only set for
+        // quota errors; network/server errors stay retryable.
+        if (event.code === "rate_limited" && retryAfterAt) {
+          composeBlockedUntil.value = retryAfterAt
+        }
         // Transform the streaming placeholder into a failed-bubble in
         // place — keeps the message slot's id stable (handy for any
         // scroll/anchor logic) and avoids the placeholder briefly
@@ -1036,6 +1075,8 @@ export const useChatStore = defineStore("chat", () => {
     sending,
     loadingFocusIds,
     inputFocusToken,
+    composeBlockedUntil,
+    isComposeBlocked,
     unseenProactiveSessionIds,
     refreshSessions,
     openSession,

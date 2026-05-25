@@ -76,10 +76,10 @@ export default {
           "Create collections for lectures that will automatically update based on specified criteria.",
         icon: "🗃️",
       },
-      benefit5: {
-        title: "Advanced Search",
-        description: "Search through lecture texts to quickly find needed moments.",
-        icon: "🔍",
+      chat: {
+        title: "More AI chat messages",
+        description: "A bigger daily allowance for chatting with the lectures.",
+        icon: "💬",
       },
       autoScroll: {
         title: "Automatic Scroll",

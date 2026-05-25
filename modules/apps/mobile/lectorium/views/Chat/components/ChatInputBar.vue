@@ -6,7 +6,7 @@
         v-model="text"
         rows="1"
         :placeholder="placeholder"
-        :disabled="sending"
+        :disabled="sending || quotaLocked"
         class="input"
         @keydown="onKeydown"
         @input="resize"
@@ -18,8 +18,8 @@
         class="send"
         :class="{ visible: canSend || sending }"
         :aria-label="$t('chat.send')"
-        :disabled="!canSend && !sending"
-        :tabindex="canSend ? 0 : -1"
+        :disabled="(!canSend && !sending) || quotaLocked"
+        :tabindex="canSend && !quotaLocked ? 0 : -1"
         @click="onSendClick"
       >
         <IconArrowUp v-if="!sending" :size="20" stroke="2.5" />
@@ -37,6 +37,15 @@ import { IconArrowUp } from "@tabler/icons-vue"
 
 const props = defineProps<{
   sending: boolean
+  /** Set while the chat rate-limit window is still open (`useChatStore.
+   *  isComposeBlocked`). When true the composer disables textarea + send
+   *  and swaps the placeholder for a "Limit resets at HH:MM" string —
+   *  so a user who already saw the InlineNotice can't burn another 429
+   *  by mashing send. */
+  quotaLocked?: boolean
+  /** UnixMs deadline backing `quotaLocked`. Used to format the locked-
+   *  placeholder; not required to determine disabled state. */
+  quotaResetsAt?: number | null
 }>()
 const emit = defineEmits<{ send: [text: string] }>()
 
@@ -47,7 +56,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const focused = ref(false)
 
 const hasText = computed(() => text.value.trim().length > 0)
-const canSend = computed(() => !props.sending && hasText.value)
+const canSend = computed(() => !props.sending && hasText.value && !props.quotaLocked)
 
 /** Pool the placeholder rotates through — pure suggestion list. The
  *  generic "ask a question" string used to live here too, but it's dead
@@ -65,6 +74,17 @@ const placeholderPool = computed<string[]>(() => {
 /** Random start so different sessions don't all open on the same question. */
 const placeholderIndex = ref(Math.floor(Math.random() * 1000))
 const placeholder = computed<string>(() => {
+  // Quota lock wins — show the user exactly when they can compose again
+  // instead of the cheerful "Ask a question" rotation.
+  if (props.quotaLocked) {
+    if (typeof props.quotaResetsAt === "number") {
+      const d = new Date(props.quotaResetsAt)
+      const hh = d.getHours().toString().padStart(2, "0")
+      const mm = d.getMinutes().toString().padStart(2, "0")
+      return t("chat.composeLimitedPlaceholder", { time: `${hh}:${mm}` })
+    }
+    return t("chat.composeLimitedPlaceholderNoTime")
+  }
   const pool = placeholderPool.value
   if (pool.length === 0) return t("chat.placeholder")
   return pool[placeholderIndex.value % pool.length] ?? t("chat.placeholder")

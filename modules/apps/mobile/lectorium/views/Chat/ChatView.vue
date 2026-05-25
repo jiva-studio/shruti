@@ -55,7 +55,13 @@
         </PageSticker>
       </div>
     </IonContent>
-    <ChatInputBar ref="inputBarRef" :sending="sending" @send="onSend" />
+    <ChatInputBar
+      ref="inputBarRef"
+      :sending="sending"
+      :quota-locked="isComposeBlocked"
+      :quota-resets-at="composeBlockedUntil"
+      @send="onSend"
+    />
     <ChatSessionList
       :open="isHistoryOpen"
       :sessions="filteredSessions"
@@ -106,6 +112,8 @@ const {
   loadingFocusIds,
   sessionHeader,
   inputFocusToken,
+  isComposeBlocked,
+  composeBlockedUntil,
   onSend,
   onNewSession,
   onOpenHistory,

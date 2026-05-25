@@ -54,6 +54,34 @@ export default {
   retryInSeconds: "in {n}s",
   retryInMinutes: "in {n} min",
   retryAtTime: "at {time}",
+  retryNow: "now",
+
+  // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
+  // The bubble's InlineNotice picks one of these three (anon / free / pro)
+  // based on the `tier` field the server echoes in the 429 body. Old
+  // servers without tier fall back to errRate / errRateAfter above.
+  //
+  // Copy intentionally omits the per-tier message count — the server
+  // sets those numbers in config.py and we don't want to chase the
+  // strings every time we tune. The "{when}" placeholder shows the
+  // actual reset boundary so users still know how long the wait is.
+  errQuotaAnonTitle: "Daily message limit reached",
+  errQuotaAnonBody: "Sign in to get more chat messages per day. Resets {when}.",
+  errQuotaFreeTitle: "Daily message limit reached",
+  errQuotaFreeBody: "Shruti Pro lifts the daily message limit. Resets {when}.",
+  errQuotaProTitle: "Daily limit reached",
+  errQuotaProBody: "You've used up today's chat messages. Resets {when}.",
+  /** CTAs under quota InlineNotices. Anon → opens Settings (where the
+   *  social-sign-in buttons live). Free → opens the paywall page,
+   *  deep-linked to the chat-benefit slide. */
+  signInForMoreCta: "Sign in",
+  upgradeToProCta: "Shruti Pro",
+
+  // ── Composer lockdown (Phase 6) ───────────────────────────────────────
+  // Swapped into the input placeholder while the quota window is still
+  // open. The textarea is disabled too, so this is purely informational.
+  composeLimitedPlaceholder: "Limit resets at {time}",
+  composeLimitedPlaceholderNoTime: "Daily limit reached — try again later",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
@@ -192,9 +220,9 @@ export default {
   actionConfigureSmartLibraryChipLocations: "{n} locations",
   actionConfigureSmartLibraryChipLanguages: "{n} languages",
 
-  actionUpgradeToProTitle: "Lectorium Pro",
+  actionUpgradeToProTitle: "Shruti Pro",
   actionUpgradeToProBody:
-    "Unlock Smart Library, the Notes Studio, and the rest of Pro to get the most out of Lectorium.",
+    "Unlock Smart Library, the Notes Studio, and the rest of Pro to get the most out of the app.",
   actionUpgradeToProConfirm: "See Pro",
   actionUpgradeToProDone: "Paywall opened.",
   actionUpgradeToProError: "Couldn't open the upgrade screen.",
