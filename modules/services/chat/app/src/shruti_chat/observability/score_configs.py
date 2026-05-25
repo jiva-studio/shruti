@@ -47,12 +47,12 @@ SCORE_CONFIGS: list[dict] = [
         name="user_feedback_category",
         data_type="CATEGORICAL",
         categories=[
-            ConfigCategory(label="off_topic",       value=1),
-            ConfigCategory(label="no_results",      value=2),
-            ConfigCategory(label="bad_citations",   value=3),
-            ConfigCategory(label="wrong_language",  value=4),
+            ConfigCategory(label="off_topic", value=1),
+            ConfigCategory(label="no_results", value=2),
+            ConfigCategory(label="bad_citations", value=3),
+            ConfigCategory(label="wrong_language", value=4),
             ConfigCategory(label="factually_wrong", value=5),
-            ConfigCategory(label="other",           value=6),
+            ConfigCategory(label="other", value=6),
         ],
         description="Category picked in the thumbs-down sheet (i18n on client)",
     ),
@@ -61,28 +61,26 @@ SCORE_CONFIGS: list[dict] = [
     dict(
         name="user_feedback_text",
         data_type="CATEGORICAL",  # TEXT data type isn't accepted by all
-                                  # Langfuse server builds for ScoreConfig;
-                                  # CATEGORICAL with no fixed list works.
+        # Langfuse server builds for ScoreConfig;
+        # CATEGORICAL with no fixed list works.
         description="Free-form comment from the thumbs-down sheet (≤500 chars)",
     ),
-
     # ── Heuristic auto-scores (emit_turn_scores) ───────────────────────
     # Latency buckets — turn_total seldom exceeds 120s; first-token UX
     # budget is well under 30s. Higher caps would just hide a regression.
-    dict(name="latency_total_ms",     data_type="NUMERIC", min_value=0, max_value=120000),
-    dict(name="first_token_ms",       data_type="NUMERIC", min_value=0, max_value=30000),
-
+    dict(name="latency_total_ms", data_type="NUMERIC", min_value=0, max_value=120000),
+    dict(name="first_token_ms", data_type="NUMERIC", min_value=0, max_value=30000),
     # Marker / ref quality (post-expansion audit)
-    dict(name="cite_count",              data_type="NUMERIC", min_value=0, max_value=50),
-    dict(name="tool_calls_count",        data_type="NUMERIC", min_value=0, max_value=20),
+    dict(name="cite_count", data_type="NUMERIC", min_value=0, max_value=50),
+    dict(name="tool_calls_count", data_type="NUMERIC", min_value=0, max_value=20),
     dict(name="malformed_markers_count", data_type="NUMERIC", min_value=0, max_value=20),
-    dict(name="broken_refs_count",       data_type="NUMERIC", min_value=0, max_value=20),
-    dict(name="bypass_markers_count",    data_type="NUMERIC", min_value=0, max_value=20),
-    dict(name="marker_validity",         data_type="BOOLEAN"),
-    dict(name="language_match",          data_type="BOOLEAN"),
-    dict(name="had_error",               data_type="BOOLEAN"),
-    dict(name="response_length_chars",   data_type="NUMERIC", min_value=0, max_value=20000),
-
+    dict(name="broken_refs_count", data_type="NUMERIC", min_value=0, max_value=20),
+    dict(name="bypass_markers_count", data_type="NUMERIC", min_value=0, max_value=20),
+    dict(name="sentence_marker_leak_count", data_type="NUMERIC", min_value=0, max_value=20),
+    dict(name="marker_validity", data_type="BOOLEAN"),
+    dict(name="language_match", data_type="BOOLEAN"),
+    dict(name="had_error", data_type="BOOLEAN"),
+    dict(name="response_length_chars", data_type="NUMERIC", min_value=0, max_value=20000),
     # Router intent — segmentation knob for dashboards. Labels mirror
     # the intent strings emitted by `application/router_turn.py` /
     # `agent/graph/conditional.py`; keep this list in sync when the
@@ -91,12 +89,12 @@ SCORE_CONFIGS: list[dict] = [
         name="router_intent",
         data_type="CATEGORICAL",
         categories=[
-            ConfigCategory(label="direct_chat",   value=1),
-            ConfigCategory(label="research",      value=2),
-            ConfigCategory(label="find_track",    value=3),
+            ConfigCategory(label="direct_chat", value=1),
+            ConfigCategory(label="research", value=2),
+            ConfigCategory(label="find_track", value=3),
             ConfigCategory(label="create_action", value=4),
-            ConfigCategory(label="help",          value=5),
-            ConfigCategory(label="unknown",       value=6),
+            ConfigCategory(label="help", value=5),
+            ConfigCategory(label="unknown", value=6),
         ],
     ),
 ]
