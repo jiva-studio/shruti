@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from lectorium_chat.api._auth import get_current_user
+from lectorium_chat.api._rate_limit import raise_429
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
 from lectorium_chat.observability.langfuse_client import get_langfuse
@@ -83,20 +84,10 @@ async def post_feedback(
 ) -> FeedbackOut:
     ip = request.client.host if request.client else "unknown"
     rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="feedback",
+        user.id, user.anonymous, ip, scope="feedback", tier=user.tier,
     )
     if not rl.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": rl.code,
-                "limit": rl.limit,
-                "current": rl.current,
-                "key_type": rl.key_type,
-                "scope": "feedback",
-            },
-            headers={"Retry-After": str(rl.retry_after or 60)},
-        )
+        raise_429(rl, scope="feedback")
 
     langfuse = get_langfuse()
     if langfuse is None:
