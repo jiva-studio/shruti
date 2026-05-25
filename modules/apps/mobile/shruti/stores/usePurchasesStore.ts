@@ -25,6 +25,19 @@ export const usePurchasesStore = defineStore("purchases", () => {
   let unsubscribe: (() => void) | undefined
   let resumeHandle: { remove(): Promise<void> } | undefined
   let stopAuthWatch: WatchStopHandle | undefined
+  /**
+   * Tracks the in-flight `Purchases.logIn` / `logOut` triggered by the
+   * userId watcher. `purchase()` and `restore()` await this (with a
+   * timeout) before talking to the RC SDK so we don't fire a purchase
+   * under the anonymous app_user_id when the user just signed in in
+   * the same frame. Reset to null on completion (success or failure).
+   *
+   * Graceful failure: if logIn rejects or the await times out we still
+   * proceed with the purchase. RC's SUBSCRIBER_ALIAS event lets the
+   * backend reconcile the anonymous purchase with the authed identity
+   * once logIn finally succeeds.
+   */
+  let loginPromise: Promise<void> | null = null
 
   const available = computed(() => useShruti().purchases.available)
   // Dev-build override: treat every dev build as Pro so we can test
@@ -43,6 +56,44 @@ export const usePurchasesStore = defineStore("purchases", () => {
     activePackageId.value = s.activePackageId
     managementUrl.value = s.managementUrl
     appUserId.value = s.appUserId
+  }
+
+  /**
+   * Resolves when the in-flight RC.logIn/logOut from the userId watcher
+   * settles, or after `timeoutMs`. Never rejects — on a timeout or a
+   * logIn failure we log + count and let the caller proceed. This is
+   * the "graceful failure" leg of the RC.logIn race fix: blocking a
+   * purchase forever on a network flake would be far worse UX than
+   * letting RC fire the purchase under the anonymous app_user_id and
+   * trusting SUBSCRIBER_ALIAS to reconcile it server-side.
+   */
+  async function waitForLogin(timeoutMs: number): Promise<void> {
+    const p = loginPromise
+    if (!p) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), timeoutMs)
+    })
+    try {
+      const result = await Promise.race([
+        p.then(() => "ok" as const).catch(() => "error" as const),
+        timeout,
+      ])
+      if (result !== "ok") {
+        // Failed-or-timed-out — proceed anyway. SUBSCRIBER_ALIAS handles
+        // late binding when (and if) logIn finally succeeds.
+        console.warn("[purchases] RC.logIn did not settle before purchase/restore", {
+          reason: result,
+          timeoutMs,
+        })
+        // Metric (observability port doesn't exist yet — console-only).
+        console.warn("[metric] rc_login_pre_purchase_failed_total +=1", {
+          reason: result,
+        })
+      }
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -97,19 +148,38 @@ export const usePurchasesStore = defineStore("purchases", () => {
         () => auth.userId,
         (newId, oldId) => {
           if (newId && newId !== oldId) {
-            void purchases
+            // Stash the promise so `purchase()` / `restore()` can await
+            // it (with a timeout) before talking to RC. We map success
+            // to `applyState` and swallow errors here — `waitForLogin`
+            // reads the same promise and surfaces the error path via a
+            // warning + counter so we don't double-log.
+            const p = purchases
               .logIn(newId)
-              .then(applyState)
+              .then((s) => {
+                applyState(s)
+              })
               .catch((e) => {
                 console.warn("[purchases] logIn failed", e)
+                throw e
               })
+            loginPromise = p
+            void p.finally(() => {
+              if (loginPromise === p) loginPromise = null
+            })
           } else if (!newId && oldId) {
-            void purchases
+            const p = purchases
               .logOut()
-              .then(applyState)
+              .then((s) => {
+                applyState(s)
+              })
               .catch((e) => {
                 console.warn("[purchases] logOut failed", e)
+                throw e
               })
+            loginPromise = p
+            void p.finally(() => {
+              if (loginPromise === p) loginPromise = null
+            })
           }
         },
         { immediate: true }
@@ -126,6 +196,11 @@ export const usePurchasesStore = defineStore("purchases", () => {
     if (!purchases.available) return
     purchasing.value = true
     try {
+      // Make sure any in-flight RC.logIn from a just-now signin has
+      // landed before we kick off the purchase, otherwise the receipt
+      // lands under the anonymous app_user_id and the user has to wait
+      // for SUBSCRIBER_ALIAS reconciliation to see Pro.
+      await waitForLogin(5000)
       const state = await purchases.purchase(packageId)
       applyState(state)
       // RC sends the INITIAL_PURCHASE webhook almost immediately; by the
@@ -144,6 +219,9 @@ export const usePurchasesStore = defineStore("purchases", () => {
     if (!purchases.available) return
     restoring.value = true
     try {
+      // Same race as `purchase()`: restore under the wrong app_user_id
+      // would attach the user's existing receipts to the anon RC alias.
+      await waitForLogin(5000)
       const state = await purchases.restore()
       applyState(state)
       await useAuthStore().refreshTokens()
