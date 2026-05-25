@@ -33,6 +33,28 @@ container's logs.
 Unknown event types are logged at `warn` and **left unprocessed** —
 they're an operational bug worth inspection, not a no-op.
 
+## Scheduled jobs
+
+In addition to the outbox consumer loop, the worker runs in-process
+crons under `internal/cron/`. These are wall-clock timers that DELETE
+rows directly; the AFTER DELETE triggers from `0023_outbox.up.sql` fan
+out into `app.outbox`, which the consumer loop above picks up — closed
+loop, no extra wiring.
+
+| job              | what                                                                                  | knobs                                  |
+| ---------------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
+| `anon_cleanup`   | Delete anonymous (device-only) accounts whose newest refresh_token is older than TTL. | `CLEANUP_ANON_TTL`, `CLEANUP_ANON_INTERVAL` |
+
+On boot the cron runs one sweep immediately (so a long-down instance
+catches up), then ticks every `CLEANUP_ANON_INTERVAL`. **Activity proxy
+is `refresh_tokens.created_at`** — *not* `expires_at` — because auth's
+RefreshTTL is 90 days; using expires_at would give a 15-month effective
+idle window instead of the policy 12.
+
+Set `CLEANUP_ANON_TTL=0` to disable the cron entirely (handy in dev /
+test). The worker logs `anon_cleanup_disabled reason=CLEANUP_ANON_TTL=0`
+on startup in that mode.
+
 ## Configuration
 
 All via environment variables:
@@ -41,6 +63,8 @@ All via environment variables:
 | ------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------- |
 | `DATABASE_URL`            | yes      | —       | Postgres DSN (`postgres://shruti:…@postgres:5432/shruti`).                          |
 | `CLEANUP_SWEEP_INTERVAL`  | no       | `5m`    | How often the durability-net sweep walks `app.outbox` for stragglers. Go `time.ParseDuration`. |
+| `CLEANUP_ANON_TTL`        | no       | `8760h` | Idle window before an anonymous account is deleted. `0` disables the cron. Go duration (`8760h`, `30d`-style not supported). |
+| `CLEANUP_ANON_INTERVAL`   | no       | `24h`   | How often the anon-cleanup cron ticks. Ignored when `CLEANUP_ANON_TTL=0`.                  |
 | `PORT`                    | no       | `8090`  | Where `/healthz` listens. Keep it off the well-known service ports (auth=8081, etc).      |
 | `LANGFUSE_HOST`           | no       | —       | Base URL of the self-hosted Langfuse. Empty → `user.deleted` becomes a logged no-op.       |
 | `LANGFUSE_PUBLIC_KEY`     | no       | —       | Langfuse public key for basic-auth on the REST API.                                       |
@@ -111,6 +135,7 @@ modules/services/cleanup-worker/
 ├── cmd/cleanup-worker/main.go     # entry + healthz subcommand for HEALTHCHECK
 ├── internal/
 │   ├── config/                    # env loader
+│   ├── cron/                      # scheduled jobs (anon-account cleanup, …)
 │   ├── db/                        # pgxpool + outbox claim/mark queries
 │   ├── handlers/                  # event_type → Handler chain
 │   ├── observability/             # Langfuse REST purge client (ported from PR #604)
