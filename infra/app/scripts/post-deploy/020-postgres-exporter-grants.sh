@@ -7,11 +7,14 @@
 # Currently grants:
 #   - SELECT on app.outbox  (feeds shruti_outbox_unprocessed_count
 #     used by the cleanup_worker_outbox_stuck Grafana alert)
+#
+# Uses `docker exec` directly (not `docker compose exec`) so the hook
+# doesn't need SHRUTI_POSTGRES_PASSWORD in its env — compose would
+# re-evaluate the full service graph and fail to interpolate, but the
+# container itself is already running with credentials baked in.
 set -euo pipefail
 
-cd "$(dirname "$0")/../../../.."
-
-docker compose -f infra/app/compose/docker-compose.yml exec -T postgres \
+docker exec -i shruti-postgres-1 \
   psql -U shruti -d shruti -v ON_ERROR_STOP=1 <<'SQL'
 GRANT USAGE ON SCHEMA app TO shruti_exporter;
 GRANT SELECT ON app.outbox TO shruti_exporter;
