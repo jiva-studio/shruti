@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -165,7 +166,23 @@ func (r *UserRepo) SetPictureURL(ctx context.Context, tx pgx.Tx, id uuid.UUID, u
 // row into app.outbox in the same transaction. Pass a non-nil tx when the
 // caller also needs to clean up rows outside the auth schema (e.g. the
 // rate-limit `usage` table) atomically with the user row removal.
-func (r *UserRepo) Delete(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-	_, err := exec(ctx, r.Pool, tx, `DELETE FROM auth.users WHERE id = $1`, id)
-	return err
+//
+// Returns the number of rows affected so the caller can distinguish a real
+// delete from a no-op (id already gone — second concurrent request, or a
+// stale Bearer that survived a previous delete). Lets the handler map the
+// latter to 410 Gone instead of 200 OK.
+func (r *UserRepo) Delete(ctx context.Context, tx pgx.Tx, id uuid.UUID) (int64, error) {
+	var (
+		tag pgconn.CommandTag
+		err error
+	)
+	if tx != nil {
+		tag, err = tx.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, id)
+	} else {
+		tag, err = r.Pool.Exec(ctx, `DELETE FROM auth.users WHERE id = $1`, id)
+	}
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
