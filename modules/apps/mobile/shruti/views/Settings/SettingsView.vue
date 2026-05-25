@@ -56,7 +56,7 @@
 
     <SettingsDataGroup @export="onExportDatabase" @import-file="onImportFileSelected" />
 
-    <SettingsHelpGroup @open-help="helpOpen = true" />
+    <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
 
     <SettingsDangerGroup v-if="debugUnlocked" @clear-cache="onClearCache" />
 
@@ -76,6 +76,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAccountGroup,
@@ -99,6 +100,7 @@ const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
 const platform = useShruti().platform
+const i18n = useI18n()
 const {
   version,
   buildId,
@@ -135,5 +137,14 @@ const smartLibraryFiltersOpen = ref(false)
 function onSmartLibraryEntry(): void {
   if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
   else paywall.requestOpen("smartLibrary")
+}
+
+function onOpenPrivacyPolicy(): void {
+  // Same site / per-locale split as the subscription "Privacy Policy" link
+  // (see useSubscriptionBinding.ts) — GitHub Pages from modules/web/policy/.
+  const base = "https://jiva-studio.github.io/shruti"
+  const url = (i18n.locale.value as string) === "ru" ? `${base}/ru.html` : `${base}/`
+  // Capacitor's webview opens external schemes in the system browser.
+  window.open(url, "_blank")
 }
 </script>
