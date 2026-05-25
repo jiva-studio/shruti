@@ -76,24 +76,42 @@ func New(apiKey string) *Client {
 }
 
 // SubscriberResponse is the trimmed-down shape we actually read from
-// `GET /subscribers/{id}`. We only care about active entitlements;
-// everything else (offerings, products, non-subscriptions) gets
-// dropped by the JSON decoder.
+// `GET /subscribers/{id}`. We only care about the subscriber object and
+// its entitlements; everything else (offerings, products,
+// non-subscriptions) gets dropped by the JSON decoder.
+//
+// Subscriber is a pointer so a missing or null `subscriber` key
+// surfaces as nil at the consumer (rather than a zero struct that
+// looks superficially "OK"). The consumer treats nil Subscriber as a
+// malformed body and falls back to free-tier.
 type SubscriberResponse struct {
-	Subscriber struct {
-		Entitlements map[string]Entitlement `json:"entitlements"`
-	} `json:"subscriber"`
+	Subscriber *Subscriber `json:"subscriber"`
+}
+
+// Subscriber is the inner `subscriber` object. OriginalAppUserID is
+// required — RC always returns it for any non-404 success — so it
+// stays a non-pointer. Entitlements is the canonical activity map but
+// may be omitted on brand-new subscribers; the consumer treats nil as
+// "no entitlements" (free).
+type Subscriber struct {
+	OriginalAppUserID string                 `json:"original_app_user_id"`
+	Entitlements      map[string]Entitlement `json:"entitlements"`
 }
 
 // Entitlement is one slot of `subscriber.entitlements`. RC returns the
 // entitlement here regardless of state; the consumer filters by
-// `ExpiresDate > now()`. `ExpiresDate` is nullable for lifetime
-// purchases — treat null as "never expires", which still maps to
-// active.
+// `ExpiresDate > now()`. ExpiresDate is nullable for lifetime
+// purchases — treat null (or the zero time, which RC has been observed
+// to emit on synthetic test payloads) as "never expires", which still
+// maps to active. PurchaseDate and ProductIdentifier are optional in
+// the shape we care about, hence pointers — that way the consumer can
+// distinguish "field omitted" from "empty string / zero time", which
+// matters when we add corpus auditing later.
 type Entitlement struct {
 	ExpiresDate       *time.Time `json:"expires_date"`
 	PurchaseDate      *time.Time `json:"purchase_date"`
-	ProductIdentifier string     `json:"product_identifier"`
+	ProductIdentifier *string    `json:"product_identifier"`
+	PeriodType        *string    `json:"period_type"`
 }
 
 // GetSubscriber fetches the current state for an RC app_user_id. The

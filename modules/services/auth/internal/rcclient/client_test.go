@@ -62,7 +62,10 @@ func TestGetSubscriber404Sentinel(t *testing.T) {
 	if resp == nil {
 		t.Fatal("expected non-nil empty response on 404")
 	}
-	if len(resp.Subscriber.Entitlements) != 0 {
+	// PR-J2 made Subscriber a pointer so missing/empty payloads can be
+	// distinguished from "subscriber present, no entitlements". 404 →
+	// nil pointer is the documented soft-empty shape.
+	if resp.Subscriber != nil && len(resp.Subscriber.Entitlements) != 0 {
 		t.Fatalf("expected empty entitlements on 404, got %d", len(resp.Subscriber.Entitlements))
 	}
 }

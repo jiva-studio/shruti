@@ -13,10 +13,10 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 	past := now.Add(-1 * time.Hour)
 
 	tests := []struct {
-		name         string
-		resp         *rcclient.SubscriberResponse
-		wantTier     string
-		wantExpires  *time.Time
+		name        string
+		resp        *rcclient.SubscriberResponse
+		wantTier    string
+		wantExpires *time.Time
 	}{
 		{
 			name:     "nil response",
@@ -24,16 +24,24 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 			wantTier: TierFree,
 		},
 		{
-			name:     "no entitlements",
+			name:     "empty response (no subscriber)",
 			resp:     &rcclient.SubscriberResponse{},
+			wantTier: TierFree,
+		},
+		{
+			name: "no entitlements",
+			resp: &rcclient.SubscriberResponse{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
+				},
+			},
 			wantTier: TierFree,
 		},
 		{
 			name: "expired entitlement is free",
 			resp: &rcclient.SubscriberResponse{
-				Subscriber: struct {
-					Entitlements map[string]rcclient.Entitlement `json:"entitlements"`
-				}{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
 					Entitlements: map[string]rcclient.Entitlement{
 						"pro": {ExpiresDate: &past},
 					},
@@ -44,9 +52,8 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 		{
 			name: "active entitlement is pro",
 			resp: &rcclient.SubscriberResponse{
-				Subscriber: struct {
-					Entitlements map[string]rcclient.Entitlement `json:"entitlements"`
-				}{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
 					Entitlements: map[string]rcclient.Entitlement{
 						"pro": {ExpiresDate: &future},
 					},
@@ -58,9 +65,8 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 		{
 			name: "lifetime entitlement is pro with nil expires",
 			resp: &rcclient.SubscriberResponse{
-				Subscriber: struct {
-					Entitlements map[string]rcclient.Entitlement `json:"entitlements"`
-				}{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
 					Entitlements: map[string]rcclient.Entitlement{
 						"pro": {ExpiresDate: nil},
 					},
@@ -72,9 +78,8 @@ func TestSnapshotFromRCResponse(t *testing.T) {
 		{
 			name: "lifetime beats any dated entitlement",
 			resp: &rcclient.SubscriberResponse{
-				Subscriber: struct {
-					Entitlements map[string]rcclient.Entitlement `json:"entitlements"`
-				}{
+				Subscriber: &rcclient.Subscriber{
+					OriginalAppUserID: "app_user_1",
 					Entitlements: map[string]rcclient.Entitlement{
 						"pro":      {ExpiresDate: &future},
 						"lifetime": {ExpiresDate: nil},
