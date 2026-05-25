@@ -7,15 +7,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/jiva-studio/shruti-share-video/internal/db"
 	"github.com/jiva-studio/shruti-share-video/internal/logx"
+	"github.com/jiva-studio/shruti-share-video/internal/redislimit"
 	"github.com/jiva-studio/shruti-share-video/internal/types"
 )
 
 // Server holds the dependencies the reels endpoints need.
 type Server struct {
 	Pool             *pgxpool.Pool
+	Redis            *redis.Client
 	AnonPerDay       int
 	SignedInPerDay   int
 	OutputPrefix     string
@@ -65,7 +68,7 @@ func (s *Server) PostReels(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	usage, err := db.IncrementAndCheck(r.Context(), s.Pool, user.ID, user.Anonymous, s.AnonPerDay, s.SignedInPerDay)
+	usage, err := redislimit.IncrementAndCheck(r.Context(), s.Redis, user.ID, user.Anonymous, s.AnonPerDay, s.SignedInPerDay)
 	if err != nil {
 		logx.From(r.Context()).Error("usage_check_failed", "err", err.Error())
 		writeError(w, http.StatusInternalServerError, "internal server error")

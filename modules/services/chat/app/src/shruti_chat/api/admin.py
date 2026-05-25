@@ -115,7 +115,6 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
     _check_token(x_app_token)
     s = get_settings()
     pool = get_pool()
-    today = datetime.now(timezone.utc).date()
     async with pool.acquire() as conn:
         # catalog version
         cs = await conn.fetchrow(
@@ -136,9 +135,6 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
             LIMIT 10
             """
         )
-        # today counters from usage table — best effort
-        today_total = await conn.fetchval(
-            "SELECT COALESCE(SUM(count), 0) FROM usage WHERE day = $1", today)
 
     return {
         "service": "shruti-chat",
@@ -168,9 +164,6 @@ async def status(x_app_token: str | None = Header(default=None)) -> dict[str, An
                 } for r in runs
             ],
             "interval_hours": s.indexer_interval_hours,
-        },
-        "today": {
-            "chat_requests": today_total or 0,
         },
     }
 
