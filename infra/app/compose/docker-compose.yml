@@ -235,6 +235,10 @@ services:
       DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
       # LANGFUSE_HOST / PUBLIC_KEY / SECRET_KEY come from env_file (.env), same as chat.
       CLEANUP_SWEEP_INTERVAL: ${LECTORIUM_CLEANUP_SWEEP_INTERVAL:-5m}
+      # Anonymous-account TTL cron. CLEANUP_ANON_TTL=0 disables the cron
+      # entirely (test/dev escape hatch). Default 8760h = 365 days.
+      CLEANUP_ANON_TTL: ${LECTORIUM_CLEANUP_ANON_TTL:-8760h}
+      CLEANUP_ANON_INTERVAL: ${LECTORIUM_CLEANUP_ANON_INTERVAL:-24h}
       PORT: "8090"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_CLEANUP_WORKER_TAG:-latest}
