@@ -151,6 +151,7 @@ import ActionCardUpgradeToPro from "./ActionCardUpgradeToPro.vue"
 import ActionCardQueueNextTrack from "./ActionCardQueueNextTrack.vue"
 import StatusPill from "./StatusPill.vue"
 import InlineNotice from "@ui/shared/InlineNotice.vue"
+import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import ChatFocusCard from "./ChatFocusCard.vue"
 
@@ -392,6 +393,7 @@ const failedRetryLabel = computed<string>(() => t("chat.actionRetry"))
 /* -------------------------------------------------------------------------- */
 
 const paywall = usePaywallStore()
+const { triggerSignIn } = useAnonymousSignInFlow()
 
 const failedError = computed(() => {
   const e = props.message.error
@@ -502,7 +504,12 @@ const noticeCta = computed(() => {
     if (e.tier === "anonymous") {
       return {
         label: t("chat.signInForMoreCta"),
-        action: () => router.push({ name: "settings" }),
+        // Inline provider flow: iOS opens the Apple+Google sheet,
+        // Android/web triggers Google directly. Same composable as the
+        // Settings account row — no Settings detour.
+        action: () => {
+          void triggerSignIn()
+        },
       }
     }
     if (e.tier === "free") {
