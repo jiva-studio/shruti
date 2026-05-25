@@ -55,7 +55,7 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 	}
 
 	userID := uuid.New()
-	tok, jti, err := signer.Issue(userID, true, "", "", 15*time.Minute, uuid.Nil)
+	tok, jti, err := signer.Issue(userID, true, "", "", 0, 15*time.Minute, uuid.Nil)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestVerifyRejectsTamperedToken(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv, "v1")
 	verifier, _ := NewVerifierFromFile(pub)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 	tampered := tok[:len(tok)-2] + "XX"
 
 	if _, err := verifier.Verify(tampered); err == nil {
@@ -104,7 +104,7 @@ func TestVerifyRejectsExpired(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv, "v1")
 	verifier, _ := NewVerifierFromFile(pub)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", -time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, -time.Minute, uuid.Nil)
 
 	if _, err := verifier.Verify(tok); err == nil {
 		t.Error("expired token verified")
@@ -118,7 +118,7 @@ func TestVerifyRejectsForeignKey(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv1, "v1")
 	verifier, _ := NewVerifierFromFile(pub2)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 
 	if _, err := verifier.Verify(tok); err == nil {
 		t.Error("foreign-key signed token verified — must reject")
@@ -165,11 +165,11 @@ func TestVerifierFromDirAcceptsBothKidsDuringRotation(t *testing.T) {
 
 	tok1, _, _ := func() (string, uuid.UUID, error) {
 		s, _ := NewSignerFromFile(priv1, "v1")
-		return s.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+		return s.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 	}()
 	tok2, _, _ := func() (string, uuid.UUID, error) {
 		s, _ := NewSignerFromFile(priv2, "v2")
-		return s.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+		return s.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 	}()
 
 	if _, err := verifier.Verify(tok1); err != nil {
@@ -186,7 +186,7 @@ func TestVerifierFromDirRejectsUnknownKid(t *testing.T) {
 	// Sign with v1's private key but stamp a kid the verifier hasn't
 	// seen — simulates a rogue signer or a missed rotation file.
 	signer, _ := NewSignerFromFile(priv1, "v999")
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 
 	verifier, _ := NewVerifierFromDir(dir)
 	if _, err := verifier.Verify(tok); err == nil {
@@ -210,7 +210,7 @@ func TestVerifierFromDirAcceptsLegacyPublicPem(t *testing.T) {
 		t.Fatalf("NewVerifierFromDir: %v", err)
 	}
 	signer, _ := NewSignerFromFile(priv, "v1")
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
 	if _, err := verifier.Verify(tok); err != nil {
 		t.Errorf("legacy public.pem mapped to v1 must verify, got %v", err)
 	}

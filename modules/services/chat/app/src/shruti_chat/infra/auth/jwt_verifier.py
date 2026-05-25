@@ -55,6 +55,12 @@ class VerifiedUser:
     # (no OAuth identity yet) and for old in-flight tokens; the limiter
     # falls back to `sub` in that case.
     quota_id: str = ""
+    # UNIX-epoch (seconds) at which `tier` expires. 0 means lifetime Pro,
+    # free, or an old in-flight token that pre-dates the claim. The rate
+    # limiter coerces a "pro" tier whose expiry already slid into the past
+    # back to free limits — defends against a dropped EXPIRATION webhook
+    # leaving stale Pro until the next reconcile cycle (up to 6h).
+    tier_expires_at: int = 0
 
 
 class JwtVerifyError(Exception):
@@ -139,9 +145,17 @@ class JwtVerifier:
                 quota_id_len=len(quota_id_raw),
             )
             quota_id_raw = ""
+        # tier_expires_at is UNIX-epoch seconds. Missing on old in-flight
+        # tokens — 0 disables the expiry check (matches lifetime / free).
+        tier_exp_raw = claims.get("tier_expires_at") or 0
+        try:
+            tier_exp_int = int(tier_exp_raw)
+        except (TypeError, ValueError):
+            tier_exp_int = 0
         return VerifiedUser(
             id=sub,
             anonymous=bool(anon_raw),
             tier=str(tier_raw),
             quota_id=quota_id_raw,
+            tier_expires_at=tier_exp_int,
         )

@@ -18,7 +18,26 @@ export const useAuthStore = defineStore("auth", () => {
   const name = ref<string | null>(null)
   const picture = ref<string | null>(null)
   const anonymous = ref<boolean>(true)
-  const tier = ref<string>("free")
+  // Raw server tier. Don't read this directly from UI — use `tier`
+  // which applies the tier_expires_at coercion. Stored separately so a
+  // future webhook flip can land back to "pro" without losing the raw
+  // value just because the cached expiry happened to be in the past.
+  const rawTier = ref<string>("free")
+  // UNIX-epoch (ms) at which the Pro entitlement expires. null = lifetime
+  // or free (no expiry concept). Mirrored from /auth/me's tierExpiresAt
+  // (ISO string parsed to ms). Drives the `tier` getter's coercion.
+  const tierExpiresAt = ref<number | null>(null)
+
+  // Public tier. Coerces a "pro" with a past expiry back to "free" so a
+  // stale auth-cached value (dropped EXPIRATION webhook) can't keep the
+  // UI on Pro past the real boundary. Lifetime Pro (expiry null) is
+  // never coerced.
+  const tier = computed<string>(() => {
+    if (rawTier.value !== "pro") return rawTier.value || "free"
+    if (tierExpiresAt.value === null) return "pro" // lifetime
+    if (tierExpiresAt.value < Date.now()) return "free"
+    return "pro"
+  })
 
   const signedIn = computed(() => !!userId.value && !anonymous.value)
   const isPro = computed(() => tier.value === "pro")
@@ -60,7 +79,8 @@ export const useAuthStore = defineStore("auth", () => {
       name.value = s.name
       picture.value = s.picture
       anonymous.value = s.anonymous
-      tier.value = s.tier || "free"
+      rawTier.value = s.tier || "free"
+      tierExpiresAt.value = s.tierExpiresAt ?? null
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
@@ -68,7 +88,8 @@ export const useAuthStore = defineStore("auth", () => {
       name.value = null
       picture.value = null
       anonymous.value = true
-      tier.value = "free"
+      rawTier.value = "free"
+      tierExpiresAt.value = null
       status.value = "uninitialized"
     }
   }
@@ -103,7 +124,13 @@ export const useAuthStore = defineStore("auth", () => {
       const me = await auth.fetchMe()
       if (!me) return
       lastSyncAt = Date.now()
-      if (me.tier !== tier.value) {
+      // Compare against the raw server tier — `tier.value` is the
+      // already-coerced view. If the server's view diverges (webhook
+      // flipped to Pro, or expiry shifted) force a refresh so the JWT
+      // claim catches up.
+      const rawDiverged = me.tier !== rawTier.value
+      const expiryDiverged = (me.tierExpiresAt ?? null) !== tierExpiresAt.value
+      if (rawDiverged || expiryDiverged) {
         await auth.refreshTokens()
       }
     } catch (e) {
@@ -246,6 +273,8 @@ export const useAuthStore = defineStore("auth", () => {
     picture,
     anonymous,
     tier,
+    rawTier,
+    tierExpiresAt,
     isPro,
     signedIn,
     restore,

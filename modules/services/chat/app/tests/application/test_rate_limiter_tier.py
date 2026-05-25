@@ -8,6 +8,7 @@ contract).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import date
 
@@ -159,6 +160,47 @@ async def test_different_quota_ids_are_independent(limiter):
         scope="chat", tier="free", quota_id="quota-google",
     )
     assert rl.allowed, "different quota_ids must have separate counters"
+
+
+# ─── tier_expires_at coercion (plan 1.7) ─────────────────────────────────
+
+
+def test_expired_pro_falls_back_to_free_limits(limiter):
+    # A "pro" claim whose tier_expires_at slid into the past must be
+    # treated as free — defends against a dropped EXPIRATION webhook.
+    past = int(time.time()) - 60
+    assert limiter._user_limit_for("chat", False, "pro", past) == 10  # free
+    assert limiter._user_limit_for("title", False, "pro", past) == 50  # free
+
+
+def test_pro_with_future_expiry_keeps_pro_limits(limiter):
+    future = int(time.time()) + 3600
+    assert limiter._user_limit_for("chat", False, "pro", future) == 200  # pro
+    assert limiter._user_limit_for("title", False, "pro", future) == 500  # pro
+
+
+def test_pro_with_zero_expiry_is_lifetime(limiter):
+    # tier_expires_at=0 means lifetime (or missing claim on old tokens).
+    # Must NOT be coerced even though 0 < now.
+    assert limiter._user_limit_for("chat", False, "pro", 0) == 200
+
+
+@pytest.mark.asyncio
+async def test_expired_pro_429_echoes_free_tier(limiter):
+    # Burn through free limit with a stale Pro claim — the 429 body must
+    # carry tier="free" so the mobile UX shows the right copy.
+    past = int(time.time()) - 60
+    for _ in range(10):
+        await limiter.check_and_increment(
+            "u-stale-pro", anonymous=False, ip="1.2.3.4",
+            scope="chat", tier="pro", tier_expires_at=past,
+        )
+    rl = await limiter.check_and_increment(
+        "u-stale-pro", anonymous=False, ip="1.2.3.4",
+        scope="chat", tier="pro", tier_expires_at=past,
+    )
+    assert not rl.allowed
+    assert rl.tier == "free"
 
 
 @pytest.mark.asyncio

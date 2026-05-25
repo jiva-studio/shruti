@@ -3,20 +3,32 @@ package handler
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"errors"
 	"net/http/httptest"
-	"sync"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jiva-studio/shruti/auth/internal/jwt"
 	"github.com/jiva-studio/shruti/auth/internal/metrics"
 	"github.com/jiva-studio/shruti/auth/internal/rcclient"
+	"github.com/jiva-studio/shruti/auth/internal/service"
 	"github.com/jiva-studio/shruti/auth/internal/store"
 )
 
@@ -103,10 +115,28 @@ type stubApplier struct {
 	applyErr        error
 }
 
-func (s *stubApplier) LookupProcessed(_ context.Context, _ string) (bool, error) {
-	return s.lookupProcessed, s.lookupErr
+// InsertOrLookup returns (inserted=true, processed=false) by default so
+// the handler proceeds straight to the apply step — that's what the
+// classification tests want to assert against. Use lookupErr to force
+// the error path; lookupProcessed maps to processed=true (skipping apply
+// via the duplicate short-circuit).
+func (s *stubApplier) InsertOrLookup(_ context.Context, _, _ string) (inserted, processed bool, err error) {
+	if s.lookupErr != nil {
+		return false, false, s.lookupErr
+	}
+	if s.lookupProcessed {
+		return false, true, nil
+	}
+	return true, false, s.insertErr
 }
-func (s *stubApplier) InsertEvent(_ context.Context, _ string) error { return s.insertErr }
+
+// WaitForSibling is a no-op stub — the unit tests don't exercise the
+// concurrent-retry path. The integration test TestConcurrentWebhookRetry
+// uses the real defaultApplier against Postgres.
+func (s *stubApplier) WaitForSibling(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
 func (s *stubApplier) Apply(_ context.Context, _ string, _ store.SubscriptionSnapshot) (uuid.UUID, bool, error) {
 	s.mu.Lock()
 	s.applyCalls++
@@ -412,5 +442,329 @@ func TestSanitizeRCErrorRedactsBothEmailAndPhone(t *testing.T) {
 	}
 	if strings.Contains(got, "+1555") {
 		t.Errorf("phone leaked: %q", got)
+	}
+}
+
+// Webhook-side integration tests covering plan 1.2 (atomic idempotency
+// against concurrent RC retries) and the unmatched/500 behaviour from
+// plan 1.3.
+//
+// Mirrors the skip pattern in internal/service/service_test.go — needs
+// TEST_DATABASE_URL set to a real Postgres. Off-CI runs skip cleanly.
+
+const migrationsDir = "../../../../../infra/app/db/migrations"
+
+func dbDSNFromEnv(t *testing.T) string {
+	t.Helper()
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("set TEST_DATABASE_URL to run handler-layer integration tests")
+	}
+	return dsn
+}
+
+func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
+	t.Helper()
+	pool, err := store.Connect(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS auth CASCADE`)
+	_, _ = pool.Exec(context.Background(), `DROP SCHEMA IF EXISTS app CASCADE`)
+	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.usage`)
+	_, _ = pool.Exec(context.Background(), `DROP TABLE IF EXISTS public.schema_migrations`)
+
+	authFiles, _ := filepath.Glob(filepath.Join(migrationsDir, "000[0-9]_auth_*.up.sql"))
+	moreAuth, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth...)
+	moreWebhook, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_rc_webhook_*.up.sql"))
+	authFiles = append(authFiles, moreWebhook...)
+	authFiles = append(authFiles,
+		filepath.Join(migrationsDir, "0023_outbox.up.sql"),
+		filepath.Join(migrationsDir, "0026_outbox_dedup.up.sql"),
+	)
+	sort.Strings(authFiles)
+	for _, p := range authFiles {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", p, err)
+		}
+		if _, err := pool.Exec(context.Background(), string(b)); err != nil {
+			t.Fatalf("apply migration %s: %v", p, err)
+		}
+	}
+	return pool
+}
+
+func tempKeys(t *testing.T) (privPath, pubPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	privPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	pubBytes, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubBytes,
+	})
+	privPath = filepath.Join(dir, "private.pem")
+	pubPath = filepath.Join(dir, "public.pem")
+	_ = os.WriteFile(privPath, privPEM, 0o600)
+	_ = os.WriteFile(pubPath, pubPEM, 0o644)
+	return
+}
+
+// rcStub is a tiny HTTP server replacing RC's REST API. It returns a
+// fixed entitlement set keyed on whatever app_user_id the handler asks
+// for and counts hits so tests can assert against fan-out.
+type rcStub struct {
+	srv         *httptest.Server
+	hits        atomic.Int64
+	expiresDate time.Time
+}
+
+func newRCStub(t *testing.T) *rcStub {
+	t.Helper()
+	s := &rcStub{expiresDate: time.Now().UTC().Add(30 * 24 * time.Hour)}
+	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.hits.Add(1)
+		body := map[string]any{
+			"subscriber": map[string]any{
+				"entitlements": map[string]any{
+					"pro": map[string]any{
+						"expires_date":       s.expiresDate.Format(time.RFC3339),
+						"product_identifier": "shruti.pro.monthly",
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(s.srv.Close)
+	return s
+}
+
+func bootWebhook(t *testing.T) (*RCWebhookHandler, *service.Service, *rcStub) {
+	t.Helper()
+	dsn := dbDSNFromEnv(t)
+	pool := resetSchema(t, dsn)
+	t.Cleanup(pool.Close)
+
+	priv, pub := tempKeys(t)
+	signer, _ := jwt.NewSignerFromFile(priv, "v1")
+	verifier, _ := jwt.NewVerifierFromFile(pub)
+
+	svc := &service.Service{
+		Pool:          pool,
+		Users:         &store.UserRepo{Pool: pool},
+		Identities:    &store.IdentityRepo{Pool: pool},
+		RefreshTokens: &store.RefreshTokenRepo{Pool: pool},
+		WebhookEvents: &store.WebhookEventRepo{Pool: pool},
+		Signer:        signer,
+		Verifier:      verifier,
+	}
+
+	stub := newRCStub(t)
+	rc := &rcclient.Client{
+		BaseURL: stub.srv.URL,
+		APIKey:  "stub-key",
+		HTTP:    stub.srv.Client(),
+	}
+	h := &RCWebhookHandler{
+		SecretPrimary: "stub-secret",
+		Svc:           svc,
+		RC:            rc,
+	}
+	return h, svc, stub
+}
+
+func postWebhook(h *RCWebhookHandler, eventID, appUserID string) *httptest.ResponseRecorder {
+	payload := map[string]any{
+		"event": map[string]any{
+			"id":          eventID,
+			"type":        "INITIAL_PURCHASE",
+			"app_user_id": appUserID,
+			"environment": "PRODUCTION",
+		},
+	}
+	b, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/revenuecat", bytes.NewReader(b))
+	req.Header.Set("Authorization", "Bearer stub-secret")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+// TestConcurrentWebhookRetry — plan 1.2.
+//
+// Ten goroutines POST the same event_id at the same time. With the
+// new InsertOrLookup + advisory-lock idempotency, exactly ONE outbox
+// row must materialise. Sibling retries either short-circuit on the
+// processed_at=NOT NULL path or wait on the advisory lock and then
+// observe the completed result.
+func TestConcurrentWebhookRetry(t *testing.T) {
+	h, svc, _ := bootWebhook(t)
+	ctx := context.Background()
+
+	// Seed a user with a bound rc_app_user_id so matched=true.
+	const appUserID = "rc-app-user-concurrent"
+	var userID string
+	if err := svc.Pool.QueryRow(ctx,
+		`INSERT INTO auth.users(rc_app_user_id) VALUES ($1) RETURNING id`,
+		appUserID,
+	).Scan(&userID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	const n = 10
+	const eventID = "ev-concurrent-1"
+	var wg sync.WaitGroup
+	statuses := make(chan int, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rr := postWebhook(h, eventID, appUserID)
+			statuses <- rr.Code
+		}()
+	}
+	wg.Wait()
+	close(statuses)
+
+	var ok, other int
+	for code := range statuses {
+		switch code {
+		case http.StatusOK:
+			ok++
+		default:
+			other++
+		}
+	}
+	if other != 0 {
+		t.Errorf("expected all 10 concurrent calls to 200, got %d non-200", other)
+	}
+	if ok != n {
+		t.Errorf("expected %d ok responses, got %d", n, ok)
+	}
+
+	// Exactly one outbox row, regardless of how the retries interleaved.
+	var outboxN int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM app.outbox
+		  WHERE event_type='subscription.changed' AND aggregate_id=$1`,
+		userID,
+	).Scan(&outboxN); err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if outboxN != 1 {
+		t.Errorf("expected exactly 1 outbox row across %d retries, got %d", n, outboxN)
+	}
+
+	// processed_at set, error cleared.
+	var processedAt *time.Time
+	var errStr *string
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT processed_at, error FROM auth.rc_webhook_events WHERE event_id = $1`,
+		eventID,
+	).Scan(&processedAt, &errStr); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if processedAt == nil {
+		t.Error("processed_at must be set after concurrent retries settle")
+	}
+	if errStr != nil {
+		t.Errorf("error must be NULL after success, got %q", *errStr)
+	}
+}
+
+// TestWebhookReturns500WhenUnmatched — plan 1.3 / 1.2 wiring.
+//
+// The webhook lands before Purchases.logIn → no auth.users row owns
+// rc_app_user_id → handler must return 500 (so RC retries within its
+// 80-min budget) and leave processed_at NULL on the row.
+func TestWebhookReturns500WhenUnmatched(t *testing.T) {
+	h, svc, _ := bootWebhook(t)
+	ctx := context.Background()
+
+	const eventID = "ev-unbound-1"
+	const appUserID = "rc-app-user-unbound"
+
+	rr := postWebhook(h, eventID, appUserID)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on unmatched, got %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "unmatched") {
+		t.Errorf("expected error code 'unmatched' in body, got %s", rr.Body.String())
+	}
+
+	var processedAt *time.Time
+	var errStr *string
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT processed_at, error FROM auth.rc_webhook_events WHERE event_id = $1`,
+		eventID,
+	).Scan(&processedAt, &errStr); err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if processedAt != nil {
+		t.Errorf("processed_at must stay NULL on unmatched, got %v", *processedAt)
+	}
+	if errStr == nil || *errStr != "no rc_app_user_id match" {
+		t.Errorf("expected error='no rc_app_user_id match', got %v", errStr)
+	}
+}
+
+// TestDuplicateEventShortCircuits — plan 1.2.
+//
+// Once an event_id has reached processed_at != NULL, subsequent POSTs
+// return 200 with duplicate=true and DO NOT re-emit outbox.
+func TestDuplicateEventShortCircuits(t *testing.T) {
+	h, svc, stub := bootWebhook(t)
+	ctx := context.Background()
+
+	const appUserID = "rc-app-user-dup"
+	var userID string
+	if err := svc.Pool.QueryRow(ctx,
+		`INSERT INTO auth.users(rc_app_user_id) VALUES ($1) RETURNING id`,
+		appUserID,
+	).Scan(&userID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	const eventID = "ev-dup-1"
+	rr1 := postWebhook(h, eventID, appUserID)
+	if rr1.Code != http.StatusOK {
+		t.Fatalf("first call expected 200, got %d", rr1.Code)
+	}
+	hitsAfterFirst := stub.hits.Load()
+	if hitsAfterFirst != 1 {
+		t.Errorf("first call should refetch from RC once, got %d hits", hitsAfterFirst)
+	}
+
+	rr2 := postWebhook(h, eventID, appUserID)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("second call expected 200, got %d", rr2.Code)
+	}
+	if !strings.Contains(rr2.Body.String(), "duplicate") {
+		t.Errorf("second call body must signal duplicate, got %s", rr2.Body.String())
+	}
+	if stub.hits.Load() != hitsAfterFirst {
+		t.Errorf("duplicate event must NOT re-hit RC API: hits went %d → %d",
+			hitsAfterFirst, stub.hits.Load())
+	}
+
+	var outboxN int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM app.outbox
+		  WHERE event_type='subscription.changed' AND aggregate_id=$1`,
+		userID,
+	).Scan(&outboxN); err != nil {
+		t.Fatalf("count outbox: %v", err)
+	}
+	if outboxN != 1 {
+		t.Errorf("expected 1 outbox row after duplicate, got %d", outboxN)
 	}
 }
