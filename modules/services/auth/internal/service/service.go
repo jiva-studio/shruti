@@ -277,13 +277,17 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 		if err != nil {
 			return err
 		}
+		tier, err := s.loadTier(ctx, row.UserID)
+		if err != nil {
+			return fmt.Errorf("load tier: %w", err)
+		}
 
-		access, _, err := s.Signer.Issue(row.UserID, anonymous, AccessTTL, uuid.Nil)
+		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, AccessTTL, uuid.Nil)
 		if err != nil {
 			return err
 		}
 		newJTI := uuid.New()
-		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, RefreshTTL, newJTI)
+		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, RefreshTTL, newJTI)
 		if err != nil {
 			return err
 		}
@@ -338,6 +342,12 @@ type MeResponse struct {
 	Anonymous  bool         `json:"anonymous"`
 	Identities []MeIdentity `json:"identities"`
 	CreatedAt  time.Time    `json:"createdAt"`
+	// Subscription state mirrored from RevenueCat. Clients hit /auth/me
+	// on app foreground; if `tier` here differs from what's in their
+	// cached access JWT they force-refresh tokens to pull the new value
+	// without waiting for the natural 15-min expiry.
+	Tier          string     `json:"tier"`
+	TierExpiresAt *time.Time `json:"tierExpiresAt,omitempty"`
 }
 
 type MeIdentity struct {
@@ -368,13 +378,19 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 	if err != nil {
 		return nil, err
 	}
+	tier := u.Tier
+	if tier == "" {
+		tier = TierFree
+	}
 	resp := &MeResponse{
-		UserID:     u.ID,
-		Email:      email,
-		Name:       u.Name,
-		PictureURL: u.PictureURL,
-		Anonymous:  anonymous,
-		CreatedAt:  u.CreatedAt,
+		UserID:        u.ID,
+		Email:         email,
+		Name:          u.Name,
+		PictureURL:    u.PictureURL,
+		Anonymous:     anonymous,
+		CreatedAt:     u.CreatedAt,
+		Tier:          tier,
+		TierExpiresAt: u.TierExpiresAt,
 	}
 	for _, i := range idents {
 		resp.Identities = append(resp.Identities, MeIdentity{
@@ -424,14 +440,33 @@ func (s *Service) userIsAnonymous(ctx context.Context, _ pgx.Tx, userID uuid.UUI
 	return true, nil
 }
 
+// loadTier reads the user's current subscription tier from auth.users.
+// Returns TierFree (the column default) if the row is missing; the
+// Signer treats an empty string the same way, but defaulting here
+// keeps the log line readable.
+func (s *Service) loadTier(ctx context.Context, userID uuid.UUID) (string, error) {
+	u, err := s.Users.Get(ctx, userID)
+	if err != nil {
+		return TierFree, err
+	}
+	if u == nil || u.Tier == "" {
+		return TierFree, nil
+	}
+	return u.Tier, nil
+}
+
 // issueSession mints fresh access + refresh and persists the refresh row.
 func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous bool, deviceID string) (*Session, error) {
-	access, _, err := s.Signer.Issue(userID, anonymous, AccessTTL, uuid.Nil)
+	tier, err := s.loadTier(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load tier: %w", err)
+	}
+	access, _, err := s.Signer.Issue(userID, anonymous, tier, AccessTTL, uuid.Nil)
 	if err != nil {
 		return nil, err
 	}
 	newJTI := uuid.New()
-	refresh, _, err := s.Signer.Issue(userID, anonymous, RefreshTTL, newJTI)
+	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, RefreshTTL, newJTI)
 	if err != nil {
 		return nil, err
 	}

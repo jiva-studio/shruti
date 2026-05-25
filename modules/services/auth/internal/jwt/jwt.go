@@ -3,7 +3,10 @@
 // JWT shape:
 //
 //	header:  { alg: "RS256", typ: "JWT", kid: "v1" }
-//	payload: { sub: <user-uuid>, anonymous: bool, exp, iat, jti }
+//	payload: { sub, anonymous, tier, exp, iat, jti }
+//
+// `tier` is the subscription tier mirrored from RevenueCat ("free" | "pro").
+// Empty / missing on old in-flight tokens — consumers default to "free".
 package jwt
 
 import (
@@ -20,9 +23,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// Claims is the JWT payload we issue.
+// Claims is the JWT payload we issue. `Tier` was added 2026-05; tokens
+// minted before that release omit it. The omitempty tag keeps them
+// byte-identical for the free path so the chat-side verifier (which
+// defaults missing tier to "free") sees no behaviour change.
 type Claims struct {
-	Anonymous bool `json:"anonymous"`
+	Anonymous bool   `json:"anonymous"`
+	Tier      string `json:"tier,omitempty"`
 	gjwt.RegisteredClaims
 }
 
@@ -119,13 +126,16 @@ func fileExists(p string) bool {
 }
 
 // Issue signs a JWT. If jti is uuid.Nil a fresh one is generated.
-func (s *Signer) Issue(userID uuid.UUID, anonymous bool, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
+// `tier` is the user's subscription tier ("free" | "pro"); empty string
+// is fine — the chat-side verifier defaults to "free".
+func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier string, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
 	if jti == uuid.Nil {
 		jti = uuid.New()
 	}
 	now := time.Now().UTC()
 	claims := Claims{
 		Anonymous: anonymous,
+		Tier:      tier,
 		RegisteredClaims: gjwt.RegisteredClaims{
 			Subject:   userID.String(),
 			IssuedAt:  gjwt.NewNumericDate(now),

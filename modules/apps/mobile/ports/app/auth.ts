@@ -34,6 +34,9 @@ export interface AuthSession {
   picture: string | null
   anonymous: boolean
   accessTokenExpiresAt: number
+  /** Subscription tier mirrored from RevenueCat ("free" | "pro"). Defaults
+   * to "free" on stale tokens that pre-date this field. */
+  tier: string
 }
 
 export interface AuthPort {
@@ -60,8 +63,30 @@ export interface AuthPort {
    */
   getAccessToken(): Promise<string | null>
 
+  /**
+   * Unconditionally call `/auth/refresh` and update the cached session.
+   * Used after a RevenueCat purchase/restore so the new `tier` claim
+   * lands in the access JWT immediately instead of waiting up to 15 min
+   * for natural rotation.
+   */
+  refreshTokens(): Promise<AuthSession | null>
+
+  /**
+   * Server-side view of the current user. Read-only — does not rotate
+   * tokens. Used by foreground-resume to detect a webhook-driven tier
+   * flip without paying the cost of a refresh round-trip every time
+   * the app comes to the foreground.
+   */
+  fetchMe(): Promise<MeView | null>
+
   /** Subscribe to session changes (login/logout/refresh). Returns unsub. */
   onSessionChange(listener: (s: AuthSession | null) => void): () => void
+}
+
+/** Subset of /auth/me the foreground-resume sync cares about. */
+export interface MeView {
+  tier: string
+  tierExpiresAt: number | null
 }
 
 export interface AuthConfig {
