@@ -63,9 +63,11 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	moreAuth, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_auth_*.up.sql"))
 	authFiles = append(authFiles, moreAuth...)
 	// Outbox + the usage table the chat service owns in prod. We just need
-	// the shape — chat's full set isn't required for these tests.
+	// the shape — chat's full set isn't required for these tests. 0026 layers
+	// the dedup column onto app.outbox and must run after 0023.
 	authFiles = append(authFiles,
 		filepath.Join(migrationsDir, "0023_outbox.up.sql"),
+		filepath.Join(migrationsDir, "0026_outbox_dedup.up.sql"),
 	)
 	sort.Strings(authFiles)
 	for _, p := range authFiles {

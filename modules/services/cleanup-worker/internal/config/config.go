@@ -38,6 +38,20 @@ type Config struct {
 	// cheap (partial index on refresh_tokens.user_id) so a once-a-day cadence
 	// is plenty; tighter only buys faster expiry, never throughput.
 	AnonCleanupInterval time.Duration
+
+	// RetentionInterval drives the periodic retention sweep over processed
+	// rows in app.outbox and auth.rc_webhook_events. Default 24h — sweeping
+	// more often just wastes a DELETE, the eligible set rotates on a
+	// day-or-greater scale.
+	RetentionInterval time.Duration
+
+	// RetentionWebhookEventsTTL is how long a processed auth.rc_webhook_events
+	// row stays before retention deletes it. Plan: 90d.
+	RetentionWebhookEventsTTL time.Duration
+
+	// RetentionOutboxTTL is how long a processed app.outbox row stays.
+	// Plan: 30d.
+	RetentionOutboxTTL time.Duration
 }
 
 func Load() (*Config, error) {
@@ -83,6 +97,38 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("CLEANUP_ANON_INTERVAL must be > 0 when CLEANUP_ANON_TTL > 0, got %s", intStr)
 	}
 	cfg.AnonCleanupInterval = interval
+
+	// Retention sweep over processed bookkeeping rows. Defaults match the
+	// improvement plan (Tier 2.6); each knob is overridable for tests/dev.
+	retInt := env("CLEANUP_RETENTION_INTERVAL", "24h")
+	retIntD, err := time.ParseDuration(retInt)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_INTERVAL: %w", err)
+	}
+	if retIntD <= 0 {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_INTERVAL must be > 0, got %s", retInt)
+	}
+	cfg.RetentionInterval = retIntD
+
+	wTTL := env("CLEANUP_RETENTION_RC_WEBHOOK_TTL", "2160h") // 90d
+	wTTLd, err := time.ParseDuration(wTTL)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_RC_WEBHOOK_TTL: %w", err)
+	}
+	if wTTLd <= 0 {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_RC_WEBHOOK_TTL must be > 0, got %s", wTTL)
+	}
+	cfg.RetentionWebhookEventsTTL = wTTLd
+
+	oTTL := env("CLEANUP_RETENTION_OUTBOX_TTL", "720h") // 30d
+	oTTLd, err := time.ParseDuration(oTTL)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_OUTBOX_TTL: %w", err)
+	}
+	if oTTLd <= 0 {
+		return nil, fmt.Errorf("CLEANUP_RETENTION_OUTBOX_TTL must be > 0, got %s", oTTL)
+	}
+	cfg.RetentionOutboxTTL = oTTLd
 
 	return cfg, nil
 }

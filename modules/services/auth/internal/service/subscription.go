@@ -91,10 +91,20 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 			if err != nil {
 				return fmt.Errorf("marshal outbox payload: %w", err)
 			}
+			// Dedup: source_event_id = RC eventID, paired with event_type
+			// 'subscription.changed' via outbox_dedup_idx (migration 0026).
+			// If the same RC event somehow reaches this INSERT twice
+			// (auth.rc_webhook_events idempotency torn between SELECT and
+			// INSERT — see Tier 1.2 in the improvement plan), the unique
+			// partial index turns the second attempt into a silent no-op
+			// instead of double-fanning the consumer side.
 			if _, err := tx.Exec(ctx,
-				`INSERT INTO app.outbox(event_type, aggregate_id, payload)
-				 VALUES ('subscription.changed', $1::text, $2::jsonb)`,
-				userID.String(), payload,
+				`INSERT INTO app.outbox(event_type, aggregate_id, payload, source_event_id)
+				 VALUES ('subscription.changed', $1::text, $2::jsonb, $3::text)
+				 ON CONFLICT (event_type, source_event_id)
+				   WHERE source_event_id IS NOT NULL
+				   DO NOTHING`,
+				userID.String(), payload, eventID,
 			); err != nil {
 				return fmt.Errorf("insert outbox: %w", err)
 			}
