@@ -375,6 +375,37 @@ async def run_chat_turn(
                             request_id=request_id,
                             prose_chars=sum(len(s) for s in full_prose),
                         )
+                        # Tag the Langfuse trace so corpus evals can
+                        # exclude cancelled turns from quality metrics
+                        # (and so debugging can tell a "user gave up"
+                        # signal apart from a model failure). Trace-
+                        # level tag + metadata mirror so both surface in
+                        # the Langfuse UI filter dropdowns.
+                        lf = get_langfuse()
+                        if lf is not None:
+                            try:
+                                lf.update_current_trace(
+                                    tags=["cancelled_by_client"],
+                                    metadata={"cancelled_by_client": True},
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                log.warning(
+                                    "langfuse_cancel_tag_failed",
+                                    request_id=request_id,
+                                    error=str(exc),
+                                )
+                        # Cancel the speculative embed if it's still in
+                        # flight — otherwise the asyncio task lingers
+                        # until GC, holding the embedding-API
+                        # connection slot for nothing. No central
+                        # registry of in-flight tool-call futures
+                        # exists today: LangGraph's `astream` drives
+                        # tool execution synchronously inside graph
+                        # nodes, so cancelling the consumer (this
+                        # generator returning) implicitly tears them
+                        # down. See PR-1b body note.
+                        if embed_task is not None and not embed_task.done():
+                            embed_task.cancel()
                         return
             except Exception as exc:
                 log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
