@@ -75,6 +75,22 @@ type Config struct {
 	// every cross-region event and POSTs each region's
 	// /internal/subscription/apply.
 	RemoteRegions []RemoteRegion
+
+	// SignedInTTL controls the long-tail cleanup of signed-in users
+	// whose newest refresh_token is older than this duration. Sibling
+	// of AnonCleanupTTL — same activity proxy (refresh_tokens.created_at),
+	// different selection predicate (must have a non-device identity).
+	// Zero disables the cron. Default 17520h = ~24 months.
+	SignedInTTL time.Duration
+
+	// SignedInTTLInterval drives the signed-in TTL cron ticker.
+	SignedInTTLInterval time.Duration
+
+	// SignedInTTLDryRun gates whether the cron actually DELETEs.
+	// Default true — the initial deployment runs dry-run for 1-2 weeks
+	// so the operator can verify the would-delete log lines look right
+	// before flipping to false.
+	SignedInTTLDryRun bool
 }
 
 func Load() (*Config, error) {
@@ -164,7 +180,54 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SHRUTI_INTERNAL_SECRET is required when REMOTE_REGIONS is set")
 	}
 
+	// Signed-in TTL cron. Same shape as anon: TTL=0 disables, otherwise
+	// both knobs must parse. Default 17520h ≈ 24 months matches the plan
+	// (2-dead-letter-policy-steady-catmull.md PR-5).
+	siTTLStr := env("CLEANUP_SIGNED_IN_TTL", "17520h")
+	siTTL, err := time.ParseDuration(siTTLStr)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_SIGNED_IN_TTL: %w", err)
+	}
+	if siTTL < 0 {
+		return nil, fmt.Errorf("CLEANUP_SIGNED_IN_TTL must be >= 0, got %s", siTTLStr)
+	}
+	cfg.SignedInTTL = siTTL
+
+	siIntStr := env("CLEANUP_SIGNED_IN_INTERVAL", "24h")
+	siInt, err := time.ParseDuration(siIntStr)
+	if err != nil {
+		return nil, fmt.Errorf("CLEANUP_SIGNED_IN_INTERVAL: %w", err)
+	}
+	if siTTL > 0 && siInt <= 0 {
+		return nil, fmt.Errorf("CLEANUP_SIGNED_IN_INTERVAL must be > 0 when CLEANUP_SIGNED_IN_TTL > 0, got %s", siIntStr)
+	}
+	cfg.SignedInTTLInterval = siInt
+
+	// Dry-run defaults to true on the first deploy so the operator can
+	// scan would-delete log lines before letting the cron actually run.
+	// Operator flips CLEANUP_SIGNED_IN_DRY_RUN=false after observing
+	// stable output for 1-2 weeks.
+	cfg.SignedInTTLDryRun = envBool("CLEANUP_SIGNED_IN_DRY_RUN", true)
+
 	return cfg, nil
+}
+
+// envBool reads a bool-ish env var. Accepts "true"/"1"/"yes"/"on" as
+// true (case-insensitive); "false"/"0"/"no"/"off" as false; anything
+// else (or unset) returns def. Lenient parse on purpose — env vars set
+// from shell scripts vs docker-compose YAML carry surprising whitespace.
+func envBool(k string, def bool) bool {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return def
+	}
+	switch strings.ToLower(v) {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	}
+	return def
 }
 
 // parseRemoteRegions turns `russia=https://auth.russia.shruti.app,

@@ -24,6 +24,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/config"
 	"github.com/jiva-studio/shruti/cleanup-worker/internal/cron"
 	cwdb "github.com/jiva-studio/shruti/cleanup-worker/internal/db"
@@ -163,6 +165,38 @@ func main() {
 		)
 	}
 
+	// Sibling cron: signed-in long-tail TTL. Same outbox-event emission
+	// path as anon_cleanup (DELETE on auth.users → user.deleted trigger
+	// → Langfuse purge handler), different selection predicate
+	// (must have a non-device identity). Dry-run gates the actual DELETE
+	// — first deployment runs DryRun=true for 1-2 weeks of observation.
+	if cfg.SignedInTTL > 0 {
+		c := &cron.SignedInTTL{
+			Pool:     pool,
+			Interval: cfg.SignedInTTLInterval,
+			TTL:      cfg.SignedInTTL,
+			DryRun:   cfg.SignedInTTLDryRun,
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := c.Run(runCtx); err != nil && !errors.Is(err, context.Canceled) {
+				slog.ErrorContext(runCtx, "signed_in_ttl_run_failed", slog.String("err", err.Error()))
+				runCancel()
+			}
+		}()
+	} else {
+		slog.InfoContext(bootCtx, "signed_in_ttl_disabled",
+			slog.String("reason", "CLEANUP_SIGNED_IN_TTL=0"),
+		)
+	}
+
+	// Outbox-pending gauge poller. Independent goroutine — does not need
+	// wg.Add since it returns silently on ctx cancellation (no critical
+	// teardown the rest of shutdown depends on; the metric just stops
+	// updating and the next scrape gets a stale `up` from Prometheus).
+	observability.StartOutboxPendingPoller(runCtx, pool)
+
 	// Retention sweep over processed bookkeeping rows (app.outbox +
 	// auth.rc_webhook_events). Independent of the consumer loop — pure
 	// daily DELETE on rows already past their TTL.
@@ -212,15 +246,21 @@ func main() {
 	}
 }
 
-// healthHandler responds 200 on /healthz. Process liveness only — the
-// LISTEN goroutine's death is already escalated via runCancel above, so
-// if the binary is still serving here, the consumer loop is alive too.
+// healthHandler responds 200 on /healthz and exposes Prometheus
+// metrics on /metrics. Process liveness only — the LISTEN goroutine's
+// death is already escalated via runCancel above, so if the binary is
+// still serving here, the consumer loop is alive too.
+//
+// /metrics is on the same mux so observability scrapers don't need a
+// second port; this mirrors the auth service's pattern (auth router
+// also collapses /metrics + /healthz onto one listener).
 func healthHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.Handle("/metrics", promhttp.Handler())
 	return mux
 }
 
