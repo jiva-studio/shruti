@@ -7,6 +7,9 @@ import { postFeedback, type AccessTokenProvider } from "./chatClient.js"
 
 export interface HttpChatFeedbackServiceDeps {
   readonly getAccessToken: AccessTokenProvider
+  /** Lazy resolver for the chat service base URL. See
+   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
+  readonly baseUrl: () => string
 }
 
 /**
@@ -22,6 +25,7 @@ export function createHttpChatFeedbackService(
       return postFeedback(payload, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
+        baseUrl: deps.baseUrl,
       })
     },
   }

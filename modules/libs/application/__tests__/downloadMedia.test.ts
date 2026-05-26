@@ -14,6 +14,8 @@ const SERVER_A: CdnServer = {
   urlTemplate: "https://a.example.com/{path}",
   shareAudioUrl: "https://a.example.com/excerpts",
   shareVideoUrl: "https://a.example.com/reels",
+  authBaseUrl: "https://a.example.com/auth",
+  chatBaseUrl: "https://a.example.com",
 }
 const SERVER_B: CdnServer = {
   id: "server-b",
@@ -21,6 +23,8 @@ const SERVER_B: CdnServer = {
   urlTemplate: "https://b.example.com/{path}",
   shareAudioUrl: "https://b.example.com/excerpts",
   shareVideoUrl: "https://b.example.com/reels",
+  authBaseUrl: "https://b.example.com/auth",
+  chatBaseUrl: "https://b.example.com",
 }
 
 const PATH = "public/tracks/t-1/audio/original.mp3"

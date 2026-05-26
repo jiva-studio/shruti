@@ -8,6 +8,9 @@ import { streamChat, type AccessTokenProvider } from "./chatClient.js"
 
 export interface HttpProactiveChatServiceDeps {
   readonly getAccessToken: AccessTokenProvider
+  /** Lazy resolver for the chat service base URL — typically
+   *  `() => lectorium.activeServer.value.chatBaseUrl`. */
+  readonly baseUrl: () => string
 }
 
 /**
@@ -37,6 +40,7 @@ export function useHttpProactiveChatService(
 
       for await (const event of streamChat(placeholderMessages, wireLocale, {
         getAccessToken: deps.getAccessToken,
+        baseUrl: deps.baseUrl,
         proactive: {
           ruleKind: req.ruleKind,
           ruleDate: req.ruleDate,

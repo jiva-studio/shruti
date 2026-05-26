@@ -101,8 +101,11 @@ initLectorium({
   }),
   // Auth service — anonymous-by-device bootstrap on first launch; Google /
   // Apple sign-in upgrades the same user when invoked from Settings.
+  // `baseUrl` is a lazy getter: resolved at each fetch call against
+  // `lectorium.activeServer.value.authBaseUrl`, so a region flip via
+  // Settings routes subsequent auth traffic to the new backend.
   auth: useCapacitorAuth({
-    baseUrl: __AUTH_API_BASE_URL__,
+    baseUrl: () => useLectorium().activeServer.value.authBaseUrl,
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
   }),
@@ -126,6 +129,7 @@ initLectorium({
   // proactive turn), well after init has completed.
   proactiveChat: useHttpProactiveChatService({
     getAccessToken: () => useLectorium().auth.getAccessToken(),
+    baseUrl: () => useLectorium().activeServer.value.chatBaseUrl,
   }),
 })
 

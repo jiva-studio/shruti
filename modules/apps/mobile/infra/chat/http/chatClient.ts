@@ -193,13 +193,13 @@ export async function fetchSessionTitle(
   messages: readonly ChatTurn[],
   lang: "ru" | "en",
   opts: {
-    baseUrl?: string
+    baseUrl: () => string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<string | null> {
   if (messages.length === 0) return null
-  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const baseUrl = opts.baseUrl()
 
   let token: string
   try {
@@ -261,12 +261,12 @@ export async function fetchSuggestedQuestions(
   focus: QuestionsFocusInput,
   lang: "ru" | "en",
   opts: {
-    baseUrl?: string
+    baseUrl: () => string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<readonly string[]> {
-  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const baseUrl = opts.baseUrl()
 
   let token: string
   try {
@@ -336,12 +336,12 @@ export interface FeedbackPayload {
 export async function postFeedback(
   payload: FeedbackPayload,
   opts: {
-    baseUrl?: string
+    baseUrl: () => string
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<void> {
-  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const baseUrl = opts.baseUrl()
   const token = await resolveAccessToken(opts.getAccessToken)
 
   const traceId = payload.messageId.replace(/-/g, "").toLowerCase()
@@ -384,7 +384,10 @@ export interface ProactiveTurnOptions {
  */
 export interface StreamChatRequestInit {
   readonly signal?: AbortSignal
-  readonly baseUrl?: string
+  /** Lazy resolver for the chat service base URL. Read at the top of
+   *  each request so a region flip via `lectorium.activeServer` reaches
+   *  in-flight chats on the next turn. */
+  readonly baseUrl: () => string
   /** JWT provider — typically `app.auth.getAccessToken`, injected
    *  through the adapter's constructor. Required: the chatClient
    *  doesn't hold any module-level fallback. */
@@ -430,7 +433,7 @@ export async function* streamChat(
   lang: "ru" | "en",
   opts: StreamChatRequestInit
 ): AsyncGenerator<ChatStreamEvent, void, void> {
-  const baseUrl = opts.baseUrl ?? __CHAT_API_BASE_URL__
+  const baseUrl = opts.baseUrl()
   const token = await resolveAccessToken(opts.getAccessToken)
 
   // Transient errors (network blip, 502/503/504 during a server redeploy)

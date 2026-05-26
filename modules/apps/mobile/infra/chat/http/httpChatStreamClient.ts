@@ -8,6 +8,11 @@ import { streamChat, type AccessTokenProvider } from "./chatClient.js"
 
 export interface HttpChatStreamClientDeps {
   readonly getAccessToken: AccessTokenProvider
+  /** Lazy resolver for the chat service base URL — typically
+   *  `() => lectorium.activeServer.value.chatBaseUrl`. Resolved at
+   *  the top of every `streamChat` call so a region flip propagates
+   *  without re-instantiating the adapter. */
+  readonly baseUrl: () => string
 }
 
 /**
@@ -35,6 +40,7 @@ export function createHttpChatStreamClient(deps: HttpChatStreamClientDeps): ICha
       return streamChat(turns, lang, {
         ...(opts ?? {}),
         getAccessToken: deps.getAccessToken,
+        baseUrl: deps.baseUrl,
       }) as AsyncIterable<PortChatStreamEvent>
     },
   }
