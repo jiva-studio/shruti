@@ -237,8 +237,13 @@ export const useChatStore = defineStore("chat", () => {
   // Lazy because `app.auth` is wired by the composition root and the
   // factories are called from inside reactive setup — using the deps
   // object directly here would freeze the reference at store-setup
-  // time and miss any auth re-init.
-  const authDeps = { getAccessToken: () => app.auth.getAccessToken() }
+  // time and miss any auth re-init. The `baseUrl` getter routes
+  // through `shruti.activeServer.value.chatBaseUrl` so a region
+  // flip reaches the next chat turn without re-wiring the store.
+  const authDeps = {
+    getAccessToken: () => app.auth.getAccessToken(),
+    baseUrl: () => app.activeServer.value.chatBaseUrl,
+  }
   function streamClient() {
     return createHttpChatStreamClient(authDeps)
   }

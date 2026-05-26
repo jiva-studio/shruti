@@ -7,6 +7,9 @@ import { fetchSuggestedQuestions, type AccessTokenProvider } from "./chatClient.
 
 export interface HttpChatQuestionsServiceDeps {
   readonly getAccessToken: AccessTokenProvider
+  /** Lazy resolver for the chat service base URL. See
+   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
+  readonly baseUrl: () => string
 }
 
 /**
@@ -27,6 +30,7 @@ export function createHttpChatQuestionsService(
       return fetchSuggestedQuestions(focus, lang, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
+        baseUrl: deps.baseUrl,
       })
     },
   }

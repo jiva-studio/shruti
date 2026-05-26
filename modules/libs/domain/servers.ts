@@ -22,6 +22,15 @@ export interface CdnServer {
   readonly urlTemplate: string
   readonly shareAudioUrl: string
   readonly shareVideoUrl: string
+  /** Base URL of the shruti auth service for this region, e.g.
+   *  `https://<host>/auth`. Read at call time via the composition
+   *  root's `activeServer` ref so a region flip routes auth traffic
+   *  to the new backend without an app restart. */
+  readonly authBaseUrl: string
+  /** Base URL of the shruti chat service for this region. Same
+   *  per-region lazy-resolution pattern as `authBaseUrl` — the chat
+   *  HTTP client reads it through a getter, not at module import time. */
+  readonly chatBaseUrl: string
 }
 
 // Single host until we stand up a Russia VPS; sslip.io resolves
@@ -35,6 +44,8 @@ export const SERVERS: readonly CdnServer[] = [
     urlTemplate: "https://cdn-s3.shruti.local/{path}",
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
+    authBaseUrl: `${HOST}/auth`,
+    chatBaseUrl: HOST,
   },
   {
     id: "russia",
@@ -43,9 +54,11 @@ export const SERVERS: readonly CdnServer[] = [
     // TODO: replace with a Russia-side host once the RU VPS is live. Until
     // then Russia users hit the same backend as Global; their CDN reads
     // (urlTemplate above) still resolve to Yandex Object Storage so big
-    // assets stay close, but share-* round-trips through Germany.
+    // assets stay close, but share-* / auth / chat round-trip through Germany.
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
+    authBaseUrl: `${HOST}/auth`,
+    chatBaseUrl: HOST,
   },
 ]
 
