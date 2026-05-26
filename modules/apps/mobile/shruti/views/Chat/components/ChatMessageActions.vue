@@ -122,7 +122,6 @@ async function onThumbsUp(): Promise<void> {
   feedbackInFlight.value = true
   try {
     await chat.submitFeedback(props.messageId, { state: "up" })
-    void toast.info(t("chat.feedback.thanks"))
   } catch {
     void toast.error(t("chat.feedback.failed"))
   } finally {
@@ -147,7 +146,6 @@ async function onSheetSubmit(args: {
       category: args.category,
       comment: args.comment,
     })
-    void toast.info(t("chat.feedback.thanks"))
   } catch {
     void toast.error(t("chat.feedback.failed"))
   } finally {
