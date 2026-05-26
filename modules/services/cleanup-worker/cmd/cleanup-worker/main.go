@@ -33,6 +33,14 @@ import (
 	"github.com/akdasa-studios/lectorium/cleanup-worker/internal/worker"
 )
 
+// broadcastHTTPTimeout is the per-request budget for delivering a
+// subscription.broadcast snapshot to one remote region. Short enough
+// that a slow region doesn't stall the outbox worker; long enough to
+// cover a normal cross-region round-trip plus the destination's DB
+// write. Failures inside this window keep the outbox row pending so
+// the outer retry loop reattempts.
+const broadcastHTTPTimeout = 10 * time.Second
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthz" {
 		os.Exit(selfHealthz())
@@ -74,8 +82,24 @@ func main() {
 	reg := handlers.NewRegistry()
 	reg.Register("user.deleted", handlers.UserDeleted(lf))
 	reg.Register("subscription.changed", handlers.SubscriptionChanged())
+
+	// Cross-region RC webhook fan-out (PR-2b). Wired on every region: the
+	// originating region writes 'subscription.broadcast' to its own
+	// outbox; the cleanup-worker on the same region picks the row up and
+	// HMAC-delivers to every entry in REMOTE_REGIONS. A region with
+	// REMOTE_REGIONS unset (single-region deployment) still wires the
+	// handler — it no-ops on an empty list, marking the row processed so
+	// duplicates from a future operator rollback don't accumulate.
+	bh := &handlers.SubscriptionBroadcastHandler{
+		Client:        &http.Client{Timeout: broadcastHTTPTimeout},
+		Secret:        cfg.InternalSecret,
+		RemoteRegions: toHandlerRemoteRegions(cfg.RemoteRegions),
+	}
+	reg.Register("subscription.broadcast", handlers.SubscriptionBroadcast(bh))
+
 	slog.InfoContext(bootCtx, "handlers_registered",
 		slog.Any("event_types", reg.KnownEventTypes()),
+		slog.Int("remote_regions", len(cfg.RemoteRegions)),
 	)
 
 	w := &worker.Worker{
@@ -198,6 +222,19 @@ func healthHandler() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 	return mux
+}
+
+// toHandlerRemoteRegions adapts config.RemoteRegion (the parsed env
+// shape) to handlers.RemoteRegion (the handler's contract). Two structs
+// instead of one because the config package owns parsing and the
+// handlers package owns wire-level delivery — keeping them
+// independently testable.
+func toHandlerRemoteRegions(in []config.RemoteRegion) []handlers.RemoteRegion {
+	out := make([]handlers.RemoteRegion, len(in))
+	for i, r := range in {
+		out[i] = handlers.RemoteRegion{ID: r.ID, BaseURL: r.BaseURL}
+	}
+	return out
 }
 
 // selfHealthz hits /healthz on localhost from inside the FROM-scratch

@@ -4,8 +4,18 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
+
+// RemoteRegion is the parsed form of a single REMOTE_REGIONS entry
+// (`id=baseurl`). Re-exported as handlers.RemoteRegion via the
+// SubscriptionBroadcast wiring in cmd/cleanup-worker/main.go — defined
+// here so config tests don't need a handlers import cycle.
+type RemoteRegion struct {
+	ID      string
+	BaseURL string
+}
 
 type Config struct {
 	// DatabaseURL is the postgres DSN. Same DB the auth/chat services use;
@@ -52,6 +62,19 @@ type Config struct {
 	// RetentionOutboxTTL is how long a processed app.outbox row stays.
 	// Plan: 30d.
 	RetentionOutboxTTL time.Duration
+
+	// InternalSecret is the HMAC key shared with every region's auth
+	// service. Used to sign cross-region subscription.broadcast
+	// deliveries to /internal/subscription/apply. Empty disables the
+	// broadcast handler (single-region deployment); non-empty with no
+	// RemoteRegions configured is harmless (the handler still no-ops).
+	InternalSecret string
+
+	// RemoteRegions is the parsed REMOTE_REGIONS env (comma-separated
+	// `id=baseurl` pairs). The broadcast handler iterates this list on
+	// every cross-region event and POSTs each region's
+	// /internal/subscription/apply.
+	RemoteRegions []RemoteRegion
 }
 
 func Load() (*Config, error) {
@@ -130,7 +153,48 @@ func Load() (*Config, error) {
 	}
 	cfg.RetentionOutboxTTL = oTTLd
 
+	// Cross-region fan-out (PR-2b). LECTORIUM_INTERNAL_SECRET signs every
+	// broadcast delivery; REMOTE_REGIONS lists the destinations. Both
+	// empty = single-region deployment (Cloud Provider today). Half-configured
+	// is a misconfiguration: REMOTE_REGIONS without a secret cannot sign
+	// requests and would 401 at every destination — fail boot loudly.
+	cfg.InternalSecret = env("LECTORIUM_INTERNAL_SECRET", "")
+	cfg.RemoteRegions = parseRemoteRegions(env("REMOTE_REGIONS", ""))
+	if cfg.InternalSecret == "" && len(cfg.RemoteRegions) > 0 {
+		return nil, fmt.Errorf("LECTORIUM_INTERNAL_SECRET is required when REMOTE_REGIONS is set")
+	}
+
 	return cfg, nil
+}
+
+// parseRemoteRegions turns `russia=https://auth.russia.lectorium.app,
+// other=https://...` into a slice of RemoteRegion. Trims whitespace
+// around each `id` and `baseurl`; silently skips empty or malformed
+// entries (missing `=`) so a trailing comma in the env doesn't fail
+// boot.
+func parseRemoteRegions(s string) []RemoteRegion {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]RemoteRegion, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		kv := strings.SplitN(p, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		id := strings.TrimSpace(kv[0])
+		base := strings.TrimSpace(kv[1])
+		if id == "" || base == "" {
+			continue
+		}
+		out = append(out, RemoteRegion{ID: id, BaseURL: base})
+	}
+	return out
 }
 
 func env(k, def string) string {
