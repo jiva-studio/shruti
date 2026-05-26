@@ -142,10 +142,34 @@ func (s *Service) SigninApple(ctx context.Context, in SocialInput) (*Session, er
 
 // signinSocial implements the central resolve-or-create-or-link decision tree.
 // Documented in plan §"Sign-in поток".
+//
+// The raw OAuth payload is filtered through ProfilePolicy.FromOAuth before
+// any DB write so suppressed fields (email/name/avatar in RU profile) never
+// reach the persistence layer. Provider + Subject always survive — the
+// identity row needs them to bind. When the deployment doesn't collect
+// email, the cross-link-by-verified-email branch is skipped: Google and
+// Apple on the same human become two separate accounts. Acceptable
+// simplification per the locked architectural decision.
 func (s *Service) signinSocial(ctx context.Context, provider string, ident *providers.Identity, in SocialInput) (*Session, error) {
 	if ident.Subject == "" {
 		return nil, fmt.Errorf("%s: empty subject", provider)
 	}
+
+	// Apple's fullName is one-shot in the signin request body (only the
+	// first time the user grants the app). Fold it into the OAuth payload
+	// here so the policy filter sees a uniform shape.
+	rawName := ident.Name
+	if rawName == "" {
+		rawName = in.FullName
+	}
+	filtered := s.ProfilePolicy.FromOAuth(profile.OAuthIdentityData{
+		Provider:      provider,
+		Subject:       ident.Subject,
+		Email:         ident.Email,
+		EmailVerified: ident.EmailVerified,
+		Name:          rawName,
+		AvatarURL:     ident.PictureURL,
+	})
 
 	var userID uuid.UUID
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -156,27 +180,31 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		}
 		if existing != nil {
 			userID = existing.UserID
-			if err := s.maybeUpdateIdentityEmail(ctx, tx, existing, ident); err != nil {
+			if err := s.maybeUpdateIdentityEmail(ctx, tx, existing, filtered); err != nil {
 				return err
 			}
-			return s.applyProfile(ctx, tx, userID, ident, in.FullName)
+			return s.applyProfile(ctx, tx, userID, filtered)
 		}
 
 		// 2. Anonymous Bearer in play → upgrade that user.
 		if uid, ok := s.userFromBearer(in.BearerAccess); ok && isAnonymousClaim(in.BearerAccess, s.Verifier) {
 			userID = uid
-			return s.createIdentity(ctx, tx, provider, ident, uid, in.FullName)
+			return s.createIdentity(ctx, tx, uid, filtered)
 		}
 
-		// 3. Cross-link by verified email.
-		if ident.EmailVerified && ident.Email != "" {
-			matchUID, err := s.Identities.FindUserByVerifiedEmail(ctx, ident.Email)
+		// 3. Cross-link by verified email — only useful if this
+		//    deployment collects email at all. With email disabled,
+		//    Google + Apple on the same human produce two separate
+		//    user rows; the user's tier travels with whichever they
+		//    signed in with first, and the duplicate is harmless.
+		if s.ProfilePolicy.Email.Enabled && filtered.EmailVerified && filtered.Email != "" {
+			matchUID, err := s.Identities.FindUserByVerifiedEmail(ctx, filtered.Email)
 			if err != nil {
 				return err
 			}
 			if matchUID != uuid.Nil {
 				userID = matchUID
-				return s.createIdentity(ctx, tx, provider, ident, matchUID, in.FullName)
+				return s.createIdentity(ctx, tx, matchUID, filtered)
 			}
 		}
 
@@ -186,7 +214,7 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 			return err
 		}
 		userID = uid
-		return s.createIdentity(ctx, tx, provider, ident, uid, in.FullName)
+		return s.createIdentity(ctx, tx, uid, filtered)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("signin %s: %w", provider, err)
@@ -202,54 +230,64 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 	return s.issueSession(ctx, userID, false, in.DeviceID)
 }
 
-func (s *Service) createIdentity(ctx context.Context, tx pgx.Tx, provider string, ident *providers.Identity, userID uuid.UUID, fullName string) error {
+// createIdentity inserts an auth.identities row for `userID` from a
+// policy-filtered OAuth payload. When the policy suppressed the email
+// the row is created with email=NULL, email_verified=false — same shape
+// as a provider that simply didn't return one.
+func (s *Service) createIdentity(ctx context.Context, tx pgx.Tx, userID uuid.UUID, f profile.FilteredIdentity) error {
 	row := store.Identity{
-		Provider:      provider,
-		Subject:       ident.Subject,
+		Provider:      f.Provider,
+		Subject:       f.Subject,
 		UserID:        userID,
-		EmailVerified: ident.EmailVerified,
+		EmailVerified: f.EmailVerified,
 	}
-	if ident.Email != "" {
-		em := ident.Email
+	if f.Email != "" {
+		em := f.Email
 		row.Email = &em
 	}
 	if err := s.Identities.Create(ctx, tx, row); err != nil {
 		return err
 	}
-	return s.applyProfile(ctx, tx, userID, ident, fullName)
+	return s.applyProfile(ctx, tx, userID, f)
 }
 
 // applyProfile is the single place that lands display name + avatar into
-// auth.users. Name follows "set-if-empty" semantics (Apple's fullName is
-// one-shot and we don't want a later Google login clobbering an existing
-// custom name down the line). Picture is always overwritten when the
-// provider hands one back — Google rotates avatar URLs, so the freshest
-// wins. Apple's "no picture" path is a no-op rather than a NULL write.
-func (s *Service) applyProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, ident *providers.Identity, fullName string) error {
-	name := ident.Name
-	if name == "" {
-		name = fullName
-	}
-	if name != "" {
-		if err := s.Users.SetNameIfEmpty(ctx, tx, userID, name); err != nil {
+// auth.users from a policy-filtered OAuth payload. Name follows "set-if-
+// empty" semantics (Apple's fullName is one-shot and we don't want a
+// later Google login clobbering an existing custom name down the line).
+// Picture is always overwritten when the provider hands one back —
+// Google rotates avatar URLs, so the freshest wins. Empty input (either
+// the provider didn't return the field, or the policy suppressed it) is
+// a no-op rather than a NULL write.
+func (s *Service) applyProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, f profile.FilteredIdentity) error {
+	if f.Name != "" {
+		if err := s.Users.SetNameIfEmpty(ctx, tx, userID, f.Name); err != nil {
 			return err
 		}
 	}
-	if ident.PictureURL != "" {
-		if err := s.Users.SetPictureURL(ctx, tx, userID, ident.PictureURL); err != nil {
+	if f.AvatarURL != "" {
+		if err := s.Users.SetPictureURL(ctx, tx, userID, f.AvatarURL); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Service) maybeUpdateIdentityEmail(ctx context.Context, tx pgx.Tx, existing *store.Identity, fresh *providers.Identity) error {
-	freshEmail := emptyToNil(fresh.Email)
-	// Skip write if nothing changed (Apple re-issues the same relay most of the time).
-	if equalPtrStr(existing.Email, freshEmail) && existing.EmailVerified == fresh.EmailVerified {
+// maybeUpdateIdentityEmail refreshes an existing identity row's email
+// only when the policy collects email AND the value actually changed
+// (Apple re-issues the same relay most of the time). With email
+// suppressed by the policy the call is a no-op — we don't write NULL
+// over a pre-existing address either, because the row was created under
+// the same policy and already matches.
+func (s *Service) maybeUpdateIdentityEmail(ctx context.Context, tx pgx.Tx, existing *store.Identity, f profile.FilteredIdentity) error {
+	if !s.ProfilePolicy.Email.Enabled {
 		return nil
 	}
-	return s.Identities.UpdateEmail(ctx, tx, existing.Provider, existing.Subject, freshEmail, fresh.EmailVerified)
+	freshEmail := emptyToNil(f.Email)
+	if equalPtrStr(existing.Email, freshEmail) && existing.EmailVerified == f.EmailVerified {
+		return nil
+	}
+	return s.Identities.UpdateEmail(ctx, tx, existing.Provider, existing.Subject, freshEmail, f.EmailVerified)
 }
 
 // ─── Refresh ────────────────────────────────────────────────────────────────
