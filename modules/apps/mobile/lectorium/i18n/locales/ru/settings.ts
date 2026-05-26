@@ -21,6 +21,21 @@ export default {
     signInWithApple: "Через Apple",
     signedIn: "Вы авторизованы",
     signOut: "Выйти",
+    signinRetryOtherRegion: {
+      title: "Аккаунт в {currentRegion} не найден",
+      message:
+        "Если вы регистрировались в {otherRegion}, попробуйте этот регион. Иначе создайте новый аккаунт здесь.",
+      switchTo: "Перейти в {otherRegion} и попробовать снова",
+      createNew: "Создать новый аккаунт в {currentRegion}",
+      dupRiskTitle: "В другом регионе может быть аккаунт",
+      dupRiskMessage:
+        "Не удалось связаться с {otherRegion} для проверки. Если создать новый аккаунт в {currentRegion}, когда в {otherRegion} уже есть аккаунт, получится два параллельных аккаунта.",
+      continueAnyway: "Продолжить",
+      cancel: "Отмена",
+      alreadyExistsTitle: "Аккаунт уже есть в {otherRegion}",
+      alreadyExistsMessage: "Перейдите в {otherRegion} и войдите там.",
+      switchAndRetry: "Перейти и войти",
+    },
     deleteAccount: {
       title: "Удалить аккаунт",
       confirmWipe: "Удалить аккаунт и стереть данные",

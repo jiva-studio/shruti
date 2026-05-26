@@ -66,6 +66,26 @@ export type MigrationResult =
   | { ok: true; newUserId: string }
   | { ok: false; code: "unreachable" | "rejected" | "network" | "no_session"; message: string }
 
+/**
+ * Thrown by `signInWithGoogle` / `signInWithApple` when the X-Lookup-Only
+ * probe of the current region returns 404. Carries the verified
+ * idToken (and Apple's fullName, if surfaced once) so the caller can
+ * present the retry-other-region dialog WITHOUT re-triggering the
+ * SocialLogin popup: passing the idToken back to `lookupAccount` or
+ * `completeSigninAfterRetry` resumes the flow with the same OAuth
+ * material.
+ */
+export class SigninAccountNotFoundError extends Error {
+  constructor(
+    public readonly provider: "google" | "apple",
+    public readonly idToken: string,
+    public readonly fullName?: string
+  ) {
+    super(`signin/${provider}: account_not_found on current region`)
+    this.name = "SigninAccountNotFoundError"
+  }
+}
+
 export interface AuthPort {
   /**
    * Restore tokens from storage; if none, bootstrap an anonymous session.
@@ -73,8 +93,31 @@ export interface AuthPort {
    */
   initialize(): Promise<AuthSession>
 
+  /**
+   * OAuth signin via Google. Probes the current region first with
+   * `X-Lookup-Only: 1`; on a 404 throws `SigninAccountNotFoundError`
+   * carrying the verified idToken so the caller can drive the
+   * retry-other-region UX (PR-3) without re-running the SocialLogin
+   * popup. On hit, proceeds with the normal bootstrap and returns the
+   * session. `null` on user-cancel.
+   */
   signInWithGoogle(): Promise<AuthSession | null>
+  /** Same probe-then-bootstrap flow as `signInWithGoogle`, for Apple. */
   signInWithApple(): Promise<AuthSession | null>
+
+  /**
+   * Bootstrap a new account on the CURRENT region using an OAuth idToken
+   * we've already verified once (no X-Lookup-Only probe). Called by the
+   * retry-other-region "Create new account here" branch after the user
+   * decided to proceed despite the previous 404. Reuses the idToken
+   * captured in `SigninAccountNotFoundError` so the user doesn't re-tap
+   * the SocialLogin popup.
+   */
+  completeSigninAfterRetry(
+    provider: "google" | "apple",
+    idToken: string,
+    fullName?: string
+  ): Promise<AuthSession>
 
   signOut(): Promise<void>
   deleteAccount(): Promise<void>
@@ -88,6 +131,31 @@ export interface AuthPort {
    * caller should run a signOut + reboot in the new region instead.
    */
   migrateToRegion(newRegionId: string): Promise<MigrationResult>
+
+  /**
+   * Probe whether an account for the given OAuth identity lives on a
+   * SPECIFIC region — different from the currently-active one. Used by
+   * the retry-other-region signin UX (PR-3): when signin on the current
+   * region returns 404 and the user picks "Create new account here", we
+   * synchronously probe the OTHER region first to catch the "you already
+   * have an account on Russia" case before bootstrapping a duplicate.
+   *
+   * Uses the same `X-Lookup-Only: 1` shortcut as
+   * `lookupSigninCurrentRegion`, so the destination region verifies the
+   * OAuth id-token (proves the caller holds the subject) and looks up
+   * the identity without bootstrapping. The mobile client never has to
+   * decode the OAuth subject locally.
+   *
+   * Returns `{exists, anonymous}` on a clean response. On any uncertainty
+   * — timeout (3s), network error, non-2xx other than 404 — returns
+   * `null` so the caller can surface the "we couldn't verify, dup-account
+   * risk" warning instead of silently proceeding.
+   */
+  lookupAccount(
+    regionId: string,
+    provider: "google" | "apple",
+    idToken: string
+  ): Promise<{ exists: boolean; anonymous: boolean } | null>
 
   /** Latest cached session. `null` if `initialize` hasn't run yet. */
   getSession(): AuthSession | null

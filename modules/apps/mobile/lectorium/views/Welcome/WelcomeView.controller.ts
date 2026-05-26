@@ -1,5 +1,6 @@
 import { computed, onMounted, ref, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
+import { SERVERS } from "@lib/domain/servers.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { bootstrapUserDatabaseFromApp } from "@lectorium/services/bootstrap.js"
 import { type ResolveContentDatabaseDeps } from "./composables/resolveContentDatabase.js"
@@ -9,6 +10,7 @@ import {
 } from "./composables/checkForUpdatesInBackground.js"
 import { useDbSchemeRetry } from "./composables/useDbSchemeRetry.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
+import { detectHomeRegion, welcomeRegion } from "./regionDetect.js"
 
 const crossfadeAnimation: AnimationBuilder = (_, opts) => {
   const enter = createAnimation().addElement(opts.enteringEl).fromTo("opacity", 0, 1).duration(300)
@@ -138,6 +140,28 @@ export function useWelcomeController(
     try {
       error.value = null
       progress.value = 0
+
+      // First-launch home-region detection (PR-3). On returning launches
+      // this hits the early-return path in `welcomeRegion` and is
+      // basically free — the preference has already been written. On
+      // first launch the three-signal heuristic picks "russia" or
+      // "global" and persists it; the subsequent `serverProber.probe`
+      // (inside resolveAndValidate) reads PREFERRED_SERVER_KEY and
+      // starts the probe there. We always source the /whoami advisory
+      // from the GLOBAL region so the IP-geo signal is consistent
+      // regardless of where the user ultimately lands.
+      const globalServer = SERVERS.find((s) => s.id === "global") ?? SERVERS[0]
+      await welcomeRegion({
+        prefs: {
+          get: (k) => lectorium.preferences.get(k),
+          set: (k, v) => lectorium.preferences.set(k, v),
+        },
+        detect: () =>
+          detectHomeRegion({
+            whoamiUrl: `${globalServer.authBaseUrl}/whoami`,
+          }),
+        storageKey: PREFERRED_SERVER_KEY,
+      })
 
       await resolveAndValidate()
       await bootstrapApp()

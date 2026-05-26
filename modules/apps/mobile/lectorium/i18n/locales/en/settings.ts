@@ -21,6 +21,21 @@ export default {
     signInWithApple: "Continue with Apple",
     signedIn: "You are signed in",
     signOut: "Sign out",
+    signinRetryOtherRegion: {
+      title: "No account found in {currentRegion}",
+      message:
+        "If you signed up in {otherRegion} before, try that region. Otherwise, create a new account here.",
+      switchTo: "Switch to {otherRegion} and try again",
+      createNew: "Create new account in {currentRegion}",
+      dupRiskTitle: "Account on the other region may exist",
+      dupRiskMessage:
+        "We couldn't reach {otherRegion} to verify. Creating a new account in {currentRegion} while one may exist in {otherRegion} will result in two parallel accounts.",
+      continueAnyway: "Continue anyway",
+      cancel: "Cancel",
+      alreadyExistsTitle: "Account already exists in {otherRegion}",
+      alreadyExistsMessage: "Switch to {otherRegion} and sign in there instead.",
+      switchAndRetry: "Switch and sign in",
+    },
     deleteAccount: {
       title: "Delete account",
       confirmWipe: "Delete account and wipe data",
