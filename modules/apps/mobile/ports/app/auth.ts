@@ -99,8 +99,13 @@ export interface MeView {
 }
 
 export interface AuthConfig {
-  /** Base URL of the auth service (e.g. https://api.example/auth). */
-  baseUrl: string
+  /**
+   * Lazy getter for the base URL of the auth service (e.g.
+   * `() => "https://api.example/auth"`). Resolved at every fetch call
+   * so a region flip via `shruti.activeServer` routes subsequent
+   * auth traffic to the new backend without re-initializing the adapter.
+   */
+  baseUrl: () => string
   /** Google OAuth web client ID (used by capgo on Android & Web). */
   googleWebClientId: string
   /** Google OAuth iOS client ID. */

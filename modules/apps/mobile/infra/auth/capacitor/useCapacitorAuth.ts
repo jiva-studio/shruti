@@ -132,7 +132,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
 
   async function fetchMeBody(accessToken: string): Promise<MeBody | null> {
     try {
-      const res = await fetch(`${cfg.baseUrl}/me`, {
+      const res = await fetch(`${cfg.baseUrl()}/me`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (!res.ok) return null
@@ -191,7 +191,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   async function callAnonymous(): Promise<TokenResponseBody> {
     const deviceId = (await Device.getId()).identifier
     const platform = Capacitor.getPlatform()
-    const res = await fetch(`${cfg.baseUrl}/anonymous`, {
+    const res = await fetch(`${cfg.baseUrl()}/anonymous`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -204,7 +204,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   }
 
   async function callRefresh(refreshToken: string): Promise<TokenResponseBody | null> {
-    const res = await fetch(`${cfg.baseUrl}/refresh`, {
+    const res = await fetch(`${cfg.baseUrl()}/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
@@ -218,7 +218,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     idToken: string,
     fullName?: string
   ): Promise<TokenResponseBody> {
-    const res = await fetch(`${cfg.baseUrl}/signin/${provider}`, {
+    const res = await fetch(`${cfg.baseUrl()}/signin/${provider}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -310,7 +310,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
   async function signOut(): Promise<void> {
     if (!stored) return
     try {
-      await fetch(`${cfg.baseUrl}/signout`, {
+      await fetch(`${cfg.baseUrl()}/signout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -339,7 +339,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     // notes/chats/downloads while their server account still exists.
     const doDelete = async (token: string): Promise<Response> => {
       try {
-        return await fetch(`${cfg.baseUrl}/account/delete`, {
+        return await fetch(`${cfg.baseUrl()}/account/delete`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

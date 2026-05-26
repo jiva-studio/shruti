@@ -3,6 +3,9 @@ import { fetchSessionTitle, type AccessTokenProvider } from "./chatClient.js"
 
 export interface HttpChatTitleServiceDeps {
   readonly getAccessToken: AccessTokenProvider
+  /** Lazy resolver for the chat service base URL. See
+   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
+  readonly baseUrl: () => string
 }
 
 /**
@@ -20,6 +23,7 @@ export function createHttpChatTitleService(deps: HttpChatTitleServiceDeps): ICha
       return fetchSessionTitle(messages, lang, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
+        baseUrl: deps.baseUrl,
       })
     },
   }
