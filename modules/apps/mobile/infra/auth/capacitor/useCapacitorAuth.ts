@@ -39,6 +39,10 @@ interface StoredTokens {
   // JWT `quota_id` claim — server-side rate-limit bucket id. Empty
   // string on pre-PR-1 tokens (anon users without a stable hash).
   quotaId: string
+  // Server-authoritative home region from /auth/me. Empty string when
+  // the response was missing the field (pre-this-PR server) — treated
+  // as "no reconcile" by the composition root.
+  homeRegion: string
 }
 
 const PREFERENCES_KEY = "auth.tokens"
@@ -58,6 +62,9 @@ interface MeBody {
   anonymous: boolean
   tier?: string
   tierExpiresAt?: string | null
+  // Always emitted by PR-3.X+ servers; missing on older deployments
+  // (treated as "" and the composition root skips reconcile).
+  homeRegion?: string
 }
 
 /**
@@ -137,6 +144,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       tier: t.tier || "free",
       tierExpiresAt: t.tierExpiresAt ?? null,
       quotaId: t.quotaId ?? "",
+      homeRegion: t.homeRegion ?? "",
     }
   }
 
@@ -162,6 +170,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       const parsed = Date.parse(me.tierExpiresAt)
       tierExpiresAt = Number.isFinite(parsed) ? parsed : null
     }
+    const serverHomeRegion = me?.homeRegion ?? ""
     const next: StoredTokens = {
       accessToken: body.accessToken,
       refreshToken: body.refreshToken,
@@ -177,10 +186,20 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       tier: claims.tier || me?.tier || "free",
       tierExpiresAt,
       quotaId: claims.quotaId,
+      homeRegion: serverHomeRegion,
     }
     await persistTokens(next)
     const sess = sessionFromTokens(next)
     setSession(sess)
+    // Reconcile local activeServer against server truth. Skip when
+    // /me didn't carry homeRegion (older server) or when the values
+    // already match. The composition root decides what to do.
+    if (serverHomeRegion) {
+      const localRegion = cfg.currentRegionId()
+      if (serverHomeRegion !== localRegion) {
+        cfg.onHomeRegionMismatch?.(serverHomeRegion, localRegion)
+      }
+    }
     return sess
   }
 
