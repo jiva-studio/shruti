@@ -48,6 +48,11 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	r.Post("/auth/signin/google", h.signinGoogle)
 	r.Post("/auth/signin/apple", h.signinApple)
 	r.Post("/auth/refresh", h.refresh)
+	// /auth/lookup is the no-side-effects existence probe used by
+	// mobile's retry-other-region flow. No bearer required — the
+	// (provider, subject) pair is the credential. Rate-limited at
+	// Caddy edge alongside /auth/signin/*.
+	r.Post("/auth/lookup", h.lookup)
 
 	r.Group(func(r chi.Router) {
 		r.Use(requireBearer(verifier))

@@ -26,16 +26,37 @@ import (
 	"github.com/google/uuid"
 )
 
+// ClaimIdentity is one identity row mirrored into the JWT so the chat
+// service (and migrate-in handlers in other regions) can rebuild a
+// user's social-identity set without round-tripping to the home region.
+// `EmailHash` is sha256(lower(trim(email))) — never the raw email. The
+// `Email.Enabled` profile policy gates whether EmailHash + EmailVerified
+// are emitted (see profile.BuildClaims).
+type ClaimIdentity struct {
+	Provider      string `json:"p"`
+	Subject       string `json:"s"`
+	EmailHash     string `json:"eh,omitempty"`
+	EmailVerified bool   `json:"ev,omitempty"`
+}
+
 // Claims is the JWT payload we issue. `Tier` and `QuotaID` were added
 // 2026-05; tokens minted before that release omit them. The omitempty
 // tag keeps the free / anonymous path byte-identical so the chat-side
 // verifier (which defaults missing tier to "free" and falls back to
 // `sub` when quota_id is empty) sees no behaviour change.
 //
-// QuotaID is a sha256 of the user's earliest non-device identity
-// (`provider:subject`). The chat rate-limiter keys per-user counters
-// on it instead of `sub` so a delete+recreate doesn't refresh today's
-// quota — see internal/identityhash and issue #626.
+// QuotaID is a sha256 of the user's earliest identity (non-device when
+// available, falling back to a per-device hash for anon users since
+// PR-1). The chat rate-limiter keys per-user counters on it instead of
+// `sub` so a delete+recreate doesn't refresh today's quota — see
+// internal/identityhash and issue #626.
+//
+// Identities and RCAppUserID were added 2026-05 as the cross-region
+// foundation (Wave 2 / PR-1): a migrate-in target needs the full
+// identity set so it can rebuild auth.identities without trusting the
+// migrating client. Audience is populated via RegisteredClaims.Audience:
+// "chat" on access tokens, "auth" on refresh tokens; chat-side verifier
+// pins audience="chat".
 type Claims struct {
 	Anonymous bool   `json:"anonymous"`
 	Tier      string `json:"tier,omitempty"`
@@ -45,9 +66,20 @@ type Claims struct {
 	// (no expiry concept). Chat-side verifier coerces `tier="pro"` with
 	// a past `tier_expires_at` to "free" so a missed EXPIRATION webhook
 	// can't extend Pro past its real boundary.
-	TierExpiresAt int64 `json:"tier_expires_at,omitempty"`
+	TierExpiresAt int64           `json:"tier_expires_at,omitempty"`
+	RCAppUserID   string          `json:"rc_aid,omitempty"`
+	Identities    []ClaimIdentity `json:"ids,omitempty"`
 	gjwt.RegisteredClaims
 }
+
+// Audience strings stamped into `aud`. Access tokens are bound to the
+// chat service; refresh tokens go back to /auth/refresh. Chat-side
+// verifier pins audience="chat" and rejects mismatches with
+// InvalidAudienceError.
+const (
+	AudienceChat = "chat"
+	AudienceAuth = "auth"
+)
 
 // Signer issues access + refresh tokens.
 type Signer struct {
@@ -141,32 +173,57 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// Issue signs a JWT. If jti is uuid.Nil a fresh one is generated.
+// IssueInput bundles every claim a caller may want to set. Use this
+// instead of a long positional argument list — the call sites in
+// service.go would otherwise be six fields of bool/string at the call
+// boundary with no contextual cues, easy to mis-order.
+type IssueInput struct {
+	UserID        uuid.UUID
+	Anonymous     bool
+	Tier          string
+	QuotaID       string
+	TierExpiresAt int64
+	RCAppUserID   string
+	Identities    []ClaimIdentity
+	Audience      string // AudienceChat or AudienceAuth; required
+	TTL           time.Duration
+	JTI           uuid.UUID // uuid.Nil → fresh one is generated
+}
+
+// Issue signs a JWT.
 //
-// `tier` is the user's subscription tier ("free" | "pro"); empty string
+// `Tier` is the user's subscription tier ("free" | "pro"); empty string
 // is fine — the chat-side verifier defaults to "free".
 //
-// `tierExpiresAt` is UNIX-epoch seconds at which `tier` expires. 0 means
+// `TierExpiresAt` is UNIX-epoch seconds at which `tier` expires. 0 means
 // lifetime / free (no expiry). The chat-side limiter coerces an expired
 // "pro" claim back to free limits.
 //
-// `quotaID` is a stable hash of the user's earliest non-device identity
-// (see internal/identityhash). Empty for anonymous users — the chat
-// limiter falls back to `sub` in that case.
-func (s *Signer) Issue(userID uuid.UUID, anonymous bool, tier, quotaID string, tierExpiresAt int64, ttl time.Duration, jti uuid.UUID) (token string, generatedJTI uuid.UUID, err error) {
+// `QuotaID` is a stable hash of the user's earliest identity (see
+// internal/identityhash). Since PR-1 it is non-empty even for anonymous
+// users — derived from the device subject — so anon quota enforcement
+// can key on a stable per-device hash instead of falling back to `sub`.
+//
+// `Audience` is required and stamped into `aud`. Use AudienceChat for
+// access tokens and AudienceAuth for refresh tokens.
+func (s *Signer) Issue(in IssueInput) (token string, generatedJTI uuid.UUID, err error) {
+	jti := in.JTI
 	if jti == uuid.Nil {
 		jti = uuid.New()
 	}
 	now := time.Now().UTC()
 	claims := Claims{
-		Anonymous:     anonymous,
-		Tier:          tier,
-		QuotaID:       quotaID,
-		TierExpiresAt: tierExpiresAt,
+		Anonymous:     in.Anonymous,
+		Tier:          in.Tier,
+		QuotaID:       in.QuotaID,
+		TierExpiresAt: in.TierExpiresAt,
+		RCAppUserID:   in.RCAppUserID,
+		Identities:    in.Identities,
 		RegisteredClaims: gjwt.RegisteredClaims{
-			Subject:   userID.String(),
+			Subject:   in.UserID.String(),
+			Audience:  gjwt.ClaimStrings{in.Audience},
 			IssuedAt:  gjwt.NewNumericDate(now),
-			ExpiresAt: gjwt.NewNumericDate(now.Add(ttl)),
+			ExpiresAt: gjwt.NewNumericDate(now.Add(in.TTL)),
 			ID:        jti.String(),
 		},
 	}

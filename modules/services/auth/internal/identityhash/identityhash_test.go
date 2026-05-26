@@ -34,16 +34,70 @@ func TestCompute_Empty(t *testing.T) {
 	}
 }
 
-func TestCompute_DeviceOnly_ReturnsEmpty(t *testing.T) {
-	// Anonymous users have only a (device, deviceId) identity. The chat
-	// side falls back to JWT `sub` for them — the small anon limit
-	// makes delete+recreate not worth the OAuth-less complexity.
+func TestCompute_DeviceOnly_ReturnsNonEmpty(t *testing.T) {
+	// Anonymous (device-only) users get a stable peppered hash so the
+	// chat-side rate limiter keys their counter on a per-device value
+	// instead of falling back to `sub`. Without this, uninstall +
+	// reinstall would reset the anon counter and effectively void the
+	// 3/day cap. Earliest device identity wins for stability — same as
+	// the OAuth path.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	got := Compute([]store.Identity{
-		id("device", "device-A", time.Now()),
-		id("device", "device-B", time.Now().Add(time.Hour)),
+		id("device", "device-A", base),
+		id("device", "device-B", base.Add(time.Hour)),
 	})
-	if got != "" {
-		t.Errorf("device-only: got %q, want \"\"", got)
+	if got == "" {
+		t.Fatal("device-only: got empty hash, want non-empty")
+	}
+	if len(got) != 64 {
+		t.Errorf("device-only: hash length %d, want 64", len(got))
+	}
+	// Earliest wins: same input again must yield same hash.
+	again := Compute([]store.Identity{
+		id("device", "device-A", base),
+		id("device", "device-B", base.Add(time.Hour)),
+	})
+	if again != got {
+		t.Errorf("device-only: non-deterministic, %q vs %q", got, again)
+	}
+	// Different device subject → different hash.
+	other := Compute([]store.Identity{id("device", "device-Z", base)})
+	if other == got {
+		t.Error("different device subjects must produce different hashes")
+	}
+}
+
+func TestCompute_DeviceOnly_StableAcrossReinstall(t *testing.T) {
+	// The whole point of the device-only path: uninstall + reinstall
+	// keeps the same OS-stable device id, so the quota_id must match
+	// across the gap. Models that gap by giving the "after" identity a
+	// fresh CreatedAt but the same subject.
+	before := []store.Identity{
+		id("device", "stable-device-subject", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+	}
+	after := []store.Identity{
+		id("device", "stable-device-subject", time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)),
+	}
+	if h1, h2 := Compute(before), Compute(after); h1 != h2 {
+		t.Errorf("anon reinstall broke the hash: %q vs %q", h1, h2)
+	}
+}
+
+func TestCompute_NonDeviceWinsOverDevice(t *testing.T) {
+	// When the user has both an OAuth identity AND a device identity
+	// (post-upgrade: anon device row plus a Google sign-in), the OAuth
+	// hash wins — same as before PR-1. Device-only is the fallback,
+	// not the primary path.
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	withBoth := Compute([]store.Identity{
+		id("device", "dev-1", base),
+		id("google", "gsub-1", base.Add(time.Hour)),
+	})
+	oauthOnly := Compute([]store.Identity{
+		id("google", "gsub-1", base.Add(time.Hour)),
+	})
+	if withBoth != oauthOnly {
+		t.Errorf("device identity changed the hash: with-both=%q oauth-only=%q", withBoth, oauthOnly)
 	}
 }
 
