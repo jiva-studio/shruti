@@ -26,9 +26,11 @@ container's logs.
 
 ## Events handled
 
-| event_type      | side effect                                                  |
-| --------------- | ------------------------------------------------------------ |
-| `user.deleted`  | Delete all Langfuse traces tagged with the user's id (REST). |
+| event_type                | side effect                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `user.deleted`            | Delete all Langfuse traces tagged with the user's id (REST).                         |
+| `subscription.changed`    | Locally-emitted RC tier flip; observed for telemetry, no extra side effect today.    |
+| `subscription.broadcast`  | Cross-region RC webhook fan-out: HMAC-POST each remote region's `/internal/subscription/apply`. Infinite retry per the dead-letter policy below. |
 
 Unknown event types are logged at `warn` and **left unprocessed** —
 they're an operational bug worth inspection, not a no-op.
@@ -41,19 +43,59 @@ rows directly; the AFTER DELETE triggers from `0023_outbox.up.sql` fan
 out into `app.outbox`, which the consumer loop above picks up — closed
 loop, no extra wiring.
 
-| job              | what                                                                                  | knobs                                  |
-| ---------------- | ------------------------------------------------------------------------------------- | -------------------------------------- |
-| `anon_cleanup`   | Delete anonymous (device-only) accounts whose newest refresh_token is older than TTL. | `CLEANUP_ANON_TTL`, `CLEANUP_ANON_INTERVAL` |
+| job              | what                                                                                                                                       | knobs                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `anon_cleanup`   | Delete anonymous (device-only) accounts whose newest refresh_token is older than TTL.                                                      | `CLEANUP_ANON_TTL`, `CLEANUP_ANON_INTERVAL`                                      |
+| `signed_in_ttl`  | Delete signed-in users (at least one non-device identity) whose newest refresh_token is older than TTL. Defaults to dry-run on first deploy. | `CLEANUP_SIGNED_IN_TTL`, `CLEANUP_SIGNED_IN_INTERVAL`, `CLEANUP_SIGNED_IN_DRY_RUN` |
 
-On boot the cron runs one sweep immediately (so a long-down instance
-catches up), then ticks every `CLEANUP_ANON_INTERVAL`. **Activity proxy
-is `refresh_tokens.created_at`** — *not* `expires_at` — because auth's
+On boot each cron runs one sweep immediately (so a long-down instance
+catches up), then ticks at its interval. **Activity proxy is
+`refresh_tokens.created_at`** — *not* `expires_at` — because auth's
 RefreshTTL is 90 days; using expires_at would give a 15-month effective
-idle window instead of the policy 12.
+idle window instead of the policy 12 / 24.
 
-Set `CLEANUP_ANON_TTL=0` to disable the cron entirely (handy in dev /
-test). The worker logs `anon_cleanup_disabled reason=CLEANUP_ANON_TTL=0`
-on startup in that mode.
+Set `CLEANUP_ANON_TTL=0` or `CLEANUP_SIGNED_IN_TTL=0` to disable the
+respective cron entirely (handy in dev / test). The worker logs
+`*_disabled reason=…` on startup in that mode.
+
+### Signed-in TTL dry-run
+
+`signed_in_ttl` ships with `CLEANUP_SIGNED_IN_DRY_RUN=true` as the
+default. In dry-run mode the cron runs the same selection predicate as
+a SELECT and logs every would-delete user id — but never DELETEs. The
+operator should:
+
+1. Deploy with the default. Wait 1-2 weeks.
+2. Inspect `signed_in_ttl_dryrun_user user_id=…` log lines for false
+   positives (e.g. test accounts you want to keep, internal users).
+3. When the would-delete set looks sensible, flip
+   `CLEANUP_SIGNED_IN_DRY_RUN=false` and redeploy.
+
+Same outbox-event path as `anon_cleanup`: DELETE on `auth.users` →
+`AFTER DELETE` trigger → `user.deleted` row in `app.outbox` → Langfuse
+purge handler picks it up.
+
+## Dead-letter policy
+
+This worker drains `app.outbox` with **infinite retry** — events never
+move to a dead-letter table, never get dropped. Justification:
+
+- Outbox events represent durable user-visible state (`user.deleted`,
+  `subscription.changed`, `subscription.broadcast`). Dropping them
+  silently produces orphan state on other regions.
+- The cost of unbounded retry is bounded: one row per stuck event,
+  Postgres handles millions of rows cheaply, the
+  `outbox_unprocessed_idx` partial index keeps `WHERE processed_at IS
+  NULL` cheap regardless of processed-row volume.
+- The Grafana alert `outbox_dead_letter` fires after 1h of stuck-state
+  via Prometheus → Telegram, surfacing the issue to the operator. See
+  `infra/observability/compose/grafana/provisioning/alerting/rules.yml`.
+- The operator decides remediation: drop the row manually (`DELETE
+  FROM app.outbox WHERE id = $1`), fix the destination, or wait.
+
+The gauge backing the alert is `lectorium_outbox_pending_seconds`,
+labelled by `event_type`, polled every 30s from the worker's DB pool
+and exposed on `/metrics` (same port as `/healthz`).
 
 ## Configuration
 
@@ -65,7 +107,10 @@ All via environment variables:
 | `CLEANUP_SWEEP_INTERVAL`  | no       | `5m`    | How often the durability-net sweep walks `app.outbox` for stragglers. Go `time.ParseDuration`. |
 | `CLEANUP_ANON_TTL`        | no       | `8760h` | Idle window before an anonymous account is deleted. `0` disables the cron. Go duration (`8760h`, `30d`-style not supported). |
 | `CLEANUP_ANON_INTERVAL`   | no       | `24h`   | How often the anon-cleanup cron ticks. Ignored when `CLEANUP_ANON_TTL=0`.                  |
-| `PORT`                    | no       | `8090`  | Where `/healthz` listens. Keep it off the well-known service ports (auth=8081, etc).      |
+| `CLEANUP_SIGNED_IN_TTL`     | no       | `17520h`(~24mo) | Idle window before a signed-in account is deleted. `0` disables. Predicate: has a non-device identity AND no refresh_token created within TTL. |
+| `CLEANUP_SIGNED_IN_INTERVAL`| no       | `24h`   | Tick rate for the signed-in TTL cron. Ignored when `CLEANUP_SIGNED_IN_TTL=0`.              |
+| `CLEANUP_SIGNED_IN_DRY_RUN` | no       | `true`  | Safety default. When `true` the cron logs would-delete ids but does not DELETE. Flip to `false` after 1-2 weeks of stable would-delete output. |
+| `PORT`                    | no       | `8090`  | Where `/healthz` and `/metrics` listen. Keep off well-known service ports (auth=8081, etc). |
 | `LANGFUSE_HOST`           | no       | —       | Base URL of the self-hosted Langfuse. Empty → `user.deleted` becomes a logged no-op.       |
 | `LANGFUSE_PUBLIC_KEY`     | no       | —       | Langfuse public key for basic-auth on the REST API.                                       |
 | `LANGFUSE_SECRET_KEY`     | no       | —       | Langfuse secret key.                                                                      |

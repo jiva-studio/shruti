@@ -248,6 +248,13 @@ services:
       # entirely (test/dev escape hatch). Default 8760h = 365 days.
       CLEANUP_ANON_TTL: ${LECTORIUM_CLEANUP_ANON_TTL:-8760h}
       CLEANUP_ANON_INTERVAL: ${LECTORIUM_CLEANUP_ANON_INTERVAL:-24h}
+      # Signed-in long-tail TTL cron (PR-5). DRY_RUN=true by default —
+      # operator flips to false after 1-2 weeks of observing the
+      # would-delete log lines (`signed_in_ttl_dryrun_user`). TTL=0
+      # disables entirely.
+      CLEANUP_SIGNED_IN_TTL: ${LECTORIUM_CLEANUP_SIGNED_IN_TTL:-17520h}
+      CLEANUP_SIGNED_IN_INTERVAL: ${LECTORIUM_CLEANUP_SIGNED_IN_INTERVAL:-24h}
+      CLEANUP_SIGNED_IN_DRY_RUN: ${LECTORIUM_CLEANUP_SIGNED_IN_DRY_RUN:-true}
       PORT: "8090"
       ENV: ${LECTORIUM_ENV:-dev}
       SERVICE_VERSION: ${LECTORIUM_CLEANUP_WORKER_TAG:-latest}
