@@ -11,12 +11,9 @@ import (
 
 func globalProfile() ProfilePolicy {
 	return ProfilePolicy{
-		Email:      FieldPolicy{Enabled: true},
-		Name:       FieldPolicy{Enabled: true},
-		AvatarURL:  FieldPolicy{Enabled: true},
-		Locale:     FieldPolicy{Enabled: true},
-		DeviceID:   FieldPolicy{Enabled: true},
-		LastSeenAt: FieldPolicy{Enabled: true},
+		Email:     FieldPolicy{Enabled: true},
+		Name:      FieldPolicy{Enabled: true},
+		AvatarURL: FieldPolicy{Enabled: true},
 	}
 }
 
@@ -25,8 +22,6 @@ func ruProfile() ProfilePolicy {
 		Email:     FieldPolicy{Enabled: false},
 		Name:      FieldPolicy{Enabled: false},
 		AvatarURL: FieldPolicy{Enabled: false},
-		Locale:    FieldPolicy{Enabled: true},
-		DeviceID:  FieldPolicy{Enabled: true},
 	}
 }
 
@@ -42,7 +37,6 @@ func fullSource() SourceUser {
 		Email:         "alice@example.com",
 		Name:          "Alice",
 		PictureURL:    "https://cdn.example/alice.png",
-		Locale:        "en",
 		Identities: []SourceIdentity{
 			{
 				Provider:      "google",
@@ -78,9 +72,6 @@ func TestProjectMe_GlobalProfileRetainsAllFields(t *testing.T) {
 	if out.PictureURL == nil || *out.PictureURL != "https://cdn.example/alice.png" {
 		t.Errorf("picture dropped: %+v", out.PictureURL)
 	}
-	if out.Locale == nil || *out.Locale != "en" {
-		t.Errorf("locale dropped: %+v", out.Locale)
-	}
 	if out.Tier != "pro" {
 		t.Errorf("tier lost: %q", out.Tier)
 	}
@@ -98,10 +89,9 @@ func TestProjectMe_GlobalProfileRetainsAllFields(t *testing.T) {
 	}
 }
 
-func TestProjectMe_RuProfileOmitsOptionalsButKeepsLocale(t *testing.T) {
+func TestProjectMe_RuProfileOmitsOptionals(t *testing.T) {
 	p := ruProfile()
 	src := fullSource()
-	src.Locale = "ru" // RU deployment will set this once column exists.
 
 	out := p.ProjectMe(src)
 
@@ -113,9 +103,6 @@ func TestProjectMe_RuProfileOmitsOptionalsButKeepsLocale(t *testing.T) {
 	}
 	if out.PictureURL != nil {
 		t.Errorf("pictureUrl must be nil under ru profile, got %q", *out.PictureURL)
-	}
-	if out.Locale == nil || *out.Locale != "ru" {
-		t.Errorf("locale must remain present under ru profile, got %+v", out.Locale)
 	}
 	// Tier always emitted.
 	if out.Tier != "pro" {
@@ -185,9 +172,6 @@ func TestProjectMe_EnabledButEmptyValueStaysNil(t *testing.T) {
 	if out.PictureURL != nil {
 		t.Errorf("empty source pictureUrl must produce nil pointer")
 	}
-	if out.Locale != nil {
-		t.Errorf("empty source locale must produce nil pointer")
-	}
 }
 
 func TestProjectMe_GlobalJsonShape_PreservesLegacyKeys(t *testing.T) {
@@ -213,9 +197,6 @@ func TestProjectMe_GlobalJsonShape_PreservesLegacyKeys(t *testing.T) {
 			t.Errorf("legacy key shape missing %q in %q", key, s)
 		}
 	}
-	if strings.Contains(s, `"locale"`) {
-		t.Errorf("locale should be omitted when DB has nothing, got %q", s)
-	}
 }
 
 func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
@@ -225,7 +206,6 @@ func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 	// error.
 	p := ruProfile()
 	src := fullSource()
-	src.Locale = "ru"
 	out := p.ProjectMe(src)
 	j, err := json.Marshal(out)
 	if err != nil {
@@ -236,9 +216,6 @@ func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 		if !strings.Contains(s, key) {
 			t.Errorf("ru profile must still emit %q (just as null) in %q", key, s)
 		}
-	}
-	if !strings.Contains(s, `"locale":"ru"`) {
-		t.Errorf("locale must remain present under ru, got %q", s)
 	}
 }
 
