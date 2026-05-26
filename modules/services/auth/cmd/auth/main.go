@@ -20,6 +20,7 @@ import (
 	"github.com/akdasa-studios/shruti/auth/internal/handler"
 	"github.com/akdasa-studios/shruti/auth/internal/jwt"
 	logpkg "github.com/akdasa-studios/shruti/auth/internal/logging"
+	"github.com/akdasa-studios/shruti/auth/internal/profile"
 	"github.com/akdasa-studios/shruti/auth/internal/providers/apple"
 	"github.com/akdasa-studios/shruti/auth/internal/providers/google"
 	"github.com/akdasa-studios/shruti/auth/internal/rcclient"
@@ -46,6 +47,23 @@ func main() {
 		os.Exit(2)
 	}
 	logpkg.Setup("shruti-auth", cfg.Env, cfg.ServiceVersion)
+
+	// Resolve the profile-collection policy before anything else touches
+	// storage — boot must fail fast if PROFILE/CONFIG_PATH disagree with
+	// the on-disk config (typo, missing file, unknown profile name).
+	// Policy is unused for now; follow-up PRs (1.5b/c/d) wire it into
+	// OAuth, /auth/me and JWT-claims choke-points.
+	profilePolicy, err := profile.LoadPolicy(cfg.ConfigPath, cfg.Profile)
+	if err != nil {
+		slog.Error("profile_policy_load_failed", "err", err.Error(),
+			"path", cfg.ConfigPath, "profile", cfg.Profile)
+		os.Exit(2)
+	}
+	slog.Info("profile_policy_loaded", "profile", cfg.Profile,
+		"email_enabled", profilePolicy.Email.Enabled,
+		"name_enabled", profilePolicy.Name.Enabled,
+		"locale_enabled", profilePolicy.Locale.Enabled)
+	_ = profilePolicy // wired into handlers in follow-up PRs
 
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer bootCancel()
