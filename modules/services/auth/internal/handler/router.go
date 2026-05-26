@@ -48,6 +48,12 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	r.Post("/auth/signin/google", h.signinGoogle)
 	r.Post("/auth/signin/apple", h.signinApple)
 	r.Post("/auth/refresh", h.refresh)
+	// /whoami is the public country-hint endpoint used by mobile's
+	// Welcome auto-detect (PR-3). Not under /auth/* because no auth
+	// claim is being asserted — it's a pure read of the request IP
+	// resolved by Caddy. Currently returns {"country":""}; see
+	// whoami.go for the GeoIP TODO.
+	r.Get("/whoami", h.whoami)
 	// /auth/lookup is the no-side-effects existence probe used by
 	// mobile's retry-other-region flow. No bearer required — the
 	// (provider, subject) pair is the credential. Rate-limited at

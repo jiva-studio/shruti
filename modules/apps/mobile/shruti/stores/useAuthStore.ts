@@ -6,6 +6,7 @@ import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import type { AuthSession, AuthStatus, MigrationResult } from "@ports/app/auth.js"
+import { SigninAccountNotFoundError } from "@ports/app/auth.js"
 
 /**
  * Reactive view over the AuthPort. Mirrors the port's session into Pinia
@@ -237,6 +238,15 @@ export const useAuthStore = defineStore("auth", () => {
       invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
+      // SigninAccountNotFoundError is the retry-other-region trigger.
+      // Re-throw so the orchestrator (useAnonymousSignInFlow) can
+      // present the dialog instead of treating it as a generic error.
+      if (e instanceof SigninAccountNotFoundError) {
+        // Reset status so the busy spinner clears; the dialog will
+        // drive its own UX from here.
+        applySession(auth.getSession())
+        throw e
+      }
       console.error("[auth] google sign-in failed:", e)
       status.value = "error"
       return false
@@ -256,6 +266,10 @@ export const useAuthStore = defineStore("auth", () => {
       invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
+      if (e instanceof SigninAccountNotFoundError) {
+        applySession(auth.getSession())
+        throw e
+      }
       console.error("[auth] apple sign-in failed:", e)
       status.value = "error"
       return false
@@ -324,6 +338,46 @@ export const useAuthStore = defineStore("auth", () => {
     return auth.migrateToRegion(newRegionId)
   }
 
+  /**
+   * Resume a signin flow that was paused by a `SigninAccountNotFoundError`.
+   * The orchestrator captured the OAuth idToken at the popup step; this
+   * call commits the bootstrap on the CURRENT region (which may now be
+   * a region the user switched to via the retry-other-region dialog).
+   */
+  async function completeSigninAfterRetry(
+    provider: "google" | "apple",
+    idToken: string,
+    fullName?: string
+  ): Promise<boolean> {
+    const auth = useShruti().auth
+    status.value = "signingIn"
+    try {
+      const session = await auth.completeSigninAfterRetry(provider, idToken, fullName)
+      applySession(session)
+      invalidateAndSyncAfterSignin()
+      return true
+    } catch (e) {
+      console.error("[auth] completeSigninAfterRetry failed:", e)
+      status.value = "error"
+      return false
+    }
+  }
+
+  /**
+   * Probe a DIFFERENT region for an existing account, used by the
+   * retry-other-region dialog's dup-prevention guard. Returns null on
+   * any uncertainty (timeout / network / non-2xx other than 404) so the
+   * caller can surface the dup-account-risk warning.
+   */
+  async function lookupAccount(
+    regionId: string,
+    provider: "google" | "apple",
+    idToken: string
+  ): Promise<{ exists: boolean; anonymous: boolean } | null> {
+    const auth = useShruti().auth
+    return auth.lookupAccount(regionId, provider, idToken)
+  }
+
   return {
     status,
     userId,
@@ -340,6 +394,8 @@ export const useAuthStore = defineStore("auth", () => {
     restore,
     signInGoogle,
     signInApple,
+    completeSigninAfterRetry,
+    lookupAccount,
     signOut,
     deleteAccount,
     migrateToRegion,

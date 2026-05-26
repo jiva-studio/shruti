@@ -4,6 +4,7 @@ import { Preferences } from "@capacitor/preferences"
 import { SocialLogin } from "@capgo/capacitor-social-login"
 
 import type { AuthConfig, AuthPort, AuthSession, MeView, MigrationResult } from "@ports/app/auth.js"
+import { SigninAccountNotFoundError } from "@ports/app/auth.js"
 
 export type AccountDeleteErrorKind =
   | "already-deleted"
@@ -240,6 +241,41 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return (await res.json()) as TokenResponseBody
   }
 
+  /**
+   * Hit the current region's /signin/{provider} with `X-Lookup-Only: 1`.
+   * Server verifies the OAuth id-token, checks if the (provider, sub)
+   * already maps to a local user, and returns either:
+   *   200 {exists: true, anonymous: bool}  — account exists here
+   *   404 {error: {code: "account_not_found"}}  — verified but no row
+   *
+   * Used as the probe step of the signin retry-other-region UX (PR-3).
+   * On 404 the caller throws SigninAccountNotFoundError. On any other
+   * non-2xx (auth verification rejected, 5xx) the caller falls through
+   * to the normal signin path so error reporting stays uniform with
+   * pre-PR-3 behavior.
+   */
+  async function probeSigninCurrentRegion(
+    provider: "google" | "apple",
+    idToken: string
+  ): Promise<{ status: number; body: { exists?: boolean; anonymous?: boolean } | null }> {
+    const res = await fetch(`${cfg.baseUrl()}/signin/${provider}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Lookup-Only": "1",
+        ...(stored?.accessToken ? { Authorization: `Bearer ${stored.accessToken}` } : {}),
+      },
+      body: JSON.stringify({ idToken }),
+    })
+    let body: { exists?: boolean; anonymous?: boolean } | null
+    try {
+      body = (await res.json()) as { exists?: boolean; anonymous?: boolean }
+    } catch {
+      body = null
+    }
+    return { status: res.status, body }
+  }
+
   // ─── AuthPort ─────────────────────────────────────────────────────────
 
   async function initialize(): Promise<AuthSession> {
@@ -280,6 +316,32 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return refreshInFlight
   }
 
+  /**
+   * Run the X-Lookup-Only probe on the current region. If it cleanly
+   * returns 404 throw `SigninAccountNotFoundError` so the caller can
+   * present the retry-other-region dialog. On any other response
+   * (200 hit, 401 verification reject, 5xx) return without throwing —
+   * the calling signin flow proceeds with the normal bootstrap so
+   * error handling stays uniform.
+   */
+  async function probeAndMaybeThrow(
+    provider: "google" | "apple",
+    idToken: string,
+    fullName?: string
+  ): Promise<void> {
+    let probe
+    try {
+      probe = await probeSigninCurrentRegion(provider, idToken)
+    } catch {
+      // Network error on the probe — don't block the user; the normal
+      // signin below will surface the same network failure consistently.
+      return
+    }
+    if (probe.status === 404) {
+      throw new SigninAccountNotFoundError(provider, idToken, fullName)
+    }
+  }
+
   async function signInWithGoogle(): Promise<AuthSession | null> {
     await ensureSocialInit()
     let result
@@ -292,6 +354,10 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     if (result.provider !== "google" || result.result?.responseType !== "online") return null
     const idToken = result.result.idToken
     if (!idToken) return null
+    // Probe first: if the (provider, sub) doesn't exist on the current
+    // region, throw with the verified idToken attached so the orchestrator
+    // can offer "Switch to other region" without re-running the popup.
+    await probeAndMaybeThrow("google", idToken)
     const tokens = await callSignin("google", idToken)
     return commitTokenResponse(tokens)
   }
@@ -313,8 +379,63 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     if (!idToken) return null
     const { givenName, familyName } = result.result.profile ?? {}
     const fullName = [givenName, familyName].filter(Boolean).join(" ").trim() || undefined
+    await probeAndMaybeThrow("apple", idToken, fullName)
     const tokens = await callSignin("apple", idToken, fullName)
     return commitTokenResponse(tokens)
+  }
+
+  async function completeSigninAfterRetry(
+    provider: "google" | "apple",
+    idToken: string,
+    fullName?: string
+  ): Promise<AuthSession> {
+    const tokens = await callSignin(provider, idToken, fullName)
+    return commitTokenResponse(tokens)
+  }
+
+  /**
+   * Probe the OTHER region for an existing account using the same
+   * X-Lookup-Only signin shortcut. 3s timeout — anything slower than
+   * that is treated as uncertainty and the caller surfaces the
+   * dup-account-risk warning. Returns null on:
+   *   - timeout / network / abort
+   *   - resolveAuthBaseUrl rejection (unknown region id)
+   *   - non-2xx other than 404
+   *   - 200 with malformed body
+   */
+  async function lookupAccount(
+    regionId: string,
+    provider: "google" | "apple",
+    idToken: string
+  ): Promise<{ exists: boolean; anonymous: boolean } | null> {
+    let url: string
+    try {
+      url = cfg.resolveAuthBaseUrl(regionId)
+    } catch {
+      return null
+    }
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 3000)
+    try {
+      const res = await fetch(`${url}/signin/${provider}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Lookup-Only": "1",
+        },
+        body: JSON.stringify({ idToken }),
+        signal: ctl.signal,
+      })
+      if (res.status === 404) return { exists: false, anonymous: false }
+      if (!res.ok) return null
+      const body = (await res.json()) as { exists?: boolean; anonymous?: boolean }
+      if (typeof body.exists !== "boolean") return null
+      return { exists: body.exists, anonymous: !!body.anonymous }
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   async function signOut(): Promise<void> {
@@ -499,6 +620,8 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     initialize,
     signInWithGoogle,
     signInWithApple,
+    completeSigninAfterRetry,
+    lookupAccount,
     signOut,
     deleteAccount,
     migrateToRegion,
