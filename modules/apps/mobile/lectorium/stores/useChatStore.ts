@@ -1,5 +1,5 @@
 import { defineStore } from "pinia"
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import { useNow } from "@vueuse/core"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
@@ -172,10 +172,56 @@ export const useChatStore = defineStore("chat", () => {
   const inputFocusToken = ref<number>(0)
   /** UnixMs deadline until which the chat composer stays disabled
    *  after a `rate_limited` 429. Set from the server's `resets_at_epoch`
-   *  (or `Retry-After` as fallback). Not persisted across cold-starts —
-   *  on app restart the first send re-hits the limiter and the store
-   *  re-arms this from the fresh 429. */
+   *  (or `Retry-After` as fallback). Persisted in `app.preferences`
+   *  under `chat_blocked_until:<quota_id>` so a cold-start mid-lockout
+   *  rehydrates the deadline instead of letting the user bait themselves
+   *  into another 429. Hydration runs on every `authStore.quotaId`
+   *  transition (signin / signout / fresh app restore); the key is
+   *  removed once `now` crosses the deadline. Pre-PR-1 anonymous
+   *  tokens whose `quota_id` is empty fall back to in-memory-only —
+   *  no key is written without a stable bucket id. */
   const composeBlockedUntil = ref<number | null>(null)
+  /** Quota id last used to read/write the persisted lockout. Tracked
+   *  separately from `useAuthStore.quotaId` so the expiry-tick cleanup
+   *  knows which key to remove even after the identity flips. */
+  let persistedForQuotaId: string = ""
+
+  const BLOCKED_UNTIL_KEY_PREFIX = "chat_blocked_until:"
+  function blockedUntilKey(qid: string): string {
+    return `${BLOCKED_UNTIL_KEY_PREFIX}${qid}`
+  }
+
+  /** Read back the persisted deadline for `qid` and arm
+   *  `composeBlockedUntil` if it's still in the future. Stale entries
+   *  (past their deadline) are wiped here so they don't linger across
+   *  app sessions. Tolerant to corrupt payloads — anything that
+   *  doesn't parse cleanly is treated as "no lockout". */
+  async function hydrateComposeLock(qid: string): Promise<void> {
+    persistedForQuotaId = qid
+    if (!qid) {
+      // No stable bucket id — nothing to read. Leave any in-memory
+      // value alone (a 429 in this session can still arm the ref;
+      // we just can't persist or restore it without a quota_id).
+      return
+    }
+    const key = blockedUntilKey(qid)
+    try {
+      const raw = await app.preferences.get(key)
+      if (raw === null) return
+      const parsed = parseInt(raw, 10)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        await app.preferences.remove(key)
+        return
+      }
+      if (parsed > Date.now()) {
+        composeBlockedUntil.value = parsed
+      } else {
+        await app.preferences.remove(key)
+      }
+    } catch (e) {
+      console.warn("[chat] failed to hydrate compose lockout", e)
+    }
+  }
   /** Reactive clock for `isComposeBlocked` — ticks every second while
    *  any consumer subscribes. @vueuse handles the timer lifecycle
    *  (visibility-aware, cleaned up on unmount). */
@@ -184,13 +230,18 @@ export const useChatStore = defineStore("chat", () => {
     () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
   )
   /** Clear the composer lockdown AND wipe any stale rate_limit error
-   *  bubble in the current message list. Called from `useAuthStore`'s
-   *  `userId` watcher on signin / signout / switch-account — the new
-   *  identity has its own quota bucket on the server (`quota_id` is
-   *  derived from `user_id`), so the old deadline and the upsell
-   *  banner attached to it are meaningless for them. Tier-change
-   *  within the same user_id is NOT a trigger: the bucket stays the
-   *  same and the lockdown is still authoritative. */
+   *  bubble in the current message list, then hydrate the lockout for
+   *  the new identity from `app.preferences`. Called from
+   *  `useAuthStore`'s `userId` watcher on signin / signout / switch-
+   *  account, and (transitively) once on cold-start after auth restore
+   *  flips userId from `null` to its initial value. Each identity has
+   *  its own server-side quota bucket (`quota_id`), so the previous
+   *  bucket's deadline + upsell banner are meaningless for the next
+   *  one. Tier-change within the same user_id is NOT a trigger: the
+   *  bucket stays the same and the lockdown is still authoritative.
+   *  The previous identity's persisted key is intentionally left
+   *  untouched — they may sign back in later and the deadline should
+   *  still apply for them. */
   function resetComposeLock(): void {
     composeBlockedUntil.value = null
     // Also drop the inline "limit exhausted" failed bubble — keeping
@@ -206,7 +257,34 @@ export const useChatStore = defineStore("chat", () => {
       next[idx] = { ...next[idx], error: undefined }
       messages.value = next
     }
+    // Pick up the new identity's persisted deadline (if any). The auth
+    // store calls us right after `applySession` has stamped quotaId,
+    // so reading it directly here yields the bucket id we want to key
+    // on. Fire-and-forget: hydration is a best-effort read and any
+    // failure leaves the composer unlocked rather than blocking UI.
+    const nextQuotaId = useAuthStore().quotaId
+    void hydrateComposeLock(nextQuotaId)
   }
+
+  /** Watch the wall-clock against the live deadline and clean up the
+   *  persisted entry the first time `now` crosses it. Without this the
+   *  preferences key would linger past its usefulness — harmless for
+   *  correctness (the next hydration would see a past timestamp and
+   *  drop it) but it makes the SharedPreferences/UserDefaults dump
+   *  noisier than necessary, and a remove-on-tick keeps the storage
+   *  reflective of "currently-active lockouts only". */
+  watch(
+    () => composeBlockedUntil.value !== null && now.value.getTime() >= composeBlockedUntil.value,
+    (expired, wasExpired) => {
+      if (!expired || wasExpired) return
+      composeBlockedUntil.value = null
+      if (persistedForQuotaId) {
+        void app.preferences.remove(blockedUntilKey(persistedForQuotaId)).catch((e) => {
+          console.warn("[chat] failed to remove expired compose lockout key", e)
+        })
+      }
+    }
+  )
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
    *  session header above the message list (track title / author /
    *  date) and any other code that needs to know whether the current
@@ -785,6 +863,19 @@ export const useChatStore = defineStore("chat", () => {
         // quota errors; network/server errors stay retryable.
         if (event.code === "rate_limited" && retryAfterAt) {
           composeBlockedUntil.value = retryAfterAt
+          // Persist under the current bucket id so a cold-start
+          // mid-lockout re-arms the deadline on next launch (see
+          // `hydrateComposeLock`). Skip when quota_id is empty
+          // (pre-PR-1 anon tokens still in flight) — without a stable
+          // bucket the persisted value couldn't be matched back on
+          // the next session.
+          const qid = useAuthStore().quotaId
+          if (qid) {
+            persistedForQuotaId = qid
+            void app.preferences.set(blockedUntilKey(qid), String(retryAfterAt)).catch((e) => {
+              console.warn("[chat] failed to persist compose lockout", e)
+            })
+          }
         }
         // Transform the streaming placeholder into a failed-bubble in
         // place — keeps the message slot's id stable (handy for any

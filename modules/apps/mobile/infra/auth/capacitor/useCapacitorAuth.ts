@@ -35,6 +35,9 @@ interface StoredTokens {
   tier: string
   // UNIX-epoch ms; null = lifetime Pro or free. See AuthSession docs.
   tierExpiresAt: number | null
+  // JWT `quota_id` claim — server-side rate-limit bucket id. Empty
+  // string on pre-PR-1 tokens (anon users without a stable hash).
+  quotaId: string
 }
 
 const PREFERENCES_KEY = "auth.tokens"
@@ -99,6 +102,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     expMs: number
     tier: string
     tierExpiresAtMs: number | null
+    quotaId: string
   } {
     try {
       const [, payloadB64] = accessToken.split(".")
@@ -111,9 +115,13 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
         expMs: typeof json.exp === "number" ? json.exp * 1000 : 0,
         tier: typeof json.tier === "string" ? json.tier : "free",
         tierExpiresAtMs: rawExp > 0 ? rawExp * 1000 : null,
+        // PR-1 made anonymous quota_id always non-empty (device-subject
+        // hash); pre-PR-1 tokens collapsed anon users to "". Treat
+        // missing/malformed as "" so consumers can fall back gracefully.
+        quotaId: typeof json.quota_id === "string" ? json.quota_id : "",
       }
     } catch {
-      return { expMs: 0, tier: "free", tierExpiresAtMs: null }
+      return { expMs: 0, tier: "free", tierExpiresAtMs: null, quotaId: "" }
     }
   }
 
@@ -127,6 +135,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       accessTokenExpiresAt: t.accessTokenExpiresAt,
       tier: t.tier || "free",
       tierExpiresAt: t.tierExpiresAt ?? null,
+      quotaId: t.quotaId ?? "",
     }
   }
 
@@ -166,6 +175,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       // when JWT lacks the claim (older tokens in flight).
       tier: claims.tier || me?.tier || "free",
       tierExpiresAt,
+      quotaId: claims.quotaId,
     }
     await persistTokens(next)
     const sess = sessionFromTokens(next)

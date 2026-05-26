@@ -429,7 +429,7 @@ watch(
   (unknown) => {
     if (!unknown) return
     const tier = failedError.value?.tier
-    // eslint-disable-next-line no-console
+
     console.warn("[InlineNotice] unknown tier:", tier)
   },
   { immediate: true }

@@ -46,6 +46,15 @@ export interface AuthSession {
    * boundary.
    */
   tierExpiresAt: number | null
+  /**
+   * Server-side quota bucket identifier (mirror of JWT `quota_id` claim).
+   * Stable across token rotations within the same identity — anonymous
+   * device-bootstrap, Google, and Apple users each get a distinct
+   * non-empty value (post PR-1, anon users no longer collapse to "").
+   * Used by the chat store to scope persisted rate-limit lockout state
+   * to the bucket the server's limiter actually keys on.
+   */
+  quotaId: string
 }
 
 export interface AuthPort {

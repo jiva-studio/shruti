@@ -28,6 +28,13 @@ export const useAuthStore = defineStore("auth", () => {
   // or free (no expiry concept). Mirrored from /auth/me's tierExpiresAt
   // (ISO string parsed to ms). Drives the `tier` getter's coercion.
   const tierExpiresAt = ref<number | null>(null)
+  // Server-side quota bucket id mirrored from the JWT `quota_id` claim.
+  // Stable per-identity (PR-1 made anon device-bootstrap users non-empty
+  // too), so it scopes any persisted per-bucket state — e.g. the chat
+  // composer rate-limit lockout in `useChatStore.composeBlockedUntil`.
+  // Empty string on pre-PR-1 tokens still in flight; consumers must
+  // treat "" as "no quota_id yet" and skip persistence.
+  const quotaId = ref<string>("")
 
   // Public tier. Coerces a "pro" with a past expiry back to "free" so a
   // stale auth-cached value (dropped EXPIRATION webhook) can't keep the
@@ -82,6 +89,7 @@ export const useAuthStore = defineStore("auth", () => {
       anonymous.value = s.anonymous
       rawTier.value = s.tier || "free"
       tierExpiresAt.value = s.tierExpiresAt ?? null
+      quotaId.value = s.quotaId ?? ""
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
@@ -91,6 +99,7 @@ export const useAuthStore = defineStore("auth", () => {
       anonymous.value = true
       rawTier.value = "free"
       tierExpiresAt.value = null
+      quotaId.value = ""
       status.value = "uninitialized"
     }
   }
@@ -311,6 +320,7 @@ export const useAuthStore = defineStore("auth", () => {
     tier,
     rawTier,
     tierExpiresAt,
+    quotaId,
     isPro,
     signedIn,
     restore,
