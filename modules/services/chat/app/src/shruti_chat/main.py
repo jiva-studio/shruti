@@ -27,6 +27,7 @@ from shruti_chat.api import admin, chat, feedback, questions, title
 from shruti_chat.application.rate_limiter import RateLimiter
 from shruti_chat.composition import AppDeps
 from shruti_chat.config import get_settings
+from shruti_chat.infra.llm_provider import build_llm_provider
 from shruti_chat.db.client import close_pool, init_pool
 from shruti_chat.db.assert_schema import assert_schema_ready
 from shruti_chat.indexer import run as indexer_run
@@ -148,9 +149,8 @@ async def lifespan(app: FastAPI):
     # node fns are async and stateless, the compiled graph is reused
     # for every chat turn.
     from shruti_chat.agent.graph import build_chat_graph
-    from shruti_chat.infra.llm_provider import OpenRouterLLMProvider
 
-    llm_provider = OpenRouterLLMProvider(s)
+    llm_provider = build_llm_provider(s)
     chat_graph = build_chat_graph()
 
     app.state.deps = AppDeps(
