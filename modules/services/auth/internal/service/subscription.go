@@ -228,6 +228,43 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 			return fmt.Errorf("insert outbox: %w", err)
 		}
 
+		// PR-2b: cross-region fan-out. Only the global region broadcasts
+		// — RC's dashboard is configured to send webhooks to global only,
+		// and a non-global region receiving an RC webhook (which
+		// shouldn't happen in normal operation) wouldn't have other
+		// regions configured to forward to anyway. The cleanup-worker
+		// consumes 'subscription.broadcast' rows and HMAC-POSTs every
+		// remote region's /internal/subscription/apply with the snapshot;
+		// dedup at the destination uses event_id, shared with the local
+		// RC webhook idempotency path.
+		if s.RegionID == "global" {
+			var expiresMs *int64
+			if snap.TierExpiresAt != nil {
+				ms := snap.TierExpiresAt.UnixMilli()
+				expiresMs = &ms
+			}
+			broadcastPayload, err := json.Marshal(map[string]any{
+				"event_id":        eventID,
+				"app_user_id":     snap.AppUserID,
+				"tier":            snap.Tier,
+				"tier_expires_at": expiresMs,
+				"source_region":   s.RegionID,
+			})
+			if err != nil {
+				return fmt.Errorf("marshal broadcast payload: %w", err)
+			}
+			if _, err := tx.Exec(ctx,
+				`INSERT INTO app.outbox(event_type, aggregate_id, payload, source_event_id)
+				 VALUES ('subscription.broadcast', $1::text, $2::jsonb, $3::text)
+				 ON CONFLICT (event_type, source_event_id)
+				   WHERE source_event_id IS NOT NULL
+				   DO NOTHING`,
+				userID.String(), broadcastPayload, eventID,
+			); err != nil {
+				return fmt.Errorf("insert broadcast outbox: %w", err)
+			}
+		}
+
 		if err := s.WebhookEvents.MarkProcessed(ctx, tx, eventID); err != nil {
 			return fmt.Errorf("mark processed: %w", err)
 		}
