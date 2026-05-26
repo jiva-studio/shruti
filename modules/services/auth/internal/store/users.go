@@ -164,8 +164,7 @@ func (r *UserRepo) SetPictureURL(ctx context.Context, tx pgx.Tx, id uuid.UUID, u
 // Delete cascades to identities and refresh_tokens via FK ON DELETE CASCADE,
 // and fires the app.emit_user_deleted trigger which enqueues a `user.deleted`
 // row into app.outbox in the same transaction. Pass a non-nil tx when the
-// caller also needs to clean up rows outside the auth schema (e.g. the
-// rate-limit `usage` table) atomically with the user row removal.
+// caller needs same-tx atomicity with sibling writes outside auth.users.
 //
 // Returns the number of rows affected so the caller can distinguish a real
 // delete from a no-op (id already gone — second concurrent request, or a

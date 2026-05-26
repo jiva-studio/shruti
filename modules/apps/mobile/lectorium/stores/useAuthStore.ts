@@ -4,6 +4,7 @@ import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
+import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
@@ -263,21 +264,34 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Delete the server-side account, then optionally wipe local user
-   * data. Order matters: if the server call fails (network, 5xx) we
-   * MUST NOT touch local data — otherwise the user loses their
-   * notes/chats/downloads while still being signed in. On success we
-   * drop to anonymous via a fresh bootstrap, same as signOut.
+   * data. Order matters: a network/5xx failure from the server call
+   * MUST NOT mutate local state, otherwise the user loses their
+   * notes/chats/downloads while their server account still exists.
+   *
+   * Once the server confirms the delete (or reports 410 — already
+   * gone, tokens cleared by the adapter), every cleanup step runs
+   * independently: wipe failing doesn't block RC logOut, RC logOut
+   * failing doesn't block dropping to anonymous. applySession(null) +
+   * restore() are the only steps required to reach a clean anonymous
+   * UI, so they run unconditionally at the end.
    */
   async function deleteAccount(opts: { wipeLocal: boolean }): Promise<void> {
     const app = useLectorium()
-    await app.auth.deleteAccount()
-    if (opts.wipeLocal) {
-      await wipeLocalUserData(app)
+    try {
+      await app.auth.deleteAccount()
+    } catch (err) {
+      if (!(err instanceof AccountDeleteError && err.kind === "already-deleted")) throw err
     }
-    // Detach RC binding BEFORE flipping the session so the watcher's
-    // subsequent logIn(newAnonId) doesn't race the SDK's in-flight
-    // logOut. RC SDK failure here is non-fatal — the server account is
-    // already gone; local SDK state will recover on next sign-in.
+    if (opts.wipeLocal) {
+      try {
+        await wipeLocalUserData(app)
+      } catch (e) {
+        console.warn("[auth] wipe failed during deleteAccount:", e)
+      }
+    }
+    // The usePurchasesStore userId watcher already unbinds RC on the
+    // session flip below; this synchronous call is the backstop so the
+    // SDK is detached before applySession races the watcher.
     try {
       await usePurchasesStore().logOut()
     } catch (e) {
