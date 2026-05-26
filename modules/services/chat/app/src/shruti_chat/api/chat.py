@@ -38,6 +38,12 @@ router = APIRouter()
 _TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _TRACE_ID_ZERO = "0" * 32
 
+# Idempotency-Key shape: 8-64 chars, alphanumeric + hyphen. Anchored so
+# we reject embedded whitespace / control chars / unicode that could
+# wreck the Redis key. UUIDv4 (with or without hyphens), short hashes,
+# and our client-minted formats all comply.
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+
 
 _SUPPORTED_PROTOCOL_VERSIONS = ("1",)
 
@@ -87,6 +93,12 @@ async def chat(
         client_trace_id = x_trace_id
     elif x_trace_id:
         log.info("chat_x_trace_id_invalid", value=x_trace_id[:64])
+
+    # Reject malformed Idempotency-Key shapes up-front. A junk value
+    # (whitespace, control chars, unbounded length) would otherwise flow
+    # straight into the Redis key and waste store slots forever.
+    if idempotency_key is not None and not _IDEMPOTENCY_KEY_RE.fullmatch(idempotency_key):
+        raise HTTPException(status_code=400, detail="invalid Idempotency-Key")
 
     # Idempotency gate — duplicate retries within the TTL window bounce
     # with 409 instead of replaying the LLM turn. Sits BEFORE the rate

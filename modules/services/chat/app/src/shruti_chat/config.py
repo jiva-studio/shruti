@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -59,7 +59,6 @@ class Settings(BaseSettings):
 
     llm_default: str = "openrouter/deepseek/deepseek-chat"
     llm_fallback: str = "openrouter/anthropic/claude-3-haiku"
-    llm_premium: str = "openrouter/anthropic/claude-3.5-sonnet"
     # Outline generation is a one-shot JSON-mode call, not the chat agent
     # itself — picked separately for cost (~$0.0007 per lecture, see
     # /tmp/outline_bench.py).
@@ -166,6 +165,31 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [s.strip() for s in value.split(",") if s.strip()]
         return value
+
+    @model_validator(mode="after")
+    def _forbid_insecure_prod_defaults(self) -> "Settings":
+        """Fail-boot when running in prod with development defaults.
+
+        Catches two footguns where forgetting to override an env var would
+        otherwise silently open the service:
+          - `cors_allow_origins == "*"` → any web origin can call us
+          - `app_shared_token == "dev-token"` → the shared-secret gate is
+            effectively disabled
+        Dev / staging keep the relaxed defaults so local hacking and CI
+        smoke runs don't need to set them.
+        """
+        if self.env == "prod":
+            if self.cors_allow_origins.strip() == "*":
+                raise ValueError(
+                    "cors_allow_origins='*' is forbidden when env=prod; "
+                    "set CORS_ALLOW_ORIGINS to the real app origin(s)"
+                )
+            if self.app_shared_token == "dev-token":
+                raise ValueError(
+                    "app_shared_token='dev-token' is forbidden when env=prod; "
+                    "set APP_SHARED_TOKEN to a non-default secret"
+                )
+        return self
 
     # ── Derived helpers ────────────────────────────────────────────────
     @property

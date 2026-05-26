@@ -82,7 +82,10 @@ class ChunkAliasDto(BaseModel):
 
 class ChatMessageDto(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    # Cap on user message size — bounds prompt cost and mitigates trivial
+    # DoS via giant payloads. 4000 chars comfortably exceeds the longest
+    # legitimate question we've seen in production.
+    content: str = Field(..., max_length=4000)
     # Server-minted integer aliases for the chip markers in `content`.
     # Keys are integers serialised as strings (JSON limitation); values
     # describe the catalog reference each alias points to. Only present
@@ -91,7 +94,7 @@ class ChatMessageDto(BaseModel):
     # assistant messages (before this protocol) have it absent; the
     # server falls back to stripping their chip markers to placeholder
     # text.
-    aliases: dict[str, ChunkAliasDto] | None = None
+    aliases: dict[str, ChunkAliasDto] | None = Field(default=None, max_length=128)
 
 
 # Proactive-rule context — opaque JSON dict. Each rule kind has its own
@@ -113,7 +116,7 @@ class ProactiveRequestDto(BaseModel):
 
 
 class ChatRequestDto(BaseModel):
-    messages: list[ChatMessageDto] = Field(min_length=1)
+    messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)
     lang: Literal["ru", "en"] = "ru"
     user_context: UserContextDto | None = None
     proactive: ProactiveRequestDto | None = None
