@@ -9,6 +9,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/prometheus/client_golang v1.23.2
 	google.golang.org/api v0.247.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
