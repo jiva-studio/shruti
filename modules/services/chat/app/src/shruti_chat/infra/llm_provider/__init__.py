@@ -1,11 +1,62 @@
 """LLMPort implementations.
 
-`OpenRouterLLMProvider` wraps `langchain_openai.ChatOpenAI` pointed at
-OpenRouter's OpenAI-compatible endpoint. This is the default provider —
-all production models (Gemini Flash Lite, Haiku, Sonnet) are reached
-through OpenRouter, so one adapter covers the full tier.
+Three adapters live here:
+
+- `OpenRouterLLMProvider` — default for the global region. Reaches all
+  Western models (Gemini, Claude, DeepSeek, OpenAI) through one
+  OpenAI-compatible endpoint. Implementation rides
+  `langchain_openai.ChatOpenAI` with `base_url=` overridden.
+- `YandexLLMProvider` — YandexGPT 5 (Lite/Pro) via the Yandex Cloud
+  Foundation Models REST API. Direct httpx — no langchain.
+  Tool / function-calling is NotImplemented; structured output is a
+  prompt-and-parse fallback.
+- `GigaChatLLMProvider` — Sber GigaChat (Lite/Pro/Max) over the
+  OpenAI-shaped chat-completions endpoint with OAuth2 client-credentials
+  auth. Function-calling supported (legacy `functions` shape).
+
+`build_llm_provider(settings)` is the canonical dispatch: composition
+root calls it once at startup; tests call it to assert the LLM_PROVIDER
+→ adapter mapping without booting the full lifespan.
 """
 
-from shruti_chat.infra.llm_provider.openrouter import OpenRouterLLMProvider
+from __future__ import annotations
 
-__all__ = ["OpenRouterLLMProvider"]
+from shruti_chat.config import Settings
+from shruti_chat.domain.ports.llm_provider import LLMPort
+from shruti_chat.infra.llm_provider.gigachat import GigaChatLLMProvider
+from shruti_chat.infra.llm_provider.openrouter import OpenRouterLLMProvider
+from shruti_chat.infra.llm_provider.yandex import YandexLLMProvider
+
+
+__all__ = [
+    "GigaChatLLMProvider",
+    "OpenRouterLLMProvider",
+    "YandexLLMProvider",
+    "build_llm_provider",
+]
+
+
+def build_llm_provider(settings: Settings) -> LLMPort:
+    """Branch on `settings.llm_provider` and return the matching adapter.
+
+    The `Settings` `model_validator` already enforced that the chosen
+    branch's required envs are populated; this function only cares
+    about adapter selection. Russia VPS deploys with `yandex` or
+    `gigachat`; global stays on `openrouter`.
+
+    Unknown values are caught by the `Literal` on `Settings.llm_provider`
+    (pydantic rejects at construction), but the `case _:` arm stays as
+    defence-in-depth in case the Literal is loosened later.
+    """
+    match settings.llm_provider:
+        case "openrouter":
+            return OpenRouterLLMProvider(settings)
+        case "yandex":
+            return YandexLLMProvider(settings)
+        case "gigachat":
+            return GigaChatLLMProvider(settings)
+        case other:  # pragma: no cover — Literal guards this
+            raise ValueError(
+                f"unknown LLM_PROVIDER={other!r}; "
+                "allowed: openrouter | yandex | gigachat"
+            )
