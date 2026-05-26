@@ -3,7 +3,7 @@ import { Device } from "@capacitor/device"
 import { Preferences } from "@capacitor/preferences"
 import { SocialLogin } from "@capgo/capacitor-social-login"
 
-import type { AuthConfig, AuthPort, AuthSession, MeView } from "@ports/app/auth.js"
+import type { AuthConfig, AuthPort, AuthSession, MeView, MigrationResult } from "@ports/app/auth.js"
 
 export type AccountDeleteErrorKind =
   | "already-deleted"
@@ -418,6 +418,72 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return session
   }
 
+  async function migrateToRegion(newRegionId: string): Promise<MigrationResult> {
+    // Need a fresh access token to present to the destination region's
+    // `/auth/migrate-in` — that token's signature (kid + sub claim) is
+    // the only proof the destination has that the caller owns the
+    // source-side identity.
+    const access = await getAccessToken()
+    if (!access) {
+      return { ok: false, code: "no_session", message: "no active session" }
+    }
+
+    // Adapter doesn't reach into `lectorium.servers` — the route is
+    // passed in via cfg.resolveAuthBaseUrl(newRegionId). Unknown region
+    // → throw → map to "rejected" so the UI shows a sensible toast
+    // instead of a confusing "network error".
+    let destAuthBaseUrl: string
+    try {
+      destAuthBaseUrl = cfg.resolveAuthBaseUrl(newRegionId)
+    } catch {
+      return { ok: false, code: "rejected", message: `unknown region: ${newRegionId}` }
+    }
+
+    const sourceRegionId = cfg.currentRegionId()
+    let res: Response
+    try {
+      res = await fetch(`${destAuthBaseUrl}/migrate-in`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${access}`,
+          "Content-Type": "application/json",
+        },
+        // Empty body — deviceId/anything else the server cares about
+        // is read from the bearer's claims.
+        body: JSON.stringify({}),
+      })
+    } catch (err) {
+      return {
+        ok: false,
+        code: "network",
+        message: err instanceof Error ? err.message : "network error",
+      }
+    }
+
+    if (!res.ok) {
+      if (res.status === 400) {
+        // Anonymous-only identities (device-subject only) or other
+        // bad-shape rejections. Anonymous switch uses signOut+reboot,
+        // not migration — see SettingsAccountGroup tap handler.
+        return { ok: false, code: "rejected", message: `status ${res.status}` }
+      }
+      return { ok: false, code: "unreachable", message: `status ${res.status}` }
+    }
+
+    const body = (await res.json()) as TokenResponseBody
+    // commitTokenResponse() persists, decodes claims and fires the
+    // session-change listener — which propagates the new userId
+    // through useAuthStore so the existing watcher in
+    // usePurchasesStore.init() picks it up and re-links RC.
+    await commitTokenResponse(body)
+
+    // Composition root flips `activeServer` + enqueues source-side
+    // revoke + tries to drain it once while we still have network.
+    cfg.onMigrationCompleted?.(newRegionId, sourceRegionId, access)
+
+    return { ok: true, newUserId: body.userId }
+  }
+
   async function fetchMe(): Promise<MeView | null> {
     const tok = await getAccessToken()
     if (!tok) return null
@@ -435,6 +501,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     signInWithApple,
     signOut,
     deleteAccount,
+    migrateToRegion,
     getSession,
     getAccessToken,
     refreshTokens,

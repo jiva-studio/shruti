@@ -57,6 +57,15 @@ export interface AuthSession {
   quotaId: string
 }
 
+/**
+ * Outcome of a cross-region account migration. The caller surfaces this
+ * to the UI via toast/dialog copy keyed on `code`; success carries the
+ * fresh `userId` minted by the destination region.
+ */
+export type MigrationResult =
+  | { ok: true; newUserId: string }
+  | { ok: false; code: "unreachable" | "rejected" | "network" | "no_session"; message: string }
+
 export interface AuthPort {
   /**
    * Restore tokens from storage; if none, bootstrap an anonymous session.
@@ -69,6 +78,16 @@ export interface AuthPort {
 
   signOut(): Promise<void>
   deleteAccount(): Promise<void>
+
+  /**
+   * Move the user's account to a different region. Mints a fresh access
+   * token in the source region, presents it to `${dest}/auth/migrate-in`,
+   * persists the destination's tokens locally, flips the composition
+   * root's `activeServer` and schedules a fire-and-forget revoke on the
+   * source. Anonymous sessions are rejected by the server (400) — the
+   * caller should run a signOut + reboot in the new region instead.
+   */
+  migrateToRegion(newRegionId: string): Promise<MigrationResult>
 
   /** Latest cached session. `null` if `initialize` hasn't run yet. */
   getSession(): AuthSession | null
@@ -115,6 +134,26 @@ export interface AuthConfig {
    * auth traffic to the new backend without re-initializing the adapter.
    */
   baseUrl: () => string
+  /**
+   * Resolve the auth base URL of *another* region. Used by
+   * `migrateToRegion` to reach the destination's `/auth/migrate-in`
+   * endpoint without coupling the adapter to the in-domain SERVERS
+   * registry. Must throw on an unknown region id — the adapter maps
+   * the throw to `MigrationResult.code = "rejected"`.
+   */
+  resolveAuthBaseUrl: (regionId: string) => string
+  /** Id of the region the adapter is currently signed into. Captured at
+   *  the moment of migration so the source-side revoke (queued in
+   *  Preferences) knows where to POST when it later drains. */
+  currentRegionId: () => string
+  /**
+   * Hook the composition root uses to react to a successful migration:
+   * flip `activeServer` to `newRegionId`, enqueue a `migrate-revoke`
+   * on `sourceRegionId` carrying the still-valid source bearer, and
+   * trigger any other region-bound bookkeeping. Optional only to keep
+   * tests / web stubs ergonomic — production wiring always sets it.
+   */
+  onMigrationCompleted?: (newRegionId: string, sourceRegionId: string, sourceBearer: string) => void
   /** Google OAuth web client ID (used by capgo on Android & Web). */
   googleWebClientId: string
   /** Google OAuth iOS client ID. */

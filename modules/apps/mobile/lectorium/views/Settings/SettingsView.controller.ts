@@ -45,7 +45,7 @@ export interface SettingsControllerReturn {
   autoDownloadTargetSeconds: Ref<number>
   smartLibrary: UseSmartLibraryBindingReturn
   /* Selector sources */
-  activeServerId: Ref<string>
+  activeServerId: ComputedRef<string>
   serverItems: SelectorItem[]
   languageItems: Ref<SelectorItem[]>
   /* Danger handlers */
@@ -104,8 +104,7 @@ export function useSettingsController(): SettingsControllerReturn {
 
   const { activeServerId, serverItems } = useActiveServerBinding({
     servers: app.appConfig.servers,
-    initial: app.activeServer.value,
-    setActiveServer: (server) => app.setActiveServer(server),
+    activeServer: app.activeServer,
   })
 
   const { items: languageItems } = useAppLanguageList(app.repositories().languages)

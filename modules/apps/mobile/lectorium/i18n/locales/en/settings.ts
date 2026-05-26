@@ -165,6 +165,32 @@ export default {
     description: "Content delivery network",
   },
 
+  regionMigration: {
+    confirmAnonymous: {
+      title: "Switch region?",
+      message:
+        "Switching to {region} will create a new anonymous account there. Your on-device data (chat history, listening notes) will be kept.",
+      cancel: "Cancel",
+      confirm: "Switch",
+    },
+    confirmSignedIn: {
+      title: "Move account to {region}?",
+      message:
+        "Your account, subscription, and on-device data will move to {region}. Your old region's account will be deleted in the background.",
+      cancel: "Cancel",
+      confirm: "Move",
+    },
+    inProgress: "Moving your account…",
+    success: "Account moved to {region}.",
+    failed: {
+      unreachable: "Could not reach the new region. Please try again later.",
+      rejected:
+        "The migration was rejected. Anonymous accounts cannot be migrated — please sign in first.",
+      network: "Network error. Please check your connection and try again.",
+      no_session: "No active session. Please sign in first.",
+    },
+  },
+
   player: {
     showProgress: {
       title: "Player progress",
