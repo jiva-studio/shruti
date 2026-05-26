@@ -5,7 +5,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
-import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
+import type { AuthSession, AuthStatus, MigrationResult } from "@ports/app/auth.js"
 
 /**
  * Reactive view over the AuthPort. Mirrors the port's session into Pinia
@@ -310,6 +310,20 @@ export const useAuthStore = defineStore("auth", () => {
     await restore()
   }
 
+  /**
+   * Move the signed-in account to another region. Thin wrapper over the
+   * port — the port persists destination tokens, fires the
+   * session-change listener (which updates this store via
+   * `applySession`) and triggers `onMigrationCompleted` to switch
+   * `activeServer` + queue the source-side revoke. Anonymous users
+   * must NOT call this — server rejects with 400; the Settings UI
+   * routes anonymous tap to signOut+reboot instead.
+   */
+  async function migrateToRegion(newRegionId: string): Promise<MigrationResult> {
+    const auth = useShruti().auth
+    return auth.migrateToRegion(newRegionId)
+  }
+
   return {
     status,
     userId,
@@ -328,6 +342,7 @@ export const useAuthStore = defineStore("auth", () => {
     signInApple,
     signOut,
     deleteAccount,
+    migrateToRegion,
     refreshTokens,
     ensureFresh,
   }

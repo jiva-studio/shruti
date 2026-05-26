@@ -41,6 +41,7 @@ import { useDatabaseToFsFetcher } from "@infra/persistence/fetchers/fs/index.js"
 import { useWebRemoteFilesStorage } from "@infra/files/web/index.js"
 import { useCapacitorRemoteFilesStorage } from "@infra/files/capacitor/index.js"
 import { useCapacitorPreferences } from "@infra/preferences/capacitor/index.js"
+import { makeScheduledRevoke } from "./services/scheduledRevoke.js"
 import { useCapacitorAudioPlayer } from "@infra/audio/capacitor/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications/capacitor/index.js"
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
@@ -74,6 +75,22 @@ if (isNative) {
   config.database = { ...config.database, userLocalPath: "user.db" }
 }
 
+// Shared Preferences adapter — same instance used by the auth port and
+// the scheduled-revoke queue, so an in-memory web fallback (if it ever
+// lands) would see consistent state across both consumers.
+const preferences = useCapacitorPreferences()
+
+// Resolve an auth base URL for a region OTHER than the active one.
+// Used by migrate-in to reach the destination region and by the
+// scheduled-revoke queue to reach the prior source on drain.
+function resolveAuthBaseUrl(regionId: string): string {
+  const server = SERVERS.find((s) => s.id === regionId)
+  if (!server) throw new Error(`Unknown region: ${regionId}`)
+  return server.authBaseUrl
+}
+
+const scheduledRevoke = makeScheduledRevoke({ prefs: preferences, resolveAuthBaseUrl })
+
 initShruti({
   appConfig: config,
   persistence: isNative ? useCapacitorSqlPersistence() : useSqlJsPersistence(),
@@ -81,7 +98,7 @@ initShruti({
   filesStorage: isNative
     ? useCapacitorRemoteFilesStorage({ cacheDir: "shruti" })
     : useWebRemoteFilesStorage({ cacheName: "shruti" }),
-  preferences: useCapacitorPreferences(),
+  preferences,
   // Capacitor plugin selects native vs its own web fallback automatically.
   audioPlayer: useCapacitorAudioPlayer(),
   notifications: useCapacitorNotificationScheduler(),
@@ -106,6 +123,20 @@ initShruti({
   // Settings routes subsequent auth traffic to the new backend.
   auth: useCapacitorAuth({
     baseUrl: () => useShruti().activeServer.value.authBaseUrl,
+    resolveAuthBaseUrl,
+    currentRegionId: () => useShruti().activeServer.value.id,
+    // Post-migration: flip activeServer so every subsequent fetch
+    // (auth/chat/share-*) targets the destination, then enqueue the
+    // source-side revoke and try to drain it once while we likely
+    // still have network. The watcher on `useAuthStore.userId` in
+    // `usePurchasesStore.init()` already re-links RC when the new
+    // session lands — no extra logIn() call is needed here.
+    onMigrationCompleted: (newRegionId, sourceRegionId, sourceBearer) => {
+      useShruti().setActiveServerById(newRegionId)
+      void scheduledRevoke.enqueue(sourceRegionId, sourceBearer).then(() => {
+        void scheduledRevoke.drain()
+      })
+    },
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
   }),
@@ -160,4 +191,10 @@ router.isReady().then(() => {
     .catch((e) => {
       console.warn("auth.restore failed", e)
     })
+  // Drain any pending `/auth/migrate-revoke` calls left over from a
+  // prior session where the source region was unreachable at migration
+  // time. Best-effort: failed retries get re-queued for the next start.
+  void scheduledRevoke.drain().catch((e) => {
+    console.warn("scheduledRevoke.drain failed", e)
+  })
 })
