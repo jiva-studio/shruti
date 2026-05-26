@@ -569,3 +569,94 @@ func TestDeleteAccountRevokesAllRefreshTokens(t *testing.T) {
 // Quiet "imported and not used" if a constant drops later.
 var _ = strings.Builder{}
 var _ = time.Second
+
+// ─── /auth/lookup ──────────────────────────────────────────────────────────
+
+func TestFindUserByProviderSubject_Hit(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "google-lookup-1", Email: "lk@example.com", EmailVerified: true}
+	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+	_ = sess
+
+	res, err := svc.FindUserByProviderSubject(ctx, "google", "google-lookup-1")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if !res.Exists {
+		t.Error("expected exists=true")
+	}
+	if res.Anonymous {
+		t.Error("signed-in user must report anonymous=false")
+	}
+}
+
+func TestFindUserByProviderSubject_AnonHit(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	if _, err := svc.Anonymous(ctx, "lookup-dev-1", ""); err != nil {
+		t.Fatalf("anon: %v", err)
+	}
+	res, err := svc.FindUserByProviderSubject(ctx, "device", "lookup-dev-1")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if !res.Exists || !res.Anonymous {
+		t.Errorf("anon lookup: exists=%v anonymous=%v (want true/true)", res.Exists, res.Anonymous)
+	}
+}
+
+func TestFindUserByProviderSubject_Miss(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	res, err := svc.FindUserByProviderSubject(ctx, "google", "never-seen-subject")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if res.Exists {
+		t.Errorf("expected exists=false, got %+v", res)
+	}
+}
+
+// LookupSignin verifies the OAuth token + delegates to FindUserByProviderSubject.
+func TestLookupSigninReturnsResolvedSubject(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "google-lksig-1", Email: "x@example.com", EmailVerified: true}
+	if _, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"}); err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	res, err := svc.LookupSignin(ctx, ProviderGoogle, "stub-idtoken")
+	if err != nil {
+		t.Fatalf("LookupSignin: %v", err)
+	}
+	if !res.Exists || res.Anonymous {
+		t.Errorf("LookupSignin: %+v", res)
+	}
+}
+
+func TestLookupSigninMiss(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "never-signed-in"}
+	res, err := svc.LookupSignin(ctx, ProviderGoogle, "stub-idtoken")
+	if err != nil {
+		t.Fatalf("LookupSignin: %v", err)
+	}
+	if res.Exists {
+		t.Errorf("expected miss, got %+v", res)
+	}
+}
+
+// Ensures errors package keeps being referenced if a future edit
+// removes the only existing usage above.
+var _ = errors.New

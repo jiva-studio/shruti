@@ -8,11 +8,12 @@ small (~450 bytes each) so we just keep them in memory.
 Verification surface is intentionally tight:
   - algorithms=['RS256'] — no alg=none, no HS-vs-RS confusion.
   - exp checked (default in PyJWT) — expired tokens fail.
+  - audience="chat" pinned — refresh tokens carry aud="auth" and must
+    be rejected here. PyJWT raises InvalidAudienceError on mismatch
+    and InvalidTokenError when the claim is missing entirely (the
+    require=["sub","exp","aud"] options.require triggers the latter).
   - Token's `kid` header is looked up in the map; missing kid falls
     back to "v1" (signer has been stamping v1 since day one).
-  - We do NOT check `aud` because auth currently doesn't set it
-    (follow-up task). When auth starts setting it, pass
-    `audience="chat"` here and pin a matching `aud` in auth.
 """
 
 from __future__ import annotations
@@ -115,13 +116,19 @@ class JwtVerifier:
                 token,
                 key,
                 algorithms=["RS256"],
-                # auth doesn't set aud yet (follow-up task). When it
-                # does, pass `audience="chat"` here and matching pin in
-                # auth.
-                options={"require": ["sub", "exp"]},
+                # Pin audience=chat. The auth service stamps aud="chat"
+                # on access tokens and aud="auth" on refresh tokens;
+                # a refresh token must NEVER be accepted by chat. PyJWT
+                # raises InvalidAudienceError on mismatch and a generic
+                # MissingRequiredClaimError (subclass of InvalidToken)
+                # when `aud` is absent.
+                audience="chat",
+                options={"require": ["sub", "exp", "aud"]},
             )
         except jwt.ExpiredSignatureError as exc:
             raise JwtVerifyError("token expired") from exc
+        except jwt.InvalidAudienceError as exc:
+            raise JwtVerifyError(f"wrong audience: {exc}") from exc
         except jwt.InvalidTokenError as exc:
             raise JwtVerifyError(f"invalid token: {exc}") from exc
 

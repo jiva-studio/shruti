@@ -55,7 +55,12 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 	}
 
 	userID := uuid.New()
-	tok, jti, err := signer.Issue(userID, true, "", "", 0, 15*time.Minute, uuid.Nil)
+	tok, jti, err := signer.Issue(IssueInput{
+		UserID:    userID,
+		Anonymous: true,
+		Audience:  AudienceChat,
+		TTL:       15 * time.Minute,
+	})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -91,7 +96,7 @@ func TestVerifyRejectsTamperedToken(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv, "v1")
 	verifier, _ := NewVerifierFromFile(pub)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 	tampered := tok[:len(tok)-2] + "XX"
 
 	if _, err := verifier.Verify(tampered); err == nil {
@@ -104,7 +109,7 @@ func TestVerifyRejectsExpired(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv, "v1")
 	verifier, _ := NewVerifierFromFile(pub)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, -time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: -time.Minute})
 
 	if _, err := verifier.Verify(tok); err == nil {
 		t.Error("expired token verified")
@@ -118,7 +123,7 @@ func TestVerifyRejectsForeignKey(t *testing.T) {
 	signer, _ := NewSignerFromFile(priv1, "v1")
 	verifier, _ := NewVerifierFromFile(pub2)
 
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 
 	if _, err := verifier.Verify(tok); err == nil {
 		t.Error("foreign-key signed token verified — must reject")
@@ -165,11 +170,11 @@ func TestVerifierFromDirAcceptsBothKidsDuringRotation(t *testing.T) {
 
 	tok1, _, _ := func() (string, uuid.UUID, error) {
 		s, _ := NewSignerFromFile(priv1, "v1")
-		return s.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+		return s.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 	}()
 	tok2, _, _ := func() (string, uuid.UUID, error) {
 		s, _ := NewSignerFromFile(priv2, "v2")
-		return s.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+		return s.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 	}()
 
 	if _, err := verifier.Verify(tok1); err != nil {
@@ -186,7 +191,7 @@ func TestVerifierFromDirRejectsUnknownKid(t *testing.T) {
 	// Sign with v1's private key but stamp a kid the verifier hasn't
 	// seen — simulates a rogue signer or a missed rotation file.
 	signer, _ := NewSignerFromFile(priv1, "v999")
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 
 	verifier, _ := NewVerifierFromDir(dir)
 	if _, err := verifier.Verify(tok); err == nil {
@@ -210,8 +215,83 @@ func TestVerifierFromDirAcceptsLegacyPublicPem(t *testing.T) {
 		t.Fatalf("NewVerifierFromDir: %v", err)
 	}
 	signer, _ := NewSignerFromFile(priv, "v1")
-	tok, _, _ := signer.Issue(uuid.New(), false, "", "", 0, time.Minute, uuid.Nil)
+	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
 	if _, err := verifier.Verify(tok); err != nil {
 		t.Errorf("legacy public.pem mapped to v1 must verify, got %v", err)
+	}
+}
+
+func TestIssueStampsAudienceChat(t *testing.T) {
+	priv, pub := writeTempKeys(t)
+	signer, _ := NewSignerFromFile(priv, "v1")
+	verifier, _ := NewVerifierFromFile(pub)
+
+	tok, _, err := signer.Issue(IssueInput{
+		UserID:   uuid.New(),
+		Audience: AudienceChat,
+		TTL:      time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	claims, err := verifier.Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if len(claims.Audience) != 1 || claims.Audience[0] != AudienceChat {
+		t.Errorf("aud: want [chat], got %v", claims.Audience)
+	}
+}
+
+func TestIssueStampsAudienceAuthForRefresh(t *testing.T) {
+	priv, pub := writeTempKeys(t)
+	signer, _ := NewSignerFromFile(priv, "v1")
+	verifier, _ := NewVerifierFromFile(pub)
+
+	tok, _, _ := signer.Issue(IssueInput{
+		UserID:   uuid.New(),
+		Audience: AudienceAuth,
+		TTL:      time.Minute,
+	})
+	claims, _ := verifier.Verify(tok)
+	if len(claims.Audience) != 1 || claims.Audience[0] != AudienceAuth {
+		t.Errorf("aud: want [auth], got %v", claims.Audience)
+	}
+}
+
+func TestIssueRoundTripsIdentitiesAndRCAppUserID(t *testing.T) {
+	priv, pub := writeTempKeys(t)
+	signer, _ := NewSignerFromFile(priv, "v1")
+	verifier, _ := NewVerifierFromFile(pub)
+
+	ids := []ClaimIdentity{
+		{Provider: "google", Subject: "gsub-1", EmailHash: "ehash-1", EmailVerified: true},
+		{Provider: "apple", Subject: "asub-1"},
+	}
+	tok, _, _ := signer.Issue(IssueInput{
+		UserID:      uuid.New(),
+		Tier:        "pro",
+		QuotaID:     "qid-1",
+		RCAppUserID: "rc-app-1",
+		Identities:  ids,
+		Audience:    AudienceChat,
+		TTL:         time.Minute,
+	})
+	claims, err := verifier.Verify(tok)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if claims.RCAppUserID != "rc-app-1" {
+		t.Errorf("RCAppUserID: want rc-app-1, got %q", claims.RCAppUserID)
+	}
+	if len(claims.Identities) != 2 {
+		t.Fatalf("identities: want 2, got %d", len(claims.Identities))
+	}
+	got := claims.Identities[0]
+	if got.Provider != "google" || got.Subject != "gsub-1" || got.EmailHash != "ehash-1" || !got.EmailVerified {
+		t.Errorf("identity[0] mismatch: %+v", got)
+	}
+	if claims.Identities[1].EmailHash != "" {
+		t.Errorf("identity[1] EmailHash: want empty, got %q", claims.Identities[1].EmailHash)
 	}
 }

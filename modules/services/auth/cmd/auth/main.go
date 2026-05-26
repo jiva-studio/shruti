@@ -51,8 +51,8 @@ func main() {
 	// Resolve the profile-collection policy before anything else touches
 	// storage — boot must fail fast if PROFILE/CONFIG_PATH disagree with
 	// the on-disk config (typo, missing file, unknown profile name).
-	// Policy is unused for now; follow-up PRs (1.5b/c/d) wire it into
-	// OAuth, /auth/me and JWT-claims choke-points.
+	// PR-1 wires policy into JWT-claims (ProfilePolicy.BuildClaims). The
+	// write-side choke-points (FromOAuth, ProjectMe) follow in 1.5b/c.
 	profilePolicy, err := profile.LoadPolicy(cfg.ConfigPath, cfg.Profile)
 	if err != nil {
 		slog.Error("profile_policy_load_failed", "err", err.Error(),
@@ -63,7 +63,6 @@ func main() {
 		"email_enabled", profilePolicy.Email.Enabled,
 		"name_enabled", profilePolicy.Name.Enabled,
 		"locale_enabled", profilePolicy.Locale.Enabled)
-	_ = profilePolicy // wired into handlers in follow-up PRs
 
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer bootCancel()
@@ -107,6 +106,7 @@ func main() {
 		Verifier:       verifier,
 		GoogleVerifier: google.NewVerifier(cfg.GoogleClientIDs),
 		AppleVerifier:  apple.NewVerifier(cfg.AppleBundleIDs),
+		ProfilePolicy:  profilePolicy,
 	}
 
 	root := handler.NewRouter(svc, verifier)
