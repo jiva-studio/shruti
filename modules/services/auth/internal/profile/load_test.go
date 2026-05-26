@@ -16,8 +16,8 @@ func TestLoadPolicy_Global(t *testing.T) {
 	if !p.Email.Enabled {
 		t.Error("global profile: expected email.enabled=true")
 	}
-	if p.Phone.Enabled {
-		t.Error("global profile: expected phone.enabled=false")
+	if !p.Name.Enabled || !p.AvatarURL.Enabled {
+		t.Error("global profile: expected name and avatar_url enabled")
 	}
 }
 
@@ -30,8 +30,8 @@ func TestLoadPolicy_RU(t *testing.T) {
 	if p.Email.Enabled {
 		t.Error("ru profile: expected email.enabled=false")
 	}
-	if !p.Locale.Enabled {
-		t.Error("ru profile: expected locale.enabled=true")
+	if p.Name.Enabled || p.AvatarURL.Enabled {
+		t.Error("ru profile: expected name and avatar_url disabled")
 	}
 }
 
