@@ -8,8 +8,11 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,6 +21,7 @@ import (
 
 	"github.com/akdasa-studios/lectorium/auth/internal/identityhash"
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
+	"github.com/akdasa-studios/lectorium/auth/internal/profile"
 	"github.com/akdasa-studios/lectorium/auth/internal/providers"
 	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
@@ -41,15 +45,21 @@ type Session struct {
 
 // Service holds the deps. Methods are safe for concurrent use.
 type Service struct {
-	Pool             *pgxpool.Pool
-	Users            *store.UserRepo
-	Identities       *store.IdentityRepo
-	RefreshTokens    *store.RefreshTokenRepo
-	WebhookEvents    *store.WebhookEventRepo
-	Signer           *jwt.Signer
-	Verifier         *jwt.Verifier
-	GoogleVerifier   ProviderVerifier
-	AppleVerifier    ProviderVerifier
+	Pool           *pgxpool.Pool
+	Users          *store.UserRepo
+	Identities     *store.IdentityRepo
+	RefreshTokens  *store.RefreshTokenRepo
+	WebhookEvents  *store.WebhookEventRepo
+	Signer         *jwt.Signer
+	Verifier       *jwt.Verifier
+	GoogleVerifier ProviderVerifier
+	AppleVerifier  ProviderVerifier
+	// ProfilePolicy gates which optional profile fields land in JWT
+	// claims and storage. Zero-value (every field disabled) is safe
+	// for tests that don't care about claim filtering — emits no
+	// EmailHash / EmailVerified. Production sets it from config.yaml
+	// at boot, indexed by PROFILE env (global vs ru).
+	ProfilePolicy profile.ProfilePolicy
 }
 
 // ProviderVerifier is the interface satisfied by providers/{google,apple}.Verifier.
@@ -294,13 +304,29 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 		if err != nil {
 			return fmt.Errorf("load quota_id: %w", err)
 		}
+		idents, err := s.loadIdentities(ctx, row.UserID)
+		if err != nil {
+			return fmt.Errorf("load identities: %w", err)
+		}
+		rcAppUserID, err := s.loadRCAppUserID(ctx, row.UserID)
+		if err != nil {
+			return fmt.Errorf("load rc_app_user_id: %w", err)
+		}
+		base := s.ProfilePolicy.BuildClaims(row.UserID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
 
-		access, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, tierExp, AccessTTL, uuid.Nil)
+		accessIn := base
+		accessIn.Audience = jwt.AudienceChat
+		accessIn.TTL = AccessTTL
+		access, _, err := s.Signer.Issue(accessIn)
 		if err != nil {
 			return err
 		}
 		newJTI := uuid.New()
-		refresh, _, err := s.Signer.Issue(row.UserID, anonymous, tier, quotaID, tierExp, RefreshTTL, newJTI)
+		refreshIn := base
+		refreshIn.Audience = jwt.AudienceAuth
+		refreshIn.TTL = RefreshTTL
+		refreshIn.JTI = newJTI
+		refresh, _, err := s.Signer.Issue(refreshIn)
 		if err != nil {
 			return err
 		}
@@ -523,15 +549,111 @@ func (s *Service) loadTierAndExpiry(ctx context.Context, userID uuid.UUID, now t
 }
 
 // loadQuotaID derives the rate-limit key for `userID`. See
-// internal/identityhash for the algorithm. Empty string for anonymous
-// users (only device-provider identities) — the chat-side limiter
-// falls back to JWT `sub` in that case.
+// internal/identityhash for the algorithm. Non-empty for every user
+// since PR-1 (device-only / anonymous users get a peppered per-device
+// hash).
 func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, error) {
 	idents, err := s.Identities.ListForUser(ctx, userID)
 	if err != nil {
 		return "", err
 	}
 	return identityhash.Compute(idents), nil
+}
+
+// LookupResult is the no-side-effects result of /auth/lookup. It says
+// whether a (provider, subject) pair is currently bound to any user
+// and, if so, whether that user is anonymous. Used by mobile's
+// retry-other-region flow (PR-3) — never issues tokens, never mutates
+// state.
+type LookupResult struct {
+	Exists    bool
+	Anonymous bool
+}
+
+// LookupSignin verifies the OAuth id-token to extract its `sub` and
+// then returns the LookupResult for that (provider, sub). No DB
+// writes, no token issuance. Powers the `X-Lookup-Only: 1` shortcut
+// on /auth/signin/{google,apple}: callers can probe "do I already
+// exist on this region?" without paying the signin bootstrap cost.
+func (s *Service) LookupSignin(ctx context.Context, provider, idToken string) (LookupResult, error) {
+	var verifier ProviderVerifier
+	switch provider {
+	case ProviderGoogle:
+		verifier = s.GoogleVerifier
+	case ProviderApple:
+		verifier = s.AppleVerifier
+	default:
+		return LookupResult{}, fmt.Errorf("unsupported provider %q", provider)
+	}
+	ident, err := verifier.Verify(ctx, idToken)
+	if err != nil {
+		return LookupResult{}, fmt.Errorf("%s verify: %w", provider, err)
+	}
+	if ident.Subject == "" {
+		return LookupResult{}, fmt.Errorf("%s: empty subject", provider)
+	}
+	return s.FindUserByProviderSubject(ctx, provider, ident.Subject)
+}
+
+// FindUserByProviderSubject resolves a (provider, subject) pair to a
+// LookupResult. Returns `{Exists: false}` when no identity matches.
+// Bounded by the (provider, subject) PK on auth.identities (and the
+// supporting index from migration 0028) — O(log n) regardless of
+// table size.
+func (s *Service) FindUserByProviderSubject(ctx context.Context, provider, subject string) (LookupResult, error) {
+	ident, err := s.Identities.Get(ctx, provider, subject)
+	if err != nil {
+		return LookupResult{}, err
+	}
+	if ident == nil {
+		return LookupResult{}, nil
+	}
+	anon, err := s.userIsAnonymous(ctx, nil, ident.UserID)
+	if err != nil {
+		return LookupResult{}, err
+	}
+	return LookupResult{Exists: true, Anonymous: anon}, nil
+}
+
+// loadIdentities returns the user's identities shaped for the JWT
+// `ids` claim. Email is hashed (sha256 of lower+trimmed) so the raw
+// address never enters a token. Whether EmailHash / EmailVerified are
+// actually emitted to the wire is decided downstream by
+// ProfilePolicy.BuildClaims.
+func (s *Service) loadIdentities(ctx context.Context, userID uuid.UUID) ([]jwt.ClaimIdentity, error) {
+	rows, err := s.Identities.ListForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]jwt.ClaimIdentity, 0, len(rows))
+	for _, r := range rows {
+		ci := jwt.ClaimIdentity{
+			Provider:      r.Provider,
+			Subject:       r.Subject,
+			EmailVerified: r.EmailVerified,
+		}
+		if r.Email != nil && *r.Email != "" {
+			norm := strings.ToLower(strings.TrimSpace(*r.Email))
+			sum := sha256.Sum256([]byte(norm))
+			ci.EmailHash = hex.EncodeToString(sum[:])
+		}
+		out = append(out, ci)
+	}
+	return out, nil
+}
+
+// loadRCAppUserID returns the user's mirrored RC app_user_id, or ""
+// if it hasn't been bound yet (signin not completed, or webhook
+// arrived before Purchases.logIn).
+func (s *Service) loadRCAppUserID(ctx context.Context, userID uuid.UUID) (string, error) {
+	u, err := s.Users.Get(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if u == nil || u.RCAppUserID == nil {
+		return "", nil
+	}
+	return *u.RCAppUserID, nil
 }
 
 // issueSession mints fresh access + refresh and persists the refresh row.
@@ -544,12 +666,29 @@ func (s *Service) issueSession(ctx context.Context, userID uuid.UUID, anonymous 
 	if err != nil {
 		return nil, fmt.Errorf("load quota_id: %w", err)
 	}
-	access, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, tierExp, AccessTTL, uuid.Nil)
+	idents, err := s.loadIdentities(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load identities: %w", err)
+	}
+	rcAppUserID, err := s.loadRCAppUserID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("load rc_app_user_id: %w", err)
+	}
+	base := s.ProfilePolicy.BuildClaims(userID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
+
+	accessIn := base
+	accessIn.Audience = jwt.AudienceChat
+	accessIn.TTL = AccessTTL
+	access, _, err := s.Signer.Issue(accessIn)
 	if err != nil {
 		return nil, err
 	}
 	newJTI := uuid.New()
-	refresh, _, err := s.Signer.Issue(userID, anonymous, tier, quotaID, tierExp, RefreshTTL, newJTI)
+	refreshIn := base
+	refreshIn.Audience = jwt.AudienceAuth
+	refreshIn.TTL = RefreshTTL
+	refreshIn.JTI = newJTI
+	refresh, _, err := s.Signer.Issue(refreshIn)
 	if err != nil {
 		return nil, err
 	}

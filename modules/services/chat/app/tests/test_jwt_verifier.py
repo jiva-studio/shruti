@@ -42,10 +42,13 @@ def _sign(
     sub: str = "user-1",
     anonymous: bool = False,
     quota_id: str | None = None,
+    aud: str | None = "chat",
 ) -> str:
     claims: dict[str, object] = {"sub": sub, "anonymous": anonymous, "exp": 9999999999}
     if quota_id is not None:
         claims["quota_id"] = quota_id
+    if aud is not None:
+        claims["aud"] = aud
     return pyjwt.encode(
         claims,
         priv,
@@ -190,6 +193,7 @@ def test_tier_expires_at_parsed(tmp_path: Path) -> None:
             "tier": "pro",
             "tier_expires_at": 1700000000,
             "exp": 9999999999,
+            "aud": "chat",
         },
         priv,
         algorithm="RS256",
@@ -209,3 +213,51 @@ def test_tier_expires_at_missing_defaults_to_zero(tmp_path: Path) -> None:
     v = JwtVerifier.from_file(tmp_path / "public.pem")
     user = v.verify(_sign(priv, "v1"))
     assert user.tier_expires_at == 0
+
+
+# ── audience enforcement (PR-1) ──────────────────────────────────────────
+
+
+def test_audience_chat_accepted(tmp_path: Path) -> None:
+    # Sanity check — the verifier accepts an aud=chat token (also
+    # implicit in every other test above, so a single explicit case
+    # documents the contract).
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    user = v.verify(_sign(priv, "v1", aud="chat"))
+    assert user.id == "user-1"
+
+
+def test_audience_auth_rejected(tmp_path: Path) -> None:
+    # Refresh tokens carry aud="auth" and must NEVER be accepted by
+    # the chat service. The mismatch fires InvalidAudienceError inside
+    # PyJWT — surfaced as JwtVerifyError with "wrong audience" text.
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError, match="wrong audience"):
+        v.verify(_sign(priv, "v1", aud="auth"))
+
+
+def test_audience_missing_rejected(tmp_path: Path) -> None:
+    # `options.require=['aud']` makes a missing aud claim a hard
+    # failure too. Pre-PR-1 tokens (no aud) cannot leak past this
+    # boundary; they all aged out of their 15-min window long before
+    # this code reaches prod.
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError):
+        v.verify(_sign(priv, "v1", aud=None))
+
+
+def test_audience_wrong_value_rejected(tmp_path: Path) -> None:
+    # Any audience that isn't "chat" must be rejected — defends
+    # against future tokens minted for a different service ending up
+    # accepted by chat.
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError, match="wrong audience"):
+        v.verify(_sign(priv, "v1", aud="share-video"))

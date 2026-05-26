@@ -74,13 +74,13 @@ func (h *authHandler) anonymous(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *authHandler) signinGoogle(w http.ResponseWriter, r *http.Request) {
-	h.signinSocial(w, r, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
+	h.signinSocial(w, r, service.ProviderGoogle, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
 		return h.svc.SigninGoogle(ctx, in)
 	})
 }
 
 func (h *authHandler) signinApple(w http.ResponseWriter, r *http.Request) {
-	h.signinSocial(w, r, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
+	h.signinSocial(w, r, service.ProviderApple, func(ctx context.Context, in service.SocialInput) (*service.Session, error) {
 		return h.svc.SigninApple(ctx, in)
 	})
 }
@@ -88,6 +88,7 @@ func (h *authHandler) signinApple(w http.ResponseWriter, r *http.Request) {
 func (h *authHandler) signinSocial(
 	w http.ResponseWriter,
 	r *http.Request,
+	provider string,
 	fn func(context.Context, service.SocialInput) (*service.Session, error),
 ) {
 	var body signinSocialReq
@@ -97,6 +98,31 @@ func (h *authHandler) signinSocial(
 	}
 	if body.IDToken == "" {
 		writeErr(w, http.StatusBadRequest, "missing_id_token", "idToken is required")
+		return
+	}
+	// X-Lookup-Only: verify the OAuth id-token, look up (provider,
+	// sub), but DON'T bootstrap or issue tokens. The retry-other-
+	// region flow (PR-3) uses this to ask "does this account already
+	// exist on the destination region?" before bouncing the user.
+	// 404 + {code:"account_not_found"} on miss; 200 + {exists,
+	// anonymous} on hit. The OAuth token is still cryptographically
+	// verified to prevent a probe with forged subjects.
+	if r.Header.Get("X-Lookup-Only") == "1" {
+		res, err := h.svc.LookupSignin(r.Context(), provider, body.IDToken)
+		if err != nil {
+			slog.WarnContext(r.Context(), "lookup_signin_failed",
+				slog.String("path", r.URL.Path), slog.String("error", err.Error()))
+			writeErr(w, http.StatusUnauthorized, "signin_failed", err.Error())
+			return
+		}
+		if !res.Exists {
+			writeErr(w, http.StatusNotFound, "account_not_found", "account does not exist on this region")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"exists":    true,
+			"anonymous": res.Anonymous,
+		})
 		return
 	}
 	in := service.SocialInput{
