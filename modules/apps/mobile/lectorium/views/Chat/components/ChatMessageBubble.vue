@@ -231,6 +231,9 @@ const errorSuffix = computed(() => {
   if (e.kind === "truncated") {
     return e.reason === "turns" ? t("chat.errTruncatedTurns") : t("chat.errTruncatedStream")
   }
+  if (e.kind === "stopped") {
+    return t("chat.errStopped")
+  }
   return ""
 })
 

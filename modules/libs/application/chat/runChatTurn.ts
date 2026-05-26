@@ -334,11 +334,14 @@ export async function* runChatTurn(
     }
   }
 
-  // 5. Decide error marker. !sawDone && acc.length > 0 means the stream
-  // dropped after some text — render that as truncated rather than a
-  // half-cut silent bubble.
-  const errorMeta: ChatMessageError | undefined =
-    !sawDone && acc.length > 0
+  // 5. Decide error marker. The signal-aborted branch wins over a
+  // generic truncated/stream — a user-initiated stop is intentional,
+  // not a connection drop, so we render the neutral "Stopped" copy
+  // instead of "connection dropped". `!sawDone && acc.length > 0` is
+  // the catch-all truncated path for real network truncations.
+  const errorMeta: ChatMessageError | undefined = input.signal.aborted
+    ? { kind: "stopped" }
+    : !sawDone && acc.length > 0
       ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
       : undefined
 
@@ -358,6 +361,13 @@ export async function* runChatTurn(
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }
+  } else if (input.signal.aborted) {
+    // User tapped stop before any prose landed. Nothing useful to
+    // preserve, and converting the placeholder to a "no content"
+    // failed-bubble would suggest something went wrong — it didn't,
+    // the user just changed their mind. Emit a dedicated code the
+    // store recognises so it can drop the placeholder silently.
+    yield { kind: "error", code: "stopped_empty", message: "stopped" }
   } else if (lastError) {
     yield {
       kind: "error",

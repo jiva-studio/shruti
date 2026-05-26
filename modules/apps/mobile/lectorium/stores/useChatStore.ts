@@ -748,6 +748,17 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "error": {
+        // User-stop-with-no-content: runChatTurn emits a dedicated
+        // `stopped_empty` code so we can drop the placeholder silently
+        // instead of leaving a "no content" failed-bubble. There's
+        // nothing useful to preserve and converting the placeholder
+        // would suggest something went wrong — the user just changed
+        // their mind. Stop paths with prose accumulated are persisted
+        // via the `finalised` event with meta.error.kind="stopped".
+        if (event.code === "stopped_empty") {
+          messages.value = messages.value.filter((m) => !m.streaming)
+          return
+        }
         // Prefer the absolute resets_at_epoch from the Phase-4 429 body
         // when present — it's authoritative server time, no clock-drift
         // pinning. Fall back to relative `Retry-After` if the server

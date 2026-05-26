@@ -172,6 +172,15 @@ function parseError(raw: unknown): ChatMessageError | undefined {
   if (obj.kind === "truncated" && (obj.reason === "stream" || obj.reason === "turns")) {
     return { kind: "truncated", reason: obj.reason }
   }
+  // User tapped stop mid-stream. Round-trips through SQL so the
+  // partial bubble survives cold-start (the user explicitly preserved
+  // that prose by stopping rather than letting it continue).
+  if (obj.kind === "stopped") {
+    return { kind: "stopped" }
+  }
+  // `failed` is intentionally NOT in the whitelist — failed bubbles
+  // are not useful history; they live in memory only and the reload
+  // surfaces a clean assistant gap instead.
   // Unknown kind → caller sees `undefined` and renders no error suffix.
   return undefined
 }

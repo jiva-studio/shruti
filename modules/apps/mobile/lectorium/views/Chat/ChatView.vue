@@ -61,6 +61,7 @@
       :quota-locked="isComposeBlocked"
       :quota-resets-at="composeBlockedUntil"
       @send="onSend"
+      @cancel="onCancel"
     />
     <ChatSessionList
       :open="isHistoryOpen"
@@ -115,6 +116,7 @@ const {
   isComposeBlocked,
   composeBlockedUntil,
   onSend,
+  onCancel,
   onNewSession,
   onOpenHistory,
   onCloseHistory,

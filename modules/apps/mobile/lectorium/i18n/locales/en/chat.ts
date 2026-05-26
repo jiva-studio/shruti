@@ -2,6 +2,9 @@ export default {
   title: "Chat",
   placeholder: "Just ask a question…",
   send: "Send",
+  /** Composer button label while a turn is streaming — the send icon
+   *  swaps to a stop icon and tapping it aborts the SSE stream. */
+  stop: "Stop",
   sending: "Thinking…",
   emptyStateTitle: "How can I help?",
   emptyState: "Ask anything — I'll look it up in the recordings.",
@@ -72,6 +75,10 @@ export default {
   errTruncatedStream: " (cut off — connection dropped)",
   /** Appended when the agent hit MAX_TOOL_TURNS without a final answer. */
   errTruncatedTurns: " (stopped — too many tool calls)",
+  /** Appended to an assistant bubble the user explicitly stopped mid-
+   *  stream via the composer's stop button. Neutral copy — distinct
+   *  from `errTruncated*` (which suggests something went wrong). */
+  errStopped: " (stopped)",
   /** Relative "{when}" fragments composed into errRateAfter. */
   retryInSeconds: "in {n}s",
   retryInMinutes: "in {n} min",

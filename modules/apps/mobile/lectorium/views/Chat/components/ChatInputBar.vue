@@ -17,14 +17,14 @@
       <button
         type="button"
         class="send"
-        :class="{ visible: canSend || sending }"
+        :class="{ visible: canSend || sending, stopping: sending }"
         :aria-label="sendAriaLabel"
         :disabled="(!canSend && !sending) || quotaLocked"
-        :tabindex="canSend && !quotaLocked ? 0 : -1"
+        :tabindex="(canSend || sending) && !quotaLocked ? 0 : -1"
         @click="onSendClick"
       >
         <IconArrowUp v-if="!sending" :size="20" stroke="2.5" />
-        <IonSpinner v-else name="dots" />
+        <IconPlayerStopFilled v-else :size="18" />
       </button>
     </div>
   </div>
@@ -33,8 +33,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonSpinner } from "@ionic/vue"
-import { IconArrowUp } from "@tabler/icons-vue"
+import { IconArrowUp, IconPlayerStopFilled } from "@tabler/icons-vue"
 
 const props = defineProps<{
   sending: boolean
@@ -48,7 +47,7 @@ const props = defineProps<{
    *  placeholder; not required to determine disabled state. */
   quotaResetsAt?: number | null
 }>()
-const emit = defineEmits<{ send: [text: string] }>()
+const emit = defineEmits<{ send: [text: string]; cancel: [] }>()
 
 const { t, tm } = useI18n()
 
@@ -115,8 +114,10 @@ const ariaLabel = computed<string>(() => {
 
 /** Send-button label mirrors the lock state so a SR user who tabs onto
  *  the disabled button still gets the explanation, not just "Send,
- *  dimmed". */
+ *  dimmed". While a turn is streaming the button switches role to
+ *  "Stop" so the SR user hears the actual action it triggers. */
 const sendAriaLabel = computed<string>(() => {
+  if (props.sending) return t("chat.stop")
   if (props.quotaLocked) {
     if (typeof props.quotaResetsAt === "number") {
       const d = new Date(props.quotaResetsAt)
@@ -170,6 +171,13 @@ watch(text, () => {
 })
 
 function onSendClick(): void {
+  // While a turn is streaming the button is the Stop affordance —
+  // emit `cancel` so the parent can abort the SSE stream. Quota-lock
+  // still wins so users can't fire cancel during a 429 cooldown.
+  if (props.sending && !props.quotaLocked) {
+    emit("cancel")
+    return
+  }
   if (!canSend.value) return
   const payload = text.value.trim()
   text.value = ""
@@ -311,6 +319,14 @@ defineExpose({ setText, focus })
   transform: scale(1);
   opacity: 1;
   pointer-events: auto;
+}
+
+/* While streaming the button is the Stop affordance — give it a
+ * subtle visual cue (slightly muted surface) so it doesn't look
+ * like a regular send button mid-turn. The icon flip already
+ * carries most of the signal. */
+.send.stopping {
+  background: var(--ion-color-medium, #8a8a8a);
 }
 
 .send:disabled {
