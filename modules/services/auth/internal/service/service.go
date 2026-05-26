@@ -60,6 +60,16 @@ type Service struct {
 	// EmailHash / EmailVerified. Production sets it from config.yaml
 	// at boot, indexed by PROFILE env (global vs ru).
 	ProfilePolicy profile.ProfilePolicy
+	// RegionID identifies this deployment ("global" | "russia" | …).
+	// Stamped into home_region on rows materialised by migrate-in and
+	// inspected by migrate-revoke to refuse own-region bearers. Empty
+	// string in tests is treated like "global" by the migration helpers.
+	RegionID string
+	// LocalKid is the kid this region's signer stamps on freshly issued
+	// tokens. migrate-revoke compares it against the resolved kid of the
+	// incoming bearer: a match means the caller is asking us to revoke a
+	// session WE just issued — no migration is in flight, so we refuse.
+	LocalKid string
 }
 
 // ProviderVerifier is the interface satisfied by providers/{google,apple}.Verifier.
@@ -458,12 +468,9 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 		CreatedAt:     u.CreatedAt,
 		Tier:          tier,
 		TierExpiresAt: u.TierExpiresAt,
-		Email:         derefStr(email),
-		Name:          derefStr(u.Name),
-		PictureURL:    derefStr(u.PictureURL),
-		// Locale column not yet on auth.users (PR-1.5e); empty string
-		// causes ProjectMe to omit the field regardless of policy.
-		Locale: "",
+		Email:      derefStr(email),
+		Name:       derefStr(u.Name),
+		PictureURL: derefStr(u.PictureURL),
 	}
 	src.Identities = make([]profile.SourceIdentity, 0, len(idents))
 	for _, i := range idents {

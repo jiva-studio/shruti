@@ -52,6 +52,17 @@ type Config struct {
 	// from ConfigPath governs optional profile-field collection. Default
 	// "global"; "ru" minimises stored fields for the Russia deployment.
 	Profile string
+	// RegionID identifies which regional deployment this binary is. Stamped
+	// into `home_region` on freshly migrated-in users and used by the
+	// migrate-revoke handler to refuse own-kid bearers. Defaults to
+	// "global"; the Russia VPS sets it to "russia". Wave 4 / PR-2a.
+	RegionID string
+	// InternalSecret authenticates cross-region service-to-service traffic
+	// via HMAC. POST /internal/subscription/apply validates the
+	// X-Lectorium-HMAC header against this value. Empty disables the
+	// endpoint (returns 503 not_configured), same opt-in pattern as the
+	// RC webhook secrets. Wave 4 / PR-2a.
+	InternalSecret string
 }
 
 func Load() (*Config, error) {
@@ -71,6 +82,8 @@ func Load() (*Config, error) {
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
 		ConfigPath:        env("CONFIG_PATH", "/etc/lectorium/auth/config.yaml"),
 		Profile:           env("PROFILE", "global"),
+		RegionID:          env("REGION_ID", "global"),
+		InternalSecret:    os.Getenv("LECTORIUM_INTERNAL_SECRET"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")

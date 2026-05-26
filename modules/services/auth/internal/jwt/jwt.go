@@ -242,7 +242,23 @@ func (s *Signer) Issue(in IssueInput) (token string, generatedJTI uuid.UUID, err
 // pre-date kid emission still validate because the signer has been
 // stamping kid="v1" since day one.
 func (v *Verifier) Verify(token string) (*Claims, error) {
+	claims, _, err := v.verifyResolveKid(token)
+	return claims, err
+}
+
+// VerifyAnyKid is Verify but also returns the kid that matched. The
+// migration handlers (POST /auth/migrate-in, /auth/migrate-revoke) use
+// the resolved kid to distinguish "this region signed it" from
+// "another region signed it" — migrate-revoke refuses own-kid bearers
+// because revoking on receipt of our own token would mean there is no
+// migration in flight to complete.
+func (v *Verifier) VerifyAnyKid(token string) (*Claims, string, error) {
+	return v.verifyResolveKid(token)
+}
+
+func (v *Verifier) verifyResolveKid(token string) (*Claims, string, error) {
 	claims := &Claims{}
+	var resolved string
 	_, err := gjwt.ParseWithClaims(token, claims, func(t *gjwt.Token) (any, error) {
 		if _, ok := t.Method.(*gjwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected alg %v", t.Header["alg"])
@@ -256,12 +272,13 @@ func (v *Verifier) Verify(token string) (*Claims, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown kid %q", kid)
 		}
+		resolved = kid
 		return key, nil
 	}, gjwt.WithValidMethods([]string{"RS256"}))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return claims, nil
+	return claims, resolved, nil
 }
 
 // JTI extracts the jti from a verified Claims.

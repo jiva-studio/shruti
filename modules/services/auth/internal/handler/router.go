@@ -53,6 +53,15 @@ func NewRouter(svc *service.Service, verifier *jwt.Verifier) http.Handler {
 	// (provider, subject) pair is the credential. Rate-limited at
 	// Caddy edge alongside /auth/signin/*.
 	r.Post("/auth/lookup", h.lookup)
+	// Cross-region migration (Wave 4 / PR-2a). The bearer is the only
+	// credential — verified through the multi-kid Verifier; trust is
+	// implied by the kid being in JWT_PUBLIC_KEYS_DIR. No bearer
+	// middleware here because the bearer may have been signed by ANY
+	// trusted region (requireBearer pins to verifier.Verify which is
+	// fine, but migration handlers want the resolved kid back too,
+	// hence the inline VerifyAnyKid call).
+	r.Post("/auth/migrate-in", h.migrateIn)
+	r.Post("/auth/migrate-revoke", h.migrateRevoke)
 
 	r.Group(func(r chi.Router) {
 		r.Use(requireBearer(verifier))
@@ -82,6 +91,20 @@ func AttachRCWebhook(r http.Handler, h *RCWebhookHandler) http.Handler {
 		return r
 	}
 	chiR.Post("/webhooks/revenuecat", h.ServeHTTP)
+	return chiR
+}
+
+// attachInternalSubscription wires POST /internal/subscription/apply
+// onto an existing chi router. Mounted regardless of whether the
+// HMAC secret is configured — the handler itself returns 503 on
+// missing secret so operators get a clear "not enabled yet" signal
+// instead of a 404 that looks like a routing bug.
+func attachInternalSubscription(r http.Handler, h *InternalSubscriptionHandler) http.Handler {
+	chiR, ok := r.(chi.Router)
+	if !ok {
+		return r
+	}
+	chiR.Post("/internal/subscription/apply", h.ServeHTTP)
 	return chiR
 }
 
