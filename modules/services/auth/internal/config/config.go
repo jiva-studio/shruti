@@ -44,6 +44,14 @@ type Config struct {
 	// ServiceVersion is the image tag at runtime (SHRUTI_AUTH_TAG in
 	// compose). Surfaces in every log line as `version`.
 	ServiceVersion string
+	// ConfigPath points at the structured YAML config (currently consumed
+	// only by the profile-collection policy loader; future structured
+	// knobs land in the same file).
+	ConfigPath string
+	// Profile selects which `profile_collection.profiles.<name>` block
+	// from ConfigPath governs optional profile-field collection. Default
+	// "global"; "ru" minimises stored fields for the Russia deployment.
+	Profile string
 }
 
 func Load() (*Config, error) {
@@ -61,6 +69,8 @@ func Load() (*Config, error) {
 		RCRestAPIKey:             os.Getenv("RC_REST_API_KEY"),
 		Env:               env("ENV", "dev"),
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
+		ConfigPath:        env("CONFIG_PATH", "/etc/shruti/auth/config.yaml"),
+		Profile:           env("PROFILE", "global"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")

@@ -1,0 +1,35 @@
+# Shruti auth — structured config (single source for non-secret config).
+# Secrets remain in env vars; this file is for shape-driven knobs.
+
+profile_collection:
+  # Determines which optional profile fields are collected, stored,
+  # included in /auth/me responses, and stamped into JWT claims.
+  # Selected at boot via the PROFILE env var (default: "global").
+  #
+  # Mandatory fields (not configurable here, always collected):
+  #   - oauth_provider, oauth_subject (identity)
+  #   - tier, tier_expires_at         (subscription)
+  #   - quota_id                      (rate limiting)
+  #   - created_at                    (audit)
+  #
+  # Each optional field declares `enabled` and a `purpose`. When
+  # `enabled: false`, the field is NEVER written from OAuth callbacks,
+  # NEVER returned by /auth/me, and NEVER included in JWT claims.
+  profiles:
+    global:
+      email:        { enabled: true,  purpose: "account recovery, billing receipts" }
+      name:         { enabled: true,  purpose: "personalised greeting" }
+      avatar_url:   { enabled: true,  purpose: "profile picture display" }
+      locale:       { enabled: true,  purpose: "content language preference" }
+      device_id:    { enabled: true,  purpose: "anti-abuse on anonymous bootstrap" }
+      last_seen_at: { enabled: true,  purpose: "inactive-account cleanup" }
+      phone:        { enabled: false, purpose: "" }
+
+    ru:
+      email:        { enabled: false, purpose: "" }
+      name:         { enabled: false, purpose: "" }
+      avatar_url:   { enabled: false, purpose: "" }
+      locale:       { enabled: true,  purpose: "RU/EN content selection" }
+      device_id:    { enabled: true,  purpose: "anti-abuse" }
+      last_seen_at: { enabled: false, purpose: "" }
+      phone:        { enabled: false, purpose: "" }
