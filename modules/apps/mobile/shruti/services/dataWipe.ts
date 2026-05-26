@@ -23,10 +23,9 @@ const PLAYER_STOP_TIMEOUT_MS = 5000
  *   1. Stop playback — the engine may be holding a track row that's
  *      about to vanish, leaving the floating player pointing at a
  *      ghost. `stop()` is a no-op when nothing is open.
- *   2. On-disk wipes (repos + filesStorage + preferences). Doing the
- *      file-storage sweep here too is what closes issue #X's gap:
- *      previously `mediaItems` rows were deleted but the audio blobs
- *      on disk were orphaned forever.
+ *   2. On-disk wipes (repos + filesStorage + preferences). The
+ *      filesStorage sweep is what keeps the audio + transcript blobs
+ *      from orphaning on disk when their metadata rows are gone.
  *   3. In-memory Pinia caches — without this, Home/Search/Notes keep
  *      rendering the pre-wipe lists until the next cold start.
  */
