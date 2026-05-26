@@ -13,11 +13,6 @@ import (
 // with a fully-populated user produces output byte-identical to the
 // previous MeResponse path. RU profile renders the same shape but
 // with email/name/pictureUrl always null.
-//
-// Locale uses omitempty because it never existed in the pre-policy
-// response — adding it as `null` for every legacy global user would
-// be a new key on the wire. Keep it absent unless policy + DB value
-// both warrant rendering.
 type MeUser struct {
 	UserID    uuid.UUID `json:"userId"`
 	Anonymous bool      `json:"anonymous"`
@@ -37,9 +32,6 @@ type MeUser struct {
 	Email      *string `json:"email"`
 	Name       *string `json:"name"`
 	PictureURL *string `json:"pictureUrl"`
-	// Locale is the only new field; omit when absent to keep the
-	// legacy wire shape pristine for clients that never asked for it.
-	Locale *string `json:"locale,omitempty"`
 
 	// Identities are gated by policy too: when Email.Enabled=false the
 	// per-identity Email field is suppressed (same rule as
@@ -78,9 +70,6 @@ type SourceUser struct {
 	Name string
 	// Profile picture URL from auth.users.picture_url, or empty string.
 	PictureURL string
-	// Locale preference. Empty string when the column does not yet
-	// exist on auth.users (PR-1.5e adds it) or the row has NULL.
-	Locale string
 
 	Identities []SourceIdentity
 }
@@ -120,10 +109,6 @@ func (p ProfilePolicy) ProjectMe(s SourceUser) MeUser {
 	if p.AvatarURL.Enabled && s.PictureURL != "" {
 		pic := s.PictureURL
 		out.PictureURL = &pic
-	}
-	if p.Locale.Enabled && s.Locale != "" {
-		loc := s.Locale
-		out.Locale = &loc
 	}
 	out.Identities = make([]MeIdentity, 0, len(s.Identities))
 	for _, src := range s.Identities {

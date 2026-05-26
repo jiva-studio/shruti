@@ -249,3 +249,75 @@ func (s *Service) ApplyRCSubscriberState(ctx context.Context, eventID string, sn
 	}
 	return userID, matched, nil
 }
+
+// ApplyRemoteSubscription receives an RC subscriber-state snapshot
+// from another region via the cross-region outbox broadcast (PR-2b
+// builds the sender; PR-2a wires the receiver). Idempotency on the
+// snapshot's event_id is shared with the local RC webhook path: the
+// auth.rc_webhook_events table dedupes both the in-region delivery
+// and any number of remote redeliveries on the same eventID.
+//
+// Semantics differ from ApplyRCSubscriberState in one important way:
+// here we do NOT emit a subscription.broadcast outbox row on apply.
+// The originating region already wrote one; re-broadcasting on
+// receipt would loop. The caller fans out by writing
+// subscription.broadcast on the *send* side only.
+//
+// Returns:
+//   - (true, nil)  → local user matched + state updated. The matched
+//     bool flows back to the caller so the broadcaster can short-
+//     circuit further fan-out (the migrated-from region keeps
+//     delivering until at least one region claims the user, then
+//     stops).
+//   - (false, nil) → no local user owns this rc_app_user_id; treated as
+//     a clean miss (the user lives on a different region). Idempotency
+//     row is still inserted so RC-style retries dedup.
+//   - (matched, err) for a duplicate event_id: matched reflects what
+//     the previous winner observed; err is nil.
+func (s *Service) ApplyRemoteSubscription(ctx context.Context, eventID string, snap store.SubscriptionSnapshot) (bool, error) {
+	var matched bool
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		// InsertOrLookup is atomic against concurrent deliveries from
+		// multiple source regions hammering the same event. inserted=
+		// false + processed=true → a sibling already finished; we look
+		// up whether they matched a local user so the caller can log
+		// a useful matched flag.
+		inserted, processed, err := s.WebhookEvents.InsertOrLookup(ctx, tx, eventID, snap.AppUserID)
+		if err != nil {
+			return fmt.Errorf("event idempotency: %w", err)
+		}
+		if !inserted && processed {
+			// Already handled by an earlier delivery. Determine
+			// whether it matched by checking if our local user row
+			// carries the rc_app_user_id.
+			var anyMatch bool
+			if err := tx.QueryRow(ctx,
+				`SELECT EXISTS(SELECT 1 FROM auth.users WHERE rc_app_user_id = $1)`,
+				snap.AppUserID,
+			).Scan(&anyMatch); err != nil {
+				return fmt.Errorf("dup match probe: %w", err)
+			}
+			matched = anyMatch
+			return nil
+		}
+		// Fresh delivery (or a sibling left processed_at=NULL on a
+		// previous failure → safe to retry). Apply the snapshot.
+		_, ok, err := s.Users.UpsertSubscriptionState(ctx, tx, snap)
+		if err != nil {
+			return fmt.Errorf("upsert remote subscription: %w", err)
+		}
+		matched = ok
+		// Mark processed regardless of match. A miss is still a
+		// completed event from the broadcaster's point of view —
+		// retrying delivery to a region that doesn't own the user
+		// burns the broadcaster's retry budget for no gain.
+		if err := s.WebhookEvents.MarkProcessed(ctx, tx, eventID); err != nil {
+			return fmt.Errorf("mark processed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return matched, nil
+}

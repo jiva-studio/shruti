@@ -22,6 +22,10 @@ type Identity struct {
 	// the EmailVerifiedNull helper when it needs to write NULL.
 	EmailVerified bool
 	CreatedAt     time.Time
+	// HomeRegion stamps the regional deployment that owns this identity
+	// row. Default 'global' is filled by the DB on plain INSERTs; the
+	// migrate-in path (PR-2a) writes the destination region explicitly.
+	HomeRegion string
 }
 
 type IdentityRepo struct{ Pool *pgxpool.Pool }
@@ -49,12 +53,26 @@ func (r *IdentityRepo) Get(ctx context.Context, provider, subject string) (*Iden
 
 // Create inserts and returns the new row. ON CONFLICT not handled here —
 // callers do the "lookup → maybe create" dance under their own tx.
+//
+// HomeRegion is written explicitly only when non-empty; an empty string
+// falls back to the DB column default ('global', set by migration 0028).
+// The migrate-in path sets it to the destination region so the row is
+// stamped correctly on insert without a second UPDATE.
 func (r *IdentityRepo) Create(ctx context.Context, tx pgx.Tx, ident Identity) error {
+	if ident.HomeRegion == "" {
+		_, err := exec(ctx, r.Pool, tx,
+			`INSERT INTO auth.identities
+			   (provider, subject, user_id, email, email_verified)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			ident.Provider, ident.Subject, ident.UserID, ident.Email, ident.EmailVerified,
+		)
+		return err
+	}
 	_, err := exec(ctx, r.Pool, tx,
 		`INSERT INTO auth.identities
-		   (provider, subject, user_id, email, email_verified)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		ident.Provider, ident.Subject, ident.UserID, ident.Email, ident.EmailVerified,
+		   (provider, subject, user_id, email, email_verified, home_region)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		ident.Provider, ident.Subject, ident.UserID, ident.Email, ident.EmailVerified, ident.HomeRegion,
 	)
 	return err
 }

@@ -55,6 +55,65 @@ func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 	return u, nil
 }
 
+// GetTx is Get bound to a caller-supplied transaction. Used by the
+// migrate-in flow to peek at whether a user row already exists for
+// the JWT's `sub` inside the same tx that will (re)build it, without
+// a separate connection round-trip racing against the insert.
+func (r *UserRepo) GetTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*User, error) {
+	row := tx.QueryRow(ctx,
+		`SELECT id, name, picture_url, created_at,
+		        tier, tier_expires_at, tier_updated_at, rc_app_user_id
+		   FROM auth.users WHERE id = $1`, id)
+	u := &User{}
+	if err := row.Scan(
+		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
+		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
+// MigrateUser is the projection of a JWT migrate-in claim onto the
+// auth.users columns the destination region needs to set explicitly.
+// The user id is sourced from the bearer's `sub` (not generated locally,
+// so subsequent migrate-revoke calls on the source region target the
+// right row by id).
+type MigrateUser struct {
+	ID            uuid.UUID
+	Tier          string
+	TierExpiresAt *time.Time
+	RCAppUserID   *string
+	HomeRegion    string
+}
+
+// InsertForMigration creates an auth.users row with a known id and the
+// fields carried in a migrate-in JWT. Mirrors the Create path but
+// accepts every column instead of letting the DB default them — the
+// destination region must reproduce tier/expiry/rc_app_user_id verbatim
+// so the user keeps Pro across the move and RC webhooks continue to
+// match. Caller wraps in the same tx as the identities INSERTs so a
+// partial migration never leaves a user row without identities.
+func (r *UserRepo) InsertForMigration(ctx context.Context, tx pgx.Tx, in MigrateUser) error {
+	homeRegion := in.HomeRegion
+	if homeRegion == "" {
+		homeRegion = "global"
+	}
+	tier := in.Tier
+	if tier == "" {
+		tier = "free"
+	}
+	_, err := exec(ctx, r.Pool, tx,
+		`INSERT INTO auth.users(id, tier, tier_expires_at, rc_app_user_id, home_region)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		in.ID, tier, in.TierExpiresAt, in.RCAppUserID, homeRegion,
+	)
+	return err
+}
+
 // SubscriptionSnapshot is the canonical subscription state derived
 // from a RevenueCat `GET /subscribers/{app_user_id}` response. Built
 // by the webhook handler and applied via UpsertSubscriptionState.
