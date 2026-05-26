@@ -47,6 +47,11 @@ dependencies = [
   # service still serves traffic.
   "langfuse>=3.15.0,<4.0.0",
   "langchain>=0.3.0,<0.4.0",
+  # Prometheus counters / gauges for ops dashboards. The chat service
+  # does not (yet) expose a /metrics endpoint — counters land in the
+  # default REGISTRY and are picked up by a future PR-5 scraper. Adding
+  # the dep now avoids a second dependency bump when /metrics goes in.
+  "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]
