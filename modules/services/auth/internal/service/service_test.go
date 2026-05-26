@@ -289,6 +289,37 @@ func TestNoCrossLinkOnUnverifiedEmail(t *testing.T) {
 	}
 }
 
+func TestSigninBindsRCAppUserID(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "google-sub-rc", Email: "rc@example.com", EmailVerified: true}
+	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	var got *string
+	if err := svc.Pool.QueryRow(ctx, `SELECT rc_app_user_id FROM auth.users WHERE id = $1`, sess.UserID).Scan(&got); err != nil {
+		t.Fatalf("read rc_app_user_id: %v", err)
+	}
+	if got == nil || *got != sess.UserID.String() {
+		t.Fatalf("rc_app_user_id: want %s, got %v", sess.UserID, got)
+	}
+
+	// Second signin with the same identity must be a no-op — bind is idempotent.
+	if _, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"}); err != nil {
+		t.Fatalf("re-signin: %v", err)
+	}
+	var again *string
+	if err := svc.Pool.QueryRow(ctx, `SELECT rc_app_user_id FROM auth.users WHERE id = $1`, sess.UserID).Scan(&again); err != nil {
+		t.Fatalf("re-read rc_app_user_id: %v", err)
+	}
+	if again == nil || *again != sess.UserID.String() {
+		t.Fatalf("re-signin must keep binding: want %s, got %v", sess.UserID, again)
+	}
+}
+
 func TestRefreshRotationAndReplay(t *testing.T) {
 	svc, _ := boot(t)
 	ctx := context.Background()

@@ -181,6 +181,14 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 	if err != nil {
 		return nil, fmt.Errorf("signin %s: %w", provider, err)
 	}
+	// Mobile-side Purchases.logIn(JWT sub) makes appUserID == userID.
+	// Idempotent UPDATE — only writes when the column is NULL, so
+	// subsequent signins are a no-op. Without this, the RC webhook's
+	// UPDATE WHERE rc_app_user_id = ... never matches and the row
+	// gets stamped orphaned_no_link by the 7-day sweep.
+	if err := s.Users.BindRCAppUserID(ctx, nil, userID, userID.String()); err != nil {
+		return nil, fmt.Errorf("signin %s: bind rc: %w", provider, err)
+	}
 	return s.issueSession(ctx, userID, false, in.DeviceID)
 }
 
