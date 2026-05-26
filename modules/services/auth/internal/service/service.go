@@ -373,29 +373,13 @@ func (s *Service) Signout(ctx context.Context, refreshToken string) error {
 
 // ─── /auth/me ───────────────────────────────────────────────────────────────
 
-type MeResponse struct {
-	UserID     uuid.UUID    `json:"userId"`
-	Email      *string      `json:"email"`
-	Name       *string      `json:"name"`
-	PictureURL *string      `json:"pictureUrl"`
-	Anonymous  bool         `json:"anonymous"`
-	Identities []MeIdentity `json:"identities"`
-	CreatedAt  time.Time    `json:"createdAt"`
-	// Subscription state mirrored from RevenueCat. Clients hit /auth/me
-	// on app foreground; if `tier` here differs from what's in their
-	// cached access JWT they force-refresh tokens to pull the new value
-	// without waiting for the natural 15-min expiry.
-	Tier          string     `json:"tier"`
-	TierExpiresAt *time.Time `json:"tierExpiresAt,omitempty"`
-}
-
-type MeIdentity struct {
-	Provider      string    `json:"provider"`
-	Subject       string    `json:"subject"`
-	Email         *string   `json:"email"`
-	EmailVerified bool      `json:"emailVerified"`
-	CreatedAt     time.Time `json:"createdAt"`
-}
+// MeResponse and MeIdentity are the wire types of /auth/me. They are
+// thin re-exports of profile.MeUser / profile.MeIdentity so the policy
+// package owns the single source of truth for the response shape.
+// Existing handler code constructs neither directly — Me() builds them
+// via ProfilePolicy.ProjectMe.
+type MeResponse = profile.MeUser
+type MeIdentity = profile.MeIdentity
 
 func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error) {
 	u, err := s.Users.Get(ctx, userID)
@@ -429,26 +413,39 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 	if tier == TierPro && u.TierExpiresAt != nil && !u.TierExpiresAt.After(time.Now().UTC()) {
 		tier = TierFree
 	}
-	resp := &MeResponse{
+
+	src := profile.SourceUser{
 		UserID:        u.ID,
-		Email:         email,
-		Name:          u.Name,
-		PictureURL:    u.PictureURL,
 		Anonymous:     anonymous,
 		CreatedAt:     u.CreatedAt,
 		Tier:          tier,
 		TierExpiresAt: u.TierExpiresAt,
+		Email:         derefStr(email),
+		Name:          derefStr(u.Name),
+		PictureURL:    derefStr(u.PictureURL),
+		// Locale column not yet on auth.users (PR-1.5e); empty string
+		// causes ProjectMe to omit the field regardless of policy.
+		Locale: "",
 	}
+	src.Identities = make([]profile.SourceIdentity, 0, len(idents))
 	for _, i := range idents {
-		resp.Identities = append(resp.Identities, MeIdentity{
+		src.Identities = append(src.Identities, profile.SourceIdentity{
 			Provider:      i.Provider,
 			Subject:       i.Subject,
-			Email:         i.Email,
+			Email:         derefStr(i.Email),
 			EmailVerified: i.EmailVerified,
 			CreatedAt:     i.CreatedAt,
 		})
 	}
-	return resp, nil
+	resp := s.ProfilePolicy.ProjectMe(src)
+	return &resp, nil
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // ─── Account delete ─────────────────────────────────────────────────────────
