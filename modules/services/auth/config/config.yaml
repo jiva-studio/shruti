@@ -15,21 +15,19 @@ profile_collection:
   # Each optional field declares `enabled` and a `purpose`. When
   # `enabled: false`, the field is NEVER written from OAuth callbacks,
   # NEVER returned by /auth/me, and NEVER included in JWT claims.
+  #
+  # Only fields actually returned by an OAuth provider (Google / Apple)
+  # are listed. Speculative slots (phone, device_id, locale, last_seen_at)
+  # were dropped — reserving PII columns for hypothetical future use was
+  # the wrong shape. When a real consumer appears, add the field here
+  # AND in the schema AND in the OAuth filter together.
   profiles:
     global:
-      email:        { enabled: true,  purpose: "account recovery, billing receipts" }
-      name:         { enabled: true,  purpose: "personalised greeting" }
-      avatar_url:   { enabled: true,  purpose: "profile picture display" }
-      locale:       { enabled: true,  purpose: "content language preference" }
-      device_id:    { enabled: true,  purpose: "anti-abuse on anonymous bootstrap" }
-      last_seen_at: { enabled: true,  purpose: "inactive-account cleanup" }
-      phone:        { enabled: false, purpose: "" }
+      email:      { enabled: true, purpose: "account recovery, billing receipts" }
+      name:       { enabled: true, purpose: "personalised greeting" }
+      avatar_url: { enabled: true, purpose: "profile picture display" }
 
     ru:
-      email:        { enabled: false, purpose: "" }
-      name:         { enabled: false, purpose: "" }
-      avatar_url:   { enabled: false, purpose: "" }
-      locale:       { enabled: true,  purpose: "RU/EN content selection" }
-      device_id:    { enabled: true,  purpose: "anti-abuse" }
-      last_seen_at: { enabled: false, purpose: "" }
-      phone:        { enabled: false, purpose: "" }
+      email:      { enabled: false, purpose: "" }
+      name:       { enabled: false, purpose: "" }
+      avatar_url: { enabled: false, purpose: "" }

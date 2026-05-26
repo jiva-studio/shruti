@@ -62,7 +62,7 @@ func main() {
 	slog.Info("profile_policy_loaded", "profile", cfg.Profile,
 		"email_enabled", profilePolicy.Email.Enabled,
 		"name_enabled", profilePolicy.Name.Enabled,
-		"locale_enabled", profilePolicy.Locale.Enabled)
+		"avatar_enabled", profilePolicy.AvatarURL.Enabled)
 
 	bootCtx, bootCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer bootCancel()
