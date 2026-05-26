@@ -53,6 +53,8 @@
   <li><strong>Optional feedback</strong> — if you tap thumbs-up / thumbs-down on a reply, that rating is stored alongside the corresponding turn.</li>
 </ul>
 <p>Chat traffic is routed through <strong>OpenRouter, Inc.</strong> (the LLM gateway) to <strong>Google Gemini</strong> models operated by Google. No other LLM provider currently receives your chat messages. Chat content is used solely to produce the reply you see and to improve the quality of the feature; it is not used for advertising or profiling.</p>
+<p>To find the lecture excerpts relevant to your question, the text of your message is also passed through OpenRouter to <strong>OpenAI's</strong> <code>text-embedding-3-small</code> model, which converts the text into a numerical vector used for semantic search over the lecture library. Only the message text is sent; no account identifiers, history, or device data accompany the embedding request.</p>
+<p>We additionally record each chat turn — your message, the retrieved excerpts, the model's reply, and timing information — into <strong>Langfuse</strong>, an open-source observability tool we run on our own infrastructure. Langfuse is used solely to debug answer quality and to investigate failures. The data does not leave our servers and is not shared with any third party.</p>
 
 <strong class="section">Diagnostic logs and chat records</strong>
 <p>To keep the service running and to improve answer quality, the Application's backend keeps:</p>
@@ -67,10 +69,11 @@
 <ul>
   <li><strong>RevenueCat, Inc.</strong> (subscriptions) — verifies in-app purchases, manages entitlements, and powers the restore-purchase flow. Receives the purchase receipt and an anonymous random identifier minted on your device (<code>$RCAnonymousID:...</code>). This identifier is <em>not</em> linked to your Lectorium account id, name, or email. <a href="https://www.revenuecat.com/privacy">RevenueCat Privacy Policy</a>.</li>
   <li><strong>Apple Inc.</strong> (on iOS) and <strong>Google LLC</strong> (on Android) — process the actual purchase transaction and issue the verification receipts. <strong>Apple</strong> additionally provides the Sign in with Apple flow when you choose it. <strong>Google</strong> additionally provides the Sign in with Google flow when you choose it. Their handling of this data is governed by their respective privacy policies.</li>
-  <li><strong>OpenRouter, Inc.</strong> (in-app chat) — LLM gateway that forwards your chat prompts and the retrieved lecture excerpts from our backend to the underlying model provider, and returns the reply. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
+  <li><strong>OpenRouter, Inc.</strong> (in-app chat) — LLM gateway that forwards your chat prompts and the retrieved lecture excerpts from our backend to the underlying model provider, and returns the reply. Also routes embedding requests to OpenAI for semantic search over the lecture library. <a href="https://openrouter.ai/privacy">OpenRouter Privacy Policy</a>.</li>
   <li><strong>Google LLC</strong> (in-app chat) — operates the Google Gemini models that currently generate the chat reply downstream of OpenRouter. <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
+  <li><strong>OpenAI, L.L.C.</strong> (in-app chat) — operates the <code>text-embedding-3-small</code> model that converts your chat message into a search vector used to retrieve relevant lecture excerpts. Reached through OpenRouter; only the message text is sent. <a href="https://openai.com/policies/privacy-policy">OpenAI Privacy Policy</a>.</li>
 </ul>
-<p>Our own diagnostic logs and chat records run on infrastructure we operate ourselves — they are <em>not</em> third-party sub-processors.</p>
+<p>Our own diagnostic logs, chat records, and Langfuse observability traces run on infrastructure we operate ourselves — they are <em>not</em> third-party sub-processors.</p>
 
 <strong class="section">Anonymous use</strong>
 <p>If you use the app without signing in, we still need a stable device-only identifier to recognise you across sessions (for example, to remember your subscription receipts). That identifier and any server-side data tied to it are automatically deleted after 12 months of inactivity. If you sign in at any point, this data becomes part of your account and is governed by the <em>Account deletion</em> rules below.</p>
