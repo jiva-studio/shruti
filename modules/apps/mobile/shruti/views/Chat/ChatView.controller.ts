@@ -249,19 +249,19 @@ export function useChatController(): ChatControllerReturn {
    * free-form session and dispatches the question immediately — the
    * user must NEVER see the prompt flash into the input bar.
    *
-   * Order matters: clear any current session, create the session row
-   * + claim the id via `ensureActiveSession`, push the URL so the
-   * route watcher's idempotent `openSession(activeSessionId)` is a
-   * no-op, THEN kick off the streaming turn. Two quick taps yield two
-   * separate sessions because the first tap leaves `activeSessionId`
-   * populated only briefly — `startNewSession()` at the top of the
-   * second handler resets it before the next `ensureActiveSession`
-   * runs.
+   * Single source of session creation: we just reset state and call
+   * `sendMessage`, which calls `ensureActiveSession` once and writes
+   * the row. The URL is synced afterwards by the `activeSessionId`
+   * watcher below. The previous shape (pre-create here + sendMessage
+   * re-calls `ensureActiveSession`) was ostensibly idempotent on the
+   * second call, but any race that nulled `activeSessionId` between
+   * the two awaits (route-watcher reset, re-mount during the Ionic
+   * stack transition, anonymous→signed-in switch firing
+   * `resetComposeLock` mid-await) produced a duplicate empty session
+   * — and the user saw both in history.
    */
   async function onPickSuggestion(text: string): Promise<void> {
     store.startNewSession()
-    const sessionId = await store.ensureActiveSession(text)
-    await router.push({ name: "chat-session", params: { sessionId } })
     void store.sendMessage(text)
   }
 
@@ -424,6 +424,27 @@ export function useChatController(): ChatControllerReturn {
     () => route?.params?.sessionId,
     () => {
       void ensureSessionFromRoute()
+    }
+  )
+
+  /**
+   * URL sync — when `sendMessage` mints a session while we're on the
+   * chat home (no `sessionId` in the URL — pill tap or first-message
+   * direct-input send), promote the URL to `chat-session/:id` so the
+   * session has a real route, history-back lands on the empty home,
+   * and the route-watcher above stops resetting the store on the next
+   * tick. We can't navigate inside the store, and we don't want to
+   * pre-create a session in the controller (the previous shape did
+   * that and produced duplicates under racing awaits — see
+   * `onPickSuggestion` above), so the cleanest path is to react to the
+   * store's own activeSessionId.
+   */
+  watch(
+    () => store.activeSessionId,
+    (id) => {
+      if (id && route?.name === "chat") {
+        void router.replace({ name: "chat-session", params: { sessionId: id } })
+      }
     }
   )
 
