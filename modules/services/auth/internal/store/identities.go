@@ -11,10 +11,15 @@ import (
 )
 
 type Identity struct {
-	Provider      string
-	Subject       string
-	UserID        uuid.UUID
-	Email         *string
+	Provider string
+	Subject  string
+	UserID   uuid.UUID
+	Email    *string
+	// EmailVerified is exposed as a plain bool to keep service.go and
+	// the JWT claim builder simple. The underlying column is nullable
+	// after migration 0029 (a region that disables email collection
+	// writes NULL); scans coerce NULL → false here. PR-1.5b will use
+	// the EmailVerifiedNull helper when it needs to write NULL.
 	EmailVerified bool
 	CreatedAt     time.Time
 }
@@ -29,11 +34,15 @@ func (r *IdentityRepo) Get(ctx context.Context, provider, subject string) (*Iden
 		provider, subject,
 	)
 	i := &Identity{}
-	if err := row.Scan(&i.Provider, &i.Subject, &i.UserID, &i.Email, &i.EmailVerified, &i.CreatedAt); err != nil {
+	var verified *bool
+	if err := row.Scan(&i.Provider, &i.Subject, &i.UserID, &i.Email, &verified, &i.CreatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if verified != nil {
+		i.EmailVerified = *verified
 	}
 	return i, nil
 }
@@ -99,8 +108,12 @@ func (r *IdentityRepo) ListForUser(ctx context.Context, userID uuid.UUID) ([]Ide
 	var out []Identity
 	for rows.Next() {
 		var i Identity
-		if err := rows.Scan(&i.Provider, &i.Subject, &i.UserID, &i.Email, &i.EmailVerified, &i.CreatedAt); err != nil {
+		var verified *bool
+		if err := rows.Scan(&i.Provider, &i.Subject, &i.UserID, &i.Email, &verified, &i.CreatedAt); err != nil {
 			return nil, err
+		}
+		if verified != nil {
+			i.EmailVerified = *verified
 		}
 		out = append(out, i)
 	}

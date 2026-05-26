@@ -18,12 +18,15 @@ type FieldPolicy struct {
 
 // ProfilePolicy is the collection-policy resolved for the current
 // deployment. Selected by name from config.yaml at boot.
+//
+// Only fields that correspond to data actually returned by an OAuth
+// provider (Google / Apple) and persisted on auth.users / auth.identities
+// are tracked here. Speculative slots (phone, device_id, locale,
+// last_seen_at) live in code only when a concrete consumer is added —
+// reserving PII columns "for later" was a wrong-shape decision and got
+// reverted in this PR.
 type ProfilePolicy struct {
-	Email      FieldPolicy `yaml:"email"`
-	Name       FieldPolicy `yaml:"name"`
-	AvatarURL  FieldPolicy `yaml:"avatar_url"`
-	Locale     FieldPolicy `yaml:"locale"`
-	DeviceID   FieldPolicy `yaml:"device_id"`
-	LastSeenAt FieldPolicy `yaml:"last_seen_at"`
-	Phone      FieldPolicy `yaml:"phone"`
+	Email     FieldPolicy `yaml:"email"`
+	Name      FieldPolicy `yaml:"name"`
+	AvatarURL FieldPolicy `yaml:"avatar_url"`
 }

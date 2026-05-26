@@ -20,10 +20,10 @@ type User struct {
 	// nil for users who never had Pro. Updated by the webhook handler
 	// (Phase 2) and the reconciliation cron (Phase 8); the JWT signer
 	// reads `Tier` at session issuance and embeds it as a claim.
-	Tier            string
-	TierExpiresAt   *time.Time
-	TierUpdatedAt   *time.Time
-	RCAppUserID     *string
+	Tier          string
+	TierExpiresAt *time.Time
+	TierUpdatedAt *time.Time
+	RCAppUserID   *string
 }
 
 type UserRepo struct{ Pool *pgxpool.Pool }
