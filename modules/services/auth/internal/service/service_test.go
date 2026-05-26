@@ -18,9 +18,23 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/akdasa-studios/lectorium/auth/internal/jwt"
+	"github.com/akdasa-studios/lectorium/auth/internal/profile"
 	"github.com/akdasa-studios/lectorium/auth/internal/providers"
 	"github.com/akdasa-studios/lectorium/auth/internal/store"
 )
+
+// globalPolicy mirrors the default `PROFILE=global` deployment: email,
+// name, avatar all collected. Existing service tests assume this shape
+// (cross-link by verified email, name/picture written to auth.users).
+// Use this in boot() so the existing behavioral contract is preserved
+// byte-for-byte under the new policy boundary.
+func globalPolicy() profile.ProfilePolicy {
+	return profile.ProfilePolicy{
+		Email:     profile.FieldPolicy{Enabled: true},
+		Name:      profile.FieldPolicy{Enabled: true},
+		AvatarURL: profile.FieldPolicy{Enabled: true},
+	}
+}
 
 // dbDSNFromEnv returns the dev/test DSN. If not set, the test skips with a
 // clear message — the suite needs a real Postgres.
@@ -124,7 +138,22 @@ func boot(t *testing.T) (*Service, *stubVerifier) {
 		Verifier:       verifier,
 		GoogleVerifier: stub,
 		AppleVerifier:  stub,
+		// Default to the `global` collection policy (email + name +
+		// avatar enabled) — existing tests written before policy
+		// gating depend on this shape. RU-policy scenarios opt in
+		// explicitly via bootWithPolicy.
+		ProfilePolicy: globalPolicy(),
 	}
+	return svc, stub
+}
+
+// bootWithPolicy is boot() with a custom ProfilePolicy. Use for tests
+// that exercise non-default collection rules (e.g. PROFILE=ru where
+// email/name/avatar are suppressed).
+func bootWithPolicy(t *testing.T, p profile.ProfilePolicy) (*Service, *stubVerifier) {
+	t.Helper()
+	svc, stub := boot(t)
+	svc.ProfilePolicy = p
 	return svc, stub
 }
 
@@ -654,6 +683,144 @@ func TestLookupSigninMiss(t *testing.T) {
 	}
 	if res.Exists {
 		t.Errorf("expected miss, got %+v", res)
+	}
+}
+
+// ─── ProfilePolicy.FromOAuth — write-path gating ──────────────────────────
+
+// TestSigninRuProfileDropsPIIOnWrite: with PROFILE=ru (email/name/avatar
+// suppressed), Google signin must persist provider+subject but NOT
+// email, name, or picture_url. Identity row's email column is NULL;
+// auth.users.name and picture_url are NULL too.
+func TestSigninRuProfileDropsPIIOnWrite(t *testing.T) {
+	ruPolicy := profile.ProfilePolicy{
+		Email:     profile.FieldPolicy{Enabled: false},
+		Name:      profile.FieldPolicy{Enabled: false},
+		AvatarURL: profile.FieldPolicy{Enabled: false},
+	}
+	svc, stub := bootWithPolicy(t, ruPolicy)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{
+		Subject:       "google-ru-1",
+		Email:         "person@example.com",
+		EmailVerified: true,
+		Name:          "Alice Anonymous",
+		PictureURL:    "https://example.test/avatar.png",
+	}
+	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	// identities row: email IS NULL, email_verified=false, but
+	// provider+subject survived (needed for the next signin to bind).
+	var (
+		email         *string
+		emailVerified bool
+	)
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT email, email_verified FROM auth.identities
+		  WHERE user_id = $1 AND provider = 'google'`,
+		sess.UserID,
+	).Scan(&email, &emailVerified); err != nil {
+		t.Fatalf("read identity: %v", err)
+	}
+	if email != nil {
+		t.Errorf("ru profile must drop email on insert, got %q", *email)
+	}
+	if emailVerified {
+		t.Error("ru profile must drop email_verified on insert")
+	}
+
+	// auth.users.name and picture_url: both NULL.
+	u, err := svc.Users.Get(ctx, sess.UserID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if u.Name != nil {
+		t.Errorf("ru profile must drop name on insert, got %q", *u.Name)
+	}
+	if u.PictureURL != nil {
+		t.Errorf("ru profile must drop picture_url on insert, got %q", *u.PictureURL)
+	}
+}
+
+// TestSigninRuProfileSkipsVerifiedEmailCrossLink: with email collection
+// disabled, two providers on the same human email do NOT cross-link.
+// They become two separate accounts. Acceptable per locked decision.
+func TestSigninRuProfileSkipsVerifiedEmailCrossLink(t *testing.T) {
+	ruPolicy := profile.ProfilePolicy{
+		Email:     profile.FieldPolicy{Enabled: false},
+		Name:      profile.FieldPolicy{Enabled: false},
+		AvatarURL: profile.FieldPolicy{Enabled: false},
+	}
+	svc, stub := bootWithPolicy(t, ruPolicy)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{Subject: "google-ru-2", Email: "shared@example.com", EmailVerified: true}
+	g, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("google: %v", err)
+	}
+
+	stub.Want = providers.Identity{Subject: "apple-ru-2", Email: "shared@example.com", EmailVerified: true}
+	a, err := svc.SigninApple(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("apple: %v", err)
+	}
+	if a.UserID == g.UserID {
+		t.Error("ru profile must NOT cross-link by email; expected two separate users")
+	}
+}
+
+// TestSigninGlobalProfileWritesAreByteIdentical: with the default
+// global policy (all enabled), the persisted shape matches the pre-
+// policy baseline. Email, name, picture_url all land in their columns
+// exactly like before.
+func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
+	svc, stub := boot(t) // globalPolicy() by default
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{
+		Subject:       "google-global-1",
+		Email:         "gp@example.com",
+		EmailVerified: true,
+		Name:          "Global Person",
+		PictureURL:    "https://example.test/gp.png",
+	}
+	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	var (
+		email         *string
+		emailVerified bool
+	)
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT email, email_verified FROM auth.identities
+		  WHERE user_id = $1 AND provider = 'google'`,
+		sess.UserID,
+	).Scan(&email, &emailVerified); err != nil {
+		t.Fatalf("read identity: %v", err)
+	}
+	if email == nil || *email != "gp@example.com" {
+		t.Errorf("global profile must persist email, got %v", email)
+	}
+	if !emailVerified {
+		t.Error("global profile must persist email_verified=true")
+	}
+
+	u, err := svc.Users.Get(ctx, sess.UserID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if u.Name == nil || *u.Name != "Global Person" {
+		t.Errorf("global profile must persist name, got %v", u.Name)
+	}
+	if u.PictureURL == nil || *u.PictureURL != "https://example.test/gp.png" {
+		t.Errorf("global profile must persist picture_url, got %v", u.PictureURL)
 	}
 }
 
