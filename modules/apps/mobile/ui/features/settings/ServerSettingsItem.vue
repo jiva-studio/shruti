@@ -5,7 +5,7 @@
     </IconChip>
 
     <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.server.title") }}</h2>
+      <h2>{{ $t("settings.accountRegion.title") }}</h2>
       <p>{{ currentTitle }}</p>
     </IonLabel>
   </IonItem>
@@ -13,7 +13,7 @@
   <ListItemSelectorDialog
     v-model:open="open"
     :value="value"
-    :title="$t('settings.server.title')"
+    :title="$t('settings.accountRegion.title')"
     :items="items"
     :allow-empty="false"
     @close="open = false"

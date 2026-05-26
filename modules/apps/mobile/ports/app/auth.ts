@@ -55,6 +55,14 @@ export interface AuthSession {
    * to the bucket the server's limiter actually keys on.
    */
   quotaId: string
+  /**
+   * Server-authoritative region the user belongs to (mirror of
+   * auth.users.home_region; "global" | "russia" | …). Set from
+   * `/auth/me` on every fresh fetch — the composition root reconciles
+   * its local `activeServer.id` against this when they disagree.
+   * Empty string only on the very first call before /auth/me lands.
+   */
+  homeRegion: string
 }
 
 /**
@@ -222,6 +230,14 @@ export interface AuthConfig {
    * tests / web stubs ergonomic — production wiring always sets it.
    */
   onMigrationCompleted?: (newRegionId: string, sourceRegionId: string, sourceBearer: string) => void
+  /**
+   * Fired after every fresh `/auth/me` when the server's authoritative
+   * `homeRegion` disagrees with `currentRegionId()`. The adapter does
+   * NOT mutate state itself — the composition root decides whether to
+   * flip `activeServer`, log only, or ignore (e.g. when the server's
+   * region is an id the build doesn't ship). Optional only for tests.
+   */
+  onHomeRegionMismatch?: (serverRegion: string, localRegion: string) => void
   /** Google OAuth web client ID (used by capgo on Android & Web). */
   googleWebClientId: string
   /** Google OAuth iOS client ID. */

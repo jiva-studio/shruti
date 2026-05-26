@@ -37,6 +37,7 @@ func fullSource() SourceUser {
 		Email:         "alice@example.com",
 		Name:          "Alice",
 		PictureURL:    "https://cdn.example/alice.png",
+		HomeRegion:    "global",
 		Identities: []SourceIdentity{
 			{
 				Provider:      "google",
@@ -86,6 +87,9 @@ func TestProjectMe_GlobalProfileRetainsAllFields(t *testing.T) {
 	}
 	if !out.Identities[0].EmailVerified {
 		t.Errorf("identity emailVerified dropped")
+	}
+	if out.HomeRegion != "global" {
+		t.Errorf("homeRegion dropped: %q", out.HomeRegion)
 	}
 }
 
@@ -216,6 +220,40 @@ func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 		if !strings.Contains(s, key) {
 			t.Errorf("ru profile must still emit %q (just as null) in %q", key, s)
 		}
+	}
+}
+
+func TestProjectMe_HomeRegionPassesThroughUnderEveryPolicy(t *testing.T) {
+	// HomeRegion is server-authoritative metadata: mobile uses it to
+	// reconcile its local activeServer choice with reality. It must
+	// ride through both the global and ru policies unchanged.
+	cases := []struct {
+		name   string
+		policy ProfilePolicy
+		region string
+	}{
+		{"global-policy/global", globalProfile(), "global"},
+		{"global-policy/russia", globalProfile(), "russia"},
+		{"ru-policy/russia", ruProfile(), "russia"},
+		{"ru-policy/global", ruProfile(), "global"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := fullSource()
+			src.HomeRegion = tc.region
+			out := tc.policy.ProjectMe(src)
+			if out.HomeRegion != tc.region {
+				t.Errorf("homeRegion=%q, want %q", out.HomeRegion, tc.region)
+			}
+			j, err := json.Marshal(out)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			want := `"homeRegion":"` + tc.region + `"`
+			if !strings.Contains(string(j), want) {
+				t.Errorf("expected %s in %s", want, string(j))
+			}
+		})
 	}
 }
 

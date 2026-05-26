@@ -471,6 +471,7 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 		Email:      derefStr(email),
 		Name:       derefStr(u.Name),
 		PictureURL: derefStr(u.PictureURL),
+		HomeRegion: u.HomeRegion,
 	}
 	src.Identities = make([]profile.SourceIdentity, 0, len(idents))
 	for _, i := range idents {

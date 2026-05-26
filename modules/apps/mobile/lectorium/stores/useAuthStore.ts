@@ -36,6 +36,10 @@ export const useAuthStore = defineStore("auth", () => {
   // Empty string on pre-PR-1 tokens still in flight; consumers must
   // treat "" as "no quota_id yet" and skip persistence.
   const quotaId = ref<string>("")
+  // Server-authoritative region (auth.users.home_region). Empty string
+  // until the first /auth/me lands; consumers should treat "" as "no
+  // server truth yet" and avoid asserting region drift on it.
+  const homeRegion = ref<string>("")
 
   // Public tier. Coerces a "pro" with a past expiry back to "free" so a
   // stale auth-cached value (dropped EXPIRATION webhook) can't keep the
@@ -91,6 +95,7 @@ export const useAuthStore = defineStore("auth", () => {
       rawTier.value = s.tier || "free"
       tierExpiresAt.value = s.tierExpiresAt ?? null
       quotaId.value = s.quotaId ?? ""
+      homeRegion.value = s.homeRegion ?? ""
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
@@ -101,6 +106,7 @@ export const useAuthStore = defineStore("auth", () => {
       rawTier.value = "free"
       tierExpiresAt.value = null
       quotaId.value = ""
+      homeRegion.value = ""
       status.value = "uninitialized"
     }
   }
@@ -389,6 +395,7 @@ export const useAuthStore = defineStore("auth", () => {
     rawTier,
     tierExpiresAt,
     quotaId,
+    homeRegion,
     isPro,
     signedIn,
     restore,
