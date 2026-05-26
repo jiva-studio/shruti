@@ -16,6 +16,11 @@ FROM scratch
 COPY --from=build /out/auth /auth
 # CA roots so /auth can hit Google/Apple JWKS over TLS.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Profile-collection policy config — read at boot from CONFIG_PATH
+# (default /etc/lectorium/auth/config.yaml). PR-1.5a shipped the file
+# in the repo but missed wiring it into the image; without this COPY
+# the binary fail-boots in prod with profile_policy_load_failed.
+COPY services/auth/config/config.yaml /etc/lectorium/auth/config.yaml
 # Migrations are embedded in the binary via go:embed — nothing to COPY.
 # Build stamps surfaced on /healthz — CI passes both as --build-arg.
 ARG LECTORIUM_BUILD_SHA=dev
