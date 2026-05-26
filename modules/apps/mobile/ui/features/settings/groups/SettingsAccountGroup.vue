@@ -206,8 +206,11 @@ function handleDeleteAccount(): void {
    class still supplies the background, border-radius and ion-item slot
    alignment, so the avatar lines up pixel-perfect with neighbouring rows. */
 .account-avatar {
-  width: 32px;
-  height: 32px;
+  /* Neighbour chips render a default-sized (24px) Tabler icon inside
+     6px padding → 36×36 outer. The 32×32 we had before made the
+     portrait read as visibly undersized next to those rows. */
+  width: 36px;
+  height: 36px;
   padding: 0;
   overflow: hidden;
 }

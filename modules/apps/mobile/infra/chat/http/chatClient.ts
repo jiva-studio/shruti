@@ -799,7 +799,20 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
         label,
       }
     }
-    case "error":
+    case "error": {
+      // Phase-4 rate-limit responses also carry `tier` + `resets_at_epoch`
+      // (both inline 429 JSON and the SSE error event). Without them the
+      // bubble falls all the way through the tier ladder and lands on the
+      // generic "Не удалось получить ответ" / `errUnknown` copy — the user
+      // sees a confusing "failed" message, taps Retry, and only then sees
+      // the real "daily limit" reason.
+      const tier = typeof payload.tier === "string" ? payload.tier : undefined
+      const resetsAtEpoch =
+        typeof payload.resets_at_epoch === "number"
+          ? payload.resets_at_epoch
+          : typeof payload.resetsAtEpoch === "number"
+            ? payload.resetsAtEpoch
+            : undefined
       return {
         type: "error",
         code: typeof payload.code === "string" ? payload.code : "unknown",
@@ -810,7 +823,10 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
             : typeof payload.retryAfter === "number"
               ? payload.retryAfter
               : undefined,
+        ...(tier !== undefined ? { tier } : {}),
+        ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
       }
+    }
     default:
       console.warn("[chat] unknown sse event:", name)
       return null

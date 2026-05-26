@@ -193,6 +193,26 @@ export const useAuthStore = defineStore("auth", () => {
     }
   }
 
+  /**
+   * Post-signin tier sync. The session we just got back may still
+   * carry a pre-purchase tier claim — the RC webhook can land seconds
+   * AFTER the SSO provider returns, so the freshly-minted JWT may say
+   * "free" while the server already knows the user is Pro. Without
+   * this, the user's next chat send goes out under the stale claim →
+   * server 429s with tier=free even though the subscription is active,
+   * and the only way out is an app restart that re-bootstraps
+   * `/auth/me`.
+   *
+   * Invalidate `lastSyncAt` so the very next `ensureFresh()` (from the
+   * chat composer) actually hits the network instead of short-
+   * circuiting on the 5-min cache, and proactively kick a background
+   * sync now so the JWT catches up before the user taps Send.
+   */
+  function invalidateAndSyncAfterSignin(): void {
+    lastSyncAt = 0
+    void ensureFresh()
+  }
+
   async function signInGoogle(): Promise<boolean> {
     const auth = useLectorium().auth
     status.value = "signingIn"
@@ -204,6 +224,7 @@ export const useAuthStore = defineStore("auth", () => {
         return false
       }
       applySession(session)
+      invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
       console.error("[auth] google sign-in failed:", e)
@@ -222,6 +243,7 @@ export const useAuthStore = defineStore("auth", () => {
         return false
       }
       applySession(session)
+      invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
       console.error("[auth] apple sign-in failed:", e)
