@@ -72,7 +72,7 @@
     </IonLabel>
   </IonItem>
 
-  <ServerSettingsItem v-model="activeServerId" :items="serverItems" />
+  <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
 
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
 
@@ -106,6 +106,9 @@ const props = defineProps<{
   picture: string | null
   isSubscribed: boolean
   serverItems: SelectorItem[]
+  /** Currently-active region id. Read-only from this component's
+   *  perspective — changes flow through `request-region-change`. */
+  activeServerId: string
 }>()
 
 const emit = defineEmits<{
@@ -119,9 +122,27 @@ const emit = defineEmits<{
   "open-paywall": []
   "manage-subscription": []
   "delete-account": [opts: { wipeLocal: boolean }]
+  /**
+   * User selected a new region. Parent runs the confirm dialog +
+   * migration flow (signed-in) or signOut+reboot (anonymous). The
+   * activeServer flip is the parent's job; this component never
+   * mutates region state directly.
+   */
+  "request-region-change": [newRegionId: string]
 }>()
 
-const activeServerId = defineModel<string>("activeServerId", { required: true })
+// Proxy bound to ServerSettingsItem's v-model. Reads pass through to
+// the active id so the selector dialog highlights the current region;
+// writes get intercepted — they emit `request-region-change` instead
+// of mutating anything locally. The parent runs the confirm/migration
+// flow and flips activeServer once the destination region is live.
+const activeServerIdProxy = computed<string>({
+  get: () => props.activeServerId,
+  set: (next) => {
+    if (next === props.activeServerId) return
+    emit("request-region-change", next)
+  },
+})
 
 const { t } = useI18n()
 const busy = ref(false)

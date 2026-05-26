@@ -1,7 +1,7 @@
 <template>
   <AppPage :reserve-player-space="player.open">
     <SettingsAccountGroup
-      v-model:active-server-id="activeServerId"
+      :active-server-id="activeServerId"
       :anonymous="auth.anonymous"
       :email="auth.email"
       :name="auth.name"
@@ -13,6 +13,7 @@
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
       @delete-account="onDeleteAccountConfirm"
+      @request-region-change="onRequestRegionChange"
     />
 
     <SettingsAppearanceGroup
@@ -76,6 +77,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
+import { alertController, loadingController, toastController } from "@ionic/vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAccountGroup,
@@ -88,6 +90,7 @@ import {
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
+import { useShruti } from "@shruti/shruti.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
@@ -100,6 +103,7 @@ import { useSettingsController } from "./SettingsView.controller.js"
 const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
+const shruti = useShruti()
 const i18n = useI18n()
 const { t } = i18n
 const toast = useToast()
@@ -168,6 +172,94 @@ async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<voi
     }
     await toast.error(t(key))
     return
+  }
+}
+
+async function onRequestRegionChange(newRegionId: string): Promise<void> {
+  // Same-region tap shouldn't even reach here (the proxy in
+  // SettingsAccountGroup guards), but be defensive.
+  if (newRegionId === shruti.activeServer.value.id) return
+  const newRegionName = serverItems.find((s) => s.id === newRegionId)?.title ?? newRegionId
+
+  if (auth.anonymous) {
+    // Anonymous: confirm → signOut → switch active server → re-bootstrap
+    // anonymous in the new region. No migrate-in; the destination's
+    // /auth/anonymous mints a brand-new device-keyed user. The old
+    // anonymous user ages out via the source's anon TTL cron.
+    const dlg = await alertController.create({
+      header: t("settings.regionMigration.confirmAnonymous.title"),
+      message: t("settings.regionMigration.confirmAnonymous.message", {
+        region: newRegionName,
+      }),
+      buttons: [
+        {
+          text: t("settings.regionMigration.confirmAnonymous.cancel"),
+          role: "cancel",
+        },
+        {
+          text: t("settings.regionMigration.confirmAnonymous.confirm"),
+          role: "confirm",
+        },
+      ],
+    })
+    await dlg.present()
+    const { role } = await dlg.onDidDismiss()
+    if (role !== "confirm") return
+    await auth.signOut()
+    shruti.setActiveServerById(newRegionId)
+    // signOut already triggers an anonymous re-bootstrap via
+    // restore(); explicit restore here would double-bootstrap.
+    return
+  }
+
+  // Signed-in: confirm → progress spinner → migrateToRegion →
+  // success/failure toast. activeServerId v-model flip happens inside
+  // the port's onMigrationCompleted callback (composition root); we
+  // don't touch the model directly.
+  const dlg = await alertController.create({
+    header: t("settings.regionMigration.confirmSignedIn.title", {
+      region: newRegionName,
+    }),
+    message: t("settings.regionMigration.confirmSignedIn.message", {
+      region: newRegionName,
+    }),
+    buttons: [
+      {
+        text: t("settings.regionMigration.confirmSignedIn.cancel"),
+        role: "cancel",
+      },
+      {
+        text: t("settings.regionMigration.confirmSignedIn.confirm"),
+        role: "confirm",
+      },
+    ],
+  })
+  await dlg.present()
+  const { role } = await dlg.onDidDismiss()
+  if (role !== "confirm") return
+
+  const loading = await loadingController.create({
+    message: t("settings.regionMigration.inProgress"),
+  })
+  await loading.present()
+  let result
+  try {
+    result = await auth.migrateToRegion(newRegionId)
+  } finally {
+    await loading.dismiss()
+  }
+  if (result.ok) {
+    const ok = await toastController.create({
+      message: t("settings.regionMigration.success", { region: newRegionName }),
+      duration: 2500,
+    })
+    await ok.present()
+  } else {
+    const fail = await toastController.create({
+      message: t(`settings.regionMigration.failed.${result.code}`),
+      duration: 3500,
+    })
+    await fail.present()
   }
 }
 
