@@ -137,6 +137,28 @@ initShruti({
         void scheduledRevoke.drain()
       })
     },
+    // After every /auth/me, if the server's authoritative home region
+    // disagrees with the local `activeServer.id`, sync local to server.
+    // Server is the source of truth — local was drifting (e.g. user
+    // flipped the picker manually after a migration, or older builds
+    // never reconciled). Silently ignore unknown region ids so a server
+    // returning a region this build doesn't ship doesn't crash.
+    onHomeRegionMismatch: (serverRegion, localRegion) => {
+      const shruti = useShruti()
+      const known = shruti.appConfig.servers.some((s) => s.id === serverRegion)
+      if (!known) {
+        console.warn("[auth] home region drift (unknown to this build, ignoring)", {
+          server: serverRegion,
+          local: localRegion,
+        })
+        return
+      }
+      console.warn("[auth] home region drift; syncing local to server", {
+        server: serverRegion,
+        local: localRegion,
+      })
+      shruti.setActiveServerById(serverRegion)
+    },
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
   }),

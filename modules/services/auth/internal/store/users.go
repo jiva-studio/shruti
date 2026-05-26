@@ -24,6 +24,11 @@ type User struct {
 	TierExpiresAt *time.Time
 	TierUpdatedAt *time.Time
 	RCAppUserID   *string
+	// HomeRegion mirrors auth.users.home_region (NOT NULL DEFAULT
+	// 'global', migration 0028). Surfaces in /auth/me so the mobile
+	// client can reconcile its local activeServer choice against the
+	// server-authoritative region.
+	HomeRegion string
 }
 
 type UserRepo struct{ Pool *pgxpool.Pool }
@@ -40,12 +45,14 @@ func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
 func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 	row := r.Pool.QueryRow(ctx,
 		`SELECT id, name, picture_url, created_at,
-		        tier, tier_expires_at, tier_updated_at, rc_app_user_id
+		        tier, tier_expires_at, tier_updated_at, rc_app_user_id,
+		        home_region
 		   FROM auth.users WHERE id = $1`, id)
 	u := &User{}
 	if err := row.Scan(
 		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
 		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
+		&u.HomeRegion,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -62,12 +69,14 @@ func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 func (r *UserRepo) GetTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*User, error) {
 	row := tx.QueryRow(ctx,
 		`SELECT id, name, picture_url, created_at,
-		        tier, tier_expires_at, tier_updated_at, rc_app_user_id
+		        tier, tier_expires_at, tier_updated_at, rc_app_user_id,
+		        home_region
 		   FROM auth.users WHERE id = $1`, id)
 	u := &User{}
 	if err := row.Scan(
 		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
 		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
+		&u.HomeRegion,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

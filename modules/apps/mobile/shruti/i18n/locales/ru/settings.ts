@@ -174,9 +174,10 @@ export default {
     subtitleArchivePrefix: "архив",
   },
 
-  server: {
-    title: "Сервер",
-    description: "Сеть доставки контента",
+  accountRegion: {
+    title: "Регион аккаунта",
+    description: "Где хранится ваш аккаунт и история чата",
+    serverTruth: "Регион аккаунта: {region}",
   },
 
   regionMigration: {
