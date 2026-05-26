@@ -62,6 +62,10 @@ export interface ChatControllerReturn {
    *  composer so the placeholder can show a wall-clock reset time. */
   composeBlockedUntil: ComputedRef<number | null>
   onSend: (text: string) => Promise<void>
+  /** User tapped the stop button while a turn was streaming. Aborts
+   *  the SSE stream; the store's run loop preserves any partial
+   *  assistant prose with `meta.error.kind="stopped"`. */
+  onCancel: () => void
   onNewSession: () => void
   onOpenHistory: () => Promise<void>
   onCloseHistory: () => void
@@ -170,6 +174,14 @@ export function useChatController(): ChatControllerReturn {
     // Errors surface as inline failed-bubbles via `applyTurnEvent →
     // error` inside the store; no toast hop needed.
     await store.sendMessage(text)
+  }
+
+  function onCancel(): void {
+    // Aborts the in-flight SSE stream. Any prose already streamed is
+    // preserved by `runChatTurn`'s finalisation branch with
+    // `meta.error.kind="stopped"`; if no text landed yet the
+    // placeholder is dropped silently.
+    store.cancelStream()
   }
 
   async function onRetry(messageId: string): Promise<void> {
@@ -499,6 +511,7 @@ export function useChatController(): ChatControllerReturn {
     isComposeBlocked: computed(() => store.isComposeBlocked),
     composeBlockedUntil: computed(() => store.composeBlockedUntil),
     onSend,
+    onCancel,
     onNewSession,
     onOpenHistory,
     onCloseHistory,

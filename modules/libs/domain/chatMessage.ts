@@ -115,6 +115,13 @@ export type ChatMessageError =
        *  the Phase 4 tier-aware 429 body. Absent on older servers. */
       tier?: QuotaTier
     }
+  /** User tapped the stop button on the composer mid-stream. The
+   *  partial assistant content is preserved (intent: they wanted to
+   *  keep what they already read) and the bubble is marked so the UI
+   *  can render a neutral "Stopped" label rather than the alarming
+   *  "connection dropped" copy used for `truncated`. Persisted via the
+   *  same `meta.error` path as the other kinds. */
+  | { kind: "stopped" }
 
 export interface ChatMessage {
   readonly id: ChatMessageId
