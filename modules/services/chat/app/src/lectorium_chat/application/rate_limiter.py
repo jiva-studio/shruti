@@ -4,20 +4,35 @@ Day-bucketed per-(scope, user) and per-(scope, ip) throttle. JWT-based:
 the key is the auth-issued `sub` claim. Anonymous JWTs get a tighter
 quota than signed-in ones (the `anonymous` claim selects which limit).
 
-Storage is plugged via `RateLimitStore` (postgres `usage` table in
-prod). Endpoints call `check_and_increment` directly — no module-level
-singleton.
+Storage is plugged via `RateLimitStore` (Redis in prod). Endpoints call
+`check_and_increment` directly — no module-level singleton.
+
+When the backing store raises `RedisUnavailableError` the use-case
+applies a tier-aware fallback policy (PR-1b):
+
+- Pro tier → process-local LRU brownout counter so paying users keep
+  serving through a Redis outage. Single-process only, so multiple
+  replicas independently allow up to the limit each — accepted as a
+  graceful-degradation trade-off, not exact enforcement.
+- All other tiers (free, anonymous) → return a result with
+  `backend_unavailable=True`, which the API layer translates into a
+  503 response. Fail-closed prevents anonymous abuse traffic from
+  slipping past enforcement during a Redis outage.
 """
 
 from __future__ import annotations
 
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from lectorium_chat.config import Settings
-from lectorium_chat.domain.ports.rate_limit_store import RateLimitStore
+from lectorium_chat.domain.ports.rate_limit_store import CounterRecord, RateLimitStore
+from lectorium_chat.infra.rate_limit.redis_rate_limit_store import RedisUnavailableError
 from lectorium_chat.observability.logging import get_logger
+from lectorium_chat.observability.metrics import redis_unavailable_counter
 
 
 log = get_logger(__name__)
@@ -41,6 +56,57 @@ class RateLimitResult:
     # 429 body so the mobile UX can pick the right copy + CTA (anon →
     # "Войти", free → "Lectorium Pro", pro → "wait for reset").
     tier: str | None = None
+    # PR-1b: Redis-store sentinel. When True the caller MUST raise 503
+    # instead of 429 — the rate-limit decision is unknown, not denied.
+    # Only ever set when the underlying store raises
+    # `RedisUnavailableError` AND the tier policy is fail-closed.
+    backend_unavailable: bool = False
+
+
+@dataclass
+class _LocalCounter:
+    """One entry in the brownout LRU. Window-based, mirrors the Redis
+    day-bucket semantics: when `now - window_start > window` the count
+    resets implicitly on the next increment."""
+
+    count: int
+    window_start: float
+
+
+class _BrownoutCounter:
+    """Process-local LRU counter used only when Redis is unavailable
+    AND the tier is `pro` (brownout instead of fail-closed).
+
+    Single-process only — multiple replicas all independently allow up
+    to the limit. The goal is rough cost containment during outages,
+    not exact enforcement. LRU cap prevents memory growth if the outage
+    is long and the key space is large.
+    """
+
+    def __init__(self, *, max_entries: int = 10_000, window_seconds: int = 86_400):
+        self._lock = threading.Lock()
+        self._entries: OrderedDict[str, _LocalCounter] = OrderedDict()
+        self._max = max_entries
+        self._window = window_seconds
+
+    def increment(self, key: str, *, key_type: str, limit: int) -> CounterRecord:
+        with self._lock:
+            now = time.time()
+            rec = self._entries.get(key)
+            if rec is None or (now - rec.window_start) > self._window:
+                rec = _LocalCounter(count=0, window_start=now)
+            rec.count += 1
+            self._entries[key] = rec
+            self._entries.move_to_end(key)
+            while len(self._entries) > self._max:
+                self._entries.popitem(last=False)
+            return CounterRecord(key_type=key_type, count=rec.count, limit=limit)
+
+
+# Module-level singleton — shared across all RateLimiter instances in
+# this process. Survives RateLimiter rebuilds (no use-case state should
+# live on the limiter; the counter belongs to the process).
+_local_brownout_counter = _BrownoutCounter()
 
 
 def _seconds_until_midnight_utc() -> int:
@@ -157,18 +223,84 @@ class RateLimiter:
         # don't also blow the IP counter — that would let a single bad
         # actor poison CGNAT peers' quota.
         scoped_user_key = f"{scope}:user:{user_key}"
-        rec = await self._store.increment(
-            scoped_key=scoped_user_key, key_type="user", limit=user_limit, day=today,
-        )
+        try:
+            rec = await self._store.increment(
+                scoped_key=scoped_user_key, key_type="user", limit=user_limit, day=today,
+            )
+        except RedisUnavailableError:
+            return self._on_backend_unavailable(
+                scoped_key=scoped_user_key, key_type="user",
+                limit=user_limit, echoed_tier=echoed_tier, tier=tier,
+            )
         if rec.count > rec.limit:
             return reject(rec, "user")
 
         # Pass 2: per-IP. Same table, distinct key namespace.
         scoped_ip_key = f"{scope}:ip:{ip}"
-        rec = await self._store.increment(
-            scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
-        )
+        try:
+            rec = await self._store.increment(
+                scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
+            )
+        except RedisUnavailableError:
+            return self._on_backend_unavailable(
+                scoped_key=scoped_ip_key, key_type="ip",
+                limit=ip_limit, echoed_tier=echoed_tier, tier=tier,
+            )
         if rec.count > rec.limit:
             return reject(rec, "ip")
 
         return RateLimitResult(allowed=True)
+
+    def _on_backend_unavailable(
+        self,
+        *,
+        scoped_key: str,
+        key_type: str,
+        limit: int,
+        echoed_tier: str,
+        tier: str,
+    ) -> RateLimitResult:
+        """Tier-aware Redis-outage fallback.
+
+        - `pro` → brownout: count against the process-local LRU; if the
+          local count exceeds the limit return a normal 429 result so
+          the existing 429 envelope translates it. Otherwise return
+          `allowed=True`.
+        - everything else → fail-closed: return a result flagged
+          `backend_unavailable=True`. The API layer surfaces this as a
+          503; the caller treats Redis being down as "unknown decision"
+          rather than "approved".
+        """
+        redis_unavailable_counter.labels(tier=echoed_tier).inc()
+        if tier == "pro":
+            rec = _local_brownout_counter.increment(
+                scoped_key, key_type=key_type, limit=limit,
+            )
+            log.warning(
+                "rate_limit_brownout",
+                tier=echoed_tier, key=scoped_key,
+                current=rec.count, limit=rec.limit,
+            )
+            if rec.count > rec.limit:
+                now = datetime.now(timezone.utc)
+                reset_at = _next_midnight_utc(now)
+                return RateLimitResult(
+                    allowed=False, code="rate_limited",
+                    retry_after=int((reset_at - now).total_seconds()),
+                    current=rec.count, limit=rec.limit, key_type=key_type,
+                    resets_at_iso=reset_at.isoformat().replace("+00:00", "Z"),
+                    resets_at_epoch=int(reset_at.timestamp()),
+                    tier=echoed_tier,
+                )
+            return RateLimitResult(allowed=True, tier=echoed_tier)
+        # Non-Pro: fail-closed.
+        log.warning(
+            "rate_limit_fail_closed", tier=echoed_tier, key=scoped_key,
+        )
+        return RateLimitResult(
+            allowed=False,
+            code="rate_limit_backend_unavailable",
+            tier=echoed_tier,
+            key_type=key_type,
+            backend_unavailable=True,
+        )
