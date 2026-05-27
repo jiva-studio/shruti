@@ -115,6 +115,14 @@ class Settings(BaseSettings):
     yandex_embed_folder_id: str | None = None
     gigachat_embed_api_key: str | None = None
 
+    # Base URL override for the embedder. When unset, the openai
+    # embed_provider branch hits the public OpenAI endpoint (EU
+    # behaviour, unchanged). When set, it hits an OpenAI-compatible
+    # upstream — e.g. the self-hosted TEI container at
+    # http://embedder:8080/v1 on RU. Any future deployment swapping
+    # embedding backends only needs to flip this env var; no code change.
+    embed_base_url: str | None = None
+
     # Bounded parallelism for any LLM/embedding provider that respects
     # it. Default 2 is conservative for a fresh Yandex Cloud folder
     # where Foundation Models RPS quota is ~3-5; operators with bumped
