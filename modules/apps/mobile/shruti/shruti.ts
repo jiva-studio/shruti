@@ -1,5 +1,6 @@
-import { ref, type Ref } from "vue"
+import { ref, watch, type Ref } from "vue"
 import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { PREFERRED_SERVER_KEY } from "./services/preferredServer.js"
 import type {
   AuthPort,
   IAudioPlayer,
@@ -168,6 +169,19 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
   if (instance) throw new Error("Shruti already initialized")
 
   const activeServer = ref<CdnServer>(seed.initialServer)
+  // Whenever activeServer flips, persist the id under PREFERRED_SERVER_KEY
+  // so the next cold start lands on the same region. This collapses the
+  // "set active" and "remember for next launch" knobs that used to live
+  // as two separate functions (setActiveServerById + promotePreferredServer)
+  // and caused subtle regressions whenever a new flow forgot to call both.
+  // Welcome's initial swap doesn't need an early-exit guard: writing the
+  // same id back to preferences is a no-op on disk.
+  watch(activeServer, (next, prev) => {
+    if (next.id === prev.id) return
+    void seed.preferences.set(PREFERRED_SERVER_KEY, next.id).catch((err) => {
+      console.warn(`[shruti] persist preferredServerId failed for ${next.id}`, err)
+    })
+  })
   const contentDbFile = ref<string | null>(null)
   const databases: Shruti["databases"] = { content: null, user: null }
   let cachedRepos: AppRepositories | null = null
