@@ -4,3 +4,9 @@
 .env
 .env.dev
 .env.*.local
+
+# JWT signing keys never enter git — only public halves under
+# infra/app/jwt-keys/. See infra/app/jwt-keys/README.md for the
+# trust model and rotation runbook.
+*.priv.pem
+*.key
