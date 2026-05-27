@@ -1,8 +1,10 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
+import { SERVERS } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
+import { promotePreferredServer } from "@shruti/services/preferredServer.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import type { AuthSession, AuthStatus, MigrationResult } from "@ports/app/auth.js"
@@ -69,10 +71,7 @@ export const useAuthStore = defineStore("auth", () => {
   // Identity-change watcher: signin (null→id), signout (id→null), and
   // switch-account (idA→idB) all invalidate any composer lockdown the
   // chat store may be holding — the deadline was bound to the previous
-  // identity's quota bucket and means nothing for the new one. Tier-
-  // change within the same user_id is intentionally NOT a trigger: the
-  // server-side quota_id is keyed by user_id, so the same bucket (and
-  // therefore the same deadline) keeps applying.
+  // identity's quota bucket and means nothing for the new one.
   //
   // `useChatStore` is imported lazily here so this module doesn't pull
   // the chat store graph at auth-store registration time, which would
@@ -80,6 +79,20 @@ export const useAuthStore = defineStore("auth", () => {
   // wiring that lands after auth restore kicks off).
   watch(userId, (newId, oldId) => {
     if (newId === oldId) return
+    void import("@shruti/stores/useChatStore.js").then(({ useChatStore }) => {
+      useChatStore().resetComposeLock()
+    })
+  })
+
+  // Tier-upgrade watcher: free → pro within the same user_id (in-place
+  // IAP, or webhook landing for a purchase made on another device)
+  // makes a stale free-tier `composeBlockedUntil` deadline moot — Pro's
+  // quota policy is different and the user shouldn't have to wait out
+  // the previous tier's lockout. We only trigger on the upgrade edge
+  // (true after false); pro → free expiry doesn't need to clear locks
+  // (if anything, the new tier deserves its own rate-limit bookkeeping).
+  watch(isPro, (next, prev) => {
+    if (!next || prev) return
     void import("@shruti/stores/useChatStore.js").then(({ useChatStore }) => {
       useChatStore().resetComposeLock()
     })
@@ -214,20 +227,66 @@ export const useAuthStore = defineStore("auth", () => {
    * Post-signin tier sync. The session we just got back may still
    * carry a pre-purchase tier claim — the RC webhook can land seconds
    * AFTER the SSO provider returns, so the freshly-minted JWT may say
-   * "free" while the server already knows the user is Pro. Without
-   * this, the user's next chat send goes out under the stale claim →
-   * server 429s with tier=free even though the subscription is active,
-   * and the only way out is an app restart that re-bootstraps
+   * "free" while the server already knows the user is Pro (purchase
+   * made earlier under another device, or another anon user upgraded).
+   * Without this, the user's next chat send goes out under the stale
+   * claim → server 429s with tier=free even though the subscription is
+   * active, and the only way out is an app restart that re-bootstraps
    * `/auth/me`.
    *
-   * Invalidate `lastSyncAt` so the very next `ensureFresh()` (from the
-   * chat composer) actually hits the network instead of short-
-   * circuiting on the 5-min cache, and proactively kick a background
-   * sync now so the JWT catches up before the user taps Send.
+   * A single `ensureFresh()` call here is not enough: it'd set
+   * `lastSyncAt` to NOW even if /auth/me still returned "free", and
+   * the chat composer's own `ensureFresh()` would then short-circuit
+   * for 5 min — straight through the window when the webhook usually
+   * lands. We loop the probe a few times with a short backoff so the
+   * webhook gets a chance to catch up before we freeze the cache.
+   * Fire-and-forget; never throws.
    */
   function invalidateAndSyncAfterSignin(): void {
     lastSyncAt = 0
-    void ensureFresh()
+    void syncTierAfterSignin()
+  }
+
+  /**
+   * Bounded retry loop for the post-signin tier sync. Probes /auth/me
+   * up to `ATTEMPTS` times, refreshing tokens the first time the
+   * server's tier (or expiry) diverges from the cached JWT view. Exits
+   * early once we observe non-free or detect a flip. `lastSyncAt` is
+   * only stamped at exit, so the chat composer's `ensureFresh()`
+   * stays armed (i.e. won't short-circuit) for the duration of the
+   * retry window — if the user taps Send during that window, the
+   * composer's own probe coalesces with the webhook landing path.
+   */
+  async function syncTierAfterSignin(): Promise<void> {
+    const ATTEMPTS = 5
+    const DELAY_MS = 3000
+    const auth = useShruti().auth
+    for (let i = 0; i < ATTEMPTS; i++) {
+      try {
+        const me = await auth.fetchMe()
+        if (!me) {
+          lastSyncAt = Date.now()
+          return
+        }
+        const rawDiverged = me.tier !== rawTier.value
+        const expiryDiverged = (me.tierExpiresAt ?? null) !== tierExpiresAt.value
+        if (rawDiverged || expiryDiverged) {
+          await auth.refreshTokens()
+          lastSyncAt = Date.now()
+          return
+        }
+        if (me.tier !== "free") {
+          lastSyncAt = Date.now()
+          return
+        }
+      } catch (e) {
+        console.warn("[auth] post-signin tier sync attempt failed", e)
+      }
+      if (i < ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, DELAY_MS))
+      }
+    }
+    lastSyncAt = Date.now()
   }
 
   async function signInGoogle(): Promise<boolean> {
@@ -288,6 +347,40 @@ export const useAuthStore = defineStore("auth", () => {
     applySession(null)
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).
+    await restore()
+  }
+
+  /**
+   * Anonymous-only region switch. Tears the current device-bootstrap user
+   * down on the source region, flips `activeServer` (and persists the
+   * choice via `promotePreferredServer` so a cold start lands on the
+   * destination), then mints a fresh anonymous user on the destination.
+   *
+   * Order matters: the naive "store.signOut() then setActiveServerById"
+   * sequence mints the new anonymous JWT against the SOURCE region's
+   * `/auth/anonymous` (because `signOut` triggers `restore()` while
+   * `cfg.baseUrl()` still points at the source) — its `kid` then fails
+   * verification on the destination's chat backend, requiring an app
+   * restart to recover. Doing the region flip BEFORE the implicit
+   * re-bootstrap closes that race.
+   *
+   * Signed-in users must NOT call this — server's `/auth/anonymous`
+   * doesn't carry over their identity; use `migrateToRegion` instead.
+   */
+  async function switchAnonymousRegion(newRegionId: string): Promise<void> {
+    const app = useShruti()
+    const target = SERVERS.find((s) => s.id === newRegionId)
+    if (!target) throw new Error(`Unknown server id: ${newRegionId}`)
+    // (1) Port-level signOut: clears persisted tokens AND hits the SOURCE
+    //     region's /signout. Direct port call (not store.signOut) so the
+    //     implicit `restore()` from the store's signOut doesn't fire here.
+    await app.auth.signOut()
+    applySession(null)
+    // (2) Flip + persist BEFORE the re-bootstrap so cfg.baseUrl() resolves
+    //     to the destination region for the upcoming /auth/anonymous, and
+    //     a cold restart wouldn't bounce the user back to the source.
+    await promotePreferredServer(app, target)
+    // (3) Re-bootstrap anonymous against the destination region.
     await restore()
   }
 
@@ -404,6 +497,7 @@ export const useAuthStore = defineStore("auth", () => {
     completeSigninAfterRetry,
     lookupAccount,
     signOut,
+    switchAnonymousRegion,
     deleteAccount,
     migrateToRegion,
     refreshTokens,

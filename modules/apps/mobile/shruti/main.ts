@@ -56,6 +56,7 @@ import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatS
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
+import { promotePreferredServer } from "./services/preferredServer.js"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 
@@ -126,13 +127,21 @@ initShruti({
     resolveAuthBaseUrl,
     currentRegionId: () => useShruti().activeServer.value.id,
     // Post-migration: flip activeServer so every subsequent fetch
-    // (auth/chat/share-*) targets the destination, then enqueue the
-    // source-side revoke and try to drain it once while we likely
-    // still have network. The watcher on `useAuthStore.userId` in
-    // `usePurchasesStore.init()` already re-links RC when the new
+    // (auth/chat/share-*) targets the destination, persist the choice
+    // so a cold start lands on the new region (otherwise Welcome reads
+    // a stale preferredServerId and boots back on the source), then
+    // enqueue the source-side revoke and try to drain it once while we
+    // likely still have network. The watcher on `useAuthStore.userId`
+    // in `usePurchasesStore.init()` already re-links RC when the new
     // session lands — no extra logIn() call is needed here.
     onMigrationCompleted: (newRegionId, sourceRegionId, sourceBearer) => {
-      useShruti().setActiveServerById(newRegionId)
+      const app = useShruti()
+      const target = SERVERS.find((s) => s.id === newRegionId)
+      if (target) {
+        void promotePreferredServer(app, target)
+      } else {
+        app.setActiveServerById(newRegionId)
+      }
       void scheduledRevoke.enqueue(sourceRegionId, sourceBearer).then(() => {
         void scheduledRevoke.drain()
       })
