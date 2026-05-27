@@ -65,6 +65,21 @@ export default {
   errAuth: "Authorization failed. Restart the app to retry.",
   /** HTTP 426 — server is on a newer protocol and refuses our request. */
   errProtocol: "This app version is no longer supported. Please update.",
+  /** Toast surfaced on HTTP 426 — server demands a newer protocol
+   *  version than we sent. CTA opens the matching app store. */
+  error: {
+    protocolMismatch: {
+      title: "Update required",
+      body: "Chat uses a new protocol. Update Lectorium to continue.",
+      cta: "Open store",
+    },
+    /** Toast surfaced on HTTP 503 `rate_limit_backend_unavailable` —
+     *  the rate-limit backend (Redis) is down, server can't admit us. */
+    backendUnavailable: {
+      title: "Temporary outage",
+      body: "Try again in a moment.",
+    },
+  },
   /** SSE connection dropped after handshake but before `done`. */
   errStreamDropped: "Connection dropped before the answer arrived.",
   /** Catch-all for `no_body`, `empty`, or any code we haven't seen yet. */

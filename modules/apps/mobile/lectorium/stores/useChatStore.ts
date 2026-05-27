@@ -1,8 +1,11 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
 import { useNow } from "@vueuse/core"
+import { toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { useToast } from "@lectorium/services/useToast.js"
+import { openStorePage } from "@lectorium/utils/openStorePage.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import {
   useTrackUserState,
@@ -30,6 +33,7 @@ import type {
   QuotaTier,
   SmartLibraryFiltersPayload,
 } from "@lib/domain"
+import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
@@ -149,6 +153,7 @@ export const useChatStore = defineStore("chat", () => {
   const playlist = usePlaylistStore()
   const verseBodyStore = useVerseBodyStore()
   const { t } = useI18n()
+  const toast = useToast()
 
   const sessions = ref<ChatSession[]>([])
   const activeSessionId = ref<string | null>(null)
@@ -551,6 +556,43 @@ export const useChatStore = defineStore("chat", () => {
     return id
   }
 
+  /** Drop any in-flight streaming placeholder from `messages`. Used by
+   *  the typed-error branches in `sendMessage` — those errors aren't
+   *  retryable at the bubble level (the user has to update the app or
+   *  wait for the outage to clear), so leaving an empty failed bubble
+   *  with a Retry button would be misleading. */
+  function dropStreamingPlaceholder(): void {
+    if (messages.value.some((m) => m.streaming)) {
+      messages.value = messages.value.filter((m) => !m.streaming)
+    }
+  }
+
+  /** Present the "update required" toast with a one-tap CTA that
+   *  opens the platform store. Built directly on `toastController` (not
+   *  via `useToast`) because the wrapped helper only exposes text-only
+   *  toasts; the CTA needs a `buttons` array on the Ionic toast. */
+  async function showProtocolMismatchToast(): Promise<void> {
+    const t1 = await toastController.create({
+      message: `${t("chat.error.protocolMismatch.title")}: ${t("chat.error.protocolMismatch.body")}`,
+      // Sticky (`duration: 0`) until the user dismisses or taps the
+      // store button — the action is real and we don't want it to
+      // slide off after 1.8s while they're scrolling.
+      duration: 0,
+      position: "top",
+      color: "danger",
+      buttons: [
+        {
+          text: t("chat.error.protocolMismatch.cta"),
+          handler: () => {
+            openStorePage()
+          },
+        },
+        { text: "", role: "cancel", icon: "close" },
+      ],
+    })
+    await t1.present()
+  }
+
   async function sendMessage(
     text: string,
     options?: { focus?: FocusFragmentPayload }
@@ -634,15 +676,31 @@ export const useChatStore = defineStore("chat", () => {
         if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
       }
     } catch (err) {
-      // Unexpected error escaping the for-await loop (runChatTurn catches
-      // stream-side failures internally and yields them as `error` events,
-      // so we rarely land here — but if applyTurnEvent or another folded
-      // step throws, surface it through the same inline path so the user
-      // sees a failed bubble + Retry instead of a silently vanishing
-      // placeholder.
-      const code = "stream"
-      const message = err instanceof Error ? err.message : "Stream failed"
-      applyTurnEvent({ kind: "error", code, message })
+      // Typed structural failures (426 protocol mismatch, 503 backend
+      // unavailable) get a dedicated toast and we drop the streaming
+      // placeholder rather than converting it to a failed bubble — these
+      // aren't retryable at the message level (the user has to update or
+      // wait for the outage to clear), so a Retry CTA on a per-bubble
+      // failed state would be misleading.
+      if (err instanceof ProtocolVersionMismatchError) {
+        void showProtocolMismatchToast()
+        dropStreamingPlaceholder()
+      } else if (err instanceof BackendUnavailableError) {
+        void toast.error(
+          `${t("chat.error.backendUnavailable.title")}: ${t("chat.error.backendUnavailable.body")}`
+        )
+        dropStreamingPlaceholder()
+      } else {
+        // Unexpected error escaping the for-await loop (runChatTurn catches
+        // stream-side failures internally and yields them as `error` events,
+        // so we rarely land here — but if applyTurnEvent or another folded
+        // step throws, surface it through the same inline path so the user
+        // sees a failed bubble + Retry instead of a silently vanishing
+        // placeholder.
+        const code = "stream"
+        const message = err instanceof Error ? err.message : "Stream failed"
+        applyTurnEvent({ kind: "error", code, message })
+      }
     } finally {
       abort = null
       sending.value = false
