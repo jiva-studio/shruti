@@ -37,7 +37,6 @@ vi.mock("@capgo/capacitor-social-login", () => ({
 }))
 
 import { useCapacitorAuth } from "../useCapacitorAuth.js"
-import { SigninAccountNotFoundError } from "@ports/app/auth.js"
 
 function b64url(input: string): string {
   return btoa(input).replace(/=+$/g, "").replace(/\+/g, "-").replace(/\//g, "_")
@@ -50,7 +49,35 @@ function makeAccessJwt(claims: Record<string, unknown>): string {
 
 const futureExp = Math.floor(Date.now() / 1000) + 3600
 
-function makeAdapter() {
+function tokenResponse(): Response {
+  const accessTok = makeAccessJwt({ exp: futureExp, tier: "free", quota_id: "q1" })
+  return new Response(
+    JSON.stringify({
+      accessToken: accessTok,
+      refreshToken: "r-1",
+      userId: "u-1",
+      anonymous: false,
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  )
+}
+
+function meResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      userId: "u-1",
+      email: null,
+      name: null,
+      pictureUrl: null,
+      anonymous: false,
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  )
+}
+
+// Single-region adapter — no proactive cross-region probe; signin goes
+// straight to the only region the build knows about.
+function makeAdapterSingleRegion() {
   return useCapacitorAuth({
     baseUrl: () => "https://current.example/auth",
     resolveAuthBaseUrl: (id: string) => `https://${id}.example/auth`,
@@ -60,7 +87,26 @@ function makeAdapter() {
   })
 }
 
-describe("useCapacitorAuth signin probe-then-bootstrap", () => {
+// Multi-region adapter — wires `getRegions` + `setActiveServerById` so the
+// adapter can probe and silent-switch. The `setActive` spy lets each test
+// assert which region the signin landed on.
+function makeAdapterMultiRegion(opts: {
+  regions: string[]
+  current: string
+  setActive: (id: string) => void
+}) {
+  return useCapacitorAuth({
+    baseUrl: () => `https://${opts.current}.example/auth`,
+    resolveAuthBaseUrl: (id: string) => `https://${id}.example/auth`,
+    currentRegionId: () => opts.current,
+    getRegions: () => opts.regions.map((id) => ({ id })),
+    setActiveServerById: opts.setActive,
+    googleWebClientId: "g-web",
+    googleIOSClientId: "g-ios",
+  })
+}
+
+describe("useCapacitorAuth signin — proactive cross-region probe", () => {
   let fetchMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
@@ -77,31 +123,140 @@ describe("useCapacitorAuth signin probe-then-bootstrap", () => {
     vi.restoreAllMocks()
   })
 
-  it("X-Lookup-Only 404 → throws SigninAccountNotFoundError, no bootstrap call", async () => {
-    // First fetch is the probe — return 404. The signin call MUST NOT
-    // happen; if the adapter erroneously falls through, the second
-    // mockResolvedValueOnce is missing and fetch returns undefined,
-    // tripping the assertion below.
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: { code: "account_not_found" } }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      })
-    )
-    const auth = makeAdapter()
-    await expect(auth.signInWithGoogle()).rejects.toBeInstanceOf(SigninAccountNotFoundError)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe("https://current.example/auth/signin/google")
+  it("single-region: skips probe entirely, goes straight to signin on current", async () => {
+    fetchMock.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterSingleRegion()
+    const session = await auth.signInWithGoogle()
+    expect(session?.userId).toBe("u-1")
+    // Just the real signin + /auth/me. No X-Lookup-Only probe call.
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const [, init] = fetchMock.mock.calls[0]!
     const headers = new Headers((init as RequestInit).headers as HeadersInit)
-    expect(headers.get("X-Lookup-Only")).toBe("1")
+    expect(headers.get("X-Lookup-Only")).toBeNull()
   })
 
-  it("X-Lookup-Only 200 (hit) → falls through to bootstrap, returns session", async () => {
-    const accessTok = makeAccessJwt({ exp: futureExp, tier: "free", quota_id: "q1" })
-    // 1: probe responds 200 (account exists). 2: real signin commits.
-    // 3: fetchMeBody call after commit.
+  it("multi-region: account on other region → silent switch + signin there", async () => {
+    const switchCalls: string[] = []
     fetchMock
+      // probe global → not found (404 is treated by lookupAccount as exists:false)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "account_not_found" } }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      // probe russia → hit
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ exists: true, anonymous: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      // real signin (on russia after switch)
+      .mockResolvedValueOnce(tokenResponse())
+      // /auth/me after commit
+      .mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterMultiRegion({
+      regions: ["global", "russia"],
+      current: "global",
+      setActive: (id) => switchCalls.push(id),
+    })
+    const session = await auth.signInWithGoogle()
+    expect(session?.userId).toBe("u-1")
+    expect(switchCalls).toEqual(["russia"])
+    // Probe URLs hit both regions
+    const probeUrls = fetchMock.mock.calls.slice(0, 2).map((c) => c[0])
+    expect(probeUrls.sort()).toEqual([
+      "https://global.example/auth/signin/google",
+      "https://russia.example/auth/signin/google",
+    ])
+    // First two carry X-Lookup-Only, third (real signin) doesn't
+    const probeHeaders0 = new Headers(
+      (fetchMock.mock.calls[0]![1] as RequestInit).headers as HeadersInit
+    )
+    const probeHeaders1 = new Headers(
+      (fetchMock.mock.calls[1]![1] as RequestInit).headers as HeadersInit
+    )
+    const signinHeaders = new Headers(
+      (fetchMock.mock.calls[2]![1] as RequestInit).headers as HeadersInit
+    )
+    expect(probeHeaders0.get("X-Lookup-Only")).toBe("1")
+    expect(probeHeaders1.get("X-Lookup-Only")).toBe("1")
+    expect(signinHeaders.get("X-Lookup-Only")).toBeNull()
+  })
+
+  it("multi-region: account on current region → no switch, signin there", async () => {
+    const switchCalls: string[] = []
+    fetchMock
+      // probe global → hit (current is global)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ exists: true, anonymous: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      // probe russia → 404
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: "account_not_found" } }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterMultiRegion({
+      regions: ["global", "russia"],
+      current: "global",
+      setActive: (id) => switchCalls.push(id),
+    })
+    const session = await auth.signInWithGoogle()
+    expect(session?.userId).toBe("u-1")
+    expect(switchCalls).toEqual([]) // no switch needed
+  })
+
+  it("multi-region: no region has account → no switch, signin on current creates new", async () => {
+    const switchCalls: string[] = []
+    fetchMock
+      // both probes 404 — no account anywhere
+      .mockResolvedValueOnce(
+        new Response("{}", { status: 404, headers: { "Content-Type": "application/json" } })
+      )
+      .mockResolvedValueOnce(
+        new Response("{}", { status: 404, headers: { "Content-Type": "application/json" } })
+      )
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterMultiRegion({
+      regions: ["global", "russia"],
+      current: "global",
+      setActive: (id) => switchCalls.push(id),
+    })
+    const session = await auth.signInWithGoogle()
+    expect(session?.userId).toBe("u-1")
+    expect(switchCalls).toEqual([])
+  })
+
+  it("multi-region: probe timeouts swallowed, falls through to signin on current", async () => {
+    const switchCalls: string[] = []
+    fetchMock
+      .mockRejectedValueOnce(new TypeError("offline")) // probe global crash
+      .mockRejectedValueOnce(new TypeError("offline")) // probe russia crash
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterMultiRegion({
+      regions: ["global", "russia"],
+      current: "global",
+      setActive: (id) => switchCalls.push(id),
+    })
+    const session = await auth.signInWithGoogle()
+    expect(session?.userId).toBe("u-1")
+    expect(switchCalls).toEqual([]) // can't switch on uncertainty — stay on current
+  })
+
+  it("multi-region: account on BOTH regions → prefers current (no switch)", async () => {
+    const switchCalls: string[] = []
+    fetchMock
+      // both probes 200 exists
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ exists: true, anonymous: false }), {
           status: 200,
@@ -109,120 +264,20 @@ describe("useCapacitorAuth signin probe-then-bootstrap", () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            accessToken: accessTok,
-            refreshToken: "r-1",
-            userId: "u-1",
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
+        new Response(JSON.stringify({ exists: true, anonymous: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
       )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            userId: "u-1",
-            email: null,
-            name: null,
-            pictureUrl: null,
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      )
-    const auth = makeAdapter()
+      .mockResolvedValueOnce(tokenResponse())
+      .mockResolvedValueOnce(meResponse())
+    const auth = makeAdapterMultiRegion({
+      regions: ["global", "russia"],
+      current: "global",
+      setActive: (id) => switchCalls.push(id),
+    })
     const session = await auth.signInWithGoogle()
     expect(session?.userId).toBe("u-1")
-    // Second fetch is the real signin — no X-Lookup-Only header.
-    const [, signinInit] = fetchMock.mock.calls[1]!
-    const signinHeaders = new Headers((signinInit as RequestInit).headers as HeadersInit)
-    expect(signinHeaders.get("X-Lookup-Only")).toBeNull()
-  })
-
-  it("probe network error → swallow, fall through to bootstrap (errors surface there)", async () => {
-    const accessTok = makeAccessJwt({ exp: futureExp, tier: "free", quota_id: "q1" })
-    fetchMock
-      .mockRejectedValueOnce(new TypeError("offline")) // probe explodes
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            accessToken: accessTok,
-            refreshToken: "r-1",
-            userId: "u-1",
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            userId: "u-1",
-            email: null,
-            name: null,
-            pictureUrl: null,
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      )
-    const auth = makeAdapter()
-    const session = await auth.signInWithGoogle()
-    expect(session?.userId).toBe("u-1")
-  })
-
-  it("completeSigninAfterRetry — bootstraps with idToken without probing", async () => {
-    const accessTok = makeAccessJwt({ exp: futureExp, tier: "free", quota_id: "q1" })
-    fetchMock
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            accessToken: accessTok,
-            refreshToken: "r-1",
-            userId: "u-1",
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            userId: "u-1",
-            email: null,
-            name: null,
-            pictureUrl: null,
-            anonymous: false,
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
-      )
-    const auth = makeAdapter()
-    const session = await auth.completeSigninAfterRetry("google", "id-token-x")
-    expect(session.userId).toBe("u-1")
-    // First call must be the real signin (no probe).
-    const [, init] = fetchMock.mock.calls[0]!
-    const headers = new Headers((init as RequestInit).headers as HeadersInit)
-    expect(headers.get("X-Lookup-Only")).toBeNull()
-  })
-
-  it("SigninAccountNotFoundError carries provider + idToken", async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: { code: "account_not_found" } }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      })
-    )
-    const auth = makeAdapter()
-    try {
-      await auth.signInWithGoogle()
-      throw new Error("expected throw")
-    } catch (e) {
-      expect(e).toBeInstanceOf(SigninAccountNotFoundError)
-      const err = e as SigninAccountNotFoundError
-      expect(err.provider).toBe("google")
-      expect(err.idToken).toBe("stub-id-token")
-    }
+    expect(switchCalls).toEqual([]) // duplicate-on-both → stick with current
   })
 })

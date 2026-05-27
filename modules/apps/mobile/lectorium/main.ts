@@ -125,6 +125,13 @@ initLectorium({
     baseUrl: () => useLectorium().activeServer.value.authBaseUrl,
     resolveAuthBaseUrl,
     currentRegionId: () => useLectorium().activeServer.value.id,
+    // Used by the proactive cross-region signin probe — adapter fans
+    // out /auth/lookup across these regions and silently switches the
+    // active server to the one the user's OAuth identity already lives
+    // on, so a fresh install or a migrated user never lands on a
+    // duplicate account on the wrong region.
+    getRegions: () => useLectorium().appConfig.servers.map((s) => ({ id: s.id })),
+    setActiveServerById: (id: string) => useLectorium().setActiveServerById(id),
     // Post-migration: flip activeServer so every subsequent fetch
     // (auth/chat/share-*) targets the destination. The activeServer
     // watcher inside initLectorium persists the id under
