@@ -1,5 +1,4 @@
 import { useLectorium } from "@lectorium/lectorium.js"
-import { promotePreferredServer } from "@lectorium/services/preferredServer.js"
 import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
 
 export interface ServerFallbackReturn {
@@ -21,13 +20,14 @@ export interface ServerFallbackReturn {
    * server up-front is the only way to redirect them to the candidate.
    *
    * If a non-active candidate succeeds, the promotion is also persisted
-   * to `IPreferences` (via `promotePreferredServer`) so the next session
-   * starts from the working CDN. If every candidate fails the active
-   * server is left set to whichever was tried last; the next call will
-   * rotate again. Returns `null` on total failure — callers warn-log
-   * rather than surface a `failed` UI state, since transcript prefetch
-   * is opportunistic and the audio leg (the only user-visible
-   * commitment) handles its own failure mode.
+   * (the activeServer watcher inside initLectorium writes
+   * preferredServerId on every flip) so the next session starts from
+   * the working CDN. If every candidate fails the active server is
+   * left set to whichever was tried last; the next call will rotate
+   * again. Returns `null` on total failure — callers warn-log rather
+   * than surface a `failed` UI state, since transcript prefetch is
+   * opportunistic and the audio leg (the only user-visible commitment)
+   * handles its own failure mode.
    */
   tryServers<T>(attempt: () => Promise<T>): Promise<T | null>
 }
@@ -43,10 +43,12 @@ export function useServerFallback(): ServerFallbackReturn {
   async function tryServers<T>(attempt: () => Promise<T>): Promise<T | null> {
     let lastError: unknown = null
     for (const server of candidates()) {
-      // Awaited so the persist happens before `attempt()` runs:
-      // guarantees the in-flight request observes the new active
-      // server when it builds its URL via `storagePublicUrl`.
-      await promotePreferredServer(app, server)
+      // Flip activeServer before `attempt()` runs so the in-flight
+      // request observes the new server when it builds its URL via
+      // `storagePublicUrl`. Persistence to preferredServerId is
+      // handled out-of-band by the activeServer watcher in
+      // initLectorium.
+      app.setActiveServer(server)
       try {
         return await attempt()
       } catch (err) {

@@ -6,7 +6,6 @@ import { removeDownloadedTranscripts } from "@lib/application/removeDownloadedTr
 import type { TrackId } from "@lib/domain/core.js"
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { promotePreferredServer } from "@lectorium/services/preferredServer.js"
 import { useServerFallback } from "./downloads/useServerFallback.js"
 import { useTranscriptPrefetch } from "./downloads/useTranscriptPrefetch.js"
 
@@ -216,10 +215,14 @@ export const useDownloadStore = defineStore("downloads", () => {
         if (result.ok) {
           if (fresh()) setState(trackId, "completed")
           // Promote the working CDN if it differs from the active
-          // server when the download started. Awaited so the
-          // transcript prefetch (kicked off below) starts from the
-          // updated active server, not the failed one.
-          if (fresh()) await promotePreferredServer(app, result.value.server)
+          // server when the download started. The activeServer watcher
+          // in initLectorium persists the new preference so the next
+          // session also starts from this CDN; the transcript prefetch
+          // (kicked off below) sees the updated active server because
+          // we set it synchronously here.
+          if (fresh() && app.activeServer.value.id !== result.value.server.id) {
+            app.setActiveServer(result.value.server)
+          }
           if (fresh()) void transcriptPrefetch.prefetchForTrack(trackId)
           return result.value.mediaItem.localPath
         }

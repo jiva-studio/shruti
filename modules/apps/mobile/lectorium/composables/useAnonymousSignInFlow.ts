@@ -142,12 +142,12 @@ export function useAnonymousSignInFlow(): UseAnonymousSignInFlowReturn {
     err: SigninAccountNotFoundError,
     targetRegionId: string
   ): Promise<void> {
-    app.setActiveServerById(targetRegionId)
     // The idToken issued by the OAuth provider is for the (app's) audience
     // — both regions verify against the same client IDs, so reusing it
     // against the new region is sound. completeSigninAfterRetry skips
     // the X-Lookup-Only probe; a 404 here would be genuinely surprising
     // (we just confirmed the account didn't live in the OTHER place).
+    app.setActiveServerById(targetRegionId)
     busy.value = true
     try {
       await auth.completeSigninAfterRetry(err.provider, err.idToken, err.fullName)

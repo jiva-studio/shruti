@@ -4,7 +4,6 @@ import { App, type AppState } from "@capacitor/app"
 import { SERVERS } from "@lib/domain/servers.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
-import { promotePreferredServer } from "@lectorium/services/preferredServer.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import type { AuthSession, AuthStatus, MigrationResult } from "@ports/app/auth.js"
@@ -352,9 +351,8 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Anonymous-only region switch. Tears the current device-bootstrap user
-   * down on the source region, flips `activeServer` (and persists the
-   * choice via `promotePreferredServer` so a cold start lands on the
-   * destination), then mints a fresh anonymous user on the destination.
+   * down on the source region, flips `activeServer` to the destination,
+   * then mints a fresh anonymous user there.
    *
    * Order matters: the naive "store.signOut() then setActiveServerById"
    * sequence mints the new anonymous JWT against the SOURCE region's
@@ -362,24 +360,28 @@ export const useAuthStore = defineStore("auth", () => {
    * `cfg.baseUrl()` still points at the source) — its `kid` then fails
    * verification on the destination's chat backend, requiring an app
    * restart to recover. Doing the region flip BEFORE the implicit
-   * re-bootstrap closes that race.
+   * re-bootstrap closes that race. The `activeServer` watcher inside
+   * `initLectorium` handles persisting `preferredServerId` so a cold
+   * start lands on the destination.
    *
    * Signed-in users must NOT call this — server's `/auth/anonymous`
    * doesn't carry over their identity; use `migrateToRegion` instead.
    */
   async function switchAnonymousRegion(newRegionId: string): Promise<void> {
     const app = useLectorium()
-    const target = SERVERS.find((s) => s.id === newRegionId)
-    if (!target) throw new Error(`Unknown server id: ${newRegionId}`)
+    // Validate up front so a typoed id can't leave us with a half-
+    // completed signOut and no destination to bootstrap against.
+    if (!SERVERS.some((s) => s.id === newRegionId)) {
+      throw new Error(`Unknown server id: ${newRegionId}`)
+    }
     // (1) Port-level signOut: clears persisted tokens AND hits the SOURCE
     //     region's /signout. Direct port call (not store.signOut) so the
     //     implicit `restore()` from the store's signOut doesn't fire here.
     await app.auth.signOut()
     applySession(null)
-    // (2) Flip + persist BEFORE the re-bootstrap so cfg.baseUrl() resolves
-    //     to the destination region for the upcoming /auth/anonymous, and
-    //     a cold restart wouldn't bounce the user back to the source.
-    await promotePreferredServer(app, target)
+    // (2) Flip activeServer BEFORE the re-bootstrap so cfg.baseUrl()
+    //     resolves to the destination region for /auth/anonymous.
+    app.setActiveServerById(newRegionId)
     // (3) Re-bootstrap anonymous against the destination region.
     await restore()
   }

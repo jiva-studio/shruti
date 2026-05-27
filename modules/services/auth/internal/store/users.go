@@ -33,10 +33,18 @@ type User struct {
 
 type UserRepo struct{ Pool *pgxpool.Pool }
 
-func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
+// Create inserts a fresh auth.users row stamped with the regional
+// deployment's id. Callers MUST pass the running service's RegionID:
+// the DB column default ('global', from migration 0028) is a
+// backwards-compat carry-over from before regional deployments
+// existed, and relying on it on the Russia VPS would mis-stamp every
+// fresh signup as a global user. /auth/me then reports the wrong
+// home_region, and the mobile client's onHomeRegionMismatch flips
+// activeServer back to global mid-signin.
+func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx, homeRegion string) (uuid.UUID, error) {
 	var id uuid.UUID
-	q := `INSERT INTO auth.users DEFAULT VALUES RETURNING id`
-	if err := selectRow(ctx, r.Pool, tx, q).Scan(&id); err != nil {
+	q := `INSERT INTO auth.users(home_region) VALUES ($1) RETURNING id`
+	if err := selectRow(ctx, r.Pool, tx, q, homeRegion).Scan(&id); err != nil {
 		return uuid.Nil, err
 	}
 	return id, nil
