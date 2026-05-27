@@ -123,6 +123,52 @@ func (r *IdentityRepo) ListForUser(ctx context.Context, userID uuid.UUID) ([]Ide
 		return nil, err
 	}
 	defer rows.Close()
+	return scanIdentities(rows)
+}
+
+// GetTx mirrors Get but reads inside the caller's transaction so the
+// migrate-in conflict-resolution path sees rows it just deleted in the
+// same tx. Returns (nil, nil) on miss.
+func (r *IdentityRepo) GetTx(ctx context.Context, tx pgx.Tx, provider, subject string) (*Identity, error) {
+	row := tx.QueryRow(ctx,
+		`SELECT provider, subject, user_id, email, email_verified, created_at
+		   FROM auth.identities
+		  WHERE provider = $1 AND subject = $2`,
+		provider, subject,
+	)
+	i := &Identity{}
+	var verified *bool
+	if err := row.Scan(&i.Provider, &i.Subject, &i.UserID, &i.Email, &verified, &i.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if verified != nil {
+		i.EmailVerified = *verified
+	}
+	return i, nil
+}
+
+// ListForUserTx mirrors ListForUser but reads inside the caller's
+// transaction. Used by migrate-in's anon-conflict resolution to verify
+// the conflicting user is anonymous-only before deleting them.
+func (r *IdentityRepo) ListForUserTx(ctx context.Context, tx pgx.Tx, userID uuid.UUID) ([]Identity, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT provider, subject, user_id, email, email_verified, created_at
+		   FROM auth.identities
+		  WHERE user_id = $1
+		  ORDER BY created_at ASC`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanIdentities(rows)
+}
+
+func scanIdentities(rows pgx.Rows) ([]Identity, error) {
 	var out []Identity
 	for rows.Next() {
 		var i Identity
