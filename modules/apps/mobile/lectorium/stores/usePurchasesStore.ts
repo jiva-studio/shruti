@@ -125,6 +125,18 @@ export const usePurchasesStore = defineStore("purchases", () => {
       applyState(state)
       unsubscribe = purchases.onCustomerInfoChanged((s) => {
         applyState(s)
+        // RC SDK push channel — fires when its backend learns the
+        // entitlement state changed (renew, expire, RevenueCat webhook
+        // landing from another device, etc.). The JWT `tier` claim is
+        // frozen at issue time, so without an explicit refresh the
+        // server-side flip won't reach the chat rate-limiter until the
+        // next natural rotation (~15 min). Compare RC's view against
+        // the cached JWT tier and force a refresh on divergence.
+        const auth = useAuthStore()
+        const rcActive = s.activePackageId !== undefined
+        if (rcActive !== auth.isPro) {
+          void auth.refreshTokens()
+        }
       })
       // Re-fetch on foreground. The RC SDK has its own push channel but
       // for sandbox / late-renewal cases the client doesn't get notified

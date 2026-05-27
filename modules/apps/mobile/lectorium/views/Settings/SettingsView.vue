@@ -182,10 +182,12 @@ async function onRequestRegionChange(newRegionId: string): Promise<void> {
   const newRegionName = serverItems.find((s) => s.id === newRegionId)?.title ?? newRegionId
 
   if (auth.anonymous) {
-    // Anonymous: confirm → signOut → switch active server → re-bootstrap
-    // anonymous in the new region. No migrate-in; the destination's
-    // /auth/anonymous mints a brand-new device-keyed user. The old
-    // anonymous user ages out via the source's anon TTL cron.
+    // Anonymous: confirm → switchAnonymousRegion. The store action
+    // sequences port.signOut → activeServer flip + persist → anonymous
+    // re-bootstrap so the new /auth/anonymous mint lands on the
+    // destination region. No migrate-in; the destination mints a
+    // brand-new device-keyed user. The old anonymous user ages out via
+    // the source's anon TTL cron.
     const dlg = await alertController.create({
       header: t("settings.regionMigration.confirmAnonymous.title"),
       message: t("settings.regionMigration.confirmAnonymous.message", {
@@ -205,10 +207,7 @@ async function onRequestRegionChange(newRegionId: string): Promise<void> {
     await dlg.present()
     const { role } = await dlg.onDidDismiss()
     if (role !== "confirm") return
-    await auth.signOut()
-    lectorium.setActiveServerById(newRegionId)
-    // signOut already triggers an anonymous re-bootstrap via
-    // restore(); explicit restore here would double-bootstrap.
+    await auth.switchAnonymousRegion(newRegionId)
     return
   }
 
