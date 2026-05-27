@@ -95,14 +95,23 @@ def _build_embedder(s: Settings) -> Embedder:
             base_url="https://openrouter.ai/api/v1",
         )
     if s.embed_provider == "openai":
-        if not s.openai_api_key:
-            raise RuntimeError("EMBED_PROVIDER=openai requires OPENAI_API_KEY")
+        # EMBED_BASE_URL routes to a self-hosted OpenAI-compatible
+        # upstream (e.g. the TEI container on RU). When unset we hit
+        # api.openai.com — EU's existing behaviour. The api_key is
+        # still required by the OpenAI SDK client even for a
+        # self-hosted upstream that ignores auth; pass a sentinel
+        # when the operator left it blank.
+        if not s.openai_api_key and not s.embed_base_url:
+            raise RuntimeError(
+                "EMBED_PROVIDER=openai requires OPENAI_API_KEY "
+                "(or EMBED_BASE_URL for a self-hosted upstream)"
+            )
         return OpenAICompatEmbedder(
             name=s.embed_model,
             model=s.embed_model,
             dim=s.embed_dim,
-            api_key=s.openai_api_key,
-            base_url=None,
+            api_key=s.openai_api_key or "not-needed",
+            base_url=s.embed_base_url,
         )
     if s.embed_provider == "yandex":
         # Yandex Foundation Models exposes an asymmetric pair —
