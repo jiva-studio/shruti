@@ -83,6 +83,12 @@ export default {
   retryInSeconds: "in {n}s",
   retryInMinutes: "in {n} min",
   retryAtTime: "at {time}",
+  /** Used when the reset clock lands on the user's local NEXT day —
+   *  server's resets_at_epoch is next UTC midnight, so for users east of
+   *  UTC the same "05:00" can mean tomorrow morning, not later today.
+   *  Bare "at 05:00" without the day word turned out to mislead users
+   *  ("is that today or tomorrow?") so we make it explicit. */
+  retryAtTimeTomorrow: "tomorrow at {time}",
   retryNow: "now",
 
   // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
@@ -109,13 +115,15 @@ export default {
   // ── Composer lockdown (Phase 6) ───────────────────────────────────────
   // Swapped into the input placeholder while the quota window is still
   // open. The textarea is disabled too, so this is purely informational.
-  composeLimitedPlaceholder: "Limit resets at {time}",
+  // `{when}` is built from `retryAtTime` / `retryAtTimeTomorrow` so the
+  // day word is included when the reset rolls past local midnight.
+  composeLimitedPlaceholder: "Limit resets {when}",
   composeLimitedPlaceholderNoTime: "Daily limit reached — try again later",
   /** aria-label set on the textarea + send button while the composer is
    *  locked. Screen readers announce this in place of the rotating
-   *  placeholder copy, which they normally don't surface. `{time}` is the
-   *  same HH:MM the placeholder shows. */
-  composeLimitedAriaLabel: "Composing paused, daily limit resets at {time}",
+   *  placeholder copy, which they normally don't surface. `{when}` is
+   *  the same fragment the placeholder shows. */
+  composeLimitedAriaLabel: "Composing paused, daily limit resets {when}",
   composeLimitedAriaLabelNoTime: "Composing paused, daily limit reached",
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
