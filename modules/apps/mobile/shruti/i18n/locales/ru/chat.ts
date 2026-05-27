@@ -84,6 +84,11 @@ export default {
   retryInSeconds: "через {n} с",
   retryInMinutes: "через {n} мин",
   retryAtTime: "в {time}",
+  /** Используется, когда сброс лимита приходится на локальный СЛЕДУЮЩИЙ
+   *  день — серверный resets_at_epoch это полночь UTC, и для пользователей
+   *  восточнее UTC те же «05:00» могут означать завтрашнее утро, а не
+   *  «через пару часов сегодня». Без слова «завтра» это путало. */
+  retryAtTimeTomorrow: "завтра в {time}",
   retryNow: "сейчас",
 
   // ── Tier-aware quota copy (Phase 5) ───────────────────────────────────
@@ -100,13 +105,16 @@ export default {
   upgradeToProCta: "Слушай Садху Pro",
 
   // ── Composer lockdown (Phase 6) ───────────────────────────────────────
-  composeLimitedPlaceholder: "Лимит обновится в {time}",
+  // `{when}` собирается из `retryAtTime` / `retryAtTimeTomorrow` —
+  // если сброс лимита приходится на локальное «завтра», в строке
+  // появляется слово «завтра», иначе просто «в HH:MM».
+  composeLimitedPlaceholder: "Лимит обновится {when}",
   composeLimitedPlaceholderNoTime: "Лимит исчерпан — попробуйте позже",
   /** aria-label на textarea + send-кнопке, пока ввод заблокирован
    *  лимитом. Экранные читалки озвучат это вместо ротации placeholder'а,
-   *  которую они обычно не подхватывают. `{time}` — те же ЧЧ:ММ, что
-   *  и в placeholder'е. */
-  composeLimitedAriaLabel: "Ввод приостановлен, дневной лимит обновится в {time}",
+   *  которую они обычно не подхватывают. `{when}` — тот же фрагмент,
+   *  что и в placeholder'е. */
+  composeLimitedAriaLabel: "Ввод приостановлен, дневной лимит обновится {when}",
   composeLimitedAriaLabelNoTime: "Ввод приостановлен, дневной лимит исчерпан",
 
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.

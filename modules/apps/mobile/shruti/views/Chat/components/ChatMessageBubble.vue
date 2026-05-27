@@ -548,7 +548,10 @@ function formatResetWhen(retryAfterAt: number | undefined): string {
  * Format a "{when}" fragment for `errRateAfter`:
  *  - <  60s → "in N s" (countdown, ticks every second)
  *  - <  1h  → "in N min" (still ticks but in coarser units)
- *  - else   → "at HH:MM" (no countdown; would be visually noisy at hours)
+ *  - else   → "at HH:MM" / "tomorrow at HH:MM" — no countdown (would be
+ *             noisy at hours), but disambiguate against the user's local
+ *             day so "at 5:00" doesn't look like 2 hours away when it's
+ *             actually 14 (UTC-midnight reset for an eastern user).
  *
  * Server's `Retry-After` for our /chat endpoint is seconds-until-midnight-UTC
  * (see backend rate_limiter.py), which can easily land in the hours range
@@ -564,7 +567,13 @@ function formatRetryWhen(remainingMs: number, deadlineMs: number): string {
   const d = new Date(deadlineMs)
   const hh = d.getHours().toString().padStart(2, "0")
   const mm = d.getMinutes().toString().padStart(2, "0")
-  return t("chat.retryAtTime", { time: `${hh}:${mm}` })
+  const time = `${hh}:${mm}`
+  const nowD = new Date(now.value)
+  const sameLocalDay =
+    d.getFullYear() === nowD.getFullYear() &&
+    d.getMonth() === nowD.getMonth() &&
+    d.getDate() === nowD.getDate()
+  return sameLocalDay ? t("chat.retryAtTime", { time }) : t("chat.retryAtTimeTomorrow", { time })
 }
 
 function onRetry(): void {

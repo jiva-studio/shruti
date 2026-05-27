@@ -17,14 +17,14 @@
       <button
         type="button"
         class="send"
-        :class="{ visible: canSend || sending, stopping: sending }"
+        :class="{ visible: canSend || sending }"
         :aria-label="sendAriaLabel"
         :disabled="(!canSend && !sending) || quotaLocked"
         :tabindex="(canSend || sending) && !quotaLocked ? 0 : -1"
         @click="onSendClick"
       >
         <IconArrowUp v-if="!sending" :size="20" stroke="2.5" />
-        <IconPlayerStopFilled v-else :size="18" />
+        <IonSpinner v-else name="dots" />
       </button>
     </div>
   </div>
@@ -33,7 +33,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { IconArrowUp, IconPlayerStopFilled } from "@tabler/icons-vue"
+import { IonSpinner } from "@ionic/vue"
+import { IconArrowUp } from "@tabler/icons-vue"
 
 const props = defineProps<{
   sending: boolean
@@ -73,15 +74,31 @@ const placeholderPool = computed<string[]>(() => {
 
 /** Random start so different sessions don't all open on the same question. */
 const placeholderIndex = ref(Math.floor(Math.random() * 1000))
+/** Format the `{when}` fragment for the lockout copy: `"at HH:MM"` when
+ *  the reset lands later today (local), `"tomorrow at HH:MM"` when it
+ *  rolls past local midnight. Server's `resets_at_epoch` is next UTC
+ *  midnight (~daily window), so for users east of UTC the deadline can
+ *  easily fall on the local next day — bare "HH:MM" would then look
+ *  like today and mislead "5:00" as "in 2 hours" when it's actually 14. */
+function formatLockoutWhen(deadlineMs: number): string {
+  const d = new Date(deadlineMs)
+  const hh = d.getHours().toString().padStart(2, "0")
+  const mm = d.getMinutes().toString().padStart(2, "0")
+  const time = `${hh}:${mm}`
+  const now = new Date()
+  const sameLocalDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  return sameLocalDay ? t("chat.retryAtTime", { time }) : t("chat.retryAtTimeTomorrow", { time })
+}
+
 const placeholder = computed<string>(() => {
   // Quota lock wins — show the user exactly when they can compose again
   // instead of the cheerful "Ask a question" rotation.
   if (props.quotaLocked) {
     if (typeof props.quotaResetsAt === "number") {
-      const d = new Date(props.quotaResetsAt)
-      const hh = d.getHours().toString().padStart(2, "0")
-      const mm = d.getMinutes().toString().padStart(2, "0")
-      return t("chat.composeLimitedPlaceholder", { time: `${hh}:${mm}` })
+      return t("chat.composeLimitedPlaceholder", { when: formatLockoutWhen(props.quotaResetsAt) })
     }
     return t("chat.composeLimitedPlaceholderNoTime")
   }
@@ -102,10 +119,7 @@ const placeholder = computed<string>(() => {
 const ariaLabel = computed<string>(() => {
   if (props.quotaLocked) {
     if (typeof props.quotaResetsAt === "number") {
-      const d = new Date(props.quotaResetsAt)
-      const hh = d.getHours().toString().padStart(2, "0")
-      const mm = d.getMinutes().toString().padStart(2, "0")
-      return t("chat.composeLimitedAriaLabel", { time: `${hh}:${mm}` })
+      return t("chat.composeLimitedAriaLabel", { when: formatLockoutWhen(props.quotaResetsAt) })
     }
     return t("chat.composeLimitedAriaLabelNoTime")
   }
@@ -120,10 +134,7 @@ const sendAriaLabel = computed<string>(() => {
   if (props.sending) return t("chat.stop")
   if (props.quotaLocked) {
     if (typeof props.quotaResetsAt === "number") {
-      const d = new Date(props.quotaResetsAt)
-      const hh = d.getHours().toString().padStart(2, "0")
-      const mm = d.getMinutes().toString().padStart(2, "0")
-      return t("chat.composeLimitedAriaLabel", { time: `${hh}:${mm}` })
+      return t("chat.composeLimitedAriaLabel", { when: formatLockoutWhen(props.quotaResetsAt) })
     }
     return t("chat.composeLimitedAriaLabelNoTime")
   }
@@ -319,14 +330,6 @@ defineExpose({ setText, focus })
   transform: scale(1);
   opacity: 1;
   pointer-events: auto;
-}
-
-/* While streaming the button is the Stop affordance — give it a
- * subtle visual cue (slightly muted surface) so it doesn't look
- * like a regular send button mid-turn. The icon flip already
- * carries most of the signal. */
-.send.stopping {
-  background: var(--ion-color-medium, #8a8a8a);
 }
 
 .send:disabled {
