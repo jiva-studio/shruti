@@ -109,8 +109,8 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
 
-  # Self-hosted text-embeddings server (HuggingFace TEI + BAAI/bge-m3,
-  # 1024-dim, multilingual). Exposes an OpenAI-compatible /v1/embeddings
+  # Self-hosted text-embeddings server (HuggingFace TEI, model picked at
+  # runtime via --model-id). Exposes an OpenAI-compatible /v1/embeddings
   # endpoint on port 8080 inside the shruti network. Reachable from
   # chat as http://embedder:8080/v1.
   #
@@ -120,16 +120,17 @@ services:
   # activates the profile so chat can index without the Yandex 10 RPS
   # embedding throttle.
   #
-  # Model + cache are baked into the image (infra/app/compose/embedder/
-  # Dockerfile downloads BAAI/bge-m3 at CI build time). HF_HUB_OFFLINE
-  # prevents any runtime phone-home.
+  # We run the upstream TEI image directly — no custom build. On first
+  # start TEI downloads BAAI/bge-m3 (~2.3 GB) from huggingface.co into
+  # the `embedder_models` named volume; subsequent restarts find it
+  # cached and start in seconds. The download window is the only time
+  # the container needs outbound HF access; if a future deployment
+  # can't reach huggingface.co, pre-populate the volume from a backup.
   embedder:
-    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-embedder:${SHRUTI_EMBEDDER_TAG:-latest}
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
     restart: unless-stopped
     logging: *default-logging
     profiles: ["selfhosted-embedder"]
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
     command:
       - --model-id=BAAI/bge-m3
       - --port=8080
@@ -137,14 +138,17 @@ services:
       - --max-client-batch-size=128
     environment:
       HUGGINGFACE_HUB_CACHE: /data
-      HF_HUB_OFFLINE: "1"
+    volumes:
+      - embedder_models:/data
     networks: [shruti]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
       interval: 15s
       timeout: 3s
-      retries: 20
-      start_period: 30s
+      # First-boot model download is ~5-15 min over a typical link.
+      # 60 retries * 15s = 15 min total grace, then unhealthy.
+      retries: 60
+      start_period: 60s
 
   # L2 cache for chat (router / title / embed_query / topic).
   # AOF on so hot caches survive restarts; 1 GB cap with allkeys-lru fits
@@ -407,3 +411,4 @@ volumes:
   chatdata:
   redisdata:
   share_video_scratch:
+  embedder_models:
