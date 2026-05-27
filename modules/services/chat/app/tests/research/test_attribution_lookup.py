@@ -80,7 +80,7 @@ async def test_native_match_accepted_above_threshold() -> None:
     pool = FakePool(conn)
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="openai/text-embedding-3-small", pool=pool,
+        embed_model="openai/text-embedding-3-small", embed_dim=1536, pool=pool,
     )
     assert len(matches) == 1
     assert matches[0].attribution_id == "attribution_a"
@@ -96,7 +96,7 @@ async def test_multi_match_returns_top_k_above_accept() -> None:
     ]})
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     # 4 are >= 0.85, but cap at QUESTION_MAX_MATCHES=3
     assert [m.attribution_id for m in matches] == ["a1", "a2", "a3"]
@@ -114,7 +114,7 @@ async def test_native_below_accept_falls_to_cross() -> None:
     })
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert len(matches) == 1
     assert matches[0].stage == "cross"
@@ -130,7 +130,7 @@ async def test_question_border_zone_triggers_llm_confirm_yes() -> None:
     conn = FakeConn({("ru", "question"): [_row("a1", 0.78)]})
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn), llm=YesLLM(),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn), llm=YesLLM(),
     )
     assert len(matches) == 1
     assert matches[0].attribution_id == "a1"
@@ -145,7 +145,7 @@ async def test_question_border_zone_llm_says_no_returns_empty() -> None:
     conn = FakeConn({("ru", "question"): [_row("a1", 0.78)]})
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn), llm=NoLLM(),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn), llm=NoLLM(),
     )
     assert matches == []
 
@@ -159,7 +159,7 @@ async def test_topic_no_llm_confirm_lower_thresholds() -> None:
     })
     matches = await find_attributions(
         kind="topic", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert len(matches) == 1
     assert matches[0].stage == "cross"
@@ -172,7 +172,7 @@ async def test_topic_native_threshold_separate_from_cross() -> None:
     conn = FakeConn({("ru", "topic"): [_row("t1", 0.71)]})
     matches = await find_attributions(
         kind="topic", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert len(matches) == 1
     assert matches[0].stage == "native"
@@ -183,7 +183,7 @@ async def test_empty_table_returns_empty_no_errors() -> None:
     conn = FakeConn({})  # no rows for any (lang, kind)
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert matches == []
 
@@ -196,7 +196,7 @@ async def test_refs_parsed_from_jsonb() -> None:
     ])]})
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert len(matches[0].refs) == 2
     assert matches[0].refs[0].ref_kind == "verse"
@@ -211,7 +211,7 @@ async def test_native_match_at_cross_threshold_promoted_no_extra_query() -> None
     conn = FakeConn({("ru", "question"): [_row("a1", 0.81)]})
     matches = await find_attributions(
         kind="question", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", pool=FakePool(conn),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
     assert len(matches) == 1
     assert matches[0].stage == "native"

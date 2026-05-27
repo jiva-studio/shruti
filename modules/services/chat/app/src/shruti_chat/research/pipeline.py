@@ -262,6 +262,7 @@ async def run_research(
     pool: Any,                           # asyncpg pool
     llm: Any,                            # LLMPort
     embed_model: str,                    # settings.embed_model
+    embed_dim: int,                      # settings.embed_dim — selects attribution_emb_d{N} table
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
@@ -342,7 +343,8 @@ async def run_research(
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
             kind="question", user_q_embedding=user_q_embedding, lang=lang,
-            embed_model=embed_model, pool=pool, llm=llm, confirm_model=confirm_model,
+            embed_model=embed_model, embed_dim=embed_dim,
+            pool=pool, llm=llm, confirm_model=confirm_model,
         ),
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
@@ -451,7 +453,8 @@ async def run_research(
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
         boost_by_kind=boost_by_kind, expand_model=expand_model,
-        topic_model=topic_model, embed_model_for_lookup=embed_model, pool=pool,
+        topic_model=topic_model, embed_model_for_lookup=embed_model,
+        embed_dim_for_lookup=embed_dim, pool=pool,
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
         kv_cache=kv_cache,
@@ -535,6 +538,7 @@ async def _research_path(
     expand_model: str | None,
     topic_model: str | None = None,
     embed_model_for_lookup: str | None = None,
+    embed_dim_for_lookup: int | None = None,
     pool: Any | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
@@ -546,7 +550,12 @@ async def _research_path(
     coverage gate and up to MAX_FANOUT_ROUNDS rounds."""
     topic_matches: list[AttributionMatch] = []
 
-    if boost_ids is None and pool is not None and embed_model_for_lookup is not None:
+    if (
+        boost_ids is None
+        and pool is not None
+        and embed_model_for_lookup is not None
+        and embed_dim_for_lookup is not None
+    ):
         # Step A: LLM extracts topics from the question. Use the
         # speculative result from `run_research` if it's available
         # (already paid for under `expand_query` latency); otherwise
@@ -579,7 +588,9 @@ async def _research_path(
                     _safe(
                         lambda emb=emb: find_attributions(
                             kind="topic", user_q_embedding=emb, lang=lang,
-                            embed_model=embed_model_for_lookup, pool=pool,
+                            embed_model=embed_model_for_lookup,
+                            embed_dim=embed_dim_for_lookup,
+                            pool=pool,
                         ),
                         default=[], timeout=TIMEOUT_TOPIC_LOOKUP_S,
                         name="topic_lookup", request_id=request_id,
