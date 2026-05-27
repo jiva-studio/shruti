@@ -181,7 +181,6 @@ export default {
     /** Small note rendered below the picker; surfaces the server-truth
      *  region (mirror of auth.users.home_region) so the user sees what
      *  the server thinks alongside the local picker. */
-    serverTruth: "Account region: {region}",
   },
 
   regionMigration: {

@@ -73,14 +73,6 @@
   </IonItem>
 
   <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
-  <!-- Server-authoritative home region. Sourced from /auth/me — the
-       picker above shows the LOCAL choice, this line confirms what the
-       server says you actually belong to. They match in steady state
-       (the composition root reconciles on every /me); a transient drift
-       reads as the two values diverging until the next /me lands. -->
-  <p v-if="serverHomeRegionLabel" class="settings-home-region-note">
-    {{ $t("settings.accountRegion.serverTruth", { region: serverHomeRegionLabel }) }}
-  </p>
 
   <IonActionSheet :is-open="sheetOpen" :buttons="sheetButtons" @did-dismiss="sheetOpen = false" />
 
@@ -117,13 +109,6 @@ const props = defineProps<{
   /** Currently-active region id. Read-only from this component's
    *  perspective — changes flow through `request-region-change`. */
   activeServerId: string
-  /**
-   * Server-authoritative home region id from /auth/me. Empty string
-   * before the first /me lands or on older servers that don't emit the
-   * field — in those cases the "Account region: …" line stays hidden.
-   * Matches `activeServerId` once the composition root has reconciled.
-   */
-  serverHomeRegion: string
 }>()
 
 const emit = defineEmits<{
@@ -145,20 +130,6 @@ const emit = defineEmits<{
    */
   "request-region-change": [newRegionId: string]
 }>()
-
-/**
- * Display label for the server-authoritative home region. Resolves
- * the id through `serverItems` (which already carries the user-facing
- * region name). Falls back to the raw id only when the server returns
- * an id this build doesn't ship — same shape `currentTitle` uses in
- * ServerSettingsItem.
- */
-const serverHomeRegionLabel = computed<string>(() => {
-  if (!props.serverHomeRegion) return ""
-  return (
-    props.serverItems.find((s) => s.id === props.serverHomeRegion)?.title ?? props.serverHomeRegion
-  )
-})
 
 // Proxy bound to ServerSettingsItem's v-model. Reads pass through to
 // the active id so the selector dialog highlights the current region;
@@ -269,12 +240,6 @@ function handleDeleteAccount(): void {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-.settings-home-region-note {
-  font-size: 0.75em;
-  color: var(--ion-color-medium);
-  margin: 4px 16px 8px;
-  padding: 0;
 }
 .account-avatar__initials {
   display: flex;

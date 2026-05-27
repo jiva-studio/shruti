@@ -177,7 +177,6 @@ export default {
   accountRegion: {
     title: "Регион аккаунта",
     description: "Где хранится ваш аккаунт и история чата",
-    serverTruth: "Регион аккаунта: {region}",
   },
 
   regionMigration: {
