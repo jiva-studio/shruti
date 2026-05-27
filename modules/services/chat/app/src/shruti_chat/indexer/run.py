@@ -23,6 +23,7 @@ from shruti_chat.indexer.embed import Embedder, get_embedder
 from shruti_chat.indexer.library import db as library_db
 from shruti_chat.indexer.library.attribution_indexer import run_once_attribution
 from shruti_chat.indexer.library.indexer import run_once_library
+from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -273,25 +274,50 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
         return 0
 
     vectors = await embedder.embed_documents([c.text for c in chunks])
+    # Embedding column is no longer on `chunks` after migration 0030 —
+    # the active dim's per-dim table receives the vectors. Indexer
+    # routes through `EmbeddingTableRouter`; FK CASCADE on chunk_id
+    # means deleting the chunks row also removes its embedding row.
+    router = EmbeddingTableRouter(dim=settings.embed_dim)
     pool = get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # Cascading delete: dropping the chunks row removes any
+            # matching d{N} embedding rows automatically (FK CASCADE).
             await conn.execute(
                 "DELETE FROM chunks WHERE track_id=$1 AND lang=$2 AND embed_model=$3",
                 obj.track_id, obj.lang, embedder.name,
             )
-            await conn.executemany(
+            # Bulk insert metadata rows via UNNEST; RETURNING id keeps
+            # the (chunk, embedding) zip aligned because UNNEST preserves
+            # input order. Then bulk-insert the matching d{N} rows.
+            track_ids = [c.track_id for c in chunks]
+            langs = [c.lang for c in chunks]
+            starts = [c.start_ms for c in chunks]
+            ends = [c.end_ms for c in chunks]
+            texts = [c.text for c in chunks]
+            ref_src = [c.reference_source_id for c in chunks]
+            id_rows = await conn.fetch(
                 """
                 INSERT INTO chunks
                   (track_id, lang, start_ms, end_ms, text,
-                   reference_source_id, embed_model, embedding)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                   reference_source_id, embed_model)
+                SELECT * FROM UNNEST(
+                  $1::text[], $2::text[], $3::int[], $4::int[], $5::text[],
+                  $6::text[], $7::text[]
+                )
+                RETURNING id
                 """,
-                [
-                    (c.track_id, c.lang, c.start_ms, c.end_ms, c.text,
-                     c.reference_source_id, embedder.name, v)
-                    for c, v in zip(chunks, vectors, strict=True)
-                ],
+                track_ids, langs, starts, ends, texts, ref_src,
+                [embedder.name] * len(chunks),
+            )
+            chunk_ids = [int(r["id"]) for r in id_rows]
+            await conn.executemany(
+                f"""
+                INSERT INTO {router.chunk_table} (chunk_id, embedding)
+                VALUES ($1, $2)
+                """,
+                list(zip(chunk_ids, vectors, strict=True)),
             )
             await conn.execute(
                 """

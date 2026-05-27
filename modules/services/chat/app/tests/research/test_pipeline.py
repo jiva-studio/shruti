@@ -203,6 +203,10 @@ def _common_kwargs(*, llm, pool, chunk_repo=None, embedder=None) -> dict:
         "pool": pool,
         "llm": llm,
         "embed_model": "openai/text-embedding-3-small",
+        # Default to the legacy 1536 dim (text-embedding-3-small);
+        # router will resolve `attribution_emb_d1536` for the lookup
+        # SQL — the FakePool below ignores the table name in any case.
+        "embed_dim": 1536,
     }
 
 
@@ -404,7 +408,7 @@ async def test_embed_failure_falls_through_to_fanout():
         question="вопрос", lang="ru", router_args={},
         chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
         embedder=embedder, alias_map=FakeAliasMap(),
-        pool=pool, llm=llm, embed_model="m",
+        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
     )
     assert result.authoritative_refs == []
     assert len(result.research_chunks) == 1
@@ -431,7 +435,7 @@ async def test_router_args_propagated_to_fanout(monkeypatch):
         router_args={"author_id": "author_p", "tag_ids": ["t1"], "doc_date_from": "1972-01-01"},
         chunk_repo=chunk_repo, catalog_repo=_CatalogRepoCapture(),
         embedder=FakeEmbedder(), alias_map=FakeAliasMap(),
-        pool=pool, llm=llm, embed_model="m",
+        pool=pool, llm=llm, embed_model="m", embed_dim=1536,
     )
     assert captured  # filter_track_ids was called
     assert captured[0]["author_id"] == "author_p"

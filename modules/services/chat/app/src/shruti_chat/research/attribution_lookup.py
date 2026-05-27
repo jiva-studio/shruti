@@ -20,6 +20,7 @@ import asyncio
 import json
 from typing import Any, Literal
 
+from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import (
     QUESTION_ACCEPT_SCORE_CROSS,
@@ -43,6 +44,7 @@ async def find_attributions(
     user_q_embedding: list[float],
     lang: str,
     embed_model: str,
+    embed_dim: int,
     pool: Any,                           # asyncpg pool
     llm: Any | None = None,              # for border-zone confirm; topic ignores
     confirm_model: str | None = None,
@@ -66,9 +68,11 @@ async def find_attributions(
     else:
         return []
 
+    router = EmbeddingTableRouter(dim=embed_dim)
+
     # Stage 1 — NATIVE lang. MAX(score) per attribution (one attribution may
     # have N text variants; we want its best variant for THIS user query).
-    native = await _query(pool, user_q_embedding, kind, embed_model, lang=lang)
+    native = await _query(pool, user_q_embedding, kind, embed_model, lang=lang, router=router)
     accepted_native = [m for m in native if m.score >= an]
     if accepted_native:
         return _take(accepted_native, mm, stage="native")
@@ -92,7 +96,7 @@ async def find_attributions(
         accepted = [m for m in native if m.score >= ac]
         return _take(accepted, mm, stage="native")
 
-    cross = await _query(pool, user_q_embedding, kind, embed_model, lang=None)
+    cross = await _query(pool, user_q_embedding, kind, embed_model, lang=None, router=router)
     accepted_cross = [m for m in cross if m.score >= ac]
     if accepted_cross:
         return _take(accepted_cross, mm, stage="cross")
@@ -116,18 +120,25 @@ async def _query(
     embed_model: str,
     *,
     lang: str | None,
+    router: EmbeddingTableRouter,
 ) -> list[AttributionMatch]:
     """One pgvector lookup. Returns top-10 candidates ordered by score desc.
 
     GROUP BY attribution.id with MAX(similarity) so an attribution with N
     variants reports its best variant for this query (we don't want it to
-    appear N times in the result)."""
+    appear N times in the result).
+
+    Embeddings now live in the per-dim `attribution_emb_d{N}` table
+    (migration 0030); `router` resolves the right table for the active
+    deployment's `embed_dim`."""
+
+    emb_table = router.attribution_table
 
     if lang is not None:
-        sql = """
+        sql = f"""
             SELECT a.id, a.refs::text AS refs_json,
                    MAX(1 - (e.embedding <=> $1::vector)) AS score
-            FROM attribution_embeddings e
+            FROM {emb_table} e
             JOIN attributions a ON a.id = e.attribution_id
             WHERE e.language = $2
               AND e.embed_model = $3
@@ -138,10 +149,10 @@ async def _query(
         """
         args = (user_q_embedding, lang, embed_model, kind)
     else:
-        sql = """
+        sql = f"""
             SELECT a.id, a.refs::text AS refs_json,
                    MAX(1 - (e.embedding <=> $1::vector)) AS score
-            FROM attribution_embeddings e
+            FROM {emb_table} e
             JOIN attributions a ON a.id = e.attribution_id
             WHERE e.embed_model = $2
               AND a.kind = $3
