@@ -1,3 +1,11 @@
+import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
+
+// Re-export so the mobile store + tests can import either from the
+// domain barrel or directly off the chat HTTP adapter — keeps the
+// import path short at call-sites that already pull other types from
+// this module.
+export { BackendUnavailableError, ProtocolVersionMismatchError }
+
 /* -------------------------------------------------------------------------- */
 /*                              Wire-protocol types                           */
 /* -------------------------------------------------------------------------- */
@@ -505,6 +513,36 @@ export async function* streamChat(
   }
 
   if (!response.ok) {
+    // 426 — `X-Chat-Protocol-Version` doesn't match anything the
+    // server supports. The mismatch is structural (no retry will help
+    // until the app updates), so throw a typed error instead of
+    // funneling it into the SSE error event stream. The store catches
+    // and surfaces a "please update" toast with a store-link CTA.
+    if (response.status === 426) {
+      let supported: number[] | undefined
+      let received: number | undefined
+      try {
+        const json = (await response.clone().json()) as {
+          detail?: { supported?: unknown; received?: unknown }
+        } | null
+        const d = json?.detail
+        if (d) {
+          if (Array.isArray(d.supported)) {
+            supported = d.supported
+              .map((v) => (typeof v === "number" ? v : Number(v)))
+              .filter((n) => Number.isFinite(n))
+          }
+          if (typeof d.received === "number") received = d.received
+          else if (typeof d.received === "string") {
+            const n = Number(d.received)
+            if (Number.isFinite(n)) received = n
+          }
+        }
+      } catch {
+        // Body wasn't JSON / detail missing — throw with what we have.
+      }
+      throw new ProtocolVersionMismatchError(supported, received)
+    }
     if (response.status === 429) {
       const retryHeader = response.headers.get("Retry-After")
       const retryAfter = retryHeader ? Number(retryHeader) : 60
@@ -534,6 +572,28 @@ export async function* streamChat(
         ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
       }
       return
+    }
+    // 503 with `code: "rate_limit_backend_unavailable"` means Redis is
+    // down so the server can't make a quota decision. Distinct from a
+    // plain 503 (server warming up / gateway burp) which should still
+    // fall through to the SSE error path so the bubble can retry. Other
+    // 503 shapes (no code, different code) keep the existing handling.
+    if (response.status === 503) {
+      try {
+        const json = (await response.clone().json()) as {
+          detail?: { code?: unknown }
+        } | null
+        const code = json?.detail?.code
+        if (typeof code === "string" && code === "rate_limit_backend_unavailable") {
+          throw new BackendUnavailableError()
+        }
+      } catch (err) {
+        // Re-throw the typed error so the catch above doesn't swallow it
+        // while parsing a malformed body. Any other parse failure means
+        // the body wasn't the rate-limit shape — fall through to the
+        // generic http_503 path below.
+        if (err instanceof BackendUnavailableError) throw err
+      }
     }
     const text = await safeReadText(response)
     yield { type: "error", code: `http_${response.status}`, message: text }

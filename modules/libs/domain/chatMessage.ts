@@ -123,6 +123,41 @@ export type ChatMessageError =
    *  same `meta.error` path as the other kinds. */
   | { kind: "stopped" }
 
+/**
+ * Thrown by the chat HTTP adapter when the server returns 426 — the
+ * mobile client's `X-Chat-Protocol-Version` header doesn't match any
+ * version the server supports. Carries the server's `supported` list
+ * and the value we sent so callers can render a "please update" toast
+ * with a store-link CTA. Bypasses the regular SSE error event channel
+ * because the failure is structural (no negotiation possible), not a
+ * transient stream-level hiccup the bubble can retry on.
+ */
+export class ProtocolVersionMismatchError extends Error {
+  readonly kind = "protocol_version_mismatch"
+  constructor(
+    public readonly serverSupported: number[] | undefined,
+    public readonly clientSent: number | undefined,
+  ) {
+    super("Chat protocol version mismatch")
+    this.name = "ProtocolVersionMismatchError"
+  }
+}
+
+/**
+ * Thrown by the chat HTTP adapter when the server returns 503 with
+ * `code: "rate_limit_backend_unavailable"` — the Redis-backed rate
+ * limiter is down so the server can't make a quota decision. Surfaced
+ * as a typed error so the store can show a dedicated "try again in a
+ * moment" toast instead of bucketing it with generic network failures.
+ */
+export class BackendUnavailableError extends Error {
+  readonly kind = "backend_unavailable"
+  constructor() {
+    super("Chat backend temporarily unavailable")
+    this.name = "BackendUnavailableError"
+  }
+}
+
 export interface ChatMessage {
   readonly id: ChatMessageId
   readonly sessionId: ChatSessionId

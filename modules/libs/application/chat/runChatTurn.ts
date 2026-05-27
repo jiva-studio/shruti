@@ -5,6 +5,10 @@ import type {
   ChatMessageError,
   ChatOutlinePayload,
 } from "@lib/domain/chatMessage.js"
+import {
+  BackendUnavailableError,
+  ProtocolVersionMismatchError,
+} from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageRepository.js"
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
@@ -328,6 +332,18 @@ export async function* runChatTurn(
       if (event.type === "done" || event.type === "error") break
     }
   } catch (e) {
+    // Typed structural failures (protocol mismatch, backend unavailable)
+    // bypass the inline failed-bubble path — the store catches and
+    // surfaces them as toasts with their own copy + CTA. Bucketing them
+    // into a generic `code: "stream"` event would land them on the
+    // generic "couldn't get a response" message and lose the actionable
+    // signal (e.g. "update the app").
+    if (
+      e instanceof ProtocolVersionMismatchError ||
+      e instanceof BackendUnavailableError
+    ) {
+      throw e
+    }
     lastError = {
       code: "stream",
       message: e instanceof Error ? e.message : "Stream failed",
