@@ -29,8 +29,10 @@ OpenRouter on global until Yandex grows the feature.
 
 from __future__ import annotations
 
+import asyncio
 import json
-from contextlib import nullcontext
+import random
+from contextlib import asynccontextmanager, nullcontext
 from typing import Any, AsyncIterator, TypeVar
 
 import httpx
@@ -54,6 +56,30 @@ _YANDEX_COMPLETION_URL = (
     "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 )
 
+# Bounded retry on HTTP 429 (Too Many Requests) for the initial POST.
+# Yandex's Foundation Models RPS quota on a fresh folder is ~3-5/s;
+# the chat service today fires one stream at a time, but parallel
+# callers (e.g. background outline generation + a live chat turn)
+# can still trip 429. Mid-stream failures are NOT retried — once
+# the stream is open we have token/usage state mid-flight and the
+# caller already committed to consuming a delta sequence.
+_MAX_RETRIES = 5
+_BACKOFF_BASE_SECONDS = 2.0
+
+
+def _retry_delay(attempt: int, retry_after: str | None) -> float:
+    """Compute the sleep before the next retry on 429.
+
+    Honours `Retry-After` (RFC 7231 — seconds form). Falls back to
+    exponential backoff with jitter to spread concurrent retries.
+    """
+    if retry_after:
+        try:
+            return max(float(retry_after), 0.0)
+        except ValueError:
+            pass
+    return _BACKOFF_BASE_SECONDS * (2 ** attempt) + random.random()
+
 
 class YandexLLMProvider:
     """`LLMPort` impl backed by the Yandex Cloud Foundation Models REST API.
@@ -67,7 +93,9 @@ class YandexLLMProvider:
     and async-safe.
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, *, concurrency: int = 2,
+    ) -> None:
         if not settings.yandex_gpt_folder_id:
             raise RuntimeError(
                 "YandexLLMProvider requires YANDEX_GPT_FOLDER_ID in settings"
@@ -88,6 +116,12 @@ class YandexLLMProvider:
                 connect=10.0, read=180.0, write=30.0, pool=10.0
             ),
         )
+        # Bound parallelism on outgoing requests. We don't fan out
+        # chat completions today, but the semaphore is a cheap guard
+        # against a future caller spinning multiple streams in parallel
+        # (e.g. background outline generator + a live chat turn) and
+        # tripping the Foundation Models RPS quota.
+        self._sem = asyncio.Semaphore(concurrency)
 
     @staticmethod
     def _resolve_auth(s: Settings) -> str:
@@ -158,6 +192,79 @@ class YandexLLMProvider:
             log.warning("langfuse_generation_open_failed", error=str(exc))
             return nullcontext(None)
 
+    @asynccontextmanager
+    async def _stream_with_retry_on_429(
+        self,
+        *,
+        body: dict[str, Any],
+        headers: dict[str, str],
+        model_uri: str,
+    ) -> AsyncIterator[httpx.Response]:
+        """Open `client.stream(POST, ...)` with bounded retry on 429.
+
+        Yielded value is the live `httpx.Response`. Caller is responsible
+        for `raise_for_status()` and consuming the body — we just handle
+        the throttle handshake. Non-429 status codes (including 4xx like
+        401/400 and all 5xx) pass through unchanged for the caller to
+        raise normally.
+
+        Body content is NOT consumed on a 429 attempt — we read the
+        Retry-After header off the response head, close the stream, and
+        retry. Streaming bodies on error responses are typically a JSON
+        error dict; not reading them keeps the retry path cheap.
+        """
+        last_resp_status: int | None = None
+        last_retry_after: str | None = None
+        for attempt in range(_MAX_RETRIES + 1):
+            stream_cm = self._client.stream(
+                "POST", _YANDEX_COMPLETION_URL, json=body, headers=headers,
+            )
+            resp = await stream_cm.__aenter__()
+            if resp.status_code != 429:
+                try:
+                    yield resp
+                    return
+                finally:
+                    await stream_cm.__aexit__(None, None, None)
+            # 429 path — close immediately and either retry or give up.
+            last_resp_status = resp.status_code
+            last_retry_after = resp.headers.get("Retry-After")
+            await stream_cm.__aexit__(None, None, None)
+            if attempt >= _MAX_RETRIES:
+                log.error(
+                    "yandex_llm_throttled_giving_up",
+                    model_uri=model_uri,
+                    attempts=attempt + 1,
+                    retry_after=last_retry_after,
+                )
+                # Re-open one final time so the caller's raise_for_status
+                # surfaces the 429 with the original response context
+                # (headers, body) intact — matches the pre-retry contract.
+                final_cm = self._client.stream(
+                    "POST", _YANDEX_COMPLETION_URL, json=body, headers=headers,
+                )
+                final_resp = await final_cm.__aenter__()
+                try:
+                    yield final_resp
+                    return
+                finally:
+                    await final_cm.__aexit__(None, None, None)
+            delay = _retry_delay(attempt, last_retry_after)
+            log.warning(
+                "yandex_llm_throttled_retrying",
+                model_uri=model_uri,
+                attempt=attempt + 1,
+                max_attempts=_MAX_RETRIES + 1,
+                sleep_seconds=round(delay, 2),
+                retry_after=last_retry_after,
+            )
+            await asyncio.sleep(delay)
+        # Defensive — loop always returns or re-yields above.
+        raise RuntimeError(  # pragma: no cover
+            f"YandexLLMProvider: retry loop exited without resolution "
+            f"(last status={last_resp_status})"
+        )
+
     async def stream_completion(
         self,
         messages: list[Message],
@@ -216,8 +323,13 @@ class YandexLLMProvider:
         usage_out = 0
         with gen_ctx as gen:
             try:
-                async with self._client.stream(
-                    "POST", _YANDEX_COMPLETION_URL, json=body, headers=headers,
+                # Bound concurrent open streams — protects the per-folder
+                # RPS quota when multiple call sites stream in parallel.
+                # Held for the full stream duration: Yandex's quota is
+                # really about concurrent active completions, not just
+                # request opens.
+                async with self._sem, self._stream_with_retry_on_429(
+                    body=body, headers=headers, model_uri=model_uri,
                 ) as resp:
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():

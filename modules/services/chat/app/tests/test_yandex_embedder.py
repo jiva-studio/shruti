@@ -11,6 +11,11 @@ import pytest
 from shruti_chat.indexer.yandex_embed import YandexEmbedder
 
 
+async def _noop_sleep(_: float) -> None:
+    """Replacement for asyncio.sleep in retry tests — must remain async."""
+    return None
+
+
 def _build_embedder_with_handler(handler) -> YandexEmbedder:
     emb = YandexEmbedder(
         folder_id="folder-x",
@@ -97,3 +102,104 @@ def test_construction_requires_credentials() -> None:
             query_model="text-search-query/latest",
             dim=256,
         )
+
+
+def test_default_concurrency_is_conservative() -> None:
+    """Fresh Yandex Cloud folders cap at ~3-5 RPS for Foundation Models —
+    default semaphore must keep the indexer under that without an explicit
+    env override."""
+    emb = YandexEmbedder(
+        folder_id="f",
+        api_key="k",
+        iam_token=None,
+        doc_model="text-search-doc/latest",
+        query_model="text-search-query/latest",
+        dim=256,
+    )
+    # asyncio.Semaphore exposes its initial value via the private
+    # `_value` attr — fine for a unit assertion.
+    assert emb._sem._value == 2  # type: ignore[attr-defined]
+
+
+async def test_embed_retries_on_429_then_succeeds(monkeypatch) -> None:
+    """A single 429 must be transparently retried and the caller gets
+    the eventual successful embedding."""
+    monkeypatch.setattr(
+        "shruti_chat.indexer.yandex_embed.asyncio.sleep",
+        _noop_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "0"},
+                json={"error": "Too Many Requests"},
+            )
+        return httpx.Response(
+            200, json={"embedding": [0.5] * 256, "numTokens": "1"},
+        )
+
+    emb = _build_embedder_with_handler(handler)
+    vec = await emb.embed_query("ok-after-retry")
+    assert len(vec) == 256
+    assert vec[0] == pytest.approx(0.5)
+    assert call_count["n"] == 2
+    await emb.close()
+
+
+async def test_embed_raises_after_max_429s(monkeypatch) -> None:
+    """5 consecutive 429s exhaust the retry budget; the original
+    HTTPStatusError is raised to the caller."""
+    monkeypatch.setattr(
+        "shruti_chat.indexer.yandex_embed.asyncio.sleep",
+        _noop_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return httpx.Response(
+            429,
+            headers={"Retry-After": "0"},
+            json={"error": "Too Many Requests"},
+        )
+
+    emb = _build_embedder_with_handler(handler)
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        await emb.embed_query("never-succeeds")
+    assert excinfo.value.response.status_code == 429
+    # _MAX_RETRIES = 5 → 1 initial + 5 retries = 6 attempts total.
+    assert call_count["n"] == 6
+    await emb.close()
+
+
+async def test_embed_honors_retry_after_seconds(monkeypatch) -> None:
+    """When the server sends Retry-After in seconds, we should sleep
+    that exact value instead of the backoff curve."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(d: float) -> None:
+        sleeps.append(d)
+
+    monkeypatch.setattr(
+        "shruti_chat.indexer.yandex_embed.asyncio.sleep", fake_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return httpx.Response(
+                429, headers={"Retry-After": "7"}, json={"error": "x"},
+            )
+        return httpx.Response(
+            200, json={"embedding": [0.1] * 256, "numTokens": "1"},
+        )
+
+    emb = _build_embedder_with_handler(handler)
+    await emb.embed_query("retry-after-test")
+    assert sleeps == [7.0]
+    await emb.close()

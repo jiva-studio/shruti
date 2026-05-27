@@ -324,3 +324,129 @@ def test_constructor_rejects_missing_credentials() -> None:
     )
     with pytest.raises(RuntimeError, match="API_KEY or"):
         YandexLLMProvider(s)
+
+
+def test_default_concurrency_is_conservative() -> None:
+    """Default semaphore caps in-flight streams to 2 — fresh Yandex
+    Cloud folders only allow ~3-5 RPS on Foundation Models, and we'd
+    rather under-utilise than thrash 429s."""
+    provider = YandexLLMProvider(_make_settings())
+    assert provider._sem._value == 2  # type: ignore[attr-defined]
+
+
+async def _noop_sleep(_: float) -> None:
+    """Replacement for asyncio.sleep in retry tests — must remain async."""
+    return None
+
+
+async def test_stream_retries_on_429_then_succeeds(monkeypatch) -> None:
+    """A single 429 on the initial POST is retried transparently and
+    the caller eventually consumes the successful stream."""
+    monkeypatch.setattr(
+        "shruti_chat.infra.llm_provider.yandex.asyncio.sleep",
+        _noop_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "0"},
+                json={"error": "Too Many Requests"},
+            )
+        return _stream_response([
+            {
+                "result": {
+                    "alternatives": [{
+                        "message": {"role": "assistant", "text": "ok"},
+                        "status": "ALTERNATIVE_STATUS_FINAL",
+                    }],
+                },
+            }
+        ])
+
+    provider = _build_provider_with_handler(handler)
+    chunks = await _collect(
+        provider.stream_completion([{"role": "user", "content": "hi"}])
+    )
+    assert call_count["n"] == 2
+    assert chunks[-1]["finish_reason"] == "stop"
+    assert "".join(c.get("text", "") for c in chunks) == "ok"
+    await provider.close()
+
+
+async def test_stream_raises_after_max_429s(monkeypatch) -> None:
+    """5 consecutive 429s exhaust the retry budget; the HTTPStatusError
+    is raised so the caller can surface the throttle to the user."""
+    monkeypatch.setattr(
+        "shruti_chat.infra.llm_provider.yandex.asyncio.sleep",
+        _noop_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return httpx.Response(
+            429,
+            headers={"Retry-After": "0"},
+            json={"error": "Too Many Requests"},
+        )
+
+    provider = _build_provider_with_handler(handler)
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        await _collect(
+            provider.stream_completion([{"role": "user", "content": "hi"}])
+        )
+    assert excinfo.value.response.status_code == 429
+    # 1 initial + 5 retries + 1 final replay for the raise_for_status
+    # surface = 7 attempts. (See _stream_with_retry_on_429 docstring.)
+    assert call_count["n"] == 7
+    await provider.close()
+
+
+async def test_stream_honors_retry_after_seconds(monkeypatch) -> None:
+    """When Retry-After is set (seconds form), sleep that exact value
+    rather than the backoff curve."""
+    sleeps: list[float] = []
+
+    async def fake_sleep(d: float) -> None:
+        sleeps.append(d)
+
+    monkeypatch.setattr(
+        "shruti_chat.infra.llm_provider.yandex.asyncio.sleep",
+        fake_sleep,
+    )
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return httpx.Response(
+                429, headers={"Retry-After": "5"}, json={"error": "x"},
+            )
+        return _stream_response([
+            {
+                "result": {
+                    "alternatives": [{
+                        "message": {"role": "assistant", "text": "ok"},
+                        "status": "ALTERNATIVE_STATUS_FINAL",
+                    }],
+                },
+            }
+        ])
+
+    provider = _build_provider_with_handler(handler)
+    await _collect(
+        provider.stream_completion([{"role": "user", "content": "hi"}])
+    )
+    assert sleeps == [5.0]
+    await provider.close()
+
+
+def test_explicit_concurrency_override() -> None:
+    """Operators with bumped Yandex quotas can opt out of the default
+    cap by passing concurrency directly at construction time."""
+    provider = YandexLLMProvider(_make_settings(), concurrency=10)
+    assert provider._sem._value == 10  # type: ignore[attr-defined]
