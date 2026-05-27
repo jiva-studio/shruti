@@ -238,6 +238,32 @@ entirely in `/opt/shruti/.env` on the host (`SHRUTI_REGION_ID`,
 `SHRUTI_JWT_KID`, `AWS_REGION`, `AWS_ENDPOINT_URL`, LLM/embedder
 provider stack).
 
+### Self-hosted embedder (opt-in per region)
+
+A region with restricted/expensive outbound embedding API can run its
+own TEI + BGE-M3 container next to chat. The service is gated behind
+`profiles: ["selfhosted-embedder"]` in `docker-compose.yml`; setting
+`COMPOSE_PROFILES=selfhosted-embedder` in `/opt/shruti/.env` makes
+Compose include it on the next `deploy.sh`.
+
+Wiring chat to the local embedder:
+
+```env
+COMPOSE_PROFILES=selfhosted-embedder
+EMBED_PROVIDER=openai
+EMBED_MODEL=baai/bge-m3
+EMBED_DIM=1024
+OPENAI_API_KEY=not-needed
+EMBED_BASE_URL=http://embedder:8080/v1
+EMBED_CONCURRENCY=4
+```
+
+EU does not set these — it keeps its OpenAI cloud config. The
+embedder image (`shruti-embedder`) bakes the model into the image
+at CI build time, so the container starts without phoning home to
+huggingface.co. See `infra/app/compose/embedder/README.md` for sizing
+and the model-bump procedure.
+
 ### 7. Backup cron  *(operator, on the VPS)*
 
 ```bash

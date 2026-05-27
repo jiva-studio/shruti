@@ -5,13 +5,20 @@ Diff is per (item_id, lang, embed_model) by content_hash; embed in
 batches; upsert into the unified `chunks` table with `kind` set to the
 appropriate library kind ('verse' / 'commentary' / 'prose_chapter' /
 'letter').
+
+Walk is streamed: chunks for one (item_id, lang) are grouped from the
+chunker output via itertools.groupby (both walk_verses and walk_documents
+yield chunks for one (item_id, lang) consecutively), hashed, diffed,
+and either skipped or buffered into the next embed cycle. Peak RAM is
+bounded by ITEM_BATCH items * ~38 chunks * ~1 KB ≈ a few MB, regardless
+of how many items live in library.db.
 """
 
 from __future__ import annotations
 
+import itertools
 import time
-from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from shruti_chat.config import Settings, get_settings
 from shruti_chat.db.client import get_pool
@@ -43,6 +50,29 @@ ITEM_BATCH = 64
 LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter")
 
 
+def _stream_items(
+    library_db_path,
+    short_names: dict[tuple[str, str], str],
+    *,
+    langs: list[str],
+) -> Iterator[tuple[tuple[str, str], list[LibraryChunk]]]:
+    """Yield (item_id, lang) → list[chunks] one item at a time.
+
+    Both walk_verses and walk_documents emit chunks for one (item_id, lang)
+    consecutively (verses produce a single chunk per pair; documents
+    iterate segments within a (doc, lang) variant before moving on), so
+    itertools.groupby groups correctly without buffering the whole walk.
+    """
+    chunk_stream: Iterable[LibraryChunk] = itertools.chain(
+        walk_verses(library_db_path, short_names, langs=langs),
+        walk_documents(library_db_path, short_names, langs=langs),
+    )
+    for key, group in itertools.groupby(
+        chunk_stream, key=lambda c: (c.item_id, c.lang)
+    ):
+        yield key, list(group)
+
+
 async def run_once_library(settings: Settings | None = None) -> dict:
     """One library indexing pass — diff, embed changed, upsert, GC."""
     s = settings or get_settings()
@@ -65,22 +95,9 @@ async def run_once_library(settings: Settings | None = None) -> dict:
     short_names = load_source_short_names(s.catalog_db_path)
     langs = s.langs
 
-    t0 = time.monotonic()
-    item_chunks: dict[tuple[str, str], list[LibraryChunk]] = defaultdict(list)
-    for chunk in walk_verses(s.library_db_path, short_names, langs=langs):
-        item_chunks[(chunk.item_id, chunk.lang)].append(chunk)
-    for chunk in walk_documents(s.library_db_path, short_names, langs=langs):
-        item_chunks[(chunk.item_id, chunk.lang)].append(chunk)
-
-    items_total = len(item_chunks)
-    log.info(
-        "library_walk_complete",
-        items_total=items_total,
-        chunks_total=sum(len(v) for v in item_chunks.values()),
-        duration_ms=int((time.monotonic() - t0) * 1000),
-    )
-
-    # Load existing hashes for diff
+    # Load existing hashes for diff. Bounded ~80k rows of
+    # (item_id, lang, etag) → ~10 MB resident. Cheap compared to
+    # accumulating the full chunk corpus.
     async with pool.acquire() as conn:
         indexed = await conn.fetch(
             """
@@ -92,29 +109,140 @@ async def run_once_library(settings: Settings | None = None) -> dict:
         )
     indexed_hash = {(r["item_id"], r["lang"]): r["etag"] for r in indexed}
 
-    # Compute content hash per item — includes BOTH the chunk text AND the
-    # composed addr_label, so an update to catalog.sources.short_name (which
-    # changes addr_label without changing text) triggers a reindex of just
-    # the affected items. Without this the documents' addr_label column
-    # stays stale until library.db itself republishes.
-    changed: list[tuple[tuple[str, str], list[LibraryChunk], str]] = []
-    for (item_id, lang), chunks in item_chunks.items():
-        body = "\n\n---\n\n".join(
-            f"{c.addr_label}\t{c.text}" for c in chunks
+    async def _flush(cycle: list[tuple[tuple[str, str], list[LibraryChunk], str]]) -> int:
+        """Embed + commit one cycle's worth of items. Returns chunks written."""
+        flat: list[LibraryChunk] = []
+        item_offsets: list[tuple[tuple[str, str], int, int, str]] = []
+        for key, chunks, h in cycle:
+            start = len(flat)
+            flat.extend(chunks)
+            item_offsets.append((key, start, len(flat), h))
+
+        cycle_t0 = time.monotonic()
+        vectors = await embedder.embed_documents([c.text for c in flat])
+        if len(vectors) != len(flat):
+            raise RuntimeError(
+                f"embedder returned {len(vectors)} vectors for {len(flat)} texts"
+            )
+
+        cycle_chunks = 0
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                for (item_id, lang), start, end, h in item_offsets:
+                    # FK CASCADE drops matching d{N} rows automatically.
+                    await conn.execute(
+                        "DELETE FROM chunks WHERE item_id=$1 AND lang=$2 AND embed_model=$3",
+                        item_id, lang, embedder.name,
+                    )
+                    item_chunks_list = flat[start:end]
+                    item_vectors = vectors[start:end]
+                    if not item_chunks_list:
+                        continue
+                    n = len(item_chunks_list)
+                    # Bulk insert via UNNEST keeps INSERT...RETURNING
+                    # ordered, so chunk_ids align with item_vectors.
+                    id_rows = await conn.fetch(
+                        """
+                        INSERT INTO chunks
+                          (kind, lang, text,
+                           source_id, tokens, author_id, doc_date,
+                           item_id, segment_index, addr_label,
+                           embed_model)
+                        SELECT * FROM UNNEST(
+                          $1::text[], $2::text[], $3::text[],
+                          $4::text[], $5::text[], $6::text[], $7::text[],
+                          $8::text[], $9::int[], $10::text[],
+                          $11::text[]
+                        )
+                        RETURNING id
+                        """,
+                        [c.item_kind for c in item_chunks_list],
+                        [c.lang for c in item_chunks_list],
+                        [c.text for c in item_chunks_list],
+                        [c.source_id for c in item_chunks_list],
+                        [c.tokens for c in item_chunks_list],
+                        [c.author_id for c in item_chunks_list],
+                        [c.doc_date for c in item_chunks_list],
+                        [c.item_id for c in item_chunks_list],
+                        [c.segment_index for c in item_chunks_list],
+                        [c.addr_label for c in item_chunks_list],
+                        [embedder.name] * n,
+                    )
+                    chunk_ids = [int(r["id"]) for r in id_rows]
+                    await conn.executemany(
+                        f"""
+                        INSERT INTO {router.chunk_table} (chunk_id, embedding)
+                        VALUES ($1, $2)
+                        """,
+                        list(zip(chunk_ids, item_vectors, strict=True)),
+                    )
+                    cycle_chunks += n
+                    await conn.execute(
+                        """
+                        INSERT INTO indexed_items
+                          (item_kind, item_id, lang, embed_model, etag, indexed_at)
+                        VALUES ($1, $2, $3, $4, $5, NOW())
+                        ON CONFLICT (item_kind, item_id, lang, embed_model)
+                        DO UPDATE SET etag=$5, indexed_at=NOW()
+                        """,
+                        item_chunks_list[0].item_kind,
+                        item_id, lang, embedder.name, h,
+                    )
+        log.info(
+            "library_embed_cycle",
+            items_in_cycle=len(item_offsets),
+            chunks_written_cycle=cycle_chunks,
+            cycle_ms=int((time.monotonic() - cycle_t0) * 1000),
         )
+        return cycle_chunks
+
+    t0 = time.monotonic()
+    current_keys: set[tuple[str, str]] = set()
+    buffer: list[tuple[tuple[str, str], list[LibraryChunk], str]] = []
+    items_total = 0
+    items_changed = 0
+    chunks_total = 0
+
+    for (item_id, lang), chunks in _stream_items(
+        s.library_db_path, short_names, langs=langs
+    ):
+        items_total += 1
+        current_keys.add((item_id, lang))
+
+        # Content hash covers chunk text AND the composed addr_label, so
+        # an update to catalog.sources.short_name (which changes addr_label
+        # without changing text) triggers a reindex of just the affected
+        # items. Without this the documents' addr_label column stays stale
+        # until library.db itself republishes.
+        body = "\n\n---\n\n".join(f"{c.addr_label}\t{c.text}" for c in chunks)
         h = hash_body(body)
-        if indexed_hash.get((item_id, lang)) != h:
-            changed.append(((item_id, lang), chunks, h))
+        if indexed_hash.get((item_id, lang)) == h:
+            # Unchanged — drop the chunks; they go out of scope and the
+            # GC reclaims memory before the next item is walked.
+            continue
+
+        items_changed += 1
+        buffer.append(((item_id, lang), chunks, h))
+
+        if len(buffer) >= ITEM_BATCH:
+            chunks_total += await _flush(buffer)
+            buffer.clear()
+
+    # Final partial cycle.
+    if buffer:
+        chunks_total += await _flush(buffer)
+        buffer.clear()
 
     log.info(
-        "library_diff",
+        "library_walk_complete",
         items_total=items_total,
-        items_changed=len(changed),
+        items_changed=items_changed,
         embed_model=embedder.name,
+        duration_ms=int((time.monotonic() - t0) * 1000),
     )
 
-    # GC: items present in indexed_items (library kinds) but no longer in library.db
-    current_keys = set(item_chunks.keys())
+    # GC: items present in indexed_items (library kinds) but no longer in library.db.
+    # `current_keys` was populated during the streaming walk above.
     stale = [k for k in indexed_hash if k not in current_keys]
     if stale:
         async with pool.acquire() as conn:
@@ -132,113 +260,14 @@ async def run_once_library(settings: Settings | None = None) -> dict:
             )
         log.info("library_gc", removed=len(stale))
 
-    if not changed:
-        return {"items_total": items_total, "chunks_total": 0, "items_changed": 0}
-
-    # Process in commit cycles of ITEM_BATCH items. Each cycle: embed →
-    # one transaction that upserts chunks + indexed_items together.
-    # `indexed_items.etag` only becomes durable when its cycle commits, so
-    # a crash mid-loop leaves the finished cycles indexed and the rest
-    # picked up by the next run's diff.
-    chunks_total = 0
-    items_done = 0
-    items_remaining = len(changed)
-    for cycle_start in range(0, len(changed), ITEM_BATCH):
-        cycle = changed[cycle_start:cycle_start + ITEM_BATCH]
-
-        flat: list[LibraryChunk] = []
-        item_offsets: list[tuple[tuple[str, str], int, int, str]] = []
-        for key, chunks, h in cycle:
-            start = len(flat)
-            flat.extend(chunks)
-            item_offsets.append((key, start, len(flat), h))
-
-        cycle_t0 = time.monotonic()
-        vectors = await embedder.embed_documents([c.text for c in flat])
-        if len(vectors) != len(flat):
-            raise RuntimeError(
-                f"embedder returned {len(vectors)} vectors for {len(flat)} texts"
-            )
-
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                for (item_id, lang), start, end, h in item_offsets:
-                    item_kind = flat[start].item_kind
-                    # FK CASCADE drops matching d{N} rows automatically.
-                    await conn.execute(
-                        "DELETE FROM chunks WHERE item_id=$1 AND lang=$2 AND embed_model=$3",
-                        item_id, lang, embedder.name,
-                    )
-                    item_chunks_list = flat[start:end]
-                    item_vectors = vectors[start:end]
-                    if item_chunks_list:
-                        # Bulk insert via UNNEST keeps INSERT...RETURNING
-                        # ordered, so chunk_ids align with item_vectors.
-                        n = len(item_chunks_list)
-                        id_rows = await conn.fetch(
-                            """
-                            INSERT INTO chunks
-                              (kind, lang, text,
-                               source_id, tokens, author_id, doc_date,
-                               item_id, segment_index, addr_label,
-                               embed_model)
-                            SELECT * FROM UNNEST(
-                              $1::text[], $2::text[], $3::text[],
-                              $4::text[], $5::text[], $6::text[], $7::text[],
-                              $8::text[], $9::int[], $10::text[],
-                              $11::text[]
-                            )
-                            RETURNING id
-                            """,
-                            [c.item_kind for c in item_chunks_list],
-                            [c.lang for c in item_chunks_list],
-                            [c.text for c in item_chunks_list],
-                            [c.source_id for c in item_chunks_list],
-                            [c.tokens for c in item_chunks_list],
-                            [c.author_id for c in item_chunks_list],
-                            [c.doc_date for c in item_chunks_list],
-                            [c.item_id for c in item_chunks_list],
-                            [c.segment_index for c in item_chunks_list],
-                            [c.addr_label for c in item_chunks_list],
-                            [embedder.name] * n,
-                        )
-                        chunk_ids = [int(r["id"]) for r in id_rows]
-                        await conn.executemany(
-                            f"""
-                            INSERT INTO {router.chunk_table} (chunk_id, embedding)
-                            VALUES ($1, $2)
-                            """,
-                            list(zip(chunk_ids, item_vectors, strict=True)),
-                        )
-                        chunks_total += len(chunk_ids)
-                    await conn.execute(
-                        """
-                        INSERT INTO indexed_items
-                          (item_kind, item_id, lang, embed_model, etag, indexed_at)
-                        VALUES ($1, $2, $3, $4, $5, NOW())
-                        ON CONFLICT (item_kind, item_id, lang, embed_model)
-                        DO UPDATE SET etag=$5, indexed_at=NOW()
-                        """,
-                        item_kind, item_id, lang, embedder.name, h,
-                    )
-
-        items_done += len(cycle)
-        log.info(
-            "library_embed_progress",
-            items_done=items_done,
-            items_total=items_remaining,
-            chunks_written=chunks_total,
-            cycle_ms=int((time.monotonic() - cycle_t0) * 1000),
-        )
-
     log.info(
         "library_index_complete",
-        items_changed=len(changed),
+        items_changed=items_changed,
         chunks_written=chunks_total,
         duration_ms=int((time.monotonic() - t0) * 1000),
     )
     return {
         "items_total": items_total,
-        "items_changed": len(changed),
+        "items_changed": items_changed,
         "chunks_total": chunks_total,
     }

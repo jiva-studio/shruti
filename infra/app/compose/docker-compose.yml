@@ -109,6 +109,43 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
 
+  # Self-hosted text-embeddings server (HuggingFace TEI + BAAI/bge-m3,
+  # 1024-dim, multilingual). Exposes an OpenAI-compatible /v1/embeddings
+  # endpoint on port 8080 inside the shruti network. Reachable from
+  # chat as http://embedder:8080/v1.
+  #
+  # OPT-IN: starts only when COMPOSE_PROFILES contains "selfhosted-embedder"
+  # in /opt/shruti/.env. EU leaves the profile inactive and never
+  # spawns this container — chat there keeps hitting OpenAI cloud. RU
+  # activates the profile so chat can index without the Yandex 10 RPS
+  # embedding throttle.
+  #
+  # Model + cache are baked into the image (infra/app/compose/embedder/
+  # Dockerfile downloads BAAI/bge-m3 at CI build time). HF_HUB_OFFLINE
+  # prevents any runtime phone-home.
+  embedder:
+    image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-embedder:${SHRUTI_EMBEDDER_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    profiles: ["selfhosted-embedder"]
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    command:
+      - --model-id=BAAI/bge-m3
+      - --port=8080
+      - --auto-truncate
+      - --max-client-batch-size=128
+    environment:
+      HUGGINGFACE_HUB_CACHE: /data
+      HF_HUB_OFFLINE: "1"
+    networks: [shruti]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
   # L2 cache for chat (router / title / embed_query / topic).
   # AOF on so hot caches survive restarts; 1 GB cap with allkeys-lru fits
   # ~250k embed_query entries.
