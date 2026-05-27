@@ -2,7 +2,6 @@
   <AppPage :reserve-player-space="player.open">
     <SettingsAccountGroup
       :active-server-id="activeServerId"
-      :server-home-region="auth.homeRegion"
       :anonymous="auth.anonymous"
       :email="auth.email"
       :name="auth.name"
