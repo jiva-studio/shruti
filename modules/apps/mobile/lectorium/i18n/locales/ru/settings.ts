@@ -20,6 +20,11 @@ export default {
     signInWithGoogle: "Через Google",
     signInWithApple: "Через Apple",
     signedIn: "Вы авторизованы",
+    // Подзаголовок для signed-in строки когда у провайдера auth нет
+    // email/picture (RU регион: персональные данные не собираются;
+    // также любой OAuth flow без profile). Сообщает что сессия всё
+    // равно привязана к чему-то persistent, даже без видимой identity.
+    signedInNoDataSubtitle: "Ваш прогресс сохранён",
     signOut: "Выйти",
     signinRetryOtherRegion: {
       title: "Аккаунт в {currentRegion} не найден",

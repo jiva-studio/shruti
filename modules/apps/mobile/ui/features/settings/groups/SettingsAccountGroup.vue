@@ -10,6 +10,15 @@
     <IconChip v-if="anonymous" slot="start">
       <IconUserPlus />
     </IconChip>
+    <!-- Signed-in with no personal data (provider didn't expose
+         email/picture, or the region's auth deliberately doesn't store
+         them — RU). Visually parallel to the anonymous IconChip variant
+         above: same chip shape, neutral palette. Strictly a data-presence
+         check — not gated on region — so any deployment that ends up
+         without user data lands here. -->
+    <IconChip v-else-if="!hasPersonalData" slot="start">
+      <IconUserFilled />
+    </IconChip>
     <!-- Signed-in avatar shares the square-rounded-corners chip shape with
          every other Settings row (see IconChip.vue / .settings-item-icon).
          IonAvatar's circular crop made the avatar pop out visually; this
@@ -34,8 +43,12 @@
         <h2>{{ $t("settings.account.signInCta.title") }}</h2>
         <p>{{ $t("settings.account.signInCta.description") }}</p>
       </template>
+      <template v-else-if="!hasPersonalData">
+        <h2>{{ $t("settings.account.signedIn") }}</h2>
+        <p>{{ $t("settings.account.signedInNoDataSubtitle") }}</p>
+      </template>
       <template v-else>
-        <h2>{{ name || email || $t("settings.account.signedIn") }}</h2>
+        <h2>{{ name || email }}</h2>
         <p>{{ $t("settings.account.signedIn") }}</p>
       </template>
     </IonLabel>
@@ -90,7 +103,7 @@
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonItem, IonLabel, IonListHeader } from "@ionic/vue"
-import { IconRosetteDiscountCheckFilled, IconUserPlus } from "@tabler/icons-vue"
+import { IconRosetteDiscountCheckFilled, IconUserFilled, IconUserPlus } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ServerSettingsItem from "../ServerSettingsItem.vue"
 
@@ -150,11 +163,21 @@ const sheetOpen = ref(false)
 const deleteSheetOpen = ref(false)
 const pictureFailed = ref(false)
 
+// "Signed-in with data" gate. When the user has no email, no name AND
+// no profile picture (RU region by design, also any provider that
+// declined to surface a profile), the row collapses to the friendly
+// no-data branch — an icon chip + "Your progress is safe" copy — and
+// the avatar/initials path is never reached. Not gated on region: the
+// same shape applies to any deployment with the same data state.
+const hasPersonalData = computed(
+  () => !!(props.name?.trim() || props.email?.trim() || props.picture)
+)
+
 const initials = computed(() => {
-  const source = props.name?.trim() || props.email?.trim() || ""
-  if (!source) return "?"
+  // hasPersonalData guards the only caller — when reached, at least one
+  // of name/email is set, so the source string is non-empty.
+  const source = (props.name?.trim() || props.email?.trim())!
   const parts = source.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return "?"
   if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase()
   return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase()
 })

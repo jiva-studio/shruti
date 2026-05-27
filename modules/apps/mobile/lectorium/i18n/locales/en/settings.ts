@@ -20,6 +20,12 @@ export default {
     signInWithGoogle: "Continue with Google",
     signInWithApple: "Continue with Apple",
     signedIn: "You are signed in",
+    // Subtitle for the signed-in row when the auth provider didn't
+    // expose email/picture (RU region: no personal data by design;
+    // also any OAuth flow that withheld the profile). Reassures the
+    // user that their session is still attached to something
+    // persistent even without a visible identity.
+    signedInNoDataSubtitle: "Your progress is safe",
     signOut: "Sign out",
     signinRetryOtherRegion: {
       title: "No account found in {currentRegion}",
