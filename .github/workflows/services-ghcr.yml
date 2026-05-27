@@ -199,27 +199,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The embedder image bakes BAAI/bge-m3 (~2.3 GB of weights) on top
-      # of the TEI base, producing a ~3 GB image. Standard GitHub-hosted
-      # runners ship with ~14 GB of free disk; between BuildKit cache,
-      # the docker tarball export, and the Trivy local-load step, that's
-      # not enough — the build OOM-disk'd in run 26518678308 on the
-      # huggingface-cli download. `free-disk-space` reclaims ~25-30 GB
-      # by removing preinstalled SDKs (Android, .NET, Haskell, large APT
-      # packages) we don't touch. Only matters for the embedder; the
-      # other services build in ~500 MB so we skip the overhead there.
-      - name: Free disk space (embedder only)
-        if: matrix.service == 'embedder'
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          swap-storage: false
-          docker-images: false
-
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -249,14 +228,6 @@ jobs:
             type=ref,event=branch,enable=${{ github.event_name == 'workflow_dispatch' }},prefix=branch-
 
       - name: Build image (load locally for Trivy scan)
-        # Skipped for the embedder: a 3 GB load-local image plus the
-        # buildkit cache won't fit on a standard runner even after
-        # free-disk-space. The embedder's vulnerability surface is
-        # bounded by the upstream HuggingFace TEI image we extend
-        # (scanned in their own CI) plus the baked HF weights (data,
-        # not executable). Skip the local-load + Trivy and push the
-        # built artifact directly in the next step.
-        if: matrix.service != 'embedder'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -282,7 +253,6 @@ jobs:
       # continue-on-error) once the dep tree is clean — Trivy itself
       # already runs at every push so the report stays current.
       - name: Trivy vulnerability scan
-        if: matrix.service != 'embedder'
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
