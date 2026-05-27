@@ -104,17 +104,21 @@ func (s *Service) Anonymous(ctx context.Context, deviceID string, bearerAccess s
 	}
 
 	// Fresh anon — create user + (device, deviceId) identity in one tx.
+	// home_region is stamped from s.RegionID on both rows; bare
+	// DEFAULT-VALUES inserts would carry over the migration-0028 default
+	// 'global' even on the Russia VPS.
 	var userID uuid.UUID
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		uid, err := s.Users.Create(ctx, tx)
+		uid, err := s.Users.Create(ctx, tx, s.RegionID)
 		if err != nil {
 			return err
 		}
 		userID = uid
 		return s.Identities.Create(ctx, tx, store.Identity{
-			Provider: ProviderDevice,
-			Subject:  deviceID,
-			UserID:   uid,
+			Provider:   ProviderDevice,
+			Subject:    deviceID,
+			UserID:     uid,
+			HomeRegion: s.RegionID,
 		})
 	})
 	if err != nil {
@@ -219,7 +223,7 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		}
 
 		// 4. Fresh user.
-		uid, err := s.Users.Create(ctx, tx)
+		uid, err := s.Users.Create(ctx, tx, s.RegionID)
 		if err != nil {
 			return err
 		}
@@ -243,13 +247,16 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 // createIdentity inserts an auth.identities row for `userID` from a
 // policy-filtered OAuth payload. When the policy suppressed the email
 // the row is created with email=NULL, email_verified=false — same shape
-// as a provider that simply didn't return one.
+// as a provider that simply didn't return one. home_region is stamped
+// from the running deployment's RegionID so the row carries the
+// correct region tag without depending on the migration-0028 default.
 func (s *Service) createIdentity(ctx context.Context, tx pgx.Tx, userID uuid.UUID, f profile.FilteredIdentity) error {
 	row := store.Identity{
 		Provider:      f.Provider,
 		Subject:       f.Subject,
 		UserID:        userID,
 		EmailVerified: f.EmailVerified,
+		HomeRegion:    s.RegionID,
 	}
 	if f.Email != "" {
 		em := f.Email
