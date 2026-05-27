@@ -131,6 +131,7 @@ def _build_embedder(s: Settings) -> Embedder:
             doc_model=s.embed_model or "text-search-doc/latest",
             query_model=s.embed_query_model or "text-search-query/latest",
             dim=s.embed_dim,
+            concurrency=s.embed_concurrency,
         )
     if s.embed_provider == "gigachat":
         from lectorium_chat.indexer.gigachat_embed import GigaChatEmbedder

@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     yandex_embed_folder_id: str | None = None
     gigachat_embed_api_key: str | None = None
 
+    # Bounded parallelism for any LLM/embedding provider that respects
+    # it. Default 2 is conservative for a fresh Yandex Cloud folder
+    # where Foundation Models RPS quota is ~3-5; operators with bumped
+    # quotas (or providers without strict RPS limits — OpenRouter,
+    # GigaChat) can raise via env. Provider adapters read these via
+    # the composition root.
+    embed_concurrency: int = 2
+    llm_concurrency: int = 2
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     indexer_interval_hours: int = 6

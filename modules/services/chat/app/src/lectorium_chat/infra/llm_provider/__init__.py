@@ -52,7 +52,9 @@ def build_llm_provider(settings: Settings) -> LLMPort:
         case "openrouter":
             return OpenRouterLLMProvider(settings)
         case "yandex":
-            return YandexLLMProvider(settings)
+            return YandexLLMProvider(
+                settings, concurrency=settings.llm_concurrency,
+            )
         case "gigachat":
             return GigaChatLLMProvider(settings)
         case other:  # pragma: no cover — Literal guards this
