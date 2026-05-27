@@ -102,15 +102,21 @@ export interface AuthPort {
   initialize(): Promise<AuthSession>
 
   /**
-   * OAuth signin via Google. Probes the current region first with
-   * `X-Lookup-Only: 1`; on a 404 throws `SigninAccountNotFoundError`
-   * carrying the verified idToken so the caller can drive the
-   * retry-other-region UX (PR-3) without re-running the SocialLogin
-   * popup. On hit, proceeds with the normal bootstrap and returns the
-   * session. `null` on user-cancel.
+   * OAuth signin via Google. After the OAuth popup yields a verified
+   * idToken, the adapter fans out a parallel `/auth/signin/google`
+   * probe (X-Lookup-Only=1) across every region in `getRegions` to
+   * find where the user's account actually lives. If exactly one
+   * region claims the identity, `activeServer` is silently flipped to
+   * that region before the real signin call — eliminating the
+   * "you need to switch region" dialog. No-hit → signin on the
+   * current region (creates a new account there). Multi-region hit
+   * → prefers the currently-active region if it's a hit, else the
+   * first hit; no dialog (user can change via Settings).
+   *
+   * Returns `null` on user-cancel.
    */
   signInWithGoogle(): Promise<AuthSession | null>
-  /** Same probe-then-bootstrap flow as `signInWithGoogle`, for Apple. */
+  /** Same cross-region probe-then-signin flow as `signInWithGoogle`, for Apple. */
   signInWithApple(): Promise<AuthSession | null>
 
   /**
@@ -238,6 +244,23 @@ export interface AuthConfig {
    * region is an id the build doesn't ship). Optional only for tests.
    */
   onHomeRegionMismatch?: (serverRegion: string, localRegion: string) => void
+  /**
+   * Registry of all known regions. Used by signInWithGoogle / signInWithApple
+   * to fan-out a parallel /auth/lookup probe across regions BEFORE the real
+   * signin call — if exactly one region (or one preferred) returns
+   * `exists:true`, the adapter silently flips activeServer to that region
+   * via `setActiveServerById` and performs the signin there. Eliminates the
+   * "you need to switch region" dialog: the right region is detected by the
+   * OAuth identity itself, not by user choice or geo-heuristic.
+   *
+   * Order in the array doesn't matter — the adapter probes in parallel
+   * and resolves ties by preferring the currently-active region.
+   */
+  getRegions?: () => { id: string }[]
+  /** Flip activeServer to the given region id. Called by the proactive
+   *  cross-region signin probe when it finds the user's account on a
+   *  different region than the one currently active. */
+  setActiveServerById?: (regionId: string) => void
   /** Google OAuth web client ID (used by capgo on Android & Web). */
   googleWebClientId: string
   /** Google OAuth iOS client ID. */

@@ -125,6 +125,13 @@ initShruti({
     baseUrl: () => useShruti().activeServer.value.authBaseUrl,
     resolveAuthBaseUrl,
     currentRegionId: () => useShruti().activeServer.value.id,
+    // Used by the proactive cross-region signin probe — adapter fans
+    // out /auth/lookup across these regions and silently switches the
+    // active server to the one the user's OAuth identity already lives
+    // on, so a fresh install or a migrated user never lands on a
+    // duplicate account on the wrong region.
+    getRegions: () => useShruti().appConfig.servers.map((s) => ({ id: s.id })),
+    setActiveServerById: (id: string) => useShruti().setActiveServerById(id),
     // Post-migration: flip activeServer so every subsequent fetch
     // (auth/chat/share-*) targets the destination. The activeServer
     // watcher inside initShruti persists the id under
