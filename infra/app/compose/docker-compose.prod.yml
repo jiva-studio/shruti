@@ -29,6 +29,15 @@ services:
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    # Pin upstream DNS to public resolvers. Required on the RU VPS where
+    # the host's resolver is a Russian recursor that intermittently fails
+    # on LE/ACME hostnames — caddy then can't fetch certs and falls back
+    # to self-signed. Harmless on EU: caddy uses 8.8.8.8 for *external*
+    # lookups; service-name resolution inside the lectorium network still
+    # goes through Docker's embedded resolver at 127.0.0.11.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     environment:
       DOMAIN: ${LECTORIUM_DOMAIN:?}
       ACME_EMAIL: ${LECTORIUM_ACME_EMAIL:?}

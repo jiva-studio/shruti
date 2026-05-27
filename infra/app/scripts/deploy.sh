@@ -34,6 +34,10 @@
 #
 # Required:   SERVER_IP=<ipv4>  ./infra/app/scripts/deploy.sh
 # Optional:   SERVER_USER (root), SSH_KEY (~/.ssh/id_ed25519)
+#
+# Per-region differences (JWT_KID, REGION_ID, AWS_REGION, AWS_ENDPOINT_URL,
+# the LLM/embedder stack) live entirely in /opt/lectorium/.env on the
+# host. The compose files are region-agnostic.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

@@ -157,6 +157,9 @@ services:
       CATALOG_DIR: /var/lib/chat
       REDIS_URL: redis://redis:6379/0
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      # See auth.JWT_PUBLIC_KEYS_DIR — chat verifies bearers issued by any
+      # region whose pubkey landed in /secrets.
+      JWT_PUBLIC_KEYS_DIR: /secrets
       # LECTORIUM_ENV comes from /opt/lectorium/.env on the VPS (set to
       # "prod" there); local dev gets the "dev" default. SERVICE_VERSION
       # mirrors the running image tag so Datadog can correlate logs to
@@ -191,7 +194,23 @@ services:
       DATABASE_URL: postgresql://lectorium:${LECTORIUM_POSTGRES_PASSWORD:?}@postgres:5432/lectorium
       JWT_PRIVATE_KEY_PATH: /secrets/private.pem
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
-      JWT_KID: v1
+      # Multi-key verifier dir — auth scans every `<kid>.pub.pem` in
+      # /secrets so a token signed by ANY region's private key verifies.
+      # The legacy `public.pem` is mapped to kid v1 by NewVerifierFromDir,
+      # so EU (single key file) keeps working unchanged. RU adds russia-v1
+      # via the regional overlay. Required for /auth/migrate-in to trust
+      # cross-region bearers (see internal/handler/migration.go).
+      JWT_PUBLIC_KEYS_DIR: /secrets
+      # KID identifies which keypair auth signs WITH. Defaults to v1 for
+      # the global region; the russia region overrides to russia-v1 via
+      # LECTORIUM_JWT_KID in /opt/lectorium/.env so russia-v1.priv.pem in
+      # /secrets is used. The chosen kid must match a *.priv.pem filename
+      # under LECTORIUM_JWT_KEYS_DIR.
+      JWT_KID: ${LECTORIUM_JWT_KID:-v1}
+      # Multi-region: which region this auth instance signs for. Shapes
+      # /auth/lookup responses + /auth/me home_region. Default "global"
+      # keeps existing single-region deployments behaving unchanged.
+      REGION_ID: ${LECTORIUM_REGION_ID:-global}
       GOOGLE_CLIENT_IDS: ${LECTORIUM_GOOGLE_CLIENT_IDS:-}
       APPLE_BUNDLE_IDS: ${LECTORIUM_APPLE_BUNDLE_IDS:-studio.jiva.shruti}
       # RevenueCat webhook: shared Bearer secret from the RC dashboard
@@ -319,8 +338,11 @@ services:
       OPENAI_API_KEY: ${LECTORIUM_OPENAI_API_KEY:-}
       TRANSCRIBER: ${LECTORIUM_TRANSCRIBER:-whisper}
       # Anchor for JWT verification (added in P6.5). Mount the same
-      # /opt/lectorium/jwt directory auth uses; only public.pem is read.
+      # /opt/lectorium/jwt directory auth uses; share-video's verifier
+      # loads every `<kid>.pub.pem` from JWT_PUBLIC_KEYS_DIR so a token
+      # signed by ANY region's auth instance verifies here.
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
+      JWT_PUBLIC_KEYS_DIR: /secrets
       SHARE_VIDEO_ANON_PER_DAY: ${LECTORIUM_SHARE_VIDEO_ANON_PER_DAY:-3}
       SHARE_VIDEO_SIGNED_IN_PER_DAY: ${LECTORIUM_SHARE_VIDEO_SIGNED_IN_PER_DAY:-20}
       ENV: ${LECTORIUM_ENV:-dev}

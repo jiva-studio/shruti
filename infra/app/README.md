@@ -233,6 +233,11 @@ workspace or `~/.ssh/id_ed25519`). The script:
    (postgres → migrator → app services → caddy).
 6. Health-checks `/healthz` and `/auth/healthz` over the public domain.
 
+The same compose files serve every region. Per-region knobs live
+entirely in `/opt/lectorium/.env` on the host (`LECTORIUM_REGION_ID`,
+`LECTORIUM_JWT_KID`, `AWS_REGION`, `AWS_ENDPOINT_URL`, LLM/embedder
+provider stack).
+
 ### 7. Backup cron  *(operator, on the VPS)*
 
 ```bash
