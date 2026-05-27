@@ -121,18 +121,21 @@ services:
   # embedding throttle.
   #
   # We run the upstream TEI image directly — no custom build. On first
-  # start TEI downloads BAAI/bge-m3 (~2.3 GB) from huggingface.co into
-  # the `embedder_models` named volume; subsequent restarts find it
-  # cached and start in seconds. The download window is the only time
-  # the container needs outbound HF access; if a future deployment
-  # can't reach huggingface.co, pre-populate the volume from a backup.
+  # start TEI downloads `intfloat/multilingual-e5-base` (~1.1 GB) from
+  # huggingface.co into the `embedder_models` named volume; subsequent
+  # restarts find it cached and start in seconds. Model resident set is
+  # ~2 GB which fits comfortably on the 7.7 GB RU box alongside
+  # postgres + chat. Tried BGE-M3 first but its 4.9 GB ONNX-load peak
+  # OOM-killed the box (run 26519950... 2026-05-27). multilingual-e5-base
+  # is the largest model that fits with headroom; quality on RU + EN
+  # retrieval is solid, slightly below BGE-M3.
   embedder:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
     restart: unless-stopped
     logging: *default-logging
     profiles: ["selfhosted-embedder"]
     command:
-      - --model-id=BAAI/bge-m3
+      - --model-id=intfloat/multilingual-e5-base
       - --port=8080
       - --auto-truncate
       - --max-client-batch-size=128
