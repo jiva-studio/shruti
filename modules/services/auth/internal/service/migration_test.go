@@ -220,6 +220,119 @@ func TestMigrateIn_RCAppUserIDPreserved(t *testing.T) {
 	}
 }
 
+func TestMigrateIn_AnonConflictResolved(t *testing.T) {
+	// Dest region holds a fresh anonymous user with device id "dev-X"
+	// (cold-boot bootstrap before migration). Source user being migrated
+	// also has device id "dev-X" + a real google identity. The migration
+	// must succeed: the anonymous throwaway is dropped, the migrated user
+	// + its identities land cleanly.
+	svc, _ := boot(t)
+	svc.RegionID = "global"
+	ctx := context.Background()
+
+	// 1. Seed the dest with an anonymous user owning the conflicting device.
+	const deviceSub = "dev-anon-conflict"
+	anonID := uuid.New()
+	if _, err := svc.Pool.Exec(ctx,
+		`INSERT INTO auth.users (id, home_region) VALUES ($1, 'global')`,
+		anonID,
+	); err != nil {
+		t.Fatalf("seed anon user: %v", err)
+	}
+	if _, err := svc.Pool.Exec(ctx,
+		`INSERT INTO auth.identities (provider, subject, user_id, home_region)
+		 VALUES ('device', $1, $2, 'global')`,
+		deviceSub, anonID,
+	); err != nil {
+		t.Fatalf("seed anon identity: %v", err)
+	}
+
+	// 2. Migrate a real user with the same device + a google identity.
+	migrateID := uuid.New()
+	claims := makeMigrateClaims(migrateID, []jwt.ClaimIdentity{
+		{Provider: "device", Subject: deviceSub},
+		{Provider: "google", Subject: "gsub-anon-conflict", EmailVerified: true},
+	}, TierFree, nil)
+
+	sess, err := svc.MigrateIn(ctx, claims, "dev-anon-conflict")
+	if err != nil {
+		t.Fatalf("migrate-in: %v", err)
+	}
+	if sess.UserID != migrateID {
+		t.Fatalf("session userID: want %s, got %s", migrateID, sess.UserID)
+	}
+
+	// 3. Anon user is gone; device identity now points to the migrated user.
+	var ownerID uuid.UUID
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT user_id FROM auth.identities WHERE provider = 'device' AND subject = $1`,
+		deviceSub,
+	).Scan(&ownerID); err != nil {
+		t.Fatalf("read device identity post-migrate: %v", err)
+	}
+	if ownerID != migrateID {
+		t.Errorf("device owner: want %s (migrated), got %s", migrateID, ownerID)
+	}
+
+	var anonCount int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM auth.users WHERE id = $1`, anonID,
+	).Scan(&anonCount); err != nil {
+		t.Fatalf("count anon: %v", err)
+	}
+	if anonCount != 0 {
+		t.Errorf("anon user should be deleted, found %d row(s)", anonCount)
+	}
+}
+
+func TestMigrateIn_NonAnonConflictRejected(t *testing.T) {
+	// Dest region already has a NON-anonymous user (google identity) and
+	// the migration would steal its device identity. We refuse rather than
+	// silently merging — that would be data loss for the dest account.
+	svc, _ := boot(t)
+	svc.RegionID = "global"
+	ctx := context.Background()
+
+	const deviceSub = "dev-real-conflict"
+	realID := uuid.New()
+	if _, err := svc.Pool.Exec(ctx,
+		`INSERT INTO auth.users (id, home_region) VALUES ($1, 'global')`,
+		realID,
+	); err != nil {
+		t.Fatalf("seed real user: %v", err)
+	}
+	if _, err := svc.Pool.Exec(ctx,
+		`INSERT INTO auth.identities (provider, subject, user_id, home_region)
+		 VALUES
+		   ('device', $1, $2, 'global'),
+		   ('google', $3, $2, 'global')`,
+		deviceSub, realID, "gsub-already-here",
+	); err != nil {
+		t.Fatalf("seed real identities: %v", err)
+	}
+
+	migrateID := uuid.New()
+	claims := makeMigrateClaims(migrateID, []jwt.ClaimIdentity{
+		{Provider: "device", Subject: deviceSub},
+		{Provider: "google", Subject: "gsub-different-from-conflict"},
+	}, TierFree, nil)
+
+	if _, err := svc.MigrateIn(ctx, claims, ""); err == nil {
+		t.Fatal("migrate-in must reject when dest already has a non-anonymous user with the same identity")
+	}
+
+	// Real user must still be intact, no rows touched.
+	var n int
+	if err := svc.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM auth.identities WHERE user_id = $1`, realID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count real identities: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("real user identities unchanged: want 2, got %d", n)
+	}
+}
+
 func TestMigrateRevoke_DeletesUser(t *testing.T) {
 	// Local user → call MigrateRevoke with a bearer signed by a
 	// DIFFERENT kid (foreign region) → user row gone, refresh tokens

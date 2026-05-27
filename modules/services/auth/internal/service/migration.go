@@ -99,6 +99,55 @@ func (s *Service) MigrateIn(ctx context.Context, claims *jwt.Claims, deviceID st
 		if existing != nil {
 			return nil
 		}
+
+		// Anon-conflict resolution: this region may already hold a row in
+		// auth.identities with the same (provider, subject) under a
+		// DIFFERENT user_id. Common when the user installed the app fresh
+		// on this region before migrating their real account in from
+		// elsewhere (the cold-boot anonymous bootstrap stamps the device
+		// identity on a throwaway user). Without this fixup the identity
+		// insert below would fail on the (provider, subject) unique
+		// constraint and surface as a 500 to the caller — exact repro on
+		// 2026-05-27, request 81c494d0-c83e-4692-8119-56782b76b304.
+		//
+		// If the conflicting user has ONLY device identities we drop
+		// them (the FK CASCADE wipes identities + refresh_tokens) so the
+		// migration can proceed. If they have a real identity
+		// (google/apple) the dest region already owns a non-anonymous
+		// account for this person — that's a duplicate-account state the
+		// proactive cross-region probe at signin (#708) is supposed to
+		// prevent; refuse the migration here rather than silently
+		// stealing identities from a real account.
+		for _, id := range claims.Identities {
+			existingIdent, err := s.Identities.GetTx(ctx, tx, id.Provider, id.Subject)
+			if err != nil {
+				return fmt.Errorf("lookup conflicting identity %s/%s: %w", id.Provider, id.Subject, err)
+			}
+			if existingIdent == nil || existingIdent.UserID == userID {
+				continue
+			}
+			others, err := s.Identities.ListForUserTx(ctx, tx, existingIdent.UserID)
+			if err != nil {
+				return fmt.Errorf("list identities for conflicting user %s: %w", existingIdent.UserID, err)
+			}
+			anonOnly := true
+			for _, oi := range others {
+				if oi.Provider != ProviderDevice {
+					anonOnly = false
+					break
+				}
+			}
+			if !anonOnly {
+				return fmt.Errorf(
+					"migrate-in: identity %s/%s already bound to non-anonymous user %s on this region",
+					id.Provider, id.Subject, existingIdent.UserID,
+				)
+			}
+			if _, err := s.Users.Delete(ctx, tx, existingIdent.UserID); err != nil {
+				return fmt.Errorf("clear conflicting anon user %s: %w", existingIdent.UserID, err)
+			}
+		}
+
 		if err := s.Users.InsertForMigration(ctx, tx, store.MigrateUser{
 			ID:            userID,
 			Tier:          claims.Tier,
