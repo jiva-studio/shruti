@@ -93,6 +93,31 @@ rsync -avz --delete \
   "$INFRA/" \
   "$SSH_TARGET:$REMOTE_DIR/infra/"
 
+# ── 3.5. Mirror cross-region JWT pubkeys into /opt/shruti/jwt/. ───
+# Every region trusts every other region's pubkey, distributed via
+# the repo's infra/app/jwt-keys/ folder (see that dir's README). The
+# auth + chat + share-video verifiers (NewVerifierFromDir) scan
+# /secrets — which mounts /opt/shruti/jwt — so any `*.pub.pem` we
+# drop here is picked up on next container start.
+#
+# Restart the three verifier-loading services so a freshly-added
+# region pubkey is trusted immediately, not on the next deploy that
+# happens to touch their image tags.
+echo "→ Installing JWT pubkeys from infra/app/jwt-keys/..."
+ssh_run "
+  set -e
+  if [ -d $REMOTE_DIR/infra/app/jwt-keys ]; then
+    install -d -m 0755 -o root -g root $REMOTE_DIR/jwt
+    for pem in $REMOTE_DIR/infra/app/jwt-keys/*.pub.pem; do
+      [ -e \"\$pem\" ] || continue
+      install -m 0644 -o root -g root \"\$pem\" $REMOTE_DIR/jwt/
+    done
+    echo \"  installed: \$(ls $REMOTE_DIR/jwt/*.pub.pem 2>/dev/null | xargs -n1 basename | tr '\n' ' ')\"
+  else
+    echo \"  (no jwt-keys/ in deploy bundle — skipped)\"
+  fi
+"
+
 # ── 4. Pull latest images and bring stack up. ────────────────────────
 # `docker compose pull` honours image tags from .env (e.g. if the
 # operator pinned SHRUTI_AUTH_TAG=main-<sha> for a rollback, that's
@@ -108,6 +133,13 @@ ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD pull"
 
 echo "→ docker compose up -d..."
 ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d"
+
+# Restart the verifier-loading services so they pick up any newly
+# added *.pub.pem from step 3.5. `up -d` only restarts containers
+# whose image / config diffs; a fresh pub.pem in the mounted dir
+# does NOT trigger a restart on its own.
+echo "→ Restarting auth + chat + share-video to reload JWT pubkeys..."
+ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart auth chat share-video" || true
 
 # ── 5. Health-check. ─────────────────────────────────────────────────
 DOMAIN=$(ssh_run "grep -E '^SHRUTI_DOMAIN=' $REMOTE_DIR/.env | head -1 | cut -d= -f2-")

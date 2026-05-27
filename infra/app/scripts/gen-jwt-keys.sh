@@ -1,21 +1,69 @@
 #!/usr/bin/env bash
-# Generate the workspace-wide JWT RSA keypair used by the auth service.
+# Generate an RSA-2048 JWT signing keypair.
 #
-# Canonical storage: dotfiles repo at
-#   $HOME/Projects/akdasa/dotfiles/.../credentials/shruti-auth-jwt-{private.key,public.pem}
-# (private encrypted by git-crypt via the *.key pattern; public is, well, public).
+# Two modes:
 #
-# Workspace path .config/shruti/jwt/{private,public}.pem is materialized as
-# symlinks into that dotfiles location — deploy.sh and dev compose read those
-# symlinked paths, so existing code stays unchanged.
+# 1. Per-kid mode (PROD / multi-region):
+#      gen-jwt-keys.sh <kid>
+#    Run on the region's own VPS. Writes
+#      /opt/shruti/jwt/<kid>.priv.pem  (mode 0400, owner root)
+#      /opt/shruti/jwt/<kid>.pub.pem   (mode 0644, owner root)
+#    The priv key NEVER leaves that box. Copy the .pub.pem into the
+#    repo's infra/app/jwt-keys/ folder so other regions can mirror it
+#    (see infra/app/jwt-keys/README.md).
 #
-# Without persistent storage, regenerating keys would invalidate every issued
-# refresh token (90-day TTL). The dotfiles repo is the source of truth so a
-# fresh clone of the workspace inherits valid keys.
+# 2. Legacy dev-bootstrap mode (no argument):
+#    Materialises the workspace-wide single keypair from
+#    $HOME/Projects/akdasa/dotfiles/.../credentials as symlinks at
+#    .config/shruti/jwt/{private,public}.pem so dev compose can
+#    read them. Without persistent storage, regenerating keys would
+#    invalidate every issued refresh token (90-day TTL); the dotfiles
+#    repo is the source of truth so a fresh clone of the workspace
+#    inherits valid keys.
 #
-# Idempotent: skips generation if keys already exist in dotfiles.
+# Idempotent in both modes — refuses to overwrite existing files for a
+# kid, skips generation when the workspace symlinks already point at
+# valid dotfiles keys.
 set -euo pipefail
 
+# ---------------------------------------------------------------- mode 1
+if [ "$#" -ge 1 ]; then
+  kid="$1"
+  # Sanity: only alphanumerics + dashes (filenames embed the kid).
+  if [[ ! "$kid" =~ ^[a-zA-Z0-9-]+$ ]]; then
+    echo "Invalid kid: $kid (allowed: [a-zA-Z0-9-])" >&2
+    exit 64
+  fi
+
+  dest="/opt/shruti/jwt"
+  priv="$dest/$kid.priv.pem"
+  pub="$dest/$kid.pub.pem"
+
+  sudo mkdir -p "$dest"
+
+  if [ -e "$priv" ] || [ -e "$pub" ]; then
+    echo "Refusing to overwrite existing key files for kid=$kid:" >&2
+    [ -e "$priv" ] && echo "  $priv" >&2
+    [ -e "$pub" ]  && echo "  $pub"  >&2
+    echo "Remove them manually (with proper key-rotation discipline) and re-run." >&2
+    exit 73
+  fi
+
+  command -v openssl >/dev/null 2>&1 || { echo "✗ need 'openssl' on the host" >&2; exit 1; }
+
+  sudo openssl genrsa -out "$priv" 2048
+  sudo openssl rsa -in "$priv" -pubout -out "$pub"
+  sudo chmod 0400 "$priv"
+  sudo chmod 0644 "$pub"
+  sudo chown root:root "$priv" "$pub" 2>/dev/null || true
+
+  echo "Wrote:"
+  echo "  $priv  (private — keep on this box)"
+  echo "  $pub   (public — commit to infra/app/jwt-keys/ in the repo)"
+  exit 0
+fi
+
+# ---------------------------------------------------------------- mode 2 (legacy)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WORKSPACE="$(cd "$ROOT/../.." && pwd)"
 WS_KEYS_DIR="${WORKSPACE}/.config/shruti/jwt"
@@ -29,6 +77,7 @@ PUB_FILE="$DOTFILES_CREDS/shruti-auth-jwt-public.pem"
 if [ ! -d "$DOTFILES_CREDS" ]; then
   echo "✗ dotfiles credentials dir not found: $DOTFILES_CREDS" >&2
   echo "  Set SHRUTI_DOTFILES_CREDS_DIR or clone akdasa/dotfiles first." >&2
+  echo "  (For per-region prod key generation use: gen-jwt-keys.sh <kid>.)" >&2
   exit 1
 fi
 
