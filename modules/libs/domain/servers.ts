@@ -33,9 +33,11 @@ export interface CdnServer {
   readonly chatBaseUrl: string
 }
 
-// Single host until we stand up a Russia VPS; sslip.io resolves
-// <ip-dashed>.sslip.io → 31.220.80.248 without us owning a domain.
+// sslip.io resolves <ip-dashed>.sslip.io → the literal IP without us
+// owning a domain. Lets Caddy auto-provision Let's Encrypt certs on
+// both Cloud Provider (global) and Dedicated Host (russia) with zero DNS work.
 const HOST = "https://api.shruti.local"
+const HOST_RU = "https://62-109-31-177.sslip.io"
 
 export const SERVERS: readonly CdnServer[] = [
   {
@@ -51,14 +53,16 @@ export const SERVERS: readonly CdnServer[] = [
     id: "russia",
     name: "Russia",
     urlTemplate: "https://akds-lectorium.storage.yandexcloud.net/{path}",
-    // TODO: replace with a Russia-side host once the RU VPS is live. Until
-    // then Russia users hit the same backend as Global; their CDN reads
-    // (urlTemplate above) still resolve to Yandex Object Storage so big
-    // assets stay close, but share-* / auth / chat round-trip through Germany.
+    // Auth + chat live on the RU VPS (Dedicated Host, Moscow); CDN reads
+    // resolve to Yandex Object Storage independently of the regional
+    // service host. share-audio/share-video stay on Germany — they
+    // require a Whisper key we haven't provisioned on RU yet, and
+    // they're not data-residency-sensitive (just audio excerpts and
+    // shareable reels).
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
-    authBaseUrl: `${HOST}/auth`,
-    chatBaseUrl: HOST,
+    authBaseUrl: `${HOST_RU}/auth`,
+    chatBaseUrl: HOST_RU,
   },
 ]
 
