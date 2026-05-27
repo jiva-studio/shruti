@@ -33,6 +33,7 @@ from lectorium_chat.db.assert_schema import assert_schema_ready
 from lectorium_chat.indexer import run as indexer_run
 from lectorium_chat.indexer.embed import get_embedder
 from lectorium_chat.infra.rate_limit.redis_rate_limit_store import RedisRateLimitStore
+from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
@@ -115,9 +116,15 @@ async def lifespan(app: FastAPI):
 
     # Build the composition: each adapter takes only the dependencies
     # it needs, the use-cases take ports.
+    # Per-dim embedding router (migration 0030 split embeddings into
+    # `chunk_embeddings_d{N}` / `attribution_emb_d{N}` tables, one per
+    # supported `EMBED_DIM`). Fails fast on a misconfigured dim so a
+    # mistyped env can't silently route writes into a missing table.
+    embedding_router = EmbeddingTableRouter(dim=s.embed_dim)
     chunk_repo = PgChunkRepository(
         pool=pool,
         embed_model=embedder.name,
+        router=embedding_router,
         kv_cache=(kv_cache if s.cache_enabled else None),
     )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)

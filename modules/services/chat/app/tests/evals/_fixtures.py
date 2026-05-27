@@ -36,6 +36,7 @@ from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.domain.user_context import FocusFragment, UserContext, UserContextTrack
 from lectorium_chat.indexer.embed import get_embedder
 from lectorium_chat.infra.llm_provider import OpenRouterLLMProvider
+from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
 from lectorium_chat.infra.repositories.sqlite_catalog_repository import (
     SqliteCatalogRepository,
@@ -226,7 +227,11 @@ async def _build_once() -> EvalChatClient:
     legacy_llm.configure_providers(s)
     embedder = get_embedder(s)
 
-    chunk_repo = PgChunkRepository(pool=pool, embed_model=embedder.name)
+    chunk_repo = PgChunkRepository(
+        pool=pool,
+        embed_model=embedder.name,
+        router=EmbeddingTableRouter(dim=s.embed_dim),
+    )
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     transcript_storage = S3TranscriptStorage(settings=s)
     outline_cache = S3OutlineCache(settings=s)

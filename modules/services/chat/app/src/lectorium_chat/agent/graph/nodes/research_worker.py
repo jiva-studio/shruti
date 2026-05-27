@@ -37,7 +37,13 @@ async def research_worker_node(
 
     # Fallback path: if any required collaborator is missing (test
     # harness without pool/embedder/chunk_repo), keep the ReAct loop.
-    if ctx.chunk_repo is None or ctx.embedder is None or ctx.pool is None or ctx.embed_model is None:
+    if (
+        ctx.chunk_repo is None
+        or ctx.embedder is None
+        or ctx.pool is None
+        or ctx.embed_model is None
+        or ctx.embed_dim is None
+    ):
         log.info("research_worker_react_fallback", request_id=ctx.request_id)
         result = await run_worker(
             state, runtime,
@@ -81,6 +87,7 @@ async def research_worker_node(
         pool=ctx.pool,
         llm=ctx.llm,
         embed_model=ctx.embed_model,
+        embed_dim=ctx.embed_dim,
         request_id=ctx.request_id,
         on_event=on_event,
         kv_cache=ctx.kv_cache,

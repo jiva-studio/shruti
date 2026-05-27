@@ -32,7 +32,14 @@ async def _ensure_schema(url: str) -> None:
     from pathlib import Path
     # tests/integration/ → tests/ → app/ → chat/ → services/ → modules/ → root → infra/db/migrations/
     migrations_dir = Path(__file__).parent.parent.parent.parent.parent.parent.parent / "infra" / "db" / "migrations"
-    files = sorted(migrations_dir.glob("0010_chat_*.up.sql")) + sorted(migrations_dir.glob("001[1-6]_chat_*.up.sql"))
+    files = (
+        sorted(migrations_dir.glob("0010_chat_*.up.sql"))
+        + sorted(migrations_dir.glob("001[1-6]_chat_*.up.sql"))
+        # 0030 splits embeddings into per-dim tables; later code paths
+        # require it. Replayed after the 001x set so the source tables
+        # exist before they're refactored.
+        + sorted(migrations_dir.glob("0030_split_embedding_tables.up.sql"))
+    )
     conn = await asyncpg.connect(url)
     try:
         async with conn.transaction():
@@ -59,7 +66,12 @@ async def _insert_attribution(conn: Any, *, aid: str, kind: str, refs: list[dict
 
     `embed_texts` is {lang: [text, ...]}. Vectors are deterministic
     fixtures (1536-dim with a single high value per (aid, lang)) so
-    integration tests don't need a real embedder."""
+    integration tests don't need a real embedder.
+
+    Post-migration 0030, embeddings live in `attribution_emb_d1536`
+    (and friends). The parent `attribution_embeddings` row carries
+    only metadata; the d1536 child row holds the vector.
+    """
     await conn.execute(
         "INSERT INTO attributions (id, kind, refs, updated_at) VALUES ($1, $2, $3::jsonb, NOW())",
         aid, kind, json.dumps(refs, ensure_ascii=False),
@@ -76,10 +88,17 @@ async def _insert_attribution(conn: Any, *, aid: str, kind: str, refs: list[dict
             vec_str = "[" + ",".join(f"{v:.6f}" for v in vec) + "]"
             await conn.execute(
                 """INSERT INTO attribution_embeddings
-                   (attribution_id, language, text, embedding, embed_model)
-                   VALUES ($1, $2, $3, $4::vector, $5)
+                   (attribution_id, language, text, embed_model)
+                   VALUES ($1, $2, $3, $4)
                    ON CONFLICT DO NOTHING""",
-                aid, lang, text, vec_str, embed_model,
+                aid, lang, text, embed_model,
+            )
+            await conn.execute(
+                """INSERT INTO attribution_emb_d1536
+                   (attribution_id, language, text, embed_model, embedding)
+                   VALUES ($1, $2, $3, $4, $5::vector)
+                   ON CONFLICT DO NOTHING""",
+                aid, lang, text, embed_model, vec_str,
             )
 
 
@@ -104,7 +123,7 @@ async def test_question_attribution_short_path(pg_conn):
     rows = await pg_conn.fetch(
         """SELECT a.id, a.refs::text AS refs_json,
                   MAX(1 - (e.embedding <=> $1::vector)) AS score
-           FROM attribution_embeddings e
+           FROM attribution_emb_d1536 e
            JOIN attributions a ON a.id = e.attribution_id
            WHERE e.language = 'ru' AND e.embed_model = 'openai/text-embedding-3-small' AND a.kind = 'question'
              AND a.id = $2
@@ -141,7 +160,7 @@ async def test_topic_attribution_drives_boost_set(pg_conn):
     rows = await pg_conn.fetch(
         """SELECT a.id, a.refs::text AS refs_json,
                   MAX(1 - (e.embedding <=> $1::vector)) AS score
-           FROM attribution_embeddings e
+           FROM attribution_emb_d1536 e
            JOIN attributions a ON a.id = e.attribution_id
            WHERE e.language = 'ru' AND e.embed_model = 'openai/text-embedding-3-small' AND a.kind = 'topic'
              AND a.id = $2
@@ -192,7 +211,7 @@ async def test_multi_variant_max_score_per_attribution(pg_conn):
 
     rows = await pg_conn.fetch(
         """SELECT a.id, MAX(1 - (e.embedding <=> $1::vector)) AS score
-           FROM attribution_embeddings e
+           FROM attribution_emb_d1536 e
            JOIN attributions a ON a.id = e.attribution_id
            WHERE a.kind = 'question' AND a.id = $2
            GROUP BY a.id""",
@@ -222,7 +241,7 @@ async def test_cross_lingual_fallback_no_lang_filter(pg_conn):
     # Cross-lang query (no language filter).
     rows = await pg_conn.fetch(
         """SELECT a.id, MAX(1 - (e.embedding <=> $1::vector)) AS score
-           FROM attribution_embeddings e
+           FROM attribution_emb_d1536 e
            JOIN attributions a ON a.id = e.attribution_id
            WHERE a.kind = 'question' AND a.id = $2
            GROUP BY a.id""",

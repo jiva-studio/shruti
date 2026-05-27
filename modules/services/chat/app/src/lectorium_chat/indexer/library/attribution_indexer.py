@@ -27,6 +27,7 @@ from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.db.client import get_pool
 from lectorium_chat.indexer.embed import get_embedder
 from lectorium_chat.indexer.library import db as library_db
+from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -87,6 +88,8 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
         return {"items_total": 0, "items_changed": 0, "embeddings_total": 0}
 
     embedder = get_embedder(s)
+    # Per-dim destination table for attribution embeddings (migration 0030).
+    router = EmbeddingTableRouter(dim=s.embed_dim)
     pool = get_pool()
 
     t0 = time.monotonic()
@@ -165,6 +168,8 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
             )
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Cascading delete on parent → FK CASCADE on the per-dim
+                # child table removes the matching d{N} rows automatically.
                 await conn.execute(
                     """
                     DELETE FROM attribution_embeddings
@@ -172,13 +177,24 @@ async def run_once_attribution(settings: Settings | None = None) -> dict:
                     """,
                     aid, lang, embedder.name,
                 )
+                # Parent row first (metadata only since 0030 dropped the
+                # `embedding` column from attribution_embeddings); then
+                # the child d{N} row carrying the actual vector.
                 await conn.executemany(
                     """
                     INSERT INTO attribution_embeddings
-                      (attribution_id, language, text, embedding, embed_model)
+                      (attribution_id, language, text, embed_model)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    [(aid, lang, t, embedder.name) for t in texts],
+                )
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {router.attribution_table}
+                      (attribution_id, language, text, embed_model, embedding)
                     VALUES ($1, $2, $3, $4, $5)
                     """,
-                    [(aid, lang, t, v, embedder.name) for t, v in zip(texts, vectors, strict=True)],
+                    [(aid, lang, t, embedder.name, v) for t, v in zip(texts, vectors, strict=True)],
                 )
                 await conn.execute(
                     """

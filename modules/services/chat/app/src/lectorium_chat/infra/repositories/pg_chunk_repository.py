@@ -22,6 +22,7 @@ from typing import Any
 import asyncpg
 
 from lectorium_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
+from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 
 
 def _embedding_digest(embedding: list[float]) -> str:
@@ -39,10 +40,12 @@ class PgChunkRepository:
         *,
         pool: asyncpg.Pool,
         embed_model: str,
+        router: EmbeddingTableRouter,
         kv_cache: Any | None = None,
     ) -> None:
         self._pool = pool
         self._embed_model = embed_model
+        self._router = router
         self._cache = kv_cache
 
     async def search_by_embedding(
@@ -134,35 +137,41 @@ class PgChunkRepository:
         top_k: int,
     ) -> list[ScoredChunk]:
         # `kind='track_transcript'` keeps library rows out of lecture search.
-        where = ["embed_model = $1", "kind = 'track_transcript'"]
+        # Embedding column now lives in `chunk_embeddings_d{dim}` (migration
+        # 0030); join through chunk_id.
+        emb_table = self._router.chunk_table
+        where = ["c.embed_model = $1", "c.kind = 'track_transcript'"]
         params: list[Any] = [self._embed_model]
         if lang:
-            where.append(f"lang = ${len(params) + 1}")
+            where.append(f"c.lang = ${len(params) + 1}")
             params.append(lang)
         if eligible_track_ids is not None:
-            where.append(f"track_id = ANY(${len(params) + 1}::text[])")
+            where.append(f"c.track_id = ANY(${len(params) + 1}::text[])")
             params.append(eligible_track_ids)
         if excluded_track_ids:
-            where.append(f"track_id <> ALL(${len(params) + 1}::text[])")
+            where.append(f"c.track_id <> ALL(${len(params) + 1}::text[])")
             params.append(excluded_track_ids)
         params.append(embedding)
         params.append(top_k)
         # When excluding tracks (recommend / similar), de-dupe to one
         # chunk per track via DISTINCT ON; otherwise return raw top-k.
         select_clause = (
-            "DISTINCT ON (track_id) track_id, lang, start_ms, end_ms, text, reference_source_id"
+            "DISTINCT ON (c.track_id) c.track_id, c.lang, c.start_ms, c.end_ms, "
+            "c.text, c.reference_source_id"
             if excluded_track_ids
-            else "track_id, lang, start_ms, end_ms, text, reference_source_id"
+            else "c.track_id, c.lang, c.start_ms, c.end_ms, c.text, "
+                 "c.reference_source_id"
         )
         order_clause = (
-            f"ORDER BY track_id, embedding <=> ${len(params) - 1}::vector"
+            f"ORDER BY c.track_id, e.embedding <=> ${len(params) - 1}::vector"
             if excluded_track_ids
-            else f"ORDER BY embedding <=> ${len(params) - 1}::vector"
+            else f"ORDER BY e.embedding <=> ${len(params) - 1}::vector"
         )
         sql = f"""
           SELECT {select_clause},
-                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks
+                 1 - (e.embedding <=> ${len(params) - 1}::vector) AS score
+          FROM chunks c
+          JOIN {emb_table} e ON e.chunk_id = c.id
           WHERE {' AND '.join(where)}
           {order_clause}
           LIMIT ${len(params)}
@@ -346,35 +355,37 @@ class PgChunkRepository:
     ) -> list[ScoredLibraryChunk]:
         if not kinds:
             return []
+        emb_table = self._router.chunk_table
         where: list[str] = [
-            "embed_model = $1",
-            f"kind = ANY($2::text[])",
+            "c.embed_model = $1",
+            f"c.kind = ANY($2::text[])",
         ]
         params: list[Any] = [self._embed_model, kinds]
         if lang:
-            where.append(f"lang = ${len(params) + 1}")
+            where.append(f"c.lang = ${len(params) + 1}")
             params.append(lang)
         if source_id:
-            where.append(f"source_id = ${len(params) + 1}")
+            where.append(f"c.source_id = ${len(params) + 1}")
             params.append(source_id)
         if author_id:
-            where.append(f"author_id = ${len(params) + 1}")
+            where.append(f"c.author_id = ${len(params) + 1}")
             params.append(author_id)
         if date_from:
-            where.append(f"doc_date >= ${len(params) + 1}")
+            where.append(f"c.doc_date >= ${len(params) + 1}")
             params.append(date_from)
         if date_to:
-            where.append(f"doc_date <= ${len(params) + 1}")
+            where.append(f"c.doc_date <= ${len(params) + 1}")
             params.append(date_to)
         params.append(embedding)
         params.append(top_k)
         sql = f"""
-          SELECT item_id, kind, source_id, tokens, author_id, doc_date,
-                 lang, segment_index, text, addr_label,
-                 1 - (embedding <=> ${len(params) - 1}::vector) AS score
-          FROM chunks
+          SELECT c.item_id, c.kind, c.source_id, c.tokens, c.author_id, c.doc_date,
+                 c.lang, c.segment_index, c.text, c.addr_label,
+                 1 - (e.embedding <=> ${len(params) - 1}::vector) AS score
+          FROM chunks c
+          JOIN {emb_table} e ON e.chunk_id = c.id
           WHERE {' AND '.join(where)}
-          ORDER BY embedding <=> ${len(params) - 1}::vector
+          ORDER BY e.embedding <=> ${len(params) - 1}::vector
           LIMIT ${len(params)}
         """
         async with self._pool.acquire() as conn:
@@ -563,16 +574,18 @@ class PgChunkRepository:
     ) -> list[list[float]]:
         if not track_ids:
             return []
-        where = ["embed_model = $1", "track_id = ANY($2::text[])"]
+        emb_table = self._router.chunk_table
+        where = ["c.embed_model = $1", "c.track_id = ANY($2::text[])"]
         params: list[Any] = [self._embed_model, track_ids]
         if lang:
-            where.append(f"lang = ${len(params) + 1}")
+            where.append(f"c.lang = ${len(params) + 1}")
             params.append(lang)
         sql = f"""
-          SELECT DISTINCT ON (track_id) track_id, embedding
-          FROM chunks
+          SELECT DISTINCT ON (c.track_id) c.track_id, e.embedding
+          FROM chunks c
+          JOIN {emb_table} e ON e.chunk_id = c.id
           WHERE {' AND '.join(where)}
-          ORDER BY track_id, start_ms
+          ORDER BY c.track_id, c.start_ms
         """
         pool = self._pool
         async with pool.acquire() as conn:

@@ -24,6 +24,7 @@ from lectorium_chat.indexer.library.chunker import (
     walk_documents,
     walk_verses,
 )
+from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -57,6 +58,8 @@ async def run_once_library(settings: Settings | None = None) -> dict:
         return {"items_total": 0, "chunks_total": 0, "items_changed": 0}
 
     embedder = get_embedder(s)
+    # Per-dim destination table for chunk embeddings (migration 0030).
+    router = EmbeddingTableRouter(dim=s.embed_dim)
     pool = get_pool()
 
     short_names = load_source_short_names(s.catalog_db_path)
@@ -161,30 +164,53 @@ async def run_once_library(settings: Settings | None = None) -> dict:
             async with conn.transaction():
                 for (item_id, lang), start, end, h in item_offsets:
                     item_kind = flat[start].item_kind
+                    # FK CASCADE drops matching d{N} rows automatically.
                     await conn.execute(
                         "DELETE FROM chunks WHERE item_id=$1 AND lang=$2 AND embed_model=$3",
                         item_id, lang, embedder.name,
                     )
-                    rows = [
-                        (c.item_kind, c.lang, c.text,
-                         c.source_id, c.tokens, c.author_id, c.doc_date,
-                         c.item_id, c.segment_index, c.addr_label,
-                         embedder.name, v)
-                        for c, v in zip(flat[start:end], vectors[start:end], strict=True)
-                    ]
-                    if rows:
-                        await conn.executemany(
+                    item_chunks_list = flat[start:end]
+                    item_vectors = vectors[start:end]
+                    if item_chunks_list:
+                        # Bulk insert via UNNEST keeps INSERT...RETURNING
+                        # ordered, so chunk_ids align with item_vectors.
+                        n = len(item_chunks_list)
+                        id_rows = await conn.fetch(
                             """
                             INSERT INTO chunks
                               (kind, lang, text,
                                source_id, tokens, author_id, doc_date,
                                item_id, segment_index, addr_label,
-                               embed_model, embedding)
-                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                               embed_model)
+                            SELECT * FROM UNNEST(
+                              $1::text[], $2::text[], $3::text[],
+                              $4::text[], $5::text[], $6::text[], $7::text[],
+                              $8::text[], $9::int[], $10::text[],
+                              $11::text[]
+                            )
+                            RETURNING id
                             """,
-                            rows,
+                            [c.item_kind for c in item_chunks_list],
+                            [c.lang for c in item_chunks_list],
+                            [c.text for c in item_chunks_list],
+                            [c.source_id for c in item_chunks_list],
+                            [c.tokens for c in item_chunks_list],
+                            [c.author_id for c in item_chunks_list],
+                            [c.doc_date for c in item_chunks_list],
+                            [c.item_id for c in item_chunks_list],
+                            [c.segment_index for c in item_chunks_list],
+                            [c.addr_label for c in item_chunks_list],
+                            [embedder.name] * n,
                         )
-                        chunks_total += len(rows)
+                        chunk_ids = [int(r["id"]) for r in id_rows]
+                        await conn.executemany(
+                            f"""
+                            INSERT INTO {router.chunk_table} (chunk_id, embedding)
+                            VALUES ($1, $2)
+                            """,
+                            list(zip(chunk_ids, item_vectors, strict=True)),
+                        )
+                        chunks_total += len(chunk_ids)
                     await conn.execute(
                         """
                         INSERT INTO indexed_items

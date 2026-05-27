@@ -303,6 +303,7 @@ async def run_chat_turn(
             embedder=deps.embedder,
             pool=deps.pool,
             embed_model=deps.settings.embed_model,
+            embed_dim=deps.settings.embed_dim,
             kv_cache=deps.kv_cache,
             embed_task=embed_task,
         )

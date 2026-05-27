@@ -54,6 +54,7 @@ class _FakeEmbedder:
 class _FakeSettings:
     library_db_path: str = "/tmp/x.db"
     embed_model: str = "fake-embed"
+    embed_dim: int = 1536
 
 
 @dataclass
