@@ -77,7 +77,7 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { alertController, loadingController, toastController } from "@ionic/vue"
+import { alertController, loadingController } from "@ionic/vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAccountGroup,
@@ -248,17 +248,13 @@ async function onRequestRegionChange(newRegionId: string): Promise<void> {
     await loading.dismiss()
   }
   if (result.ok) {
-    const ok = await toastController.create({
-      message: t("settings.regionMigration.success", { region: newRegionName }),
-      duration: 2500,
+    await toast.info(t("settings.regionMigration.success", { region: newRegionName }), {
+      durationMs: 2500,
     })
-    await ok.present()
   } else {
-    const fail = await toastController.create({
-      message: t(`settings.regionMigration.failed.${result.code}`),
-      duration: 3500,
+    await toast.error(t(`settings.regionMigration.failed.${result.code}`), {
+      durationMs: 3500,
     })
-    await fail.present()
   }
 }
 
