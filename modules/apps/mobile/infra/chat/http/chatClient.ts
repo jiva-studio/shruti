@@ -158,6 +158,27 @@ export type ChatStreamEvent =
       /** UTC Unix-seconds epoch of the next reset. Set only on
        *  rate_limited; absent on old servers. */
       readonly resetsAtEpoch?: number
+      /** Post-increment counter from the rejecting bucket — used to
+       *  hydrate the usage chip from the 429 body without waiting for
+       *  a successful follow-up turn. Only set on rate_limited. */
+      readonly current?: number
+      /** Limit the request was checked against. Pairs with `current`. */
+      readonly limit?: number
+      /** Which bucket exhausted: `user` (per-JWT) vs `ip` (per-IP defence).
+       *  The chat usage chip only hydrates on `user` — an IP-cap 429
+       *  isn't about THIS user's quota. */
+      readonly keyType?: "user" | "ip"
+    }
+  /** Per-turn usage frame from the server's SSE finally-block. The chat
+   *  composer's progress chip hydrates from this event whether the turn
+   *  succeeded, the LLM errored mid-stream, or the client disconnected.
+   *  Scope is "chat" for now; other endpoints can reuse the same name. */
+  | {
+      readonly type: "usage"
+      readonly scope: string
+      readonly current: number
+      readonly limit: number
+      readonly resetsAtEpoch: number
     }
 
 /** Wire shape of a verse body — carried by an `action` event with
@@ -547,18 +568,33 @@ export async function* streamChat(
       const retryHeader = response.headers.get("Retry-After")
       const retryAfter = retryHeader ? Number(retryHeader) : 60
       // Phase 4 added `tier` and `resets_at_epoch` to the 429 JSON body
-      // (under `detail`). Old servers omit them — we still get a usable
-      // generic "rate limited" message via the header.
+      // (under `detail`). Phase-7 (this PR) appends `current` / `limit`
+      // / `key_type` so the chat usage chip can hydrate from the
+      // rejection without a follow-up successful turn. Old servers omit
+      // any of these — we still get a usable generic "rate limited"
+      // message via the header.
       let tier: string | undefined
       let resetsAtEpoch: number | undefined
+      let current: number | undefined
+      let limit: number | undefined
+      let keyType: "user" | "ip" | undefined
       try {
         const json = (await response.clone().json()) as {
-          detail?: { tier?: string; resets_at_epoch?: number }
+          detail?: {
+            tier?: string
+            resets_at_epoch?: number
+            current?: number
+            limit?: number
+            key_type?: string
+          }
         } | null
         const d = json?.detail
         if (d) {
           if (typeof d.tier === "string") tier = d.tier
           if (typeof d.resets_at_epoch === "number") resetsAtEpoch = d.resets_at_epoch
+          if (typeof d.current === "number") current = d.current
+          if (typeof d.limit === "number") limit = d.limit
+          if (d.key_type === "user" || d.key_type === "ip") keyType = d.key_type
         }
       } catch {
         // Body wasn't JSON / detail missing — fall back to header-only.
@@ -570,6 +606,9 @@ export async function* streamChat(
         retryAfter: Number.isFinite(retryAfter) ? retryAfter : 60,
         ...(tier !== undefined ? { tier } : {}),
         ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
+        ...(current !== undefined ? { current } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        ...(keyType !== undefined ? { keyType } : {}),
       }
       return
     }
@@ -610,6 +649,13 @@ export async function* streamChat(
   const decoder = new TextDecoder()
   let buffer = ""
 
+  // Server emits `usage` from its SSE finally-block AFTER `done` / `error`,
+  // so we can't bail on the terminal event — we have to keep reading
+  // until the server closes its side. We do flip a flag so we only
+  // forward post-terminal frames the consumer cares about (`usage`); any
+  // stray delta after a `done` would be a server bug we shouldn't fold
+  // into the assistant bubble.
+  let sawTerminal = false
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -628,8 +674,9 @@ export async function* streamChat(
         buffer = buffer.slice(separatorIndex + skip)
         const event = parseSseBlock(block)
         if (!event) continue
+        if (sawTerminal && event.type !== "usage") continue
         yield event
-        if (event.type === "done" || event.type === "error") return
+        if (event.type === "done" || event.type === "error") sawTerminal = true
       }
     }
   } catch (err) {
@@ -876,6 +923,19 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
           : typeof payload.resetsAtEpoch === "number"
             ? payload.resetsAtEpoch
             : undefined
+      // Phase-7 (this PR) appends current / limit / key_type to mid-
+      // stream rate_limited errors too so the chat usage chip can
+      // hydrate without waiting for the next successful turn.
+      const current = typeof payload.current === "number" ? payload.current : undefined
+      const limit = typeof payload.limit === "number" ? payload.limit : undefined
+      const keyTypeRaw =
+        typeof payload.key_type === "string"
+          ? payload.key_type
+          : typeof payload.keyType === "string"
+            ? payload.keyType
+            : ""
+      const keyType: "user" | "ip" | undefined =
+        keyTypeRaw === "user" || keyTypeRaw === "ip" ? keyTypeRaw : undefined
       return {
         type: "error",
         code: typeof payload.code === "string" ? payload.code : "unknown",
@@ -888,7 +948,26 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
               : undefined,
         ...(tier !== undefined ? { tier } : {}),
         ...(resetsAtEpoch !== undefined ? { resetsAtEpoch } : {}),
+        ...(current !== undefined ? { current } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        ...(keyType !== undefined ? { keyType } : {}),
       }
+    }
+    case "usage": {
+      const scope = typeof payload.scope === "string" ? payload.scope : "chat"
+      const current = typeof payload.current === "number" ? payload.current : -1
+      const limit = typeof payload.limit === "number" ? payload.limit : -1
+      const resetsAtEpoch =
+        typeof payload.resets_at_epoch === "number"
+          ? payload.resets_at_epoch
+          : typeof payload.resetsAtEpoch === "number"
+            ? payload.resetsAtEpoch
+            : -1
+      // Server should always send all four; if any field is missing
+      // (old server / malformed payload) drop the event silently —
+      // showing a chip with `-1/-1` would be worse than showing none.
+      if (current < 0 || limit <= 0 || resetsAtEpoch <= 0) return null
+      return { type: "usage", scope, current, limit, resetsAtEpoch }
     }
     default:
       console.warn("[chat] unknown sse event:", name)

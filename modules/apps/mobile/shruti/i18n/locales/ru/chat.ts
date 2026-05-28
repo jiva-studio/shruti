@@ -132,6 +132,15 @@ export default {
   composeLimitedAriaLabel: "Ввод приостановлен, дневной лимит обновится {when}",
   composeLimitedAriaLabelNoTime: "Ввод приостановлен, дневной лимит исчерпан",
 
+  /** Чип с дневной квотой над полем ввода. Виден всем тарифам начиная
+   *  с ≥50% расхода. Одна процентная подпись для всех — размер квоты
+   *  отличается по тарифам, но «насколько я заполнен» читается одинаково.
+   *  Тап для бесплатного/анонима открывает страницу подписки; для Pro
+   *  чип — статический info-бейдж. */
+  usage: {
+    chip: "использовано {p}% · сброс в {time}",
+  },
+
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.
   // Keep them 2-4 words so they fit one line.
   // The "recap" chip swaps between current / recent / generic to make

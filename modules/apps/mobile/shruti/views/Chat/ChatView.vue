@@ -60,6 +60,7 @@
       :sending="sending"
       :quota-locked="isComposeBlocked"
       :quota-resets-at="composeBlockedUntil"
+      :chat-usage="chatUsage"
       @send="onSend"
       @cancel="onCancel"
     />
@@ -115,6 +116,7 @@ const {
   inputFocusToken,
   isComposeBlocked,
   composeBlockedUntil,
+  chatUsage,
   onSend,
   onCancel,
   onNewSession,

@@ -93,6 +93,26 @@ export type RunChatTurnEvent =
        *  as `tier`. Store converts to absolute UnixMs before persisting
        *  on the ChatMessageError so countdowns survive backgrounding. */
       readonly resetsAtEpoch?: number
+      /** Post-increment counter for the rejecting bucket. The store
+       *  uses this with `limit` to hydrate the usage chip from the
+       *  429 body. Only set on `code: "rate_limited"`. */
+      readonly current?: number
+      /** Per-user limit the request was checked against. */
+      readonly limit?: number
+      /** Which bucket exhausted: `user` (per-JWT) vs `ip` (per-IP). The
+       *  usage chip only hydrates on `user`; `ip` means a CGNAT peer
+       *  hammered the IP cap and this user's quota is fine. */
+      readonly keyType?: "user" | "ip"
+    }
+  /** Per-turn quota chip frame. Emitted by the server's SSE finally-block
+   *  on success, LLM error, and client disconnect. Store sets `chatUsage`
+   *  and persists. */
+  | {
+      readonly kind: "usage"
+      readonly scope: string
+      readonly current: number
+      readonly limit: number
+      readonly resetsAtEpoch: number
     }
   | { readonly kind: "title-updated"; readonly title: string }
 
@@ -187,6 +207,9 @@ export async function* runChatTurn(
     retryAfter?: number
     tier?: string
     resetsAtEpoch?: number
+    current?: number
+    limit?: number
+    keyType?: "user" | "ip"
   } | null = null
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
@@ -326,10 +349,28 @@ export async function* runChatTurn(
             retryAfter: event.retryAfter,
             tier: event.tier,
             resetsAtEpoch: event.resetsAtEpoch,
+            current: event.current,
+            limit: event.limit,
+            keyType: event.keyType,
+          }
+          break
+        case "usage":
+          // Per-turn quota chip frame from the server's SSE finally-block.
+          // Forwarded verbatim; the store sets `chatUsage` + persists
+          // under `chat_usage:<quota_id>`. Doesn't fold into the message
+          // or `lastError` — it's a sidecar.
+          yield {
+            kind: "usage",
+            scope: event.scope,
+            current: event.current,
+            limit: event.limit,
+            resetsAtEpoch: event.resetsAtEpoch,
           }
           break
       }
-      if (event.type === "done" || event.type === "error") break
+      // Server emits `usage` AFTER terminal events (`done` / `error`)
+      // from its SSE finally-block. Don't break on terminal here — wait
+      // for the underlying stream to close so the usage frame reaches us.
     }
   } catch (e) {
     // Typed structural failures (protocol mismatch, backend unavailable)
@@ -392,6 +433,9 @@ export async function* runChatTurn(
       retryAfter: lastError.retryAfter,
       ...(lastError.tier !== undefined ? { tier: lastError.tier } : {}),
       ...(lastError.resetsAtEpoch !== undefined ? { resetsAtEpoch: lastError.resetsAtEpoch } : {}),
+      ...(lastError.current !== undefined ? { current: lastError.current } : {}),
+      ...(lastError.limit !== undefined ? { limit: lastError.limit } : {}),
+      ...(lastError.keyType !== undefined ? { keyType: lastError.keyType } : {}),
     }
   } else {
     // No text and no error — empty `done`. Store drops the placeholder.
