@@ -65,15 +65,17 @@ async def synthesis_planner_node(
         else None
     )
 
-    # `model=None` lets `prompt_with_fallback` resolve the model from
-    # Langfuse prompt-config (set to `llm_synthesis_planner` default at
-    # bootstrap time) — same pattern as query_planner / topic_extractor.
+    # `model=None` / `conclusion_model=None` lets `prompt_with_fallback`
+    # resolve the model from the respective Langfuse prompt-config (set
+    # to `llm_synthesis_planner` / `llm_conclusion_writer` at bootstrap
+    # time) — same pattern as query_planner / topic_extractor.
     outline = await build_outline(
         state.get("user_query", ""),
         state.get("lang", "ru"),
         tool_results,
         llm=ctx.llm,
         model=None,
+        conclusion_model=None,
         callbacks=[cb] if cb is not None else None,
     )
 
