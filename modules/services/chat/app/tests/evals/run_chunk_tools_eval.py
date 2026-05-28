@@ -49,6 +49,7 @@ from tests.evals.observation import (
     TurnObservation,
     has_blockquote,
     has_marker_kind,
+    parse_markers,
 )
 
 
@@ -173,13 +174,32 @@ def _check_intent(case: dict[str, Any], obs: TurnObservation) -> list[str]:
     expected = case.get("expect_intent")
     if expected is None:
         return []
+    if obs.intent is None:
+        # Intent not observable on this path (HTTP eval — router_decision
+        # is a structlog event captured only by the in-process observer,
+        # not surfaced over SSE). Skip silently rather than reporting a
+        # noisy "got=None" on every research case.
+        return []
     if obs.intent != expected:
         return [f"intent: expected={expected!r}, got={obs.intent!r}"]
     return []
 
 
+def _tool_chain_observable(obs: TurnObservation) -> bool:
+    """Heuristic: tool_chain is unobservable on the HTTP eval pathway
+    (tool calls happen server-side; not surfaced over SSE). When the
+    chain is empty AND intent is None, assume we're in HTTP mode and
+    skip tool predicates rather than firing false negatives. In-process
+    eval populates intent via the structlog capture, so the heuristic
+    correctly distinguishes "tools never called" (in-process empty
+    chain) from "we can't see them" (HTTP)."""
+    return bool(obs.tool_chain) or obs.intent is not None
+
+
 def _check_no_tool(case: dict[str, Any], obs: TurnObservation) -> list[str]:
     if not case.get("expect_no_tool"):
+        return []
+    if not _tool_chain_observable(obs):
         return []
     if obs.tool_chain:
         return [f"expect_no_tool but got {obs.tool_names!r}"]
@@ -190,6 +210,8 @@ def _check_first_tool(case: dict[str, Any], obs: TurnObservation) -> list[str]:
     expected = case.get("expect_tool")
     if expected is None:
         return []
+    if not _tool_chain_observable(obs):
+        return []
     actual = obs.first_tool.name if obs.first_tool else None
     if actual != expected:
         return [f"expect_tool: expected={expected!r}, got={actual!r}"]
@@ -199,6 +221,8 @@ def _check_first_tool(case: dict[str, Any], obs: TurnObservation) -> list[str]:
 def _check_first_tool_args(case: dict[str, Any], obs: TurnObservation) -> list[str]:
     expected = case.get("expect_args")
     if expected is None:
+        return []
+    if not _tool_chain_observable(obs):
         return []
     if obs.first_tool is None:
         return ["expect_args set but no tool called"]
@@ -227,6 +251,8 @@ def _check_first_tool_result(case: dict[str, Any], obs: TurnObservation) -> list
     expected = case.get("expect_result")
     if expected is None:
         return []
+    if not _tool_chain_observable(obs):
+        return []
     target_name = case.get("expect_tool")
     target_chain = case.get("expect_tool_chain") or []
     target: Any = None
@@ -249,6 +275,8 @@ def _check_tool_chain(case: dict[str, Any], obs: TurnObservation) -> list[str]:
     expected progression happened."""
     expected = case.get("expect_tool_chain")
     if expected is None:
+        return []
+    if not _tool_chain_observable(obs):
         return []
     actual = obs.tool_names
     i = 0
@@ -411,7 +439,136 @@ def _check_no_unexpected_brackets(
     return []
 
 
+# ── Outline-shape predicates (code-driven research pipeline) ──────────
+# These assert against the synthesis_planner's outline output captured
+# from the `outline_summary` custom event. None on observations from
+# direct_chat / action / help flows; the predicates skip silently if
+# the case doesn't declare them.
+
+
+def _outline_observable(obs: TurnObservation) -> bool:
+    """Outline-shape unobservable in HTTP eval (the `outline_summary`
+    event is swallowed by chat_turn before reaching the SSE wire). When
+    all four outline fields are None, assume HTTP mode and skip outline
+    predicates."""
+    return any(
+        v is not None for v in (
+            obs.outline_n_theses,
+            obs.outline_has_intro,
+            obs.outline_has_conclusion,
+            obs.outline_skipped_notes_ratio,
+        )
+    )
+
+
+def _check_n_theses_min(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    expected = case.get("expect_n_theses_min")
+    if expected is None:
+        return []
+    if not _outline_observable(obs):
+        return []
+    if obs.outline_n_theses is None:
+        return [f"expect_n_theses_min={expected}: no outline was built"]
+    if obs.outline_n_theses < expected:
+        return [
+            f"expect_n_theses_min={expected}, "
+            f"got n_theses={obs.outline_n_theses}"
+        ]
+    return []
+
+
+def _check_n_theses_max(case: dict[str, Any], obs: TurnObservation) -> list[str]:
+    expected = case.get("expect_n_theses_max")
+    if expected is None:
+        return []
+    if obs.outline_n_theses is None:
+        return []  # No outline = no upper bound to enforce
+    if obs.outline_n_theses > expected:
+        return [
+            f"expect_n_theses_max={expected}, "
+            f"got n_theses={obs.outline_n_theses}"
+        ]
+    return []
+
+
+def _check_has_conclusion(
+    case: dict[str, Any], obs: TurnObservation,
+) -> list[str]:
+    expected = case.get("expect_has_conclusion")
+    if expected is None:
+        return []
+    if not _outline_observable(obs):
+        return []
+    if obs.outline_has_conclusion is None:
+        return [
+            f"expect_has_conclusion={expected}: no outline was built"
+        ]
+    if bool(obs.outline_has_conclusion) != bool(expected):
+        return [
+            f"expect_has_conclusion={expected}, "
+            f"got has_conclusion={obs.outline_has_conclusion}"
+        ]
+    return []
+
+
+def _check_skipped_notes_ratio_max(
+    case: dict[str, Any], obs: TurnObservation,
+) -> list[str]:
+    """Catches over-aggressive filtering. If the planner skipped > X%
+    of the notes the eval thinks the case should be answerable from,
+    something's wrong upstream (bad embedding, missing material, or
+    the rerank/augment overcorrecting)."""
+    expected = case.get("expect_skipped_notes_ratio_max")
+    if expected is None:
+        return []
+    if not _outline_observable(obs):
+        return []
+    if obs.outline_skipped_notes_ratio is None:
+        return []
+    if obs.outline_skipped_notes_ratio > expected:
+        return [
+            f"expect_skipped_notes_ratio_max={expected}, "
+            f"got ratio={obs.outline_skipped_notes_ratio:.2f}"
+        ]
+    return []
+
+
+def _check_response_mentions_verse(
+    case: dict[str, Any], obs: TurnObservation,
+) -> list[str]:
+    """`expect_response_mentions_verse: "src/tokens"` — assert the
+    response cited a verse from a specific (source_id, tokens) address.
+    Matches expanded `[verse:src/tokens|…]` widgets. Useful for cases
+    like "find a verse about karma" — we don't care which specific
+    verse, but we DO care that a verse was emitted at all."""
+    expected = case.get("expect_response_mentions_verse")
+    if expected is None:
+        return []
+    if isinstance(expected, str):
+        expected_list = [expected]
+    else:
+        expected_list = list(expected)
+
+    found_verses: set[str] = set()
+    for kind, body in parse_markers(obs.response_text):
+        if kind != "verse":
+            continue
+        # body is "src/tokens" or "src/tokens|label"
+        addr = body.split("|", 1)[0]
+        found_verses.add(addr)
+
+    missing = [v for v in expected_list if v not in found_verses]
+    if missing:
+        return [
+            f"expect_response_mentions_verse: missing {missing!r}; "
+            f"found {sorted(found_verses)!r}"
+        ]
+    return []
+
+
 # Ordered list of predicate runners. Each returns failure strings.
+# Legacy tool-* predicates kept for the catalog/action/help flows that
+# still use tools; new pipeline predicates added at the bottom.
 _PREDICATES = (
     _check_intent,
     _check_no_tool,
@@ -425,6 +582,12 @@ _PREDICATES = (
     _check_no_duplicate_markers,
     _check_no_unexpanded_footnote,
     _check_no_unexpected_brackets,
+    # ── new pipeline predicates ──
+    _check_n_theses_min,
+    _check_n_theses_max,
+    _check_has_conclusion,
+    _check_skipped_notes_ratio_max,
+    _check_response_mentions_verse,
 )
 
 
@@ -493,17 +656,28 @@ async def run_eval(
     Returns the process exit code (0 = all OK, 1 = at least one
     regression).
     """
-    try:
-        from tests.evals._fixtures import make_chat_client  # type: ignore
-    except ImportError:
-        print(
-            "tests/evals/_fixtures.make_chat_client not found.\n"
-            "Wire a chat client adapter for your environment (LLM key,\n"
-            "test DB) returning TurnObservation, then re-run."
-        )
-        return 2
+    # When `EVAL_TARGET_URL` is set, skip `_fixtures` entirely — it has
+    # heavy module-level imports (Postgres pool, OpenRouter, S3) that
+    # the HTTP pathway doesn't need and shouldn't have to satisfy.
+    import os
+    target = os.getenv("EVAL_TARGET_URL", "").strip().rstrip("/")
+    if target:
+        from tests.evals._http_client import HttpChatClient
+        chat_client = HttpChatClient(target)
+        print(f"running against HTTP target: {target}")
+    else:
+        try:
+            from tests.evals._fixtures import make_chat_client  # type: ignore
+        except ImportError:
+            print(
+                "tests/evals/_fixtures.make_chat_client not found.\n"
+                "Set EVAL_TARGET_URL=https://… to use the HTTP target instead,\n"
+                "or wire a chat client adapter for your environment (LLM key,\n"
+                "test DB) returning TurnObservation, then re-run."
+            )
+            return 2
+        chat_client = make_chat_client()
 
-    chat_client = make_chat_client()
     cases = load_jsonl(cases_path)
     if not cases:
         print("no cases loaded")
@@ -511,9 +685,11 @@ async def run_eval(
 
     # Warm up the client once (the lazy factory builds DB pool, LLM,
     # graph on the first observe_turn call — we don't want N parallel
-    # workers racing on that). A tiny noop turn keeps it cheap.
-    print(f"warming up client (1 call)...")
-    await chat_client.observe_turn("__warmup__")
+    # workers racing on that). Skipped for HTTP target — each turn
+    # gets a fresh anonymous device anyway, no shared state to warm.
+    if not target:
+        print("warming up client (1 call)...")
+        await chat_client.observe_turn("__warmup__")
     print(f"running {len(cases)} cases with concurrency={concurrency}...")
 
     sem = asyncio.Semaphore(concurrency)

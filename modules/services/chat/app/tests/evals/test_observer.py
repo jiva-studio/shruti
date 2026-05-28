@@ -43,7 +43,11 @@ class FakeLLM:
         *,
         model: str | None = None,
         callbacks: list[Any] | None = None,
+        **_kwargs: Any,
     ) -> T:
+        # **_kwargs catches future-added params (e.g. `run_name` for
+        # Langfuse span labels) without breaking this mock every time
+        # the real LLMPort signature grows.
         resp = self.router_responses[self._ridx]
         self._ridx += 1
         return resp  # type: ignore[return-value]
@@ -57,7 +61,10 @@ class FakeLLM:
         model: str | None = None,
         temperature: float | None = None,
         callbacks: list[Any] | None = None,
+        **_kwargs: Any,
     ) -> AsyncIterator[CompletionChunk]:
+        # **_kwargs catches future-added params (e.g. `run_name` for
+        # Langfuse span labels) so this mock survives signature growth.
         chunks = self.stream_responses[self._sidx]
         self._sidx += 1
         for c in chunks:

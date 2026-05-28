@@ -280,7 +280,21 @@ async def _build_once() -> EvalChatClient:
 # The runner imports this synchronously. We expose an async factory
 # that returns the client; the runner's `run_eval` is already async,
 # so it can await it.
-def make_chat_client() -> _ClientFactory:
+#
+# When `EVAL_TARGET_URL` env var is set, the factory returns an
+# HTTP-backed client that talks to a DEPLOYED chat instance over
+# HTTPS+SSE — used for prod-regression eval without spinning up a
+# local DB. Without the env var, falls back to the in-process
+# `EvalChatClient` (requires local pgvector / OpenRouter etc.).
+def make_chat_client() -> Any:
+    import os
+    target = os.getenv("EVAL_TARGET_URL", "").strip().rstrip("/")
+    if target:
+        # Deferred import — HttpChatClient is in its own thin module
+        # so the in-process pathway's heavy deps (Postgres, S3, etc.)
+        # don't get pulled when we just want to hit a deployed instance.
+        from tests.evals._http_client import HttpChatClient
+        return HttpChatClient(target)
     return _ClientFactory()
 
 
@@ -302,3 +316,9 @@ class _ClientFactory:
     ) -> TurnObservation:
         client = await self._ensure()
         return await client.observe_turn(query, context=context, lang=lang)
+
+
+# `HttpChatClient` is imported lazily from `_http_client.py` inside
+# `make_chat_client` so the in-process pathway (which needs Postgres,
+# OpenRouter, S3 — see imports at top of this file) doesn't get
+# triggered when the runner only wants the HTTP target.

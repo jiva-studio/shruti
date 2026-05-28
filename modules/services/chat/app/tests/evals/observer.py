@@ -203,13 +203,29 @@ async def observe_turn(
         }
 
         response_chunks: list[str] = []
+        outline_n_theses: int | None = None
+        outline_has_intro: bool | None = None
+        outline_has_conclusion: bool | None = None
+        outline_skipped_notes_ratio: float | None = None
         async for mode, payload in graph.astream(
             state, context=ctx_wrapped, stream_mode=["custom"]
         ):
             if mode != "custom":
                 continue
-            if payload.get("type") == "delta":
-                response_chunks.append(payload["data"].get("text", ""))
+            ev_type = payload.get("type")
+            ev_data = payload.get("data", {})
+            if ev_type == "delta":
+                response_chunks.append(ev_data.get("text", ""))
+            elif ev_type == "outline_summary":
+                # synthesis_planner_node emits this once per turn when
+                # an outline was built. Captures the shape predicates
+                # can assert against (n_theses, has_conclusion, …).
+                outline_n_theses = ev_data.get("n_theses")
+                outline_has_intro = ev_data.get("has_intro")
+                outline_has_conclusion = ev_data.get("has_conclusion")
+                outline_skipped_notes_ratio = ev_data.get(
+                    "skipped_notes_ratio",
+                )
 
         # Tool calls captured via wrapper carry args+result; every
         # invocation (incl. those returning {"error": ...}) is in the
@@ -226,6 +242,10 @@ async def observe_turn(
             confidence=buf.confidence,
             tool_chain=tool_chain,
             response_text="".join(response_chunks),
+            outline_n_theses=outline_n_theses,
+            outline_has_intro=outline_has_intro,
+            outline_has_conclusion=outline_has_conclusion,
+            outline_skipped_notes_ratio=outline_skipped_notes_ratio,
         )
     finally:
         _capture_buf.reset(token)
