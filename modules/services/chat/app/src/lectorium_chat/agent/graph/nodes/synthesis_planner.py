@@ -42,7 +42,18 @@ async def synthesis_planner_node(
     bind_node_role("synthesis_planner")
     ctx = runtime.context
 
-    tool_results = state.get("tool_results") or []
+    # ReAct loop appends each tool result as-is, so `tool_results` can
+    # contain both flat dicts (single-result tools) AND nested lists
+    # (chunks_search / chunks_get_by_address etc., which return list[dict]).
+    # The synthesizer flattens in its own formatter; we do the same here
+    # so build_outline / Stage 1 / Stage 2 all see uniform list[dict].
+    raw_results = state.get("tool_results") or []
+    tool_results: list[dict] = []
+    for r in raw_results:
+        if isinstance(r, list):
+            tool_results.extend(x for x in r if isinstance(x, dict))
+        elif isinstance(r, dict):
+            tool_results.append(r)
     if not tool_results:
         # No notes to plan over — let the synthesizer's existing
         # empty-tool_results handling take over (it already emits the

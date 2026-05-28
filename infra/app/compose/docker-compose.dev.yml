@@ -25,21 +25,36 @@ services:
     ports:
       - "6379:6379"
 
+  # Migrator image is private on GHCR; local dev builds it from
+  # source so nobody needs a registry token to bring the stack up.
+  migrator:
+    image: lectorium-migrator:dev
+    pull_policy: never
+    build:
+      context: ../db
+      dockerfile: Dockerfile
+
   chat:
     image: lectorium-chat:dev
     pull_policy: never
     build:
       # Context = modules/ so Dockerfile can COPY both services/chat/ and docs/help/.
-      context: ../../modules
+      context: ../../../modules
       dockerfile: services/chat/Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      # Mount tests/ read-only so `docker compose exec chat python -m
+      # tests.evals.run_chunk_tools_eval` works against the running
+      # stack. Prod image deliberately omits tests/; this is dev-only.
+      # rw so eval can write results.jsonl + filter tmp files back to the host.
+      - ../../../modules/services/chat/app/tests:/app/tests
 
   auth:
     image: lectorium-auth:dev
     pull_policy: never
     build:
-      context: ../../modules
+      context: ../../../modules
       dockerfile: services/auth/Dockerfile
     ports:
       # Host port shifted to 18081 — local dev shares the box with
@@ -50,7 +65,7 @@ services:
     image: lectorium-cleanup-worker:dev
     pull_policy: never
     build:
-      context: ../../modules
+      context: ../../../modules
       dockerfile: services/cleanup-worker/Dockerfile
     # No host port mapping: cleanup-worker has no API surface beyond
     # /healthz, and the in-container HEALTHCHECK dogfoods the binary.

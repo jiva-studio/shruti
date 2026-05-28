@@ -612,6 +612,37 @@ def evaluate_case(
 # predicates unit-tested) without spinning up infra.
 
 
+_RATE_LIMIT_RETRIES = 4
+_RATE_LIMIT_BACKOFF_S = (4.0, 8.0, 16.0, 30.0)
+
+
+async def _observe_with_backoff(
+    chat_client: Any, query: str, *, context: dict[str, Any], lang: str
+) -> Any:
+    """Wrap observe_turn with retry on transient OpenRouter throttles.
+
+    Gemini's per-minute cap is the dominant failure mode in batch runs
+    — a 5-concurrent prod sweep can burst through it inside the first
+    minute, then the rest of the batch trips a 429. Exponential backoff
+    with a ~60s ceiling gives the bucket time to refill without sleeping
+    forever on a real outage.
+    """
+    from openai import RateLimitError  # type: ignore
+
+    last_exc: Exception | None = None
+    for attempt in range(_RATE_LIMIT_RETRIES + 1):
+        try:
+            return await chat_client.observe_turn(
+                query, context=context, lang=lang,
+            )
+        except RateLimitError as exc:
+            last_exc = exc
+            if attempt == _RATE_LIMIT_RETRIES:
+                raise
+            await asyncio.sleep(_RATE_LIMIT_BACKOFF_S[attempt])
+    raise last_exc  # type: ignore[misc]  # unreachable
+
+
 async def _run_one(
     case: dict[str, Any], chat_client: Any, sem: asyncio.Semaphore
 ) -> dict[str, Any]:
@@ -624,7 +655,8 @@ async def _run_one(
     async with sem:
         query = case["query"]
         try:
-            obs = await chat_client.observe_turn(
+            obs = await _observe_with_backoff(
+                chat_client,
                 query,
                 context=case.get("context", {}),
                 lang=case.get("lang", "ru"),
@@ -645,13 +677,16 @@ async def _run_one(
 
 
 async def run_eval(
-    cases_path: Path, results_path: Path, *, concurrency: int = 5
+    cases_path: Path, results_path: Path, *, concurrency: int = 3
 ) -> int:
     """Execute every case in parallel (bounded by `concurrency`), write
     per-case results to disk, print a summary.
 
-    `concurrency=5` is conservative for OpenRouter — most Gemini Flash
-    Lite plans tolerate 10+ concurrent. Bump if you have headroom.
+    `concurrency=3` is conservative for OpenRouter — Gemini Flash Lite's
+    per-minute cap on free tier saturates above ~3 concurrent on a
+    42-case sweep (each case fires 4-6 LLM calls: router, planner,
+    research worker, synth planner, synthesizer). Per-case retry with
+    backoff handles residual 429s on top of that.
 
     Returns the process exit code (0 = all OK, 1 = at least one
     regression).
@@ -733,8 +768,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--concurrency",
         type=int,
-        default=5,
-        help="Parallel cases under the OpenRouter call cap (default 5)",
+        default=3,
+        help="Parallel cases under the OpenRouter call cap (default 3)",
     )
     p.add_argument(
         "--filter",
