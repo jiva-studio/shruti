@@ -220,6 +220,13 @@ async def run_chat_turn(
     had_error = False
     detected_intent: str | None = None
     full_prose: list[str] = []
+    # Outline shape captured from synthesis_planner_node's one-shot
+    # `outline_summary` custom event. Stays None on non-research flows
+    # (action / help / catalog / direct chat) where no outline is built.
+    outline_n_theses: int | None = None
+    outline_has_intro: bool | None = None
+    outline_has_conclusion: bool | None = None
+    outline_skipped_notes_ratio: float | None = None
 
     try:
         # ── Build per-turn services (aliases + expander + tools) ──────
@@ -368,6 +375,17 @@ async def run_chat_turn(
                                 detected_intent = maybe
                     elif ev_type == "error":
                         had_error = True
+                    elif ev_type == "outline_summary":
+                        # synthesis_planner_node emits this once per turn
+                        # for Langfuse scoring. NOT a client-facing event
+                        # — swallow it rather than yielding to the SSE.
+                        outline_n_theses = ev_data.get("n_theses")
+                        outline_has_intro = ev_data.get("has_intro")
+                        outline_has_conclusion = ev_data.get("has_conclusion")
+                        outline_skipped_notes_ratio = ev_data.get(
+                            "skipped_notes_ratio",
+                        )
+                        continue
                     yield AgentEvent(type=ev_type, data=ev_data)
                     # Co-op cancellation if the client closed the SSE.
                     if is_disconnected is not None and await is_disconnected():
@@ -482,6 +500,10 @@ async def run_chat_turn(
                 had_error=had_error,
                 intent=detected_intent,
                 final_text=joined_prose,
+                outline_n_theses=outline_n_theses,
+                outline_has_intro=outline_has_intro,
+                outline_has_conclusion=outline_has_conclusion,
+                outline_skipped_notes_ratio=outline_skipped_notes_ratio,
             )
             emit_turn_scores(get_langfuse(), langfuse_trace_id, summary, audit)
         except Exception as exc:  # noqa: BLE001

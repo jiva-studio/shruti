@@ -234,6 +234,14 @@ class TurnSummary:
     had_error: bool
     intent: str | None  # router intent, may be missing on non-graph paths
     final_text: str  # post-expansion, used for language_match
+    # Outline shape (None when the synthesis_planner skipped — e.g.
+    # action / help / catalog flows, or research-no-notes refusal).
+    # Used to emit per-trace scores that let us filter Langfuse for
+    # `n_theses=3 AND has_conclusion=0` style diagnostics.
+    outline_n_theses: int | None = None
+    outline_has_intro: bool | None = None
+    outline_has_conclusion: bool | None = None
+    outline_skipped_notes_ratio: float | None = None
 
 
 def emit_turn_scores(
@@ -301,3 +309,27 @@ def emit_turn_scores(
 
     if summary.intent is not None:
         _emit("router_intent", summary.intent, "CATEGORICAL")
+
+    # Outline-shape scores. Only emitted when the synthesis planner
+    # actually built an outline (skipped on direct_chat / action / help
+    # turns where there's no research-side outline at all).
+    if summary.outline_n_theses is not None:
+        _emit("outline.n_theses", summary.outline_n_theses, "NUMERIC")
+    if summary.outline_has_intro is not None:
+        _emit(
+            "outline.has_intro",
+            1 if summary.outline_has_intro else 0,
+            "BOOLEAN",
+        )
+    if summary.outline_has_conclusion is not None:
+        _emit(
+            "outline.has_conclusion",
+            1 if summary.outline_has_conclusion else 0,
+            "BOOLEAN",
+        )
+    if summary.outline_skipped_notes_ratio is not None:
+        _emit(
+            "outline.skipped_notes_ratio",
+            summary.outline_skipped_notes_ratio,
+            "NUMERIC",
+        )

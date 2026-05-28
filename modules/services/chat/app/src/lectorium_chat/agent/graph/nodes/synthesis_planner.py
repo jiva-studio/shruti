@@ -19,6 +19,7 @@ fallback wiring elsewhere.
 
 from __future__ import annotations
 
+from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
@@ -128,6 +129,29 @@ async def synthesis_planner_node(
         lang=state.get("lang"),
         router_args=state.get("extracted_args") or {},
     )
+
+    # Emit a one-shot summary event so chat_turn can pull outline-shape
+    # data into TurnSummary for Langfuse scoring. Custom-event channel —
+    # doesn't reach the client (chat_turn filters known event types
+    # before yielding to the SSE writer); pure observability plumbing.
+    try:
+        writer = get_stream_writer()
+        n_outline_notes = len(tool_results)
+        n_skipped = len(augmented.skipped_notes)
+        ratio = (n_skipped / n_outline_notes) if n_outline_notes else 0.0
+        writer({
+            "type": "outline_summary",
+            "data": {
+                "n_theses": len(augmented.theses),
+                "has_intro": bool(augmented.intro and augmented.intro.strip()),
+                "has_conclusion": bool(
+                    augmented.conclusion and augmented.conclusion.strip(),
+                ),
+                "skipped_notes_ratio": round(ratio, 3),
+            },
+        })
+    except Exception as exc:  # noqa: BLE001 — observability never breaks the turn
+        log.warning("synthesis_planner_summary_emit_failed", error=str(exc))
 
     update: dict = {"outline": augmented}
     combined_appends = list(new_commentaries) + list(fresh_chunks)

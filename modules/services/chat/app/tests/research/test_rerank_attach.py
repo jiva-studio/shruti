@@ -310,3 +310,28 @@ async def test_commentary_dedup_against_base_notes():
     )
     # Duplicate was dropped — no new commentary appended.
     assert new == []
+
+
+@pytest.mark.asyncio
+async def test_log_runs_without_crash_with_enriched_fields():
+    """Smoke check — enriched logs (per_thesis dict with cosine scores
+    and type_mix) shouldn't crash structlog's pipeline. Real field-level
+    verification lives in Langfuse traces after deploy."""
+    outline = Outline(theses=[
+        Thesis(thesis="topic A", supporting_notes=[1]),
+        Thesis(thesis="topic B", supporting_notes=[2]),
+    ])
+    notes = [_lecture_env(text="A text"), _lecture_env(text="B text")]
+    embedder = FakeEmbedder(mapping={
+        "topic A": [1.0, 0.0, 0.0, 0.0],
+        "topic B": [0.0, 1.0, 0.0, 0.0],
+        "A text": [0.95, 0.0, 0.0, 0.0],
+        "B text": [0.0, 0.95, 0.0, 0.0],
+    })
+    # If the new per_thesis log fields are malformed, structlog would
+    # raise — the test would fail. Pass = the enriched log call works.
+    await rerank_and_attach_commentaries(
+        outline, notes,
+        chunk_repo=FakeChunkRepo(), embedder=embedder,
+        alias_map=FakeAliasMap(), lang="ru",
+    )

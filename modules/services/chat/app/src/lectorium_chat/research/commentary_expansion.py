@@ -387,6 +387,12 @@ async def rerank_and_attach_commentaries(
 
     # ── 5. Per-thesis: cosine over pool → top-K → new supporting_notes ─
     new_theses: list[Thesis] = []
+    # Per-thesis observability: top cosine + supporting-note type mix.
+    # Skipped-note diagnostics: how strong was the BEST note we DIDN'T
+    # pick? When a thesis's top-K caps short, the skipped-max tells us
+    # if there's real material being dropped (high) vs noise (low).
+    per_thesis_obs: list[dict] = []
+
     for t, t_emb in zip(outline.theses, thesis_embeds):
         scored: list[tuple[float, int]] = []
         for pool_idx, n_emb in note_embeds_by_idx.items():
@@ -407,6 +413,26 @@ async def rerank_and_attach_commentaries(
             supporting_notes=new_supporting,
             sub_query_types=list(t.sub_query_types),
         ))
+        # Type mix of the picks — tells us if a thesis ended up
+        # commentary-heavy / verse-heavy / lecture-heavy.
+        type_counts: dict[str, int] = {}
+        for _, pool_idx in top:
+            env = pool_envelopes[pool_idx]
+            kind = (env.get("type") or "?") if isinstance(env, dict) else "?"
+            type_counts[kind] = type_counts.get(kind, 0) + 1
+        skipped_after_cap = scored[top_k_per_thesis:]
+        per_thesis_obs.append({
+            "n_supporting": len(new_supporting),
+            "top_cosine": round(top[0][0], 3) if top else 0.0,
+            "median_cosine": round(
+                top[len(top) // 2][0], 3) if top else 0.0,
+            "type_mix": type_counts,
+            "n_above_threshold": sum(1 for s, _ in top if s >= 0.55),
+            # The strongest note we did NOT keep — flags potential
+            # under-coverage when this is also above threshold.
+            "skipped_max_cosine": round(
+                skipped_after_cap[0][0], 3) if skipped_after_cap else 0.0,
+        })
 
     enriched = Outline(
         intro=outline.intro,
@@ -422,6 +448,7 @@ async def rerank_and_attach_commentaries(
         n_base_notes=len(base_notes),
         n_new_commentaries=len(new_envelopes),
         n_verses_expanded=len(verse_pairs),
+        per_thesis=per_thesis_obs,
     )
 
     return enriched, new_envelopes

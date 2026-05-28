@@ -206,13 +206,6 @@ async def augment_thin_theses(
         )
         return outline, []
 
-    log.info(
-        "augment_thin_theses_detected",
-        n_theses=len(outline.theses),
-        n_thin=len(thin_indices),
-        thin_positions=thin_indices,
-    )
-
     # ── 4. For each thin thesis: fresh ANN, re-rank ─────────────────────
     # Fresh-fetched chunks accumulate here. Same chunk fetched by two
     # different thin theses gets dedup'd by track_id+window or item_id+seg.
@@ -224,10 +217,27 @@ async def augment_thin_theses(
     new_theses: list[Thesis] = []
     next_pool_idx = len(base_notes) + 1  # 1-based; new chunks get this index
 
+    # Per-thesis observability for the summary log emitted below.
+    # Captures the augmentation outcome so traces show whether augment
+    # actually helped or just paid latency for nothing.
+    per_thesis_summary: list[dict] = []
+
     for i, t in enumerate(outline.theses):
+        old_top = (
+            per_thesis_scored[i][0][0] if per_thesis_scored[i] else 0.0
+        )
+
         if i not in thin_indices:
             # Strong thesis — passthrough Stage 1's supporting_notes.
             new_theses.append(t)
+            per_thesis_summary.append({
+                "idx": i,
+                "was_thin": False,
+                "old_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(old_top, 3),
+                "fresh_fetched": 0,
+                "fresh_above_threshold": 0,
+            })
             continue
 
         try:
@@ -245,6 +255,15 @@ async def augment_thin_theses(
                 thesis_idx=i, error=str(exc),
             )
             new_theses.append(t)
+            per_thesis_summary.append({
+                "idx": i,
+                "was_thin": True,
+                "old_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(old_top, 3),
+                "fresh_fetched": 0,
+                "fresh_above_threshold": 0,
+                "outcome": "fetch_failed",
+            })
             continue
 
         # Convert raw ScoredChunk → envelopes; dedup against already-added.
@@ -318,20 +337,36 @@ async def augment_thin_theses(
         if not new_top:
             new_top = list(t.supporting_notes)
 
-        log.info(
-            "augment_thesis_done",
-            thesis_idx=i,
-            old_top_score=round(per_thesis_scored[i][0][0], 3) if per_thesis_scored[i] else 0.0,
-            new_top_score=round(rescored[0][0], 3) if rescored else 0.0,
-            n_fresh=len(fresh_for_this_thesis),
-        )
-
         new_theses.append(Thesis(
             thesis=t.thesis,
             header=t.header,
             supporting_notes=new_top,
             sub_query_types=list(t.sub_query_types),
         ))
+
+        # Augment outcome metrics. Distinguish three cases:
+        #   - "improved": new_top_cosine ≥ threshold AND > old_top
+        #   - "no_help":   fresh fetched but couldn't beat existing
+        #   - "empty":     fresh fetch returned nothing
+        new_top_cosine = rescored[0][0] if rescored else 0.0
+        fresh_above_threshold = sum(
+            1 for s, _ in rescored if s >= 0.55
+        )
+        if not fresh_for_this_thesis:
+            outcome = "empty"
+        elif new_top_cosine >= 0.55 and new_top_cosine > old_top:
+            outcome = "improved"
+        else:
+            outcome = "no_help"
+        per_thesis_summary.append({
+            "idx": i,
+            "was_thin": True,
+            "old_top_cosine": round(old_top, 3),
+            "new_top_cosine": round(new_top_cosine, 3),
+            "fresh_fetched": len(fresh_for_this_thesis),
+            "fresh_above_threshold": fresh_above_threshold,
+            "outcome": outcome,
+        })
 
     # Strip the internal `_augment_dedup` field before envelopes hit
     # downstream consumers — purely internal-to-this-function bookkeeping.
@@ -344,6 +379,23 @@ async def augment_thin_theses(
         conclusion=outline.conclusion,
         skipped_notes=list(outline.skipped_notes),
         skipped_reason=outline.skipped_reason,
+    )
+
+    # Aggregate counters for the outcome distribution — easier to see
+    # at a glance in Langfuse than scanning per_thesis array.
+    outcome_counts = {"empty": 0, "no_help": 0, "improved": 0, "fetch_failed": 0}
+    for entry in per_thesis_summary:
+        outcome = entry.get("outcome")
+        if outcome in outcome_counts:
+            outcome_counts[outcome] += 1
+    log.info(
+        "augment_summary",
+        n_theses=len(outline.theses),
+        n_thin=len(thin_indices),
+        thin_positions=thin_indices,
+        n_fresh_total=len(additional_envelopes),
+        outcomes=outcome_counts,
+        per_thesis=per_thesis_summary,
     )
 
     return enriched, additional_envelopes
