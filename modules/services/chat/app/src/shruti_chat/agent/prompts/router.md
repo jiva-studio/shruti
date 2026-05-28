@@ -23,12 +23,18 @@ Intents:
   AND any "find more like this fragment / lecture" request when
   there's a focused track/fragment in context (chunks_find_similar
   is a research tool).
+  Note on "chapter from a book": "из Книги Кришны главу про X" /
+  "chapter from KRSNA Book about X" is research+chunks_search with
+  type=prose_chapter — the user wants the prose chapter's CONTENT.
+  Contrast with "покажи лекции по главе" (find_track — lectures about).
   Examples (ru): "найди про карму", "БГ 2.13",
                  "комментарий к ШБ 5.5.3",
+                 "из Книги Кришны главу про Говардхану",
                  "что я недавно слушал про карму",
                  "найди что-то похожее на эту лекцию".
   Examples (en): "what did he say about devotion", "BG 2.13",
                  "letter about temple management",
+                 "chapter from KRSNA Book about Govardhana",
                  "I heard about karma recently — find it",
                  "find me a similar fragment".
 - find_track: catalog lookup by metadata — title, source/verse
