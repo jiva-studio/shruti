@@ -204,6 +204,43 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     return f"{header}\n{text}".rstrip() if header else text
 
 
+_MAX_HEADER_WORDS = 6
+_MAX_HEADER_CHARS = 50
+
+
+def _sanitize_header(raw: str | None) -> str | None:
+    """Guard against the LLM emitting an entire thesis sentence as the
+    `header` field. The schema is permissive (`str | None`), the prompt
+    asks for 3-5 words — but on rich notes the planner sometimes packs
+    the whole claim into the header and leaves nothing meaningful for
+    the thesis sentence. Drop the header in that case so the synthesizer
+    just renders the paragraph without a misleading bold preamble.
+
+    Also strip trailing punctuation (`.`, `…`, `!`, `?`) — a header is a
+    label, not a sentence, so it shouldn't end like one.
+    """
+    if not raw:
+        return None
+    cleaned = raw.strip().rstrip(".!?…:;")
+    if not cleaned:
+        return None
+    if len(cleaned) > _MAX_HEADER_CHARS:
+        log.info(
+            "synth_header_dropped_too_long",
+            chars=len(cleaned),
+            preview=cleaned[:60],
+        )
+        return None
+    if len(cleaned.split()) > _MAX_HEADER_WORDS:
+        log.info(
+            "synth_header_dropped_too_many_words",
+            words=len(cleaned.split()),
+            preview=cleaned[:60],
+        )
+        return None
+    return cleaned
+
+
 def _format_outline_block(outline: Any) -> str:
     """Render an `Outline` (or None) as an LLM-facing block that pins the
     synthesizer to a structured plan. Empty theses → an explicit refusal
@@ -247,7 +284,7 @@ def _format_outline_block(outline: Any) -> str:
 
     parts.append("")  # spacer line before thesis list
     for i, t in enumerate(theses, start=1):
-        header = getattr(t, "header", None)
+        header = _sanitize_header(getattr(t, "header", None))
         refs = ", ".join(str(n) for n in t.supporting_notes)
         header_line = f' header="{header}"' if header else ""
         parts.append(
