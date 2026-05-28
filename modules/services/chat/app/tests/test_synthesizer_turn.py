@@ -65,7 +65,7 @@ async def test_plain_text_passes_through() -> None:
         run_synthesizer_turn(
             "что?",
             tool_results=[],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -101,7 +101,7 @@ async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
         run_synthesizer_turn(
             "?",
             tool_results=[{"placeholder": True}],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -128,7 +128,7 @@ async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
         run_synthesizer_turn(
             "verse",
             tool_results=[{"placeholder": True}],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -154,7 +154,7 @@ async def test_ref_marker_split_across_chunks_buffers_correctly() -> None:
         run_synthesizer_turn(
             "?",
             tool_results=[{"x": 1}],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -187,7 +187,7 @@ async def test_unknown_integer_ref_dropped() -> None:
         run_synthesizer_turn(
             "?",
             tool_results=[{"x": 1}],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -212,7 +212,7 @@ async def test_empty_tool_results_still_streams() -> None:
         run_synthesizer_turn(
             "найди про инопланетян",
             tool_results=[],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -252,7 +252,7 @@ async def test_history_flows_into_synth_messages() -> None:
         run_synthesizer_turn(
             "а ещё что?",
             tool_results=[],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -279,9 +279,8 @@ async def test_history_flows_into_synth_messages() -> None:
     assert "prior" not in prior_assistant   # caption dropped, not kept
     assert "Прабхупада объясняет" in prior_assistant
 
-    # The latest user message (third in history) got the lang tag.
+    # The latest user message (third in history) carries the current query.
     latest_user = msgs[3]["content"]
-    assert "lang=ru" in latest_user
     assert "а ещё что?" in latest_user
 
     # No-history fallback path stays intact (covered elsewhere).
@@ -299,7 +298,6 @@ async def test_no_history_uses_user_query_directly() -> None:
         run_synthesizer_turn(
             "single-turn query",
             tool_results=[],
-            lang="en",
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -312,7 +310,6 @@ async def test_no_history_uses_user_query_directly() -> None:
     # inside the system block per the synth refactor.
     assert roles == ["system", "user"]
     assert "single-turn query" in msgs[1]["content"]
-    assert "lang=en" in msgs[1]["content"]
 
 
 @pytest.mark.asyncio
@@ -328,7 +325,7 @@ async def test_done_event_carries_full_prose() -> None:
         run_synthesizer_turn(
             "?",
             tool_results=[{"x": 1}],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="sys",
@@ -429,7 +426,7 @@ async def test_notes_in_system_block_not_assistant_role() -> None:
             tool_results=[
                 {"type": "lecture", "ref": 1, "label": "L", "text": "Body…", "meta": {}}
             ],
-            lang="ru",
+
             llm=llm,
             expander=expander,
             system_prompt="SYS",

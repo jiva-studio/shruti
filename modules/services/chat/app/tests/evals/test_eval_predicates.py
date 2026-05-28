@@ -124,10 +124,12 @@ def test_expect_intent_mismatch() -> None:
     assert not ok and any("intent" in f for f in fails)
 
 
-def test_expect_intent_none_obs() -> None:
-    """Router never ran (legacy monolith) → expect_intent fails."""
+def test_expect_intent_none_obs_skips_silently() -> None:
+    """Intent unobservable (HTTP eval — `router_decision` is a
+    structlog event not surfaced over SSE). Predicate skips silently
+    rather than reporting noise on every research case."""
     ok, fails = evaluate_case({"expect_intent": "research"}, _obs(intent=None))
-    assert not ok and any("intent" in f for f in fails)
+    assert ok and not fails
 
 
 # expect_no_tool
@@ -431,4 +433,116 @@ def test_unexpected_bracket_can_be_disabled() -> None:
     bracketed text (e.g., testing legacy shape preservation)."""
     obs = _obs(response_text="[ref:1]")
     ok, _ = evaluate_case({"expect_no_unexpected_brackets": False}, obs)
+    assert ok
+
+
+# ── Pipeline outline predicates ───────────────────────────────────
+
+
+def _obs_outline(
+    *,
+    intent: str | None = "research",
+    n_theses: int | None = None,
+    has_intro: bool | None = None,
+    has_conclusion: bool | None = None,
+    skipped_notes_ratio: float | None = None,
+    response_text: str = "",
+) -> TurnObservation:
+    return TurnObservation(
+        intent=intent,
+        response_text=response_text,
+        outline_n_theses=n_theses,
+        outline_has_intro=has_intro,
+        outline_has_conclusion=has_conclusion,
+        outline_skipped_notes_ratio=skipped_notes_ratio,
+    )
+
+
+def test_expect_n_theses_min_pass() -> None:
+    obs = _obs_outline(n_theses=3)
+    ok, _ = evaluate_case({"expect_n_theses_min": 2}, obs)
+    assert ok
+
+
+def test_expect_n_theses_min_fail() -> None:
+    obs = _obs_outline(n_theses=1)
+    ok, fails = evaluate_case({"expect_n_theses_min": 3}, obs)
+    assert not ok and any("n_theses" in f for f in fails)
+
+
+def test_expect_n_theses_min_skips_when_outline_unobservable() -> None:
+    """When all outline-shape fields are None (HTTP eval, where the
+    `outline_summary` event is swallowed before reaching SSE), outline
+    predicates skip silently rather than fire false negatives on every
+    research case."""
+    obs = _obs_outline(n_theses=None)
+    ok, fails = evaluate_case({"expect_n_theses_min": 1}, obs)
+    assert ok and not fails
+
+
+def test_expect_n_theses_max_pass() -> None:
+    obs = _obs_outline(n_theses=3)
+    ok, _ = evaluate_case({"expect_n_theses_max": 5}, obs)
+    assert ok
+
+
+def test_expect_n_theses_max_fail() -> None:
+    obs = _obs_outline(n_theses=6)
+    ok, fails = evaluate_case({"expect_n_theses_max": 5}, obs)
+    assert not ok and any("n_theses" in f for f in fails)
+
+
+def test_expect_has_conclusion_pass() -> None:
+    obs = _obs_outline(has_conclusion=True)
+    ok, _ = evaluate_case({"expect_has_conclusion": True}, obs)
+    assert ok
+
+
+def test_expect_has_conclusion_fail() -> None:
+    obs = _obs_outline(has_conclusion=False)
+    ok, fails = evaluate_case({"expect_has_conclusion": True}, obs)
+    assert not ok and any("has_conclusion" in f for f in fails)
+
+
+def test_expect_skipped_notes_ratio_max_pass() -> None:
+    obs = _obs_outline(skipped_notes_ratio=0.4)
+    ok, _ = evaluate_case({"expect_skipped_notes_ratio_max": 0.85}, obs)
+    assert ok
+
+
+def test_expect_skipped_notes_ratio_max_fail() -> None:
+    obs = _obs_outline(skipped_notes_ratio=0.95)
+    ok, fails = evaluate_case({"expect_skipped_notes_ratio_max": 0.85}, obs)
+    assert not ok and any("skipped_notes_ratio" in f for f in fails)
+
+
+def test_expect_response_mentions_verse_pass() -> None:
+    obs = _obs_outline(
+        response_text="See [verse:source_BG/9.22|БГ 9.22] for details.",
+    )
+    ok, _ = evaluate_case(
+        {"expect_response_mentions_verse": "source_BG/9.22"}, obs,
+    )
+    assert ok
+
+
+def test_expect_response_mentions_verse_fail() -> None:
+    obs = _obs_outline(
+        response_text="See [verse:source_BG/2.13|БГ 2.13] for details.",
+    )
+    ok, fails = evaluate_case(
+        {"expect_response_mentions_verse": "source_BG/9.22"}, obs,
+    )
+    assert not ok and any("missing" in f for f in fails)
+
+
+def test_expect_response_mentions_verse_accepts_list() -> None:
+    obs = _obs_outline(
+        response_text="See [verse:source_BG/2.13|БГ 2.13] and "
+                      "[verse:source_BG/9.22|БГ 9.22] details.",
+    )
+    ok, _ = evaluate_case(
+        {"expect_response_mentions_verse": ["source_BG/2.13", "source_BG/9.22"]},
+        obs,
+    )
     assert ok
