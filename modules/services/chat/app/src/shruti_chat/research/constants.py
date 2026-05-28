@@ -69,3 +69,23 @@ TIMEOUT_COMMENTARY_EXPAND_S = 5.0
 # get attached. Authors-first selection means up to N distinct purports
 # appear before any second segment from one author.
 MAX_COMMENTARIES_PER_VERSE = 12
+
+
+# ---- Stage 2: per-thesis thin-support augmentation ------------------------
+
+# After Stage 1 rerank, a thesis is considered "thin" if its top
+# supporting_note has cosine < THIN_THESIS_MIN_SCORE or fewer than
+# THIN_THESIS_MIN_STRONG_NOTES notes clear the threshold. Thin theses
+# trigger a fresh thesis-targeted ANN search (Stage 2 augment).
+THIN_THESIS_MIN_SCORE = 0.55
+THIN_THESIS_MIN_STRONG_NOTES = 2
+
+# How many fresh chunks Stage 2 pulls per thin thesis (split across
+# lecture + library kinds inside _augment_one). Kept small — augment
+# only fires when initial pool was already insufficient; flooding with
+# 30 more chunks would just shift the noise problem one level down.
+AUGMENT_FRESH_TOP_K = 10
+
+# Stage 2 ANN total budget. Used by `_safe` to avoid runaway on a thin
+# thesis if pgvector hangs.
+TIMEOUT_AUGMENT_S = 6.0

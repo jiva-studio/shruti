@@ -29,6 +29,7 @@ from shruti_chat.research.commentary_expansion import (
     rerank_and_attach_commentaries,
 )
 from shruti_chat.research.outline_builder import build_outline
+from shruti_chat.research.thesis_augmentation import augment_thin_theses
 
 
 log = get_logger(__name__)
@@ -93,7 +94,7 @@ async def synthesis_planner_node(
         has_intro=outline.intro is not None,
     )
 
-    # Stage 2: lazy commentary attach + per-thesis cosine rerank.
+    # Stage 1: lazy commentary attach + per-thesis cosine rerank.
     # Pulls purports ONLY for verses the planner picked, then re-ranks
     # the pool against each thesis text — replaces planner's tentative
     # LLM-attribution with embedding-based per-thesis ranking. Graceful
@@ -110,9 +111,26 @@ async def synthesis_planner_node(
         on_event=None,  # planner runs after the live SSE progress panel
     )
 
-    update: dict = {"outline": enriched}
-    if new_commentaries:
+    # Stage 2: per-thesis thin-support augmentation.
+    # For theses still weak after Stage 1 (max cosine < threshold or
+    # fewer than 2 strong notes), run a fresh thesis-targeted ANN
+    # fetch — respecting the user's router_args filters — and re-rank.
+    # Fires conditionally per-thesis; if all are strong, no DB calls.
+    augmented, fresh_chunks = await augment_thin_theses(
+        enriched,
+        list(tool_results) + list(new_commentaries),
+        chunk_repo=ctx.chunk_repo,
+        embedder=ctx.embedder,
+        alias_map=ctx.aliases,
+        catalog_repo=ctx.catalog_repo,
+        lang=state.get("lang"),
+        router_args=state.get("extracted_args") or {},
+    )
+
+    update: dict = {"outline": augmented}
+    combined_appends = list(new_commentaries) + list(fresh_chunks)
+    if combined_appends:
         # `tool_results` state field uses an append-reducer so returning
         # a list here gets concatenated onto what research_worker wrote.
-        update["tool_results"] = new_commentaries
+        update["tool_results"] = combined_appends
     return update
