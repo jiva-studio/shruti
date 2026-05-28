@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     # Query planner + topic extractor share a model — both are short
     # structured-JSON calls. Flash-Lite is cheap and fast enough.
     llm_query_planner: str = "openrouter/google/gemini-3.1-flash-lite"
+    # Synthesis planner is a heavier structured-JSON call: it must rank
+    # 15-25 notes and pick which back which thesis. Lite was observed to
+    # hallucinate broken supporting_notes refs ~5% on the bench; Flash
+    # (full, not Lite) handles the attribution selection reliably.
+    llm_synthesis_planner: str = "openrouter/google/gemini-2.5-flash"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

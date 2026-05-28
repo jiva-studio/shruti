@@ -70,11 +70,13 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_fallback,
         settings.llm_outline,
         settings.llm_query_planner,
+        settings.llm_synthesis_planner,
         # Known-good aliases — extend here when adding a new model to
         # Langfuse prompt-config. Keep curated; the whole point is
         # rejecting typos before they hit the provider.
         "openrouter/anthropic/claude-3-haiku",
         "openrouter/google/gemini-2.0-flash-001",
+        "openrouter/google/gemini-2.5-flash",
         "openrouter/google/gemini-3.1-flash-lite",
         "openrouter/deepseek/deepseek-chat",
     }

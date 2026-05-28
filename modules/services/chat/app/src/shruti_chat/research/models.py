@@ -46,6 +46,49 @@ class QueryPlan(BaseModel):
     sub_queries: list[SubQuery] = Field(default_factory=list, max_length=4)
 
 
+class Thesis(BaseModel):
+    """One thesis paragraph in the synthesis outline.
+
+    `thesis` is the one-sentence statement the synthesizer should expand
+    into one short paragraph. `supporting_notes` are 1-N indices (1-based,
+    matching the `[^N]` markers in the rendered notes block) that back
+    this thesis — the synthesizer cites ONLY these notes when writing
+    this paragraph and emits one `[^N]` at the paragraph end.
+
+    `sub_query_types` is diagnostic-only: lists the sub-question types
+    of supporting notes so we can grade outline coherence in Langfuse
+    without re-reading individual chunks.
+    """
+
+    thesis: str
+    supporting_notes: list[int] = Field(default_factory=list, min_length=1)
+    sub_query_types: list[str] = Field(default_factory=list)
+
+
+class Outline(BaseModel):
+    """Output of `outline_builder.build_outline`. Plan the synthesizer
+    writes against when `outline.theses` is non-empty.
+
+    Three meaningful states downstream:
+      - `outline = None`             → planner failed; synthesizer runs
+                                       in free-form mode (legacy behaviour).
+      - `Outline(theses=[])`         → planner deliberately rejected all
+                                       notes; synthesizer emits refusal.
+      - `Outline(theses=[...])`      → synthesizer writes one paragraph
+                                       per thesis, citing only that
+                                       thesis's `supporting_notes`.
+
+    `intro` is an optional one-sentence preamble. `skipped_notes` /
+    `skipped_reason` are diagnostic — show which notes the planner saw
+    and chose not to use, helping us tune relevance thresholds upstream.
+    """
+
+    intro: str | None = None
+    theses: list[Thesis] = Field(default_factory=list, max_length=5)
+    skipped_notes: list[int] = Field(default_factory=list)
+    skipped_reason: str | None = None
+
+
 class TopicExtractionResult(BaseModel):
     """Output of `topic_extractor.extract_topics`. 0-5 short topic strings
     (1-4 words each) extracted from the user query for matching against

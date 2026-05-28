@@ -204,6 +204,41 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     return f"{header}\n{text}".rstrip() if header else text
 
 
+def _format_outline_block(outline: Any) -> str:
+    """Render an `Outline` (or None) as an LLM-facing block that pins the
+    synthesizer to a structured plan. Empty theses → an explicit refusal
+    directive so the synthesizer doesn't try to paper over.
+
+    Kept here (not in models.py) because the formatting is purely an
+    artifact of how this turn talks to the LLM — the Outline schema
+    itself stays prompt-agnostic.
+    """
+    if outline is None:
+        return ""
+    theses = list(getattr(outline, "theses", []) or [])
+    if not theses:
+        return (
+            "OUTLINE: planner determined none of the retrieved notes are "
+            "relevant for the question. Emit a refusal in the user's "
+            "language per the grounding rules. Do NOT attempt to compose "
+            "an answer from the notes."
+        )
+    parts: list[str] = []
+    intro = getattr(outline, "intro", None)
+    if intro:
+        parts.append(f'Intro: "{intro}"')
+    parts.append(
+        "Write ONE short paragraph per thesis below, in order. End each "
+        "paragraph with a single `[^N]` marker selecting from THAT "
+        "thesis's supporting_notes ONLY. Do NOT cite notes attributed "
+        "to other theses. Do NOT introduce new theses."
+    )
+    for i, t in enumerate(theses, start=1):
+        refs = ", ".join(str(n) for n in t.supporting_notes)
+        parts.append(f"  Thesis {i}: {t.thesis}  (supporting_notes: {refs})")
+    return "OUTLINE (follow strictly):\n" + "\n".join(parts)
+
+
 async def run_synthesizer_turn(
     user_query: str,
     *,
@@ -212,6 +247,7 @@ async def run_synthesizer_turn(
     expander: MarkerExpander,
     system_prompt: str,
     history: list[dict[str, Any]] | None = None,
+    outline: Any | None = None,
     request_id: str | None = None,
     model: str | None = None,
     temperature: float | None = 0.5,
@@ -235,11 +271,21 @@ async def run_synthesizer_turn(
     form via each entry's persisted `aliases` payload.
     When `history` is None or empty the synth sees only the current
     `user_query` plus the internal research notes.
+
+    `outline` (optional) is a `research.models.Outline` produced by the
+    `synthesis_planner` node. Three meaningful values:
+      - `None`                 → free-form synthesis (legacy behaviour);
+                                 model decides structure from notes.
+      - `Outline(theses=[])`   → planner deliberately rejected all notes;
+                                 system prompt instructs explicit refusal.
+      - `Outline(theses=[…])`  → model writes one paragraph per thesis,
+                                 citing only that thesis's supporting_notes.
     """
     notes = _format_tool_results(tool_results) if tool_results else "(no research notes)"
 
     # Build the message list. Order matters:
     #   1. system prompt with grounding rules + research notes inline
+    #      + optional outline block (when provided)
     #   2. prior conversation history (folds chip markers); ends on
     #      the current user message
     #
@@ -252,12 +298,17 @@ async def run_synthesizer_turn(
     # Putting the notes in `system` reframes them as ambient context,
     # not a prior turn to continue.
     _SEP = "─" * 66
+    outline_block = _format_outline_block(outline)
+    outline_section = (
+        f"\n\n{_SEP}\n{outline_block}\n{_SEP}" if outline_block else ""
+    )
     system_block = (
         f"{system_prompt}\n\n"
         f"{_SEP}\n"
         f"RESEARCH NOTES (private context — do NOT mention or echo)\n"
         f"{_SEP}\n"
         f"{notes}"
+        f"{outline_section}"
     )
     messages: list[Message] = [
         {"role": "system", "content": system_block},
