@@ -3,11 +3,11 @@ for `router.intent == "research"` turns.
 
 Two paths:
   SHORT (question-attribution match):
-    expand_query ∥ find_attributions(kind=question)
+    plan_queries ∥ find_attributions(kind=question)
     → if matches: fetch_refs + supplementary fanout → return authoritative
 
   LONG (no match):
-    expand_query ∥ find_attributions(kind=question) → no matches
+    plan_queries ∥ find_attributions(kind=question) → no matches
     → extract_topics → embed topics → find_attributions(kind=topic)
     → fanout_search_with_boost (topic-matched item_ids get +0.15)
     → coverage gate; up to MAX_FANOUT_ROUNDS with regenerate_queries between
@@ -38,9 +38,9 @@ from lectorium_chat.research.constants import (
     BOOST_BY_KIND,
     MAX_FANOUT_ROUNDS,
     TIMEOUT_COMMENTARY_EXPAND_S,
-    TIMEOUT_EXPAND_S,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
+    TIMEOUT_PLAN_S,
     TIMEOUT_QUESTION_LOOKUP_S,
     TIMEOUT_REGENERATE_S,
     TIMEOUT_TOPIC_EXTRACT_S,
@@ -57,11 +57,12 @@ from lectorium_chat.research.coverage_gate import (
 from lectorium_chat.research.models import (
     AttributionMatch,
     AttributionRef,
-    ExpansionResult,
     FanoutResult,
+    QueryPlan,
     ResearchResult,
+    SubQuery,
 )
-from lectorium_chat.research.query_expander import expand_query
+from lectorium_chat.research.query_planner import plan_queries
 from lectorium_chat.research.topic_extractor import extract_topics
 
 
@@ -152,6 +153,20 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
         )
 
 
+def _plan_to_fanout_queries(plan: QueryPlan) -> list[tuple[int, str]]:
+    """Flatten a QueryPlan into the `(sub_query_id, text)` tuples that
+    `fanout_search_with_boost` consumes. Each sub_query contributes its
+    primary `text` plus every `alt_phrasing` — all tagged with the same
+    `sub_query_id` so retrieval can be grouped per sub-question downstream.
+    """
+    out: list[tuple[int, str]] = []
+    for sq in plan.sub_queries:
+        out.append((sq.id, sq.text))
+        for alt in sq.alt_phrasings:
+            out.append((sq.id, alt))
+    return out
+
+
 def _dedupe_refs(refs: list[AttributionRef]) -> list[AttributionRef]:
     seen: set[tuple[str, str]] = set()
     out: list[AttributionRef] = []
@@ -231,23 +246,25 @@ async def _regenerate_queries(
     model: str | None,
     on_event: OnEvent | None = None,
     callbacks: list[Any] | None = None,
-) -> list[str]:
-    """Second-pass query expansion that explicitly avoids the previous
-    angles. The query_expander prompt + a follow-up hint."""
+) -> list[tuple[int, str]]:
+    """Second-pass query planning that explicitly avoids the previous
+    angles. Re-runs the query_planner with a follow-up hint and returns
+    `(sub_query_id, text)` tuples ready for `fanout_search_with_boost`.
+    """
     found_labels = [e.get("label") or "" for e in found_chunks[:5]]
     follow_up = (
         f"Previous queries attempted: {previous_queries}\n"
         f"Top labels found so far: {found_labels}\n"
-        "Generate 3-5 NEW queries that approach the question from angles "
+        "Produce NEW sub_queries that approach the question from angles "
         "NOT covered by the previous queries. Do not repeat what was tried."
     )
     args = {"_followup": follow_up}
-    result: ExpansionResult = await expand_query(
+    plan: QueryPlan = await plan_queries(
         question, lang, args, llm=llm, model=model, callbacks=callbacks,
     )
-    for q in result.queries:
-        _emit_question(on_event, q, question)
-    return result.queries
+    for sq in plan.sub_queries:
+        _emit_question(on_event, sq.text, question)
+    return _plan_to_fanout_queries(plan)
 
 
 async def run_research(
@@ -316,7 +333,10 @@ async def run_research(
         # plain fanout with the raw question.
         log.warning("pipeline_embed_failed_fanout_only", request_id=request_id)
         return await _research_path(
-            question=question, lang=lang, expansion=ExpansionResult(queries=[question]),
+            question=question, lang=lang,
+            plan=QueryPlan(sub_queries=[
+                SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
+            ]),
             boost_ids=set(),
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
@@ -325,20 +345,23 @@ async def run_research(
             callbacks=callbacks,
         )
 
-    # 1. PARALLEL: expand + question-attribution lookup + speculative
+    # 1. PARALLEL: plan + question-attribution lookup + speculative
     # topic extraction. Topic extraction is only consumed by the LONG
     # path (no question_match), but the LLM call is independent of both
-    # `expansion` and `question_matches` (it uses [] as expansion
-    # context in the prompt) so we hide its 0.8-1.4 s latency under
-    # `expand_task` instead of paying for it sequentially after we
-    # confirm no question_match. On SHORT path the result is discarded.
-    expand_task = asyncio.create_task(_safe(
-        lambda: expand_query(
+    # `plan` and `question_matches` (it uses [] as expansion context in
+    # the prompt) so we hide its 0.8-1.4 s latency under `plan_task`
+    # instead of paying for it sequentially after we confirm no
+    # question_match. On SHORT path the result is discarded.
+    plan_task = asyncio.create_task(_safe(
+        lambda: plan_queries(
             question, lang, router_args, llm=llm, model=expand_model,
             callbacks=callbacks,
         ),
-        default=ExpansionResult(queries=[question]), timeout=TIMEOUT_EXPAND_S,
-        name="expand_query", request_id=request_id,
+        default=QueryPlan(sub_queries=[
+            SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
+        ]),
+        timeout=TIMEOUT_PLAN_S,
+        name="query_planner", request_id=request_id,
     ))
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
@@ -360,14 +383,15 @@ async def run_research(
             default=[], timeout=TIMEOUT_TOPIC_EXTRACT_S,
             name="extract_topics_speculative", request_id=request_id,
         ))
-    expansion: ExpansionResult = await expand_task
+    plan: QueryPlan = await plan_task
     question_matches: list[AttributionMatch] = await q_lookup_task
 
-    # Surface diversified sub-queries the moment they're ready — both
-    # SHORT and LONG paths use them. Filtered to skip echoes of the
-    # original question (degraded `expand_query` fallback shape).
-    for q in expansion.queries:
-        _emit_question(on_event, q, question)
+    # Surface typed sub-queries the moment they're ready — both SHORT and
+    # LONG paths use them. Filtered to skip echoes of the original question
+    # (degraded `plan_queries` fallback shape). One event per sub_query;
+    # alt_phrasings are NOT surfaced to keep the panel readable.
+    for sq in plan.sub_queries:
+        _emit_question(on_event, sq.text, question)
 
     # 2. SHORT PATH — question-attribution found.
     if question_matches:
@@ -396,10 +420,16 @@ async def run_research(
         )
 
         # Supplementary fanout — broader semantic exploration around the
-        # canonical theme. No topic-boost in SHORT path.
+        # canonical theme. No topic-boost in SHORT path. We cap at the
+        # first 3 sub_queries' primary texts only (no alt_phrasings) so
+        # SHORT path stays lean — authoritative refs already provide the
+        # core grounding.
+        supplementary_queries = [
+            (sq.id, sq.text) for sq in plan.sub_queries[:3]
+        ]
         supplementary = await _safe(
             lambda: fanout_search_with_boost(
-                queries=expansion.queries[:3],
+                queries=supplementary_queries,
                 embedder=embedder, chunk_repo=chunk_repo,
                 catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
                 boost_ids=set(),
@@ -448,7 +478,7 @@ async def run_research(
         except (asyncio.CancelledError, Exception):
             speculative_topics = []
     long_result = await _research_path(
-        question=question, lang=lang, expansion=expansion,
+        question=question, lang=lang, plan=plan,
         boost_ids=None,  # computed below from topics
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
@@ -526,7 +556,7 @@ async def _research_path(
     *,
     question: str,
     lang: str,
-    expansion: ExpansionResult,
+    plan: QueryPlan,
     boost_ids: set[str] | None,
     chunk_repo: Any,
     catalog_repo: Any,
@@ -558,15 +588,17 @@ async def _research_path(
     ):
         # Step A: LLM extracts topics from the question. Use the
         # speculative result from `run_research` if it's available
-        # (already paid for under `expand_query` latency); otherwise
-        # extract synchronously here.
+        # (already paid for under `plan_queries` latency); otherwise
+        # extract synchronously here. The topic-extractor receives
+        # `plan.sub_queries`'s texts as extra context (same role the
+        # old `expansion.queries` list played).
         topics: list[str]
         if precomputed_topics:
             topics = precomputed_topics
         else:
             topics = await _safe(
                 lambda: extract_topics(
-                    question, lang, expansion.queries,
+                    question, lang, [sq.text for sq in plan.sub_queries],
                     llm=llm, model=topic_model, kv_cache=kv_cache,
                     callbacks=callbacks,
                 ),
@@ -644,7 +676,9 @@ async def _research_path(
 
     # Step C: fanout with topic-boost, coverage gate, up to N rounds.
     accumulated = FanoutResult()
-    queries = expansion.queries or [question]
+    queries: list[tuple[int, str]] = (
+        _plan_to_fanout_queries(plan) or [(0, question)]
+    )
 
     for round_idx in range(MAX_FANOUT_ROUNDS):
         result = await _safe(
@@ -685,7 +719,7 @@ async def _research_path(
         if round_idx + 1 < MAX_FANOUT_ROUNDS:
             queries = await _safe(
                 lambda: _regenerate_queries(
-                    question, lang, queries, accumulated.chunks,
+                    question, lang, [q[1] for q in queries], accumulated.chunks,
                     llm=llm, model=expand_model, on_event=on_event,
                     callbacks=callbacks,
                 ),

@@ -164,7 +164,7 @@ def warm_prompt_cache(names: list[str]) -> None:
 # for warm-up at startup and as the source-of-truth for the bootstrap
 # script (`scripts/bootstrap_langfuse_prompts.py`).
 LANGFUSE_PROMPT_NAMES: tuple[str, ...] = (
-    "query-expander",
+    "query-planner",
     "topic-extractor",
     "caption-generator",
     "chat-router",
@@ -336,7 +336,7 @@ def langfuse_node_callback(trace_id: str, span_name: str) -> Any | None:
         no usage_details, no cost),
       - produced unnamed nested children (`ChatOpenAI`, `RunnableLambda`)
         that cluttered the trace tree below our semantic `router_decision`
-        / `query_expander` / `synthesizer` spans.
+        / `query_planner` / `synthesizer` spans.
 
     The stub is retained so existing call sites that still build a
     `callbacks=[cb] if cb is not None else None` list don't need to be

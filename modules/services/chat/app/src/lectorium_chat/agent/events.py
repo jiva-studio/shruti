@@ -24,7 +24,7 @@ absent or unsupported). The current set is **9 event types**:
                  `enable_daily_reminder`, `configure_smart_library`,
                  `upgrade_to_pro`.
 - `research_question` — sub-query the research pipeline is about
-                 to investigate. Emitted live as `query_expander`
+                 to investigate. Emitted live as `query_planner`
                  / `_regenerate_queries` returns. Payload:
                  `{question: str}`. Ephemeral — client renders
                  in the "what's being investigated" panel under

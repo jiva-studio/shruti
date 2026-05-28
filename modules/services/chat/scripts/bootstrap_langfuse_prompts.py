@@ -3,7 +3,7 @@
 Reads every `.md` file under `app/src/lectorium_chat/agent/prompts/`
 (`header`, `tools`, `actions`, `followups`, `no_narration`,
 `citations`, `note_types`, `quoting`, `response_shape`, `language`,
-`safety`, `grounding`, `router`, `query_expander`, `topic_extractor`,
+`safety`, `grounding`, `router`, `query_planner`, `topic_extractor`,
 `caption_generator`) and keeps them aligned with our Langfuse instance.
 
 Subcommands:
@@ -27,7 +27,7 @@ names like `chat-section-header`); empty = all known prompts.
 `push --dry-run` shows what would be pushed without contacting
 Langfuse, useful for verifying the file resolution + config payloads.
 
-`structured_output` prompts (router / query-expander /
+`structured_output` prompts (router / query-planner /
 topic-extractor / caption-generator) have `temperature` documented in
 config but the LLM adapter forces 0 internally — see
 `infra/llm_provider/openrouter.py::structured_output`. The `config`
@@ -73,7 +73,7 @@ _FLASH_LITE = "openrouter/google/gemini-3.1-flash-lite"
 _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
     # ── research pipeline (3 short structured_output calls) ────────────
     (
-        "query-expander", "query_expander",
+        "query-planner", "query_planner",
         {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
         ["chat", "research"],
     ),

@@ -90,9 +90,9 @@ class Settings(BaseSettings):
     llm_outline: str = "openrouter/google/gemini-2.0-flash-001"
 
     # Research pipeline knobs.
-    # Query expander + topic extractor share a model — both are short
+    # Query planner + topic extractor share a model — both are short
     # structured-JSON calls. Flash-Lite is cheap and fast enough.
-    llm_query_expander: str = "openrouter/google/gemini-3.1-flash-lite"
+    llm_query_planner: str = "openrouter/google/gemini-3.1-flash-lite"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

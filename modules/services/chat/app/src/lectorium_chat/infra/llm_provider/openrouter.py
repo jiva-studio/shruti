@@ -69,7 +69,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_default,
         settings.llm_fallback,
         settings.llm_outline,
-        settings.llm_query_expander,
+        settings.llm_query_planner,
         # Known-good aliases — extend here when adding a new model to
         # Langfuse prompt-config. Keep curated; the whole point is
         # rejecting typos before they hit the provider.
