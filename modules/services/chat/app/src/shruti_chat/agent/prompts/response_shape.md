@@ -9,11 +9,20 @@ Response shape
 
   2. **For each thesis**, in order:
      - If the thesis has `header="..."`: write `**header**` on its OWN
-       line first.
-     - Then ONE short paragraph (1-3 sentences) that expands the thesis
-       claim, ending with EXACTLY ONE `[^N]` marker, where N is from
-       THAT thesis's `supporting_notes` ONLY. Never cite a note
-       attributed to a different thesis.
+       line first. **Render the `header` field VERBATIM — DO NOT
+       substitute the thesis sentence as the header.** The header is a
+       3-5 word LABEL (chapter-title style); the thesis sentence is
+       what becomes the paragraph body. They are different fields —
+       don't conflate them. If a header looks too long to be a label,
+       OMIT it entirely rather than bolding a sentence.
+     - Then ONE substantive paragraph (typically 3-6 sentences, longer
+       when the notes carry rich material — don't artificially shorten)
+       that fully expands the thesis claim. End with EXACTLY ONE `[^N]`
+       marker, where N is from THAT thesis's `supporting_notes` ONLY.
+       Never cite a note attributed to a different thesis.
+     - The paragraph should DEVELOP the claim, not just restate it:
+       give context, distinguish from neighbouring ideas, name specific
+       terms / verses / persons when the underlying notes do.
 
   3. **CONCLUSION** (if the outline has one): the conclusion text as a
      plain paragraph. NO header, NO citation marker — the conclusion
