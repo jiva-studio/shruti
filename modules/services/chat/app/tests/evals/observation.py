@@ -35,11 +35,22 @@ class TurnObservation:
     intent: str | None = None
     confidence: float | None = None
     # Tool calls in dispatch order (across all workers in chain).
+    # Kept for legacy cases that still assert tool-level behaviour
+    # (catalog / action / help flows); research flow uses pipeline
+    # outline observations below instead.
     tool_chain: list[ToolInvocation] = field(default_factory=list)
     # The synthesizer's final prose (post-MarkerExpander expansion —
     # this is what the client sees, including `[cite:track_X@...]`
     # marker shapes).
     response_text: str = ""
+    # Outline-shape captured from `synthesis_planner_node`'s one-shot
+    # `outline_summary` custom event. All None when the synthesis
+    # planner didn't run (direct_chat / action / help flows). Eval
+    # predicates assert outline structure via these.
+    outline_n_theses: int | None = None
+    outline_has_intro: bool | None = None
+    outline_has_conclusion: bool | None = None
+    outline_skipped_notes_ratio: float | None = None
 
     @property
     def first_tool(self) -> ToolInvocation | None:
