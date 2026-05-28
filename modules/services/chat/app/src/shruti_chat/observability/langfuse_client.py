@@ -166,6 +166,7 @@ def warm_prompt_cache(names: list[str]) -> None:
 LANGFUSE_PROMPT_NAMES: tuple[str, ...] = (
     "query-planner",
     "synthesis-planner",
+    "conclusion-writer",
     "topic-extractor",
     "caption-generator",
     "chat-router",

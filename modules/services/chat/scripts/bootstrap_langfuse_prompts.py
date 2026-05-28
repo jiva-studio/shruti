@@ -86,6 +86,12 @@ _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
         ["chat", "synth"],
     ),
     (
+        "conclusion-writer", "conclusion_writer",
+        {"model": _FLASH_LITE, "temperature": 0, "schema": "ConclusionResponse",
+         "note": "structured_output → temperature forced to 0; fallback for outlines with 3+ theses where synthesis-planner left conclusion null"},
+        ["chat", "synth"],
+    ),
+    (
         "topic-extractor", "topic_extractor",
         {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
         ["chat", "research"],

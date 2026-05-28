@@ -103,6 +103,20 @@ class Outline(BaseModel):
     skipped_reason: str | None = None
 
 
+class ConclusionResponse(BaseModel):
+    """Output of the server-side conclusion synthesis fallback. Fires
+    when `synthesis_planner` leaves `conclusion=None` on a 3+ thesis
+    answer despite the prompt rule, which is consistent behaviour for
+    weaker structured-output models.
+
+    Kept tiny (single string field) — Pydantic max_length lets the
+    LLM emit empty/blank strings as a "no good conclusion to write"
+    signal without triggering a validation error and breaking the call.
+    """
+
+    conclusion: str = Field(default="", max_length=600)
+
+
 class TopicExtractionResult(BaseModel):
     """Output of `topic_extractor.extract_topics`. 0-5 short topic strings
     (1-4 words each) extracted from the user query for matching against

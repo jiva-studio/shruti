@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     # hallucinate broken supporting_notes refs ~5% on the bench; Flash
     # (full, not Lite) handles the attribution selection reliably.
     llm_synthesis_planner: str = "openrouter/google/gemini-2.5-flash"
+    # Conclusion writer is the cheapest call in the pipeline — just a
+    # 2-3 sentence closing paragraph from a list of theses. Fires only
+    # when synthesis_planner skipped conclusion on a 3+ thesis answer.
+    llm_conclusion_writer: str = "openrouter/google/gemini-3.1-flash-lite"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.
