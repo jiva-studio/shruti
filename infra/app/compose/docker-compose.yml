@@ -129,12 +129,10 @@ services:
     logging: *default-logging
     profiles: ["selfhosted-embedder"]
     command:
-      - --model-id=BAAI/bge-m3
+      - --model-id=intfloat/multilingual-e5-base
       - --port=8080
       - --auto-truncate
       - --max-client-batch-size=128
-      - --max-batch-tokens=2048
-      - --max-concurrent-requests=512
     environment:
       HUGGINGFACE_HUB_CACHE: /data
     volumes:

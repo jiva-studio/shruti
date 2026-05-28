@@ -110,6 +110,13 @@ class Settings(BaseSettings):
     # encoder differs from the document encoder; both must share the
     # same dimensionality.
     embed_query_model: str = ""
+    # Prefixes prepended to inputs before embedding. Required by the e5
+    # family (`query: ` / `passage: `) and similar instruction-tuned
+    # models; empty for OpenAI text-embedding-3-* and bge-m3, which are
+    # prefix-free. Both indexing and query paths read the same setting,
+    # so a model swap is a pure env change.
+    embed_query_prefix: str = ""
+    embed_doc_prefix: str = ""
 
     yandex_embed_api_key: str | None = None
     yandex_embed_folder_id: str | None = None
