@@ -94,10 +94,19 @@
             events 20
             window 1h
         }
-        # /chat/* root — main LLM cost surface. 200/hour/IP × 24h = 4800/day
-        # ceiling per IP, ≈ $5-50/day at typical token cost. This rate is
-        # the actual abuse cap even if an attacker mints many anon JWTs
-        # from one IP.
+        # /chat/* root — main LLM cost surface. Loose DoS shield: this
+        # cap is for catching obvious botnet-scale abuse from one IP,
+        # not for governing legitimate user behaviour. The 200/h cap we
+        # used to have here clipped CGNAT peers (Yota / Tele2 / Beeline
+        # mobile, corporate offices, ashrams) — ~10 active Pro users
+        # on one shared IP collectively hit 200/h well before any of
+        # them dented their personal 200/day, and the bare-Caddy 429 has
+        # no JSON envelope so the mobile UI couldn't differentiate an
+        # ip-cap clip from a user-cap clip.
+        #
+        # The real auth-aware policing lives in the chat service's
+        # rate_limiter (per-user 200/day Pro, plus a per-IP cap that
+        # only applies to anonymous JWTs). Edge stays a dumb fence.
         zone chat {
             match {
                 # Negative match so this fires on the root catch-all but
@@ -108,7 +117,7 @@
                 }
             }
             key {client_ip}
-            events 200
+            events 1000
             window 1h
         }
     }
