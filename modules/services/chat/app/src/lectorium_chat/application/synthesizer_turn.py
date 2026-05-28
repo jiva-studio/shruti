@@ -166,26 +166,28 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # to see it in the note header.
             header = f"[^{ref}]"
         elif note_type == "commentary":
-            # Commentary notes show sentence-indexed body so the LLM
-            # can pick what to quote via `[^N|s=0,2]`. Author goes in
-            # the header so multiple authors' purports on the same
-            # verse are distinguishable. The marker expander pulls
-            # the picked sentences verbatim from alias storage —
-            # neither the LLM nor any prompt instruction can fabricate
-            # a quote that isn't really there.
-            # author_name is resolved by `chunks_search` /
-            # `commentary_expansion` via a batch catalog lookup before
-            # the envelope reaches synth. If it's still missing we render
-            # without an author rather than leaking the raw id (which is
-            # opaque to the LLM and to anyone reading the trace).
-            author = meta.get("author_name") or ""
-            tag = (
-                f"{attribution} — комментарий, {author}"
-                if author and attribution
-                else (attribution and f"{attribution} — комментарий")
-                or "комментарий"
-            )
-            header = f"[^{ref}] {tag}".rstrip()
+            # Bare `[^N]` header — symmetric with the verse case above.
+            #
+            # Why no `addr_label` / `author` adjacency: weaker models
+            # (Gemini Flash, DeepSeek) copy the prose-y header into
+            # their final answer as plain text — observed in prod as
+            # trailing lines like `БГ 3.9 БГ 12.14 — комментарий ШБ
+            # 1.18.17 — комментарий` after the last cited paragraph.
+            # The model treats the header pattern as a citation-summary
+            # idiom worth imitating.
+            #
+            # The marker expander already renders the full attribution
+            # (`> — А.Ч. Прабхупада, комментарий к БГ 2.13`) server-side
+            # from the alias map's stored `addr_label` + `author_name`,
+            # so the model never needed to see those tokens to produce
+            # correct output — only the temptation to leak them.
+            #
+            # Multi-author distinguishability (two purports on the same
+            # verse) is preserved by the sentence body shown below the
+            # header — the LLM picks `[^7|s=0,2]` based on which
+            # purport's prose actually backs the thesis, not based on
+            # an author-name label.
+            header = f"[^{ref}]"
             sentences = meta.get("sentences") or []
             if isinstance(sentences, list) and sentences:
                 indexed = "\n".join(
