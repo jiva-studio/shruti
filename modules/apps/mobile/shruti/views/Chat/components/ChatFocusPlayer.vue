@@ -54,6 +54,7 @@ import { IonSpinner } from "@ionic/vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useShruti } from "@shruti/shruti.js"
 import { useNotesInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
+import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
 
 const BAR_COUNT = 96
 
@@ -99,6 +100,10 @@ async function resolveExcerptUrl(): Promise<string> {
     excerptId: props.messageId,
   })
   cachedUrl = result.url
+  // Server now answers 202 ready:false the moment it dispatches the
+  // background cut; the file lands on S3 a beat later. Without this
+  // poll the <audio> element would hit a 404 on the first play.
+  if (!result.ready) await pollUntilReady(cachedUrl)
   return cachedUrl
 }
 

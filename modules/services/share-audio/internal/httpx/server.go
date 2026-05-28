@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -26,7 +27,8 @@ var (
 const maxBodyBytes = 32 * 1024
 
 type Server struct {
-	Cutter pipeline.Cutter
+	Cutter     pipeline.Cutter
+	Dispatcher *Dispatcher
 }
 
 // Router returns a chi router with the CORS middleware preconfigured.
@@ -70,28 +72,64 @@ func (s *Server) postExcerpt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := s.Cutter.Cut(r.Context(), pipeline.Request{
+	req := pipeline.Request{
 		SourceKey: body.SourceKey,
 		StartMs:   body.StartMs,
 		EndMs:     body.EndMs,
 		ExcerptID: body.ExcerptID,
-	})
+	}
+
+	// Fast path on the request goroutine: validate + resolve eid +
+	// S3 HEAD. Everything heavier (download → ffmpeg → upload) runs
+	// later in a background worker so client disconnect doesn't kill
+	// the upload.
+	prep, err := s.Cutter.Prepare(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, pipeline.ErrValidation) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		var sErr *pipeline.ServiceError
-		if errors.As(err, &sErr) {
-			logx.From(r.Context()).Error("cut_failed", "err", sErr.Error())
-			writeError(w, http.StatusBadGateway, sErr.Error())
-			return
-		}
-		logx.From(r.Context()).Error("cut_unhandled", "err", err.Error())
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writePrepareError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+
+	if prep.Cached {
+		writeJSON(w, http.StatusOK, pipeline.Result{
+			ExcerptID: prep.ExcerptID,
+			URL:       prep.URL,
+			Ready:     true,
+		})
+		return
+	}
+
+	// Cold path: kick off the background cut and answer immediately
+	// with the predicted URL. Pin the resolved excerpt id onto the
+	// request so the worker doesn't roll its own UUID and end up
+	// writing to a different key.
+	workReq := req
+	workReq.ExcerptID = prep.ExcerptID
+	s.Dispatcher.Dispatch(prep.ExcerptID, func(ctx context.Context) {
+		if _, err := s.Cutter.Cut(ctx, workReq); err != nil {
+			logx.From(ctx).Error("async_cut_failed", "excerpt_id", prep.ExcerptID, "err", err.Error())
+		}
+	})
+
+	writeJSON(w, http.StatusAccepted, pipeline.Result{
+		ExcerptID: prep.ExcerptID,
+		URL:       prep.URL,
+		Ready:     false,
+	})
+}
+
+func writePrepareError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, pipeline.ErrValidation) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var sErr *pipeline.ServiceError
+	if errors.As(err, &sErr) {
+		logx.From(r.Context()).Error("prepare_failed", "err", sErr.Error())
+		writeError(w, http.StatusBadGateway, sErr.Error())
+		return
+	}
+	logx.From(r.Context()).Error("prepare_unhandled", "err", err.Error())
+	writeError(w, http.StatusInternalServerError, "internal server error")
 }
 
 func decodeJSON(r *http.Request, dst any) error {
