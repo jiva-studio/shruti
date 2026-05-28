@@ -18,9 +18,9 @@ Topology:
        │            │               │                  │      │
        │            │       create_action ──► action_worker   │
        │            │               │                  │      │
-       │            │       else ───┘                  │      │
-       │            │               │                  │      │
-       └────────────┴──► synthesizer ◄─────────────────┴──────┘
+       │            │       else ───► synthesis_planner       │
+       │            │                  │               │      │
+       └────────────┴──► synthesizer ◄─┴───────────────┴──────┘
                             │
                             ▼
                            END
@@ -29,6 +29,10 @@ The short path (router → action_worker) is taken when the action
 doesn't need tracks (reminder / smart_library / pro) OR the user
 has a track anchored in context (current_track_ref / focus_ref) —
 see `conditional.route_after_router`.
+
+`synthesis_planner` only sits in the research_worker → synthesizer
+arm because that's the only path that produces prose-grounding notes;
+catalog/action/help workers go straight to the synthesizer.
 """
 
 from __future__ import annotations
@@ -49,6 +53,9 @@ from lectorium_chat.agent.graph.nodes import (
     router_node,
     synthesizer_node,
 )
+from lectorium_chat.agent.graph.nodes.synthesis_planner import (
+    synthesis_planner_node,
+)
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.domain.turn_context import TurnContext
 
@@ -66,6 +73,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("catalog_worker", catalog_worker_node)
     builder.add_node("action_worker", action_worker_node)
     builder.add_node("help_worker", help_worker_node)
+    builder.add_node("synthesis_planner", synthesis_planner_node)
     builder.add_node("synthesizer", synthesizer_node)
 
     builder.add_edge(START, "router")
@@ -80,17 +88,24 @@ def build_chat_graph() -> Pregel:
             "synthesizer": "synthesizer",
         },
     )
-    # research_worker forks: stay → synth, OR chain → action_worker.
+    # research_worker forks: chain → action_worker, OR plan synthesis.
+    # We route the "stay → synthesizer" branch through synthesis_planner
+    # so the outline-first synth path runs over research notes. The
+    # planner itself degrades to outline=None on empty notes / LLM
+    # failure, and the synthesizer then falls back to free-form prose.
     builder.add_conditional_edges(
         "research_worker",
         route_after_research,
         {
             "action_worker": "action_worker",
-            "synthesizer": "synthesizer",
+            "synthesizer": "synthesis_planner",
         },
     )
     # catalog_worker forks just like research_worker: stay → synth,
     # OR chain into action_worker for catalog-hint create_action turns.
+    # Catalog results are list-tile envelopes, NOT prose-grounding notes
+    # — so we deliberately bypass synthesis_planner here. The synthesizer
+    # already has list-question rules in response_shape.md for these.
     builder.add_conditional_edges(
         "catalog_worker",
         route_after_catalog,
@@ -99,8 +114,11 @@ def build_chat_graph() -> Pregel:
             "synthesizer": "synthesizer",
         },
     )
+    # action_worker and help_worker emit action cards / help blurbs, not
+    # research notes — straight to synthesizer, no planning needed.
     builder.add_edge("action_worker", "synthesizer")
     builder.add_edge("help_worker", "synthesizer")
+    builder.add_edge("synthesis_planner", "synthesizer")
     builder.add_edge("synthesizer", END)
 
     return builder.compile()

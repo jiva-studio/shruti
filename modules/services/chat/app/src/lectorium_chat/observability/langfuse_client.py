@@ -165,6 +165,7 @@ def warm_prompt_cache(names: list[str]) -> None:
 # script (`scripts/bootstrap_langfuse_prompts.py`).
 LANGFUSE_PROMPT_NAMES: tuple[str, ...] = (
     "query-planner",
+    "synthesis-planner",
     "topic-extractor",
     "caption-generator",
     "chat-router",
