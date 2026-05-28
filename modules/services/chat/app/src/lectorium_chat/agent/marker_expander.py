@@ -149,11 +149,17 @@ class MarkerExpander:
         # If `_pending` currently holds a commentary blockquote, these
         # carry the structured state needed to MERGE a follow-up
         # commentary marker with the same `(author, addr_label)` into
-        # the same blockquote — appending its sentences instead of
+        # the same blockquote — appending its sentence picks instead of
         # producing a second visually-glued one. Cleared the moment
         # `_pending` flushes (prose interrupts) or a non-commentary
         # marker arrives.
-        self._pending_comm_sentences: list[str] | None = None
+        #
+        # Picks carry both the original sentence index and the sentence
+        # text so the renderer can group consecutive indices into one
+        # joined run and insert ` … ` between non-consecutive runs.
+        # When the LLM emitted `[^N]` without `|s=...` we use synthetic
+        # indices 0..N-1 (default first-K behaviour from `_format_commentary`).
+        self._pending_comm_picks: list[tuple[int, str]] | None = None
         self._pending_comm_attribution: str | None = None
 
     async def feed(self, text: str) -> str:
@@ -248,7 +254,7 @@ class MarkerExpander:
             # tracking is now stale: either prose came in between
             # (handled in _consume_text_char) or a different-source
             # marker is opening a fresh blockquote.
-            self._pending_comm_sentences = None
+            self._pending_comm_picks = None
             self._pending_comm_attribution = None
         self._pending = expanded
         self._pending_pre_ws = self._ws_hold
@@ -290,7 +296,7 @@ class MarkerExpander:
             self._pending = None
             self._pending_pre_ws = ""
             self._pending_gap = ""
-            self._pending_comm_sentences = None
+            self._pending_comm_picks = None
             self._pending_comm_attribution = None
             return ch + " " + expansion
 
@@ -304,7 +310,7 @@ class MarkerExpander:
         self._pending_gap = ""
         # Prose continuing → commentary run is over; any follow-up
         # commentary marker is a NEW blockquote, not an extension.
-        self._pending_comm_sentences = None
+        self._pending_comm_picks = None
         self._pending_comm_attribution = None
         return pre_ws + expansion + gap + ch
 
@@ -466,14 +472,17 @@ class MarkerExpander:
         if not sents:
             return ""
 
+        # Build `picks: list[(idx, sentence_text)]`. Preserving the
+        # original index per pick lets the renderer detect consecutive
+        # vs. non-consecutive runs (joined with space vs. ` … `).
         if not sentence_indices:
-            picked = list(sents[:2])
+            picks: list[tuple[int, str]] = [(i, sents[i]) for i in range(min(2, len(sents)))]
         else:
-            picked = []
+            picks = []
             for idx in sentence_indices:
                 if 0 <= idx < len(sents):
-                    picked.append(sents[idx])
-            if not picked:
+                    picks.append((idx, sents[idx]))
+            if not picks:
                 log.info(
                     "chat_marker_commentary_no_valid_sentences",
                     request_id=self._request_id,
@@ -497,37 +506,42 @@ class MarkerExpander:
         if (
             self._pending is not None
             and self._pending_comm_attribution == attribution
-            and self._pending_comm_sentences is not None
+            and self._pending_comm_picks is not None
         ):
-            self._pending_comm_sentences.extend(picked)
+            self._pending_comm_picks.extend(picks)
             self._pending = self._render_commentary_blockquote(
-                self._pending_comm_sentences, attribution,
+                self._pending_comm_picks, attribution,
             )
             return _MERGE_SENTINEL
 
-        # Fresh commentary expansion — capture the sentences + attribution
+        # Fresh commentary expansion — capture the picks + attribution
         # so a follow-up marker can extend us.
-        self._pending_comm_sentences = list(picked)
+        self._pending_comm_picks = list(picks)
         self._pending_comm_attribution = attribution
-        return self._render_commentary_blockquote(picked, attribution)
+        return self._render_commentary_blockquote(picks, attribution)
 
     def _render_commentary_blockquote(
         self,
-        sentences: list[str],
+        picks: list[tuple[int, str]],
         attribution: str,
     ) -> str:
-        """Pure renderer — takes the merged sentence list and produces
-        the full blockquote string. Used both for fresh expansions and
-        for re-rendering `_pending` when a same-source merge appends
-        new sentences.
+        """Pure renderer — takes the merged (sentence_index, sentence_text)
+        picks and produces the full blockquote string. Used both for fresh
+        expansions and for re-rendering `_pending` when a same-source merge
+        appends new picks.
 
-        Each sentence may itself contain newlines (purports embed
-        multi-line shloka quotations like "*мāṁ ча йо ’вйабхичāреṇа\n
-        бхакти-йогена севате..."). CommonMark requires `> ` on EVERY
-        line of a blockquote — so we prefix every internal line of
-        every picked sentence, not just the first. Empty internal
-        lines become bare `>` so the blockquote stays continuous
-        across stanza breaks.
+        Sentence-join policy: picks are sorted by index (LLM may emit
+        out-of-order), then grouped into consecutive runs. Within a run,
+        sentences are joined with a single space — they're adjacent in
+        the source purport, so they read naturally as one continuous
+        thought. Between non-consecutive runs we insert ` … ` (Unicode
+        ellipsis surrounded by spaces) to signal a skip in the source.
+
+        Internal newlines within a single sentence (multi-line shloka
+        quotations like "*мāṁ ча йо ’вйабхичāреṇа\\nбхакти-йогена севате*")
+        are preserved verbatim and get their own `> ` prefix per line —
+        CommonMark requires it on every blockquote line, and the verse
+        structure matters visually.
 
         Leading + trailing newline frame the block:
         - Leading `\\n` so `>` lands at line-start even if the LLM
@@ -537,15 +551,35 @@ class MarkerExpander:
           one leading on the next = `\\n\\n`, which markdown reads as
           end-of-blockquote, start-of-new-blockquote).
         """
-        rendered: list[str] = []
-        for sent in sentences:
-            sent = sent.strip()
-            if not sent:
-                continue
-            for line in sent.split("\n"):
-                stripped = line.strip()
-                rendered.append(f"> {stripped}" if stripped else ">")
-        if not rendered:
+        cleaned: list[tuple[int, str]] = [
+            (idx, sent.strip())
+            for idx, sent in sorted(picks, key=lambda p: p[0])
+            if sent and sent.strip()
+        ]
+        if not cleaned:
             return ""
+
+        # Group consecutive indices into runs. Each run becomes one
+        # joined string; runs themselves get separated by ` … `.
+        runs: list[list[str]] = []
+        prev_idx: int | None = None
+        for idx, sent in cleaned:
+            if prev_idx is None or idx != prev_idx + 1:
+                runs.append([sent])
+            else:
+                runs[-1].append(sent)
+            prev_idx = idx
+
+        run_strings = [" ".join(r) for r in runs]
+        body_text = " … ".join(run_strings)
+
+        # Now wrap the joined body in blockquote prefixes. Internal
+        # newlines (sanskrit shlokas) get `> ` per line; empty internal
+        # lines become bare `>` so the blockquote stays continuous
+        # across stanza breaks.
+        rendered: list[str] = []
+        for line in body_text.split("\n"):
+            stripped = line.strip()
+            rendered.append(f"> {stripped}" if stripped else ">")
         body = "\n".join(rendered)
         return f"\n{body}\n>\n> — {attribution}\n"

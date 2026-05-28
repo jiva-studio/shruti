@@ -209,9 +209,12 @@ def _format_outline_block(outline: Any) -> str:
     synthesizer to a structured plan. Empty theses → an explicit refusal
     directive so the synthesizer doesn't try to paper over.
 
-    Kept here (not in models.py) because the formatting is purely an
-    artifact of how this turn talks to the LLM — the Outline schema
-    itself stays prompt-agnostic.
+    The rendered shape (intro paragraph + per-thesis [optional bold
+    header + paragraph + citation] + optional conclusion paragraph)
+    matches the rendering rules in `response_shape.md`. Keeping the
+    formatting here (not in models.py) lets the schema stay prompt-
+    agnostic and lets us tune the LLM directives without touching the
+    Outline model.
     """
     if outline is None:
         return ""
@@ -223,19 +226,35 @@ def _format_outline_block(outline: Any) -> str:
             "language per the grounding rules. Do NOT attempt to compose "
             "an answer from the notes."
         )
-    parts: list[str] = []
+
     intro = getattr(outline, "intro", None)
+    conclusion = getattr(outline, "conclusion", None)
+
+    parts: list[str] = ["Render the answer in this EXACT order:"]
     if intro:
-        parts.append(f'Intro: "{intro}"')
+        parts.append(f'1. INTRO paragraph (no citation): "{intro}"')
     parts.append(
-        "Write ONE short paragraph per thesis below, in order. End each "
-        "paragraph with a single `[^N]` marker selecting from THAT "
-        "thesis's supporting_notes ONLY. Do NOT cite notes attributed "
-        "to other theses. Do NOT introduce new theses."
+        "2. For each thesis below: if it has a header, write it as "
+        "`**header**` on its own line, then ONE short paragraph that "
+        "expands the claim, ending with EXACTLY ONE `[^N]` marker from "
+        "that thesis's supporting_notes. Do NOT cite notes from other "
+        "theses. Do NOT introduce extra theses."
     )
+    if conclusion:
+        parts.append(
+            f'3. CONCLUSION paragraph (no citation, no header): "{conclusion}"'
+        )
+
+    parts.append("")  # spacer line before thesis list
     for i, t in enumerate(theses, start=1):
+        header = getattr(t, "header", None)
         refs = ", ".join(str(n) for n in t.supporting_notes)
-        parts.append(f"  Thesis {i}: {t.thesis}  (supporting_notes: {refs})")
+        header_line = f' header="{header}"' if header else ""
+        parts.append(
+            f"  Thesis {i}{header_line} (supporting_notes: {refs}):\n"
+            f"    {t.thesis}"
+        )
+
     return "OUTLINE (follow strictly):\n" + "\n".join(parts)
 
 

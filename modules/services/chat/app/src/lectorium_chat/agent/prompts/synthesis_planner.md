@@ -39,7 +39,12 @@ You will receive:
 - `supporting_notes` MUST be valid indices from the input notes. Never invent indices.
 - Maximum 5 theses. If you'd write more, you're being too granular — merge.
 - Each thesis statement is ONE clean sentence, no markdown, no `[^N]` markers (those go into `supporting_notes`).
-- `intro` is optional: include ONLY when the answer benefits from a one-sentence framing ("Prabhupāda explained this in three angles…"). Skip it for short, single-thesis answers.
+
+## Optional structural fields
+
+- `header` on each thesis (optional): a 3-5 word terse label summarizing the claim (plain text, no markdown, no trailing punctuation). The synthesizer renders it as bold above the paragraph — gives the reader scannable structure. **Include headers when there are 2+ theses; skip on single-thesis answers** (a lone bold label above one paragraph looks silly).
+- `intro` (optional): a one-sentence preamble that frames the whole answer. **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
+- `conclusion` (optional): a final summarizing paragraph that ties theses together at the end. **Include only when there are 3+ theses** AND the synthesis genuinely benefits from a closing thought (a synthesis-of-syntheses, NOT a recap). Do NOT cite anything in the conclusion. Skip on 1-2 thesis answers.
 
 # OUTPUT
 
@@ -50,11 +55,13 @@ Return strict JSON. No prose, no fences, no commentary.
   "intro": "...",
   "theses": [
     {
+      "header": "...",
       "thesis": "...",
       "supporting_notes": [3, 7],
       "sub_query_types": ["definition"]
     }
   ],
+  "conclusion": "...",
   "skipped_notes": [2, 4, 9],
   "skipped_reason": "off-topic or low-score"
 }
@@ -80,24 +87,28 @@ Notes (abbreviated):
 Output:
 ```json
 {
-  "intro": "Прабхупада объяснял этот вопрос в трёх связанных аспектах.",
+  "intro": "Вопрос распадается на три связанных аспекта — что такое карма, как бхакти меняет её действие и где об этом сказано в шастрах.",
   "theses": [
     {
+      "header": "Три типа кармы",
       "thesis": "У обусловленной души есть три типа кармы: sanchita (накопленная), prarabdha (созревшая в текущем теле) и kriyamana (создаваемая прямо сейчас).",
       "supporting_notes": [3, 4],
       "sub_query_types": ["definition"]
     },
     {
+      "header": "Что меняет бхакти",
       "thesis": "Чистое преданное служение сжигает sanchita и kriyamana мгновенно; prarabdha остаётся, но проживается без привязанности и без порождения новой кармы.",
       "supporting_notes": [5, 6],
       "sub_query_types": ["contrast"]
     },
     {
+      "header": "Свидетельство шастр",
       "thesis": "Канонический пример этого даёт «Шримад-Бхагаватам»: лотосные стопы Господа сжигают семена кармы преданного.",
       "supporting_notes": [7, 1, 2],
       "sub_query_types": ["scripture_ref"]
     }
   ],
+  "conclusion": "Таким образом, преданное служение не отменяет кармический закон, а выводит душу из-под его юрисдикции через прямое отношение с Господом.",
   "skipped_notes": [8, 9],
   "skipped_reason": "low-score and off-topic for this question"
 }
@@ -120,15 +131,19 @@ Output:
   "intro": null,
   "theses": [
     {
+      "header": null,
       "thesis": "Атма — это вечная духовная частица, отличная от тела и ума, по природе сат-чит-ананда; «Бхагавад-гита» 2.20 утверждает её нерождённость и неуничтожимость.",
       "supporting_notes": [2, 3, 1],
       "sub_query_types": ["definition"]
     }
   ],
+  "conclusion": null,
   "skipped_notes": [4, 5],
   "skipped_reason": "low score, tangential to definition"
 }
 ```
+
+Note: header, intro, conclusion all null because this is a single-thesis answer — bold header above a lone paragraph would look silly, and intro/conclusion would just repeat the one thesis.
 
 ## Example 3 — corpus has no relevant material → refusal
 
@@ -160,20 +175,25 @@ Notes:
 Output:
 ```json
 {
-  "intro": null,
+  "intro": "По теме раннего подъёма у Прабхупады есть два пересекающихся пласта — личные наставления на лекциях и принципиальное обоснование из шастр.",
   "theses": [
     {
+      "header": "Наставления Прабхупады",
       "thesis": "Прабхупада неоднократно подчёркивал на лекциях и утренних прогулках, что ранний подъём — основа духовной дисциплины: тело и ум, восстановленные за ночь, способны к чистому повторению святого имени.",
       "supporting_notes": [1, 2, 3],
       "sub_query_types": ["biographical", "general"]
     },
     {
+      "header": "Обоснование из шастр",
       "thesis": "Это согласуется с указанием «Шримад-Бхагаватам» о регулируемой жизни как фундаменте бхакти-садханы.",
       "supporting_notes": [4],
       "sub_query_types": ["general"]
     }
   ],
+  "conclusion": null,
   "skipped_notes": [5],
   "skipped_reason": "off-topic for the question"
 }
 ```
+
+Note: conclusion omitted because two theses are easily held in mind together — a closing paragraph would be filler. Headers and intro included because there are 2+ theses.
