@@ -295,3 +295,70 @@ async def test_empty_quota_id_falls_back_to_user_id(limiter):
         scope="chat", tier="free", quota_id="",
     )
     assert rl.allowed, "different user_ids without quota_id must stay independent"
+
+
+# ─── per-IP cap is anonymous-only (CGNAT relief) ─────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_signed_in_users_skip_ip_cap(limiter):
+    # ip_rate_limit_per_day defaults to 2000 — at 11 Pro users on one
+    # shared IP that's 2200 chats theoretically reachable, so without
+    # the skip the IP cap would clip the last few before any of them
+    # hit their personal 200. With the skip the cap simply doesn't
+    # apply to signed-in JWTs, so we drive far past 2000 from
+    # quota-distinct signed-in users and nobody trips the ip-key cap.
+    for i in range(2500):
+        rl = await limiter.check_and_increment(
+            f"user-{i}", anonymous=False, ip="10.0.0.1",
+            scope="chat", tier="pro", quota_id=f"q-{i}",
+        )
+        # Each user is on their first chat — well below the Pro 200/day
+        # personal cap — so the only way they'd reject is the IP cap.
+        # Which we've just turned off for signed-in.
+        assert rl.allowed, (
+            f"signed-in user #{i} on shared IP should not be IP-capped"
+        )
+
+
+@pytest.mark.asyncio
+async def test_anonymous_users_still_bottled_by_ip_cap(limiter):
+    # The IP cap is the only thing standing between an attacker's
+    # botnet (minting throwaway anon JWTs from one IP) and unbounded
+    # chat calls. Keep that fence: drive the IP counter past 2000
+    # using quota-distinct anon identities (so the per-user cap of 3
+    # never fires) and confirm the last call rejects with key_type=ip.
+    for i in range(2000):
+        rl = await limiter.check_and_increment(
+            f"u-anon-{i}", anonymous=True, ip="10.0.0.2",
+            scope="chat", tier="free", quota_id=f"anon-q-{i}",
+        )
+        assert rl.allowed, f"call {i} unexpectedly rejected: {rl}"
+    # The 2001st request exceeds ip_rate_limit_per_day=2000 → IP reject.
+    rl = await limiter.check_and_increment(
+        "u-anon-overflow", anonymous=True, ip="10.0.0.2",
+        scope="chat", tier="free", quota_id="anon-q-overflow",
+    )
+    assert not rl.allowed, "anon traffic from one IP must eventually hit a cap"
+    assert rl.key_type == "ip", (
+        "the cap that clips an anon-spam botnet from one IP is the IP cap"
+    )
+
+
+@pytest.mark.asyncio
+async def test_signed_in_user_cap_still_fires(limiter):
+    # Skipping the IP cap for signed-in users must NOT relax the per-
+    # user cap. A free signed-in user who exhausts their personal 10
+    # still gets a user-key reject on call 11.
+    for _ in range(10):
+        rl = await limiter.check_and_increment(
+            "u-free", anonymous=False, ip="10.0.0.4",
+            scope="chat", tier="free", quota_id="q-free",
+        )
+        assert rl.allowed
+    rl = await limiter.check_and_increment(
+        "u-free", anonymous=False, ip="10.0.0.4",
+        scope="chat", tier="free", quota_id="q-free",
+    )
+    assert not rl.allowed
+    assert rl.key_type == "user"
