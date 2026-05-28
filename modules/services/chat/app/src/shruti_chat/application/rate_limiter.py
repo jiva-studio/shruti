@@ -280,19 +280,28 @@ class RateLimiter:
         if rec.count > rec.limit:
             return reject(rec, "user")
 
-        # Pass 2: per-IP. Same table, distinct key namespace.
-        scoped_ip_key = f"{scope}:ip:{ip}"
-        try:
-            rec = await self._store.increment(
-                scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
-            )
-        except RedisUnavailableError:
-            return self._on_backend_unavailable(
-                scoped_key=scoped_ip_key, key_type="ip",
-                limit=ip_limit, echoed_tier=echoed_tier, tier=tier,
-            )
-        if rec.count > rec.limit:
-            return reject(rec, "ip")
+        # Pass 2: per-IP. Anonymous only — the per-IP cap exists as a
+        # defence against anon-JWT-spam from one IP (a bot script
+        # minting throwaway anon tokens to bypass the per-user cap).
+        # For signed-in users the per-user cap (200/day Pro, 10/day
+        # free, keyed by quota_id) already bottles them; layering a
+        # per-IP cap on top punishes CGNAT peers — e.g. 10 Pro users
+        # on one Yota/Tele2 IP collectively trip 2000/day even when
+        # each is well under their personal 200. Edge Caddy still
+        # carries a loose 1000/hour per-IP fence for raw DoS.
+        if anonymous:
+            scoped_ip_key = f"{scope}:ip:{ip}"
+            try:
+                rec = await self._store.increment(
+                    scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
+                )
+            except RedisUnavailableError:
+                return self._on_backend_unavailable(
+                    scoped_key=scoped_ip_key, key_type="ip",
+                    limit=ip_limit, echoed_tier=echoed_tier, tier=tier,
+                )
+            if rec.count > rec.limit:
+                return reject(rec, "ip")
 
         return RateLimitResult(
             allowed=True,
