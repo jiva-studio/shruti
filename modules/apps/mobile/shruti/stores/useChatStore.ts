@@ -177,56 +177,14 @@ export const useChatStore = defineStore("chat", () => {
   const inputFocusToken = ref<number>(0)
   /** UnixMs deadline until which the chat composer stays disabled
    *  after a `rate_limited` 429. Set from the server's `resets_at_epoch`
-   *  (or `Retry-After` as fallback). Persisted in `app.preferences`
-   *  under `chat_blocked_until:<quota_id>` so a cold-start mid-lockout
-   *  rehydrates the deadline instead of letting the user bait themselves
-   *  into another 429. Hydration runs on every `authStore.quotaId`
-   *  transition (signin / signout / fresh app restore); the key is
-   *  removed once `now` crosses the deadline. Pre-PR-1 anonymous
-   *  tokens whose `quota_id` is empty fall back to in-memory-only —
-   *  no key is written without a stable bucket id. */
+   *  (or `Retry-After` as fallback). Lives in-memory only — a cold
+   *  restart drops it so a server-side limit change (admin reset,
+   *  Redis flush, manual TTL bump) is reflected on the next send
+   *  attempt. The "free" send-then-429 cycle that earned a user a
+   *  re-armed lockout is a tiny cost (one rejected request) compared
+   *  to trapping the user behind a stale persisted deadline they have
+   *  no way to clear from the UI. */
   const composeBlockedUntil = ref<number | null>(null)
-  /** Quota id last used to read/write the persisted lockout. Tracked
-   *  separately from `useAuthStore.quotaId` so the expiry-tick cleanup
-   *  knows which key to remove even after the identity flips. */
-  let persistedForQuotaId: string = ""
-
-  const BLOCKED_UNTIL_KEY_PREFIX = "chat_blocked_until:"
-  function blockedUntilKey(qid: string): string {
-    return `${BLOCKED_UNTIL_KEY_PREFIX}${qid}`
-  }
-
-  /** Read back the persisted deadline for `qid` and arm
-   *  `composeBlockedUntil` if it's still in the future. Stale entries
-   *  (past their deadline) are wiped here so they don't linger across
-   *  app sessions. Tolerant to corrupt payloads — anything that
-   *  doesn't parse cleanly is treated as "no lockout". */
-  async function hydrateComposeLock(qid: string): Promise<void> {
-    persistedForQuotaId = qid
-    if (!qid) {
-      // No stable bucket id — nothing to read. Leave any in-memory
-      // value alone (a 429 in this session can still arm the ref;
-      // we just can't persist or restore it without a quota_id).
-      return
-    }
-    const key = blockedUntilKey(qid)
-    try {
-      const raw = await app.preferences.get(key)
-      if (raw === null) return
-      const parsed = parseInt(raw, 10)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        await app.preferences.remove(key)
-        return
-      }
-      if (parsed > Date.now()) {
-        composeBlockedUntil.value = parsed
-      } else {
-        await app.preferences.remove(key)
-      }
-    } catch (e) {
-      console.warn("[chat] failed to hydrate compose lockout", e)
-    }
-  }
   /** Reactive clock for `isComposeBlocked` — ticks every second while
    *  any consumer subscribes. @vueuse handles the timer lifecycle
    *  (visibility-aware, cleaned up on unmount). */
@@ -234,60 +192,46 @@ export const useChatStore = defineStore("chat", () => {
   const isComposeBlocked = computed<boolean>(
     () => composeBlockedUntil.value !== null && now.value.getTime() < composeBlockedUntil.value
   )
-  /** Clear the composer lockdown AND wipe any stale rate_limit error
-   *  bubble in the current message list, then hydrate the lockout for
-   *  the new identity from `app.preferences`. Called from
-   *  `useAuthStore`'s `userId` watcher on signin / signout / switch-
-   *  account, and (transitively) once on cold-start after auth restore
-   *  flips userId from `null` to its initial value. Each identity has
-   *  its own server-side quota bucket (`quota_id`), so the previous
-   *  bucket's deadline + upsell banner are meaningless for the next
-   *  one. Tier-change within the same user_id is NOT a trigger: the
-   *  bucket stays the same and the lockdown is still authoritative.
-   *  The previous identity's persisted key is intentionally left
-   *  untouched — they may sign back in later and the deadline should
-   *  still apply for them. */
-  function resetComposeLock(): void {
-    composeBlockedUntil.value = null
-    // Also drop the inline "limit exhausted" failed bubble — keeping
-    // the upsell card mounted after a signin would be confusing
-    // (anonymous → authed share no quota state). Anonymous-tier
-    // 429 bubbles are the common case here; we clear other tiers too
-    // because the new identity could legitimately retry.
+  /** Drop the inline "limit exhausted" failed bubble from the current
+   *  message list. Shared by `resetComposeLock` (identity flip) and the
+   *  expiry watcher below (wall-clock crossed the deadline) — the bubble
+   *  must die in lockstep with `composeBlockedUntil`, otherwise the
+   *  upsell card lingers indefinitely after the limit has lifted and
+   *  the user has no idea why the composer is back but the warning
+   *  isn't. */
+  function clearRateLimitedBubble(): void {
     const idx = messages.value.findIndex(
       (m) => m.role === "assistant" && m.error?.kind === "failed" && m.error.code === "rate_limited"
     )
-    if (idx >= 0) {
-      const next = [...messages.value]
-      next[idx] = { ...next[idx], error: undefined }
-      messages.value = next
-    }
-    // Pick up the new identity's persisted deadline (if any). The auth
-    // store calls us right after `applySession` has stamped quotaId,
-    // so reading it directly here yields the bucket id we want to key
-    // on. Fire-and-forget: hydration is a best-effort read and any
-    // failure leaves the composer unlocked rather than blocking UI.
-    const nextQuotaId = useAuthStore().quotaId
-    void hydrateComposeLock(nextQuotaId)
+    if (idx < 0) return
+    const next = [...messages.value]
+    next[idx] = { ...next[idx], error: undefined }
+    messages.value = next
   }
 
-  /** Watch the wall-clock against the live deadline and clean up the
-   *  persisted entry the first time `now` crosses it. Without this the
-   *  preferences key would linger past its usefulness — harmless for
-   *  correctness (the next hydration would see a past timestamp and
-   *  drop it) but it makes the SharedPreferences/UserDefaults dump
-   *  noisier than necessary, and a remove-on-tick keeps the storage
-   *  reflective of "currently-active lockouts only". */
+  /** Clear the composer lockdown and wipe any stale rate_limit error
+   *  bubble in the current message list. Called from `useAuthStore`'s
+   *  `userId` watcher on signin / signout / switch-account, and from
+   *  the `isPro` watcher on free→pro upgrade. Each identity has its
+   *  own server-side quota bucket (`quota_id`), so the previous
+   *  bucket's deadline + upsell banner are meaningless for the next
+   *  one. */
+  function resetComposeLock(): void {
+    composeBlockedUntil.value = null
+    clearRateLimitedBubble()
+  }
+
+  /** Watch the wall-clock against the live deadline and drop the
+   *  in-memory rate_limited failed bubble at the same edge as we
+   *  clear the lockout. Without this, the composer unlocks but the
+   *  error card would otherwise hang around until the next identity
+   *  change or hard restart. */
   watch(
     () => composeBlockedUntil.value !== null && now.value.getTime() >= composeBlockedUntil.value,
     (expired, wasExpired) => {
       if (!expired || wasExpired) return
       composeBlockedUntil.value = null
-      if (persistedForQuotaId) {
-        void app.preferences.remove(blockedUntilKey(persistedForQuotaId)).catch((e) => {
-          console.warn("[chat] failed to remove expired compose lockout key", e)
-        })
-      }
+      clearRateLimitedBubble()
     }
   )
   /** Auto-derived ChatSession bound to `activeSessionId`. Drives the
@@ -915,25 +859,28 @@ export const useChatStore = defineStore("chat", () => {
           ...(retryAfterAt !== undefined ? { retryAfterAt } : {}),
           ...(tier !== undefined ? { tier } : {}),
         }
-        // Phase 6 compose-lockdown — keep the input disabled until the
+        // Compose-lockdown — keep the input disabled until the
         // server-side counter resets, so the user can't queue more
-        // requests just to bounce them off another 429. Only set for
-        // quota errors; network/server errors stay retryable.
-        if (event.code === "rate_limited" && retryAfterAt) {
+        // requests just to bounce them off another 429. In-memory
+        // only; a cold restart drops the lockout so a server-side
+        // limit change (admin reset, Redis flush, manual TTL bump)
+        // is reflected on the next send attempt instead of being
+        // shadowed by a stale persisted deadline. Only set for quota
+        // errors; network/server errors stay retryable.
+        //
+        // Skip the lockout when the client already knows the user is
+        // Pro and the server echoed `tier=free` — the 429 was decided
+        // against a stale JWT claim (token rotation hasn't caught up
+        // with a recent purchase) and arming the free-tier deadline
+        // (often hours-to-midnight-UTC) would trap a paying user
+        // behind a counter that doesn't apply to them. `sendMessage`
+        // calls `ensureFresh` before every send, which forces a token
+        // refresh on /auth/me divergence, so the next attempt goes
+        // out with the corrected Pro claim and the server's quota
+        // service classifies it correctly.
+        const isProClaimStale = useAuthStore().isPro && event.tier === "free"
+        if (event.code === "rate_limited" && retryAfterAt && !isProClaimStale) {
           composeBlockedUntil.value = retryAfterAt
-          // Persist under the current bucket id so a cold-start
-          // mid-lockout re-arms the deadline on next launch (see
-          // `hydrateComposeLock`). Skip when quota_id is empty
-          // (pre-PR-1 anon tokens still in flight) — without a stable
-          // bucket the persisted value couldn't be matched back on
-          // the next session.
-          const qid = useAuthStore().quotaId
-          if (qid) {
-            persistedForQuotaId = qid
-            void app.preferences.set(blockedUntilKey(qid), String(retryAfterAt)).catch((e) => {
-              console.warn("[chat] failed to persist compose lockout", e)
-            })
-          }
         }
         // Transform the streaming placeholder into a failed-bubble in
         // place — keeps the message slot's id stable (handy for any
