@@ -74,25 +74,37 @@ type Result struct {
 	Ready     bool   `json:"ready"`
 }
 
+// PrepareResult is what callers need before deciding sync (cache hit)
+// vs async (dispatch a worker). Splitting Prepare out of Cut lets the
+// HTTP handler answer the client without waiting on the heavy phase.
+type PrepareResult struct {
+	ExcerptID string
+	Key       string
+	URL       string
+	Cached    bool
+}
+
 var safeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
-	log := logx.From(ctx)
-
+// Prepare validates the request, resolves the excerpt id (generating one
+// if the caller omitted it), and probes S3 for an existing object. At
+// most one S3 HEAD — safe to run on the request goroutine before the
+// response is sent.
+func (c Cutter) Prepare(ctx context.Context, req Request) (PrepareResult, error) {
 	if strings.TrimSpace(req.SourceKey) == "" {
-		return Result{}, fmt.Errorf("%w: source_key is required", ErrValidation)
+		return PrepareResult{}, fmt.Errorf("%w: source_key is required", ErrValidation)
 	}
 	if c.SourceKeyPrefix != "" && !strings.HasPrefix(req.SourceKey, c.SourceKeyPrefix) {
-		return Result{}, fmt.Errorf("%w: source_key must start with %q", ErrValidation, c.SourceKeyPrefix)
+		return PrepareResult{}, fmt.Errorf("%w: source_key must start with %q", ErrValidation, c.SourceKeyPrefix)
 	}
 	if req.StartMs < 0 || req.EndMs <= req.StartMs {
-		return Result{}, fmt.Errorf("%w: end_ms must be greater than start_ms", ErrValidation)
+		return PrepareResult{}, fmt.Errorf("%w: end_ms must be greater than start_ms", ErrValidation)
 	}
 	if req.EndMs-req.StartMs > c.MaxExcerptMs {
-		return Result{}, fmt.Errorf("%w: excerpt longer than %d minutes is not supported", ErrValidation, c.MaxExcerptMs/60_000)
+		return PrepareResult{}, fmt.Errorf("%w: excerpt longer than %d minutes is not supported", ErrValidation, c.MaxExcerptMs/60_000)
 	}
 	if req.ExcerptID != "" && !safeIDRe.MatchString(req.ExcerptID) {
-		return Result{}, fmt.Errorf("%w: excerpt_id must be alphanumeric / dash / underscore (<=64 chars)", ErrValidation)
+		return PrepareResult{}, fmt.Errorf("%w: excerpt_id must be alphanumeric / dash / underscore (<=64 chars)", ErrValidation)
 	}
 
 	eid := req.ExcerptID
@@ -102,19 +114,43 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 	}
 	uploadPrefix := strings.TrimRight(c.Prefix, "/") + "/"
 	key := uploadPrefix + eid + ".mp3"
-	// Sanity: catch a future refactor that builds `key` from anything
-	// other than c.Prefix. Cheap, keeps the invariant local.
 	if !strings.HasPrefix(key, uploadPrefix) {
-		return Result{}, newServiceError("computed excerpt key %q escapes prefix %q", key, uploadPrefix)
+		return PrepareResult{}, newServiceError("computed excerpt key %q escapes prefix %q", key, uploadPrefix)
 	}
 
-	exists, err := c.Storage.Exists(ctx, key)
-	if err != nil {
-		return Result{}, newServiceError("head failed: %s", err)
+	exists := false
+	url := ""
+	if c.Storage != nil {
+		ok, err := c.Storage.Exists(ctx, key)
+		if err != nil {
+			return PrepareResult{}, newServiceError("head failed: %s", err)
+		}
+		exists = ok
+		url = c.Storage.BuildURL(key)
 	}
-	if exists {
-		log.Info("excerpt_cache_hit", "excerpt_id", eid, "key", key)
-		return Result{ExcerptID: eid, URL: c.Storage.BuildURL(key), Ready: true}, nil
+	return PrepareResult{
+		ExcerptID: eid,
+		Key:       key,
+		URL:       url,
+		Cached:    exists,
+	}, nil
+}
+
+// Cut runs the full pipeline synchronously — validate, cache-check,
+// download, ffmpeg, upload — and returns the public URL with Ready:true.
+// The HTTP handler uses Prepare + Dispatcher to keep the client off this
+// goroutine; Cut is still the entry point for the background worker and
+// for any future sync caller.
+func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
+	log := logx.From(ctx)
+
+	prep, err := c.Prepare(ctx, req)
+	if err != nil {
+		return Result{}, err
+	}
+	if prep.Cached {
+		log.Info("excerpt_cache_hit", "excerpt_id", prep.ExcerptID, "key", prep.Key)
+		return Result{ExcerptID: prep.ExcerptID, URL: prep.URL, Ready: true}, nil
 	}
 
 	tmp, err := os.MkdirTemp("", "share-audio-*")
@@ -125,7 +161,7 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 	src := filepath.Join(tmp, "source.mp3")
 	dst := filepath.Join(tmp, "excerpt.mp3")
 
-	log.Info("excerpt_download_start", "bucket", c.Bucket, "source_key", req.SourceKey, "excerpt_id", eid)
+	log.Info("excerpt_download_start", "bucket", c.Bucket, "source_key", req.SourceKey, "excerpt_id", prep.ExcerptID)
 	if err := c.Storage.DownloadTo(ctx, req.SourceKey, src); err != nil {
 		return Result{}, newServiceError("download failed: %s", err)
 	}
@@ -134,13 +170,13 @@ func (c Cutter) Cut(ctx context.Context, req Request) (Result, error) {
 		return Result{}, newServiceError("ffmpeg failed: %s", err)
 	}
 
-	log.Info("excerpt_upload_start", "bucket", c.Bucket, "key", key, "excerpt_id", eid)
-	if err := c.Storage.Upload(ctx, key, dst, "audio/mpeg", ""); err != nil {
+	log.Info("excerpt_upload_start", "bucket", c.Bucket, "key", prep.Key, "excerpt_id", prep.ExcerptID)
+	if err := c.Storage.Upload(ctx, prep.Key, dst, "audio/mpeg", ""); err != nil {
 		return Result{}, newServiceError("upload failed: %s", err)
 	}
-	log.Info("excerpt_done", "excerpt_id", eid, "key", key)
+	log.Info("excerpt_done", "excerpt_id", prep.ExcerptID, "key", prep.Key)
 
-	return Result{ExcerptID: eid, URL: c.Storage.BuildURL(key), Ready: true}, nil
+	return Result{ExcerptID: prep.ExcerptID, URL: prep.URL, Ready: true}, nil
 }
 
 // FromFFmpegBin is a small constructor sugar for cmd/main.

@@ -38,6 +38,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Worker timeout caps a single background cut. The whole flow
+	// (download a multi-hundred-MB source from S3, ffmpeg stream-copy
+	// trim, upload a small excerpt) is dominated by the download; 5
+	// minutes is well above anything we've seen in prod and well below
+	// the point where a stuck goroutine starts leaking memory.
+	dispatcher := httpx.NewDispatcher(5*time.Minute, log)
+
 	srvHandlers := &httpx.Server{
 		Cutter: pipeline.Cutter{
 			Storage:         s3c,
@@ -47,6 +54,7 @@ func main() {
 			SourceKeyPrefix: cfg.SourceKeyPrefix,
 			MaxExcerptMs:    cfg.MaxExcerptMs,
 		},
+		Dispatcher: dispatcher,
 	}
 
 	// Middleware chain (outer-most first): recoverer → request-logger →
