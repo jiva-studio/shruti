@@ -18,6 +18,7 @@ from lectorium_chat.api._rate_limit import raise_429
 from lectorium_chat.api.schemas.chat import ChatRequestDto
 from lectorium_chat.application.chat_turn import run_chat_turn
 from lectorium_chat.application.proactive_turn import run_proactive_turn
+from lectorium_chat.application.rate_limiter import _next_midnight_utc
 from lectorium_chat.composition import AppDeps, get_deps
 from lectorium_chat.config import get_settings
 from lectorium_chat.domain.user_context import UserContext
@@ -196,6 +197,24 @@ async def chat(
                 request_id=request_id,
                 proactive=body.proactive is not None,
             )
+            # Emit the usage chip frame regardless of how the turn ended:
+            # success (stream completed cleanly), in-loop LLM error, or
+            # client disconnect (sse-starlette raises into here). The
+            # `rl` capture from the rate-limit gate above is the
+            # authoritative post-increment counter — re-reading the
+            # store here would race with sibling requests.
+            yield {
+                "event": "usage",
+                "data": json.dumps(
+                    {
+                        "scope": "chat",
+                        "current": rl.current_after,
+                        "limit": rl.limit_for_scope,
+                        "resets_at_epoch": int(_next_midnight_utc().timestamp()),
+                    },
+                    ensure_ascii=False,
+                ),
+            }
             structlog.contextvars.unbind_contextvars("request_id", "user_id", "anonymous", "ip")
 
     return EventSourceResponse(

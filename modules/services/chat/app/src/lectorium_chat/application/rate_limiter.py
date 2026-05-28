@@ -62,6 +62,16 @@ class RateLimitResult:
     # Only ever set when the underlying store raises
     # `RedisUnavailableError` AND the tier policy is fail-closed.
     backend_unavailable: bool = False
+    # Per-user counter AFTER the increment for THIS request. Populated
+    # on both the allowed path and the reject path so the API layer can
+    # emit a `usage` SSE event (chat composer chip) without re-querying
+    # the store. Captured from pass-1 (user-key) BEFORE pass-2 (per-IP)
+    # clobbers `rec`.
+    current_after: int = 0
+    # The per-user scope limit the request was checked against. Mirrors
+    # `_user_limit_for(...)` output (tier-resolved, anonymous override,
+    # stale-pro coercion already applied).
+    limit_for_scope: int = 0
 
 
 @dataclass
@@ -135,11 +145,20 @@ class RateLimiter:
         tier: str,
         tier_expires_at: int = 0,
     ) -> int:
-        """Three-way tier matrix. Anonymous trumps tier — an anonymous
-        JWT can never carry a Pro entitlement (the OAuth identity that
-        receipts the purchase doesn't exist yet). After signin RC's
-        SUBSCRIBER_ALIAS event moves the entitlement to the new user_id
-        and the next refresh issues a JWT with tier='pro'.
+        """Resolve the per-user daily limit for `scope`.
+
+        For `chat`, retains the three-way tier matrix (anon / free / pro).
+        For the cheap non-chat scopes (`title`, `questions`, `feedback`)
+        the tier split was de-facto unused — the previous per-tier caps
+        differed only by an order of magnitude on already-tiny call
+        counts — so they collapse to ONE flat number. Same value for
+        anonymous, free, and Pro users; saves three knobs each.
+
+        Anonymous trumps tier — an anonymous JWT can never carry a Pro
+        entitlement (the OAuth identity that receipts the purchase
+        doesn't exist yet). After signin RC's SUBSCRIBER_ALIAS event
+        moves the entitlement to the new user_id and the next refresh
+        issues a JWT with tier='pro'.
 
         `tier_expires_at` is the UNIX-epoch claim minted by auth. 0 means
         lifetime / free (no expiry concept) — never coerce. A non-zero
@@ -148,13 +167,13 @@ class RateLimiter:
         waiting for the next reconcile cycle to repair the column."""
         s = self._settings
         if scope == "title":
-            anon, free, pro = s.title_anon_per_day, s.title_free_per_day, s.title_pro_per_day
-        elif scope == "questions":
-            anon, free, pro = s.questions_anon_per_day, s.questions_free_per_day, s.questions_pro_per_day
-        elif scope == "feedback":
-            anon, free, pro = s.feedback_anon_per_day, s.feedback_free_per_day, s.feedback_pro_per_day
-        else:  # default → chat
-            anon, free, pro = s.chat_anon_per_day, s.chat_free_per_day, s.chat_pro_per_day
+            return s.title_per_day
+        if scope == "questions":
+            return s.questions_per_day
+        if scope == "feedback":
+            return s.feedback_per_day
+        # chat → three-way tier matrix
+        anon, free, pro = s.chat_anon_per_day, s.chat_free_per_day, s.chat_pro_per_day
         if anonymous:
             return anon
         if tier == "pro":
@@ -232,6 +251,13 @@ class RateLimiter:
                 resets_at_iso=reset_at.isoformat().replace("+00:00", "Z"),
                 resets_at_epoch=int(reset_at.timestamp()),
                 tier=echoed_tier,
+                # Mirror the per-user counter on the user-key reject path
+                # so the API layer can hydrate the chat usage chip from
+                # the 429 body without a separate read. On an IP-key
+                # reject we pass through the pass-1 snapshot captured
+                # below (the per-user counter from this very request).
+                current_after=rec.count if key_type == "user" else user_current_after,
+                limit_for_scope=user_limit,
             )
 
         # Pass 1: per-user (the primary cap, JWT-derived). If they're over,
@@ -247,6 +273,10 @@ class RateLimiter:
                 scoped_key=scoped_user_key, key_type="user",
                 limit=user_limit, echoed_tier=echoed_tier, tier=tier,
             )
+        # Snapshot the per-user counter BEFORE pass-2 clobbers `rec` —
+        # the chat usage chip + IP-key reject path both want this
+        # number, not whatever the per-IP increment landed on.
+        user_current_after = rec.count
         if rec.count > rec.limit:
             return reject(rec, "user")
 
@@ -264,7 +294,11 @@ class RateLimiter:
         if rec.count > rec.limit:
             return reject(rec, "ip")
 
-        return RateLimitResult(allowed=True)
+        return RateLimitResult(
+            allowed=True,
+            current_after=user_current_after,
+            limit_for_scope=user_limit,
+        )
 
     def _on_backend_unavailable(
         self,
@@ -306,8 +340,18 @@ class RateLimiter:
                     resets_at_iso=reset_at.isoformat().replace("+00:00", "Z"),
                     resets_at_epoch=int(reset_at.timestamp()),
                     tier=echoed_tier,
+                    current_after=rec.count,
+                    limit_for_scope=limit,
                 )
-            return RateLimitResult(allowed=True, tier=echoed_tier)
+            return RateLimitResult(
+                allowed=True,
+                tier=echoed_tier,
+                # Brownout-local counter is best-effort (single-process,
+                # no shared truth across replicas) but still gives the
+                # client a reasonable progress number for the usage chip.
+                current_after=rec.count,
+                limit_for_scope=limit,
+            )
         # Non-Pro: fail-closed.
         log.warning(
             "rate_limit_fail_closed", tier=echoed_tier, key=scoped_key,

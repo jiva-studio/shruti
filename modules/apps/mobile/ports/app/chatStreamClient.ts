@@ -157,6 +157,30 @@ export type ChatStreamEvent =
        *  pins it to the failed bubble so countdowns don't drift across
        *  app backgrounding. */
       readonly resetsAtEpoch?: number
+      /** Post-increment counter from the rejecting bucket. Mobile uses
+       *  this with `limit` to hydrate the usage chip immediately on a
+       *  429 instead of waiting for the next successful turn to emit a
+       *  `usage` SSE event. Only set on `code: "rate_limited"`. */
+      readonly current?: number
+      /** The per-user limit the request was checked against. Pairs with
+       *  `current`. Only set on `code: "rate_limited"`. */
+      readonly limit?: number
+      /** Which bucket exhausted: `"user"` is the per-user JWT cap,
+       *  `"ip"` is the per-IP defence-in-depth cap. The chat usage chip
+       *  hydrates only on `"user"` — an IP-cap 429 isn't about THIS
+       *  user's quota and shouldn't change their displayed usage. */
+      readonly keyType?: "user" | "ip"
+    }
+  /** Per-turn quota chip frame. Emitted in the SSE finally-block so the
+   *  client gets it whether the turn succeeded, errored, or was
+   *  disconnected. Scope is "chat" for now; future endpoints can reuse
+   *  the same event name. */
+  | {
+      readonly type: "usage"
+      readonly scope: string
+      readonly current: number
+      readonly limit: number
+      readonly resetsAtEpoch: number
     }
 
 /**
