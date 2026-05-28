@@ -30,3 +30,27 @@ redis_unavailable_counter = Counter(
     "RedisUnavailableError occurrences during rate-limit checks, by tier",
     labelnames=["tier"],
 )
+
+
+# Increments on every 429 the application-layer rate-limiter emits.
+# (Caddy proxy 429s — e.g. `/auth/anonymous` throttle — are NOT counted
+# here; they're observable via Caddy's access log.)
+#
+# Labels:
+#   scope     — `chat` / `title` / `questions` / `feedback`. Lets us
+#               split user-facing chat throttles from cheap-call
+#               throttles in Grafana.
+#   key_type  — `user` (per-quota_id) / `ip` (per-IP). Tells us whether
+#               the same user is hammering or a CGNAT peer storm hit
+#               the IP cap.
+#   tier      — `anonymous` / `free` / `pro`. The echoed-tier value
+#               (already accounts for stale-Pro downgrade), matching
+#               the 429 body the mobile UX keys off.
+#
+# Cardinality bound: 4 scopes × 2 key_types × 3 tiers = 24 series. Safe.
+# No user_id / ip in labels — that would explode cardinality.
+rate_limit_hits_counter = Counter(
+    "shruti_chat_rate_limit_hits_total",
+    "Application-layer 429 rate-limit responses, by scope/key/tier",
+    labelnames=["scope", "key_type", "tier"],
+)

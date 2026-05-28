@@ -32,6 +32,7 @@ from shruti_chat.config import Settings
 from shruti_chat.domain.ports.rate_limit_store import CounterRecord, RateLimitStore
 from shruti_chat.infra.rate_limit.redis_rate_limit_store import RedisUnavailableError
 from shruti_chat.observability.logging import get_logger
+from shruti_chat.observability.metrics import rate_limit_hits_counter
 from shruti_chat.observability.metrics import redis_unavailable_counter
 
 
@@ -205,11 +206,25 @@ class RateLimiter:
         user_key = quota_id or user_id
 
         def reject(rec, key_type: str) -> RateLimitResult:
+            # Structured log with `ip` so grepping aggregated logs can
+            # spot CGNAT peer storms (same ip, many user_ids) vs a
+            # single hammering user (one user_id, growing count).
             log.warning(
                 "rate_limit_hit",
                 scope=scope, user_id=user_id, anonymous=anonymous, tier=echoed_tier,
                 key_type=key_type, current=rec.count, limit=rec.limit,
+                ip=ip,
             )
+            # Prometheus counter — bounded cardinality on labels so it
+            # stays cheap. Once the chat-service /metrics endpoint
+            # lands, Grafana picks this up automatically without
+            # further wiring.
+            try:
+                rate_limit_hits_counter.labels(
+                    scope=scope, key_type=key_type, tier=echoed_tier,
+                ).inc()
+            except Exception as exc:  # noqa: BLE001 — metric never breaks turn
+                log.warning("rate_limit_metric_emit_failed", error=str(exc))
             return RateLimitResult(
                 allowed=False, code="rate_limited",
                 retry_after=int((reset_at - now).total_seconds()),
