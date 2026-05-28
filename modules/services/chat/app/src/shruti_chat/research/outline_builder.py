@@ -259,14 +259,44 @@ async def build_outline(
     # where the planner declined to write one — single/double-thesis
     # outlines don't benefit from a closing paragraph and the prompt
     # explicitly says skip them.
+    planner_gave_conclusion = bool(
+        outline.conclusion and outline.conclusion.strip()
+    )
     needs_conclusion = (
         len(outline.theses) >= _MIN_THESES_FOR_CONCLUSION
-        and not (outline.conclusion and outline.conclusion.strip())
+        and not planner_gave_conclusion
     )
+    fallback_outcome = "not_called"
     if needs_conclusion:
+        before_conclusion = outline.conclusion
         outline = await _synthesize_conclusion(
             outline, lang, llm=llm,
             model=conclusion_model, callbacks=callbacks,
         )
+        if outline.conclusion != before_conclusion and outline.conclusion:
+            fallback_outcome = "filled"
+        elif outline.conclusion:
+            # Defensive — outline.conclusion was already set so the
+            # before-comparison didn't catch the filled outcome.
+            fallback_outcome = "filled"
+        else:
+            # _synthesize_conclusion already logs the specific
+            # reason (empty-return vs raised); we just summarise here
+            # so the conclusion_decision event has a single source-of-truth.
+            fallback_outcome = "failed_or_empty"
+
+    if planner_gave_conclusion:
+        conclusion_source = "planner"
+    elif outline.conclusion:
+        conclusion_source = "fallback"
+    else:
+        conclusion_source = "none"
+
+    log.info(
+        "conclusion_decision",
+        n_theses=len(outline.theses),
+        source=conclusion_source,
+        fallback_outcome=fallback_outcome,
+    )
 
     return outline
