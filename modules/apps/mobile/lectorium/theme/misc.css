@@ -24,3 +24,11 @@
 ion-toggle {
   --handle-background: var(--ion-color-step-200);
 }
+
+/* Ionic's MD default toast stacks three black drop shadows that look
+ * harsh against the warm cream / espresso palette. Replace with the
+ * same soft shadow the chat input bar uses, and a roomier radius. */
+ion-toast {
+  --box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  --border-radius: 12px;
+}
