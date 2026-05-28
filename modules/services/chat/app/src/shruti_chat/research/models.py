@@ -55,12 +55,19 @@ class Thesis(BaseModel):
     this thesis — the synthesizer cites ONLY these notes when writing
     this paragraph and emits one `[^N]` at the paragraph end.
 
+    `header` is an optional 3-5 word terse label that summarizes the
+    claim (NO markdown, NO punctuation at the end). When set, the
+    synthesizer renders it as `**header**` on its own line above the
+    paragraph — gives the answer scannable structure for longer multi-
+    thesis replies. Skip on single-thesis answers.
+
     `sub_query_types` is diagnostic-only: lists the sub-question types
     of supporting notes so we can grade outline coherence in Langfuse
     without re-reading individual chunks.
     """
 
     thesis: str
+    header: str | None = None
     supporting_notes: list[int] = Field(default_factory=list, min_length=1)
     sub_query_types: list[str] = Field(default_factory=list)
 
@@ -78,13 +85,20 @@ class Outline(BaseModel):
                                        per thesis, citing only that
                                        thesis's `supporting_notes`.
 
-    `intro` is an optional one-sentence preamble. `skipped_notes` /
-    `skipped_reason` are diagnostic — show which notes the planner saw
-    and chose not to use, helping us tune relevance thresholds upstream.
+    `intro` is an optional one-sentence preamble that frames a multi-
+    thesis answer (skip on single-thesis answers). `conclusion` is an
+    optional final paragraph that ties the theses together at the end —
+    include only on 3+ theses where the synthesis genuinely benefits
+    from a closing thought. Neither carries a citation.
+
+    `skipped_notes` / `skipped_reason` are diagnostic — show which notes
+    the planner saw and chose not to use, helping us tune relevance
+    thresholds upstream.
     """
 
     intro: str | None = None
     theses: list[Thesis] = Field(default_factory=list, max_length=5)
+    conclusion: str | None = None
     skipped_notes: list[int] = Field(default_factory=list)
     skipped_reason: str | None = None
 

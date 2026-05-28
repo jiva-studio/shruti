@@ -329,7 +329,10 @@ async def test_dedup_does_not_steal_alias_via_recovery() -> None:
 # ── [^N|s=...] — commentary blockquote (CommentaryRef) ───────────────
 
 
-async def test_commentary_marker_expands_to_verbatim_blockquote() -> None:
+async def test_commentary_marker_nonconsecutive_picks_joined_with_ellipsis() -> None:
+    """Non-consecutive picks (s=0,2 skips 1) join on ONE line with ` … `
+    between runs. Avoids the old shape of each sentence as a separate `>`
+    line, which rendered as a list."""
     aliases = TurnAliasMap()
     ref = aliases.alias_commentary(
         "comm_xyz", 0,
@@ -339,14 +342,60 @@ async def test_commentary_marker_expands_to_verbatim_blockquote() -> None:
     )
     e = MarkerExpander(aliases)
     out = await _expand(e, f"prose [^{ref}|s=0,2]\n")
-    # Server pulled sentences 0 and 2 VERBATIM and built the blockquote.
-    assert "> Sentence ZERO." in out
-    assert "> Sentence TWO." in out
+    # Both picked sentences land on ONE blockquote line, separated by ` … `
+    # since indices 0 and 2 are non-consecutive.
+    assert "> Sentence ZERO. … Sentence TWO." in out
     assert "> Sentence ONE." not in out
+    # Picked sentences must not be on separate `> ` lines.
+    assert "> Sentence ZERO.\n> Sentence TWO." not in out
     assert "— А.Ч. Бхактиведанта Свами Прабхупада, комментарий к БГ 2.13" in out
 
 
-async def test_commentary_marker_without_s_defaults_to_first_two() -> None:
+async def test_commentary_marker_consecutive_picks_joined_with_space() -> None:
+    """Consecutive picks (s=0,1,2) join with a single space — they're
+    adjacent in the source, so they read as one continuous thought."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="БГ 2.13", author_name="Author",
+        sentences=["S0.", "S1.", "S2.", "S3."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}|s=0,1,2]")
+    assert "> S0. S1. S2." in out
+    # No ellipsis since runs are consecutive.
+    assert " … " not in out
+
+
+async def test_commentary_marker_mixed_consecutive_and_gap_two_runs() -> None:
+    """s=0,1,3,4 → two consecutive runs (0,1 and 3,4) joined within with
+    spaces, runs separated by ` … `."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="БГ 2.13", author_name="Author",
+        sentences=["S0.", "S1.", "S2.", "S3.", "S4."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}|s=0,1,3,4]")
+    assert "> S0. S1. … S3. S4." in out
+    assert "> S2." not in out
+
+
+async def test_commentary_marker_out_of_order_indices_sorted_before_join() -> None:
+    """LLM may emit indices out of order (s=2,0,1); renderer sorts first
+    so the joined output reads natural-order."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="БГ 2.13", author_name="Author",
+        sentences=["S0.", "S1.", "S2."],
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}|s=2,0,1]")
+    assert "> S0. S1. S2." in out
+
+
+async def test_commentary_marker_without_s_defaults_to_first_two_joined() -> None:
+    """Fallback (no `|s=...`) picks indices 0,1 — consecutive, so joined
+    with a single space on one line."""
     aliases = TurnAliasMap()
     ref = aliases.alias_commentary(
         "c", 0, addr_label="БГ 2.13", author_name="Author",
@@ -354,8 +403,7 @@ async def test_commentary_marker_without_s_defaults_to_first_two() -> None:
     )
     e = MarkerExpander(aliases)
     out = await _expand(e, f"[^{ref}]")
-    assert "> S0." in out
-    assert "> S1." in out
+    assert "> S0. S1." in out
     assert "> S2." not in out
 
 
@@ -388,7 +436,9 @@ async def test_s_suffix_on_lecture_alias_is_silently_ignored() -> None:
 async def test_two_adjacent_same_source_commentary_markers_merge() -> None:
     """Two `[^N|s=…]` for different aliases pointing to the SAME
     (author, addr_label) must produce ONE merged blockquote — not two
-    glued ones with duplicate attribution lines."""
+    glued ones with duplicate attribution lines. The merged picks render
+    on ONE blockquote line (per the new join policy) with attribution
+    appearing exactly once at the end."""
     aliases = TurnAliasMap()
     ref_a = aliases.alias_commentary(
         "comm_seg0", 0,
@@ -402,10 +452,20 @@ async def test_two_adjacent_same_source_commentary_markers_merge() -> None:
     )
     e = MarkerExpander(aliases)
     out = await _expand(e, f"[^{ref_a}|s=0]\n[^{ref_b}|s=0]\n")
-    # All four sentences inside ONE blockquote, attribution appears once.
+    # Single attribution line — proves the two markers MERGED into one
+    # blockquote (not two glued ones with separate attributions).
     assert out.count("— А.Ч. Прабхупада, комментарий к БГ 18.66") == 1
-    assert "> First sentence." in out
-    assert "> Fourth sentence." in out
+    # Both picked sentences present and on the SAME blockquote line.
+    assert "First sentence." in out
+    assert "Fourth sentence." in out
+    # Verify they're on the same line: find the line containing First
+    # and check Fourth is on it too.
+    for line in out.split("\n"):
+        if "First sentence." in line:
+            assert "Fourth sentence." in line
+            break
+    else:
+        raise AssertionError("'First sentence.' line not found in output")
 
 
 async def test_two_adjacent_different_source_commentary_blockquotes_separated() -> None:
