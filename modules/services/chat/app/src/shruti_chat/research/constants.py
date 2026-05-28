@@ -54,7 +54,7 @@ BOOST_BY_KIND: dict[str, float] = {
 # prose} fanout = 20 parallel pgvector queries plus a batched OpenRouter
 # embedding call. Localhost finishes in ~1s, AWS RDS + OpenRouter takes
 # 6-10s on a cold pgvector cache. Give it room.
-TIMEOUT_EXPAND_S = 8.0
+TIMEOUT_PLAN_S = 8.0
 TIMEOUT_QUESTION_LOOKUP_S = 6.0
 TIMEOUT_TOPIC_EXTRACT_S = 8.0
 TIMEOUT_TOPIC_LOOKUP_S = 6.0

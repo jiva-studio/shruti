@@ -16,10 +16,20 @@ import pytest
 from shruti_chat.research.models import (
     AttributionMatch,
     AttributionRef,
-    ExpansionResult,
+    QueryPlan,
+    SubQuery,
     TopicExtractionResult,
 )
 from shruti_chat.research.pipeline import run_research
+
+
+def _plan(*texts: str) -> QueryPlan:
+    """Helper — build a QueryPlan from plain text strings. Each text becomes
+    its own general-type sub_query (matches the legacy ExpansionResult
+    fixture pattern). Empty `texts` returns an empty plan."""
+    return QueryPlan(sub_queries=[
+        SubQuery(id=i, type="general", text=t) for i, t in enumerate(texts)
+    ])
 
 
 # ---- fakes ----------------------------------------------------------------
@@ -233,7 +243,7 @@ async def test_short_path_question_match():
         },
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["природа души", "atma"]),
+        "QueryPlan": _plan("природа души", "atma"),
     })
 
     result = await run_research(
@@ -247,7 +257,7 @@ async def test_short_path_question_match():
     # Authoritative envelopes carry canonical_score >= 0.85 so synth doesn't refuse.
     assert result.authoritative_refs[0]["score"] == pytest.approx(0.92)
     # Stage 2.8.b makes extract_topics speculative — it fires in parallel
-    # with expand_query and gets cancelled in SHORT path. With FakeLLM
+    # with plan_queries and gets cancelled in SHORT path. With FakeLLM
     # being instant, the call lands before cancel; that's a known
     # trade-off (we'd rather burn one Flash-Lite call than serialise
     # the LONG path). What matters here is that topics didn't influence
@@ -274,7 +284,7 @@ async def test_short_path_multi_match_unions_refs():
         ("verse", "verse_BG_2_20"): [_LibChunk("verse_BG_2_20", "verse", "20", "ru", source_id="src", tokens="2.20")],
         ("verse", "verse_BG_2_22"): [_LibChunk("verse_BG_2_22", "verse", "22", "ru", source_id="src", tokens="2.22")],
     })
-    llm = FakeLLM(by_schema={"ExpansionResult": ExpansionResult(queries=["q"])})
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("q")})
 
     result = await run_research(
         question="природа души", lang="ru", router_args={},
@@ -311,7 +321,7 @@ async def test_long_path_no_question_match():
         ],
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["q1", "q2"]),
+        "QueryPlan": _plan("q1", "q2"),
         "TopicExtractionResult": TopicExtractionResult(topics=["вечность души"]),
     })
 
@@ -339,7 +349,7 @@ async def test_long_path_no_topics_extracted_no_boost():
         library_results=[],
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["q"]),
+        "QueryPlan": _plan("q"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),  # empty
     })
     result = await run_research(
@@ -360,7 +370,7 @@ async def test_cold_start_empty_attributions_pure_fanout():
         library_results=[],
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["q"]),
+        "QueryPlan": _plan("q"),
         "TopicExtractionResult": TopicExtractionResult(topics=["x"]),
     })
     result = await run_research(
@@ -375,7 +385,8 @@ async def test_cold_start_empty_attributions_pure_fanout():
 
 @pytest.mark.asyncio
 async def test_expand_failure_falls_back_to_question_only():
-    """expand_query raises → degraded ExpansionResult with [question]."""
+    """plan_queries raises → degraded QueryPlan with a single sub_query
+    containing the raw question."""
     pool = FakePool({("ru", "question"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "x", "ru"), 0.7)],
@@ -383,7 +394,7 @@ async def test_expand_failure_falls_back_to_question_only():
     )
     llm = FakeLLM(
         by_schema={"TopicExtractionResult": TopicExtractionResult(topics=[])},
-        raise_on_schema="ExpansionResult",
+        raise_on_schema="QueryPlan",
     )
     # expand_query swallows its own errors so the outer await never raises;
     # we just verify the pipeline completes with one fanout call.
@@ -403,7 +414,7 @@ async def test_embed_failure_falls_through_to_fanout():
         library_results=[],
     )
     embedder = FakeEmbedder(embed_query_raises=True)
-    llm = FakeLLM(by_schema={"ExpansionResult": ExpansionResult(queries=["q"])})
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("q")})
     result = await run_research(
         question="вопрос", lang="ru", router_args={},
         chunk_repo=chunk_repo, catalog_repo=FakeCatalogRepo(),
@@ -427,7 +438,7 @@ async def test_router_args_propagated_to_fanout(monkeypatch):
 
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["q"]),
+        "QueryPlan": _plan("q"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),
     })
     await run_research(
@@ -455,7 +466,7 @@ async def test_authoritative_carries_canonical_score():
     chunk_repo = FakeChunkRepo(by_target={
         ("verse", "verse_x"): [_LibChunk("verse_x", "verse", "t", "ru", source_id="src", tokens="2.13")],
     })
-    llm = FakeLLM(by_schema={"ExpansionResult": ExpansionResult(queries=[])})
+    llm = FakeLLM(by_schema={"QueryPlan": _plan()})
     result = await run_research(
         question="q", lang="ru", router_args={},
         **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
@@ -488,7 +499,7 @@ async def test_on_event_emits_research_questions_short_path():
     # Expansion echoes the original question once and adds two real angles —
     # only the two should be emitted as research_question (echo filtered).
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["что такое душа", "природа души", "atma"]),
+        "QueryPlan": _plan("что такое душа", "природа души", "atma"),
     })
 
     events: list[tuple[str, dict]] = []
@@ -543,7 +554,7 @@ async def test_on_event_emits_research_sources_from_fanout():
         ],
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["вечность"]),
+        "QueryPlan": _plan("вечность"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),
     })
 
@@ -585,7 +596,7 @@ async def test_on_event_no_callback_is_safe():
     pool = FakePool({("ru", "question"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["q"]),
+        "QueryPlan": _plan("q"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),
     })
     # No on_event kwarg — just confirm it doesn't raise.
@@ -603,7 +614,7 @@ async def test_on_event_callback_exception_does_not_break_research():
     pool = FakePool({("ru", "question"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["вечность"]),
+        "QueryPlan": _plan("вечность"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),
     })
 
@@ -642,7 +653,7 @@ async def test_long_path_verse_hit_appends_commentaries():
         },
     )
     llm = FakeLLM(by_schema={
-        "ExpansionResult": ExpansionResult(queries=["природа души"]),
+        "QueryPlan": _plan("природа души"),
         "TopicExtractionResult": TopicExtractionResult(topics=[]),
     })
     result = await run_research(
@@ -689,7 +700,7 @@ async def test_short_path_verse_hit_appends_commentaries():
             ],
         },
     )
-    llm = FakeLLM(by_schema={"ExpansionResult": ExpansionResult(queries=["q"])})
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("q")})
     result = await run_research(
         question="что такое душа", lang="ru", router_args={},
         **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
