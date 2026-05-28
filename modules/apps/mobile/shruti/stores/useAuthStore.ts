@@ -32,10 +32,11 @@ export const useAuthStore = defineStore("auth", () => {
   const tierExpiresAt = ref<number | null>(null)
   // Server-side quota bucket id mirrored from the JWT `quota_id` claim.
   // Stable per-identity (PR-1 made anon device-bootstrap users non-empty
-  // too), so it scopes any persisted per-bucket state — e.g. the chat
-  // composer rate-limit lockout in `useChatStore.composeBlockedUntil`.
-  // Empty string on pre-PR-1 tokens still in flight; consumers must
-  // treat "" as "no quota_id yet" and skip persistence.
+  // too). A change under the same `userId` means token rotation (the
+  // claim carried a refreshed bucket id) — see the `quotaId` watcher
+  // below for why that resets the chat lockout. Empty string on
+  // pre-PR-1 tokens still in flight; consumers must treat "" as "no
+  // quota_id yet".
   const quotaId = ref<string>("")
   // Server-authoritative region (auth.users.home_region). Empty string
   // until the first /auth/me lands; consumers should treat "" as "no
@@ -92,6 +93,23 @@ export const useAuthStore = defineStore("auth", () => {
   // (if anything, the new tier deserves its own rate-limit bookkeeping).
   watch(isPro, (next, prev) => {
     if (!next || prev) return
+    void import("@shruti/stores/useChatStore.js").then(({ useChatStore }) => {
+      useChatStore().resetComposeLock()
+    })
+  })
+
+  // Quota-bucket watcher: when the JWT rotates under the same userId
+  // and carries a different `quota_id`, the previous bucket's deadline
+  // is meaningless against the new bucket — releasing it lets a Pro
+  // user whose stale-claim 429 armed a free-tier lockout recover as
+  // soon as the next token refresh lands (~15 min), instead of waiting
+  // out the full free-tier deadline. The userId-change watcher above
+  // wouldn't fire here (same identity). Empty-string transitions (
+  // initial restore from "" to a real id, or rare signout-side flush)
+  // are skipped because there was no live lockout to release.
+  watch(quotaId, (next, prev) => {
+    if (next === prev) return
+    if (!prev || !next) return
     void import("@shruti/stores/useChatStore.js").then(({ useChatStore }) => {
       useChatStore().resetComposeLock()
     })

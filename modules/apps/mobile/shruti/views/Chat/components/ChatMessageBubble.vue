@@ -136,9 +136,10 @@ import { useI18n } from "vue-i18n"
 import router from "@shruti/router/index.js"
 import { messageToMarkdown, parseChatMarkers } from "@shruti/composables/chatMarkers.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
+import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
-import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import type { ChatActionPayload, QuotaTier } from "@lib/domain/chatMessage.js"
 import CitationChip from "./CitationChip.vue"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import TrackList from "./TrackList.vue"
@@ -396,11 +397,30 @@ const failedRetryLabel = computed<string>(() => t("chat.actionRetry"))
 /* -------------------------------------------------------------------------- */
 
 const paywall = usePaywallStore()
+const auth = useAuthStore()
 const { triggerSignIn } = useAnonymousSignInFlow()
 
 const failedError = computed(() => {
   const e = props.message.error
   return e && e.kind === "failed" ? e : null
+})
+
+/** Tier we render copy against. Defaults to the server's echo in the
+ *  429 body, but overrides `"free"` → `"pro"` when the local JWT
+ *  already knows the user is Pro. The server can transiently echo
+ *  `free` after a Pro purchase: its 429 is computed from the JWT's
+ *  `tier_expires_at` claim, which lags webhook landings until the next
+ *  token rotation (~15 min) — and Apple/Google receipt webhooks
+ *  occasionally drop, leaving the claim stale longer than that. Issue
+ *  #718: showing "buy Pro" copy to an actual Pro user. The
+ *  `anonymous` echo is intentionally NOT overridden — that means the
+ *  request itself ran under an anonymous token (signin flip mid-
+ *  request, separate device), and the "sign in to use your Pro quota"
+ *  CTA is the right path home. */
+const effectiveQuotaTier = computed<QuotaTier | undefined>(() => {
+  const tier = failedError.value?.tier
+  if (auth.isPro && tier === "free") return "pro"
+  return tier
 })
 
 /** Set of recognised quota tiers — keep in sync with the `QuotaTier`
@@ -446,7 +466,7 @@ const noticeKind = computed<"error" | "warning" | "upsell" | "info">(() => {
   if (isOfflineFailure.value) return "info"
   if (e.code !== "rate_limited") return "error"
   if (isUnknownQuotaTier.value) return "warning"
-  if (e.tier === "pro") return "warning"
+  if (effectiveQuotaTier.value === "pro") return "warning"
   return "upsell"
 })
 
@@ -460,9 +480,10 @@ const noticeTitle = computed<string>(() => {
   if (e.code.startsWith("http_5")) return t("chat.errServer.title")
   if (e.code !== "rate_limited") return ""
   if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownTitle")
-  if (e.tier === "anonymous") return t("chat.errQuotaAnonTitle")
-  if (e.tier === "pro") return t("chat.errQuotaProTitle")
-  if (e.tier === "free") return t("chat.errQuotaFreeTitle")
+  const tier = effectiveQuotaTier.value
+  if (tier === "anonymous") return t("chat.errQuotaAnonTitle")
+  if (tier === "pro") return t("chat.errQuotaProTitle")
+  if (tier === "free") return t("chat.errQuotaFreeTitle")
   return ""
 })
 
@@ -473,11 +494,12 @@ const noticeBody = computed<string>(() => {
   if (e.code.startsWith("http_5")) return t("chat.errServer.body")
   if (e.code === "rate_limited") {
     if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownBody")
-    if (e.tier) {
+    const tier = effectiveQuotaTier.value
+    if (tier) {
       const when = formatResetWhen(e.retryAfterAt)
-      if (e.tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
-      if (e.tier === "free") return t("chat.errQuotaFreeBody", { when })
-      if (e.tier === "pro") return t("chat.errQuotaProBody", { when })
+      if (tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
+      if (tier === "free") return t("chat.errQuotaFreeBody", { when })
+      if (tier === "pro") return t("chat.errQuotaProBody", { when })
     }
   }
   // Pre-Phase-4 server, or non-quota error — fall through to the legacy
@@ -504,7 +526,8 @@ const noticeCta = computed(() => {
   }
   if (e.code === "rate_limited") {
     if (isUnknownQuotaTier.value) return undefined
-    if (e.tier === "anonymous") {
+    const tier = effectiveQuotaTier.value
+    if (tier === "anonymous") {
       return {
         label: t("chat.signInForMoreCta"),
         // Inline provider flow: iOS opens the Apple+Google sheet,
@@ -515,7 +538,7 @@ const noticeCta = computed(() => {
         },
       }
     }
-    if (e.tier === "free") {
+    if (tier === "free") {
       return {
         label: t("chat.upgradeToProCta"),
         action: () => paywall.requestOpen("chat"),
