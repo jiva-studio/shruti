@@ -185,6 +185,88 @@ export const useChatStore = defineStore("chat", () => {
    *  to trapping the user behind a stale persisted deadline they have
    *  no way to clear from the UI. */
   const composeBlockedUntil = ref<number | null>(null)
+  /** Per-day chat usage snapshot, populated by the server's SSE `usage`
+   *  event (every successful turn) or by a `rate_limited` error body
+   *  (when `key_type === "user"`). Drives the usage chip above the
+   *  composer. `null` means "we haven't seen the server yet" — chip
+   *  stays hidden. Persisted under `chat_usage:<quota_id>` so a cold
+   *  start mid-day re-hydrates without waiting for the next turn —
+   *  unlike `composeBlockedUntil` (intentionally in-memory only), the
+   *  chip is a read-only display of a counter the server controls, so
+   *  there's no "stale state traps the user" failure mode to fear. */
+  const chatUsage = ref<{ current: number; limit: number; resetsAtEpoch: number } | null>(null)
+
+  /** Pref key for the persisted usage snapshot. Keyed by quota_id so
+   *  separate identities don't bleed into each other; empty qid =
+   *  no persistence (in-memory only). */
+  const USAGE_KEY_PREFIX = "chat_usage:"
+  function usageKey(qid: string): string {
+    return `${USAGE_KEY_PREFIX}${qid}`
+  }
+
+  /** Read back the persisted usage snapshot for `qid` and arm
+   *  `chatUsage` if `resetsAtEpoch` is still in the future. Stale
+   *  entries (the day rolled over since they were written) are wiped
+   *  so the chip doesn't briefly render a 100%-but-already-reset state.
+   *  Malformed payloads are tolerated — anything that doesn't parse is
+   *  treated as "no usage snapshot". */
+  async function hydrateChatUsage(qid: string): Promise<void> {
+    if (!qid) {
+      // No stable bucket id — clear in-memory so the chip doesn't carry
+      // over from a previous identity.
+      chatUsage.value = null
+      return
+    }
+    const key = usageKey(qid)
+    try {
+      const raw = await app.preferences.get(key)
+      if (raw === null) {
+        chatUsage.value = null
+        return
+      }
+      const parsed = JSON.parse(raw) as {
+        current?: unknown
+        limit?: unknown
+        resetsAtEpoch?: unknown
+      }
+      const current = typeof parsed.current === "number" ? parsed.current : -1
+      const limit = typeof parsed.limit === "number" ? parsed.limit : -1
+      const resetsAtEpoch = typeof parsed.resetsAtEpoch === "number" ? parsed.resetsAtEpoch : -1
+      if (current < 0 || limit <= 0 || resetsAtEpoch <= 0) {
+        await app.preferences.remove(key)
+        chatUsage.value = null
+        return
+      }
+      if (resetsAtEpoch * 1000 > Date.now()) {
+        chatUsage.value = { current, limit, resetsAtEpoch }
+      } else {
+        // Reset boundary already passed — drop the stale entry.
+        await app.preferences.remove(key)
+        chatUsage.value = null
+      }
+    } catch (e) {
+      console.warn("[chat] failed to hydrate chat usage", e)
+      chatUsage.value = null
+    }
+  }
+
+  /** Write the in-memory `chatUsage` to Preferences under the supplied
+   *  quota_id. No-op when qid is empty (pre-PR-1 anon tokens with no
+   *  stable bucket — chip stays in-memory only). Fire-and-forget — a
+   *  storage hiccup shouldn't sink the streaming turn. */
+  function persistChatUsage(qid: string): void {
+    if (!qid) return
+    const snap = chatUsage.value
+    if (snap === null) {
+      void app.preferences.remove(usageKey(qid)).catch((e) => {
+        console.warn("[chat] failed to clear chat usage key", e)
+      })
+      return
+    }
+    void app.preferences.set(usageKey(qid), JSON.stringify(snap)).catch((e) => {
+      console.warn("[chat] failed to persist chat usage", e)
+    })
+  }
   /** Reactive clock for `isComposeBlocked` — ticks every second while
    *  any consumer subscribes. @vueuse handles the timer lifecycle
    *  (visibility-aware, cleaned up on unmount). */
@@ -219,6 +301,13 @@ export const useChatStore = defineStore("chat", () => {
   function resetComposeLock(): void {
     composeBlockedUntil.value = null
     clearRateLimitedBubble()
+    // Per-identity hydration for the usage chip — each quota_id has
+    // its own daily counter on the server, so the previous identity's
+    // snapshot shouldn't bleed into this one's chip. Empty qid (pre-
+    // PR-1 anon tokens still in flight) clears the in-memory snapshot
+    // inside `hydrateChatUsage`.
+    const nextQuotaId = useAuthStore().quotaId
+    void hydrateChatUsage(nextQuotaId)
   }
 
   /** Watch the wall-clock against the live deadline and drop the
@@ -817,6 +906,20 @@ export const useChatStore = defineStore("chat", () => {
         warnOrphanActionMarkers(event.message)
         return
       }
+      case "usage": {
+        // Per-turn quota chip frame from the server's SSE finally-block.
+        // Set the snapshot + persist under the active bucket. Persist
+        // helper no-ops when qid is empty (pre-PR-1 anon tokens) — chip
+        // still updates in-memory.
+        chatUsage.value = {
+          current: event.current,
+          limit: event.limit,
+          resetsAtEpoch: event.resetsAtEpoch,
+        }
+        const qid = useAuthStore().quotaId
+        persistChatUsage(qid)
+        return
+      }
       case "title-updated": {
         const sid = activeSessionId.value
         if (!sid) return
@@ -881,6 +984,31 @@ export const useChatStore = defineStore("chat", () => {
         const isProClaimStale = useAuthStore().isPro && event.tier === "free"
         if (event.code === "rate_limited" && retryAfterAt && !isProClaimStale) {
           composeBlockedUntil.value = retryAfterAt
+          // Hydrate the usage chip from the 429 body only when the USER
+          // bucket exhausted — an IP-bucket 429 means a CGNAT peer drained
+          // the per-IP cap and this user's quota is fine; updating the
+          // chip there would mislead. 409 (idempotency dup) and 503
+          // (backend unavailable) never reach this branch — they have
+          // their own codes. Note: `isProClaimStale` already excluded
+          // above means we never write a free-bucket counter into a Pro
+          // user's chip.
+          if (
+            event.keyType === "user" &&
+            typeof event.current === "number" &&
+            typeof event.limit === "number" &&
+            event.limit > 0
+          ) {
+            const resetsAtEpoch =
+              typeof event.resetsAtEpoch === "number" && event.resetsAtEpoch > 0
+                ? event.resetsAtEpoch
+                : Math.floor(retryAfterAt / 1000)
+            chatUsage.value = {
+              current: event.current,
+              limit: event.limit,
+              resetsAtEpoch,
+            }
+            persistChatUsage(useAuthStore().quotaId)
+          }
         }
         // Transform the streaming placeholder into a failed-bubble in
         // place — keeps the message slot's id stable (handy for any
@@ -1229,6 +1357,7 @@ export const useChatStore = defineStore("chat", () => {
     composeBlockedUntil,
     isComposeBlocked,
     resetComposeLock,
+    chatUsage,
     unseenProactiveSessionIds,
     refreshSessions,
     openSession,

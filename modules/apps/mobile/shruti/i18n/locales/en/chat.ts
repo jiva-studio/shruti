@@ -141,6 +141,16 @@ export default {
   composeLimitedAriaLabel: "Composing paused, daily limit resets {when}",
   composeLimitedAriaLabelNoTime: "Composing paused, daily limit reached",
 
+  /** Per-day usage chip above the composer. Visible to every tier once
+   *  ≥50 % of the daily allowance is consumed. Same percent-based label
+   *  across tiers (no separate free/pro copy — the bucket size differs
+   *  by tier but the "how full am I" framing reads the same). Tap on
+   *  Free/anon opens the paywall directly; Pro renders the chip as a
+   *  static info badge. */
+  usage: {
+    chip: "{p}% used · resets at {time}",
+  },
+
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
   suggestionRecapCurrent: "Recap current lecture",
   suggestionRecapRecent: "Recap last lecture",

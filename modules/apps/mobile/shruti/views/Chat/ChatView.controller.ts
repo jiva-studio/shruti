@@ -61,6 +61,10 @@ export interface ChatControllerReturn {
   /** UnixMs deadline backing `isComposeBlocked`. Forwarded to the
    *  composer so the placeholder can show a wall-clock reset time. */
   composeBlockedUntil: ComputedRef<number | null>
+  /** Per-day chat usage snapshot from the SSE `usage` event / 429 body.
+   *  Forwarded to ChatInputBar which renders the chip above the
+   *  composer when usage crosses the per-tier visibility threshold. */
+  chatUsage: ComputedRef<{ current: number; limit: number; resetsAtEpoch: number } | null>
   onSend: (text: string) => Promise<void>
   /** User tapped the stop button while a turn was streaming. Aborts
    *  the SSE stream; the store's run loop preserves any partial
@@ -510,6 +514,7 @@ export function useChatController(): ChatControllerReturn {
     inputFocusToken: computed(() => store.inputFocusToken),
     isComposeBlocked: computed(() => store.isComposeBlocked),
     composeBlockedUntil: computed(() => store.composeBlockedUntil),
+    chatUsage: computed(() => store.chatUsage),
     onSend,
     onCancel,
     onNewSession,

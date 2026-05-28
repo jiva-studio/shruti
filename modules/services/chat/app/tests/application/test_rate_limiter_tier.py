@@ -62,16 +62,28 @@ def limiter():
         # anonymous always wins — a Pro claim on an anon JWT (impossible
         # in practice) still gets the anon limit.
         (True, "pro", "chat", 3),
-        # Other scopes follow the same shape.
-        (True, "free", "title", 10),
-        (False, "free", "title", 50),
+        # Non-chat scopes are flat — same value for anon, free, and pro.
+        (True, "free", "title", 500),
+        (False, "free", "title", 500),
         (False, "pro", "title", 500),
+        (True, "free", "questions", 500),
         (False, "pro", "questions", 500),
-        (False, "pro", "feedback", 2000),
+        (True, "free", "feedback", 500),
+        (False, "pro", "feedback", 500),
     ],
 )
 def test_user_limit_for_tier_matrix(limiter, anonymous, tier, scope, expected_limit):
     assert limiter._user_limit_for(scope, anonymous, tier) == expected_limit
+
+
+@pytest.mark.parametrize("scope", ["title", "questions", "feedback"])
+def test_non_chat_scopes_flat_across_tiers(limiter, scope):
+    """The three cheap non-chat endpoints share ONE limit per scope —
+    anonymous, free, and Pro all land on the same number."""
+    anon_limit = limiter._user_limit_for(scope, True, "free")
+    free_limit = limiter._user_limit_for(scope, False, "free")
+    pro_limit = limiter._user_limit_for(scope, False, "pro")
+    assert anon_limit == free_limit == pro_limit == 500
 
 
 @pytest.mark.asyncio
@@ -170,13 +182,14 @@ def test_expired_pro_falls_back_to_free_limits(limiter):
     # treated as free — defends against a dropped EXPIRATION webhook.
     past = int(time.time()) - 60
     assert limiter._user_limit_for("chat", False, "pro", past) == 10  # free
-    assert limiter._user_limit_for("title", False, "pro", past) == 50  # free
+    # title is flat across tiers so stale-pro coercion is a no-op there.
+    assert limiter._user_limit_for("title", False, "pro", past) == 500
 
 
 def test_pro_with_future_expiry_keeps_pro_limits(limiter):
     future = int(time.time()) + 3600
     assert limiter._user_limit_for("chat", False, "pro", future) == 200  # pro
-    assert limiter._user_limit_for("title", False, "pro", future) == 500  # pro
+    assert limiter._user_limit_for("title", False, "pro", future) == 500
 
 
 def test_pro_with_zero_expiry_is_lifetime(limiter):
@@ -201,6 +214,69 @@ async def test_expired_pro_429_echoes_free_tier(limiter):
     )
     assert not rl.allowed
     assert rl.tier == "free"
+
+
+# ─── usage-chip fields (current_after + limit_for_scope) ────────────────
+
+
+@pytest.mark.asyncio
+async def test_allowed_result_carries_current_after_and_limit(limiter):
+    """The /chat SSE handler reads `current_after` + `limit_for_scope`
+    off the allowed result to emit the per-turn `usage` chip event.
+    Both must be populated even on the happy path."""
+    rl = await limiter.check_and_increment(
+        "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+    )
+    assert rl.allowed
+    assert rl.current_after == 1
+    assert rl.limit_for_scope == 10
+    rl2 = await limiter.check_and_increment(
+        "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+    )
+    assert rl2.current_after == 2
+    assert rl2.limit_for_scope == 10
+
+
+@pytest.mark.asyncio
+async def test_rejected_result_carries_current_after_and_limit(limiter):
+    """On a user-key reject the chip hydrates from the 429 body, so the
+    same two fields must populate on the rejected path as well."""
+    for _ in range(10):
+        await limiter.check_and_increment(
+            "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+        )
+    rl = await limiter.check_and_increment(
+        "u-free", anonymous=False, ip="1.2.3.4", scope="chat", tier="free",
+    )
+    assert not rl.allowed
+    assert rl.key_type == "user"
+    assert rl.current_after == 11  # the over-the-limit attempt
+    assert rl.limit_for_scope == 10
+
+
+@pytest.mark.asyncio
+async def test_feedback_scope_flat_anonymous_equals_pro(limiter):
+    """The plan-1 collapse: anon vs Pro on /feedback land on the SAME
+    limit — flat 500 — instead of the legacy 30 / 2000 split."""
+    # Anonymous user: 500th call still allowed.
+    for _ in range(499):
+        rl = await limiter.check_and_increment(
+            "u-anon", anonymous=True, ip="9.9.9.9",
+            scope="feedback", tier="free",
+        )
+        assert rl.allowed
+    rl = await limiter.check_and_increment(
+        "u-anon", anonymous=True, ip="9.9.9.9",
+        scope="feedback", tier="free",
+    )
+    assert rl.allowed
+    assert rl.limit_for_scope == 500
+    # Pro user gets the same flat limit, not the old 2000.
+    rl_pro = await limiter.check_and_increment(
+        "u-pro", anonymous=False, ip="9.9.9.10",
+        scope="feedback", tier="pro",
+    )
+    assert rl_pro.limit_for_scope == 500
 
 
 @pytest.mark.asyncio
