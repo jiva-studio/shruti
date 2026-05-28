@@ -83,30 +83,29 @@ describe("useHttpShareAudioService", () => {
     expect(body).toEqual({ source_key: "k", start_ms: 0, end_ms: 100 })
   })
 
-  it("falls through to ready:false when the cut takes longer than 8s (defensive parity with share-video)", async () => {
-    vi.useFakeTimers()
-    fetchMock.mockImplementation((_url, init) => {
-      return new Promise((_, reject) => {
-        const sig = (init as RequestInit | undefined)?.signal as AbortSignal | undefined
-        sig?.addEventListener(
-          "abort",
-          () => {
-            const err = new Error("aborted") as Error & { name: string }
-            err.name = "AbortError"
-            reject(err)
-          },
-          { once: true }
-        )
-      })
-    })
+  it("passes ready:false through from the server (202 dispatched-async response)", async () => {
+    // The server answers immediately with 202 + ready:false when it
+    // dispatched a background worker. The adapter is a thin pass-through
+    // and the caller (e.g. useCitationSnippet) handles the polling.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          excerpt_id: "note-x",
+          url: "https://cdn/share/audio/note-x.mp3",
+          ready: false,
+        }),
+        { status: 202, headers: { "Content-Type": "application/json" } }
+      )
+    )
 
     const svc = useHttpShareAudioService(() => "https://endpoint")
-    const promise = svc.cut({ sourceKey: "k", startMs: 0, endMs: 1, excerptId: "note-x" })
+    const result = await svc.cut({ sourceKey: "k", startMs: 0, endMs: 1, excerptId: "note-x" })
 
-    await vi.advanceTimersByTimeAsync(8_000)
-    const result = await promise
-    expect(result).toEqual({ excerptId: "note-x", url: "", ready: false })
-    vi.useRealTimers()
+    expect(result).toEqual({
+      excerptId: "note-x",
+      url: "https://cdn/share/audio/note-x.mp3",
+      ready: false,
+    })
   })
 
   it("throws on non-2xx response", async () => {

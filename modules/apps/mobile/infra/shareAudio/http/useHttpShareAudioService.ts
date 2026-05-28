@@ -8,10 +8,16 @@ import type { CutExcerptRequest, CutExcerptResponse, IShareAudioService } from "
  * routes subsequent calls to the new region without rebuilding the
  * service.
  *
- * The function is already idempotent server-side on `excerpt_id`, so
- * this adapter is intentionally thin: no retries, no caching, no
- * client-side deduplication. Callers are expected to either reuse a
- * stable id (e.g. note id) or accept a freshly-generated one.
+ * The server answers fast: either 200 with `ready:true` (S3 cache hit on
+ * the excerpt id) or 202 with `ready:false` after dispatching a
+ * background worker. Either way the body carries the predicted URL.
+ * Callers that get `ready:false` poll the URL via `pollUntilReady`.
+ *
+ * The function is idempotent server-side on `excerpt_id`, so this
+ * adapter is intentionally thin: no retries, no caching, no client-side
+ * deduplication. Callers are expected to either reuse a stable id
+ * (e.g. note id, chat-cite-<track>-<start>-<end>) or accept a
+ * freshly-generated one.
  */
 export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAudioService {
   return {
@@ -24,31 +30,11 @@ export function useHttpShareAudioService(getEndpointUrl: () => string): IShareAu
       }
       if (req.excerptId) body.excerpt_id = req.excerptId
 
-      // Cap the cut at 8 s with our own AbortController. share-audio is
-      // sync stream-copy and almost always returns in <1 s — the abort
-      // path basically never fires in practice — but the share-video
-      // service uses the same pattern (see useHttpShareVideoService.ts
-      // for full reasoning) and consistency keeps the controller's
-      // workflow helper provider-agnostic. If the abort fires, return
-      // {ready:false}; the caller polls the predicted URL.
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort("cut-timeout-fall-through-to-poll"), 8_000)
-      let response: Response
-      try {
-        response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: ctrl.signal,
-        })
-      } catch (err: unknown) {
-        if ((err as DOMException | undefined)?.name === "AbortError") {
-          return { excerptId: req.excerptId ?? "", url: "", ready: false }
-        }
-        throw err
-      } finally {
-        clearTimeout(timer)
-      }
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
       if (!response.ok) {
         throw new Error(`share-audio cutter returned ${response.status} ${response.statusText}`)
       }
