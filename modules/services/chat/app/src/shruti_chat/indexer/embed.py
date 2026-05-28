@@ -47,15 +47,22 @@ class OpenAICompatEmbedder(Embedder):
     """
 
     def __init__(self, *, name: str, model: str, dim: int,
-                 api_key: str, base_url: str | None = None) -> None:
+                 api_key: str, base_url: str | None = None,
+                 query_prefix: str = "", doc_prefix: str = "") -> None:
         self.name = name
         self.dim = dim
         self._model = model
+        self._query_prefix = query_prefix
+        self._doc_prefix = doc_prefix
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        log.info("embedder_loaded", name=name, model=model, dim=dim, base_url=base_url)
+        log.info(
+            "embedder_loaded", name=name, model=model, dim=dim, base_url=base_url,
+            query_prefix=bool(query_prefix), doc_prefix=bool(doc_prefix),
+        )
 
     async def embed_query(self, text: str) -> list[float]:
-        resp = await self._client.embeddings.create(model=self._model, input=text)
+        inp = f"{self._query_prefix}{text}" if self._query_prefix else text
+        resp = await self._client.embeddings.create(model=self._model, input=inp)
         return resp.data[0].embedding
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -67,6 +74,8 @@ class OpenAICompatEmbedder(Embedder):
         out: list[list[float]] = []
         for i in range(0, len(texts), BATCH):
             chunk = texts[i:i + BATCH]
+            if self._doc_prefix:
+                chunk = [f"{self._doc_prefix}{t}" for t in chunk]
             resp = await self._client.embeddings.create(
                 model=self._model, input=chunk,
             )
@@ -93,6 +102,8 @@ def _build_embedder(s: Settings) -> Embedder:
             dim=s.embed_dim,
             api_key=s.openrouter_api_key,
             base_url="https://openrouter.ai/api/v1",
+            query_prefix=s.embed_query_prefix,
+            doc_prefix=s.embed_doc_prefix,
         )
     if s.embed_provider == "openai":
         # EMBED_BASE_URL routes to a self-hosted OpenAI-compatible
@@ -112,6 +123,8 @@ def _build_embedder(s: Settings) -> Embedder:
             dim=s.embed_dim,
             api_key=s.openai_api_key or "not-needed",
             base_url=s.embed_base_url,
+            query_prefix=s.embed_query_prefix,
+            doc_prefix=s.embed_doc_prefix,
         )
     if s.embed_provider == "yandex":
         # Yandex Foundation Models exposes an asymmetric pair —
