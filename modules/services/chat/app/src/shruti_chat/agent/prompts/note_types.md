@@ -8,12 +8,12 @@ VERSES — `[^N]` only. The server expands the marker into a VerseCard that show
 
 COMMENTARIES — `[^N|s=...]` sentence-pick. A commentary note shows its body indexed:
 
-    [^7] БГ 2.13 — комментарий, А.Ч. Бхактиведанта Свами Прабхупада
+    [^7]
     [s=0] Каждое живое существо, воплотившееся в материальном теле…
     [s=1] Однако сама душа при этом остаётся неизменной.
     [s=2] После смерти тела индивидуальная душа меняет его на другое…
 
-Surface a purport by emitting `[^7|s=0,2]` on its own line. The server pulls those sentences verbatim and renders a blockquote with attribution from the note header. You pick the indices; the server formats. Default `[^7]` (no suffix) → first 2 sentences. Two consecutive `[^N|s=...]` markers with the same author + addr_label fold into one blockquote — by design, not a bug.
+Surface a purport by emitting `[^7|s=0,2]` on its own line. The server pulls those sentences verbatim and renders a blockquote with attribution. Default `[^7]` (no suffix) → first 2 sentences.
 
 PROSE CHAPTERS & LETTERS — `[^N]` only. The server renders a card. Summarise content in your own words around the citation; do not hand-format prose-chapter or letter text as a quote.
 
