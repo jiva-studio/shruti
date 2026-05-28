@@ -24,6 +24,8 @@ from __future__ import annotations
 import operator
 from typing import Annotated, Any, TypedDict
 
+from shruti_chat.research.models import Outline
+
 
 class ChatState(TypedDict, total=False):
     """The state passed between graph nodes.
@@ -62,3 +64,12 @@ class ChatState(TypedDict, total=False):
 
     # ── Worker output (appended in chain order; list-append reducer) ──
     tool_results: Annotated[list[dict[str, Any]], operator.add]
+
+    # ── Synthesis planner output ──────────────────────────────────────
+    # Three meaningful values:
+    #   - absent / None       → planner skipped or failed → synthesizer
+    #                           runs in free-form mode (legacy behaviour)
+    #   - Outline(theses=[])  → planner rejected all notes → refusal path
+    #   - Outline(theses=[…]) → synthesizer writes one paragraph per
+    #                           thesis, citing only its supporting_notes
+    outline: Outline | None

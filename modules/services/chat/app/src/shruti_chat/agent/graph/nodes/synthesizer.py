@@ -80,6 +80,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         expander=ctx.expander,
         system_prompt=system_prompt,
         history=state.get("history") or None,
+        outline=state.get("outline"),
         request_id=ctx.request_id,
         callbacks=[cb] if cb is not None else None,
     ):

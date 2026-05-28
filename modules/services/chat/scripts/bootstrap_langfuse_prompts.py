@@ -3,8 +3,9 @@
 Reads every `.md` file under `app/src/shruti_chat/agent/prompts/`
 (`header`, `tools`, `actions`, `followups`, `no_narration`,
 `citations`, `note_types`, `quoting`, `response_shape`, `language`,
-`safety`, `grounding`, `router`, `query_planner`, `topic_extractor`,
-`caption_generator`) and keeps them aligned with our Langfuse instance.
+`safety`, `grounding`, `router`, `query_planner`, `synthesis_planner`,
+`topic_extractor`, `caption_generator`) and keeps them aligned with our
+Langfuse instance.
 
 Subcommands:
 
@@ -27,7 +28,7 @@ names like `chat-section-header`); empty = all known prompts.
 `push --dry-run` shows what would be pushed without contacting
 Langfuse, useful for verifying the file resolution + config payloads.
 
-`structured_output` prompts (router / query-planner /
+`structured_output` prompts (router / query-planner / synthesis-planner /
 topic-extractor / caption-generator) have `temperature` documented in
 config but the LLM adapter forces 0 internally — see
 `infra/llm_provider/openrouter.py::structured_output`. The `config`
@@ -64,6 +65,7 @@ from typing import Any, Iterable
 _DEFAULT_LLM = "openrouter/deepseek/deepseek-chat"
 _OUTLINE_LLM = "openrouter/google/gemini-2.0-flash-001"
 _FLASH_LITE = "openrouter/google/gemini-3.1-flash-lite"
+_FLASH = "openrouter/google/gemini-2.5-flash"
 
 
 # Each entry: (langfuse_prompt_name, source_ref, config, tags).
@@ -76,6 +78,12 @@ _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
         "query-planner", "query_planner",
         {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
         ["chat", "research"],
+    ),
+    (
+        "synthesis-planner", "synthesis_planner",
+        {"model": _FLASH, "temperature": 0, "schema": "Outline",
+         "note": "structured_output → temperature forced to 0; uses full Flash (not Lite) — attribution selection over 15-25 notes"},
+        ["chat", "synth"],
     ),
     (
         "topic-extractor", "topic_extractor",
