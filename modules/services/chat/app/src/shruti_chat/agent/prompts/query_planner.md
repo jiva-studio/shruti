@@ -169,6 +169,34 @@ Output:
 }
 ```
 
+## Example 4b — cross-corpus comparative ("X in lectures AND in commentaries")
+
+When the question explicitly pits two CORPORA against each other (lectures vs commentaries, letters vs prose chapters, etc.), each corpus gets its own sub_query — including the corpus name in `text` biases the embedding toward that note kind, and a separate retrieval pass guarantees at least one chunk per side reaches the synth.
+
+Input:
+  question: "сравни как Прабхупада говорил про преданное служение в лекциях и в комментариях"
+  lang: "ru"
+  router_args: {}
+Output:
+```json
+{
+  "sub_queries": [
+    {
+      "id": 0,
+      "type": "biographical",
+      "text": "что Прабхупада говорил в лекциях про преданное служение",
+      "alt_phrasings": ["Prabhupada lectures bhakti devotional service"]
+    },
+    {
+      "id": 1,
+      "type": "biographical",
+      "text": "что Прабхупада писал в комментариях purports про преданное служение",
+      "alt_phrasings": ["Prabhupada purport commentary devotional service"]
+    }
+  ]
+}
+```
+
 ## Example 5 — biographical / metadata lookup (router already filtered)
 
 Input:
