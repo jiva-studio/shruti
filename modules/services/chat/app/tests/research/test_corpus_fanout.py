@@ -113,7 +113,7 @@ class FakeAliasMap:
 async def test_batched_embed_single_http_call():
     FakeEmbedder.calls = 0
     res = await fanout_search_with_boost(
-        queries=["q1", "q2", "q3", "q4", "q5"],
+        queries=[(0, "q1"), (1, "q2"), (2, "q3"), (3, "q4"), (4, "q5")],
         embedder=FakeEmbedder(),
         chunk_repo=FakeChunkRepo([], []),
         catalog_repo=FakeCatalogRepo(),
@@ -130,7 +130,7 @@ async def test_no_boost_when_ids_empty():
         library_results=[],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
     )
     assert len(res.chunks) == 1
@@ -148,7 +148,7 @@ async def test_boost_applied_to_matching_lecture_chunks():
         library_results=[],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
         boost_ids={"track_boosted"}, boost_by_kind={"lecture": 0.15},
     )
@@ -171,7 +171,7 @@ async def test_boost_can_reorder_results():
         library_results=[],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
         boost_ids={"track_boost"}, boost_by_kind={"lecture": 0.15},
     )
@@ -187,7 +187,7 @@ async def test_boost_capped_at_1():
         library_results=[],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
         boost_ids={"track_x"}, boost_by_kind={"lecture": 0.15},
     )
@@ -204,7 +204,7 @@ async def test_relevance_floor_drops_junk():
         library_results=[],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
     )
     texts = [env["text"] for env in res.chunks]
@@ -222,7 +222,7 @@ async def test_by_kind_partition_preserved():
         ],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
     )
     assert "lecture" in res.by_kind
@@ -241,7 +241,7 @@ async def test_boost_on_library_item_id():
         ],
     )
     res = await fanout_search_with_boost(
-        queries=["q"], embedder=FakeEmbedder(), chunk_repo=repo,
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
         boost_ids={"verse_boost"}, boost_by_kind={"verse": 0.15},
     )

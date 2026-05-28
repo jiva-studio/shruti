@@ -76,7 +76,11 @@ async def resolve_commentary_author_names(
 
 
 def lecture_to_envelope(
-    chunk: Chunk, *, alias_map: TurnAliasMap, score: float | None = None,
+    chunk: Chunk,
+    *,
+    alias_map: TurnAliasMap,
+    score: float | None = None,
+    sub_query_id: int | None = None,
 ) -> dict[str, Any]:
     """Mint a fresh ref for the chunk and assemble an LLM-facing dict.
 
@@ -94,6 +98,8 @@ def lecture_to_envelope(
     meta: dict[str, Any] = {"start_ms": chunk.start_ms, "end_ms": chunk.end_ms}
     if chunk.reference_source_id:
         meta["reference_source_id"] = chunk.reference_source_id
+    if sub_query_id is not None:
+        meta["sub_query_id"] = sub_query_id
     return {
         "type": "lecture",
         "ref": ref,
@@ -111,6 +117,7 @@ def library_to_envelope(
     alias_map: TurnAliasMap,
     score: float | None = None,
     extra_meta: dict[str, Any] | None = None,
+    sub_query_id: int | None = None,
 ) -> dict[str, Any]:
     """Mint a fresh ref and assemble an LLM-facing dict.
 
@@ -170,6 +177,8 @@ def library_to_envelope(
             meta["author_id"] = chunk.author_id
         if chunk.doc_date:
             meta["doc_date"] = chunk.doc_date
+    if sub_query_id is not None:
+        meta["sub_query_id"] = sub_query_id
     return {
         "type": item_kind,
         "ref": ref,

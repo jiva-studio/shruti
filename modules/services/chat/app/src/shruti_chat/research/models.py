@@ -11,13 +11,39 @@ from pydantic import BaseModel, Field
 # ---- LLM-emitted structured outputs ---------------------------------------
 
 
-class ExpansionResult(BaseModel):
-    """Output of `query_expander.expand_query`. The expander does ONE thing:
-    generate diversified search queries. Intent/entities are NOT re-extracted
-    — router_turn has already classified the intent and the seed args travel
-    through `router_args` directly."""
+SubQueryType = Literal[
+    "definition", "scripture_ref", "contrast", "biographical", "general",
+]
 
-    queries: list[str] = Field(default_factory=list, max_length=10)
+
+class SubQuery(BaseModel):
+    """One typed sub-question produced by `query_planner.plan_queries`.
+
+    `id` is a 0-based index assigned by the planner; envelopes coming out of
+    the fanout for this sub-query carry it in `meta["sub_query_id"]` so the
+    downstream synthesis planner can group notes by sub-question.
+
+    `alt_phrasings` are optional same-meaning paraphrases used to widen the
+    embedding recall for the SAME sub-question — they share `id`, they are
+    NOT separate sub-questions.
+    """
+
+    id: int
+    type: SubQueryType
+    text: str
+    alt_phrasings: list[str] = Field(default_factory=list, max_length=2)
+
+
+class QueryPlan(BaseModel):
+    """Output of `query_planner.plan_queries`. 1-4 typed sub-questions.
+
+    On a simple question the planner returns a single sub_query (equivalent
+    to the old `query_expander` behaviour). On a multi-intent question it
+    decomposes into 2-4 sub_queries of different types so the downstream
+    fanout retrieves distinct themes instead of paraphrases of one center.
+    """
+
+    sub_queries: list[SubQuery] = Field(default_factory=list, max_length=4)
 
 
 class TopicExtractionResult(BaseModel):

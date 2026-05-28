@@ -130,12 +130,18 @@ class _RawScored:
 
     We keep `kind` separate because lecture chunks (Chunk) don't have
     `item_kind` but library chunks (LibraryChunk) do.
+
+    `sub_query_id` tracks which planner-produced sub-question this chunk came
+    from, so the downstream synthesis planner can group notes by sub-topic.
+    Same chunk surfaced by multiple sub-queries gets the sub_query_id of
+    the highest-scoring hit (handled by the score-based dedup below).
     """
 
     chunk: Any
     score: float
     kind: str           # "lecture" | "verse" | "commentary" | "prose_chapter" | "letter"
     dedup_key: tuple    # used to dedupe across queries and rounds
+    sub_query_id: int | None = None
 
 
 def _lecture_dedup_key(c: Any) -> tuple:
@@ -155,7 +161,7 @@ def _library_item_id(c: Any) -> str:
 
 
 async def fanout_search_with_boost(
-    queries: list[str],
+    queries: list[tuple[int, str]],
     *,
     embedder: Any,
     chunk_repo: Any,
@@ -173,17 +179,28 @@ async def fanout_search_with_boost(
     book_id: str | None = None,
     on_event: OnEvent | None = None,
 ) -> FanoutResult:
-    """One round of fanout. Returns top-K (boosted) envelopes."""
+    """One round of fanout. Returns top-K (boosted) envelopes.
+
+    `queries` is a list of `(sub_query_id, text)` tuples. The same
+    `sub_query_id` may appear multiple times when the query_planner
+    emits `alt_phrasings` (paraphrases that share the parent sub-query).
+    Chunks retrieved by a given tuple inherit its `sub_query_id`; on
+    cross-tuple collision the higher-score one wins (score-based dedup
+    automatically carries the right tag).
+    """
     if not queries:
         return FanoutResult()
     boost_ids = boost_ids or set()
     k = max(1, min(top_k, 16))
 
     # 1. Batched embed.
-    q_vecs = await embedder.embed_documents(queries)
-    if len(q_vecs) != len(queries):
-        log.warning("fanout_embed_mismatch", queries=len(queries), vectors=len(q_vecs))
-        q_vecs = q_vecs[: len(queries)]
+    query_texts = [q[1] for q in queries]
+    sub_query_ids = [q[0] for q in queries]
+    q_vecs = await embedder.embed_documents(query_texts)
+    if len(q_vecs) != len(query_texts):
+        log.warning("fanout_embed_mismatch", queries=len(query_texts), vectors=len(q_vecs))
+        q_vecs = q_vecs[: len(query_texts)]
+        sub_query_ids = sub_query_ids[: len(q_vecs)]
 
     # 2. Eligible-track filter (catalog-driven; independent of query).
     eligible_track_ids = await catalog_repo.filter_track_ids(
@@ -192,21 +209,27 @@ async def fanout_search_with_boost(
     )
     lectures_disabled = eligible_track_ids is not None and not eligible_track_ids
 
-    async def _one_query(q_vec: list[float]) -> list[_RawScored]:
+    async def _one_query(q_vec: list[float], sq_id: int) -> list[_RawScored]:
         async def _lecture(use_lang: str | None) -> list[_RawScored]:
             if lectures_disabled:
                 return []
             scored = await chunk_repo.search_by_embedding(
                 q_vec, eligible_track_ids=eligible_track_ids, lang=use_lang, top_k=k,
             )
-            return [_RawScored(s.chunk, s.score, "lecture", _lecture_dedup_key(s.chunk)) for s in scored]
+            return [
+                _RawScored(s.chunk, s.score, "lecture", _lecture_dedup_key(s.chunk), sq_id)
+                for s in scored
+            ]
 
         async def _library(use_lang: str | None, kinds: list[str]) -> list[_RawScored]:
             scored = await chunk_repo.search_library_by_embedding(
                 q_vec, kinds=kinds, source_id=book_id, author_id=author_id,
                 lang=use_lang, date_from=date_from, date_to=date_to, top_k=k,
             )
-            return [_RawScored(s.chunk, s.score, s.chunk.item_kind, _library_dedup_key(s.chunk)) for s in scored]
+            return [
+                _RawScored(s.chunk, s.score, s.chunk.item_kind, _library_dedup_key(s.chunk), sq_id)
+                for s in scored
+            ]
 
         async def _run(use_lang: str | None) -> list[_RawScored]:
             lec, lib = await asyncio.gather(
@@ -229,7 +252,9 @@ async def fanout_search_with_boost(
         return rows
 
     # 3. Run the parallel fanout queries.
-    per_query = await asyncio.gather(*(_one_query(v) for v in q_vecs))
+    per_query = await asyncio.gather(
+        *(_one_query(v, sq_id) for v, sq_id in zip(q_vecs, sub_query_ids))
+    )
 
     # 4. Apply topic boost FIRST (before the relevance floor) so an
     # attribution-flagged chunk isn't filtered out for having a low base
@@ -291,9 +316,15 @@ async def fanout_search_with_boost(
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for r in ranked:
         if r.kind == "lecture":
-            env = lecture_to_envelope(r.chunk, alias_map=alias_map, score=r.score)
+            env = lecture_to_envelope(
+                r.chunk, alias_map=alias_map, score=r.score,
+                sub_query_id=r.sub_query_id,
+            )
         else:
-            env = library_to_envelope(r.chunk, alias_map=alias_map, score=r.score)
+            env = library_to_envelope(
+                r.chunk, alias_map=alias_map, score=r.score,
+                sub_query_id=r.sub_query_id,
+            )
         if boosted_flags.get(r.dedup_key):
             env["topic_boosted"] = True
         # Add dedup_key to envelope for merge_fanout — caller-private field.
