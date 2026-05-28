@@ -25,6 +25,9 @@ from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
+from lectorium_chat.research.commentary_expansion import (
+    rerank_and_attach_commentaries,
+)
 from lectorium_chat.research.outline_builder import build_outline
 
 
@@ -79,14 +82,37 @@ async def synthesis_planner_node(
             request_id=ctx.request_id,
             n_notes=len(tool_results),
         )
-    else:
-        log.info(
-            "synthesis_planner_outline_built",
-            request_id=ctx.request_id,
-            n_notes=len(tool_results),
-            n_theses=len(outline.theses),
-            n_skipped=len(outline.skipped_notes),
-            has_intro=outline.intro is not None,
-        )
+        return {"outline": None}
 
-    return {"outline": outline}
+    log.info(
+        "synthesis_planner_outline_built",
+        request_id=ctx.request_id,
+        n_notes=len(tool_results),
+        n_theses=len(outline.theses),
+        n_skipped=len(outline.skipped_notes),
+        has_intro=outline.intro is not None,
+    )
+
+    # Stage 2: lazy commentary attach + per-thesis cosine rerank.
+    # Pulls purports ONLY for verses the planner picked, then re-ranks
+    # the pool against each thesis text — replaces planner's tentative
+    # LLM-attribution with embedding-based per-thesis ranking. Graceful
+    # degrade: on missing embedder / fetch failure, returns the original
+    # outline + no new notes (synthesizer keeps the planner's picks).
+    enriched, new_commentaries = await rerank_and_attach_commentaries(
+        outline,
+        tool_results,
+        chunk_repo=ctx.chunk_repo,
+        embedder=ctx.embedder,
+        alias_map=ctx.aliases,
+        lang=state.get("lang"),
+        catalog_repo=ctx.catalog_repo,
+        on_event=None,  # planner runs after the live SSE progress panel
+    )
+
+    update: dict = {"outline": enriched}
+    if new_commentaries:
+        # `tool_results` state field uses an append-reducer so returning
+        # a list here gets concatenated onto what research_worker wrote.
+        update["tool_results"] = new_commentaries
+    return update

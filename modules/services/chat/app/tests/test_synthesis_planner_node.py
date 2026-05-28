@@ -15,13 +15,19 @@ from lectorium_chat.research.models import Outline, Thesis
 
 @dataclass
 class _Ctx:
-    """Minimal stand-in for TurnContext. The node only touches `llm`,
-    `request_id`, `langfuse_trace_id`. Real TurnContext has many more
-    fields but they're irrelevant to planning."""
+    """Minimal stand-in for TurnContext. Carries the fields the node
+    accesses: `llm`, `request_id`, `langfuse_trace_id`, plus the
+    rerank-stage collaborators (`embedder`, `chunk_repo`, `aliases`,
+    `catalog_repo`). Real TurnContext has many more fields but they're
+    irrelevant to planning."""
 
     llm: Any | None = None
     request_id: str = "req-test"
     langfuse_trace_id: str = ""
+    embedder: Any | None = None
+    chunk_repo: Any | None = None
+    catalog_repo: Any | None = None
+    aliases: Any | None = None
 
 
 @dataclass
