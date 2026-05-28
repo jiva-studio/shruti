@@ -300,7 +300,7 @@ class Settings(BaseSettings):
     def s3_public_url(self) -> str:
         """Base HTTPS URL for public reads when no signing is needed."""
         if self.s3_endpoint:
-            return self.s3_endpoint.rstrip("/")
+            return f"{self.s3_endpoint.rstrip('/')}/{self.s3_bucket}"
         return f"https://{self.s3_bucket}.s3.{self.s3_region}.amazonaws.com"
 
 
