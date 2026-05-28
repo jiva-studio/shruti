@@ -205,3 +205,223 @@ async def expand_verses_with_commentaries(
         out.append(env)
         _emit_commentary_source(on_event, c)
     return out
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Cosine similarity for unit-norm or near-unit-norm embeddings
+    (OpenAI / Voyage / BGE-M3 all return normalised vectors). When the
+    norms are tiny (zero-length text → embedder returned zeros) the
+    score collapses to 0 — safer than dividing by ~0.
+    """
+    if len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+async def rerank_and_attach_commentaries(
+    outline: Any,                       # Outline (avoid circular import)
+    base_notes: list[dict[str, Any]],
+    *,
+    chunk_repo: Any,
+    embedder: Any,
+    alias_map: Any,
+    lang: str | None,
+    catalog_repo: Any | None = None,
+    top_k_per_thesis: int = 5,
+    max_commentaries_per_verse: int = MAX_COMMENTARIES_PER_VERSE,
+    on_event: OnEvent | None = None,
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Stage 1 of the per-thesis rerank pipeline.
+
+    For each thesis in `outline.theses`:
+      1. For each verse referenced in the planner's tentative
+         `supporting_notes`, fetch its commentaries (address-based DB
+         lookup). Skipped when no verse is referenced.
+      2. Build a pool = base_notes + fetched_commentaries.
+      3. Batched-embed thesis_text + every pool note text in ONE call.
+      4. Rank by cosine(thesis, note). Keep top-K (default 5).
+      5. Rewrite thesis.supporting_notes to point to those top-K via
+         their indices into the FINAL tool_results that the synthesizer
+         will see (= base_notes + the new_commentaries returned here).
+
+    Returns `(enriched_outline, new_commentary_envelopes)`. The caller
+    appends `new_commentary_envelopes` to the LangGraph state's
+    `tool_results` (which uses an append-reducer), and writes
+    `enriched_outline` back as `state["outline"]`.
+
+    Graceful degrade: any exception during embedding or DB lookup
+    returns the original outline + [] so the synthesizer keeps the
+    planner's tentative attributions.
+    """
+    # Local import to avoid models <-> commentary_expansion circular dep.
+    from shruti_chat.research.models import Outline, Thesis
+
+    if (
+        not isinstance(outline, Outline)
+        or not outline.theses
+        or embedder is None
+        or chunk_repo is None
+    ):
+        return outline, []
+
+    # ── 1. Collect verses referenced across all theses, dedup ──────────
+    # Address-keyed lookup means same (source_id, tokens) fetched once
+    # even if multiple theses reference it.
+    verse_pairs: dict[tuple[str, str], float] = {}
+    for t in outline.theses:
+        for note_idx in t.supporting_notes:
+            if not (1 <= note_idx <= len(base_notes)):
+                continue
+            env = base_notes[note_idx - 1]
+            if not isinstance(env, dict) or env.get("type") != "verse":
+                continue
+            meta = env.get("meta") or {}
+            sid = meta.get("source_id")
+            tok = meta.get("tokens")
+            if not sid or not tok:
+                continue
+            score = env.get("score") if isinstance(env.get("score"), (int, float)) else None
+            parent = float(score) if score is not None else 0.5
+            key = (sid, tok)
+            prev = verse_pairs.get(key)
+            if prev is None or prev < parent:
+                verse_pairs[key] = parent
+
+    # ── 2. Fetch commentaries for each referenced verse ────────────────
+    new_envelopes: list[dict[str, Any]] = []
+    if verse_pairs:
+        pairs = list(verse_pairs.items())
+        try:
+            chunk_lists = await asyncio.gather(
+                *(
+                    _fetch_one(chunk_repo, source_id=sid, tokens=tok, lang=lang)
+                    for (sid, tok), _ in pairs
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("rerank_attach_fetch_failed", error=str(exc))
+            chunk_lists = [[] for _ in pairs]
+
+        # Dedup commentaries already in base_notes (might have been
+        # surfaced by standalone ANN on commentary kind).
+        seen: set[tuple[str, int]] = set()
+        for env in base_notes:
+            if isinstance(env, dict) and env.get("type") == "commentary":
+                meta = env.get("meta") or {}
+                item_id = meta.get("item_id") or env.get("ref")
+                if item_id is not None:
+                    seen.add((str(item_id), int(meta.get("segment_index", 0) or 0)))
+
+        pending: list[LibraryChunk] = []
+        pending_score: list[float] = []
+        for ((_sid, _tok), parent_score), chunks in zip(pairs, chunk_lists):
+            if not chunks:
+                continue
+            capped = _select_capped(chunks, cap=max_commentaries_per_verse)
+            child_score = max(0.0, parent_score - 0.05)
+            for c in capped:
+                dedup_key = (c.item_id, c.segment_index or 0)
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+                pending.append(c)
+                pending_score.append(child_score)
+
+        if pending:
+            try:
+                author_names = await resolve_commentary_author_names(
+                    pending, catalog_repo=catalog_repo, lang=lang,
+                )
+            except Exception:  # noqa: BLE001
+                author_names = {}
+            for c, child_score in zip(pending, pending_score):
+                author_name = author_names.get(c.author_id) if c.author_id else None
+                extra = {"author_name": author_name} if author_name else None
+                env = library_to_envelope(
+                    c, alias_map=alias_map, score=child_score, extra_meta=extra,
+                )
+                new_envelopes.append(env)
+                _emit_commentary_source(on_event, c)
+
+    # ── 3. Build the pool with FINAL indices (1-based, matching what
+    # the synthesizer's _format_tool_results will assign post-append). ──
+    pool_envelopes = list(base_notes) + new_envelopes
+    pool_texts = [(env.get("text") or "").strip() for env in pool_envelopes]
+
+    # Drop empty-text envelopes from rerank consideration — their
+    # embedding would be ~zero and the score meaningless. They stay in
+    # tool_results (synthesizer might still show their addr_label), just
+    # can't be picked as supporting_notes by the reranker.
+    rerank_indices = [i for i, t in enumerate(pool_texts) if t]
+    if not rerank_indices:
+        return outline, new_envelopes
+
+    # ── 4. Batched embed: theses + all pool note texts in ONE call ─────
+    thesis_texts = [t.thesis for t in outline.theses]
+    try:
+        all_embeds = await embedder.embed_documents(
+            thesis_texts + [pool_texts[i] for i in rerank_indices]
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("rerank_embed_failed", error=str(exc))
+        return outline, new_envelopes
+
+    if len(all_embeds) != len(thesis_texts) + len(rerank_indices):
+        log.warning(
+            "rerank_embed_count_mismatch",
+            expected=len(thesis_texts) + len(rerank_indices),
+            got=len(all_embeds),
+        )
+        return outline, new_envelopes
+
+    thesis_embeds = all_embeds[: len(thesis_texts)]
+    note_embeds_by_idx: dict[int, list[float]] = {
+        rerank_indices[k]: all_embeds[len(thesis_texts) + k]
+        for k in range(len(rerank_indices))
+    }
+
+    # ── 5. Per-thesis: cosine over pool → top-K → new supporting_notes ─
+    new_theses: list[Thesis] = []
+    for t, t_emb in zip(outline.theses, thesis_embeds):
+        scored: list[tuple[float, int]] = []
+        for pool_idx, n_emb in note_embeds_by_idx.items():
+            score = _cosine(t_emb, n_emb)
+            scored.append((score, pool_idx))
+        scored.sort(reverse=True)
+        top = scored[:top_k_per_thesis]
+        # Convert pool index (0-based) to 1-based supporting_notes index
+        # matching the synthesizer's enumerate(start=1) numbering.
+        new_supporting = [pool_idx + 1 for _, pool_idx in top]
+        if not new_supporting:
+            # Reranker found nothing — keep planner's original picks so
+            # the synthesizer still has SOMETHING to cite.
+            new_supporting = list(t.supporting_notes)
+        new_theses.append(Thesis(
+            thesis=t.thesis,
+            header=t.header,
+            supporting_notes=new_supporting,
+            sub_query_types=list(t.sub_query_types),
+        ))
+
+    enriched = Outline(
+        intro=outline.intro,
+        theses=new_theses,
+        conclusion=outline.conclusion,
+        skipped_notes=list(outline.skipped_notes),
+        skipped_reason=outline.skipped_reason,
+    )
+
+    log.info(
+        "rerank_attach_done",
+        n_theses=len(outline.theses),
+        n_base_notes=len(base_notes),
+        n_new_commentaries=len(new_envelopes),
+        n_verses_expanded=len(verse_pairs),
+    )
+
+    return enriched, new_envelopes

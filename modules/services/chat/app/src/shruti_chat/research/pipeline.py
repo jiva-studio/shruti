@@ -31,13 +31,9 @@ from shruti_chat.agent.tools._envelope import (
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
-from shruti_chat.research.commentary_expansion import (
-    expand_verses_with_commentaries,
-)
 from shruti_chat.research.constants import (
     BOOST_BY_KIND,
     MAX_FANOUT_ROUNDS,
-    TIMEOUT_COMMENTARY_EXPAND_S,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
     TIMEOUT_PLAN_S,
@@ -446,19 +442,14 @@ async def run_research(
         )
 
         supplementary_top = supplementary.chunks[:8]
-        commentaries = await _safe(
-            lambda: expand_verses_with_commentaries(
-                authoritative + supplementary_top,
-                chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=lang, catalog_repo=catalog_repo, on_event=on_event,
-            ),
-            default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
-            name="expand_commentaries_short", request_id=request_id,
-        )
-
+        # Commentary attachment moved POST-planner: `synthesis_planner_node`
+        # calls `rerank_and_attach_commentaries` which pulls purports only
+        # for verses the planner actually picked into supporting_notes, then
+        # cosine-reranks them against each thesis text. Avoids the 12-per-
+        # verse flood that previously inflated tool_results to ~92 notes.
         result = ResearchResult(
             authoritative_refs=authoritative,
-            research_chunks=supplementary_top + commentaries,
+            research_chunks=supplementary_top,
             matched_question_ids=[m.attribution_id for m in question_matches],
             matched_topic_ids=[],
         )
@@ -749,19 +740,14 @@ async def _research_path(
         reverse=True,
     )[:20]
 
-    commentaries = await _safe(
-        lambda: expand_verses_with_commentaries(
-            top_chunks,
-            chunk_repo=chunk_repo, alias_map=alias_map,
-            lang=lang, catalog_repo=catalog_repo, on_event=on_event,
-        ),
-        default=[], timeout=TIMEOUT_COMMENTARY_EXPAND_S,
-        name="expand_commentaries_long", request_id=request_id,
-    )
-
+    # Commentary attachment moved POST-planner: see SHORT path comment
+    # above. `synthesis_planner_node` now calls
+    # `rerank_and_attach_commentaries` per thesis, fetching purports only
+    # for verses the planner picked and cosine-reranking them against the
+    # thesis text — avoids the upstream flood of ~92 notes.
     return ResearchResult(
         authoritative_refs=[],
-        research_chunks=top_chunks + commentaries,
+        research_chunks=top_chunks,
         matched_question_ids=[],
         matched_topic_ids=[m.attribution_id for m in topic_matches],
     )
