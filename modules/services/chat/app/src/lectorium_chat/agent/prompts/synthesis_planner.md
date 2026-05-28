@@ -42,9 +42,22 @@ You will receive:
 
 ## Optional structural fields
 
-- `header` on each thesis (optional): a 3-5 word terse label summarizing the claim (plain text, no markdown, no trailing punctuation). The synthesizer renders it as bold above the paragraph — gives the reader scannable structure. **Include headers when there are 2+ theses; skip on single-thesis answers** (a lone bold label above one paragraph looks silly).
+- `header` on each thesis (optional): a 3-5 word **label**, NOT a sentence. Maximum 6 words / 50 characters. Plain text, no markdown, no trailing punctuation. The synthesizer renders it as bold above the paragraph — gives the reader scannable structure. **Include headers when there are 2+ theses; skip on single-thesis answers** (a lone bold label above one paragraph looks silly).
+
+  CORRECT headers (short, terse, label-like):
+    - "Природа кармы"
+    - "Что меняет бхакти"
+    - "Свидетельство шастр"
+    - "Дживатма и Параматма"
+
+  WRONG headers (full sentence, paraphrase of the thesis):
+    - "У обусловленной души есть три типа кармы: sanchita, prarabdha и kriyamana"  ← that's the THESIS, not the header
+    - "Бхакти качественно меняет природу деятельности преданного, освобождая от кармических последствий"  ← way too long
+    - "Кришна обеспечивает йога-кшему преданным согласно БГ 9.22"  ← sentence, not label
+
+  The header is the chapter title above a paragraph — think table-of-contents entry, not topic sentence. If you can't compress to ≤6 words, set `header: null` and let the paragraph stand on its own.
 - `intro` (optional): a one-sentence preamble that frames the whole answer. **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
-- `conclusion` (optional): a final summarizing paragraph that ties theses together at the end. **Include only when there are 3+ theses** AND the synthesis genuinely benefits from a closing thought (a synthesis-of-syntheses, NOT a recap). Do NOT cite anything in the conclusion. Skip on 1-2 thesis answers.
+- `conclusion` (optional): a final summarizing paragraph that ties the theses together at the end. **Default: include whenever there are 3+ theses** — a multi-thesis answer benefits from a closing thought that names the through-line. Skip ONLY when the conclusion would literally just paraphrase the intro (nothing new to add at the end). Do NOT cite anything in the conclusion. Skip on 1-2 thesis answers (the synthesis is short enough to hold in mind).
 
 # OUTPUT
 
