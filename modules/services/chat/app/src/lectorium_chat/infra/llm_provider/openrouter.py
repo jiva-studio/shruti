@@ -71,6 +71,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_outline,
         settings.llm_query_planner,
         settings.llm_synthesis_planner,
+        settings.llm_conclusion_writer,
         # Known-good aliases — extend here when adding a new model to
         # Langfuse prompt-config. Keep curated; the whole point is
         # rejecting typos before they hit the provider.

@@ -7,15 +7,21 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from lectorium_chat.research.models import Outline, Thesis
+from lectorium_chat.research.models import ConclusionResponse, Outline, Thesis
 from lectorium_chat.research.outline_builder import build_outline
 
 
 class FakeLLM:
-    """Records calls; returns a scripted Outline (or raises)."""
+    """Records calls; returns a scripted Outline (or raises).
 
-    def __init__(self, script: Any) -> None:
+    Supports schema-routed scripts via `by_schema` for testing the
+    conclusion-writer fallback which uses a SECOND structured_output
+    call with a different schema.
+    """
+
+    def __init__(self, script: Any = None, by_schema: dict | None = None) -> None:
         self.script = script
+        self.by_schema = by_schema or {}
         self.calls: list[tuple[list[dict], type[BaseModel], str | None]] = []
 
     async def structured_output(
@@ -23,6 +29,11 @@ class FakeLLM:
         model: str | None = None, **_extra,
     ):
         self.calls.append((messages, schema, model))
+        if schema.__name__ in self.by_schema:
+            value = self.by_schema[schema.__name__]
+            if callable(value):
+                return value(messages, schema, model)
+            return value
         if callable(self.script):
             return self.script(messages, schema, model)
         return self.script
@@ -150,3 +161,119 @@ async def test_note_text_trimmed_to_600_chars() -> None:
     # should NOT contain the full 2000-char block.
     assert "…" in user_msg
     assert "x" * 1000 not in user_msg
+
+
+# ── Conclusion fallback ────────────────────────────────────────────
+
+
+def _outline_3_theses(conclusion: str | None = None) -> Outline:
+    return Outline(theses=[
+        Thesis(thesis="first thesis statement", supporting_notes=[1]),
+        Thesis(thesis="second thesis statement", supporting_notes=[1]),
+        Thesis(thesis="third thesis statement", supporting_notes=[1]),
+    ], conclusion=conclusion)
+
+
+@pytest.mark.asyncio
+async def test_planner_returns_conclusion_no_fallback_call() -> None:
+    """Planner did its job — server-side fallback must NOT fire."""
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion="planner-provided conclusion."),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    # Only ONE structured_output call (Outline). No ConclusionResponse call.
+    schemas_called = [c[1].__name__ for c in llm.calls]
+    assert schemas_called == ["Outline"]
+    assert out.conclusion == "planner-provided conclusion."
+
+
+@pytest.mark.asyncio
+async def test_planner_skips_conclusion_under_3_theses_no_fallback() -> None:
+    """Single/double-thesis outlines don't get a conclusion — they're
+    held in the reader's mind without one."""
+    llm = FakeLLM(by_schema={
+        "Outline": Outline(theses=[
+            Thesis(thesis="only one", supporting_notes=[1]),
+            Thesis(thesis="only two", supporting_notes=[1]),
+        ], conclusion=None),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    schemas_called = [c[1].__name__ for c in llm.calls]
+    assert schemas_called == ["Outline"]
+    assert out.conclusion is None
+
+
+@pytest.mark.asyncio
+async def test_planner_skips_conclusion_on_3plus_theses_fallback_fires() -> None:
+    """The headline case: planner left conclusion=None on a 3+ thesis
+    outline → fallback synthesises one."""
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion=None),
+        "ConclusionResponse": ConclusionResponse(
+            conclusion="Таким образом, синтез трёх тезисов сходится в одной точке.",
+        ),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    schemas_called = [c[1].__name__ for c in llm.calls]
+    assert "ConclusionResponse" in schemas_called
+    assert out.conclusion == "Таким образом, синтез трёх тезисов сходится в одной точке."
+
+
+@pytest.mark.asyncio
+async def test_planner_returns_empty_conclusion_string_triggers_fallback() -> None:
+    """Empty-string conclusion is treated the same as None — the planner
+    didn't actually write one, just put an empty value."""
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion="   "),
+        "ConclusionResponse": ConclusionResponse(conclusion="proper conclusion"),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    schemas_called = [c[1].__name__ for c in llm.calls]
+    assert "ConclusionResponse" in schemas_called
+    assert out.conclusion == "proper conclusion"
+
+
+@pytest.mark.asyncio
+async def test_fallback_failure_returns_outline_with_null_conclusion() -> None:
+    """If the conclusion-writer LLM call raises, outline keeps conclusion
+    = None — synthesizer ends on the last thesis as before."""
+    def conclusion_boom(*a, **kw):
+        raise RuntimeError("openrouter 503")
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion=None),
+        "ConclusionResponse": conclusion_boom,
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    assert out.conclusion is None
+    # Theses preserved.
+    assert len(out.theses) == 3
+
+
+@pytest.mark.asyncio
+async def test_fallback_returns_empty_string_keeps_null_conclusion() -> None:
+    """The conclusion writer's prompt allows it to signal `no good
+    conclusion fits` by returning empty string — we honour that and
+    leave the outline ending on the last thesis."""
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion=None),
+        "ConclusionResponse": ConclusionResponse(conclusion=""),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    assert out.conclusion is None
+
+
+@pytest.mark.asyncio
+async def test_fallback_uses_conclusion_model_override() -> None:
+    """`conclusion_model` parameter routes to the conclusion-writer call
+    when Langfuse prompt-config doesn't override."""
+    llm = FakeLLM(by_schema={
+        "Outline": _outline_3_theses(conclusion=None),
+        "ConclusionResponse": ConclusionResponse(conclusion="x"),
+    })
+    await build_outline(
+        "q", "ru", [_note(0)], llm=llm,
+        conclusion_model="openrouter/google/gemini-3.1-flash-lite",
+    )
+    # Find the ConclusionResponse call and verify the model override.
+    cr_call = next(c for c in llm.calls if c[1].__name__ == "ConclusionResponse")
+    assert cr_call[2] == "openrouter/google/gemini-3.1-flash-lite"
