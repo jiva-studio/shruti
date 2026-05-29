@@ -193,7 +193,14 @@ async def run_locate(
 ) -> LocateResult:
     """Locate a topic/story in the scripture structure. See module docstring."""
     _titles_cache.clear()
+    # The router emits a SHORT source code (e.g. "SB"/"BG"); chunks.source_id
+    # is the opaque catalog id ("source_…"). Passing the short code as the
+    # ANN's source filter matches nothing, so only honor an already-opaque
+    # id — otherwise search all books (the located region keeps its real
+    # source via grouping, so a named book still surfaces correctly).
     book_id = router_args.get("source_id")
+    if book_id and not str(book_id).startswith("source_"):
+        book_id = None
 
     embedding = await _await_embedding(question, embedder, precomputed_query_embedding_task)
     if embedding is None:
@@ -203,19 +210,30 @@ async def run_locate(
     attr_hits: list[_Hit] = []
 
     # (a) Curated attributions — strongest signal for narrative scope.
+    # Query BOTH question- and topic-kind attributions: locate stories are
+    # curated as TOPICS ("История Махараджи Прахлады"), while question-kind
+    # covers "where is verse X" phrasings. Querying only one kind silently
+    # drops the other half of the curated corpus.
     if pool is not None and embed_model is not None and embed_dim is not None:
-        try:
-            matches = await asyncio.wait_for(
-                find_attributions(
-                    kind="question", user_q_embedding=embedding, lang=lang,
-                    embed_model=embed_model, embed_dim=embed_dim, pool=pool,
-                    llm=llm,
-                ),
-                timeout=TIMEOUT_QUESTION_LOOKUP_S,
-            )
-        except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001
-            log.warning("locate_attribution_failed", error=str(exc), request_id=request_id)
-            matches = []
+        async def _lookup(kind: str) -> list[AttributionMatch]:
+            try:
+                return await asyncio.wait_for(
+                    find_attributions(
+                        kind=kind, user_q_embedding=embedding, lang=lang,
+                        embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+                        llm=llm if kind == "question" else None,
+                    ),
+                    timeout=TIMEOUT_QUESTION_LOOKUP_S,
+                )
+            except (asyncio.TimeoutError, Exception) as exc:  # noqa: BLE001
+                log.warning(
+                    "locate_attribution_failed", kind=kind,
+                    error=str(exc), request_id=request_id,
+                )
+                return []
+
+        q_matches, t_matches = await asyncio.gather(_lookup("question"), _lookup("topic"))
+        matches = list(q_matches) + list(t_matches)
         if matches:
             matched_ids = [m.attribution_id for m in matches]
             attr_hits = await _resolve_attribution_hits(
