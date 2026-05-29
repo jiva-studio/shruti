@@ -115,6 +115,23 @@ export function useCapacitorPurchases(cfg: CapacitorPurchasesConfig): IPurchases
       return await toCustomerState(result.customerInfo)
     },
 
+    async recoverPurchases() {
+      if (!available) return EMPTY_STATE
+      await ensureConfigured()
+      // Android: restorePurchases is silent (no OS prompt) and is RC's
+      // recommended, more reliable recovery path. iOS: restorePurchases
+      // can raise an App Store sign-in sheet, so use the silent
+      // syncPurchases for this automatic call — the Apple-mandated
+      // manual Restore button (restore()) covers the robust iOS case.
+      if (Capacitor.getPlatform() === "ios") {
+        await Purchases.syncPurchases()
+        const synced = await Purchases.getCustomerInfo()
+        return await toCustomerState(synced.customerInfo)
+      }
+      const result = await Purchases.restorePurchases()
+      return await toCustomerState(result.customerInfo)
+    },
+
     async logIn(appUserId: string) {
       if (!available) return EMPTY_STATE
       await ensureConfigured()

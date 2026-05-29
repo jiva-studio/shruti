@@ -62,6 +62,17 @@ export interface IPurchases {
    */
   logIn(appUserId: string): Promise<CustomerState>
   /**
+   * Silently re-attach this device's store purchases to the currently
+   * signed-in app user id. Used to recover a purchase stranded on a
+   * previous (anonymous) id when `logIn` hit RC's "no merge" branch —
+   * i.e. the user bought before signing in, then signed into an account
+   * RC already knew (reinstall / account recreate). For an anon-owned
+   * receipt RC aliases the anonymous id into the current one regardless
+   * of the dashboard transfer-behavior setting. Adapter picks the
+   * platform-appropriate, non-prompting SDK call.
+   */
+  recoverPurchases(): Promise<CustomerState>
+  /**
    * Drop the install back to an anonymous id. Called when the user
    * signs out; subsequent purchases are scoped to a fresh anon id.
    */
