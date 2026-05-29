@@ -22,6 +22,10 @@ from __future__ import annotations
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from lectorium_chat.agent.graph.nodes._worker_common import (
+    flush_cite_payloads,
+    flush_verse_payloads,
+)
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
@@ -178,6 +182,16 @@ async def synthesis_planner_node(
         })
     except Exception as exc:  # noqa: BLE001 — observability never breaks the turn
         log.warning("synthesis_planner_summary_emit_failed", error=str(exc))
+
+    # Stage 1 + Stage 2 mint fresh verse / lecture-fragment aliases
+    # (commentary attach, thin-thesis augmentation) AFTER research_worker
+    # already flushed its own. Flush again here so those late refs get
+    # their `verse` / `cite_transcript` payload BEFORE the synthesizer
+    # (the next node) streams the markers that cite them — otherwise the
+    # client renders a bare chip with no transcript. The per-turn
+    # `emitted_*_refs` dedup means research_worker's refs aren't re-sent.
+    await flush_verse_payloads(ctx)
+    await flush_cite_payloads(ctx)
 
     update: dict = {"outline": augmented}
     combined_appends = list(new_commentaries) + list(fresh_chunks)
