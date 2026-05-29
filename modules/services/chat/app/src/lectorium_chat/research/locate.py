@@ -263,7 +263,12 @@ async def run_locate(
             c = s.chunk
             sem_hits.append(_Hit(c.source_id, c.tokens, c.addr_label, c.item_kind, s.score))
 
-    all_hits = attr_hits + sem_hits
+    # A matched curated attribution defines the AUTHORITATIVE scope of the
+    # story — use ONLY its hits. Merging semantic hits in pollutes the clean
+    # curated chapter list (e.g. a stray 7.13 leaking into Prahlāda's
+    # 7.1–7.10). Semantic search is the fallback ONLY when no attribution
+    # matched.
+    all_hits = attr_hits if attr_hits else sem_hits
     if not all_hits:
         return LocateResult(matched_attribution_ids=matched_ids)
 
