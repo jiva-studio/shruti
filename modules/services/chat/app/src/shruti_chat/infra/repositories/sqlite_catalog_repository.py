@@ -388,6 +388,41 @@ def _get_track_sync(db_path: Path, track_id: str, lang: str) -> Track | None:
         )
 
 
+def _get_titles_sync(
+    db_path: Path, track_ids: list[str], lang: str | None,
+) -> dict[str, str]:
+    """Batch track_id → title in the caller's preferred language.
+
+    One query for the whole set (the chat research panel resolves a handful
+    of lecture titles per round); language preference mirrors `_get_track_sync`
+    (requested lang, then en, then anything). Missing/blank titles are simply
+    absent from the map — the caller decides what to do with an unresolved id.
+    """
+    ids = [t for t in track_ids if t]
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    with _catalog_conn(db_path) as conn:
+        rows = conn.execute(
+            f"""
+            SELECT track_id, title, language FROM track_variants
+            WHERE track_id IN ({placeholders})
+            ORDER BY track_id,
+                     CASE language WHEN ? THEN 0 WHEN 'en' THEN 1 ELSE 2 END
+            """,
+            (*ids, lang or "en"),
+        ).fetchall()
+    out: dict[str, str] = {}
+    for r in rows:
+        tid = r["track_id"]
+        if tid in out:  # first row per track_id wins → honours the lang order
+            continue
+        title = (r["title"] or "").strip()
+        if title:
+            out[tid] = title
+    return out
+
+
 def _filter_track_ids_by_ref(
     conn: sqlite3.Connection,
     *,
@@ -724,6 +759,13 @@ class SqliteCatalogRepository:
     async def get_track(self, track_id: str, *, lang: str) -> Track | None:
         return await asyncio.to_thread(
             _get_track_sync, self._db_path, track_id, lang,
+        )
+
+    async def get_titles(
+        self, track_ids: list[str], *, lang: str | None = None,
+    ) -> dict[str, str]:
+        return await asyncio.to_thread(
+            _get_titles_sync, self._db_path, track_ids, lang,
         )
 
     async def filter_existing_track_ids(self, track_ids: list[str]) -> list[str]:

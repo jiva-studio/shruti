@@ -36,9 +36,13 @@ OnEvent = Callable[[str, dict[str, Any]], None]
 
 
 def _emit_commentary_source(on_event: OnEvent | None, chunk: LibraryChunk) -> None:
-    """Mirror `_emit_source_for_ref` in pipeline.py so the mobile progress
-    panel lists pulled commentaries alongside the fanout sources."""
+    """Surface a pulled commentary in the mobile progress panel alongside the
+    fanout sources. Drops (no event) when there's no real `addr_label` — the
+    panel is purely visual, so an empty chip is worse than nothing."""
     if on_event is None:
+        return
+    label = (chunk.addr_label or "").strip()
+    if not label:
         return
     try:
         on_event(
@@ -46,7 +50,7 @@ def _emit_commentary_source(on_event: OnEvent | None, chunk: LibraryChunk) -> No
             {
                 "kind": "commentary",
                 "id": f"library:{chunk.item_id}",
-                "label": chunk.addr_label,
+                "label": label,
             },
         )
     except Exception:  # noqa: BLE001 — observability must never break research
