@@ -107,6 +107,17 @@ function onTap() {
 .chapter-card::after {
   bottom: 0;
 }
+/* Adjacent chapter cards (locate returned several regions): the previous
+ * card's bottom band + this card's top band would render as a double rule.
+ * Drop the runner-up's top band and collapse its top margin/padding so a
+ * single shared divider sits between them — same as stacked verse cards. */
+.chapter-card + .chapter-card {
+  margin-top: 0;
+  padding-top: 0;
+}
+.chapter-card + .chapter-card::before {
+  display: none;
+}
 .chapter-card-region {
   font-weight: 700;
   font-size: 13px;
