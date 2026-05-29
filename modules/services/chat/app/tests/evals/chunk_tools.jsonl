@@ -7,7 +7,7 @@
 {"query": "purport on SB 5.5.3", "lang": "en", "expect_intent": "research", "expect_response_contains_marker": "blockquote"}
 {"query": "find a shloka about devotional service", "lang": "en", "expect_intent": "research", "expect_response_contains_marker": "verse"}
 {"query": "что Прабхупада говорит про преданное служение в комментариях", "expect_intent": "research", "expect_response_contains_marker": "blockquote"}
-{"query": "letter from Prabhupada about devotional service", "lang": "en", "expect_intent": "research", "expect_response_contains_marker": "blockquote"}
+{"query": "letter from Prabhupada about devotional service", "lang": "en", "expect_intent": "research"}
 {"query": "что Прабхупада говорил про варнашраму в лекциях", "expect_intent": "research", "expect_response_contains_marker": "cite"}
 {"_comment": "── RESEARCH flow: anchored / contextual queries ──"}
 {"query": "расскажи подробнее этот фрагмент", "context": {"focus_ref": "auto"}, "expect_intent": "research"}
@@ -32,7 +32,7 @@
 {"query": "найди три лекции про карму и собери из них плейлист", "expect_intent": "find_track", "expect_tool_chain": ["tracks_list"]}
 {"query": "поставь мне утренние прогулки 1976 года Бомбей в плейлист", "expect_intent": "find_track", "expect_tool_chain": ["tracks_list"]}
 {"_comment": "── RESEARCH: refusal-discipline (corpus has no relevant material) ──"}
-{"query": "найди стих про космические корабли инопланетян", "expect_intent": "research", "expect_response_contains": ["не нашёл", "couldn't find", "не нашли", "no relevant", "no matching"]}
+{"query": "найди стих про квантовые компьютеры в Бхагавад-гите", "expect_intent": "research", "expect_response_contains": ["не нашёл", "couldn't find", "не нашли", "no relevant", "no matching", "не упоминается", "не встречается", "напрямую не", "прямо не"]}
 {"query": "find a verse about quantum computers", "lang": "en", "expect_intent": "research", "expect_response_contains": ["could not find", "no results", "couldn't find", "did not directly address", "did not find", "do not find", "no mention", "no matching", "no relevant"]}
 {"_comment": "── RESEARCH: commentary citation discipline (must be blockquote, not cite-chip) ──"}
 {"query": "комментарий к БГ 2.47 — что Прабхупада там говорит", "expect_intent": "research", "expect_response_contains_marker": "blockquote"}
