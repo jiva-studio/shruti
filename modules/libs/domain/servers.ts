@@ -55,12 +55,13 @@ export const SERVERS: readonly CdnServer[] = [
     urlTemplate: "https://akds-lectorium.storage.yandexcloud.net/{path}",
     // Auth + chat live on the RU VPS (Dedicated Host, Moscow); CDN reads
     // resolve to Yandex Object Storage independently of the regional
-    // service host. share-audio/share-video stay on Germany — they
-    // require a Whisper key we haven't provisioned on RU yet, and
-    // they're not data-residency-sensitive (just audio excerpts and
-    // shareable reels).
-    shareAudioUrl: `${HOST}/share/audio/excerpts`,
-    shareVideoUrl: `${HOST}/share/video/reels`,
+    // service host. share-audio + share-video also run locally on the
+    // RU host (under the `proxy` compose profile + dedicated reverse_proxy
+    // routes in Caddyfile), uploading to the Yandex bucket — so RU users
+    // hit RU containers end-to-end and excerpts/reels stay on data-resident
+    // storage. The global host's share-* containers serve everyone else.
+    shareAudioUrl: `${HOST_RU}/share/audio/excerpts`,
+    shareVideoUrl: `${HOST_RU}/share/video/reels`,
     authBaseUrl: `${HOST_RU}/auth`,
     chatBaseUrl: HOST_RU,
   },

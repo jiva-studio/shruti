@@ -174,6 +174,7 @@ async def run_chat_turn(
     session_id: str | None = None,
     session_title: str | None = None,
     client_trace_id: str | None = None,
+    region: str | None = None,
     turn_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
@@ -296,6 +297,7 @@ async def run_chat_turn(
 
         ctx = TurnContext(
             request_id=trace_id,
+            region=region,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
@@ -345,6 +347,7 @@ async def run_chat_turn(
             session_title=session_title,
             name="chat_turn",
             input=user_query_for_trace or None,
+            region=region,
         ) as langfuse_root_span:
             try:
                 async for mode, payload in deps.chat_graph.astream(

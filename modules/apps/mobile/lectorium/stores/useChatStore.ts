@@ -351,14 +351,13 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   // Lazy because `app.auth` is wired by the composition root and the
-  // factories are called from inside reactive setup — using the deps
-  // object directly here would freeze the reference at store-setup
-  // time and miss any auth re-init. The `baseUrl` getter routes
-  // through `lectorium.activeServer.value.chatBaseUrl` so a region
-  // flip reaches the next chat turn without re-wiring the store.
+  // factories are called from inside reactive setup. `chatHttpRequest`
+  // is the failover-aware HTTP client — a transient 5xx on the
+  // preferred server falls through to the next, and a sustained
+  // outage promotes the working server in Settings.
   const authDeps = {
     getAccessToken: () => app.auth.getAccessToken(),
-    baseUrl: () => app.activeServer.value.chatBaseUrl,
+    request: (path: string, init?: RequestInit) => app.chatHttpRequest(path, init),
   }
   function streamClient() {
     return createHttpChatStreamClient(authDeps)

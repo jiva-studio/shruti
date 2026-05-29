@@ -6,13 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// SignerKid mirrors auth/internal/jwt.SignerKid — the single key id every
+// token issued by the auth service carries since the #728 single-region
+// collapse. The verifier here pins this id and rejects anything else, so
+// a stale `<other>.pub.pem` left on disk after a redeploy cannot validate
+// tokens forged with the matching private key.
+const SignerKid = "v1"
 
 type CurrentUser struct {
 	ID        string
@@ -29,83 +35,39 @@ func UserFrom(ctx context.Context) (CurrentUser, bool) {
 }
 
 // JWTVerifier reads, caches, and validates RS256 tokens issued by the
-// auth service. Holds a kid → public-key map so the auth side can
-// rotate signing keys without invalidating outstanding tokens.
+// auth service. Single-key deploy: one public.pem mapped to kid="v1".
+// Multi-kid rotation was deleted with the single-region collapse (#728);
+// scanning a directory for `<kid>.pub.pem` files was a footgun because a
+// stale pubkey from a retired region (e.g. russia-v1) would still verify
+// tokens until the operator manually swept the directory.
 type JWTVerifier struct {
-	keyPath string // legacy single-file path; empty when keysDir is set
-	keysDir string // optional dir with `<kid>.pub.pem` files
+	keyPath string
 	once    sync.Once
-	keys    map[string]*rsa.PublicKey
+	key     *rsa.PublicKey
 	loadErr error
 }
 
-// NewJWTVerifier wires the verifier to a single public key file
-// (legacy single-key deploy). The token's kid is matched against "v1".
+// NewJWTVerifier wires the verifier to a single public key file. The
+// token's kid header must equal SignerKid ("v1") or verification fails.
 func NewJWTVerifier(keyPath string) *JWTVerifier {
 	return &JWTVerifier{keyPath: keyPath}
 }
 
-// NewJWTVerifierFromDir scans `dir` for `<kid>.pub.pem` files at the
-// first verify call. The legacy `public.pem` filename is mapped to
-// kid "v1" so an operator can opt into multi-key mode by adding files
-// to the existing directory without renaming.
-func NewJWTVerifierFromDir(dir string) *JWTVerifier {
-	return &JWTVerifier{keysDir: dir}
-}
-
-func (v *JWTVerifier) loadKeys() (map[string]*rsa.PublicKey, error) {
+func (v *JWTVerifier) loadKey() (*rsa.PublicKey, error) {
 	v.once.Do(func() {
-		v.keys = map[string]*rsa.PublicKey{}
-		paths, kids := v.keyPaths()
-		if v.loadErr != nil {
+		raw, err := os.ReadFile(v.keyPath)
+		if err != nil {
+			v.loadErr = fmt.Errorf("read %s: %w", v.keyPath, err)
 			return
 		}
-		for i, p := range paths {
-			raw, err := os.ReadFile(p)
-			if err != nil {
-				v.loadErr = fmt.Errorf("read %s: %w", p, err)
-				return
-			}
-			key, err := jwt.ParseRSAPublicKeyFromPEM(raw)
-			if err != nil {
-				v.loadErr = fmt.Errorf("parse %s: %w", p, err)
-				return
-			}
-			v.keys[kids[i]] = key
+		key, err := jwt.ParseRSAPublicKeyFromPEM(raw)
+		if err != nil {
+			v.loadErr = fmt.Errorf("parse %s: %w", v.keyPath, err)
+			return
 		}
-		if len(v.keys) == 0 {
-			v.loadErr = fmt.Errorf("no public keys to load")
-		}
+		v.key = key
 	})
-	return v.keys, v.loadErr
-}
-
-// keyPaths returns parallel slices of (file, kid). Legacy `public.pem`
-// is always tagged as v1; other `*.pub.pem` files get their basename.
-func (v *JWTVerifier) keyPaths() (paths []string, kids []string) {
-	if v.keysDir == "" {
-		return []string{v.keyPath}, []string{"v1"}
-	}
-	matches, err := filepath.Glob(filepath.Join(v.keysDir, "*.pub.pem"))
-	if err != nil {
-		v.loadErr = fmt.Errorf("scan %s: %w", v.keysDir, err)
-		return nil, nil
-	}
-	for _, p := range matches {
-		kid := strings.TrimSuffix(filepath.Base(p), ".pub.pem")
-		paths = append(paths, p)
-		kids = append(kids, kid)
-	}
-	if legacy := filepath.Join(v.keysDir, "public.pem"); fileExists(legacy) {
-		paths = append(paths, legacy)
-		kids = append(kids, "v1")
-	}
-	return paths, kids
-}
-
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
+	return v.key, v.loadErr
 }
 
 // RequireAuth is the chi-style middleware that fronts /reels endpoints.
@@ -121,7 +83,7 @@ func (v *JWTVerifier) RequireAuth(next http.Handler) http.Handler {
 		}
 		tokenStr := strings.TrimPrefix(h, "Bearer ")
 
-		keys, err := v.loadKeys()
+		key, err := v.loadKey()
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "auth not configured")
 			return
@@ -133,12 +95,8 @@ func (v *JWTVerifier) RequireAuth(next http.Handler) http.Handler {
 		)
 		token, err := parser.Parse(tokenStr, func(t *jwt.Token) (any, error) {
 			kid, _ := t.Header["kid"].(string)
-			if kid == "" {
-				kid = "v1"
-			}
-			key, ok := keys[kid]
-			if !ok {
-				return nil, fmt.Errorf("unknown kid %q", kid)
+			if kid != SignerKid {
+				return nil, fmt.Errorf("unexpected kid %q (want %q)", kid, SignerKid)
 			}
 			return key, nil
 		})

@@ -15,6 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from lectorium_chat.api._auth import get_current_user
 from lectorium_chat.api._rate_limit import raise_429
+from lectorium_chat.api._region import extract_region
 from lectorium_chat.api.schemas.chat import ChatRequestDto
 from lectorium_chat.application.chat_turn import run_chat_turn
 from lectorium_chat.application.proactive_turn import run_proactive_turn
@@ -129,8 +130,11 @@ async def chat(
     if not rl.allowed:
         raise_429(rl, scope="chat")
 
+    region = extract_region(request)
+
     structlog.contextvars.bind_contextvars(
         request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,
+        region=region,
     )
     log.info(
         "chat_request",
@@ -182,6 +186,7 @@ async def chat(
                     session_id=body.session_id,
                     session_title=body.session_title,
                     client_trace_id=client_trace_id,
+                    region=region,
                     turn_config=(body.config.model_dump() if body.config else None),
                 )
             async for ev in stream:
@@ -216,7 +221,9 @@ async def chat(
                     ensure_ascii=False,
                 ),
             }
-            structlog.contextvars.unbind_contextvars("request_id", "user_id", "anonymous", "ip")
+            structlog.contextvars.unbind_contextvars(
+                "request_id", "user_id", "anonymous", "ip", "region",
+            )
 
     return EventSourceResponse(
         event_stream(),

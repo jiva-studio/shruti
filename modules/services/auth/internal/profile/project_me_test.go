@@ -37,7 +37,6 @@ func fullSource() SourceUser {
 		Email:         "alice@example.com",
 		Name:          "Alice",
 		PictureURL:    "https://cdn.example/alice.png",
-		HomeRegion:    "global",
 		Identities: []SourceIdentity{
 			{
 				Provider:      "google",
@@ -88,9 +87,6 @@ func TestProjectMe_GlobalProfileRetainsAllFields(t *testing.T) {
 	if !out.Identities[0].EmailVerified {
 		t.Errorf("identity emailVerified dropped")
 	}
-	if out.HomeRegion != "global" {
-		t.Errorf("homeRegion dropped: %q", out.HomeRegion)
-	}
 }
 
 func TestProjectMe_RuProfileOmitsOptionals(t *testing.T) {
@@ -112,8 +108,8 @@ func TestProjectMe_RuProfileOmitsOptionals(t *testing.T) {
 	if out.Tier != "pro" {
 		t.Errorf("tier lost: %q", out.Tier)
 	}
-	// Identities: provider+subject must survive so migrate-in can mirror
-	// them; per-identity email must be stripped.
+	// Identities: provider+subject must survive so the chat-side claim
+	// shape stays consistent; per-identity email must be stripped.
 	if len(out.Identities) != 2 {
 		t.Fatalf("identities count: %d", len(out.Identities))
 	}
@@ -223,37 +219,20 @@ func TestProjectMe_RuJsonShape_OptionalsRenderAsNull(t *testing.T) {
 	}
 }
 
-func TestProjectMe_HomeRegionPassesThroughUnderEveryPolicy(t *testing.T) {
-	// HomeRegion is server-authoritative metadata: mobile uses it to
-	// reconcile its local activeServer choice with reality. It must
-	// ride through both the global and ru policies unchanged.
-	cases := []struct {
-		name   string
-		policy ProfilePolicy
-		region string
-	}{
-		{"global-policy/global", globalProfile(), "global"},
-		{"global-policy/russia", globalProfile(), "russia"},
-		{"ru-policy/russia", ruProfile(), "russia"},
-		{"ru-policy/global", ruProfile(), "global"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			src := fullSource()
-			src.HomeRegion = tc.region
-			out := tc.policy.ProjectMe(src)
-			if out.HomeRegion != tc.region {
-				t.Errorf("homeRegion=%q, want %q", out.HomeRegion, tc.region)
-			}
-			j, err := json.Marshal(out)
-			if err != nil {
-				t.Fatalf("marshal: %v", err)
-			}
-			want := `"homeRegion":"` + tc.region + `"`
-			if !strings.Contains(string(j), want) {
-				t.Errorf("expected %s in %s", want, string(j))
-			}
-		})
+// TestProjectMe_HomeRegionAbsent — #728 single-region collapse: the
+// homeRegion key is gone from /auth/me and from MeUser. A regression
+// that adds it back would surface in mobile as a re-introduction of
+// the region reconciliation flow this PR is tearing out.
+func TestProjectMe_HomeRegionAbsent(t *testing.T) {
+	for _, p := range []ProfilePolicy{globalProfile(), ruProfile()} {
+		out := p.ProjectMe(fullSource())
+		j, err := json.Marshal(out)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if strings.Contains(string(j), "homeRegion") {
+			t.Errorf("homeRegion key must not appear in /auth/me, got %s", string(j))
+		}
 	}
 }
 

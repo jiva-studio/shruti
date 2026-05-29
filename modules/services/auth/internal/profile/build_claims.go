@@ -12,14 +12,12 @@ import (
 // of the input is always populated:
 //
 //   - Tier, QuotaID, RCAppUserID, Identities (provider/subject pairs)
-//     ship regardless of policy. Other regions need provider/subject to
-//     mirror identity rows on migrate-in even when the destination
-//     region's profile suppresses email collection.
+//     ship regardless of policy. The chat service relies on the
+//     provider/subject pairs to attribute requests even when email
+//     collection is suppressed.
 //
 //   - EmailHash + EmailVerified are stripped per identity when
-//     Email.Enabled=false. The destination region can still receive a
-//     migrating user's identity rows; only the identifying email hash
-//     is suppressed.
+//     Email.Enabled=false.
 //
 // The caller fills the per-token Audience, TTL and JTI fields — same
 // IssueInput shape is used for access (audience=chat) and refresh

@@ -126,56 +126,7 @@ def _build_embedder(s: Settings) -> Embedder:
             query_prefix=s.embed_query_prefix,
             doc_prefix=s.embed_doc_prefix,
         )
-    if s.embed_provider == "yandex":
-        # Yandex Foundation Models exposes an asymmetric pair —
-        # `text-search-query/latest` for queries, `text-search-doc/latest`
-        # for documents. Both must use the same dim (s.embed_dim). The
-        # auth + folder share Settings with the LLM adapter, falling
-        # back to the dedicated embed-* fields if those are split out.
-        from lectorium_chat.indexer.yandex_embed import YandexEmbedder
-
-        folder = s.yandex_embed_folder_id or s.yandex_gpt_folder_id
-        api_key = s.yandex_embed_api_key or s.yandex_gpt_api_key
-        if not folder:
-            raise RuntimeError(
-                "EMBED_PROVIDER=yandex requires YANDEX_EMBED_FOLDER_ID "
-                "or YANDEX_GPT_FOLDER_ID"
-            )
-        if not api_key and not s.yandex_iam_token:
-            raise RuntimeError(
-                "EMBED_PROVIDER=yandex requires YANDEX_EMBED_API_KEY / "
-                "YANDEX_GPT_API_KEY or YANDEX_IAM_TOKEN"
-            )
-        return YandexEmbedder(
-            folder_id=folder,
-            api_key=api_key,
-            iam_token=s.yandex_iam_token,
-            doc_model=s.embed_model or "text-search-doc/latest",
-            query_model=s.embed_query_model or "text-search-query/latest",
-            dim=s.embed_dim,
-            concurrency=s.embed_concurrency,
-        )
-    if s.embed_provider == "gigachat":
-        from lectorium_chat.indexer.gigachat_embed import GigaChatEmbedder
-
-        # GigaChat's embeddings endpoint shares the OAuth2 auth flow with
-        # the chat-completions endpoint — same client_id/secret/scope.
-        # The legacy `gigachat_embed_api_key` is a placeholder from the
-        # litellm-era config; not used by the new adapter.
-        if not s.gigachat_client_id or not s.gigachat_client_secret:
-            raise RuntimeError(
-                "EMBED_PROVIDER=gigachat requires GIGACHAT_CLIENT_ID and "
-                "GIGACHAT_CLIENT_SECRET"
-            )
-        return GigaChatEmbedder(
-            client_id=s.gigachat_client_id,
-            client_secret=s.gigachat_client_secret,
-            scope=s.gigachat_scope,
-            ca_path=s.gigachat_ca_path,
-            model=s.embed_model or "EmbeddingsGigaR",
-            dim=s.embed_dim,
-        )
     raise NotImplementedError(
         f"Embed provider {s.embed_provider!r} not implemented yet. "
-        "Active: openrouter (default), openai, yandex, gigachat."
+        "Active: openrouter (default), openai."
     )

@@ -60,16 +60,6 @@ type Service struct {
 	// EmailHash / EmailVerified. Production sets it from config.yaml
 	// at boot, indexed by PROFILE env (global vs ru).
 	ProfilePolicy profile.ProfilePolicy
-	// RegionID identifies this deployment ("global" | "russia" | …).
-	// Stamped into home_region on rows materialised by migrate-in and
-	// inspected by migrate-revoke to refuse own-region bearers. Empty
-	// string in tests is treated like "global" by the migration helpers.
-	RegionID string
-	// LocalKid is the kid this region's signer stamps on freshly issued
-	// tokens. migrate-revoke compares it against the resolved kid of the
-	// incoming bearer: a match means the caller is asking us to revoke a
-	// session WE just issued — no migration is in flight, so we refuse.
-	LocalKid string
 }
 
 // ProviderVerifier is the interface satisfied by providers/{google,apple}.Verifier.
@@ -104,21 +94,17 @@ func (s *Service) Anonymous(ctx context.Context, deviceID string, bearerAccess s
 	}
 
 	// Fresh anon — create user + (device, deviceId) identity in one tx.
-	// home_region is stamped from s.RegionID on both rows; bare
-	// DEFAULT-VALUES inserts would carry over the migration-0028 default
-	// 'global' even on the Russia VPS.
 	var userID uuid.UUID
 	err = pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		uid, err := s.Users.Create(ctx, tx, s.RegionID)
+		uid, err := s.Users.Create(ctx, tx)
 		if err != nil {
 			return err
 		}
 		userID = uid
 		return s.Identities.Create(ctx, tx, store.Identity{
-			Provider:   ProviderDevice,
-			Subject:    deviceID,
-			UserID:     uid,
-			HomeRegion: s.RegionID,
+			Provider: ProviderDevice,
+			Subject:  deviceID,
+			UserID:   uid,
 		})
 	})
 	if err != nil {
@@ -223,7 +209,7 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 		}
 
 		// 4. Fresh user.
-		uid, err := s.Users.Create(ctx, tx, s.RegionID)
+		uid, err := s.Users.Create(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -247,16 +233,13 @@ func (s *Service) signinSocial(ctx context.Context, provider string, ident *prov
 // createIdentity inserts an auth.identities row for `userID` from a
 // policy-filtered OAuth payload. When the policy suppressed the email
 // the row is created with email=NULL, email_verified=false — same shape
-// as a provider that simply didn't return one. home_region is stamped
-// from the running deployment's RegionID so the row carries the
-// correct region tag without depending on the migration-0028 default.
+// as a provider that simply didn't return one.
 func (s *Service) createIdentity(ctx context.Context, tx pgx.Tx, userID uuid.UUID, f profile.FilteredIdentity) error {
 	row := store.Identity{
 		Provider:      f.Provider,
 		Subject:       f.Subject,
 		UserID:        userID,
 		EmailVerified: f.EmailVerified,
-		HomeRegion:    s.RegionID,
 	}
 	if f.Email != "" {
 		em := f.Email
@@ -475,10 +458,9 @@ func (s *Service) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 		CreatedAt:     u.CreatedAt,
 		Tier:          tier,
 		TierExpiresAt: u.TierExpiresAt,
-		Email:      derefStr(email),
-		Name:       derefStr(u.Name),
-		PictureURL: derefStr(u.PictureURL),
-		HomeRegion: u.HomeRegion,
+		Email:         derefStr(email),
+		Name:          derefStr(u.Name),
+		PictureURL:    derefStr(u.PictureURL),
 	}
 	src.Identities = make([]profile.SourceIdentity, 0, len(idents))
 	for _, i := range idents {
@@ -608,61 +590,6 @@ func (s *Service) loadQuotaID(ctx context.Context, userID uuid.UUID) (string, er
 		return "", err
 	}
 	return identityhash.Compute(idents), nil
-}
-
-// LookupResult is the no-side-effects result of /auth/lookup. It says
-// whether a (provider, subject) pair is currently bound to any user
-// and, if so, whether that user is anonymous. Used by mobile's
-// retry-other-region flow (PR-3) — never issues tokens, never mutates
-// state.
-type LookupResult struct {
-	Exists    bool
-	Anonymous bool
-}
-
-// LookupSignin verifies the OAuth id-token to extract its `sub` and
-// then returns the LookupResult for that (provider, sub). No DB
-// writes, no token issuance. Powers the `X-Lookup-Only: 1` shortcut
-// on /auth/signin/{google,apple}: callers can probe "do I already
-// exist on this region?" without paying the signin bootstrap cost.
-func (s *Service) LookupSignin(ctx context.Context, provider, idToken string) (LookupResult, error) {
-	var verifier ProviderVerifier
-	switch provider {
-	case ProviderGoogle:
-		verifier = s.GoogleVerifier
-	case ProviderApple:
-		verifier = s.AppleVerifier
-	default:
-		return LookupResult{}, fmt.Errorf("unsupported provider %q", provider)
-	}
-	ident, err := verifier.Verify(ctx, idToken)
-	if err != nil {
-		return LookupResult{}, fmt.Errorf("%s verify: %w", provider, err)
-	}
-	if ident.Subject == "" {
-		return LookupResult{}, fmt.Errorf("%s: empty subject", provider)
-	}
-	return s.FindUserByProviderSubject(ctx, provider, ident.Subject)
-}
-
-// FindUserByProviderSubject resolves a (provider, subject) pair to a
-// LookupResult. Returns `{Exists: false}` when no identity matches.
-// Bounded by the (provider, subject) PK on auth.identities (and the
-// supporting index from migration 0028) — O(log n) regardless of
-// table size.
-func (s *Service) FindUserByProviderSubject(ctx context.Context, provider, subject string) (LookupResult, error) {
-	ident, err := s.Identities.Get(ctx, provider, subject)
-	if err != nil {
-		return LookupResult{}, err
-	}
-	if ident == nil {
-		return LookupResult{}, nil
-	}
-	anon, err := s.userIsAnonymous(ctx, nil, ident.UserID)
-	if err != nil {
-		return LookupResult{}, err
-	}
-	return LookupResult{Exists: true, Anonymous: anon}, nil
 }
 
 // loadIdentities returns the user's identities shaped for the JWT

@@ -3,16 +3,16 @@
 #
 # Two modes:
 #
-# 1. Per-kid mode (PROD / multi-region):
-#      gen-jwt-keys.sh <kid>
-#    Run on the region's own VPS. Writes
-#      /opt/lectorium/jwt/<kid>.priv.pem  (mode 0400, owner root)
-#      /opt/lectorium/jwt/<kid>.pub.pem   (mode 0644, owner root)
-#    The priv key NEVER leaves that box. Copy the .pub.pem into the
-#    repo's infra/app/jwt-keys/ folder so other regions can mirror it
-#    (see infra/app/jwt-keys/README.md).
+# 1. Prod mode:
+#      gen-jwt-keys.sh --prod
+#    Run on the origin VPS. Writes
+#      /opt/lectorium/jwt/private.pem  (mode 0400, owner root)
+#      /opt/lectorium/jwt/public.pem   (mode 0644, owner root)
+#    The priv key NEVER leaves that box. Copy public.pem into the
+#    repo at infra/app/jwt-keys/v1.pub.pem so share-audio / share-video
+#    on every host can verify tokens.
 #
-# 2. Legacy dev-bootstrap mode (no argument):
+# 2. Dev-bootstrap mode (no argument):
 #    Materialises the workspace-wide single keypair from
 #    $HOME/Projects/akdasa/dotfiles/.../credentials as symlinks at
 #    .config/lectorium/jwt/{private,public}.pem so dev compose can
@@ -21,28 +21,21 @@
 #    repo is the source of truth so a fresh clone of the workspace
 #    inherits valid keys.
 #
-# Idempotent in both modes — refuses to overwrite existing files for a
-# kid, skips generation when the workspace symlinks already point at
-# valid dotfiles keys.
+# Idempotent in both modes — refuses to overwrite existing prod files,
+# skips generation when the workspace symlinks already point at valid
+# dotfiles keys.
 set -euo pipefail
 
 # ---------------------------------------------------------------- mode 1
-if [ "$#" -ge 1 ]; then
-  kid="$1"
-  # Sanity: only alphanumerics + dashes (filenames embed the kid).
-  if [[ ! "$kid" =~ ^[a-zA-Z0-9-]+$ ]]; then
-    echo "Invalid kid: $kid (allowed: [a-zA-Z0-9-])" >&2
-    exit 64
-  fi
-
+if [ "${1:-}" = "--prod" ]; then
   dest="/opt/lectorium/jwt"
-  priv="$dest/$kid.priv.pem"
-  pub="$dest/$kid.pub.pem"
+  priv="$dest/private.pem"
+  pub="$dest/public.pem"
 
   sudo mkdir -p "$dest"
 
   if [ -e "$priv" ] || [ -e "$pub" ]; then
-    echo "Refusing to overwrite existing key files for kid=$kid:" >&2
+    echo "Refusing to overwrite existing key files:" >&2
     [ -e "$priv" ] && echo "  $priv" >&2
     [ -e "$pub" ]  && echo "  $pub"  >&2
     echo "Remove them manually (with proper key-rotation discipline) and re-run." >&2
@@ -59,11 +52,11 @@ if [ "$#" -ge 1 ]; then
 
   echo "Wrote:"
   echo "  $priv  (private — keep on this box)"
-  echo "  $pub   (public — commit to infra/app/jwt-keys/ in the repo)"
+  echo "  $pub   (public — commit to infra/app/jwt-keys/v1.pub.pem in the repo)"
   exit 0
 fi
 
-# ---------------------------------------------------------------- mode 2 (legacy)
+# ---------------------------------------------------------------- mode 2 (dev)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WORKSPACE="$(cd "$ROOT/../.." && pwd)"
 WS_KEYS_DIR="${WORKSPACE}/.config/lectorium/jwt"
@@ -77,7 +70,7 @@ PUB_FILE="$DOTFILES_CREDS/lectorium-auth-jwt-public.pem"
 if [ ! -d "$DOTFILES_CREDS" ]; then
   echo "✗ dotfiles credentials dir not found: $DOTFILES_CREDS" >&2
   echo "  Set LECTORIUM_DOTFILES_CREDS_DIR or clone akdasa/dotfiles first." >&2
-  echo "  (For per-region prod key generation use: gen-jwt-keys.sh <kid>.)" >&2
+  echo "  (For prod key generation use: gen-jwt-keys.sh --prod.)" >&2
   exit 1
 fi
 

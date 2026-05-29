@@ -55,6 +55,7 @@ from lectorium_chat.observability.langfuse_client import (
     init_langfuse,
     shutdown_langfuse,
     warm_prompt_cache,
+    warn_if_pii_salt_unset,
 )
 from lectorium_chat.observability.logging import get_logger, setup_logging
 
@@ -74,6 +75,10 @@ async def lifespan(app: FastAPI):
     # cache so the first chat-turn doesn't pay the network round-trip
     # to fetch each of the 15 prompts on the hot path.
     init_langfuse()
+    # In prod/staging, log a critical warning when the PII salt is
+    # missing — otherwise RU-region traces silently drop their user_id
+    # and operators may not notice until per-user breakdowns disappear.
+    warn_if_pii_salt_unset()
     warm_prompt_cache(list(LANGFUSE_PROMPT_NAMES))
     # Register every score config declared in `score_configs.py`. Self-
     # heals a wiped Langfuse DB; idempotent on every other boot. Non-
@@ -135,11 +140,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("REDIS_URL is required for the rate-limit store")
     rate_limit_store = RedisRateLimitStore(s.redis_url)
     rate_limiter = RateLimiter(store=rate_limit_store, settings=s)
-    jwt_verifier = (
-        JwtVerifier.from_dir(s.jwt_public_keys_dir)
-        if s.jwt_public_keys_dir is not None
-        else JwtVerifier.from_file(s.jwt_public_key_path)
-    )
+    jwt_verifier = JwtVerifier.from_file(s.jwt_public_key_path)
 
     # Idempotency gate for /chat. Redis-backed when configured;
     # otherwise no-op so dev deploys without Redis don't break.

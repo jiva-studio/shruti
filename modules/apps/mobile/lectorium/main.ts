@@ -41,7 +41,6 @@ import { useDatabaseToFsFetcher } from "@infra/persistence/fetchers/fs/index.js"
 import { useWebRemoteFilesStorage } from "@infra/files/web/index.js"
 import { useCapacitorRemoteFilesStorage } from "@infra/files/capacitor/index.js"
 import { useCapacitorPreferences } from "@infra/preferences/capacitor/index.js"
-import { makeScheduledRevoke } from "./services/scheduledRevoke.js"
 import { useCapacitorAudioPlayer } from "@infra/audio/capacitor/index.js"
 import { useCapacitorNotificationScheduler } from "@infra/notifications/capacitor/index.js"
 import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
@@ -56,6 +55,7 @@ import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatS
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
+import { createFailoverClient } from "@infra/http/createFailoverClient.js"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 
@@ -75,21 +75,25 @@ if (isNative) {
   config.database = { ...config.database, userLocalPath: "user.db" }
 }
 
-// Shared Preferences adapter — same instance used by the auth port and
-// the scheduled-revoke queue, so an in-memory web fallback (if it ever
-// lands) would see consistent state across both consumers.
 const preferences = useCapacitorPreferences()
 
-// Resolve an auth base URL for a region OTHER than the active one.
-// Used by migrate-in to reach the destination region and by the
-// scheduled-revoke queue to reach the prior source on drain.
-function resolveAuthBaseUrl(regionId: string): string {
-  const server = SERVERS.find((s) => s.id === regionId)
-  if (!server) throw new Error(`Unknown region: ${regionId}`)
-  return server.authBaseUrl
-}
-
-const scheduledRevoke = makeScheduledRevoke({ prefs: preferences, resolveAuthBaseUrl })
+// Two failover-aware HTTP clients — one for the auth service, one for
+// chat. Both walk SERVERS in preferred-first order on transient
+// failures; if the preferred has been unreachable for >5 min and a
+// fallback succeeds, the active server is promoted (which persists
+// preferredServerId via the watcher in initLectorium).
+const authHttp = createFailoverClient({
+  servers: SERVERS,
+  getPreferredId: () => useLectorium().activeServer.value.id,
+  pickBaseUrl: (s) => s.authBaseUrl,
+  onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
+})
+const chatHttp = createFailoverClient({
+  servers: SERVERS,
+  getPreferredId: () => useLectorium().activeServer.value.id,
+  pickBaseUrl: (s) => s.chatBaseUrl,
+  onPromoteFallback: (id) => useLectorium().setActiveServerById(id),
+})
 
 initLectorium({
   appConfig: config,
@@ -118,56 +122,10 @@ initLectorium({
   }),
   // Auth service — anonymous-by-device bootstrap on first launch; Google /
   // Apple sign-in upgrades the same user when invoked from Settings.
-  // `baseUrl` is a lazy getter: resolved at each fetch call against
-  // `lectorium.activeServer.value.authBaseUrl`, so a region flip via
-  // Settings routes subsequent auth traffic to the new backend.
+  // `request` routes through the failover client so an unreachable
+  // preferred backend transparently falls through to others.
   auth: useCapacitorAuth({
-    baseUrl: () => useLectorium().activeServer.value.authBaseUrl,
-    resolveAuthBaseUrl,
-    currentRegionId: () => useLectorium().activeServer.value.id,
-    // Used by the proactive cross-region signin probe — adapter fans
-    // out /auth/lookup across these regions and silently switches the
-    // active server to the one the user's OAuth identity already lives
-    // on, so a fresh install or a migrated user never lands on a
-    // duplicate account on the wrong region.
-    getRegions: () => useLectorium().appConfig.servers.map((s) => ({ id: s.id })),
-    setActiveServerById: (id: string) => useLectorium().setActiveServerById(id),
-    // Post-migration: flip activeServer so every subsequent fetch
-    // (auth/chat/share-*) targets the destination. The activeServer
-    // watcher inside initLectorium persists the id under
-    // preferredServerId so a cold start lands on the new region. Then
-    // enqueue the source-side revoke and try to drain it once while we
-    // likely still have network. The watcher on `useAuthStore.userId`
-    // in `usePurchasesStore.init()` already re-links RC when the new
-    // session lands — no extra logIn() call is needed here.
-    onMigrationCompleted: (newRegionId, sourceRegionId, sourceBearer) => {
-      useLectorium().setActiveServerById(newRegionId)
-      void scheduledRevoke.enqueue(sourceRegionId, sourceBearer).then(() => {
-        void scheduledRevoke.drain()
-      })
-    },
-    // After every /auth/me, if the server's authoritative home region
-    // disagrees with the local `activeServer.id`, sync local to server.
-    // Server is the source of truth — local was drifting (e.g. user
-    // flipped the picker manually after a migration, or older builds
-    // never reconciled). Silently ignore unknown region ids so a server
-    // returning a region this build doesn't ship doesn't crash.
-    onHomeRegionMismatch: (serverRegion, localRegion) => {
-      const lectorium = useLectorium()
-      const known = lectorium.appConfig.servers.some((s) => s.id === serverRegion)
-      if (!known) {
-        console.warn("[auth] home region drift (unknown to this build, ignoring)", {
-          server: serverRegion,
-          local: localRegion,
-        })
-        return
-      }
-      console.warn("[auth] home region drift; syncing local to server", {
-        server: serverRegion,
-        local: localRegion,
-      })
-      lectorium.setActiveServerById(serverRegion)
-    },
+    request: (path, init) => authHttp.request(path, init),
     googleWebClientId: __GOOGLE_WEB_CLIENT_ID__,
     googleIOSClientId: __GOOGLE_IOS_CLIENT_ID__,
   }),
@@ -185,14 +143,11 @@ initLectorium({
   platform,
   initialServer: SERVERS[0],
   serverProber: useHttpServerProber(),
-  // Lazy auth-token resolver: useLectorium() returns the composition
-  // root, which is only fully wired after initLectorium() — but the
-  // closure runs at request time (when the scheduler invokes a
-  // proactive turn), well after init has completed.
   proactiveChat: useHttpProactiveChatService({
     getAccessToken: () => useLectorium().auth.getAccessToken(),
-    baseUrl: () => useLectorium().activeServer.value.chatBaseUrl,
+    request: (path, init) => chatHttp.request(path, init),
   }),
+  chatHttpRequest: (path, init) => chatHttp.request(path, init),
 })
 
 const app = createApp(App).use(createPinia()).use(IonicVue).use(i18n).use(router)
@@ -222,10 +177,4 @@ router.isReady().then(() => {
     .catch((e) => {
       console.warn("auth.restore failed", e)
     })
-  // Drain any pending `/auth/migrate-revoke` calls left over from a
-  // prior session where the source region was unreachable at migration
-  // time. Best-effort: failed retries get re-queued for the next start.
-  void scheduledRevoke.drain().catch((e) => {
-    console.warn("scheduledRevoke.drain failed", e)
-  })
 })

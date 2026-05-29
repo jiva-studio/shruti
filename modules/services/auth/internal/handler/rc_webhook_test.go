@@ -554,7 +554,7 @@ func bootWebhook(t *testing.T) (*RCWebhookHandler, *service.Service, *rcStub) {
 	t.Cleanup(pool.Close)
 
 	priv, pub := tempKeys(t)
-	signer, _ := jwt.NewSignerFromFile(priv, "v1")
+	signer, _ := jwt.NewSignerFromFile(priv)
 	verifier, _ := jwt.NewVerifierFromFile(pub)
 
 	svc := &service.Service{

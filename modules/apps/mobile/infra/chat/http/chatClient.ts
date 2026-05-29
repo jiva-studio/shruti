@@ -222,13 +222,12 @@ export async function fetchSessionTitle(
   messages: readonly ChatTurn[],
   lang: "ru" | "en",
   opts: {
-    baseUrl: () => string
+    request: ChatRequest
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<string | null> {
   if (messages.length === 0) return null
-  const baseUrl = opts.baseUrl()
 
   let token: string
   try {
@@ -239,7 +238,7 @@ export async function fetchSessionTitle(
   }
 
   try {
-    const response = await fetch(joinUrl(baseUrl, "/title"), {
+    const response = await opts.request("/title", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -290,13 +289,11 @@ export async function fetchSuggestedQuestions(
   focus: QuestionsFocusInput,
   lang: "ru" | "en",
   opts: {
-    baseUrl: () => string
+    request: ChatRequest
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<readonly string[]> {
-  const baseUrl = opts.baseUrl()
-
   let token: string
   try {
     token = await resolveAccessToken(opts.getAccessToken)
@@ -307,7 +304,7 @@ export async function fetchSuggestedQuestions(
   }
 
   try {
-    const response = await fetch(joinUrl(baseUrl, "/questions"), {
+    const response = await opts.request("/questions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -365,12 +362,11 @@ export interface FeedbackPayload {
 export async function postFeedback(
   payload: FeedbackPayload,
   opts: {
-    baseUrl: () => string
+    request: ChatRequest
     getAccessToken: AccessTokenProvider
     signal?: AbortSignal
   }
 ): Promise<void> {
-  const baseUrl = opts.baseUrl()
   const token = await resolveAccessToken(opts.getAccessToken)
 
   const traceId = payload.messageId.replace(/-/g, "").toLowerCase()
@@ -381,7 +377,7 @@ export async function postFeedback(
   if (payload.category) body.category = payload.category
   if (payload.comment) body.comment = payload.comment
 
-  const response = await fetch(joinUrl(baseUrl, "/chat/feedback"), {
+  const response = await opts.request("/chat/feedback", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -413,10 +409,10 @@ export interface ProactiveTurnOptions {
  */
 export interface StreamChatRequestInit {
   readonly signal?: AbortSignal
-  /** Lazy resolver for the chat service base URL. Read at the top of
-   *  each request so a region flip via `lectorium.activeServer` reaches
-   *  in-flight chats on the next turn. */
-  readonly baseUrl: () => string
+  /** HTTP call to the chat service. Path is relative; the implementation
+   *  prepends the active server's chat base URL and handles failover to
+   *  other servers on transient errors (see `createFailoverClient`). */
+  readonly request: ChatRequest
   /** JWT provider — typically `app.auth.getAccessToken`, injected
    *  through the adapter's constructor. Required: the chatClient
    *  doesn't hold any module-level fallback. */
@@ -462,7 +458,6 @@ export async function* streamChat(
   lang: "ru" | "en",
   opts: StreamChatRequestInit
 ): AsyncGenerator<ChatStreamEvent, void, void> {
-  const baseUrl = opts.baseUrl()
   const token = await resolveAccessToken(opts.getAccessToken)
 
   // Transient errors (network blip, 502/503/504 during a server redeploy)
@@ -477,7 +472,6 @@ export async function* streamChat(
   // attempts after a 502 from a proxy that sat in front of a backend
   // that already started work would both bill the LLM.
   const idempotencyKey = newIdempotencyKey()
-  const url = joinUrl(baseUrl, "/chat")
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
@@ -507,7 +501,7 @@ export async function* streamChat(
   for (let attempt = 0; attempt < 3; attempt++) {
     if (opts.signal?.aborted) return
     try {
-      response = await fetch(url, requestInit)
+      response = await opts.request("/chat", requestInit)
     } catch (err) {
       if ((err as { name?: string })?.name === "AbortError") return
       lastErr = err
@@ -746,18 +740,20 @@ function buildRequestBody(
  */
 export type AccessTokenProvider = () => Promise<string | null>
 
+/**
+ * HTTP call to the chat service. `path` is relative (e.g. `/chat`,
+ * `/title`, `/questions`, `/chat/feedback`); the implementation
+ * prepends the active server's chat base URL and handles failover.
+ * Wired by the composition root via `createFailoverClient`.
+ */
+export type ChatRequest = (path: string, init?: RequestInit) => Promise<Response>
+
 async function resolveAccessToken(provider: AccessTokenProvider): Promise<string> {
   const token = await provider()
   if (!token) {
     throw new Error("chatClient: auth.getAccessToken returned null (session unrecoverable)")
   }
   return token
-}
-
-function joinUrl(base: string, path: string): string {
-  if (base.endsWith("/") && path.startsWith("/")) return base + path.slice(1)
-  if (!base.endsWith("/") && !path.startsWith("/")) return `${base}/${path}`
-  return base + path
 }
 
 function isTransientStatus(code: number): boolean {

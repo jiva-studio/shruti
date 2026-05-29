@@ -13,7 +13,7 @@
       @open-paywall="paywall.requestOpen()"
       @manage-subscription="paywall.requestOpen()"
       @delete-account="onDeleteAccountConfirm"
-      @request-region-change="onRequestRegionChange"
+      @preferred-server-change="onPreferredServerChange"
     />
 
     <SettingsAppearanceGroup
@@ -77,7 +77,6 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { alertController, loadingController } from "@ionic/vue"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAccountGroup,
@@ -175,87 +174,13 @@ async function onDeleteAccountConfirm(opts: { wipeLocal: boolean }): Promise<voi
   }
 }
 
-async function onRequestRegionChange(newRegionId: string): Promise<void> {
-  // Same-region tap shouldn't even reach here (the proxy in
-  // SettingsAccountGroup guards), but be defensive.
-  if (newRegionId === lectorium.activeServer.value.id) return
-  const newRegionName = serverItems.find((s) => s.id === newRegionId)?.title ?? newRegionId
-
-  if (auth.anonymous) {
-    // Anonymous: confirm → switchAnonymousRegion. The store action
-    // sequences port.signOut → activeServer flip + persist → anonymous
-    // re-bootstrap so the new /auth/anonymous mint lands on the
-    // destination region. No migrate-in; the destination mints a
-    // brand-new device-keyed user. The old anonymous user ages out via
-    // the source's anon TTL cron.
-    const dlg = await alertController.create({
-      header: t("settings.regionMigration.confirmAnonymous.title"),
-      message: t("settings.regionMigration.confirmAnonymous.message", {
-        region: newRegionName,
-      }),
-      buttons: [
-        {
-          text: t("settings.regionMigration.confirmAnonymous.cancel"),
-          role: "cancel",
-        },
-        {
-          text: t("settings.regionMigration.confirmAnonymous.confirm"),
-          role: "confirm",
-        },
-      ],
-    })
-    await dlg.present()
-    const { role } = await dlg.onDidDismiss()
-    if (role !== "confirm") return
-    await auth.switchAnonymousRegion(newRegionId)
-    return
-  }
-
-  // Signed-in: confirm → progress spinner → migrateToRegion →
-  // success/failure toast. activeServerId v-model flip happens inside
-  // the port's onMigrationCompleted callback (composition root); we
-  // don't touch the model directly.
-  const dlg = await alertController.create({
-    header: t("settings.regionMigration.confirmSignedIn.title", {
-      region: newRegionName,
-    }),
-    message: t("settings.regionMigration.confirmSignedIn.message", {
-      region: newRegionName,
-    }),
-    buttons: [
-      {
-        text: t("settings.regionMigration.confirmSignedIn.cancel"),
-        role: "cancel",
-      },
-      {
-        text: t("settings.regionMigration.confirmSignedIn.confirm"),
-        role: "confirm",
-      },
-    ],
-  })
-  await dlg.present()
-  const { role } = await dlg.onDidDismiss()
-  if (role !== "confirm") return
-
-  const loading = await loadingController.create({
-    message: t("settings.regionMigration.inProgress"),
-  })
-  await loading.present()
-  let result
-  try {
-    result = await auth.migrateToRegion(newRegionId)
-  } finally {
-    await loading.dismiss()
-  }
-  if (result.ok) {
-    await toast.info(t("settings.regionMigration.success", { region: newRegionName }), {
-      durationMs: 2500,
-    })
-  } else {
-    await toast.error(t(`settings.regionMigration.failed.${result.code}`), {
-      durationMs: 3500,
-    })
-  }
+function onPreferredServerChange(newServerId: string): void {
+  // Flip the picker; the failover client reads `activeServer.value.id`
+  // at every call and the watcher in `initLectorium` persists the new
+  // id under `preferredServerId`. No migration, no toast — connectivity
+  // is the only thing the picker controls now.
+  if (newServerId === lectorium.activeServer.value.id) return
+  lectorium.setActiveServerById(newServerId)
 }
 
 function onSmartLibraryEntry(): void {

@@ -6,6 +6,17 @@ by GitHub Actions (`.github/workflows/services-ghcr.yml`), pushed to
 `ghcr.io/akdasa-studios/lectorium-*`, and pulled to the box by
 Watchtower (`com.centurylinklabs.watchtower.enable=true` label).
 
+The same compose files deploy two host **roles**, selected at deploy
+time via `--role` or `LECTORIUM_REGION_ROLE` in `.env`:
+
+- `origin` — full backend (default; the global VPS).
+- `proxy`  — thin RU box: only `share-audio`/`share-video` (plus a slim
+  postgres for share-video's `public.tasks` queue and redis for its
+  per-IP rate-limit) terminate locally. Caddy reverse-proxies `/auth/*`
+  and the chat surface to the global host, injecting
+  `X-Lectorium-Region: ru`. See [RU thin-proxy architecture](#ru-thin-proxy-architecture)
+  below.
+
 `deploy.sh` is strictly a code/config deployer: rsync `infra/`, run
 `docker compose pull && up -d`. Secrets stay on the host (`/opt/lectorium/.env`,
 `/opt/lectorium/jwt/`) and are never copied by the script.
@@ -15,12 +26,15 @@ Watchtower (`com.centurylinklabs.watchtower.enable=true` label).
 ```
 infra/
 ├── compose/
-│   ├── docker-compose.yml         base stack
+│   ├── docker-compose.yml         base stack (profiles-tagged: origin/proxy)
 │   ├── docker-compose.prod.yml    prod overlay (Caddy + Watchtower + socket-proxy)
+│   ├── docker-compose.proxy.yml   RU-only overlay (slim postgres + caddy role=proxy)
 │   ├── docker-compose.dev.yml     dev overlay (host port mappings + build:)
 │   └── caddy/
 │       ├── Dockerfile              custom Caddy with caddy-ratelimit plugin
-│       └── Caddyfile               TLS + rate limits + handle_path routing
+│       ├── Caddyfile               TLS + rate limits + handle_path routing
+│       ├── role-origin.conf        snippet: terminate /auth + chat locally
+│       └── role-proxy.conf         snippet: reverse_proxy /auth + chat upstream
 ├── db/
 │   └── migrations/                  SQL files applied by the `migrator` container
 └── scripts/
@@ -31,6 +45,53 @@ infra/
     ├── gen-jwt-keys.sh               local-only: workspace JWT keypair
     └── gen-dev-env.sh                local-only: bootstraps infra/.env.dev
 ```
+
+## RU thin-proxy architecture
+
+The RU VPS runs Caddy (role=proxy) + share-audio + share-video + a slim
+postgres (alpine, no pgvector — only share-video's `public.tasks` queue
+lives here) + redis + migrator + watchtower. Auth + chat + cleanup-worker
+are **not** on RU: Caddy reverse-proxies their paths to the global host
+and tags the egress with `X-Lectorium-Region: ru`. Only `/share/*` and
+the per-host postgres/redis stay local — everything else collapses to
+the single global backend.
+
+```mermaid
+flowchart LR
+    Mobile["Mobile (RU user)"]
+    RUCaddy["62-109-31-177.sslip.io<br/>(RU Caddy, role=proxy)"]
+    ShareLocal["share-audio / share-video<br/>(Yandex S3)"]
+    Global["Global host<br/>(auth + chat)"]
+
+    Mobile -->|HTTPS| RUCaddy
+    RUCaddy -->|"/share/*"| ShareLocal
+    RUCaddy -->|"/chat, /auth/*<br/>X-Lectorium-Region: ru"| Global
+```
+
+Selection is by `LECTORIUM_REGION_ROLE` in `/opt/lectorium/.env` (or
+`--role` on `deploy.sh`). The role drives which compose overlays layer
+and which `COMPOSE_PROFILES` is active:
+
+| Role     | Compose files                                                | Profiles |
+| -------- | ------------------------------------------------------------ | -------- |
+| `origin` | `docker-compose.yml + .prod.yml`                             | `origin` |
+| `proxy`  | `docker-compose.yml + .prod.yml + .proxy.yml`                | `proxy`  |
+
+Caddy picks its routing snippet at start via `import role-{$LECTORIUM_REGION_ROLE}`
+— `role-origin.conf` (terminate locally + strip inbound region header)
+or `role-proxy.conf` (reverse_proxy upstream + inject region header).
+Both snippet files ship inside the `lectorium-caddy` image.
+
+Proxy hosts additionally need `LECTORIUM_GLOBAL_HOST=<global-domain>`
+in `.env` so Caddy knows the upstream.
+
+### JWT pubkey on RU
+
+share-audio + share-video on RU still verify bearer tokens minted by
+global's auth — RU therefore needs `/opt/lectorium/jwt/public.pem`
+(symlink to global's `v1.pub.pem`) mounted into the share-* containers
+the same way as on origin. `deploy.sh` step 3.5 still installs every
+`*.pub.pem` from `infra/app/jwt-keys/` into `/opt/lectorium/jwt/`.
 
 ## Pre-deploy checklist (one-time per VPS)
 
@@ -219,11 +280,16 @@ ssh root@<ip> 'bash -s' < infra/app/scripts/wipe-old.sh
 ### 7. Deploy
 
 ```bash
+# Global (default role=origin)
 SERVER_IP=<ip> ./infra/app/scripts/deploy.sh
+
+# RU thin-proxy
+SERVER_IP=<ip> ./infra/app/scripts/deploy.sh --role proxy
 ```
 
 Optional overrides: `SERVER_USER` (default `root`), `SSH_KEY` (default
-workspace or `~/.ssh/id_ed25519`). The script:
+workspace or `~/.ssh/id_ed25519`), `--role origin|proxy` (default `origin`,
+or read from `LECTORIUM_REGION_ROLE` in the host's `.env`). The script:
 
 1. Bootstraps docker if missing.
 2. Verifies `.env` and JWT keys are in place — refuses to proceed otherwise.
@@ -233,36 +299,11 @@ workspace or `~/.ssh/id_ed25519`). The script:
    (postgres → migrator → app services → caddy).
 6. Health-checks `/healthz` and `/auth/healthz` over the public domain.
 
-The same compose files serve every region. Per-region knobs live
-entirely in `/opt/lectorium/.env` on the host (`LECTORIUM_REGION_ID`,
-`LECTORIUM_JWT_KID`, `AWS_REGION`, `AWS_ENDPOINT_URL`, LLM/embedder
-provider stack).
-
-### Self-hosted embedder (opt-in per region)
-
-A region with restricted/expensive outbound embedding API can run its
-own TEI + BGE-M3 container next to chat. The service is gated behind
-`profiles: ["selfhosted-embedder"]` in `docker-compose.yml`; setting
-`COMPOSE_PROFILES=selfhosted-embedder` in `/opt/lectorium/.env` makes
-Compose include it on the next `deploy.sh`.
-
-Wiring chat to the local embedder:
-
-```env
-COMPOSE_PROFILES=selfhosted-embedder
-EMBED_PROVIDER=openai
-EMBED_MODEL=baai/bge-m3
-EMBED_DIM=1024
-OPENAI_API_KEY=not-needed
-EMBED_BASE_URL=http://embedder:8080/v1
-EMBED_CONCURRENCY=4
-```
-
-EU does not set these — it keeps its OpenAI cloud config. The
-embedder image (`lectorium-embedder`) bakes the model into the image
-at CI build time, so the container starts without phoning home to
-huggingface.co. See `infra/app/compose/embedder/README.md` for sizing
-and the model-bump procedure.
+After #728 the project runs as a single global backend; the same
+compose files serve that one host. A separate RU VPS acts as a thin
+reverse proxy in front of `share-audio` / `share-video` and forwards
+auth/chat traffic upstream. Its overlay and runbook are documented
+separately (WS-5); this README covers only the origin stack.
 
 ### 7. Backup cron  *(operator, on the VPS)*
 
@@ -346,37 +387,20 @@ docker compose -f infra/app/compose/docker-compose.yml \
 Don't `force` blindly — first confirm the schema is in the state the
 new migration expects.
 
-## JWT key rotation
-
-Tokens are signed RS256 with `kid` from `LECTORIUM_JWT_KID` (default
-`v1`). To rotate:
-
-1. Generate a new keypair on your workstation: `./infra/app/scripts/gen-jwt-keys.sh`
-   then rename the files locally to `*-v2.{key,pem}`.
-2. Place both old and new on the VPS:
-   ```bash
-   scp <new-private> root@<ip>:/opt/lectorium/jwt/private.pem.v2
-   scp <new-public>  root@<ip>:/opt/lectorium/jwt/public.pem.v2
-   ```
-3. Update auth to dual-sign / dual-verify — code change, separate task.
-4. Cut new tokens by bumping `LECTORIUM_JWT_KID=v2` in `.env` and
-   redeploying auth.
-5. After the refresh-token TTL (90 days) has elapsed, retire `v1`.
-
-(Tooling for steps 3–5 isn't in this release; rotation is a future PR.)
-
 ## Local development
 
 ```bash
 # One-time: bootstrap infra/.env.dev with a fresh random POSTGRES_PASSWORD
-# (and a few placeholder vars). gitignored, never committed.
+# (and a few placeholder vars including COMPOSE_PROFILES=origin so the
+# profile-tagged services in the base compose actually start). gitignored,
+# never committed.
 ./infra/app/scripts/gen-dev-env.sh
 
 # Boot base + dev overlay together.
 docker compose \
   -f infra/app/compose/docker-compose.yml \
   -f infra/app/compose/docker-compose.dev.yml \
-  --env-file infra/.env.dev \
+  --env-file infra/app/.env.dev \
   up --build
 # postgres :5432, redis :6379, chat :8080, auth :18081
 # share-audio + share-video have no host ports — exercise via curl on the

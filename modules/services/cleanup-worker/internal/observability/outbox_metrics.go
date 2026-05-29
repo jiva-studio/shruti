@@ -20,8 +20,8 @@ import (
 
 // OutboxPendingSeconds is the per-event_type gauge of "oldest unprocessed
 // row's age in seconds". A per-event-type series lets the alert rule
-// filter to specific event types if we ever want to (e.g. only page on
-// subscription.broadcast since that's the cross-region delivery path).
+// filter to specific event types if we ever want to (e.g. page only on
+// user.deleted backlog when Langfuse is the suspect).
 var OutboxPendingSeconds = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Namespace: "lectorium",

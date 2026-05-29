@@ -4,16 +4,16 @@
       <CloudIcon />
     </IconChip>
 
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.accountRegion.title") }}</h2>
-      <p>{{ currentTitle }}</p>
+    <IonLabel class="ion-text-wrap">
+      <h2>{{ $t("settings.preferredServer.title") }}</h2>
+      <p>{{ subtitle }}</p>
     </IonLabel>
   </IonItem>
 
   <ListItemSelectorDialog
     v-model:open="open"
     :value="value"
-    :title="$t('settings.accountRegion.title')"
+    :title="$t('settings.preferredServer.title')"
     :items="items"
     :allow-empty="false"
     @close="open = false"
@@ -23,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { IonItem, IonLabel } from "@ionic/vue"
 import { CloudIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
@@ -36,10 +37,15 @@ const props = defineProps<Props>()
 const value = defineModel<string>({ required: true, default: "" })
 
 const open = ref(false)
+const { t } = useI18n()
 
-const currentTitle = computed(
-  () => props.items.find((i) => i.id === value.value)?.title ?? value.value
-)
+// Two lines: which server is currently active, plus the fall-through
+// reassurance. Keeps users from worrying that picking the "wrong" one
+// would break the app if it's unreachable.
+const subtitle = computed(() => {
+  const name = props.items.find((i) => i.id === value.value)?.title ?? value.value
+  return `${name} · ${t("settings.preferredServer.fallbackHint")}`
+})
 
 function onSelect(next?: string): void {
   if (!next) return

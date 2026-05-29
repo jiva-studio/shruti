@@ -85,6 +85,12 @@ export interface Lectorium {
   /** Lectorium auth service. Bootstraps anonymous-by-device on first launch;
    *  Settings can upgrade to Google / Apple later. */
   readonly auth: AuthPort
+  /** Failover-aware HTTP client for the chat service. Consumers (chat
+   *  store, title/questions/feedback services) call it with a path
+   *  relative to the active server's `chatBaseUrl`. The composition
+   *  root wires this through `createFailoverClient` so an unreachable
+   *  preferred server transparently falls through to others. */
+  readonly chatHttpRequest: (path: string, init?: RequestInit) => Promise<Response>
   /** HTTP/SSE adapter for `kind=proactive` chat turns. Used by the
    *  scheduler's content builders for `holiday`, `weekly_digest` and
    *  `inactivity` rules. */
@@ -153,6 +159,7 @@ export interface InitLectoriumSeed {
   readonly serverProber: IServerProber
   readonly excerptCache: IExcerptCache
   readonly auth: AuthPort
+  readonly chatHttpRequest: (path: string, init?: RequestInit) => Promise<Response>
   readonly proactiveChat: IProactiveChatService
   /** Factory invoked inside `initLectorium` with a `() => databases.user`
    * getter. The factory pattern keeps the circular dependency local — the
@@ -223,6 +230,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     purchases: seed.purchases,
     serverProber: seed.serverProber,
     auth: seed.auth,
+    chatHttpRequest: seed.chatHttpRequest,
     proactiveChat: seed.proactiveChat,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,

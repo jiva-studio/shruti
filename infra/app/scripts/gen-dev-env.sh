@@ -28,6 +28,18 @@ LECTORIUM_ENV_FILE=../.env.dev
 LECTORIUM_JWT_KEYS_DIR=../../../../.config/lectorium/jwt
 LECTORIUM_IMAGE_TAG=dev
 
+# Compose profiles — services in the base compose are tagged so the
+# same file deploys two roles in prod (origin / proxy). For local dev
+# we always want the full origin stack (auth, chat, cleanup-worker
+# included). docker compose treats services without a profile as always
+# active; tagged services need this opt-in.
+COMPOSE_PROFILES=origin
+
+# Caddy role + global host. Local dev usually skips caddy entirely
+# (no prod overlay), but if anyone layers in docker-compose.prod.yml
+# locally, default to origin so role-origin.conf imports.
+LECTORIUM_REGION_ROLE=origin
+
 OPENROUTER_API_KEY=
 APP_SHARED_TOKEN=dev-token
 AWS_ACCESS_KEY_ID=

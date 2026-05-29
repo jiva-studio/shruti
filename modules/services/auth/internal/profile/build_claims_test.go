@@ -40,8 +40,8 @@ func TestBuildClaims_EmailEnabled_PassesThrough(t *testing.T) {
 
 func TestBuildClaims_EmailDisabled_StripsEmailHash(t *testing.T) {
 	// Russia profile: email collection disabled. Identity rows must
-	// still ship provider+subject (so migrate-in can rebuild them)
-	// but the identifying email hash is suppressed.
+	// still ship provider+subject (the chat-side claim shape depends
+	// on them) but the identifying email hash is suppressed.
 	p := ProfilePolicy{Email: FieldPolicy{Enabled: false}}
 	in := p.BuildClaims(uuid.New(), false, "free", 0, "qid-2", "rc-2", sampleIdents())
 
@@ -63,8 +63,8 @@ func TestBuildClaims_EmailDisabled_StripsEmailHash(t *testing.T) {
 
 func TestBuildClaims_EmailDisabled_MandatoryFieldsKept(t *testing.T) {
 	// The policy ONLY governs EmailHash/EmailVerified. Tier, QuotaID,
-	// RCAppUserID, TierExpiresAt all ship regardless — destination
-	// regions need them on migrate-in even when email is suppressed.
+	// RCAppUserID, TierExpiresAt all ship regardless — the chat
+	// service reads them even when email is suppressed.
 	p := ProfilePolicy{Email: FieldPolicy{Enabled: false}}
 	in := p.BuildClaims(uuid.New(), true, "pro", 1234567890, "qid-3", "rc-3", nil)
 

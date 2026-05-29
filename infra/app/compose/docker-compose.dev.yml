@@ -9,6 +9,8 @@
 # Set these in your shell or via infra/app/.env.dev:
 #   LECTORIUM_ENV_FILE=../.env.dev
 #   LECTORIUM_JWT_KEYS_DIR=../../../../.config/lectorium/jwt
+#   COMPOSE_PROFILES=origin   # required since the base compose is now
+#                             # profile-tagged for origin/proxy roles
 #
 # Usage:
 #   docker compose -f infra/app/compose/docker-compose.yml \

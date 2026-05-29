@@ -1,9 +1,9 @@
-"""Coverage for the kid-aware JwtVerifier.
+"""Coverage for the single-kid JwtVerifier.
 
 Sign tokens with PyJWT against freshly generated RSA keys and confirm
-the verifier picks the right key based on the token's `kid` header,
-including the legacy single-file path and the directory-with-rotation
-path.
+the verifier accepts only `kid="v1"`. Any other kid (including the
+retired `russia-v1`) must hard-reject so the auth force-resignin pathway
+fires for tokens minted by the old RU stack (#728).
 """
 
 from __future__ import annotations
@@ -67,32 +67,38 @@ def test_from_file_accepts_v1_token(tmp_path: Path) -> None:
     assert user.anonymous is False
 
 
-def test_from_dir_accepts_both_kids_during_rotation(tmp_path: Path) -> None:
-    priv1, pub1 = _keypair()
-    priv2, pub2 = _keypair()
-    (tmp_path / "v1.pub.pem").write_text(pub1)
-    (tmp_path / "v2.pub.pem").write_text(pub2)
-
-    v = JwtVerifier.from_dir(tmp_path)
-    assert v.verify(_sign(priv1, "v1")).id == "user-1"
-    assert v.verify(_sign(priv2, "v2")).id == "user-1"
-
-
-def test_from_dir_maps_legacy_public_pem_to_v1(tmp_path: Path) -> None:
+def test_russia_v1_kid_rejected(tmp_path: Path) -> None:
+    """Tokens still signed by the retired RU keypair must hard-reject so
+    the mobile client falls into the force-resignin pathway (#728)."""
     priv, pub = _keypair()
     (tmp_path / "public.pem").write_text(pub)
 
-    v = JwtVerifier.from_dir(tmp_path)
-    assert v.verify(_sign(priv, "v1")).id == "user-1"
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError, match="unsupported kid"):
+        v.verify(_sign(priv, "russia-v1"))
 
 
 def test_unknown_kid_rejected(tmp_path: Path) -> None:
     priv, pub = _keypair()
-    (tmp_path / "v1.pub.pem").write_text(pub)
+    (tmp_path / "public.pem").write_text(pub)
 
-    v = JwtVerifier.from_dir(tmp_path)
-    with pytest.raises(JwtVerifyError, match="unknown kid"):
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError, match="unsupported kid"):
         v.verify(_sign(priv, "v999"))
+
+
+def test_missing_kid_rejected(tmp_path: Path) -> None:
+    priv, pub = _keypair()
+    (tmp_path / "public.pem").write_text(pub)
+    # Forge a token without a `kid` header.
+    tok = pyjwt.encode(
+        {"sub": "user-1", "anonymous": False, "exp": 9999999999, "aud": "chat"},
+        priv,
+        algorithm="RS256",
+    )
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
+    with pytest.raises(JwtVerifyError, match="unsupported kid"):
+        v.verify(tok)
 
 
 def test_foreign_key_signature_rejected(tmp_path: Path) -> None:
@@ -102,7 +108,7 @@ def test_foreign_key_signature_rejected(tmp_path: Path) -> None:
     privB, _ = _keypair()
     (tmp_path / "public.pem").write_text(pubA)
 
-    v = JwtVerifier.from_dir(tmp_path)
+    v = JwtVerifier.from_file(tmp_path / "public.pem")
     with pytest.raises(JwtVerifyError):
         v.verify(_sign(privB, "v1"))
 

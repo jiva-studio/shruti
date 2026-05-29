@@ -34,11 +34,49 @@
 #
 # Required:   SERVER_IP=<ipv4>  ./infra/app/scripts/deploy.sh
 # Optional:   SERVER_USER (root), SSH_KEY (~/.ssh/id_ed25519)
+#             --role origin|proxy (default: origin)
 #
-# Per-region differences (JWT_KID, REGION_ID, AWS_REGION, AWS_ENDPOINT_URL,
-# the LLM/embedder stack) live entirely in /opt/lectorium/.env on the
-# host. The compose files are region-agnostic.
+# --role selects the deployment shape:
+#   origin  — full backend (postgres+pgvector, redis, migrator, auth, chat,
+#             cleanup-worker, share-audio, share-video, caddy, watchtower).
+#             Combines docker-compose.yml + docker-compose.prod.yml.
+#   proxy   — thin RU box (slim postgres, redis, migrator, share-audio,
+#             share-video, caddy reverse-proxying chat+auth upstream).
+#             Combines docker-compose.yml + docker-compose.prod.yml +
+#             docker-compose.proxy.yml; activates COMPOSE_PROFILES=proxy.
+#
+# The role can also be set per-host by writing LECTORIUM_REGION_ROLE=…
+# into /opt/lectorium/.env (the script reads it back if --role is omitted).
+# Proxy hosts MUST also have LECTORIUM_GLOBAL_HOST=<global-domain> set
+# in .env so Caddy knows where to forward.
+#
+# Host-specific values (S3 creds, OAuth client IDs, DB password) live
+# entirely in /opt/lectorium/.env on the host. The compose files are
+# host-agnostic; only role selection differs.
 set -euo pipefail
+
+# ── Arg parse: --role origin|proxy ──────────────────────────────────
+ROLE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --role)
+      ROLE="${2:-}"
+      shift 2
+      ;;
+    --role=*)
+      ROLE="${1#--role=}"
+      shift
+      ;;
+    -h|--help)
+      sed -n '2,40p' "$0"
+      exit 0
+      ;;
+    *)
+      echo "✗ unknown arg: $1" >&2
+      exit 2
+      ;;
+  esac
+done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 INFRA="$ROOT/infra"
@@ -75,15 +113,13 @@ done
 echo "→ Ensuring docker on host..."
 ssh_pipe < "$INFRA/app/scripts/bootstrap.sh"
 
-# ── 2. Confirm operator has placed secrets in /opt/lectorium/. ───────
+# ── 2. Confirm operator has placed .env in /opt/lectorium/. ──────────
 # This script never touches secrets. Operator scp's .env and JWT keys
-# manually (one-time per host).
+# manually (one-time per host). The JWT key check is deferred until
+# after role resolution (step 3.6) because proxy hosts skip private.pem.
 ssh_run "
   set -e
-  err() { echo \"✗ \$1\" >&2; exit 1; }
-  [ -f $REMOTE_DIR/.env ]              || err \"$REMOTE_DIR/.env missing — scp it from your local infra/.env\"
-  [ -f $REMOTE_DIR/jwt/private.pem ]   || err \"$REMOTE_DIR/jwt/private.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\"
-  [ -f $REMOTE_DIR/jwt/public.pem ]    || err \"$REMOTE_DIR/jwt/public.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\"
+  [ -f $REMOTE_DIR/.env ] || { echo \"✗ $REMOTE_DIR/.env missing — scp it from your local infra/.env\" >&2; exit 1; }
 "
 
 # ── 3. rsync infra/ (compose + migrations + Caddyfile + scripts). ────
@@ -122,6 +158,31 @@ ssh_run "
   fi
 "
 
+# ── 3.6. Resolve role. CLI flag wins; otherwise read from host .env. ─
+# Role drives which compose overlays we layer and which COMPOSE_PROFILES
+# is active. Default origin keeps existing single-host installs unchanged.
+if [ -z "$ROLE" ]; then
+  ROLE=$(ssh_run "grep -E '^LECTORIUM_REGION_ROLE=' $REMOTE_DIR/.env | tail -1 | cut -d= -f2- | tr -d '\r\"'" || true)
+  ROLE="${ROLE:-origin}"
+fi
+case "$ROLE" in
+  origin|proxy) ;;
+  *) echo "✗ --role must be origin or proxy (got: $ROLE)" >&2; exit 2 ;;
+esac
+echo "→ Deploying with role: $ROLE"
+
+# ── 3.7. JWT key check (role-conditional). ──────────────────────────
+# Proxy hosts never sign tokens (auth lives on origin), so private.pem
+# is not required there — only public.pem is needed for share-audio +
+# share-video JWT verification. Origin hosts run auth and need both.
+ssh_run "
+  set -e
+  [ -f $REMOTE_DIR/jwt/public.pem ] || { echo \"✗ $REMOTE_DIR/jwt/public.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
+  if [ \"$ROLE\" != \"proxy\" ]; then
+    [ -f $REMOTE_DIR/jwt/private.pem ] || { echo \"✗ $REMOTE_DIR/jwt/private.pem missing — scp the JWT keypair into $REMOTE_DIR/jwt/\" >&2; exit 1; }
+  fi
+"
+
 # ── 4. Pull latest images and bring stack up. ────────────────────────
 # `docker compose pull` honours image tags from .env (e.g. if the
 # operator pinned LECTORIUM_AUTH_TAG=main-<sha> for a rollback, that's
@@ -130,59 +191,112 @@ ssh_run "
 # Override DOCKER_CONFIG so the daemon reads ghcr credentials from the
 # project tree (/opt/lectorium/config/config.json) rather than
 # /root/.docker — keeps all per-project state under $REMOTE_DIR.
-COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/config docker compose -f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml --env-file .env"
+#
+# Role selects overlay set + active profile. proxy adds docker-compose.proxy.yml
+# (postgres → alpine, caddy LECTORIUM_REGION_ROLE=proxy) and activates
+# COMPOSE_PROFILES=proxy so auth/chat/cleanup-worker are profile-excluded.
+if [ "$ROLE" = "proxy" ]; then
+  COMPOSE_FILES="-f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml -f infra/app/compose/docker-compose.proxy.yml"
+  PROFILES="proxy"
+else
+  COMPOSE_FILES="-f infra/app/compose/docker-compose.yml -f infra/app/compose/docker-compose.prod.yml"
+  PROFILES="origin"
+fi
+COMPOSE_CMD="DOCKER_CONFIG=$REMOTE_DIR/config COMPOSE_PROFILES=$PROFILES docker compose $COMPOSE_FILES --env-file .env"
 
 echo "→ docker compose pull..."
 ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD pull"
 
 echo "→ docker compose up -d..."
-ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d"
+# --remove-orphans reaps containers from services no longer in the
+# active compose set. Critical when a host is repurposed (origin → proxy
+# or vice versa) so the old auth/chat/cleanup-worker containers don't
+# linger after the role flip.
+ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD up -d --remove-orphans"
 
 # Restart the verifier-loading services so they pick up any newly
 # added *.pub.pem from step 3.5. `up -d` only restarts containers
 # whose image / config diffs; a fresh pub.pem in the mounted dir
 # does NOT trigger a restart on its own.
-echo "→ Restarting auth + chat + share-video to reload JWT pubkeys..."
-ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart auth chat share-video" || true
+# On proxy: only share-video is present (auth + chat live on origin).
+if [ "$ROLE" = "proxy" ]; then
+  RESTART_SVCS="share-video"
+else
+  RESTART_SVCS="auth chat share-video"
+fi
+echo "→ Restarting $RESTART_SVCS to reload JWT pubkeys..."
+ssh_run "cd $REMOTE_DIR && $COMPOSE_CMD restart $RESTART_SVCS" || true
 
 # ── 5. Health-check. ─────────────────────────────────────────────────
+# On origin we probe chat + auth (terminate locally). On proxy those
+# paths reverse-proxy to LECTORIUM_GLOBAL_HOST, so a green probe here
+# would actually be measuring the global host's health, not this one.
+# Probe the share-* services instead — those are the only HTTP services
+# that genuinely run locally on the proxy box.
 DOMAIN=$(ssh_run "grep -E '^LECTORIUM_DOMAIN=' $REMOTE_DIR/.env | head -1 | cut -d= -f2-")
 URL="https://$DOMAIN"
-echo "→ Waiting for $URL/healthz (Caddy + LE may take ~60s on first run)..."
-for i in $(seq 1 120); do
-  if curl -fsS "$URL/healthz" >/dev/null 2>&1; then
-    echo "✓ chat /healthz OK"
-    break
-  fi
-  sleep 3
-done
+if [ "$ROLE" = "proxy" ]; then
+  echo "→ Waiting for $URL/share/audio/healthz (Caddy + LE may take ~60s on first run)..."
+  for i in $(seq 1 120); do
+    if curl -fsS "$URL/share/audio/healthz" >/dev/null 2>&1; then
+      echo "✓ share-audio /healthz OK"
+      break
+    fi
+    sleep 3
+  done
 
-echo "→ Waiting for $URL/auth/healthz..."
-for i in $(seq 1 60); do
-  if curl -fsS "$URL/auth/healthz" >/dev/null 2>&1; then
-    echo "✓ auth /auth/healthz OK"
-    break
-  fi
-  sleep 2
-done
+  echo "→ Waiting for $URL/share/video/healthz..."
+  for i in $(seq 1 60); do
+    if curl -fsS "$URL/share/video/healthz" >/dev/null 2>&1; then
+      echo "✓ share-video /healthz OK"
+      break
+    fi
+    sleep 2
+  done
+else
+  echo "→ Waiting for $URL/healthz (Caddy + LE may take ~60s on first run)..."
+  for i in $(seq 1 120); do
+    if curl -fsS "$URL/healthz" >/dev/null 2>&1; then
+      echo "✓ chat /healthz OK"
+      break
+    fi
+    sleep 3
+  done
+
+  echo "→ Waiting for $URL/auth/healthz..."
+  for i in $(seq 1 60); do
+    if curl -fsS "$URL/auth/healthz" >/dev/null 2>&1; then
+      echo "✓ auth /auth/healthz OK"
+      break
+    fi
+    sleep 2
+  done
+fi
 
 # ── 6. Post-deploy hooks. Each is idempotent; failure halts the deploy. ──
 # See infra/app/scripts/post-deploy/README.md for the contract.
-echo "→ Running post-deploy hooks..."
-HOOKS=$(ssh_run "ls $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh 2>/dev/null || true")
-if [ -z "$HOOKS" ]; then
-  echo "  (none)"
+# Skipped on proxy: hooks today target origin-only surfaces (postgres-exporter
+# grants on auth/app schemas that ship empty on proxy and where no exporter
+# is running). Per-hook role guards live in the hook itself when needed.
+if [ "$ROLE" = "proxy" ]; then
+  echo "→ Skipping post-deploy hooks (role=proxy)"
 else
-  ssh_run "
-    set -e
-    for s in $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh; do
-      [ -f \"\$s\" ] || continue
-      echo \"  • \$(basename \$s)\"
-      bash \"\$s\"
-    done
-  "
+  echo "→ Running post-deploy hooks..."
+  HOOKS=$(ssh_run "ls $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh 2>/dev/null || true")
+  if [ -z "$HOOKS" ]; then
+    echo "  (none)"
+  else
+    ssh_run "
+      set -e
+      for s in $REMOTE_DIR/infra/app/scripts/post-deploy/[0-9]*.sh; do
+        [ -f \"\$s\" ] || continue
+        echo \"  • \$(basename \$s)\"
+        bash \"\$s\"
+      done
+    "
+  fi
+  echo "✓ Post-deploy hooks done"
 fi
-echo "✓ Post-deploy hooks done"
 
 echo
 echo "✓ Deployed: $URL"
