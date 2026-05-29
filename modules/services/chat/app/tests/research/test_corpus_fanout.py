@@ -78,6 +78,15 @@ class FakeChunkRepo:
         return [s for s in self.library_results if s.chunk.item_kind in kinds][: kwargs.get("top_k", 8)]
 
 
+class FakeReranker:
+    """Preserves the cosine order it's given (the pool is pre-sorted by cosine
+    before rerank), so the top-K cut == top-K by cosine. Lets the reserve tests
+    isolate "verses squeezed out of the cut" from cross-encoder quirks."""
+
+    async def rerank(self, query: str, texts: list[str], top_k: int | None = None):
+        return [(i, 1.0 - i * 0.001) for i in range(len(texts))]
+
+
 class FakeAliasMap:
     def __init__(self) -> None:
         self.lec_counter = 0
@@ -248,6 +257,56 @@ async def test_boost_on_library_item_id():
     by_text = {env["text"]: env for env in res.chunks}
     assert by_text["BOOST"]["score"] == pytest.approx(0.70)
     assert by_text["BOOST"]["topic_boosted"] is True
+
+
+# ---- per-family rerank reserve (1c) ---------------------------------------
+
+
+def _lec(i: int, score: float) -> _Scored:
+    return _Scored(_LecChunk(f"track_{i}", 0, 1000, f"lec_{i}", "ru"), score)
+
+
+def _verse(i: int, score: float) -> _Scored:
+    return _Scored(
+        _LibChunk(f"verse_{i}", "verse", f"verse_{i}", "ru", source_id="BG", tokens=f"2.{i}"),
+        score,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rerank_reserve_seats_verses_squeezed_out_of_topk():
+    # 18 lectures dominate the top-16 cut; 3 verses sit just below them but
+    # clear RERANK_RESERVE_FLOOR (0.40). Without the reserve verses = 0; with
+    # it, ≥RERANK_MIN_VERSES verses survive while lectures are untouched.
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(i, 0.60) for i in range(18)],
+        library_results=[_verse(i, 0.45) for i in range(3)],
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+        reranker=FakeReranker(), rerank_query="q",
+    )
+    verses = res.by_kind.get("verse", [])
+    lectures = res.by_kind.get("lecture", [])
+    assert len(verses) >= 2, "verse reserve should seat ≥2 verses past the cut"
+    assert len(lectures) == 16, "lecture cut (top-K) must be unaffected"
+
+
+@pytest.mark.asyncio
+async def test_rerank_reserve_skips_low_cosine_verses():
+    # Verses below RERANK_RESERVE_FLOOR (0.30 < 0.40) are NOT force-included —
+    # empty-result discipline: never promote junk just to fill a quota.
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(i, 0.60) for i in range(18)],
+        library_results=[_verse(i, 0.30) for i in range(3)],
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+        reranker=FakeReranker(), rerank_query="q",
+    )
+    assert res.by_kind.get("verse", []) == []
 
 
 # ---- _label_for_library_chunk (issue #660) --------------------------------

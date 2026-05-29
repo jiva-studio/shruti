@@ -24,7 +24,10 @@ from lectorium_chat.agent.tools._envelope import (
 )
 from lectorium_chat.domain.entities import LibraryChunk
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.research.constants import MAX_COMMENTARIES_PER_VERSE
+from lectorium_chat.research.constants import (
+    MAX_COMMENTARIES_PER_VERSE,
+    THIN_THESIS_MIN_SCORE,
+)
 
 
 log = get_logger(__name__)
@@ -449,18 +452,42 @@ async def rerank_and_attach_commentaries(
             # Nothing picked — keep planner's original picks so the
             # synthesizer still has SOMETHING to cite.
             new_supporting = list(t.supporting_notes)
+
+        # Non-lecture slot: if every pick is a lecture but a strong (≥
+        # THIN_THESIS_MIN_SCORE) verse/commentary exists in the pool, swap the
+        # weakest (last) lecture for it. Keeps theses from being lecture-
+        # monopolised (prod showed ~4:1) without changing the slot count or
+        # 1-based indexing. Swap, never append.
+        def _ptype(one_based: int) -> str | None:
+            env = pool_envelopes[one_based - 1]
+            return env.get("type") if isinstance(env, dict) else None
+
+        if new_supporting and all(_ptype(i) == "lecture" for i in new_supporting):
+            picked = set(new_supporting)
+            best_nl = next(
+                (
+                    pool_idx for s, pool_idx in scored
+                    if s >= THIN_THESIS_MIN_SCORE
+                    and (pool_idx + 1) not in picked
+                    and isinstance(pool_envelopes[pool_idx], dict)
+                    and pool_envelopes[pool_idx].get("type") in ("verse", "commentary")
+                ),
+                None,
+            )
+            if best_nl is not None:
+                new_supporting[-1] = best_nl + 1
+
         new_theses.append(Thesis(
             thesis=t.thesis,
             header=t.header,
             supporting_notes=new_supporting,
             sub_query_types=list(t.sub_query_types),
         ))
-        # Type mix of the picks — tells us if a thesis ended up
-        # commentary-heavy / verse-heavy / lecture-heavy.
+        # Type mix of the FINAL picks (post non-lecture swap) — tells us if a
+        # thesis ended up commentary-heavy / verse-heavy / lecture-heavy.
         type_counts: dict[str, int] = {}
-        for _, pool_idx in top:
-            env = pool_envelopes[pool_idx]
-            kind = (env.get("type") or "?") if isinstance(env, dict) else "?"
+        for one_based in new_supporting:
+            kind = _ptype(one_based) or "?"
             type_counts[kind] = type_counts.get(kind, 0) + 1
         skipped_after_cap = scored[top_k_per_thesis:]
         per_thesis_obs.append({

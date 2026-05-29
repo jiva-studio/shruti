@@ -335,3 +335,61 @@ async def test_log_runs_without_crash_with_enriched_fields():
         chunk_repo=FakeChunkRepo(), embedder=embedder,
         alias_map=FakeAliasMap(), lang="ru",
     )
+
+
+@pytest.mark.asyncio
+async def test_non_lecture_slot_swaps_in_commentary_when_picks_all_lectures():
+    """1d: when the per-thesis top-K is all lectures but a strong (≥0.55)
+    commentary sits just below, swap the weakest lecture for it so theses
+    aren't lecture-monopolised. Swap keeps the slot count + 1-based indices."""
+    outline = Outline(theses=[
+        Thesis(thesis="topic", supporting_notes=[1, 2, 3]),
+    ])
+    base_notes = [
+        _lecture_env(text="lec 0"),
+        _lecture_env(text="lec 1"),
+        _commentary_env(text="comm strong", item_id="comm_a"),
+    ]
+    embedder = FakeEmbedder(mapping={
+        "topic":       [1.0, 0.0, 0.0, 0.0],
+        "lec 0":       [1.0, 0.0, 0.0, 0.0],   # cos 1.0
+        "lec 1":       [0.8, 0.6, 0.0, 0.0],   # cos 0.8
+        "comm strong": [0.6, 0.8, 0.0, 0.0],   # cos 0.6 (≥0.55, below both lectures)
+    })
+    out, _ = await rerank_and_attach_commentaries(
+        outline, base_notes,
+        chunk_repo=FakeChunkRepo(), embedder=embedder,
+        alias_map=FakeAliasMap(), lang="ru",
+        catalog_repo=FakeCatalog(), top_k_per_thesis=2,
+    )
+    picks = out.theses[0].supporting_notes
+    assert len(picks) == 2                 # slot count unchanged
+    assert 3 in picks                      # commentary (1-based idx 3) swapped in
+    assert 1 in picks                      # strongest lecture kept
+
+
+@pytest.mark.asyncio
+async def test_non_lecture_slot_no_swap_when_no_strong_non_lecture():
+    """No swap when the only non-lecture is weak (<0.55) — never displace a
+    real lecture for junk."""
+    outline = Outline(theses=[
+        Thesis(thesis="topic", supporting_notes=[1, 2, 3]),
+    ])
+    base_notes = [
+        _lecture_env(text="lec 0"),
+        _lecture_env(text="lec 1"),
+        _commentary_env(text="comm weak", item_id="comm_b"),
+    ]
+    embedder = FakeEmbedder(mapping={
+        "topic":     [1.0, 0.0, 0.0, 0.0],
+        "lec 0":     [1.0, 0.0, 0.0, 0.0],
+        "lec 1":     [0.9, 0.436, 0.0, 0.0],
+        "comm weak": [0.3, 0.954, 0.0, 0.0],   # cos ~0.3 < 0.55
+    })
+    out, _ = await rerank_and_attach_commentaries(
+        outline, base_notes,
+        chunk_repo=FakeChunkRepo(), embedder=embedder,
+        alias_map=FakeAliasMap(), lang="ru",
+        catalog_repo=FakeCatalog(), top_k_per_thesis=2,
+    )
+    assert out.theses[0].supporting_notes == [1, 2]  # untouched lectures

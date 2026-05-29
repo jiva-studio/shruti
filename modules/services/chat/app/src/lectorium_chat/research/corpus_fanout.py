@@ -22,8 +22,11 @@ from lectorium_chat.research.constants import (
     BOOST_BY_KIND,
     RERANK_FETCH_TOP_K,
     RERANK_MIN_LECTURES,
+    RERANK_MIN_LIBRARY,
+    RERANK_MIN_VERSES,
     RERANK_NOISE_PREFLOOR,
     RERANK_POOL_CAP,
+    RERANK_RESERVE_FLOOR,
     RERANK_TOP_K,
     TOPK_PER_QUERY,
 )
@@ -232,6 +235,30 @@ async def _rerank_pool(
                 kept_keys.add(r.dedup_key)
                 lectures_in += 1
 
+    # Per-family reserve for verses and the rest of the library. The cross-
+    # encoder favours conversational text and its scores aren't comparable
+    # across kinds, so terse verse chunks get 0 of the top-K even when on-topic
+    # (observed in prod: 26 verse candidates → 0 kept). Mirror the lecture
+    # reserve, gated by a cosine floor so we never force low-relevance junk.
+    def _reserve(kind_pred: Callable[[str], bool], minimum: int) -> None:
+        have = sum(1 for r in kept if kind_pred(r.kind))
+        if have >= minimum:
+            return
+        for r in ranked_all:
+            if have >= minimum:
+                break
+            if (
+                kind_pred(r.kind)
+                and r.dedup_key not in kept_keys
+                and r.score >= RERANK_RESERVE_FLOOR
+            ):
+                kept.append(r)
+                kept_keys.add(r.dedup_key)
+                have += 1
+
+    _reserve(lambda k: k == "verse", RERANK_MIN_VERSES)
+    _reserve(lambda k: k in ("commentary", "prose_chapter", "letter"), RERANK_MIN_LIBRARY)
+
     # Re-sort the final set so reserve/force-include additions land in
     # rerank order, not appended at the tail.
     kept.sort(
@@ -321,11 +348,16 @@ async def fanout_search_with_boost(
             ]
 
         async def _run(use_lang: str | None) -> list[_RawScored]:
-            lec, lib = await asyncio.gather(
+            # Verses fetched in their OWN ANN call (own LIMIT) so short verse
+            # chunks aren't starved by long commentary/prose that win the shared
+            # cosine top-K. Other library kinds keep one combined fetch.
+            other_lib = [k for k in _LIBRARY_KINDS if k != "verse"]
+            lec, verse_lib, rest_lib = await asyncio.gather(
                 _lecture(use_lang),
-                _library(use_lang, list(_LIBRARY_KINDS)),
+                _library(use_lang, ["verse"]),
+                _library(use_lang, other_lib),
             )
-            return lec + lib
+            return lec + verse_lib + rest_lib
 
         rows = await _run(lang)
         if not rows and lang is not None:
