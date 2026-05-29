@@ -224,12 +224,15 @@ onBeforeUnmount(() => {
   min-height: 2px;
   background: rgba(var(--ion-color-medium-rgb), 0.35);
   border-radius: 2px;
-  /* `height` transitions so the swap from the random placeholder peaks
-   * to the real decoded peaks reads as a wave settling into shape
-   * rather than a hard jump. Bar count is constant (`BAR_COUNT = 96`),
-   * so Vue updates inline styles in place and CSS handles the tween. */
+  /* `background-color` eases over ~300ms so each bar visibly fades from
+   * the faint unplayed tint to the solid played colour as the playhead
+   * crosses it, trailing the progress edge rather than snapping.
+   * `height` transitions so the swap from the random placeholder peaks
+   * to the real decoded peaks reads as a wave settling into shape rather
+   * than a hard jump. Bar count is constant (`BAR_COUNT = 96`), so Vue
+   * updates inline styles in place and CSS handles the tween. */
   transition:
-    background 80ms linear,
+    background-color 300ms ease,
     height 350ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
