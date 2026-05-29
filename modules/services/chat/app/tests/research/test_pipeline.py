@@ -633,3 +633,41 @@ async def test_on_event_callback_exception_does_not_break_research():
 # attach moved into `synthesis_planner_node`. The equivalent behaviour
 # (commentaries fetched + reranked per-thesis) is covered by
 # `tests/research/test_rerank_attach.py`.
+
+
+# ---- _balanced_cut (final-cut membership guarantee) -----------------------
+
+from shruti_chat.research.pipeline import _balanced_cut
+
+
+def _env(t: str, score: float) -> dict:
+    return {"type": t, "score": score}
+
+
+def test_balanced_cut_backfills_verse_and_library_from_tail():
+    # 8 lectures fill the cut; a verse and a commentary sit just past it,
+    # both above RERANK_RESERVE_FLOOR → both must be pulled back in.
+    envs = [_env("lecture", 0.7) for _ in range(8)]
+    envs += [_env("verse", 0.55), _env("commentary", 0.5)]
+    out = _balanced_cut(envs, 8, min_verses=1, min_library=1)
+    kinds = [e["type"] for e in out]
+    assert kinds.count("verse") == 1
+    assert kinds.count("commentary") == 1
+    assert kinds.count("lecture") == 8  # cut grows, lectures untouched
+
+
+def test_balanced_cut_skips_low_score_tail():
+    # Tail verse below the reserve floor (0.30 < 0.40) is NOT back-filled.
+    envs = [_env("lecture", 0.7) for _ in range(8)] + [_env("verse", 0.30)]
+    out = _balanced_cut(envs, 8, min_verses=1, min_library=1)
+    assert all(e["type"] == "lecture" for e in out)
+
+
+def test_balanced_cut_noop_when_already_present_or_short():
+    # Verse already inside the top-n → no growth.
+    envs = [_env("verse", 0.8)] + [_env("lecture", 0.7) for _ in range(7)] + [_env("verse", 0.5)]
+    out = _balanced_cut(envs, 8, min_verses=1, min_library=0)
+    assert len(out) == 8
+    # Shorter than n → returned as-is.
+    short = [_env("lecture", 0.7), _env("verse", 0.6)]
+    assert _balanced_cut(short, 8) == short
