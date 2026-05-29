@@ -44,6 +44,15 @@ defineEmits<{ click: [noteId: string] }>()
   border-color: var(--ion-color-primary-tint);
   margin: 1rem 0rem;
 
+  /* Justified body text is a Notes-list-only treatment (it predates the
+     shared ExcerptCard). Kept here, on the row, so the chat citation card
+     — which reuses ExcerptCard — does NOT inherit it. `text-align` /
+     `hyphens` cascade to the text inside ExcerptCard. */
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+  -moz-hyphens: auto;
+
   /* Снимаем дефолтный ripple у IonItem[button]. Тап по заметке открывает
      action-sheet — визуального echo тут не нужно, он мешает. */
   --ripple-color: rgba(0, 0, 0, 0);

@@ -7,12 +7,19 @@
     -->
     <slot name="player" />
 
-    <HighlightText v-if="text" :text="text" :lang="language" />
+    <!--
+      Text + attribution sit in their own padded body so a host can keep
+      the player full-bleed at the top (header strip) while the body stays
+      inset. Padding is host-controlled via `--excerpt-body-padding`.
+    -->
+    <div v-if="text || authorName || titleText || refDateText" class="excerpt-body">
+      <HighlightText v-if="text" :text="text" :lang="language" />
 
-    <div v-if="authorName || titleText || refDateText" class="meta-block">
-      <div v-if="authorName" class="author">{{ authorName }}</div>
-      <div v-if="titleText" class="title">{{ titleText }}</div>
-      <div v-if="refDateText" class="meta">{{ refDateText }}</div>
+      <div v-if="authorName || titleText || refDateText" class="meta-block">
+        <div v-if="authorName" class="author">{{ authorName }}</div>
+        <div v-if="titleText" class="title">{{ titleText }}</div>
+        <div v-if="refDateText" class="meta">{{ refDateText }}</div>
+      </div>
     </div>
   </div>
 </template>
@@ -51,14 +58,16 @@ const refDateText = computed<string>(() =>
 .excerpt-card {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.25rem 0;
   width: 100%;
+}
 
-  text-align: justify;
-  text-justify: inter-word;
-  hyphens: auto;
-  -moz-hyphens: auto;
+/* Body padding is host-controlled: the chat card insets it while keeping
+ * the player flush at the top; Notes uses the default. */
+.excerpt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: var(--excerpt-body-padding, 0.25rem 0);
 }
 
 .meta-block {
