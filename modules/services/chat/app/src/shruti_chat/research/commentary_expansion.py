@@ -235,6 +235,8 @@ async def rerank_and_attach_commentaries(
     top_k_per_thesis: int = 5,
     max_commentaries_per_verse: int = MAX_COMMENTARIES_PER_VERSE,
     on_event: OnEvent | None = None,
+    reranker: Any = None,
+    rerank_concurrency: int = 2,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Stage 1 of the per-thesis rerank pipeline.
 
@@ -385,7 +387,41 @@ async def rerank_and_attach_commentaries(
         for k in range(len(rerank_indices))
     }
 
-    # ── 5. Per-thesis: cosine over pool → top-K → new supporting_notes ─
+    # ── 5a. Cross-encoder: per-thesis rerank over the SAME pool, anchored
+    # on the thesis statement alone. Owns the grounding selection; cosine
+    # stays as the fallback (+ feeds Stage 2 thin-detection). Runs per
+    # thesis in parallel, bounded by rerank_concurrency. Any failure ⇒
+    # fall back to cosine for that thesis. ─────────────────────────────
+    rerank_pool_idx = list(note_embeds_by_idx.keys())  # pool indices, rerankable
+    rerank_by_thesis: dict[int, list[int]] = {}
+    if reranker is not None and rerank_pool_idx:
+        rerank_texts = [pool_texts[i] for i in rerank_pool_idx]
+        sem = asyncio.Semaphore(max(1, rerank_concurrency))
+
+        async def _rerank_one(claim: str) -> list[int] | None:
+            if not claim.strip():
+                return None
+            async with sem:
+                try:
+                    scored = await reranker.rerank(
+                        claim, rerank_texts, top_k=top_k_per_thesis,
+                    )
+                except Exception as exc:  # noqa: BLE001 — never fail a turn
+                    log.warning("stage1_rerank_failed", error=str(exc))
+                    return None
+            # Voyage `index` points into rerank_texts → map to pool index.
+            return [rerank_pool_idx[i] for i, _ in scored[:top_k_per_thesis]
+                    if 0 <= i < len(rerank_pool_idx)]
+
+        results = await asyncio.gather(
+            *(_rerank_one(t.thesis) for t in outline.theses)
+        )
+        for ti, picks in enumerate(results):
+            if picks:
+                rerank_by_thesis[ti] = picks
+
+    # ── 5b. Per-thesis: cosine over pool → top-K (fallback / observability);
+    # reranker picks override the supporting_notes when present. ────────
     new_theses: list[Thesis] = []
     # Per-thesis observability: top cosine + supporting-note type mix.
     # Skipped-note diagnostics: how strong was the BEST note we DIDN'T
@@ -393,19 +429,25 @@ async def rerank_and_attach_commentaries(
     # if there's real material being dropped (high) vs noise (low).
     per_thesis_obs: list[dict] = []
 
-    for t, t_emb in zip(outline.theses, thesis_embeds):
+    for ti, (t, t_emb) in enumerate(zip(outline.theses, thesis_embeds)):
         scored: list[tuple[float, int]] = []
         for pool_idx, n_emb in note_embeds_by_idx.items():
             score = _cosine(t_emb, n_emb)
             scored.append((score, pool_idx))
         scored.sort(reverse=True)
         top = scored[:top_k_per_thesis]
-        # Convert pool index (0-based) to 1-based supporting_notes index
-        # matching the synthesizer's enumerate(start=1) numbering.
-        new_supporting = [pool_idx + 1 for _, pool_idx in top]
+        # Cross-encoder picks own the grounding selection when present;
+        # else fall back to the cosine top-K. Convert pool index (0-based)
+        # to 1-based supporting_notes index matching the synthesizer's
+        # enumerate(start=1) numbering.
+        rerank_picks = rerank_by_thesis.get(ti)
+        if rerank_picks:
+            new_supporting = [pool_idx + 1 for pool_idx in rerank_picks]
+        else:
+            new_supporting = [pool_idx + 1 for _, pool_idx in top]
         if not new_supporting:
-            # Reranker found nothing — keep planner's original picks so
-            # the synthesizer still has SOMETHING to cite.
+            # Nothing picked — keep planner's original picks so the
+            # synthesizer still has SOMETHING to cite.
             new_supporting = list(t.supporting_notes)
         new_theses.append(Thesis(
             thesis=t.thesis,

@@ -283,6 +283,7 @@ async def run_research(
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     kv_cache: Any | None = None,
+    reranker: Any = None,
     precomputed_query_embedding_task: Any | None = None,
     # Langfuse `CallbackHandler` list, threaded into every LLM call in
     # the pipeline (query expansion, topic extraction, caption
@@ -338,6 +339,7 @@ async def run_research(
             alias_map=alias_map, llm=llm, router_args=router_args,
             boost_by_kind=boost_by_kind, expand_model=expand_model,
             request_id=request_id, on_event=on_event,
+            reranker=reranker,
             callbacks=callbacks,
         )
 
@@ -436,6 +438,8 @@ async def run_research(
                 date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
                 book_id=router_args.get("source_id"),
                 on_event=on_event,
+                reranker=reranker,
+                rerank_query=question,
             ),
             default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
             name="supplementary_fanout", request_id=request_id,
@@ -479,6 +483,7 @@ async def run_research(
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
         kv_cache=kv_cache,
+        reranker=reranker,
         callbacks=callbacks,
     )
     _kick_caption_gen(
@@ -565,6 +570,7 @@ async def _research_path(
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
     kv_cache: Any | None = None,
+    reranker: Any = None,
     callbacks: list[Any] | None = None,
 ) -> ResearchResult:
     """LONG path: topic-extract → topic-lookup → boost-aware fanout with
@@ -685,6 +691,8 @@ async def _research_path(
                 date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
                 book_id=router_args.get("source_id"),
                 on_event=on_event,
+                reranker=reranker,
+                rerank_query=question,
             ),
             default=None, timeout=TIMEOUT_FANOUT_S,
             name=f"fanout_round_{round_idx}", request_id=request_id,
@@ -734,10 +742,21 @@ async def _research_path(
         env_score = env.get("score") or 0.0
         if prev is None or prev_score < env_score:
             merged_by_key[key] = env
+    # Two-tier order so the cosine and rerank scales are never compared
+    # against each other: authoritative attribution refs (fetched outside
+    # fanout — cosine ~0.85, no `rerank_score`) pin first by cosine; the
+    # reranked fanout chunks follow, ordered by rerank_score (fallback
+    # cosine). So a reranked chunk can't displace an authoritative ref and
+    # the rerank order survives into the note list. With the reranker off,
+    # nothing carries `rerank_score` → this is a stable cosine sort, same
+    # as before.
+    def _tier_key(e: dict[str, Any]) -> tuple[int, float]:
+        rs = e.get("rerank_score")
+        if rs is None:
+            return (1, e.get("score") or 0.0)   # authoritative ref tier
+        return (0, rs)                           # reranked chunk tier
     top_chunks = sorted(
-        merged_by_key.values(),
-        key=lambda e: e.get("score") or 0.0,
-        reverse=True,
+        merged_by_key.values(), key=_tier_key, reverse=True,
     )[:20]
 
     # Commentary attachment moved POST-planner: see SHORT path comment

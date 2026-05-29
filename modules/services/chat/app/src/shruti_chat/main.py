@@ -32,6 +32,7 @@ from shruti_chat.db.client import close_pool, init_pool
 from shruti_chat.db.assert_schema import assert_schema_ready
 from shruti_chat.indexer import run as indexer_run
 from shruti_chat.indexer.embed import get_embedder
+from shruti_chat.infra.rerank import get_reranker
 from shruti_chat.infra.rate_limit.redis_rate_limit_store import RedisRateLimitStore
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from shruti_chat.infra.repositories.pg_chunk_repository import PgChunkRepository
@@ -176,6 +177,7 @@ async def lifespan(app: FastAPI):
         idempotency_store=idempotency_store,
         llm=llm_provider,
         chat_graph=chat_graph,
+        reranker=get_reranker(s),
     )
 
     # Wire the registered tool callables with their concrete adapters.
