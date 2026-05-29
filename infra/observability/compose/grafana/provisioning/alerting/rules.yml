@@ -163,10 +163,12 @@ groups:
             type: gt
             params:
             - 3
-    # NoData here means cAdvisor stopped emitting per-container series — the
-    # safety net is blind, which is itself an incident. Alert, don't go silent.
-    noDataState: Alerting
-    execErrState: Alerting
+    # NoData is the steady state on hosts whose Docker uses the containerd
+    # image store (cAdvisor can't read per-container layers there) — so keep
+    # this OK and let the dedicated cadvisor_metrics_missing watchdog (below)
+    # be the single P2 signal for missing data, instead of paging P1 forever.
+    noDataState: OK
+    execErrState: OK
   - uid: container_oom_killed
     title: container_oom_killed
     condition: B
@@ -196,8 +198,10 @@ groups:
             type: gt
             params:
             - 0
-    noDataState: Alerting
-    execErrState: Alerting
+    # OK on NoData for the same reason as container_restart_loop above — the
+    # cadvisor_metrics_missing watchdog owns the missing-data signal.
+    noDataState: OK
+    execErrState: OK
   # Watchdog: catches a degraded/broken cAdvisor directly. On cgroup v2 a
   # private cgroupns made it emit only container_last_seen{id="/"} (no name=
   # series), silently blinding the two rules above. absent() fires when there

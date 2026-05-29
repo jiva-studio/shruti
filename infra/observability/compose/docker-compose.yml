@@ -432,7 +432,9 @@ services:
       - --label-enable
       - --interval=60
       - --cleanup
-      - --rolling-restart
+      # No --rolling-restart: langfuse-web has compose depends_on, which
+      # watchtower's rolling-restart validator rejects, crash-looping the
+      # container. Default stop-then-start honours dependency order fine.
     networks: [watchtower-internal, default]
     depends_on:
       docker-socket-proxy: { condition: service_started }
