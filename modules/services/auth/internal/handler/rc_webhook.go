@@ -204,6 +204,10 @@ type rcWebhookPayload struct {
 		Type        string `json:"type"`
 		AppUserID   string `json:"app_user_id"`
 		Environment string `json:"environment"` // "SANDBOX" | "PRODUCTION"
+		// TRANSFER events carry no app_user_id; the entitlement moves
+		// from the ids in transferred_from to the ids in transferred_to.
+		TransferredFrom []string `json:"transferred_from"`
+		TransferredTo   []string `json:"transferred_to"`
 	} `json:"event"`
 }
 
@@ -249,10 +253,29 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true, "skipped": true})
 		return
 	}
-	if p.Event.AppUserID == "" {
-		// No app_user_id → nothing to refetch and nothing the orphan
-		// sweep can resolve. Refuse with 400 so RC stops retrying.
-		slog.WarnContext(ctx, "rc_webhook_no_app_user_id", "event_id", p.Event.ID)
+	// Resolve the app_user_id we refetch + reconcile. Most events carry
+	// it directly. TRANSFER events don't — the entitlement now belongs to
+	// the id(s) in transferred_to, so fall back to the identified
+	// (non-anonymous) destination: that's the one bound to an auth.users
+	// row, and refetching it picks up the just-transferred entitlement.
+	// (The transferred_from owner — if it's an identified user that lost
+	// the entitlement — self-corrects on its own next event / the 24h
+	// reconcile sweep; the common anon source has no row to downgrade.)
+	appUserID := p.Event.AppUserID
+	if appUserID == "" {
+		for _, id := range p.Event.TransferredTo {
+			if id != "" && !strings.HasPrefix(id, "$RCAnonymousID:") {
+				appUserID = id
+				break
+			}
+		}
+	}
+	if appUserID == "" {
+		// No app_user_id and no identified transfer destination → nothing
+		// to refetch and nothing the orphan sweep can resolve. Refuse with
+		// 400 so RC stops retrying.
+		slog.WarnContext(ctx, "rc_webhook_no_app_user_id",
+			"event_id", p.Event.ID, "event_type", p.Event.Type)
 		writeErr(w, http.StatusBadRequest, "bad_request", "missing app_user_id")
 		return
 	}
@@ -270,7 +293,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//     lock keyed on event_id; the in-flight attempt holds it (or
 	//     will release on rollback). Once we have it, re-read
 	//     processed_at — if NULL we retry the apply step.
-	inserted, processed, err := h.applier().InsertOrLookup(ctx, p.Event.ID, p.Event.AppUserID)
+	inserted, processed, err := h.applier().InsertOrLookup(ctx, p.Event.ID, appUserID)
 	if err != nil {
 		slog.ErrorContext(ctx, "rc_webhook_idempotency_failed",
 			"event_id", p.Event.ID, "err", err.Error())
@@ -306,7 +329,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// processed_at=NULL with an error message; RC will retry the
 	// webhook (and we'll fall back through the idempotency path
 	// taking the "unprocessed → retry" branch).
-	resp, err := h.fetcher().GetSubscriber(ctx, p.Event.AppUserID)
+	resp, err := h.fetcher().GetSubscriber(ctx, appUserID)
 	if err != nil {
 		// 404 is a soft success — RC creates the subscriber lazily on
 		// first event, so a webhook can race ahead. Treat the empty
@@ -315,7 +338,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, rcclient.ErrSubscriberNotFound) {
 			slog.InfoContext(ctx, "rc_refetch_not_found",
 				"event_id", p.Event.ID,
-				"rc_app_user_id", p.Event.AppUserID,
+				"rc_app_user_id", appUserID,
 			)
 			// resp is the empty-but-non-nil response from rcclient;
 			// fall through to the apply step.
@@ -331,7 +354,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			safeErr := sanitizeRCError(err)
 			slog.ErrorContext(ctx, "rc_refetch_permanent_failure",
 				"event_id", p.Event.ID,
-				"rc_app_user_id", p.Event.AppUserID,
+				"rc_app_user_id", appUserID,
 				"err", safeErr,
 			)
 			if sealErr := h.events().MarkProcessedWithError(ctx,
@@ -357,7 +380,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	snap := service.SnapshotFromRCResponse(p.Event.AppUserID, resp, h.now())
+	snap := service.SnapshotFromRCResponse(appUserID, resp, h.now())
 	userID, matched, err := h.applier().Apply(ctx, p.Event.ID, snap)
 	if err != nil {
 		safeErr := sanitizeRCError(err)
@@ -378,7 +401,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(ctx, "rc_webhook_unmatched",
 			"event_id", p.Event.ID,
 			"event_type", p.Event.Type,
-			"rc_app_user_id", p.Event.AppUserID,
+			"rc_app_user_id", appUserID,
 		)
 		writeErr(w, http.StatusInternalServerError, "unmatched", "rc_app_user_id not bound yet")
 		return
@@ -387,7 +410,7 @@ func (h *RCWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.InfoContext(ctx, "rc_webhook_processed",
 		"event_id", p.Event.ID,
 		"event_type", p.Event.Type,
-		"rc_app_user_id", p.Event.AppUserID,
+		"rc_app_user_id", appUserID,
 		"user_id", userID.String(),
 		"matched", matched,
 		"tier", snap.Tier,
