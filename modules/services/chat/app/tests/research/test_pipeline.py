@@ -299,7 +299,7 @@ async def test_short_path_multi_match_unions_refs():
 
 @pytest.mark.asyncio
 async def test_long_path_no_question_match():
-    """No question match → extract_topics → topic lookup → boost → fanout."""
+    """No question match → extract_topics → topic lookup → fanout."""
     pool = FakePool({
         # No question matches.
         ("ru", "question"): [],
@@ -333,16 +333,14 @@ async def test_long_path_no_question_match():
     assert result.authoritative_refs == []
     assert result.matched_question_ids == []
     assert "attribution_t1" in result.matched_topic_ids
-    # Boost: verse_boost should now score 0.55 + 0.15 = 0.70 → above verse_other (0.65).
-    texts = [e["text"] for e in result.research_chunks]
-    assert texts[0] == "BOOSTED"
-    # Boosted flag set.
-    assert result.research_chunks[0]["topic_boosted"] is True
+    # LONG path: topic-attribution matched, fanout verses reach research_chunks.
+    texts = {e["text"] for e in result.research_chunks}
+    assert {"BOOSTED", "OTHER"} <= texts
 
 
 @pytest.mark.asyncio
 async def test_long_path_no_topics_extracted_no_boost():
-    """LLM returns 0 topics → boost_ids empty → fanout runs without boost."""
+    """LLM returns 0 topics → no topic matches → plain fanout."""
     pool = FakePool({("ru", "question"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("track_a", 0, 1000, "x", "ru"), 0.6)],
@@ -363,7 +361,7 @@ async def test_long_path_no_topics_extracted_no_boost():
 
 @pytest.mark.asyncio
 async def test_cold_start_empty_attributions_pure_fanout():
-    """Both lookups return [] → boost_ids empty → plain fanout. No crash."""
+    """Both lookups return [] → no attribution matches → plain fanout. No crash."""
     pool = FakePool({})  # no rows for any (lang, kind)
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "lec", "ru"), 0.7)],

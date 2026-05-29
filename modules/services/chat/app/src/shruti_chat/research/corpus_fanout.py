@@ -19,7 +19,6 @@ from shruti_chat.agent.tools._envelope import (
 )
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import (
-    BOOST_BY_KIND,
     RERANK_FETCH_TOP_K,
     RERANK_MIN_LECTURES,
     RERANK_MIN_LIBRARY,
@@ -166,20 +165,11 @@ def _library_dedup_key(c: Any) -> tuple:
     return (c.item_kind, c.item_id, c.segment_index)
 
 
-def _lecture_item_id(c: Any) -> str:
-    return c.track_id
-
-
-def _library_item_id(c: Any) -> str:
-    return c.item_id
-
-
 async def _rerank_pool(
     deduped: dict[tuple, _RawScored],
     *,
     reranker: Any,
     rerank_query: str | None,
-    boosted_flags: dict[tuple, bool],
 ) -> list[_RawScored]:
     """Cross-encode the deduped pool against the question and cut by fixed
     top-k with a lecture reserve. Sets `rerank_score` on survivors (cosine
@@ -187,7 +177,6 @@ async def _rerank_pool(
     cosine ordering for this round.
 
     Pool is pre-capped to RERANK_POOL_CAP by cosine to bound the call.
-    Curator-boosted items are force-included past the top-k cut.
     """
     pool = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:RERANK_POOL_CAP]
     if len(pool) <= 1:
@@ -215,12 +204,6 @@ async def _rerank_pool(
 
     kept = ranked_all[:RERANK_TOP_K]
     kept_keys = {r.dedup_key for r in kept}
-
-    # Force-include curator-boosted items dropped by the cut.
-    for r in ranked_all[RERANK_TOP_K:]:
-        if boosted_flags.get(r.dedup_key):
-            kept.append(r)
-            kept_keys.add(r.dedup_key)
 
     # Lecture reserve: guarantee the top RERANK_MIN_LECTURES lectures (by
     # rerank_score) survive, so a lecture-starved cut can't trip a spurious
@@ -259,8 +242,8 @@ async def _rerank_pool(
     _reserve(lambda k: k == "verse", RERANK_MIN_VERSES)
     _reserve(lambda k: k in ("commentary", "prose_chapter", "letter"), RERANK_MIN_LIBRARY)
 
-    # Re-sort the final set so reserve/force-include additions land in
-    # rerank order, not appended at the tail.
+    # Re-sort the final set so reserve additions land in rerank order,
+    # not appended at the tail.
     kept.sort(
         key=lambda r: (r.rerank_score if r.rerank_score is not None else -1.0, r.score),
         reverse=True,
@@ -276,8 +259,6 @@ async def fanout_search_with_boost(
     catalog_repo: Any,
     alias_map: Any,
     lang: str | None = None,
-    boost_ids: set[str] | None = None,
-    boost_by_kind: dict[str, float] | None = None,
     top_k: int = TOPK_PER_QUERY,
     author_id: str | None = None,
     location_id: str | None = None,
@@ -289,7 +270,7 @@ async def fanout_search_with_boost(
     reranker: Any = None,
     rerank_query: str | None = None,
 ) -> FanoutResult:
-    """One round of fanout. Returns top-K (boosted) envelopes.
+    """One round of fanout. Returns top-K envelopes.
 
     `queries` is a list of `(sub_query_id, text)` tuples. The same
     `sub_query_id` may appear multiple times when the query_planner
@@ -300,7 +281,6 @@ async def fanout_search_with_boost(
     """
     if not queries:
         return FanoutResult()
-    boost_ids = boost_ids or set()
     k = max(1, min(top_k, 16))
     # Rerank path widens per-sub-query ANN fetch (recall) and drops the
     # 0.45 cosine pre-floor so the cross-encoder can see ~0.30 verses the
@@ -377,36 +357,14 @@ async def fanout_search_with_boost(
         *(_one_query(v, sq_id) for v, sq_id in zip(q_vecs, sub_query_ids))
     )
 
-    # 4. Apply topic boost FIRST (before the relevance floor) so an
-    # attribution-flagged chunk isn't filtered out for having a low base
-    # score. A short verse-chunk under-scores against a long query and
-    # sits at ~0.30; the floor at 0.45 would silently drop it before
-    # ranking even has a chance. If the curator's attribution says
-    # "this item is relevant", we trust it past the noise floor.
-    # Per-kind dict makes per-corpus lift tunable without code change.
-    boost_map = boost_by_kind if boost_by_kind is not None else BOOST_BY_KIND
-    boosted_flags: dict[tuple, bool] = {}
-    for batch in per_query:
-        for r in batch:
-            if boost_ids:
-                iid = _lecture_item_id(r.chunk) if r.kind == "lecture" else _library_item_id(r.chunk)
-                if iid in boost_ids:
-                    lift = boost_map.get(r.kind, 0.0)
-                    if lift > 0.0:
-                        r.score = min(1.0, r.score + lift)
-                        boosted_flags[r.dedup_key] = True
-
-    # 5. Dedup + relevance floor (after boost so curator-flagged chunks
-    # get a chance to clear the floor). The rerank path uses a permissive
-    # cosine junk-floor instead of 0.45 so the cross-encoder can see the
-    # low-cosine verses; curator-boosted items always clear either floor.
+    # 4. Dedup + relevance floor. The rerank path uses a permissive cosine
+    # junk-floor instead of 0.45 so the cross-encoder can see the low-cosine
+    # verses; the cosine path keeps the 0.45 floor verbatim.
     floor = RERANK_NOISE_PREFLOOR if rerank_active else _RELEVANCE_FLOOR
     deduped: dict[tuple, _RawScored] = {}
     for batch in per_query:
         for r in batch:
-            # Cosine path: floor only (verbatim). Rerank path: curator-
-            # boosted items are force-included past the permissive floor.
-            if r.score < floor and not (rerank_active and boosted_flags.get(r.dedup_key)):
+            if r.score < floor:
                 continue
             prev = deduped.get(r.dedup_key)
             if prev is None or prev.score < r.score:
@@ -418,21 +376,16 @@ async def fanout_search_with_boost(
     if rerank_active:
         ranked = await _rerank_pool(
             deduped, reranker=reranker, rerank_query=rerank_query,
-            boosted_flags=boosted_flags,
         )
     else:
         ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
 
-    # Telemetry: per-kind distribution in the dedup pool (before slicing)
-    # vs the top-K. Lets us see when verse-chunks exist in the candidate
-    # pool but lose to lectures in ranking — driving the boost-tuning
-    # conversation with data instead of guesses.
+    # Telemetry: per-kind distribution in the dedup pool (before slicing) vs
+    # the top-K. Lets us see when verse-chunks exist in the candidate pool but
+    # lose to lectures in ranking — driving reserve/floor tuning with data.
     candidate_by_kind: dict[str, int] = {}
-    boosted_by_kind: dict[str, int] = {}
     for r in deduped.values():
         candidate_by_kind[r.kind] = candidate_by_kind.get(r.kind, 0) + 1
-        if boosted_flags.get(r.dedup_key):
-            boosted_by_kind[r.kind] = boosted_by_kind.get(r.kind, 0) + 1
     topk_by_kind: dict[str, int] = {}
     for r in ranked:
         topk_by_kind[r.kind] = topk_by_kind.get(r.kind, 0) + 1
@@ -440,9 +393,7 @@ async def fanout_search_with_boost(
         "fanout_kind_distribution",
         candidates_total=len(deduped),
         candidates_by_kind=candidate_by_kind,
-        boosted_by_kind=boosted_by_kind,
         topk_by_kind=topk_by_kind,
-        boost_ids_count=len(boost_ids),
     )
 
     # 6. Envelope (mints aliases) and build by_kind partition.
@@ -459,8 +410,6 @@ async def fanout_search_with_boost(
                 r.chunk, alias_map=alias_map, score=r.score,
                 sub_query_id=r.sub_query_id,
             )
-        if boosted_flags.get(r.dedup_key):
-            env["topic_boosted"] = True
         # Dual score: cosine `score` set by the envelope builder is left
         # untouched (every coverage / thin-thesis / attribution gate reads
         # it); the cross-encoder relevance rides in a separate field that

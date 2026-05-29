@@ -32,7 +32,6 @@ from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
 from shruti_chat.research.constants import (
-    BOOST_BY_KIND,
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
     MAX_FANOUT_ROUNDS,
@@ -319,7 +318,6 @@ async def run_research(
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
-    boost_by_kind: dict[str, float] | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     kv_cache: Any | None = None,
@@ -374,10 +372,9 @@ async def run_research(
             plan=QueryPlan(sub_queries=[
                 SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
             ]),
-            boost_ids=set(),
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
-            boost_by_kind=boost_by_kind, expand_model=expand_model,
+            expand_model=expand_model,
             request_id=request_id, on_event=on_event,
             reranker=reranker,
             callbacks=callbacks,
@@ -470,7 +467,6 @@ async def run_research(
                 queries=supplementary_queries,
                 embedder=embedder, chunk_repo=chunk_repo,
                 catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
-                boost_ids=set(),
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),
@@ -514,10 +510,9 @@ async def run_research(
             speculative_topics = []
     long_result = await _research_path(
         question=question, lang=lang, plan=plan,
-        boost_ids=None,  # computed below from topics
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
-        boost_by_kind=boost_by_kind, expand_model=expand_model,
+        expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model,
         embed_dim_for_lookup=embed_dim, pool=pool,
         request_id=request_id, on_event=on_event,
@@ -593,14 +588,12 @@ async def _research_path(
     question: str,
     lang: str,
     plan: QueryPlan,
-    boost_ids: set[str] | None,
     chunk_repo: Any,
     catalog_repo: Any,
     embedder: Any,
     alias_map: Any,
     llm: Any,
     router_args: dict[str, Any],
-    boost_by_kind: dict[str, float] | None,
     expand_model: str | None,
     topic_model: str | None = None,
     embed_model_for_lookup: str | None = None,
@@ -613,13 +606,12 @@ async def _research_path(
     reranker: Any = None,
     callbacks: list[Any] | None = None,
 ) -> ResearchResult:
-    """LONG path: topic-extract → topic-lookup → boost-aware fanout with
-    coverage gate and up to MAX_FANOUT_ROUNDS rounds."""
+    """LONG path: topic-extract → topic-lookup → fanout with coverage gate
+    and up to MAX_FANOUT_ROUNDS rounds."""
     topic_matches: list[AttributionMatch] = []
 
     if (
-        boost_ids is None
-        and pool is not None
+        pool is not None
         and embed_model_for_lookup is not None
         and embed_dim_for_lookup is not None
     ):
@@ -645,7 +637,6 @@ async def _research_path(
 
         # Step B: embed all topics in one HTTP call, then parallel pgvector
         # lookups for each.
-        boost_ids = set()
         if topics:
             topic_embeddings: list[list[float]] = await _safe(
                 lambda: embedder.embed_documents(topics),
@@ -669,28 +660,23 @@ async def _research_path(
                 topic_match_lists = await asyncio.gather(*lookup_tasks)
                 for matches in topic_match_lists:
                     topic_matches.extend(matches)
-                boost_ids = {ref.target_id for m in topic_matches for ref in m.refs}
 
         log.info(
             "pipeline_long_path",
             request_id=request_id,
             topics_extracted=len(topics),
             topic_matches=len(topic_matches),
-            boost_ids=len(boost_ids),
         )
-    else:
-        boost_ids = boost_ids or set()
 
     # Explicit-fetch attribution-flagged refs so they're GUARANTEED in
     # the candidate pool. Library ANN top-K is narrow (8 per query across
     # all library kinds combined); a short verse-chunk under-scores against
-    # long queries and may never enter the pool by cosine alone — boost
-    # ranks within the pool, it can't put a chunk INTO the pool. By
-    # fetching topic-attribution refs directly (same path SHORT uses for
-    # question refs), the curator's "this is relevant" decision survives
-    # past the ANN bottleneck. Score 0.75 sits below SHORT's authoritative
-    # 0.85 (topic is a weaker signal than question) but above any sensible
-    # ANN ranking, so these chunks naturally surface in top-20.
+    # long queries and may never enter the pool by cosine alone. By fetching
+    # topic-attribution refs directly (same path SHORT uses for question
+    # refs), the curator's "this is relevant" decision survives past the ANN
+    # bottleneck. Score 0.75 sits below SHORT's authoritative 0.85 (topic is
+    # a weaker signal than question) but above any sensible ANN ranking, so
+    # these chunks naturally surface in top-20.
     topic_refs_fetched: list[dict[str, Any]] = []
     if topic_matches:
         topic_refs = _dedupe_refs(
@@ -711,7 +697,7 @@ async def _research_path(
             envelopes=len(topic_refs_fetched),
         )
 
-    # Step C: fanout with topic-boost, coverage gate, up to N rounds.
+    # Step C: fanout, coverage gate, up to N rounds.
     accumulated = FanoutResult()
     queries: list[tuple[int, str]] = (
         _plan_to_fanout_queries(plan) or [(0, question)]
@@ -723,7 +709,6 @@ async def _research_path(
                 queries=queries,
                 embedder=embedder, chunk_repo=chunk_repo,
                 catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
-                boost_ids=boost_ids, boost_by_kind=boost_by_kind,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),
