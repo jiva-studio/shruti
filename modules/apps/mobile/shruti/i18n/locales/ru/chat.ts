@@ -1,6 +1,6 @@
 export default {
   title: "Чат",
-  placeholder: "Спросите что-нибудь…",
+  placeholder: "Задайте вопрос",
   send: "Отправить",
   /** Подпись кнопки в композере, пока идёт стрим — иконка отправки
    *  меняется на стоп, тап прерывает SSE-стрим. */
@@ -120,15 +120,13 @@ export default {
   upgradeToProCta: "Слушай Садху Pro",
 
   // ── Composer lockdown (Phase 6) ───────────────────────────────────────
-  // `{when}` собирается из `retryAtTime` / `retryAtTimeTomorrow` —
-  // если сброс лимита приходится на локальное «завтра», в строке
-  // появляется слово «завтра», иначе просто «в HH:MM».
-  composeLimitedPlaceholder: "Лимит обновится {when}",
+  // Placeholder больше не несёт текст лимита (он всегда статичный
+  // «Задайте вопрос»). `composeLimitedPlaceholderNoTime` теперь — фолбэк
+  // чипа квоты, когда ввод заблокирован, но снимка usage нет.
   composeLimitedPlaceholderNoTime: "Лимит исчерпан — попробуйте позже",
   /** aria-label на textarea + send-кнопке, пока ввод заблокирован
-   *  лимитом. Экранные читалки озвучат это вместо ротации placeholder'а,
-   *  которую они обычно не подхватывают. `{when}` — тот же фрагмент,
-   *  что и в placeholder'е. */
+   *  лимитом. Экранные читалки озвучат это вместо статичного placeholder'а.
+   *  `{when}` собирается из `retryAtTime` / `retryAtTimeTomorrow`. */
   composeLimitedAriaLabel: "Ввод приостановлен, дневной лимит обновится {when}",
   composeLimitedAriaLabelNoTime: "Ввод приостановлен, дневной лимит исчерпан",
 
@@ -138,7 +136,7 @@ export default {
    *  Тап для бесплатного/анонима открывает страницу подписки; для Pro
    *  чип — статический info-бейдж. */
   usage: {
-    chip: "использовано {p}% · сброс в {time}",
+    chip: "использовано {p}% · сброс {date}, {time}",
   },
 
   // Suggestion chips — each chip showcases ONE agent feature, not a topic.
