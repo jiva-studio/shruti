@@ -238,6 +238,58 @@ describe("parseChatMarkers — markdown blockquote", () => {
   })
 })
 
+describe("parseChatMarkers — markdown header (## Label)", () => {
+  /** Pull all text-token html out and join it — headers live INSIDE text
+   *  tokens (no dedicated token kind), so assertions inspect the html. */
+  const html = (input: string): string =>
+    parseChatMarkers(input)
+      .filter((t): t is Extract<typeof t, { kind: "text" }> => t.kind === "text")
+      .map((t) => t.html)
+      .join("")
+
+  it("renders an ATX H2 as a decorated <h2 class='chat-header'>", () => {
+    expect(html("## Природа кармы")).toContain('<h2 class="chat-header">Природа кармы</h2>')
+  })
+
+  it("inline-parses emphasis inside the header text", () => {
+    expect(html("## Природа *кармы*")).toContain(
+      '<h2 class="chat-header">Природа <em>кармы</em></h2>'
+    )
+  })
+
+  it("extracts the header from surrounding prose without leaving <br> gaps", () => {
+    const out = html("Вступление.\n\n## Заголовок\n\nТело абзаца.")
+    expect(out).toContain('<h2 class="chat-header">Заголовок</h2>')
+    expect(out).toContain("Вступление.")
+    expect(out).toContain("Тело абзаца.")
+    // No doubled break stacked directly on the block <h2>'s own margin.
+    expect(out).not.toContain("<br><br><h2")
+    expect(out).not.toContain("</h2><br><br>")
+  })
+
+  it("does NOT turn a bold line into a header (still inline <strong>)", () => {
+    const out = html("**Природа кармы**")
+    expect(out).toContain("<strong>Природа кармы</strong>")
+    expect(out).not.toContain("<h2")
+  })
+
+  it("does NOT treat a setext underline (---) as a header, keeps the ---", () => {
+    const out = html("Some text\n---\nMore text")
+    expect(out).not.toContain("<h2")
+    expect(out).toContain("---")
+    expect(out).toContain("Some text")
+    expect(out).toContain("More text")
+  })
+
+  it("leaves header markdown intact in the copy/share export", () => {
+    const out = messageToMarkdown("## Заголовок\n\nТело.", {
+      lang: "ru",
+      verseLookup: () => null,
+    })
+    expect(out).toContain("## Заголовок")
+  })
+})
+
 /**
  * Copy / Share export. `messageToMarkdown` is what we ship to the
  * clipboard and the platform share sheet, so a regression here breaks
