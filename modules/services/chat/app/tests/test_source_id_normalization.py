@@ -264,3 +264,22 @@ def test_tracks_list_unknown_short_name_drops_filter(catalog_db: Path) -> None:
         )
     )
     assert sorted(t.id for t in out) == ["track_A", "track_B", "track_C"]
+
+
+# ── get_titles (research-panel lecture labels) ──────────────────────
+
+def test_get_titles_batch_resolves(catalog_db: Path) -> None:
+    repo = SqliteCatalogRepository(catalog_db_path=catalog_db)
+    out = asyncio.run(repo.get_titles(["track_A", "track_C"], lang="ru"))
+    assert out == {
+        "track_A": "Лекция по БГ 2.13",
+        "track_C": "Лекция по ШБ 5.5.3",
+    }
+
+
+def test_get_titles_omits_unknown_and_empty(catalog_db: Path) -> None:
+    """Unknown ids are simply absent; an empty/blank input list → {}."""
+    repo = SqliteCatalogRepository(catalog_db_path=catalog_db)
+    out = asyncio.run(repo.get_titles(["track_A", "nope", ""], lang="ru"))
+    assert out == {"track_A": "Лекция по БГ 2.13"}
+    assert asyncio.run(repo.get_titles([], lang="ru")) == {}
