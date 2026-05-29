@@ -1,6 +1,6 @@
 export default {
   title: "Chat",
-  placeholder: "Just ask a question…",
+  placeholder: "Ask a question",
   send: "Send",
   /** Composer button label while a turn is streaming — the send icon
    *  swaps to a stop icon and tapping it aborts the SSE stream. */
@@ -128,16 +128,15 @@ export default {
   upgradeToProCta: "Shruti Pro",
 
   // ── Composer lockdown (Phase 6) ───────────────────────────────────────
-  // Swapped into the input placeholder while the quota window is still
-  // open. The textarea is disabled too, so this is purely informational.
-  // `{when}` is built from `retryAtTime` / `retryAtTimeTomorrow` so the
-  // day word is included when the reset rolls past local midnight.
-  composeLimitedPlaceholder: "Limit resets {when}",
+  // The input placeholder is now always the static prompt — it no longer
+  // carries limit copy. `composeLimitedPlaceholderNoTime` is reused as the
+  // usage chip's fallback when the composer is locked but no usage
+  // snapshot is available.
   composeLimitedPlaceholderNoTime: "Daily limit reached — try again later",
   /** aria-label set on the textarea + send button while the composer is
-   *  locked. Screen readers announce this in place of the rotating
-   *  placeholder copy, which they normally don't surface. `{when}` is
-   *  the same fragment the placeholder shows. */
+   *  locked. Screen readers announce this in place of the static
+   *  placeholder copy. `{when}` is built from `retryAtTime` /
+   *  `retryAtTimeTomorrow`. */
   composeLimitedAriaLabel: "Composing paused, daily limit resets {when}",
   composeLimitedAriaLabelNoTime: "Composing paused, daily limit reached",
 
@@ -148,7 +147,7 @@ export default {
    *  Free/anon opens the paywall directly; Pro renders the chip as a
    *  static info badge. */
   usage: {
-    chip: "{p}% used · resets at {time}",
+    chip: "{p}% used · resets {date} at {time}",
   },
 
   // Each chip showcases ONE agent feature, not a topic. 2-4 words max.
