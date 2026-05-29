@@ -13,6 +13,8 @@ from typing import Any
 import pytest
 
 from lectorium_chat.research.corpus_fanout import (
+    _fmt_timecode,
+    _label_for_lecture_chunk,
     _label_for_library_chunk,
     _parse_addresses,
     fanout_search_with_boost,
@@ -303,33 +305,63 @@ def test_label_letter_with_date_only():
     assert _label_for_library_chunk(c) == "Letter, 1972-10-04"
 
 
-def test_label_letter_with_nothing():
+def test_label_letter_with_nothing_is_dropped():
+    """No date, no source/tokens → no real address → drop (None), rather
+    than a generic "Letter" chip."""
     c = _LibChunk(
         item_id="doc_xyz", item_kind="letter", text="t", lang="en",
         addr_label="", source_id="", tokens="",
     )
-    assert _label_for_library_chunk(c) == "Letter"
+    assert _label_for_library_chunk(c) is None
 
 
-def test_label_generic_verse_fallback_when_metadata_missing():
-    """All metadata missing → generic localized label, NEVER `item_id`."""
+def test_label_dropped_when_verse_metadata_missing():
+    """All metadata missing → drop (None), NEVER a generic "verse" chip and
+    NEVER the raw `item_id` (issue #660)."""
     c = _LibChunk(
         item_id="verse_abc-uuid", item_kind="verse", text="t", lang="ru",
         addr_label="", source_id="", tokens="",
     )
-    label = _label_for_library_chunk(c)
-    assert label == "verse"
-    assert "verse_abc-uuid" not in label
+    assert _label_for_library_chunk(c) is None
 
 
-def test_label_generic_library_doc_fallback_when_metadata_missing():
+def test_label_dropped_when_library_doc_metadata_missing():
     c = _LibChunk(
         item_id="doc_abc-uuid", item_kind="commentary", text="t", lang="ru",
         addr_label="", source_id="", tokens="",
     )
-    label = _label_for_library_chunk(c)
-    assert label == "library document"
-    assert "doc_abc-uuid" not in label
+    assert _label_for_library_chunk(c) is None
+
+
+# ---- _label_for_lecture_chunk + _fmt_timecode -----------------------------
+
+
+@pytest.mark.parametrize(
+    ("ms", "expected"),
+    [
+        (0, "0:00"),
+        (4_000, "0:04"),
+        (64_000, "1:04"),
+        (3_600_000, "1:00:00"),
+        (3_725_000, "1:02:05"),
+        (None, "0:00"),
+    ],
+)
+def test_fmt_timecode(ms, expected):
+    assert _fmt_timecode(ms) == expected
+
+
+def test_lecture_label_is_title_and_timecode():
+    c = _LecChunk("track_A", 64_000, 90_000, "raw transcript text", "ru")
+    assert _label_for_lecture_chunk(c, "Утренняя прогулка") == "Утренняя прогулка · 1:04"
+
+
+def test_lecture_label_dropped_when_no_title():
+    """No resolved title → drop (None): a bare timecode and the raw
+    transcript snippet are both meaningless in the panel."""
+    c = _LecChunk("track_A", 64_000, 90_000, "raw transcript text", "ru")
+    assert _label_for_lecture_chunk(c, None) is None
+    assert _label_for_lecture_chunk(c, "   ") is None
 
 
 def test_merge_fanout_dedupes_by_internal_key():

@@ -45,6 +45,7 @@ from lectorium_chat.research.constants import (
     TIMEOUT_TOPIC_LOOKUP_S,
 )
 from lectorium_chat.research.corpus_fanout import (
+    emit_library_research_source,
     fanout_search_with_boost,
     merge_fanout,
 )
@@ -90,35 +91,6 @@ def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
         on_event("research_question", {"question": q})
     except Exception:  # noqa: BLE001 — observability must never break research
         log.warning("on_event_research_question_failed", question_chars=len(q))
-
-
-def _emit_source_for_ref(on_event: OnEvent | None, ref: "AttributionRef") -> None:
-    """Emit one `research_source` event for an attribution ref BEFORE we
-    pull its chunks — gives the user immediate "now consulting … " feedback
-    instead of waiting on the DB round-trip.
-
-    `target_id` is an opaque UUID (`verse_<uuid>` / a library doc id) — it
-    must NEVER be the user-visible label (issue #660). We have no addr_label
-    in scope yet (that's what the DB fetch is for), so emit a generic
-    kind-aware label here. The downstream chunk emission via
-    `_emit_research_source` carries the real addr_label once chunks load."""
-    if on_event is None:
-        return
-    target_id = (ref.target_id or "").strip()
-    if not target_id:
-        return
-    if ref.ref_kind == "verse":
-        kind = "verse"
-        source_id = f"verse:{target_id}"
-        label = "verse"
-    else:
-        kind = "library_doc"
-        source_id = f"library:{target_id}"
-        label = "library document"
-    try:
-        on_event("research_source", {"kind": kind, "id": source_id, "label": label})
-    except Exception:  # noqa: BLE001
-        log.warning("on_event_research_source_failed", target_id=target_id)
 
 
 async def _safe(coro_factory, *, default, timeout: float, name: str, request_id: str | None):
@@ -233,9 +205,6 @@ async def _fetch_refs(
         return []
 
     async def _one(ref: AttributionRef) -> list[dict[str, Any]]:
-        # Surface the ref the moment we know we're going to consult it —
-        # the DB round-trip is what we want to mask, not pad after.
-        _emit_source_for_ref(on_event, ref)
         try:
             chunks = await chunk_repo.get_chunks_by_target(
                 ref_kind=ref.ref_kind, target_id=ref.target_id, lang=lang,
@@ -257,6 +226,11 @@ async def _fetch_refs(
                 chunks = []
         envelopes: list[dict[str, Any]] = []
         for c in chunks:
+            # Surface the consulted source with its real (normalized) label
+            # now that the chunk — and its addr_label — has loaded. Shares
+            # the `verse:`/`library:` id namespace with the fanout path, so
+            # the client's dedup-by-id collapses a source seen by both.
+            emit_library_research_source(on_event, item_kind=c.item_kind, chunk=c)
             env = library_to_envelope(c, alias_map=alias_map, score=canonical_score)
             # Same shape as fanout's _library_dedup_key so merge_fanout-style
             # callers can dedup these alongside fanout output.

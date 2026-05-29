@@ -71,18 +71,30 @@ def _parse_addresses(text: str) -> list[str]:
 OnEvent = Callable[[str, dict[str, Any]], None]
 
 
-def _label_for_lecture_chunk(c: Any) -> str:
-    """Short preview for a lecture chunk — first line of text (~80 chars)
-    is what the user finds informative: track_id alone is opaque, the
-    timecode is meaningless without title context. Bounded to keep the
-    panel chip small."""
-    text = (getattr(c, "text", "") or "").strip().replace("\n", " ")
-    if len(text) > 80:
-        return text[:79].rstrip() + "…"
-    return text or getattr(c, "track_id", "") or "lecture"
+def _fmt_timecode(ms: Any) -> str:
+    """`start_ms` → "m:ss" (or "h:mm:ss" past the hour) for the panel chip."""
+    total = max(0, int(ms or 0)) // 1000
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-def _label_for_library_chunk(c: Any) -> str:
+def _label_for_lecture_chunk(c: Any, title: str | None) -> str | None:
+    """Panel label for a lecture chunk: lecture title + a timecode
+    (e.g. "Утренняя прогулка · 12:04"). The raw transcript snippet we used
+    before was opaque and noisy; title+timecode is what orients the user.
+
+    Returns None when the title can't be resolved — a bare timecode is
+    meaningless and the panel is purely visual, so we'd rather drop the
+    source than show a chip with no context (same "normalize or drop" rule
+    `_label_for_library_chunk` follows)."""
+    title = (title or "").strip()
+    if not title:
+        return None
+    return f"{title} · {_fmt_timecode(getattr(c, 'start_ms', 0))}"
+
+
+def _label_for_library_chunk(c: Any) -> str | None:
     """Human-readable label for a library chunk's pill in the chat status.
 
     Order of preference:
@@ -92,10 +104,13 @@ def _label_for_library_chunk(c: Any) -> str:
          pattern `_verse_addr` uses in the indexer, so e.g. a verse with
          source_id="BG" and tokens="2.13" renders as "BG 2.13".
       3. `doc_date` for letters with no source/tokens.
-      4. Generic kind-aware fallback ("verse" / "library document") —
-         NEVER the raw `item_id`. Raw UUID-like ids leaking into the
-         status pill is issue #660.
-    """
+
+    Returns None when none of those produce a real address. We deliberately
+    DON'T fall back to a generic "verse" / "library document" string: the
+    panel is purely visual and a generic chip is just noise (and, before
+    this, a recurring source of the bare "verse" pill — the placeholder for
+    a ref whose real addr_label never landed). Better blank than generic.
+    Never the raw `item_id` (issue #660)."""
     addr = (getattr(c, "addr_label", "") or "").strip()
     if addr:
         return addr
@@ -107,58 +122,70 @@ def _label_for_library_chunk(c: Any) -> str:
         return source_id
     doc_date = (getattr(c, "doc_date", "") or "").strip()
     item_kind = (getattr(c, "item_kind", "") or "").strip()
-    if item_kind == "letter":
-        return f"Letter, {doc_date}" if doc_date else "Letter"
+    if item_kind == "letter" and doc_date:
+        return f"Letter, {doc_date}"
+    return None
+
+
+def emit_library_research_source(
+    on_event: OnEvent | None, *, item_kind: str, chunk: Any,
+) -> None:
+    """Emit a normalized `research_source` for a verse / commentary /
+    prose_chapter / letter chunk, or nothing if its label can't be
+    normalized (drop — see `_label_for_library_chunk`).
+
+    Verse → `kind="verse"`, `id="verse:<item_id>"`. Every other library
+    kind → `kind="library_doc"`, `id="library:<item_id>"` (the panel doesn't
+    distinguish them). The `library:<item_id>` namespace is shared with the
+    attribution-refs path in pipeline.py so the client's dedup-by-id collapses
+    a doc discovered through both code paths. Shared by the fanout and the
+    attribution-ref fetch so both surface the same normalized label."""
+    if on_event is None:
+        return
+    label = _label_for_library_chunk(chunk)
+    if not label:
+        return
+    item_id = getattr(chunk, "item_id", "")
     if item_kind == "verse":
-        return "verse"
-    return "library document"
+        kind, source_id = "verse", f"verse:{item_id}"
+    else:
+        kind, source_id = "library_doc", f"library:{item_id}"
+    try:
+        on_event("research_source", {"kind": kind, "id": source_id, "label": label})
+    except Exception:  # noqa: BLE001 — observability must never break research
+        log.warning("on_event_research_source_failed", kind=item_kind)
 
 
-def _emit_research_source(on_event: OnEvent | None, r: "_RawScored") -> None:
+def _emit_research_source(
+    on_event: OnEvent | None,
+    r: "_RawScored",
+    *,
+    lecture_titles: dict[str, str] | None = None,
+) -> None:
     """Surface one inspected source live, BEFORE dedup/boost/sort. The
-    client dedups by `id` on its side."""
+    client dedups by `id` on its side. A source whose label can't be
+    normalized is dropped (no event)."""
     if on_event is None:
         return
     chunk = r.chunk
+    if r.kind != "lecture":
+        emit_library_research_source(on_event, item_kind=r.kind, chunk=chunk)
+        return
+    title = (lecture_titles or {}).get(getattr(chunk, "track_id", ""))
+    label = _label_for_lecture_chunk(chunk, title)
+    if not label:
+        return
+    track_id = getattr(chunk, "track_id", "")
+    start_ms = getattr(chunk, "start_ms", 0)
     try:
-        if r.kind == "lecture":
-            track_id = getattr(chunk, "track_id", "")
-            start_ms = getattr(chunk, "start_ms", 0)
-            on_event(
-                "research_source",
-                {
-                    "kind": "lecture_chunk",
-                    "id": f"lecture:{track_id}:{start_ms}",
-                    "label": _label_for_lecture_chunk(chunk),
-                },
-            )
-        elif r.kind == "verse":
-            item_id = getattr(chunk, "item_id", "")
-            on_event(
-                "research_source",
-                {
-                    "kind": "verse",
-                    "id": f"verse:{item_id}",
-                    "label": _label_for_library_chunk(chunk),
-                },
-            )
-        else:
-            # commentary / prose_chapter / letter → library_doc on the
-            # wire (the panel doesn't need to distinguish them visually).
-            # Use the `library:<item_id>` namespace — same as
-            # `_emit_source_for_ref` in pipeline.py — so a library doc
-            # discovered via BOTH the attribution-refs path AND the
-            # fanout path lands on the same client-side id and the
-            # client's dedup-by-id collapses the duplicate.
-            item_id = getattr(chunk, "item_id", "")
-            on_event(
-                "research_source",
-                {
-                    "kind": "library_doc",
-                    "id": f"library:{item_id}",
-                    "label": _label_for_library_chunk(chunk),
-                },
-            )
+        on_event(
+            "research_source",
+            {
+                "kind": "lecture_chunk",
+                "id": f"lecture:{track_id}:{start_ms}",
+                "label": label,
+            },
+        )
     except Exception:  # noqa: BLE001 — observability must never break fanout
         log.warning("on_event_research_source_failed", kind=r.kind)
 
@@ -422,10 +449,25 @@ async def fanout_search_with_boost(
         # and ranking — the user wants "I'm looking at this now", not
         # "I picked these after thinking". Floor matches the post-dedup
         # filter so we don't stream obvious noise.
-        for r in rows:
-            if r.score < _RELEVANCE_FLOOR and not r.forced:
-                continue
-            _emit_research_source(on_event, r)
+        surfaced = [r for r in rows if r.score >= _RELEVANCE_FLOOR or r.forced]
+        # Lecture panel chips read "title · timecode"; the chunk carries no
+        # title, so batch-resolve it for the lectures we're about to surface.
+        # Best-effort — a missing resolver / failure just drops lecture chips.
+        lecture_titles: dict[str, str] = {}
+        if on_event is not None:
+            lec_ids = list({
+                getattr(r.chunk, "track_id", "")
+                for r in surfaced
+                if r.kind == "lecture" and getattr(r.chunk, "track_id", "")
+            })
+            get_titles = getattr(catalog_repo, "get_titles", None)
+            if lec_ids and get_titles is not None:
+                try:
+                    lecture_titles = await get_titles(lec_ids, lang=lang)
+                except Exception as exc:  # noqa: BLE001 — never fail a turn
+                    log.warning("fanout_get_titles_failed", error=str(exc))
+        for r in surfaced:
+            _emit_research_source(on_event, r, lecture_titles=lecture_titles)
         return rows
 
     # 3. Run the parallel fanout queries.

@@ -87,8 +87,14 @@ class FakeEmbedder:
 
 
 class FakeCatalogRepo:
+    def __init__(self, titles: dict[str, str] | None = None) -> None:
+        self._titles = titles or {}
+
     async def filter_track_ids(self, **_kwargs) -> list[str] | None:
         return None
+
+    async def get_titles(self, track_ids, *, lang=None) -> dict[str, str]:
+        return {t: self._titles[t] for t in track_ids if t in self._titles}
 
 
 @dataclass
@@ -204,10 +210,10 @@ def _row(aid: str, score: float, refs: list[dict]) -> dict:
     return {"id": aid, "refs_json": json.dumps(refs), "score": score}
 
 
-def _common_kwargs(*, llm, pool, chunk_repo=None, embedder=None) -> dict:
+def _common_kwargs(*, llm, pool, chunk_repo=None, embedder=None, catalog_repo=None) -> dict:
     return {
         "chunk_repo": chunk_repo or FakeChunkRepo(),
-        "catalog_repo": FakeCatalogRepo(),
+        "catalog_repo": catalog_repo or FakeCatalogRepo(),
         "embedder": embedder or FakeEmbedder(),
         "alias_map": FakeAliasMap(),
         "pool": pool,
@@ -514,8 +520,8 @@ async def test_on_event_emits_research_questions_short_path():
     assert questions == ["природа души", "atma"], (
         "echo of the original question must be filtered out"
     )
-    # Two attribution refs → two research_source events (one per ref,
-    # emitted before each DB round-trip).
+    # Two attribution refs → two research_source events (one per consulted
+    # chunk, emitted after each DB round-trip surfaces the real addr_label).
     source_ids = sorted(s["id"] for s in sources if s["id"].startswith(("verse:", "library:")))
     assert "verse:verse_BG_2_13" in source_ids
     assert "library:doc_letter_42" in source_ids
@@ -523,11 +529,11 @@ async def test_on_event_emits_research_questions_short_path():
     by_id = {s["id"]: s for s in sources}
     assert by_id["verse:verse_BG_2_13"]["kind"] == "verse"
     assert by_id["library:doc_letter_42"]["kind"] == "library_doc"
-    # Issue #660: the pre-fetch source emission must NOT leak the raw
-    # target_id as the user-visible label. Use a kind-aware generic
-    # string until the DB round-trip surfaces the real addr_label.
-    assert by_id["verse:verse_BG_2_13"]["label"] == "verse"
-    assert by_id["library:doc_letter_42"]["label"] == "library document"
+    # Label is the chunk's real (normalized) addr_label — no generic
+    # "verse" / "library document" placeholder, and never the raw
+    # target_id (issue #660).
+    assert by_id["verse:verse_BG_2_13"]["label"] == "БГ 2.13"
+    assert by_id["library:doc_letter_42"]["label"] == "Letter 42"
 
 
 @pytest.mark.asyncio
@@ -561,7 +567,10 @@ async def test_on_event_emits_research_sources_from_fanout():
     await run_research(
         question="природа души", lang="ru", router_args={},
         on_event=lambda t, d: events.append((t, d)),
-        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+        **_common_kwargs(
+            llm=llm, pool=pool, chunk_repo=chunk_repo,
+            catalog_repo=FakeCatalogRepo(titles={"track_A": "Утренняя прогулка"}),
+        ),
     )
 
     sources = [d for t, d in events if t == "research_source"]
@@ -570,8 +579,9 @@ async def test_on_event_emits_research_sources_from_fanout():
     # Lecture chunk → kind="lecture_chunk", id includes start_ms.
     assert "lecture:track_A:60000" in by_id
     assert by_id["lecture:track_A:60000"]["kind"] == "lecture_chunk"
-    # Label is a snippet of the chunk text, not the opaque track_id.
-    assert "first words" in by_id["lecture:track_A:60000"]["label"]
+    # Label is the resolved lecture title + timecode, not the raw transcript
+    # snippet nor the opaque track_id.
+    assert by_id["lecture:track_A:60000"]["label"] == "Утренняя прогулка · 1:00"
 
     # Verse → kind="verse", id namespaced.
     assert "verse:verse_X" in by_id
