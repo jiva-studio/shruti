@@ -3,6 +3,7 @@ import {
   extractFollowups,
   messageToMarkdown,
   parseChatMarkers,
+  type CiteBodyLike,
   type VerseBodyLike,
 } from "../chatMarkers.js"
 
@@ -285,6 +286,7 @@ describe("parseChatMarkers — markdown header (## Label)", () => {
     const out = messageToMarkdown("## Заголовок\n\nТело.", {
       lang: "ru",
       verseLookup: () => null,
+      citeLookup: () => null,
     })
     expect(out).toContain("## Заголовок")
   })
@@ -298,8 +300,9 @@ describe("parseChatMarkers — markdown header (## Label)", () => {
  */
 describe("messageToMarkdown", () => {
   const noVerses = () => null
-  const ru = { lang: "ru" as const, verseLookup: noVerses }
-  const en = { lang: "en" as const, verseLookup: noVerses }
+  const noCites = () => null
+  const ru = { lang: "ru" as const, verseLookup: noVerses, citeLookup: noCites }
+  const en = { lang: "en" as const, verseLookup: noVerses, citeLookup: noCites }
 
   it("returns plain prose unchanged", () => {
     expect(messageToMarkdown("Hello **world**.", ru)).toBe("Hello **world**.")
@@ -345,6 +348,7 @@ describe("messageToMarkdown", () => {
       lang: "ru" as const,
       verseLookup: (sid: string, tokens: string) =>
         sid === "source_abc" && tokens === "2.14" ? body : null,
+      citeLookup: noCites,
     }
     const out = messageToMarkdown(
       "Verse below: [verse:source_abc/2.14|caption]\n\nthen prose.",
@@ -369,7 +373,7 @@ describe("messageToMarkdown", () => {
       transliteration: "karmāśayam line1\n\nline2\n\nline3",
       translation: { ru: "Перевод\n\nвторая строка" },
     }
-    const opts = { lang: "ru" as const, verseLookup: () => body }
+    const opts = { lang: "ru" as const, verseLookup: () => body, citeLookup: noCites }
     const out = messageToMarkdown("[verse:s/5.5.14]", opts)
     expect(out).not.toMatch(/line1\n\nline2/)
     expect(out).toMatch(/line1\nline2\nline3/)
@@ -386,6 +390,7 @@ describe("messageToMarkdown", () => {
     const opts = {
       lang: "ru" as const,
       verseLookup: () => body,
+      citeLookup: noCites,
     }
     const out = messageToMarkdown("[verse:source_x/1.1]", opts)
     expect(out).toContain("On the field of dharma…")
@@ -396,6 +401,60 @@ describe("messageToMarkdown", () => {
     expect(out).not.toContain("[verse:")
     expect(out).toContain("Mention:")
     expect(out).toContain("but no body cached.")
+  })
+
+  it("expands a cite marker into a transcript blockquote + source line", () => {
+    const body: CiteBodyLike = {
+      text: "Krishna says the soul is eternal.",
+      trackTitle: "BG 2.13 Lecture",
+      authorName: "A. C. Bhaktivedanta Swami",
+      reference: "BG 2.13",
+      trackDate: "1972-05-03",
+    }
+    const opts = {
+      lang: "ru" as const,
+      verseLookup: noVerses,
+      citeLookup: (trackId: string, startMs: number, endMs: number) =>
+        trackId === "t1" && startMs === 1000 && endMs === 2000 ? body : null,
+    }
+    const out = messageToMarkdown("Listen: [cite:t1@1000-2000|the soul] then more.", opts)
+    expect(out).not.toContain("[cite:")
+    expect(out).toContain("> Krishna says the soul is eternal.")
+    // Attribution joins title · author · reference · date, italic, inside
+    // the blockquote.
+    expect(out).toContain("> _BG 2.13 Lecture · A. C. Bhaktivedanta Swami · BG 2.13 · 1972-05-03_")
+    expect(out).toContain("Listen:")
+    expect(out).toContain("then more.")
+  })
+
+  it("falls back to the marker caption when no track meta resolved", () => {
+    const opts = {
+      lang: "en" as const,
+      verseLookup: noVerses,
+      citeLookup: () => ({ text: "Just the transcript." }),
+    }
+    const out = messageToMarkdown("[cite:t1@1000-2000|Duty vs Desire]", opts)
+    expect(out).toContain("> Just the transcript.")
+    expect(out).toContain("> _Duty vs Desire_")
+  })
+
+  it("drops cite markers when the transcript cache misses (legacy strip)", () => {
+    const out = messageToMarkdown("See [cite:t9@10-20|cap] here — no transcript.", en)
+    expect(out).not.toContain("[cite:")
+    expect(out).not.toContain(">")
+    expect(out).toContain("See")
+    expect(out).toContain("here — no transcript.")
+  })
+
+  it("prefixes every transcript line with > and collapses blank runs", () => {
+    const opts = {
+      lang: "en" as const,
+      verseLookup: noVerses,
+      citeLookup: () => ({ text: "line one\n\nline two\n\n\nline three", trackTitle: "T" }),
+    }
+    const out = messageToMarkdown("[cite:t1@0-1]", opts)
+    expect(out).toContain("> line one\n> line two\n> line three")
+    expect(out).not.toMatch(/line one\n>\n> line two/) // blank-run collapse, not a quote break
   })
 
   it("collapses 3+ blank lines left by stripped markers down to 2", () => {

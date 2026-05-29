@@ -139,6 +139,8 @@ import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@lectorium/stores/useChatStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
+import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
+import { useCitationMetadata } from "../composables/useCitationMetadata.js"
 import type { ChatActionPayload, QuotaTier } from "@lib/domain/chatMessage.js"
 import CitationCard from "./CitationCard.vue"
 import ChatMessageActions from "./ChatMessageActions.vue"
@@ -193,6 +195,7 @@ const emit = defineEmits<{
 }>()
 const chat = useChatStore()
 const verseBody = useVerseBodyStore()
+const citeTranscript = useCiteTranscriptStore()
 const appLanguage = useAppLanguage()
 // Singleton import — see NotesView.controller for the why.
 const { t } = useI18n()
@@ -201,6 +204,18 @@ const tokens = computed(() => {
   if (props.message.role !== "assistant") return []
   return parseChatMarkers(props.message.content)
 })
+
+/** Unique track ids of the cites in this message — drives the async
+ *  metadata resolution feeding the copy/share export. */
+const citeTrackIds = computed<string[]>(() => {
+  const ids = new Set<string>()
+  for (const tok of tokens.value) if (tok.kind === "cite") ids.add(tok.trackId)
+  return [...ids]
+})
+const citeMeta = useCitationMetadata(
+  () => citeTrackIds.value,
+  () => appLanguage.value
+)
 
 /* -------------------------------------------------------------------- */
 /*  Copy / Share — plain-Markdown rendering of the assistant message     */
@@ -214,6 +229,11 @@ const exportMarkdown = computed<string>(() => {
   return messageToMarkdown(props.message.content, {
     lang,
     verseLookup: (sourceId, tokens) => verseBody.get(sourceId, tokens),
+    citeLookup: (trackId, startMs, endMs) => {
+      const text = citeTranscript.get(trackId, startMs, endMs)
+      if (!text) return null
+      return { text, ...(citeMeta.value.get(trackId) ?? {}) }
+    },
   })
 })
 
@@ -314,6 +334,9 @@ function onOffline(): void {
 }
 
 onMounted(() => {
+  // Hydrate the transcript cache so the copy/share export can expand
+  // cites in reopened history (the snippet text source for citeLookup).
+  void citeTranscript.hydrate()
   if (typeof window === "undefined") return
   window.addEventListener("online", onOnline)
   window.addEventListener("offline", onOffline)
