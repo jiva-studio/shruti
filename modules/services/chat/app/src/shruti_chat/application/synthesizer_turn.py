@@ -269,20 +269,38 @@ def _format_outline_block(outline: Any) -> str:
     intro = getattr(outline, "intro", None)
     conclusion = getattr(outline, "conclusion", None)
 
-    parts: list[str] = ["Render the answer in this EXACT order:"]
+    # This block carries only the per-turn DATA (intro/thesis/conclusion
+    # text + supporting_notes indices) and a pointer. HOW to render —
+    # paragraph length, per-thesis citation budget, weaving notes into one
+    # argument, inter-thesis connectives — lives in `response_shape.md`
+    # (a Langfuse-managed section already in the system prompt), so the
+    # rules stay in one hot-reloadable place and can't drift against the
+    # code the way the old hard-coded "ONE paragraph / EXACTLY ONE [^N]"
+    # directive did.
+    parts: list[str] = [
+        "Render the answer from this plan, following the Response-shape "
+        "rules in the system prompt for HOW to develop, weave and cite "
+        "each thesis (paragraph length, per-thesis citation budget, "
+        "weaving notes into one argument, and inter-thesis connectives all "
+        "live there). Use this EXACT structure and order — do NOT add, "
+        "merge, skip or reorder theses:"
+    ]
+    step = 1
     if intro:
-        parts.append(f'1. INTRO paragraph (no citation): "{intro}"')
+        parts.append(
+            f'{step}. INTRO paragraph, rendered verbatim, no citation: "{intro}"'
+        )
+        step += 1
     parts.append(
-        "2. For each thesis below: if it has a header, write it as "
-        "`## header` (a markdown H2 header) on its own line, then ONE "
-        "short paragraph that "
-        "expands the claim, ending with EXACTLY ONE `[^N]` marker from "
-        "that thesis's supporting_notes. Do NOT cite notes from other "
-        "theses. Do NOT introduce extra theses."
+        f"{step}. Each thesis below, in order: render its header as a `## ` "
+        "markdown H2 (when given), then its developed, woven paragraph, "
+        "citing ONLY from that thesis's own supporting_notes."
     )
+    step += 1
     if conclusion:
         parts.append(
-            f'3. CONCLUSION paragraph (no citation, no header): "{conclusion}"'
+            f'{step}. CONCLUSION paragraph, rendered verbatim, no citation, '
+            f'no header: "{conclusion}"'
         )
 
     parts.append("")  # spacer line before thesis list
