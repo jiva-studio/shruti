@@ -57,6 +57,7 @@ You will receive:
 
   The header is the chapter title above a paragraph — think table-of-contents entry, not topic sentence. If you can't compress to ≤6 words, set `header: null` and let the paragraph stand on its own.
 - `intro` (optional): a one-sentence preamble that frames the whole answer. **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
+  - NEVER write apology / refusal-shaped intros: «не нашёл», «не касался напрямую», «прямого ответа нет», «материала немного». If you produced 1+ thesis, the corpus DID have material — frame the intro around what the theses actually argue, not around what the corpus lacks. If material is genuinely too thin for any thesis, return `theses: []` (the synthesizer's refusal path will run) — do NOT bury a refusal inside an intro paragraph above real theses.
 - `conclusion` (optional): a final summarizing paragraph that ties the theses together at the end. **Default: include whenever there are 3+ theses** — a multi-thesis answer benefits from a closing thought that names the through-line. Skip ONLY when the conclusion would literally just paraphrase the intro (nothing new to add at the end). Do NOT cite anything in the conclusion. Skip on 1-2 thesis answers (the synthesis is short enough to hold in mind).
 
 # OUTPUT
