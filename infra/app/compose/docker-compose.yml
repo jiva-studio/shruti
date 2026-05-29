@@ -34,6 +34,12 @@ x-app-hardening: &app-hardening
 
 services:
   postgres:
+    # profiles: same definition runs on both roles. On origin (global) we
+    # keep pgvector/pgvector:pg16 with HNSW-tuned shared_buffers because chat
+    # builds 460k-vector indexes here. On proxy (RU) docker-compose.proxy.yml
+    # overrides image → postgres:16-alpine and command → defaults — share-video's
+    # public.tasks queue needs ~10 connections, no pgvector workload.
+    profiles: [origin, proxy]
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
@@ -91,6 +97,10 @@ services:
   # exit code is non-zero — `docker compose logs migrator` shows where.
   # Recovery: `docker compose run --rm migrator force <N>` after fixup.
   migrator:
+    # Runs on both roles: idempotent forward-only SQL, unused tables on the
+    # proxy host (auth.*, chat.*, app.outbox) just sit empty. Cheaper than
+    # maintaining a second "proxy-only" migration set.
+    profiles: [origin, proxy]
     # Migrations are baked into the image (see infra/app/db/Dockerfile),
     # so there is no bind-mount here. CI rebuilds and pushes a new tag
     # whenever infra/app/db/migrations/** or the Dockerfile changes.
@@ -109,48 +119,13 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
 
-  # Self-hosted text-embeddings server (HuggingFace TEI, model picked at
-  # runtime via --model-id). Exposes an OpenAI-compatible /v1/embeddings
-  # endpoint on port 8080 inside the shruti network. Reachable from
-  # chat as http://embedder:8080/v1.
-  #
-  # OPT-IN: starts only when COMPOSE_PROFILES contains "selfhosted-embedder"
-  # in /opt/shruti/.env. EU leaves the profile inactive and never
-  # spawns this container — chat there keeps hitting OpenAI cloud. RU
-  # activates the profile so chat can index without the Yandex 10 RPS
-  # embedding throttle.
-  #
-  # Upstream TEI image; model is downloaded once into the
-  # `embedder_models` named volume on first start and cached for
-  # subsequent restarts.
-  embedder:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
-    restart: unless-stopped
-    logging: *default-logging
-    profiles: ["selfhosted-embedder"]
-    command:
-      - --model-id=intfloat/multilingual-e5-base
-      - --port=8080
-      - --auto-truncate
-      - --max-client-batch-size=128
-    environment:
-      HUGGINGFACE_HUB_CACHE: /data
-    volumes:
-      - embedder_models:/data
-    networks: [shruti]
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
-      interval: 15s
-      timeout: 3s
-      # First-boot model download is ~5-15 min over a typical link.
-      # 60 retries * 15s = 15 min total grace, then unhealthy.
-      retries: 60
-      start_period: 60s
-
   # L2 cache for chat (router / title / embed_query / topic).
   # AOF on so hot caches survive restarts; 1 GB cap with allkeys-lru fits
   # ~250k embed_query entries.
   redis:
+    # On origin: L2 cache for chat router/title/embed_query/topic.
+    # On proxy: backs share-video's per-IP rate-limit buckets only.
+    profiles: [origin, proxy]
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
@@ -174,6 +149,8 @@ services:
       retries: 20
 
   chat:
+    # origin only — proxy hosts forward /chat to global via Caddy.
+    profiles: [origin]
     # Production: image comes from ghcr.io built by services-ghcr.yml.
     # Dev override (docker-compose.dev.yml) replaces this with a build:
     # block + pull_policy: never so local hacking doesn't try to pull.
@@ -195,18 +172,28 @@ services:
       CATALOG_DIR: /var/lib/chat
       REDIS_URL: redis://redis:6379/0
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
-      # See auth.JWT_PUBLIC_KEYS_DIR — chat verifies bearers issued by any
-      # region whose pubkey landed in /secrets.
-      JWT_PUBLIC_KEYS_DIR: /secrets
       # SHRUTI_ENV comes from /opt/shruti/.env on the VPS (set to
       # "prod" there); local dev gets the "dev" default. SERVICE_VERSION
       # mirrors the running image tag so Datadog can correlate logs to
       # a specific ghcr build.
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_CHAT_TAG:-latest}
+      # TRUSTED_PROXY_CIDRS gates ProxyHeadersMiddleware's XFF rewrite.
+      # When set, it REPLACES the RFC1918 defaults baked into Settings —
+      # so we re-include the docker-bridge ranges here alongside the RU
+      # proxy's public egress IP. Without the bridge ranges, Caddy
+      # (sitting in the same compose network) would itself be untrusted
+      # and the inner peer rewrite would never happen.
+      # Empty when SHRUTI_REGION_HEADER_TRUSTED_SOURCES is unset
+      # (single-region deploy): Settings' defaults take over.
+      TRUSTED_PROXY_CIDRS: ${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:+172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,${SHRUTI_REGION_HEADER_TRUSTED_SOURCES}}
+      # REGION_HEADER_TRUSTED_SOURCES is additive to the loopback /
+      # RFC1918 defaults inside _region.py, so it's safe to pass the
+      # bare egress IP / CIDR list here.
+      REGION_HEADER_TRUSTED_SOURCES: ${SHRUTI_REGION_HEADER_TRUSTED_SOURCES:-}
     volumes:
       - chatdata:/var/lib/chat
-      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}:/secrets:ro
+      - ${SHRUTI_JWT_KEYS_DIR:-/opt/shruti/jwt}/public.pem:/secrets/public.pem:ro
     networks: [shruti]
     depends_on:
       postgres: { condition: service_healthy }
@@ -220,6 +207,8 @@ services:
       start_period: 60s
 
   auth:
+    # origin only — proxy hosts forward /auth/* to global via Caddy.
+    profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-auth:${SHRUTI_AUTH_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -232,23 +221,6 @@ services:
       DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
       JWT_PRIVATE_KEY_PATH: /secrets/private.pem
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
-      # Multi-key verifier dir — auth scans every `<kid>.pub.pem` in
-      # /secrets so a token signed by ANY region's private key verifies.
-      # The legacy `public.pem` is mapped to kid v1 by NewVerifierFromDir,
-      # so EU (single key file) keeps working unchanged. RU adds russia-v1
-      # via the regional overlay. Required for /auth/migrate-in to trust
-      # cross-region bearers (see internal/handler/migration.go).
-      JWT_PUBLIC_KEYS_DIR: /secrets
-      # KID identifies which keypair auth signs WITH. Defaults to v1 for
-      # the global region; the russia region overrides to russia-v1 via
-      # SHRUTI_JWT_KID in /opt/shruti/.env so russia-v1.priv.pem in
-      # /secrets is used. The chosen kid must match a *.priv.pem filename
-      # under SHRUTI_JWT_KEYS_DIR.
-      JWT_KID: ${SHRUTI_JWT_KID:-v1}
-      # Multi-region: which region this auth instance signs for. Shapes
-      # /auth/lookup responses + /auth/me home_region. Default "global"
-      # keeps existing single-region deployments behaving unchanged.
-      REGION_ID: ${SHRUTI_REGION_ID:-global}
       GOOGLE_CLIENT_IDS: ${SHRUTI_GOOGLE_CLIENT_IDS:-}
       APPLE_BUNDLE_IDS: ${SHRUTI_APPLE_BUNDLE_IDS:-studio.jiva.shruti}
       # RevenueCat webhook: shared Bearer secret from the RC dashboard
@@ -289,6 +261,8 @@ services:
   # no inbound traffic beyond /healthz on 8090 (kept off the well-known
   # service ports). See modules/services/cleanup-worker/README.md.
   cleanup-worker:
+    # origin only — consumes app.outbox events that only auth+chat emit.
+    profiles: [origin]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-cleanup-worker:${SHRUTI_CLEANUP_WORKER_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -329,6 +303,9 @@ services:
   # share-audio: synchronous MP3 cut + S3 upload. No DB, no queue.
   # 4 uvicorn workers per container, Caddy edge rate-limit caps spikes.
   share-audio:
+    # Both roles — share/* terminates locally on every region so the
+    # generated S3 URL belongs to the regional Yandex/AWS bucket.
+    profiles: [origin, proxy]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-audio:${SHRUTI_SHARE_AUDIO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -343,6 +320,16 @@ services:
       BUCKET: ${SHRUTI_S3_BUCKET:?SHRUTI_S3_BUCKET must be set}
       EXCERPTS_PREFIX: ${SHRUTI_S3_EXCERPTS_PREFIX:-public/shares/audio}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Override the S3 API endpoint. Empty on origin → AWS default.
+      # On the RU proxy set SHRUTI_S3_ENDPOINT_URL=https://storage.yandexcloud.net
+      # so share-audio uploads land in the Yandex bucket.
+      S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
+      # Public CDN base for excerpt URLs returned to the mobile client.
+      # When unset, share-audio composes the AWS virtual-hosted form
+      # (<bucket>.s3.<region>.amazonaws.com/<key>), which is WRONG when
+      # the file actually lives on Yandex Object Storage. Set
+      # SHRUTI_S3_PUBLIC_BASE on the RU proxy to override.
+      EXCERPTS_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-}
       ENV: ${SHRUTI_ENV:-dev}
       SERVICE_VERSION: ${SHRUTI_SHARE_AUDIO_TAG:-latest}
     networks: [shruti]
@@ -358,6 +345,8 @@ services:
   # (ffmpeg at 720p already pulls ~1.75 vCPU). JWT middleware + per-user
   # daily quotas land in P6.5.
   share-video:
+    # Both roles — render renders close to the bucket the file lands in.
+    profiles: [origin, proxy]
     image: ${SHRUTI_REGISTRY:-ghcr.io/jiva-studio}/shruti-share-video:${SHRUTI_SHARE_VIDEO_TAG:-latest}
     restart: unless-stopped
     logging: *default-logging
@@ -373,14 +362,21 @@ services:
       SHRUTI_S3_BACKGROUNDS_PREFIX: ${SHRUTI_S3_BACKGROUNDS_PREFIX:-private/share/video/backgrounds}
       SHRUTI_S3_VIDEO_PREFIX: ${SHRUTI_S3_VIDEO_PREFIX:-public/share/video}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Same endpoint override as share-audio. Empty on origin (AWS default);
+      # on the RU proxy points share-video at Yandex Object Storage.
+      S3_ENDPOINT_URL: ${SHRUTI_S3_ENDPOINT_URL:-}
+      # Public CDN base for the rendered-reel URL returned to clients.
+      # Same role as EXCERPTS_PUBLIC_BASE on share-audio — without it
+      # share-video returns AWS virtual-host URLs for files actually on
+      # Yandex (broken playback). Set SHRUTI_S3_PUBLIC_BASE on RU.
+      OUTPUT_PUBLIC_BASE: ${SHRUTI_S3_PUBLIC_BASE:-}
       OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
       TRANSCRIBER: ${SHRUTI_TRANSCRIBER:-whisper}
-      # Anchor for JWT verification (added in P6.5). Mount the same
-      # /opt/shruti/jwt directory auth uses; share-video's verifier
-      # loads every `<kid>.pub.pem` from JWT_PUBLIC_KEYS_DIR so a token
-      # signed by ANY region's auth instance verifies here.
+      # Anchor for JWT verification. Single-key deploy since the #728
+      # single-region collapse — the multi-kid dir scanner was removed
+      # because a stale `<retired-kid>.pub.pem` would still verify forged
+      # tokens until manually swept.
       JWT_PUBLIC_KEY_PATH: /secrets/public.pem
-      JWT_PUBLIC_KEYS_DIR: /secrets
       SHARE_VIDEO_ANON_PER_DAY: ${SHRUTI_SHARE_VIDEO_ANON_PER_DAY:-3}
       SHARE_VIDEO_SIGNED_IN_PER_DAY: ${SHRUTI_SHARE_VIDEO_SIGNED_IN_PER_DAY:-20}
       ENV: ${SHRUTI_ENV:-dev}
@@ -408,4 +404,3 @@ volumes:
   chatdata:
   redisdata:
   share_video_scratch:
-  embedder_models:

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jiva-studio/shruti/auth/internal/jwt"
@@ -119,7 +121,7 @@ func boot(t *testing.T) (*Service, *stubVerifier) {
 	t.Cleanup(pool.Close)
 
 	priv, pub := tempKeys(t)
-	signer, err := jwt.NewSignerFromFile(priv, "v1")
+	signer, err := jwt.NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
@@ -599,93 +601,6 @@ func TestDeleteAccountRevokesAllRefreshTokens(t *testing.T) {
 var _ = strings.Builder{}
 var _ = time.Second
 
-// ─── /auth/lookup ──────────────────────────────────────────────────────────
-
-func TestFindUserByProviderSubject_Hit(t *testing.T) {
-	svc, stub := boot(t)
-	ctx := context.Background()
-
-	stub.Want = providers.Identity{Subject: "google-lookup-1", Email: "lk@example.com", EmailVerified: true}
-	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
-	if err != nil {
-		t.Fatalf("signin: %v", err)
-	}
-	_ = sess
-
-	res, err := svc.FindUserByProviderSubject(ctx, "google", "google-lookup-1")
-	if err != nil {
-		t.Fatalf("lookup: %v", err)
-	}
-	if !res.Exists {
-		t.Error("expected exists=true")
-	}
-	if res.Anonymous {
-		t.Error("signed-in user must report anonymous=false")
-	}
-}
-
-func TestFindUserByProviderSubject_AnonHit(t *testing.T) {
-	svc, _ := boot(t)
-	ctx := context.Background()
-
-	if _, err := svc.Anonymous(ctx, "lookup-dev-1", ""); err != nil {
-		t.Fatalf("anon: %v", err)
-	}
-	res, err := svc.FindUserByProviderSubject(ctx, "device", "lookup-dev-1")
-	if err != nil {
-		t.Fatalf("lookup: %v", err)
-	}
-	if !res.Exists || !res.Anonymous {
-		t.Errorf("anon lookup: exists=%v anonymous=%v (want true/true)", res.Exists, res.Anonymous)
-	}
-}
-
-func TestFindUserByProviderSubject_Miss(t *testing.T) {
-	svc, _ := boot(t)
-	ctx := context.Background()
-
-	res, err := svc.FindUserByProviderSubject(ctx, "google", "never-seen-subject")
-	if err != nil {
-		t.Fatalf("lookup: %v", err)
-	}
-	if res.Exists {
-		t.Errorf("expected exists=false, got %+v", res)
-	}
-}
-
-// LookupSignin verifies the OAuth token + delegates to FindUserByProviderSubject.
-func TestLookupSigninReturnsResolvedSubject(t *testing.T) {
-	svc, stub := boot(t)
-	ctx := context.Background()
-
-	stub.Want = providers.Identity{Subject: "google-lksig-1", Email: "x@example.com", EmailVerified: true}
-	if _, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"}); err != nil {
-		t.Fatalf("signin: %v", err)
-	}
-
-	res, err := svc.LookupSignin(ctx, ProviderGoogle, "stub-idtoken")
-	if err != nil {
-		t.Fatalf("LookupSignin: %v", err)
-	}
-	if !res.Exists || res.Anonymous {
-		t.Errorf("LookupSignin: %+v", res)
-	}
-}
-
-func TestLookupSigninMiss(t *testing.T) {
-	svc, stub := boot(t)
-	ctx := context.Background()
-
-	stub.Want = providers.Identity{Subject: "never-signed-in"}
-	res, err := svc.LookupSignin(ctx, ProviderGoogle, "stub-idtoken")
-	if err != nil {
-		t.Fatalf("LookupSignin: %v", err)
-	}
-	if res.Exists {
-		t.Errorf("expected miss, got %+v", res)
-	}
-}
-
 // ─── ProfilePolicy.FromOAuth — write-path gating ──────────────────────────
 
 // TestSigninRuProfileDropsPIIOnWrite: with PROFILE=ru (email/name/avatar
@@ -821,6 +736,46 @@ func TestSigninGlobalProfileWritesAreByteIdentical(t *testing.T) {
 	}
 	if u.PictureURL == nil || *u.PictureURL != "https://example.test/gp.png" {
 		t.Errorf("global profile must persist picture_url, got %v", u.PictureURL)
+	}
+}
+
+// TestSigninStampsKidV1AndMeHasNoHomeRegion — #728 single-region
+// collapse contract: every issued access token carries kid="v1", and
+// /auth/me no longer emits a homeRegion field. Both halves are wired
+// through the same code path the mobile client hits in production —
+// failing either would surface as a mobile sign-in / settings regression.
+func TestSigninStampsKidV1AndMeHasNoHomeRegion(t *testing.T) {
+	svc, stub := boot(t)
+	ctx := context.Background()
+
+	stub.Want = providers.Identity{
+		Subject:       "google-kid-1",
+		Email:         "kid@example.com",
+		EmailVerified: true,
+	}
+	sess, err := svc.SigninGoogle(ctx, SocialInput{IDToken: "stub"})
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+
+	parsed, _, err := gjwt.NewParser().ParseUnverified(sess.AccessToken, &jwt.Claims{})
+	if err != nil {
+		t.Fatalf("parse access token: %v", err)
+	}
+	if kid, _ := parsed.Header["kid"].(string); kid != "v1" {
+		t.Errorf("access kid: want v1, got %q", kid)
+	}
+
+	me, err := svc.Me(ctx, sess.UserID)
+	if err != nil {
+		t.Fatalf("me: %v", err)
+	}
+	body, err := json.Marshal(me)
+	if err != nil {
+		t.Fatalf("marshal /auth/me: %v", err)
+	}
+	if strings.Contains(string(body), "homeRegion") {
+		t.Errorf("/auth/me must not emit homeRegion, got %s", string(body))
 	}
 }
 

@@ -177,19 +177,19 @@ func TestRefreshGauge_MultipleEventTypes(t *testing.T) {
 	setupSchema(t, pool)
 
 	insertOutbox(t, pool, "user.deleted", 3*time.Hour, 0)
-	insertOutbox(t, pool, "subscription.broadcast", 30*time.Minute, 0)
+	insertOutbox(t, pool, "subscription.changed", 30*time.Minute, 0)
 
 	if err := refreshGauge(context.Background(), pool); err != nil {
 		t.Fatalf("refreshGauge: %v", err)
 	}
 
 	gotUD := gaugeValue(t, "user.deleted")
-	gotSB := gaugeValue(t, "subscription.broadcast")
+	gotSC := gaugeValue(t, "subscription.changed")
 	if gotUD < 10000 || gotUD > 12000 { // ~10800
 		t.Errorf("user.deleted = %.1fs, want ~10800", gotUD)
 	}
-	if gotSB < 1700 || gotSB > 2000 { // ~1800
-		t.Errorf("subscription.broadcast = %.1fs, want ~1800", gotSB)
+	if gotSC < 1700 || gotSC > 2000 { // ~1800
+		t.Errorf("subscription.changed = %.1fs, want ~1800", gotSC)
 	}
 }
 

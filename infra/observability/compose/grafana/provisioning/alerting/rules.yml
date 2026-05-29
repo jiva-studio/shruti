@@ -624,28 +624,23 @@ groups:
       severity: P2
       service: cleanup-worker
     annotations:
-      summary: 'outbox event_type {{ index $labels "event_type" }} stuck >24h — cross-region delivery probably failing'
+      summary: 'outbox event_type {{ index $labels "event_type" }} stuck >24h — handler probably failing'
       description: |
         `shruti_outbox_pending_seconds{event_type="{{ index $labels "event_type" }}"}`
         crossed 86400s (24h) and stayed there for 1h. Most likely cause:
-        the cleanup-worker's subscription.broadcast handler can't reach a
-        remote region's /internal/subscription/apply.
+        the cleanup-worker's handler for that event_type is failing
+        (e.g. user.deleted → Langfuse purge can't reach Langfuse).
 
         Dead-letter policy: events are retried indefinitely — never
         dropped, never moved to a DLQ table. This alert IS the
         dead-letter signal. Operator decides remediation:
 
           1. Inspect cleanup-worker logs for the failing handler:
-               docker logs --tail=200 shruti-cleanup-worker-1 \
-                 | grep -E "(broadcast_dispatch|subscription_apply)"
-          2. If a remote region is down, no action needed — the outbox
-             retries forever and will drain when the region comes back.
-          3. If the region is up but rejecting (401/403/5xx), suspect
-             SHRUTI_INTERNAL_SECRET drift between regions or auth-
-             service breakage at the destination. Check the remote's
-             auth service logs.
-          4. Last resort, if the row will never deliver (e.g. event for
-             a region we've decommissioned):
+               docker logs --tail=200 shruti-cleanup-worker-1
+          2. If the downstream dependency is down, no action needed —
+             the outbox retries forever and will drain when it returns.
+          3. Last resort, if the row will never deliver (e.g. event for
+             a destination we've decommissioned):
                docker exec -i shruti-postgres-1 psql -U shruti \
                  -d shruti -c "DELETE FROM app.outbox WHERE id = $1;"
     data:

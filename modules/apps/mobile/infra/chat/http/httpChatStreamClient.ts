@@ -4,15 +4,14 @@ import type {
   IChatStreamClient,
   StreamChatOptions,
 } from "@ports/app/index.js"
-import { streamChat, type AccessTokenProvider } from "./chatClient.js"
+import { streamChat, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatStreamClientDeps {
   readonly getAccessToken: AccessTokenProvider
-  /** Lazy resolver for the chat service base URL — typically
-   *  `() => shruti.activeServer.value.chatBaseUrl`. Resolved at
-   *  the top of every `streamChat` call so a region flip propagates
-   *  without re-instantiating the adapter. */
-  readonly baseUrl: () => string
+  /** Failover-aware HTTP client for the chat service. The composition
+   *  root wires this through `createFailoverClient` so an unreachable
+   *  preferred server transparently falls through to others. */
+  readonly request: ChatRequest
 }
 
 /**
@@ -40,7 +39,7 @@ export function createHttpChatStreamClient(deps: HttpChatStreamClientDeps): ICha
       return streamChat(turns, lang, {
         ...(opts ?? {}),
         getAccessToken: deps.getAccessToken,
-        baseUrl: deps.baseUrl,
+        request: deps.request,
       }) as AsyncIterable<PortChatStreamEvent>
     },
   }

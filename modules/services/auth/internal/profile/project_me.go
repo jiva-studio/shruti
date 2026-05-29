@@ -35,16 +35,9 @@ type MeUser struct {
 
 	// Identities are gated by policy too: when Email.Enabled=false the
 	// per-identity Email field is suppressed (same rule as
-	// BuildClaims), but provider/subject ship so the destination
-	// region can mirror the row on migrate-in.
+	// BuildClaims), but provider/subject ship so the chat-side claim
+	// shape stays consistent.
 	Identities []MeIdentity `json:"identities"`
-
-	// HomeRegion is the server-authoritative region the user belongs
-	// to (auth.users.home_region, NOT NULL DEFAULT 'global'). Always
-	// emitted regardless of profile policy — mobile relies on this to
-	// reconcile its local activeServer.id with server truth after each
-	// /auth/me fetch. Not nullable on the wire.
-	HomeRegion string `json:"homeRegion"`
 }
 
 // MeIdentity is a single identity row inside /auth/me. Provider and
@@ -78,10 +71,6 @@ type SourceUser struct {
 	// Profile picture URL from auth.users.picture_url, or empty string.
 	PictureURL string
 
-	// HomeRegion is the raw auth.users.home_region value. Defaults to
-	// "global" via the DB schema; passed through unchanged into MeUser.
-	HomeRegion string
-
 	Identities []SourceIdentity
 }
 
@@ -108,10 +97,6 @@ func (p ProfilePolicy) ProjectMe(s SourceUser) MeUser {
 		CreatedAt:     s.CreatedAt,
 		Tier:          s.Tier,
 		TierExpiresAt: s.TierExpiresAt,
-		// HomeRegion is not policy-gated — every deployment exposes it
-		// so mobile can reconcile its local activeServer state against
-		// the server-authoritative region.
-		HomeRegion: s.HomeRegion,
 	}
 	if p.Email.Enabled && s.Email != "" {
 		em := s.Email

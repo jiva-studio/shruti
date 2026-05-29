@@ -19,7 +19,7 @@
 
 <p class="lang"><a href="ru.html">Русский</a></p>
 <h1>Privacy Policy</h1>
-<p class="meta">Effective date: May 25, 2026</p>
+<p class="meta">Effective date: May 29, 2026</p>
 
 <p>This privacy policy applies to the Shruti app (hereby referred to as "Application") for mobile devices that was created by Aleksei Leontev (hereby referred to as "Service Provider") as a free service. The Application includes an optional paid subscription and an optional user account. This service is intended for use "AS IS".</p>
 
@@ -55,6 +55,16 @@
 <p>Chat traffic is routed through <strong>OpenRouter, Inc.</strong> (the LLM gateway) to <strong>Google Gemini</strong> models operated by Google. No other LLM provider currently receives your chat messages. Chat content is used solely to produce the reply you see and to improve the quality of the feature; it is not used for advertising or profiling.</p>
 <p>To find the lecture excerpts relevant to your question, the text of your message is also passed through OpenRouter to <strong>OpenAI's</strong> <code>text-embedding-3-small</code> model, which converts the text into a numerical vector used for semantic search over the lecture library. Only the message text is sent; no account identifiers, history, or device data accompany the embedding request.</p>
 <p>We additionally record each chat turn — your message, the retrieved excerpts, the model's reply, and timing information — into <strong>Langfuse</strong>, an open-source observability tool we run on our own infrastructure. Langfuse is used solely to debug answer quality and to investigate failures. The data does not leave our servers and is not shared with any third party.</p>
+
+<strong class="section">Where chat requests are processed</strong>
+<p>Our chat backend runs in one global location. Devices outside Russia connect to it directly. Devices in Russia connect through a reverse-proxy hosted on a Russia-based VPS that forwards the request to the same backend; the response streams back along the same path. The proxy does not modify the message content — it only attaches a server-side marker identifying the request as originating in Russia.</p>
+<p>For requests with that marker, the backend's persistence rules are:</p>
+<ul>
+  <li>free-text feedback comments are not stored;</li>
+  <li>message bodies do not appear in access logs;</li>
+  <li>the user identifier in Langfuse observability traces is a one-way salted hash, so traces cannot be linked back to a specific account.</li>
+</ul>
+<p>The chat content itself travels to OpenRouter and Gemini for the response to be generated, exactly as described in "In-app chat" above. The rules above apply only to long-term persistence on our own infrastructure.</p>
 
 <strong class="section">Diagnostic logs and chat records</strong>
 <p>To keep the service running and to improve answer quality, the Application's backend keeps:</p>
@@ -105,7 +115,7 @@
 
 <strong class="section">Changes</strong>
 <p>This Privacy Policy may be updated from time to time for any reason. The Service Provider will notify you of any changes to their Privacy Policy by updating this page with the new Privacy Policy. You are advised to consult this Privacy Policy regularly for any changes, as continued use is deemed approval of all changes.</p>
-<p>This privacy policy is effective as of May 25, 2026.</p>
+<p>This privacy policy is effective as of May 29, 2026.</p>
 
 <strong class="section">Your Consent</strong>
 <p>By using the Application, you are consenting to the processing of your information as set forth in this Privacy Policy now and as amended by the Service Provider.</p>

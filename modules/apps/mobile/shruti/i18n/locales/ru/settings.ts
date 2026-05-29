@@ -26,21 +26,6 @@ export default {
     // равно привязана к чему-то persistent, даже без видимой identity.
     signedInNoDataSubtitle: "Ваш прогресс сохранён",
     signOut: "Выйти",
-    signinRetryOtherRegion: {
-      title: "Аккаунт в {currentRegion} не найден",
-      message:
-        "Если вы регистрировались в {otherRegion}, попробуйте этот регион. Иначе создайте новый аккаунт здесь.",
-      switchTo: "Перейти в {otherRegion} и попробовать снова",
-      createNew: "Создать новый аккаунт в {currentRegion}",
-      dupRiskTitle: "В другом регионе может быть аккаунт",
-      dupRiskMessage:
-        "Не удалось связаться с {otherRegion} для проверки. Если создать новый аккаунт в {currentRegion}, когда в {otherRegion} уже есть аккаунт, получится два параллельных аккаунта.",
-      continueAnyway: "Продолжить",
-      cancel: "Отмена",
-      alreadyExistsTitle: "Аккаунт уже есть в {otherRegion}",
-      alreadyExistsMessage: "Перейдите в {otherRegion} и войдите там.",
-      switchAndRetry: "Перейти и войти",
-    },
     deleteAccount: {
       title: "Удалить аккаунт",
       confirmWipe: "Удалить аккаунт и стереть данные",
@@ -179,35 +164,9 @@ export default {
     subtitleArchivePrefix: "архив",
   },
 
-  accountRegion: {
-    title: "Регион аккаунта",
-    description: "Где хранится ваш аккаунт и история чата",
-  },
-
-  regionMigration: {
-    confirmAnonymous: {
-      title: "Сменить регион?",
-      message:
-        "При переходе в {region} будет создан новый анонимный аккаунт. История чата и заметки на устройстве сохранятся.",
-      cancel: "Отмена",
-      confirm: "Сменить",
-    },
-    confirmSignedIn: {
-      title: "Перенести аккаунт в {region}?",
-      message:
-        "Ваш аккаунт, подписка и данные на устройстве переедут в {region}. Аккаунт в прежнем регионе будет удалён в фоне.",
-      cancel: "Отмена",
-      confirm: "Перенести",
-    },
-    inProgress: "Переносим ваш аккаунт…",
-    success: "Аккаунт перенесён в {region}.",
-    failed: {
-      unreachable: "Не удалось подключиться к новому региону. Попробуйте позже.",
-      rejected:
-        "Миграция отклонена. Анонимные аккаунты перенести нельзя — сначала войдите в свой аккаунт.",
-      network: "Ошибка сети. Проверьте подключение и попробуйте снова.",
-      no_session: "Нет активной сессии. Сначала войдите в свой аккаунт.",
-    },
+  preferredServer: {
+    title: "Предпочитаемый сервер",
+    fallbackHint: "если недоступен, приложение автоматически переключится на другой",
   },
 
   player: {

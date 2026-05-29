@@ -1,9 +1,10 @@
 """RS256 JWT verifier.
 
-Mirrors the auth service's signing config: same algorithm, accepts a
-kid → public-key map so an operator can rotate signing keys without
-invalidating outstanding tokens. Loaded once at boot — public keys are
-small (~450 bytes each) so we just keep them in memory.
+Single-kid (`v1`) deployment per #728: there is exactly one signing key
+for the global backend, loaded from `JWT_PUBLIC_KEY_PATH`. Tokens whose
+`kid` header is missing or anything other than `v1` are rejected with a
+clear error — the legacy `russia-v1` keypair is retired and any token
+still signed by it must force a re-signin.
 
 Verification surface is intentionally tight:
   - algorithms=['RS256'] — no alg=none, no HS-vs-RS confusion.
@@ -12,8 +13,8 @@ Verification surface is intentionally tight:
     be rejected here. PyJWT raises InvalidAudienceError on mismatch
     and InvalidTokenError when the claim is missing entirely (the
     require=["sub","exp","aud"] options.require triggers the latter).
-  - Token's `kid` header is looked up in the map; missing kid falls
-    back to "v1" (signer has been stamping v1 since day one).
+  - Token's `kid` header MUST be `v1`; any other value (including
+    missing) is a hard reject.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 import jwt
 
@@ -29,6 +29,9 @@ from shruti_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
+
+# Single accepted key id. Anything else is rejected at verify-time.
+_ACCEPTED_KID = "v1"
 
 # Auth signs `quota_id` as either a sha256 hex digest (64 lower-case hex
 # chars) or the empty string (anonymous / pre-Phase-3 tokens). Anything
@@ -43,8 +46,8 @@ _QUOTA_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 class VerifiedUser:
     """The subset of auth's JWT claims chat actually uses."""
 
-    id: str           # `sub` claim — uuid string
-    anonymous: bool   # `anonymous` claim — true for /auth/anonymous bootstrap
+    id: str
+    anonymous: bool
     # Subscription tier mirrored from RevenueCat via the auth-side webhook.
     # Tokens minted before Phase 3 lack the claim entirely; verify() maps
     # missing/blank to "free" so the rate-limiter degrades safely.
@@ -69,52 +72,32 @@ class JwtVerifyError(Exception):
 
 
 class JwtVerifier:
-    """Holds a kid → PEM-text map. Use `from_file` for the legacy
-    single-key deploy or `from_dir` for the rotation-ready directory
-    layout. The legacy `public.pem` filename inside a directory is
-    mapped to kid `v1`, so adding `vN.pub.pem` files alongside upgrades
-    the deploy without any renames."""
+    """Single-key RS256 verifier. Constructed from one `v1` PEM file."""
 
     @classmethod
     def from_file(cls, public_key_path: Path) -> "JwtVerifier":
         if not public_key_path.exists():
             raise FileNotFoundError(f"JWT public key not found at {public_key_path}")
-        return cls({"v1": public_key_path.read_text(encoding="utf-8")})
+        return cls(public_key_path.read_text(encoding="utf-8"))
 
-    @classmethod
-    def from_dir(cls, public_keys_dir: Path) -> "JwtVerifier":
-        if not public_keys_dir.is_dir():
-            raise FileNotFoundError(f"JWT public-keys dir not found at {public_keys_dir}")
-        keys: dict[str, str] = {}
-        for p in public_keys_dir.glob("*.pub.pem"):
-            kid = p.name[: -len(".pub.pem")]
-            keys[kid] = p.read_text(encoding="utf-8")
-        legacy = public_keys_dir / "public.pem"
-        if legacy.exists():
-            keys["v1"] = legacy.read_text(encoding="utf-8")
-        if not keys:
-            raise FileNotFoundError(
-                f"no public keys in {public_keys_dir} (expected public.pem or *.pub.pem)"
-            )
-        return cls(keys)
-
-    def __init__(self, keys: Mapping[str, str]) -> None:
-        self._keys = dict(keys)
+    def __init__(self, public_key_pem: str) -> None:
+        self._key = public_key_pem
 
     def verify(self, token: str) -> VerifiedUser:
         try:
             header = jwt.get_unverified_header(token)
         except jwt.InvalidTokenError as exc:
             raise JwtVerifyError(f"invalid token: {exc}") from exc
-        kid = header.get("kid") or "v1"
-        key = self._keys.get(kid)
-        if key is None:
-            raise JwtVerifyError(f"unknown kid {kid!r}")
+        kid = header.get("kid")
+        if kid != _ACCEPTED_KID:
+            raise JwtVerifyError(
+                f"unsupported kid {kid!r}; only {_ACCEPTED_KID!r} is accepted"
+            )
 
         try:
             claims = jwt.decode(
                 token,
-                key,
+                self._key,
                 algorithms=["RS256"],
                 # Pin audience=chat. The auth service stamps aud="chat"
                 # on access tokens and aud="auth" on refresh tokens;

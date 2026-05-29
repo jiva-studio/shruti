@@ -1,0 +1,43 @@
+# RU-only overlay. Used in tandem with docker-compose.yml +
+# docker-compose.prod.yml on the RU VPS:
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.prod.yml \
+#                  -f docker-compose.proxy.yml \
+#                  --env-file .env up -d
+#
+# On origin (global) hosts this file is NOT included.
+#
+# Why this overlay exists:
+#   - RU's postgres serves ONLY share-video's public.tasks queue
+#     (~10 connections, no pgvector workload). The HNSW-tuned flags
+#     (shared_buffers=2GB, effective_cache_size=5GB, max_connections=200, …)
+#     are wasteful on the slim VPS — strip them down to just jit=off
+#     plus a small shm_size.
+#   - We deliberately KEEP pgvector/pgvector:pg16 as the image. The
+#     migrator runs ALL forward-only SQL on every host (including the
+#     0010_chat_chunks `CREATE EXTENSION IF NOT EXISTS vector` step),
+#     and postgres:16-alpine doesn't ship that extension — switching
+#     the image crashes the migrator and the whole stack via
+#     depends_on. The image is ~50 MB larger than alpine; that's
+#     a non-issue compared to a stack that won't boot. The unused
+#     vector tables on proxy just sit empty.
+#   - Caddy needs SHRUTI_REGION_ROLE=proxy at runtime to import the
+#     role-proxy snippet (forwards /auth + /chat upstream to global).
+
+services:
+  postgres:
+    shm_size: 64m
+    # Override the HNSW-tuned command from base. Stock postgres with
+    # defaults handles a single FOR-UPDATE-SKIP-LOCKED queue table fine.
+    # jit=off matches the base intent (jit overhead > benefit at our QPS).
+    command:
+      - postgres
+      - -c
+      - jit=off
+
+  caddy:
+    environment:
+      # Picks role-proxy.conf inside Caddyfile via `import role-{$SHRUTI_REGION_ROLE}`.
+      # On origin hosts this var defaults to "origin" via .env (no overlay).
+      SHRUTI_REGION_ROLE: proxy

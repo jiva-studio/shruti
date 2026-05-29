@@ -81,17 +81,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	signer, err := jwt.NewSignerFromFile(cfg.JWTPrivateKeyPath, cfg.JWTKid)
+	signer, err := jwt.NewSignerFromFile(cfg.JWTPrivateKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_signer_init_failed", "err", err.Error())
 		os.Exit(1)
 	}
-	var verifier *jwt.Verifier
-	if cfg.JWTPublicKeysDir != "" {
-		verifier, err = jwt.NewVerifierFromDir(cfg.JWTPublicKeysDir)
-	} else {
-		verifier, err = jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
-	}
+	verifier, err := jwt.NewVerifierFromFile(cfg.JWTPublicKeyPath)
 	if err != nil {
 		slog.ErrorContext(bootCtx, "jwt_verifier_init_failed", "err", err.Error())
 		os.Exit(1)
@@ -107,22 +102,9 @@ func main() {
 		GoogleVerifier: google.NewVerifier(cfg.GoogleClientIDs),
 		AppleVerifier:  apple.NewVerifier(cfg.AppleBundleIDs),
 		ProfilePolicy:  profilePolicy,
-		RegionID:       cfg.RegionID,
-		LocalKid:       cfg.JWTKid,
 	}
 
 	root := handler.NewRouter(svc, verifier)
-	// /internal/subscription/apply is always mounted; the handler
-	// returns 503 not_configured when InternalSecret is empty so an
-	// operator who hasn't enabled cross-region delivery yet sees a
-	// clear signal rather than a 404.
-	root = handler.AttachInternalSubscription(root, &handler.InternalSubscriptionHandler{
-		Secret:  cfg.InternalSecret,
-		Applier: svc,
-	})
-	slog.Info("internal_subscription_endpoint",
-		"configured", cfg.InternalSecret != "",
-		"region_id", cfg.RegionID)
 	// Reconciliation cron context — separate from the bootCtx (which has
 	// a 15s deadline) and from the HTTP shutdown ctx (which cancels last).
 	// Cancelled when the process catches SIGTERM/SIGINT.

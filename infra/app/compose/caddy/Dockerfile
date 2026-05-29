@@ -16,3 +16,9 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 # The obs stack reuses this same image but overrides /etc/caddy/Caddyfile
 # via bind-mount with its own envsubst-rendered file.
 COPY Caddyfile /etc/caddy/Caddyfile
+# Role snippets — Caddyfile imports role-{$SHRUTI_REGION_ROLE}.conf
+# at runtime so the same image deploys to origin (global) and proxy (RU).
+# Working dir is /etc/caddy by default in caddy:alpine, so the relative
+# imports resolve next to Caddyfile.
+COPY role-origin.conf /etc/caddy/role-origin.conf
+COPY role-proxy.conf /etc/caddy/role-proxy.conf

@@ -48,7 +48,9 @@ func signToken(t *testing.T, priv *rsa.PrivateKey, kid string) string {
 		"anonymous": false,
 		"exp":       time.Now().Add(time.Minute).Unix(),
 	})
-	tok.Header["kid"] = kid
+	if kid != "" {
+		tok.Header["kid"] = kid
+	}
 	s, err := tok.SignedString(priv)
 	if err != nil {
 		t.Fatalf("sign: %v", err)
@@ -71,45 +73,48 @@ func callRequireAuth(t *testing.T, v *JWTVerifier, bearer string) int {
 	return rec.Code
 }
 
-func TestVerifierFromDirAcceptsBothKidsDuringRotation(t *testing.T) {
-	dir := t.TempDir()
-	priv1 := writeKeyPair(t, dir, "v1")
-	priv2 := writeKeyPair(t, dir, "v2")
-
-	v := NewJWTVerifierFromDir(dir)
-	if code := callRequireAuth(t, v, signToken(t, priv1, "v1")); code != http.StatusOK {
-		t.Errorf("v1 token must verify, got %d", code)
-	}
-	if code := callRequireAuth(t, v, signToken(t, priv2, "v2")); code != http.StatusOK {
-		t.Errorf("v2 token must verify, got %d", code)
-	}
-}
-
-func TestVerifierFromDirRejectsUnknownKid(t *testing.T) {
-	dir := t.TempDir()
-	priv1 := writeKeyPair(t, dir, "v1")
-
-	v := NewJWTVerifierFromDir(dir)
-	if code := callRequireAuth(t, v, signToken(t, priv1, "v999")); code != http.StatusUnauthorized {
-		t.Errorf("unknown kid must 401, got %d", code)
-	}
-}
-
-func TestVerifierFromFileSingleKeyDeploy(t *testing.T) {
-	// Back-compat: single legacy public.pem path keeps working, the
-	// single key is treated as kid v1.
+// writeSinglePublicKey writes a fresh keypair and returns the private
+// key plus the path to the corresponding `public.pem` (the file the
+// single-key verifier expects).
+func writeSinglePublicKey(t *testing.T) (*rsa.PrivateKey, string) {
+	t.Helper()
 	dir := t.TempDir()
 	priv := writeKeyPair(t, dir, "legacy")
-	// Rename legacy.pub.pem -> public.pem to match the legacy layout.
-	if err := os.Rename(
-		filepath.Join(dir, "legacy.pub.pem"),
-		filepath.Join(dir, "public.pem"),
-	); err != nil {
+	pubPath := filepath.Join(dir, "public.pem")
+	if err := os.Rename(filepath.Join(dir, "legacy.pub.pem"), pubPath); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
+	return priv, pubPath
+}
 
-	v := NewJWTVerifier(filepath.Join(dir, "public.pem"))
+func TestVerifierAcceptsKidV1(t *testing.T) {
+	priv, pubPath := writeSinglePublicKey(t)
+	v := NewJWTVerifier(pubPath)
 	if code := callRequireAuth(t, v, signToken(t, priv, "v1")); code != http.StatusOK {
-		t.Errorf("single-key v1 token must verify, got %d", code)
+		t.Errorf("kid=v1 must verify, got %d", code)
+	}
+}
+
+// Pins the #728 single-region collapse contract: only kid="v1" is
+// accepted. A token with any other (or absent) kid header — even one
+// signed by the current private key — must be rejected. Catches the
+// failure mode where a stale `<other-kid>.pub.pem` is left on disk and
+// share-video happily verifies anything signed against it.
+func TestVerifierRejectsMissingKid(t *testing.T) {
+	priv, pubPath := writeSinglePublicKey(t)
+	v := NewJWTVerifier(pubPath)
+	if code := callRequireAuth(t, v, signToken(t, priv, "")); code != http.StatusUnauthorized {
+		t.Errorf("missing kid must 401, got %d", code)
+	}
+}
+
+func TestVerifierRejectsForeignKid(t *testing.T) {
+	priv, pubPath := writeSinglePublicKey(t)
+	v := NewJWTVerifier(pubPath)
+	if code := callRequireAuth(t, v, signToken(t, priv, "v2")); code != http.StatusUnauthorized {
+		t.Errorf("kid=v2 must 401, got %d", code)
+	}
+	if code := callRequireAuth(t, v, signToken(t, priv, "russia-v1")); code != http.StatusUnauthorized {
+		t.Errorf("kid=russia-v1 must 401, got %d", code)
 	}
 }

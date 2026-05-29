@@ -24,27 +24,15 @@ type User struct {
 	TierExpiresAt *time.Time
 	TierUpdatedAt *time.Time
 	RCAppUserID   *string
-	// HomeRegion mirrors auth.users.home_region (NOT NULL DEFAULT
-	// 'global', migration 0028). Surfaces in /auth/me so the mobile
-	// client can reconcile its local activeServer choice against the
-	// server-authoritative region.
-	HomeRegion string
 }
 
 type UserRepo struct{ Pool *pgxpool.Pool }
 
-// Create inserts a fresh auth.users row stamped with the regional
-// deployment's id. Callers MUST pass the running service's RegionID:
-// the DB column default ('global', from migration 0028) is a
-// backwards-compat carry-over from before regional deployments
-// existed, and relying on it on the Russia VPS would mis-stamp every
-// fresh signup as a global user. /auth/me then reports the wrong
-// home_region, and the mobile client's onHomeRegionMismatch flips
-// activeServer back to global mid-signin.
-func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx, homeRegion string) (uuid.UUID, error) {
+// Create inserts a fresh auth.users row and returns the new id.
+func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx) (uuid.UUID, error) {
 	var id uuid.UUID
-	q := `INSERT INTO auth.users(home_region) VALUES ($1) RETURNING id`
-	if err := selectRow(ctx, r.Pool, tx, q, homeRegion).Scan(&id); err != nil {
+	q := `INSERT INTO auth.users DEFAULT VALUES RETURNING id`
+	if err := selectRow(ctx, r.Pool, tx, q).Scan(&id); err != nil {
 		return uuid.Nil, err
 	}
 	return id, nil
@@ -53,14 +41,12 @@ func (r *UserRepo) Create(ctx context.Context, tx pgx.Tx, homeRegion string) (uu
 func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 	row := r.Pool.QueryRow(ctx,
 		`SELECT id, name, picture_url, created_at,
-		        tier, tier_expires_at, tier_updated_at, rc_app_user_id,
-		        home_region
+		        tier, tier_expires_at, tier_updated_at, rc_app_user_id
 		   FROM auth.users WHERE id = $1`, id)
 	u := &User{}
 	if err := row.Scan(
 		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
 		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
-		&u.HomeRegion,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -68,67 +54,6 @@ func (r *UserRepo) Get(ctx context.Context, id uuid.UUID) (*User, error) {
 		return nil, err
 	}
 	return u, nil
-}
-
-// GetTx is Get bound to a caller-supplied transaction. Used by the
-// migrate-in flow to peek at whether a user row already exists for
-// the JWT's `sub` inside the same tx that will (re)build it, without
-// a separate connection round-trip racing against the insert.
-func (r *UserRepo) GetTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*User, error) {
-	row := tx.QueryRow(ctx,
-		`SELECT id, name, picture_url, created_at,
-		        tier, tier_expires_at, tier_updated_at, rc_app_user_id,
-		        home_region
-		   FROM auth.users WHERE id = $1`, id)
-	u := &User{}
-	if err := row.Scan(
-		&u.ID, &u.Name, &u.PictureURL, &u.CreatedAt,
-		&u.Tier, &u.TierExpiresAt, &u.TierUpdatedAt, &u.RCAppUserID,
-		&u.HomeRegion,
-	); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return u, nil
-}
-
-// MigrateUser is the projection of a JWT migrate-in claim onto the
-// auth.users columns the destination region needs to set explicitly.
-// The user id is sourced from the bearer's `sub` (not generated locally,
-// so subsequent migrate-revoke calls on the source region target the
-// right row by id).
-type MigrateUser struct {
-	ID            uuid.UUID
-	Tier          string
-	TierExpiresAt *time.Time
-	RCAppUserID   *string
-	HomeRegion    string
-}
-
-// InsertForMigration creates an auth.users row with a known id and the
-// fields carried in a migrate-in JWT. Mirrors the Create path but
-// accepts every column instead of letting the DB default them — the
-// destination region must reproduce tier/expiry/rc_app_user_id verbatim
-// so the user keeps Pro across the move and RC webhooks continue to
-// match. Caller wraps in the same tx as the identities INSERTs so a
-// partial migration never leaves a user row without identities.
-func (r *UserRepo) InsertForMigration(ctx context.Context, tx pgx.Tx, in MigrateUser) error {
-	homeRegion := in.HomeRegion
-	if homeRegion == "" {
-		homeRegion = "global"
-	}
-	tier := in.Tier
-	if tier == "" {
-		tier = "free"
-	}
-	_, err := exec(ctx, r.Pool, tx,
-		`INSERT INTO auth.users(id, tier, tier_expires_at, rc_app_user_id, home_region)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		in.ID, tier, in.TierExpiresAt, in.RCAppUserID, homeRegion,
-	)
-	return err
 }
 
 // SubscriptionSnapshot is the canonical subscription state derived

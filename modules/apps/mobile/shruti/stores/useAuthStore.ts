@@ -1,13 +1,11 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
-import { SERVERS } from "@lib/domain/servers.js"
 import { useShruti } from "@shruti/shruti.js"
 import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
-import type { AuthSession, AuthStatus, MigrationResult } from "@ports/app/auth.js"
-import { SigninAccountNotFoundError } from "@ports/app/auth.js"
+import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
  * Reactive view over the AuthPort. Mirrors the port's session into Pinia
@@ -38,10 +36,6 @@ export const useAuthStore = defineStore("auth", () => {
   // pre-PR-1 tokens still in flight; consumers must treat "" as "no
   // quota_id yet".
   const quotaId = ref<string>("")
-  // Server-authoritative region (auth.users.home_region). Empty string
-  // until the first /auth/me lands; consumers should treat "" as "no
-  // server truth yet" and avoid asserting region drift on it.
-  const homeRegion = ref<string>("")
 
   // Public tier. Coerces a "pro" with a past expiry back to "free" so a
   // stale auth-cached value (dropped EXPIRATION webhook) can't keep the
@@ -125,7 +119,6 @@ export const useAuthStore = defineStore("auth", () => {
       rawTier.value = s.tier || "free"
       tierExpiresAt.value = s.tierExpiresAt ?? null
       quotaId.value = s.quotaId ?? ""
-      homeRegion.value = s.homeRegion ?? ""
       status.value = s.anonymous ? "anonymous" : "signedIn"
     } else {
       userId.value = null
@@ -136,7 +129,6 @@ export const useAuthStore = defineStore("auth", () => {
       rawTier.value = "free"
       tierExpiresAt.value = null
       quotaId.value = ""
-      homeRegion.value = ""
       status.value = "uninitialized"
     }
   }
@@ -320,15 +312,6 @@ export const useAuthStore = defineStore("auth", () => {
       invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
-      // SigninAccountNotFoundError is the retry-other-region trigger.
-      // Re-throw so the orchestrator (useAnonymousSignInFlow) can
-      // present the dialog instead of treating it as a generic error.
-      if (e instanceof SigninAccountNotFoundError) {
-        // Reset status so the busy spinner clears; the dialog will
-        // drive its own UX from here.
-        applySession(auth.getSession())
-        throw e
-      }
       console.error("[auth] google sign-in failed:", e)
       status.value = "error"
       return false
@@ -348,10 +331,6 @@ export const useAuthStore = defineStore("auth", () => {
       invalidateAndSyncAfterSignin()
       return true
     } catch (e) {
-      if (e instanceof SigninAccountNotFoundError) {
-        applySession(auth.getSession())
-        throw e
-      }
       console.error("[auth] apple sign-in failed:", e)
       status.value = "error"
       return false
@@ -364,43 +343,6 @@ export const useAuthStore = defineStore("auth", () => {
     applySession(null)
     // After sign-out we drop to anonymous via a fresh bootstrap so the
     // user can keep using the app (same UX as Spotify free).
-    await restore()
-  }
-
-  /**
-   * Anonymous-only region switch. Tears the current device-bootstrap user
-   * down on the source region, flips `activeServer` to the destination,
-   * then mints a fresh anonymous user there.
-   *
-   * Order matters: the naive "store.signOut() then setActiveServerById"
-   * sequence mints the new anonymous JWT against the SOURCE region's
-   * `/auth/anonymous` (because `signOut` triggers `restore()` while
-   * `cfg.baseUrl()` still points at the source) — its `kid` then fails
-   * verification on the destination's chat backend, requiring an app
-   * restart to recover. Doing the region flip BEFORE the implicit
-   * re-bootstrap closes that race. The `activeServer` watcher inside
-   * `initShruti` handles persisting `preferredServerId` so a cold
-   * start lands on the destination.
-   *
-   * Signed-in users must NOT call this — server's `/auth/anonymous`
-   * doesn't carry over their identity; use `migrateToRegion` instead.
-   */
-  async function switchAnonymousRegion(newRegionId: string): Promise<void> {
-    const app = useShruti()
-    // Validate up front so a typoed id can't leave us with a half-
-    // completed signOut and no destination to bootstrap against.
-    if (!SERVERS.some((s) => s.id === newRegionId)) {
-      throw new Error(`Unknown server id: ${newRegionId}`)
-    }
-    // (1) Port-level signOut: clears persisted tokens AND hits the SOURCE
-    //     region's /signout. Direct port call (not store.signOut) so the
-    //     implicit `restore()` from the store's signOut doesn't fire here.
-    await app.auth.signOut()
-    applySession(null)
-    // (2) Flip activeServer BEFORE the re-bootstrap so cfg.baseUrl()
-    //     resolves to the destination region for /auth/anonymous.
-    app.setActiveServerById(newRegionId)
-    // (3) Re-bootstrap anonymous against the destination region.
     await restore()
   }
 
@@ -443,60 +385,6 @@ export const useAuthStore = defineStore("auth", () => {
     await restore()
   }
 
-  /**
-   * Move the signed-in account to another region. Thin wrapper over the
-   * port — the port persists destination tokens, fires the
-   * session-change listener (which updates this store via
-   * `applySession`) and triggers `onMigrationCompleted` to switch
-   * `activeServer` + queue the source-side revoke. Anonymous users
-   * must NOT call this — server rejects with 400; the Settings UI
-   * routes anonymous tap to signOut+reboot instead.
-   */
-  async function migrateToRegion(newRegionId: string): Promise<MigrationResult> {
-    const auth = useShruti().auth
-    return auth.migrateToRegion(newRegionId)
-  }
-
-  /**
-   * Resume a signin flow that was paused by a `SigninAccountNotFoundError`.
-   * The orchestrator captured the OAuth idToken at the popup step; this
-   * call commits the bootstrap on the CURRENT region (which may now be
-   * a region the user switched to via the retry-other-region dialog).
-   */
-  async function completeSigninAfterRetry(
-    provider: "google" | "apple",
-    idToken: string,
-    fullName?: string
-  ): Promise<boolean> {
-    const auth = useShruti().auth
-    status.value = "signingIn"
-    try {
-      const session = await auth.completeSigninAfterRetry(provider, idToken, fullName)
-      applySession(session)
-      invalidateAndSyncAfterSignin()
-      return true
-    } catch (e) {
-      console.error("[auth] completeSigninAfterRetry failed:", e)
-      status.value = "error"
-      return false
-    }
-  }
-
-  /**
-   * Probe a DIFFERENT region for an existing account, used by the
-   * retry-other-region dialog's dup-prevention guard. Returns null on
-   * any uncertainty (timeout / network / non-2xx other than 404) so the
-   * caller can surface the dup-account-risk warning.
-   */
-  async function lookupAccount(
-    regionId: string,
-    provider: "google" | "apple",
-    idToken: string
-  ): Promise<{ exists: boolean; anonymous: boolean } | null> {
-    const auth = useShruti().auth
-    return auth.lookupAccount(regionId, provider, idToken)
-  }
-
   return {
     status,
     userId,
@@ -508,18 +396,13 @@ export const useAuthStore = defineStore("auth", () => {
     rawTier,
     tierExpiresAt,
     quotaId,
-    homeRegion,
     isPro,
     signedIn,
     restore,
     signInGoogle,
     signInApple,
-    completeSigninAfterRetry,
-    lookupAccount,
     signOut,
-    switchAnonymousRegion,
     deleteAccount,
-    migrateToRegion,
     refreshTokens,
     ensureFresh,
   }

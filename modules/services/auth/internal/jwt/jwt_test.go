@@ -7,10 +7,10 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
+	gjwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -45,7 +45,7 @@ func writeTempKeys(t *testing.T) (privPath, pubPath string) {
 
 func TestSignAndVerifyRoundtrip(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, err := NewSignerFromFile(priv, "v1")
+	signer, err := NewSignerFromFile(priv)
 	if err != nil {
 		t.Fatalf("signer: %v", err)
 	}
@@ -91,9 +91,34 @@ func TestSignAndVerifyRoundtrip(t *testing.T) {
 	}
 }
 
+// TestIssueStampsKidV1 — single-region collapse (#728) hardcodes every
+// issued token's kid to "v1". Future rotation reintroduces a key id but
+// not the multi-key map; this test pins the contract.
+func TestIssueStampsKidV1(t *testing.T) {
+	priv, _ := writeTempKeys(t)
+	signer, _ := NewSignerFromFile(priv)
+
+	tok, _, err := signer.Issue(IssueInput{
+		UserID:   uuid.New(),
+		Audience: AudienceChat,
+		TTL:      time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	parsed, _, err := gjwt.NewParser().ParseUnverified(tok, &Claims{})
+	if err != nil {
+		t.Fatalf("parse unverified: %v", err)
+	}
+	kid, _ := parsed.Header["kid"].(string)
+	if kid != "v1" {
+		t.Errorf("kid: want v1, got %q", kid)
+	}
+}
+
 func TestVerifyRejectsTamperedToken(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, _ := NewSignerFromFile(priv, "v1")
+	signer, _ := NewSignerFromFile(priv)
 	verifier, _ := NewVerifierFromFile(pub)
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
@@ -106,7 +131,7 @@ func TestVerifyRejectsTamperedToken(t *testing.T) {
 
 func TestVerifyRejectsExpired(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, _ := NewSignerFromFile(priv, "v1")
+	signer, _ := NewSignerFromFile(priv)
 	verifier, _ := NewVerifierFromFile(pub)
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: -time.Minute})
@@ -120,7 +145,7 @@ func TestVerifyRejectsForeignKey(t *testing.T) {
 	priv1, _ := writeTempKeys(t)
 	_, pub2 := writeTempKeys(t)
 
-	signer, _ := NewSignerFromFile(priv1, "v1")
+	signer, _ := NewSignerFromFile(priv1)
 	verifier, _ := NewVerifierFromFile(pub2)
 
 	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
@@ -130,100 +155,9 @@ func TestVerifyRejectsForeignKey(t *testing.T) {
 	}
 }
 
-// writeKeyPairAs writes a fresh RSA keypair into `dir` under the kid's
-// canonical filenames: <kid>.priv.pem and <kid>.pub.pem.
-func writeKeyPairAs(t *testing.T, dir, kid string) (privPath, pubPath string) {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("genkey: %v", err)
-	}
-	privBytes := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	})
-	pub, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
-	pubBytes := pem.EncodeToMemory(&pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: pub,
-	})
-	privPath = filepath.Join(dir, kid+".priv.pem")
-	pubPath = filepath.Join(dir, kid+".pub.pem")
-	if err := os.WriteFile(privPath, privBytes, 0o600); err != nil {
-		t.Fatalf("write priv: %v", err)
-	}
-	if err := os.WriteFile(pubPath, pubBytes, 0o644); err != nil {
-		t.Fatalf("write pub: %v", err)
-	}
-	return privPath, pubPath
-}
-
-func TestVerifierFromDirAcceptsBothKidsDuringRotation(t *testing.T) {
-	dir := t.TempDir()
-	priv1, _ := writeKeyPairAs(t, dir, "v1")
-	priv2, _ := writeKeyPairAs(t, dir, "v2")
-
-	verifier, err := NewVerifierFromDir(dir)
-	if err != nil {
-		t.Fatalf("NewVerifierFromDir: %v", err)
-	}
-
-	tok1, _, _ := func() (string, uuid.UUID, error) {
-		s, _ := NewSignerFromFile(priv1, "v1")
-		return s.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
-	}()
-	tok2, _, _ := func() (string, uuid.UUID, error) {
-		s, _ := NewSignerFromFile(priv2, "v2")
-		return s.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
-	}()
-
-	if _, err := verifier.Verify(tok1); err != nil {
-		t.Errorf("v1 token must verify during rotation, got %v", err)
-	}
-	if _, err := verifier.Verify(tok2); err != nil {
-		t.Errorf("v2 token must verify during rotation, got %v", err)
-	}
-}
-
-func TestVerifierFromDirRejectsUnknownKid(t *testing.T) {
-	dir := t.TempDir()
-	priv1, _ := writeKeyPairAs(t, dir, "v1")
-	// Sign with v1's private key but stamp a kid the verifier hasn't
-	// seen — simulates a rogue signer or a missed rotation file.
-	signer, _ := NewSignerFromFile(priv1, "v999")
-	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
-
-	verifier, _ := NewVerifierFromDir(dir)
-	if _, err := verifier.Verify(tok); err == nil {
-		t.Error("token with unknown kid verified — must reject")
-	}
-}
-
-func TestVerifierFromDirAcceptsLegacyPublicPem(t *testing.T) {
-	// Status quo: only the single legacy public.pem mounted. Operator
-	// hasn't created any vN.pub.pem yet. The verifier still accepts
-	// the existing v1 tokens.
-	dir := t.TempDir()
-	priv, _ := writeTempKeys(t)
-	src, _ := os.ReadFile(strings.Replace(priv, "private.pem", "public.pem", 1))
-	if err := os.WriteFile(filepath.Join(dir, "public.pem"), src, 0o644); err != nil {
-		t.Fatalf("write legacy public.pem: %v", err)
-	}
-
-	verifier, err := NewVerifierFromDir(dir)
-	if err != nil {
-		t.Fatalf("NewVerifierFromDir: %v", err)
-	}
-	signer, _ := NewSignerFromFile(priv, "v1")
-	tok, _, _ := signer.Issue(IssueInput{UserID: uuid.New(), Audience: AudienceChat, TTL: time.Minute})
-	if _, err := verifier.Verify(tok); err != nil {
-		t.Errorf("legacy public.pem mapped to v1 must verify, got %v", err)
-	}
-}
-
 func TestIssueStampsAudienceChat(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, _ := NewSignerFromFile(priv, "v1")
+	signer, _ := NewSignerFromFile(priv)
 	verifier, _ := NewVerifierFromFile(pub)
 
 	tok, _, err := signer.Issue(IssueInput{
@@ -245,7 +179,7 @@ func TestIssueStampsAudienceChat(t *testing.T) {
 
 func TestIssueStampsAudienceAuthForRefresh(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, _ := NewSignerFromFile(priv, "v1")
+	signer, _ := NewSignerFromFile(priv)
 	verifier, _ := NewVerifierFromFile(pub)
 
 	tok, _, _ := signer.Issue(IssueInput{
@@ -259,9 +193,65 @@ func TestIssueStampsAudienceAuthForRefresh(t *testing.T) {
 	}
 }
 
+// TestVerifyRequiresKidV1 — symmetric with TestIssueStampsKidV1.
+// Verifier rejects tokens whose kid is absent or any value other than
+// "v1", even when signed by the right private key. This forecloses the
+// failure mode where a token signed with kid="russia-v1" (or empty)
+// could otherwise sneak through after a region rotation.
+func TestVerifyRequiresKidV1(t *testing.T) {
+	priv, pub := writeTempKeys(t)
+	verifier, _ := NewVerifierFromFile(pub)
+
+	// Mint tokens by hand so we can control the kid header. Use the
+	// same private key NewVerifierFromFile loaded the public half of
+	// so the signature path is healthy and only the kid check fires.
+	privBlock, _ := pem.Decode(mustReadFile(t, priv))
+	privKey, err := x509.ParsePKCS1PrivateKey(privBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse priv: %v", err)
+	}
+	mint := func(kid string) string {
+		t.Helper()
+		tok := gjwt.NewWithClaims(gjwt.SigningMethodRS256, gjwt.MapClaims{
+			"sub": uuid.New().String(),
+			"exp": time.Now().Add(time.Minute).Unix(),
+		})
+		if kid != "" {
+			tok.Header["kid"] = kid
+		}
+		s, err := tok.SignedString(privKey)
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		return s
+	}
+
+	if _, err := verifier.Verify(mint("v1")); err != nil {
+		t.Errorf("kid=v1 must verify: %v", err)
+	}
+	if _, err := verifier.Verify(mint("")); err == nil {
+		t.Error("missing kid must be rejected")
+	}
+	if _, err := verifier.Verify(mint("v2")); err == nil {
+		t.Error("kid=v2 must be rejected")
+	}
+	if _, err := verifier.Verify(mint("russia-v1")); err == nil {
+		t.Error("kid=russia-v1 must be rejected")
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return b
+}
+
 func TestIssueRoundTripsIdentitiesAndRCAppUserID(t *testing.T) {
 	priv, pub := writeTempKeys(t)
-	signer, _ := NewSignerFromFile(priv, "v1")
+	signer, _ := NewSignerFromFile(priv)
 	verifier, _ := NewVerifierFromFile(pub)
 
 	ids := []ClaimIdentity{

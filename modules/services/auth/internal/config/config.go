@@ -12,14 +12,8 @@ type Config struct {
 	DatabaseURL       string
 	JWTPrivateKeyPath string
 	JWTPublicKeyPath  string
-	// JWTPublicKeysDir, if set, opts the verifier into multi-key /
-	// kid-aware mode: every `<kid>.pub.pem` in the directory is
-	// loaded, plus the legacy `public.pem` mapped to kid "v1".
-	// Leave unset to stay on the single-file path.
-	JWTPublicKeysDir string
-	JWTKid           string
-	GoogleClientIDs  []string
-	AppleBundleIDs   []string
+	GoogleClientIDs   []string
+	AppleBundleIDs    []string
 	// RCWebhookSecretPrimary / RCWebhookSecretSecondary are the Bearer
 	// values RevenueCat sends in the Authorization header of every webhook
 	// delivery (configured in the RC dashboard → Project → Webhooks). Two
@@ -52,17 +46,6 @@ type Config struct {
 	// from ConfigPath governs optional profile-field collection. Default
 	// "global"; "ru" minimises stored fields for the Russia deployment.
 	Profile string
-	// RegionID identifies which regional deployment this binary is. Stamped
-	// into `home_region` on freshly migrated-in users and used by the
-	// migrate-revoke handler to refuse own-kid bearers. Defaults to
-	// "global"; the Russia VPS sets it to "russia". Wave 4 / PR-2a.
-	RegionID string
-	// InternalSecret authenticates cross-region service-to-service traffic
-	// via HMAC. POST /internal/subscription/apply validates the
-	// X-Shruti-HMAC header against this value. Empty disables the
-	// endpoint (returns 503 not_configured), same opt-in pattern as the
-	// RC webhook secrets. Wave 4 / PR-2a.
-	InternalSecret string
 }
 
 func Load() (*Config, error) {
@@ -71,8 +54,6 @@ func Load() (*Config, error) {
 		DatabaseURL:       env("DATABASE_URL", ""),
 		JWTPrivateKeyPath: env("JWT_PRIVATE_KEY_PATH", "/secrets/private.pem"),
 		JWTPublicKeyPath:  env("JWT_PUBLIC_KEY_PATH", "/secrets/public.pem"),
-		JWTPublicKeysDir:  os.Getenv("JWT_PUBLIC_KEYS_DIR"),
-		JWTKid:            env("JWT_KID", "v1"),
 		GoogleClientIDs:   splitCSV(os.Getenv("GOOGLE_CLIENT_IDS")),
 		AppleBundleIDs:    splitCSV(os.Getenv("APPLE_BUNDLE_IDS")),
 		RCWebhookSecretPrimary:   os.Getenv("RC_WEBHOOK_SECRET_PRIMARY"),
@@ -82,8 +63,6 @@ func Load() (*Config, error) {
 		ServiceVersion:    env("SERVICE_VERSION", "dev"),
 		ConfigPath:        env("CONFIG_PATH", "/etc/shruti/auth/config.yaml"),
 		Profile:           env("PROFILE", "global"),
-		RegionID:          env("REGION_ID", "global"),
-		InternalSecret:    os.Getenv("SHRUTI_INTERNAL_SECRET"),
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")

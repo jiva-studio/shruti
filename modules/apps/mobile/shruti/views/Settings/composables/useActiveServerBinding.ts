@@ -8,7 +8,7 @@ export interface SelectorItem {
 
 export interface UseActiveServerBindingOptions {
   servers: readonly CdnServer[]
-  /** Reactive reference to the currently-active server. The
+  /** Reactive reference to the currently-preferred server. The
    *  composition root mutates this directly (via `setActiveServer` /
    *  `setActiveServerById`); the binding just exposes its id for UI. */
   activeServer: Ref<CdnServer>
@@ -20,13 +20,9 @@ export interface UseActiveServerBindingReturn {
 }
 
 /**
- * Read-only view of the active server's id for UI use. Region changes
- * are no longer driven by an `activeServerId` watcher — the Settings
- * tap handler explicitly runs the confirm + migration flow and the
- * composition root flips `activeServer` on success (signed-in path)
- * or the tap handler does so directly (anonymous path). This binding
- * just keeps the selector in sync with whatever the composition root
- * has set.
+ * Read-only view of the preferred server's id for UI use. The selector
+ * write path simply flips `activeServer` (no migration); failover lives
+ * inside the HTTP client.
  */
 export function useActiveServerBinding(
   options: UseActiveServerBindingOptions

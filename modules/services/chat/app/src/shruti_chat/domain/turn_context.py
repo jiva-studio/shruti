@@ -64,6 +64,12 @@ class TurnContext:
 
     # ── Identity / correlation ─────────────────────────────────────────
     request_id: str = ""
+    # Region of the originating request, derived from the trusted
+    # `X-Shruti-Region` header injected by the RU reverse proxy. None
+    # means the request came directly from the global origin. Gated PII
+    # handling (Langfuse user_id hash, dropped free-text feedback,
+    # redacted message bodies in access logs) keys off `region == "ru"`.
+    region: str | None = None
     # Langfuse root-trace UUID. Bound at turn entry by
     # `application/chat_turn.run_chat_turn`; each graph node reads it
     # to build a `CallbackHandler(stateful_client=…, trace_id=…)` so

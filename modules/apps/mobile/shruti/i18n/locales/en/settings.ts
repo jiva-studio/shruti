@@ -27,21 +27,6 @@ export default {
     // persistent even without a visible identity.
     signedInNoDataSubtitle: "Your progress is safe",
     signOut: "Sign out",
-    signinRetryOtherRegion: {
-      title: "No account found in {currentRegion}",
-      message:
-        "If you signed up in {otherRegion} before, try that region. Otherwise, create a new account here.",
-      switchTo: "Switch to {otherRegion} and try again",
-      createNew: "Create new account in {currentRegion}",
-      dupRiskTitle: "Account on the other region may exist",
-      dupRiskMessage:
-        "We couldn't reach {otherRegion} to verify. Creating a new account in {currentRegion} while one may exist in {otherRegion} will result in two parallel accounts.",
-      continueAnyway: "Continue anyway",
-      cancel: "Cancel",
-      alreadyExistsTitle: "Account already exists in {otherRegion}",
-      alreadyExistsMessage: "Switch to {otherRegion} and sign in there instead.",
-      switchAndRetry: "Switch and sign in",
-    },
     deleteAccount: {
       title: "Delete account",
       confirmWipe: "Delete account and wipe data",
@@ -181,38 +166,9 @@ export default {
     subtitleArchivePrefix: "archive",
   },
 
-  accountRegion: {
-    title: "Account region",
-    description: "Where your account and chat history live",
-    /** Small note rendered below the picker; surfaces the server-truth
-     *  region (mirror of auth.users.home_region) so the user sees what
-     *  the server thinks alongside the local picker. */
-  },
-
-  regionMigration: {
-    confirmAnonymous: {
-      title: "Switch region?",
-      message:
-        "Switching to {region} will create a new anonymous account there. Your on-device data (chat history, listening notes) will be kept.",
-      cancel: "Cancel",
-      confirm: "Switch",
-    },
-    confirmSignedIn: {
-      title: "Move account to {region}?",
-      message:
-        "Your account, subscription, and on-device data will move to {region}. Your old region's account will be deleted in the background.",
-      cancel: "Cancel",
-      confirm: "Move",
-    },
-    inProgress: "Moving your account…",
-    success: "Account moved to {region}.",
-    failed: {
-      unreachable: "Could not reach the new region. Please try again later.",
-      rejected:
-        "The migration was rejected. Anonymous accounts cannot be migrated — please sign in first.",
-      network: "Network error. Please check your connection and try again.",
-      no_session: "No active session. Please sign in first.",
-    },
+  preferredServer: {
+    title: "Preferred server",
+    fallbackHint: "if unavailable, the app falls back automatically",
   },
 
   player: {

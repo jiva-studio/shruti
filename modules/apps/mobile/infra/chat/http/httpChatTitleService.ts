@@ -1,11 +1,10 @@
 import type { ChatTurn, FetchSessionTitleOptions, IChatTitleService } from "@ports/app/index.js"
-import { fetchSessionTitle, type AccessTokenProvider } from "./chatClient.js"
+import { fetchSessionTitle, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatTitleServiceDeps {
   readonly getAccessToken: AccessTokenProvider
-  /** Lazy resolver for the chat service base URL. See
-   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
-  readonly baseUrl: () => string
+  /** Failover-aware HTTP client for the chat service. */
+  readonly request: ChatRequest
 }
 
 /**
@@ -23,7 +22,7 @@ export function createHttpChatTitleService(deps: HttpChatTitleServiceDeps): ICha
       return fetchSessionTitle(messages, lang, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
-        baseUrl: deps.baseUrl,
+        request: deps.request,
       })
     },
   }

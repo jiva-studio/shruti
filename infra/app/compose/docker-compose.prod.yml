@@ -8,6 +8,9 @@
 
 services:
   caddy:
+    # Caddy runs on both roles. role-origin.conf vs role-proxy.conf is
+    # selected at runtime via SHRUTI_REGION_ROLE (set per host in .env).
+    profiles: [origin, proxy]
     # Custom build with the rate-limit plugin and the Caddyfile baked in.
     # Built by services-ghcr.yml from infra/app/compose/caddy/Dockerfile;
     # the Caddyfile travels inside the image, so a CORS / rate-limit /
@@ -41,13 +44,26 @@ services:
     environment:
       DOMAIN: ${SHRUTI_DOMAIN:?}
       ACME_EMAIL: ${SHRUTI_ACME_EMAIL:?}
+      # Caddyfile reads these to pick role + (proxy only) upstream host.
+      # Default origin so existing single-host installs keep working.
+      SHRUTI_REGION_ROLE: ${SHRUTI_REGION_ROLE:-origin}
+      # On origin: stays a placeholder — Caddy still parses role-proxy.conf
+      # (both snippet defs are global-imported) so the env var must
+      # substitute to *something* syntactically valid as a host. The
+      # snippet is never INVOKED on origin so the value is meaningless.
+      # On proxy: real global host name (shruti.example.com), set
+      # by the operator in /opt/shruti/.env.
+      SHRUTI_GLOBAL_HOST: ${SHRUTI_GLOBAL_HOST:-global.invalid}
     volumes:
       - caddydata:/data
       - caddyconfig:/config
     networks: [shruti]
+    # required: false lets caddy start on proxy hosts where chat/auth
+    # are profile-excluded (the proxy reverse-proxies them to global).
+    # share-audio + share-video are present on both roles so stay strict.
     depends_on:
-      chat:         { condition: service_healthy }
-      auth:         { condition: service_healthy }
+      chat:         { condition: service_healthy, required: false }
+      auth:         { condition: service_healthy, required: false }
       share-audio:  { condition: service_healthy }
       share-video:  { condition: service_healthy }
 
