@@ -168,7 +168,6 @@ export default {
 
   preferredServer: {
     title: "Preferred server",
-    fallbackHint: "if unavailable, the app falls back automatically",
   },
 
   player: {

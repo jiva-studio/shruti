@@ -166,7 +166,6 @@ export default {
 
   preferredServer: {
     title: "Предпочитаемый сервер",
-    fallbackHint: "если недоступен, приложение автоматически переключится на другой",
   },
 
   player: {
