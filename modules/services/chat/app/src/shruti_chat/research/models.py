@@ -169,6 +169,59 @@ class FanoutResult:
 # ---- ResearchResult — what pipeline.run_research returns ------------------
 
 
+# ---- LocateResult — what locate.run_locate returns -----------------------
+
+
+@dataclass(frozen=True, slots=True)
+class LocateChapter:
+    """One chapter inside a located region: address tokens + heading."""
+
+    tokens: str   # "7.5"
+    title: str    # "Махараджа Прахлада, святой сын Хираньякашипу"
+
+
+@dataclass(frozen=True, slots=True)
+class LocateRegion:
+    """A located region of a book — a canto (or the book itself for
+    single-level books like BG) plus the chapters the narrative spans.
+
+    `region_token` is the canto token ("7") for 3-level books, or the
+    chapter token for 2-level books. `region_label` is the canto heading
+    (or book short-name). Rendered as one ChapterCard on the client."""
+
+    source_id: str
+    region_token: str
+    region_label: str
+    chapters: tuple[LocateChapter, ...]
+    score: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class LocateVerse:
+    """A located individual verse (verse-granularity answer)."""
+
+    source_id: str
+    tokens: str
+    addr_label: str
+    score: float = 0.0
+
+
+@dataclass
+class LocateResult:
+    """Output of `locate.run_locate`, consumed by `locate_worker_node`.
+
+    Exactly one of `regions` / `verses` is normally populated, chosen by
+    the question's granularity (chapter-level vs verse-level). `truncated`
+    is True when more regions matched than the display cap — the worker
+    surfaces an "основные места" note so the cut isn't silent.
+    """
+
+    regions: list[LocateRegion] = field(default_factory=list)
+    verses: list[LocateVerse] = field(default_factory=list)
+    truncated: bool = False
+    matched_attribution_ids: list[str] = field(default_factory=list)
+
+
 @dataclass
 class ResearchResult:
     """Final output of the pipeline, consumed by the synthesizer.

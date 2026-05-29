@@ -49,6 +49,7 @@ from shruti_chat.agent.graph.nodes import (
     action_worker_node,
     catalog_worker_node,
     help_worker_node,
+    locate_worker_node,
     research_worker_node,
     router_node,
     synthesizer_node,
@@ -70,6 +71,7 @@ def build_chat_graph() -> Pregel:
 
     builder.add_node("router", router_node)
     builder.add_node("research_worker", research_worker_node)
+    builder.add_node("locate_worker", locate_worker_node)
     builder.add_node("catalog_worker", catalog_worker_node)
     builder.add_node("action_worker", action_worker_node)
     builder.add_node("help_worker", help_worker_node)
@@ -82,6 +84,7 @@ def build_chat_graph() -> Pregel:
         route_after_router,
         {
             "research_worker": "research_worker",
+            "locate_worker": "locate_worker",
             "catalog_worker": "catalog_worker",
             "action_worker": "action_worker",
             "help_worker": "help_worker",
@@ -118,6 +121,10 @@ def build_chat_graph() -> Pregel:
     # research notes — straight to synthesizer, no planning needed.
     builder.add_edge("action_worker", "synthesizer")
     builder.add_edge("help_worker", "synthesizer")
+    # locate_worker emits concise location notes (chapter/verse address) —
+    # straight to synthesizer; the outline-first synthesis_planner is for
+    # essay-grounding research notes, not for a "where is it" pointer.
+    builder.add_edge("locate_worker", "synthesizer")
     builder.add_edge("synthesis_planner", "synthesizer")
     builder.add_edge("synthesizer", END)
 

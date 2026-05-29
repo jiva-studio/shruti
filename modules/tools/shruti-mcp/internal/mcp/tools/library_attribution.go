@@ -208,16 +208,17 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 	const kind = "library.attribution.ref_add"
 	t := mcp.NewTool(kind,
 		mcp.WithDescription(
-			"Attach a ref (verse or document) to an attribution. Accepts two input shapes:\n"+
+			"Attach a ref (verse, document or title) to an attribution. Accepts these input shapes:\n"+
 				"  1. {ref_kind, target_id}                   — direct opaque id\n"+
 				"  2. {ref_kind=verse, source_id, tokens}    — shortcut for verses (MCP resolves to verse.id)\n"+
 				"  3. {ref_kind=document, document_id}        — shortcut for documents (same as direct target_id)\n"+
+				"  4. {ref_kind=title, source_id, tokens}    — a chapter/canto heading (library_titles), e.g. source_NoY8sAlXF1IT + \"7.5\". Use for verse-structured books (SB/BG/CC) where a chapter is not a document.\n"+
 				"Existence is validated against library.db; missing target → validation_failed."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("Attribution id.")),
-		mcp.WithString("ref_kind", mcp.Required(), mcp.Description("verse | document")),
+		mcp.WithString("ref_kind", mcp.Required(), mcp.Description("verse | document | title")),
 		mcp.WithString("target_id", mcp.Description("Direct opaque ID (verse.id or library_document.id). Mutually exclusive with source_id+tokens / document_id shortcuts.")),
-		mcp.WithString("source_id", mcp.Description("For ref_kind=verse shortcut: catalog source id (e.g. source_dsicuBsFvinZ).")),
-		mcp.WithString("tokens", mcp.Description("For ref_kind=verse shortcut: verse address (e.g. \"2.13\").")),
+		mcp.WithString("source_id", mcp.Description("For ref_kind=verse or ref_kind=title shortcut: catalog source id (e.g. source_dsicuBsFvinZ).")),
+		mcp.WithString("tokens", mcp.Description("For ref_kind=verse shortcut: verse address (e.g. \"2.13\"). For ref_kind=title: chapter/canto address (e.g. \"7\" or \"7.5\").")),
 		mcp.WithString("document_id", mcp.Description("For ref_kind=document shortcut: library_document_<id>.")),
 		mcp.WithNumber("position", mcp.Description("Ordering hint within the attribution (default 0).")),
 	)
@@ -230,9 +231,9 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		if refKind != "verse" && refKind != "document" {
+		if !validRefKind(refKind) {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
-				fmt.Sprintf("invalid ref_kind %q (must be 'verse' or 'document')", refKind), nil), nil
+				fmt.Sprintf("invalid ref_kind %q (must be 'verse', 'document' or 'title')", refKind), nil), nil
 		}
 		target, err := resolveRefTarget(ctx, deps, refKind, req)
 		if err != nil {
@@ -275,7 +276,7 @@ func registerAttributionRefRemove(s *server.MCPServer, deps LibraryAttributionDe
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		if refKind != "verse" && refKind != "document" {
+		if !validRefKind(refKind) {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
 				fmt.Sprintf("invalid ref_kind %q", refKind), nil), nil
 		}
@@ -346,6 +347,21 @@ func resolveRefTarget(ctx context.Context, deps LibraryAttributionDeps, refKind 
 			return "", fmt.Errorf("ref_kind=verse: must provide target_id OR (source_id, tokens)")
 		}
 	}
+	if refKind == "title" {
+		// A title ref addresses a library_titles row by (source_id, tokens);
+		// the stored target_id is the composite "<source_id>/<tokens>".
+		// Existence is validated in the repo layer.
+		switch {
+		case target != "" && (srcID != "" || tokens != "" || docID != ""):
+			return "", fmt.Errorf("ref_kind=title: provide either target_id OR (source_id, tokens), not both")
+		case target != "":
+			return target, nil
+		case srcID != "" && tokens != "":
+			return srcID + "/" + tokens, nil
+		default:
+			return "", fmt.Errorf("ref_kind=title: must provide target_id OR (source_id, tokens)")
+		}
+	}
 	// document
 	switch {
 	case target != "" && (srcID != "" || tokens != "" || docID != ""):
@@ -357,6 +373,10 @@ func resolveRefTarget(ctx context.Context, deps LibraryAttributionDeps, refKind 
 	default:
 		return "", fmt.Errorf("ref_kind=document: must provide target_id OR document_id")
 	}
+}
+
+func validRefKind(k string) bool {
+	return k == "verse" || k == "document" || k == "title"
 }
 
 func mapAttributionError(kind string, err error) *mcp.CallToolResult {

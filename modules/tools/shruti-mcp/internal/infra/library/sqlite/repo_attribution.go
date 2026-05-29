@@ -255,8 +255,22 @@ func (r *Repo) AttributionRefAdd(ctx context.Context, id string, ref library.Att
 		if !exists {
 			return ErrRefTargetNotFound
 		}
+	case "title":
+		// target_id is the composite "<source_id>/<tokens>" addressing a
+		// library_titles row (chapter/canto heading) in any language.
+		sourceID, tokens, ok := splitTitleTarget(ref.TargetID)
+		if !ok {
+			return fmt.Errorf("ref_add: title target_id must be \"<source_id>/<tokens>\", got %q", ref.TargetID)
+		}
+		exists, err := r.titleExists(ctx, sourceID, tokens)
+		if err != nil {
+			return fmt.Errorf("verify title: %w", err)
+		}
+		if !exists {
+			return ErrRefTargetNotFound
+		}
 	default:
-		return fmt.Errorf("ref_add: invalid kind %q (must be 'verse' or 'document')", ref.Kind)
+		return fmt.Errorf("ref_add: invalid kind %q (must be 'verse', 'document' or 'title')", ref.Kind)
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -306,6 +320,30 @@ func (r *Repo) attributionExists(ctx context.Context, id string) bool {
 	return n > 0
 }
 
+// titleExists reports whether a library_titles row exists for (source_id,
+// tokens) in ANY language — a title ref addresses a chapter/canto, not a
+// specific localization.
+func (r *Repo) titleExists(ctx context.Context, sourceID, tokens string) (bool, error) {
+	var n int
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM library_titles WHERE source_id = ? AND tokens = ?`,
+		sourceID, tokens,
+	).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// splitTitleTarget parses a title ref target_id "<source_id>/<tokens>". Source
+// ids and tokens never contain '/', so a single split on the first '/' is safe.
+func splitTitleTarget(target string) (sourceID, tokens string, ok bool) {
+	i := strings.IndexByte(target, '/')
+	if i <= 0 || i == len(target)-1 {
+		return "", "", false
+	}
+	return target[:i], target[i+1:], true
+}
+
 // escapeLikeAny escapes LIKE wildcards inside a substring pattern; the
 // caller adds the leading/trailing '%' separately.
 func escapeLikeAny(s string) string {
@@ -317,5 +355,5 @@ func escapeLikeAny(s string) string {
 // not_found envelope codes.
 var (
 	ErrAttributionNotFound = fmt.Errorf("attribution not found")
-	ErrRefTargetNotFound   = fmt.Errorf("ref target (verse or document) not found in library")
+	ErrRefTargetNotFound   = fmt.Errorf("ref target (verse, document or title) not found in library")
 )

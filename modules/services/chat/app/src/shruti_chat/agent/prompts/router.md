@@ -37,6 +37,24 @@ Intents:
                  "chapter from KRSNA Book about Govardhana",
                  "I heard about karma recently — find it",
                  "find me a similar fragment".
+- locate: WHERE in scripture a topic / story / verse is found — the
+  user wants the structural ADDRESS (canto / chapter / verse), not a
+  retold answer and not lectures. Reverse lookup: topic → address.
+  Includes deictic follow-ups after a narrative answer («а где это в
+  писании?», «в какой это песни?») — they inherit the prior topic.
+  Contrast: «расскажи историю про X» is research (retell); «где / в
+  какой главе / в каком стихе эта история» is locate (point to it).
+  «покажи лекции по главе» stays find_track (wants tracks).
+  Examples (ru): "в какой песни Шримад-Бхагаватам история Прахлады",
+                 "в какой главе Гиты говорится про гуны",
+                 "где в писании история Маркандеи",
+                 "а где это находится?",
+                 "в каком стихе сказано про йога-кшему".
+  Examples (en): "which canto of SB has the Prahlada story",
+                 "what chapter of the Gita is about the modes",
+                 "where in scripture is the Markandeya story",
+                 "where is that found?",
+                 "which verse mentions linux-client-kshema".
 - find_track: catalog lookup by metadata — title, source/verse
   address, date, location, author, OR the user's listening history
   by TIME WINDOW (this week, yesterday) OR personal next-track

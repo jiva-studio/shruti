@@ -98,6 +98,12 @@
               :tokens="token.tokens"
               :caption="token.caption"
             />
+            <ChapterCard
+              v-else-if="token.kind === 'chapter'"
+              :source-id="token.sourceId"
+              :region-token="token.regionToken"
+              :caption="token.caption"
+            />
             <!--
               Markdown blockquote (library document citation). bodyHtml and
               attributionHtml are output of marked.parseInline on a vetted
@@ -147,6 +153,7 @@ import ChatMessageActions from "./ChatMessageActions.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
+import ChapterCard from "./ChapterCard.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"

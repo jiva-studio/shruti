@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
+import { useChapterBodyStore } from "@shruti/stores/useChapterBodyStore.js"
 import { useCiteTranscriptStore } from "@shruti/stores/useCiteTranscriptStore.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@shruti/composables/chatMarkers.js"
@@ -153,6 +154,7 @@ export const useChatStore = defineStore("chat", () => {
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
   const verseBodyStore = useVerseBodyStore()
+  const chapterBodyStore = useChapterBodyStore()
   const citeTranscriptStore = useCiteTranscriptStore()
   const { t } = useI18n()
   const toast = useToast()
@@ -875,6 +877,17 @@ export const useChatStore = defineStore("chat", () => {
           sanskrit: event.sanskrit,
           transliteration: event.transliteration,
           translation: event.translation,
+        })
+        return
+      }
+      case "chapter-payload": {
+        // Server-streamed chapter-location region (locate intent). Cached
+        // (with persistence) so `ChapterCard.vue` renders the chapter
+        // list; arrives BEFORE the prose delta with the `[chapter:…]`
+        // marker, same ordering contract as verse-payload.
+        chapterBodyStore.set(event.sourceId, event.regionToken, {
+          regionLabel: event.regionLabel,
+          chapters: event.chapters,
         })
         return
       }

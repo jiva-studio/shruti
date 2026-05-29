@@ -54,6 +54,11 @@ export type ChatActionPayload =
       readonly id: string
       readonly payload: ChatCiteTranscriptPayloadWire
     }
+  | {
+      readonly kind: "chapter"
+      readonly id: string
+      readonly payload: ChatChapterPayloadWire
+    }
 
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
@@ -95,6 +100,18 @@ export interface ChatCiteTranscriptPayloadWire {
   readonly start_ms: number
   readonly end_ms: number
   readonly text: string
+}
+
+/** Chapter-location region shipped ahead of the prose deltas containing
+ *  the `[chapter:source_id/region_token|label]` marker (locate intent).
+ *  The store subscriber caches it under `${source_id}|${region_token}` so
+ *  ChapterCard renders the canto/chapter list instead of the chip.
+ *  Snake_case to match the agent's emitted JSON. */
+export interface ChatChapterPayloadWire {
+  readonly source_id: string
+  readonly region_token: string
+  readonly region_label: string
+  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
 }
 
 export type ChatRole = "user" | "assistant"

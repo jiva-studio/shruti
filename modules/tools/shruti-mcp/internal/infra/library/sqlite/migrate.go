@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // applyLocalMigrations runs additive, idempotent DDL against library.db.
@@ -22,6 +23,9 @@ import (
 func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureAttributionTables(ctx, db); err != nil {
 		return fmt.Errorf("ensure attribution tables: %w", err)
+	}
+	if err := relaxAttributionRefKindCheck(ctx, db); err != nil {
+		return fmt.Errorf("relax attribution ref_kind check: %w", err)
 	}
 	return nil
 }
@@ -57,9 +61,13 @@ func ensureAttributionTables(ctx context.Context, db *sql.DB) error {
 			PRIMARY KEY (attribution_id, language, text)
 		)`,
 
+		// No CHECK on ref_kind: kinds (verse | document | title | …) are
+		// validated in the repo layer, so new ref kinds never need a schema
+		// migration. relaxAttributionRefKindCheck() rebuilds older DBs that
+		// still carry the original CHECK constraint.
 		`CREATE TABLE IF NOT EXISTS library_attribution_refs (
 			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
-			ref_kind       TEXT NOT NULL CHECK (ref_kind IN ('verse', 'document')),
+			ref_kind       TEXT NOT NULL,
 			target_id      TEXT NOT NULL,
 			position       INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (attribution_id, ref_kind, target_id)
@@ -73,6 +81,55 @@ func ensureAttributionTables(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// relaxAttributionRefKindCheck rebuilds library_attribution_refs to drop the
+// original `CHECK (ref_kind IN ('verse','document'))` so newer ref kinds (e.g.
+// 'title') can be inserted. SQLite cannot drop a CHECK in place, so this does
+// the standard create-copy-drop-rename rebuild. Idempotent: a no-op once the
+// table no longer carries a CHECK (fresh DBs created above, or already-migrated
+// ones). This is the last ref_kind migration — validation now lives in code.
+func relaxAttributionRefKindCheck(ctx context.Context, db *sql.DB) error {
+	var ddl string
+	err := db.QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type='table' AND name='library_attribution_refs'`,
+	).Scan(&ddl)
+	if err == sql.ErrNoRows {
+		return nil // table not present yet (ensureAttributionTables makes it without a CHECK)
+	}
+	if err != nil {
+		return err
+	}
+	if !strings.Contains(strings.ToUpper(ddl), "CHECK") {
+		return nil // already relaxed
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmts := []string{
+		`CREATE TABLE library_attribution_refs_new (
+			attribution_id TEXT NOT NULL REFERENCES library_attributions(id) ON DELETE CASCADE,
+			ref_kind       TEXT NOT NULL,
+			target_id      TEXT NOT NULL,
+			position       INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (attribution_id, ref_kind, target_id)
+		)`,
+		`INSERT INTO library_attribution_refs_new (attribution_id, ref_kind, target_id, position)
+			SELECT attribution_id, ref_kind, target_id, position FROM library_attribution_refs`,
+		`DROP TABLE library_attribution_refs`,
+		`ALTER TABLE library_attribution_refs_new RENAME TO library_attribution_refs`,
+		`CREATE INDEX IF NOT EXISTS library_attr_refs_by_target
+			ON library_attribution_refs(ref_kind, target_id)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("rebuild %q: %w", firstLine(s), err)
+		}
+	}
+	return tx.Commit()
 }
 
 func firstLine(s string) string {

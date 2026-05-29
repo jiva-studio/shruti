@@ -2,12 +2,22 @@ package sqlitelibrary
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/library"
 )
+
+// openRaw opens the sqlite file directly (no migrations) so a test can seed a
+// legacy schema before Open() runs its self-healing migration.
+func openRaw(t *testing.T, path string) (*sql.DB, error) {
+	t.Helper()
+	dsn := fmt.Sprintf("file:%s?_foreign_keys=ON", path)
+	return sql.Open("sqlite3", dsn)
+}
 
 func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
 	t.Helper()
@@ -142,6 +152,92 @@ func TestAttributionRefAdd_DocumentValidation(t *testing.T) {
 	})
 	if !errors.Is(err, ErrRefTargetNotFound) {
 		t.Fatalf("expected ErrRefTargetNotFound, got %v", err)
+	}
+}
+
+func TestAttributionRefAdd_TitleValidation(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	// Seed a library_titles row (chapter heading) the title ref points at.
+	if _, err := r.db.ExecContext(ctx, `CREATE TABLE library_titles (
+		source_id TEXT, tokens TEXT, language TEXT, title TEXT)`); err != nil {
+		t.Fatalf("create titles table: %v", err)
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO library_titles (source_id, tokens, language, title) VALUES (?,?,?,?)`,
+		"source_SB", "7.5", "ru", "Махараджа Прахлада, святой сын Хираньякашипу"); err != nil {
+		t.Fatalf("seed title: %v", err)
+	}
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrTopic, "ru", "история Прахлады")
+
+	// Existing chapter → OK; target stored as composite "source/tokens".
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "title", TargetID: "source_SB/7.5",
+	}); err != nil {
+		t.Fatalf("ref_add existing title: %v", err)
+	}
+	got, _, _ := r.AttributionGet(ctx, "attribution_a")
+	if len(got.Refs) != 1 || got.Refs[0].Kind != "title" || got.Refs[0].TargetID != "source_SB/7.5" {
+		t.Fatalf("title ref not stored verbatim: %+v", got.Refs)
+	}
+	// Non-existing chapter → error.
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "title", TargetID: "source_SB/99.9",
+	}); !errors.Is(err, ErrRefTargetNotFound) {
+		t.Fatalf("expected ErrRefTargetNotFound, got %v", err)
+	}
+	// Malformed composite (no '/') → validation error, not a panic.
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "title", TargetID: "source_SB",
+	}); err == nil {
+		t.Fatalf("expected error for malformed title target_id")
+	}
+}
+
+func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "library.db")
+
+	// Phase 1: build a legacy DB whose refs table still carries the old
+	// CHECK (ref_kind IN ('verse','document')) — what a pre-feature
+	// library.db looks like.
+	legacy, err := openRaw(t, path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	for _, s := range []string{
+		`CREATE TABLE library_attributions (id TEXT PRIMARY KEY, kind TEXT, created_at TEXT, updated_at TEXT)`,
+		`CREATE TABLE library_attribution_refs (
+			attribution_id TEXT NOT NULL,
+			ref_kind       TEXT NOT NULL CHECK (ref_kind IN ('verse','document')),
+			target_id      TEXT NOT NULL,
+			position       INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (attribution_id, ref_kind, target_id))`,
+		`CREATE TABLE library_titles (source_id TEXT, tokens TEXT, language TEXT, title TEXT)`,
+		`INSERT INTO library_titles (source_id, tokens, language, title) VALUES ('source_SB','7.5','ru','t')`,
+	} {
+		if _, err := legacy.ExecContext(ctx, s); err != nil {
+			t.Fatalf("seed legacy: %v", err)
+		}
+	}
+	_ = legacy.Close()
+
+	// Phase 2: Open() runs the migration; the CHECK should be gone.
+	r, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("open (migrate): %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT INTO library_attributions (id, kind, created_at, updated_at) VALUES ('attribution_a','topic','t','t')`,
+	); err != nil {
+		t.Fatalf("seed attribution: %v", err)
+	}
+	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
+		Kind: "title", TargetID: "source_SB/7.5",
+	}); err != nil {
+		t.Fatalf("title ref on migrated legacy DB should succeed, got: %v", err)
 	}
 }
 

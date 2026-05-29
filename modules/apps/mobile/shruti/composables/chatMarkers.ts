@@ -44,6 +44,17 @@ export type ChatToken =
       readonly caption: string
     }
   | {
+      /** Chapter-location widget — "where in scripture is this?". Rendered
+       *  by `ChapterCard.vue`. Names a region `(sourceId, regionToken)`;
+       *  the canto/chapter titles ride the `chapter` SSE payload and are
+       *  read from `useChapterBodyStore`. `caption` is the region label
+       *  (canto heading / book name) carried inline on the marker. */
+      readonly kind: "chapter"
+      readonly sourceId: string
+      readonly regionToken: string
+      readonly caption: string
+    }
+  | {
       /** Library document citation — commentary, prose chapter, or
        *  letter — rendered as a styled blockquote with an optional
        *  italic attribution line. */
@@ -66,6 +77,10 @@ const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
 // permissive class for safety; tokens are digit groups separated by `.` or `,`
 // (combined verses like "1.2.28,1.2.29").
 const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
+// Chapter-location widget marker. Same address grammar as verse: a
+// source_id and a region token (canto "12" or chapter "2"), optional
+// `|label` carrying the canto heading / book name.
+const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture
 // group keeps the raw lines (each still prefixed by `>`) so the parser can
@@ -170,6 +185,20 @@ export function parseChatMarkers(input: string): ChatToken[] {
         kind: "verse",
         sourceId,
         tokens,
+        caption: (captionRaw ?? "").trim(),
+      },
+    })
+  }
+  for (const match of input.matchAll(CHAPTER_RE)) {
+    const [full, sourceId, regionToken, captionRaw] = match
+    const start = match.index ?? 0
+    hits.push({
+      start,
+      end: start + full.length,
+      token: {
+        kind: "chapter",
+        sourceId,
+        regionToken,
         caption: (captionRaw ?? "").trim(),
       },
     })
@@ -326,6 +355,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
     k === "action" ||
     k === "quote" ||
     k === "verse" ||
+    k === "chapter" ||
     // `cite` now renders as a block quote-card (CitationCard) when its
     // transcript text is present; collapse surrounding <br>/whitespace
     // like the other block tokens. (In chip-fallback mode it's inline —
@@ -595,6 +625,10 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   out = out.replace(OUTLINE_RE, "")
   out = out.replace(ACTION_RE, "")
   out = out.replace(FOLLOWUP_RE, "")
+  // Chapter-location widget: chapter titles live in the body store, not
+  // the message text, so there's nothing portable to expand — strip the
+  // marker (same as card / outline).
+  out = out.replace(CHAPTER_RE, "")
   // Audio citations: expand into a transcript blockquote + source line,
   // the cite analog of the verse expansion below. A cache miss (no
   // transcript yet) returns "" — the legacy strip behavior. Fresh
