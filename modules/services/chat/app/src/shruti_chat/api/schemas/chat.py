@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from shruti_chat.domain.user_context import (
     FocusFragment,
@@ -80,12 +80,19 @@ class ChunkAliasDto(BaseModel):
     end_ms: int | None = None
 
 
+USER_CONTENT_MAX = 4000
+# Assistant turns are server-generated prose with citations and routinely
+# exceed the user cap; the client replays them verbatim in history. We still
+# bound them to keep a single message from blowing up the prompt, just far
+# higher than a user question would ever be.
+ASSISTANT_CONTENT_MAX = 32000
+
+
 class ChatMessageDto(BaseModel):
     role: Literal["user", "assistant"]
-    # Cap on user message size — bounds prompt cost and mitigates trivial
-    # DoS via giant payloads. 4000 chars comfortably exceeds the longest
-    # legitimate question we've seen in production.
-    content: str = Field(..., max_length=4000)
+    # Hard ceiling enforced by the schema; the role-specific cap below is the
+    # one that matters in practice.
+    content: str = Field(..., max_length=ASSISTANT_CONTENT_MAX)
     # Server-minted integer aliases for the chip markers in `content`.
     # Keys are integers serialised as strings (JSON limitation); values
     # describe the catalog reference each alias points to. Only present
@@ -95,6 +102,17 @@ class ChatMessageDto(BaseModel):
     # server falls back to stripping their chip markers to placeholder
     # text.
     aliases: dict[str, ChunkAliasDto] | None = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def _cap_user_content(self) -> "ChatMessageDto":
+        # The 4000-char cap is meant to bound a user *question*. Applying it to
+        # assistant turns rejects the server's own prior replies on the next
+        # turn, breaking multi-turn conversations.
+        if self.role == "user" and len(self.content) > USER_CONTENT_MAX:
+            raise ValueError(
+                f"String should have at most {USER_CONTENT_MAX} characters"
+            )
+        return self
 
 
 # Proactive-rule context — opaque JSON dict. Each rule kind has its own
