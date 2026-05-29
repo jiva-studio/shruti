@@ -26,6 +26,7 @@ Intent = Literal[
     "direct_chat",      # greetings, thanks, meta-talk; no search needed
     "help",             # capability questions; routed to help_worker
     "research",         # search across lectures / verses / commentaries / letters
+    "locate",           # WHERE in scripture is a topic/story — canto/chapter/verse address
     "find_track",       # catalog lookup by author/source/date — specific track or list
     "create_action",    # user wants to create something (playlist, PDF, reminder)
     "unknown",          # ambiguous or out-of-scope; soft fallback to synthesizer

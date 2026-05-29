@@ -102,8 +102,31 @@ class CommentaryRef:
     sentences: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ChapterRef:
+    """The real-library metadata behind one integer alias for a chapter-
+    location widget — the answer to "where in scripture is this?".
+
+    Unlike VerseRef (one shloka), a ChapterRef names a REGION of a book:
+    a canto (or the book itself for single-level books like BG) plus the
+    list of chapters within it that the located narrative spans. The
+    marker expander emits `[chapter:source_id/region_token|region_label]`;
+    the chapter titles ride to the client in the `chapter` SSE payload and
+    are rendered verbatim by `ChapterCard.vue` — never echoed by the LLM.
+
+    `region_token` is the canto token ("12") for 3-level books, or the
+    book's single chapter token for 2-level books. `chapters` is the
+    ordered (tokens, title) list shown inside the card.
+    """
+
+    source_id: str
+    region_token: str
+    region_label: str
+    chapters: tuple[tuple[str, str], ...]  # (tokens, title), numerically ordered
+
+
 # Any kind of reference an integer alias may resolve to.
-AliasRef = ChunkRef | VerseRef | CommentaryRef
+AliasRef = ChunkRef | VerseRef | CommentaryRef | ChapterRef
 
 
 class TurnAliasMap:
@@ -203,6 +226,27 @@ class TurnAliasMap:
         )
         return n
 
+    def alias_chapter(
+        self,
+        source_id: str,
+        region_token: str,
+        region_label: str,
+        chapters: list[tuple[str, str]],
+    ) -> int:
+        """Mint an alias for a chapter-location widget. The LLM cites it
+        via `[^N]`; the marker expander unfolds N into
+        `[chapter:source_id/region_token|region_label]`, and
+        `flush_chapter_payloads` ships the `chapters` list (titles
+        verbatim) in the `chapter` SSE payload."""
+        n = self._alloc_ref()
+        self._chunks[n] = ChapterRef(
+            source_id=source_id,
+            region_token=region_token,
+            region_label=region_label,
+            chapters=tuple(chapters),
+        )
+        return n
+
     def resolve(self, n: int) -> AliasRef | None:
         return self._chunks.get(n)
 
@@ -213,6 +257,15 @@ class TurnAliasMap:
         return [
             (n, ref) for n, ref in self._chunks.items()
             if isinstance(ref, VerseRef)
+        ]
+
+    def chapter_refs(self) -> list[tuple[int, ChapterRef]]:
+        """All currently-minted chapter-location aliases, in mint order.
+        Used by `flush_chapter_payloads` to emit a `chapter` payload per
+        fresh region before the `[chapter:...]` marker reaches the client."""
+        return [
+            (n, ref) for n, ref in self._chunks.items()
+            if isinstance(ref, ChapterRef)
         ]
 
     def cite_refs(self) -> list[tuple[int, ChunkRef]]:
@@ -265,6 +318,17 @@ class TurnAliasMap:
                     entry["lang"] = ref.lang
             elif isinstance(ref, VerseRef):
                 entry = {"kind": "verse", "source_id": ref.source_id, "tokens": ref.tokens}
+            elif isinstance(ref, ChapterRef):
+                entry = {
+                    "kind": "chapter",
+                    "source_id": ref.source_id,
+                    "region_token": ref.region_token,
+                    "region_label": ref.region_label,
+                    "chapters": [
+                        {"tokens": tok, "title": title}
+                        for tok, title in ref.chapters
+                    ],
+                }
             elif isinstance(ref, CommentaryRef):
                 # Commentary alias is server-side only: the LLM picks
                 # sentences via `[^N|s=...]` and the expander inlines them
@@ -302,6 +366,22 @@ class TurnAliasMap:
                 if not isinstance(sid, str) or not isinstance(tok, str):
                     continue
                 self._chunks[n] = VerseRef(source_id=sid, tokens=tok)
+            elif kind == "chapter":
+                sid = entry.get("source_id")
+                region_token = entry.get("region_token")
+                if not isinstance(sid, str) or not isinstance(region_token, str):
+                    continue
+                chapters = tuple(
+                    (c.get("tokens", ""), c.get("title", ""))
+                    for c in entry.get("chapters", [])
+                    if isinstance(c, dict)
+                )
+                self._chunks[n] = ChapterRef(
+                    source_id=sid,
+                    region_token=region_token,
+                    region_label=entry.get("region_label", "") or "",
+                    chapters=chapters,
+                )
             else:
                 tid = entry.get("track_id")
                 if not isinstance(tid, str):

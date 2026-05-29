@@ -29,6 +29,7 @@ from lectorium_chat.indexer.library.chunker import (
     hash_body,
     load_source_short_names,
     walk_documents,
+    walk_titles,
     walk_verses,
 )
 from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
@@ -65,6 +66,7 @@ def _stream_items(
     """
     chunk_stream: Iterable[LibraryChunk] = itertools.chain(
         walk_verses(library_db_path, short_names, langs=langs),
+        walk_titles(library_db_path, short_names, langs=langs),
         walk_documents(library_db_path, short_names, langs=langs),
     )
     for key, group in itertools.groupby(

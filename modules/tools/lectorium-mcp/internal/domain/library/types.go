@@ -119,12 +119,19 @@ type Attribution struct {
 	UpdatedAt string                // RFC3339, bumped on any mutation
 }
 
-// AttributionRef points to a library entity through its opaque ID. Kind here
-// is the REFERENCED entity type (verse|document) — separate from
-// Attribution.Kind (question|topic).
+// AttributionRef points to a library entity. Kind here is the REFERENCED
+// entity type (verse|document|title) — separate from Attribution.Kind
+// (question|topic).
+//
+// TargetID encoding by Kind:
+//   - verse / document: the opaque entity id (verse.id / library_document.id).
+//   - title: a composite "<source_id>/<tokens>" addressing a library_titles
+//     row (a canto/chapter heading). Verse-structured books (SB/BG/CC) have no
+//     chapter document to point at, so a chapter is referenced by its title
+//     row instead. The locate pipeline resolves it via library_titles.
 type AttributionRef struct {
-	Kind     string // "verse" | "document"
-	TargetID string // verse.id OR library_document.id (opaque)
+	Kind     string // "verse" | "document" | "title"
+	TargetID string // verse.id / library_document.id, OR "<source_id>/<tokens>" for title
 	Position int    // ordering hint within the attribution (default 0)
 }
 

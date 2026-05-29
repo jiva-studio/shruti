@@ -42,6 +42,7 @@ from __future__ import annotations
 import re
 
 from lectorium_chat.agent.turn_aliases import (
+    ChapterRef,
     ChunkRef,
     CommentaryRef,
     TurnAliasMap,
@@ -75,13 +76,14 @@ _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
 # Any bracket whose first token is NOT one of the six marker keywords
 # doesn't match this and passes through verbatim.
 _KEYWORD_BRACKET_RE = re.compile(
-    r"^\[(?:cite|card|outline|verse|action|followup)[:|]"
+    r"^\[(?:cite|card|outline|verse|chapter|action|followup)[:|]"
 )
 _STRICT_PATTERNS = (
     re.compile(r"^\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[card:[A-Za-z0-9_.-]+\]$"),
     re.compile(r"^\[outline:[A-Za-z0-9_.-]+\]$"),
     re.compile(r"^\[verse:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
+    re.compile(r"^\[chapter:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]$"),
     re.compile(r"^\[followup:[^\]|\n]+\]$"),
 )
@@ -441,6 +443,11 @@ class MarkerExpander:
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
             return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
+
+        if isinstance(ref, ChapterRef):
+            body = f"{ref.source_id}/{ref.region_token}"
+            label = ref.region_label or ""
+            return f"[chapter:{body}|{label}]" if label else f"[chapter:{body}]"
 
         if isinstance(ref, ChunkRef):
             if ref.start_ms is not None and ref.end_ms is not None:

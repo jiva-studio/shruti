@@ -189,6 +189,49 @@ def walk_verses(
                 )
 
 
+def walk_titles(
+    library_db: Path,
+    short_names: dict[tuple[str, str], str],
+    *,
+    langs: list[str],
+) -> Iterator[LibraryChunk]:
+    """Emit one chunk per (canto/chapter title, lang) — the `title` kind.
+
+    Surfaces section headings so a "where is the story about X" query can
+    match a chapter directly (many chapters are named after the narrative,
+    e.g. «Маркандея созерцает иллюзорную энергию Господа»). `tokens` is the
+    section address ("12" canto, "12.8" chapter); `item_kind="title"`. The
+    locate pipeline groups these into chapter regions. Ordered by
+    (source_id, tokens, language) so the indexer's groupby sees each
+    (item_id, lang) consecutively.
+    """
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        cur = conn.execute(
+            "SELECT source_id, tokens, language, title FROM library_titles "
+            "ORDER BY source_id, tokens, language"
+        )
+        for source_id, tokens, language, title in cur:
+            if language not in langs:
+                continue
+            clean = re.sub(r"\s+", " ", (title or "")).strip()
+            if not clean:
+                continue
+            short = short_names.get((source_id, language))
+            addr_label = f"{short or source_id} {tokens}".strip()
+            yield LibraryChunk(
+                item_id=f"title_{source_id}_{tokens}",
+                item_kind="title",
+                source_id=source_id,
+                tokens=tokens,
+                author_id=None,
+                doc_date=None,
+                lang=language,
+                segment_index=0,
+                text=f"{addr_label}: {clean}".strip(),
+                addr_label=addr_label,
+            )
+
+
 def walk_documents(
     library_db: Path,
     short_names: dict[tuple[str, str], str],

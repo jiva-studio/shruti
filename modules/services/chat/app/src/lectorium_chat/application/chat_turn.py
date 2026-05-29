@@ -66,6 +66,12 @@ _RESEARCH_TOOL_NAMES = frozenset({
     "user_history_search",
     "track_outline_get",
 })
+# Locate is code-driven (run_locate); these tools are only the ReAct
+# fallback toolset used when chunk_repo/embedder are absent (tests).
+_LOCATE_TOOL_NAMES = frozenset({
+    "chunks_search",
+    "chunks_get_by_address",
+})
 _CATALOG_TOOL_NAMES = frozenset({
     "author_resolve",
     "source_resolve",
@@ -273,6 +279,7 @@ async def run_chat_turn(
         all_tools = build_personalized_tools(TOOLS, user_context)
         aliased_tools = build_aliased_tools(all_tools, aliases)
         research_tools = _subset(aliased_tools, _RESEARCH_TOOL_NAMES)
+        locate_tools = _subset(aliased_tools, _LOCATE_TOOL_NAMES)
         catalog_tools = _subset(aliased_tools, _CATALOG_TOOL_NAMES)
         action_tools = _subset(aliased_tools, _ACTION_TOOL_NAMES)
         help_tools = _subset(aliased_tools, _HELP_TOOL_NAMES)
@@ -303,6 +310,7 @@ async def run_chat_turn(
             expander=expander,
             llm=deps.llm,
             research_tools=research_tools,
+            locate_tools=locate_tools,
             catalog_tools=catalog_tools,
             action_tools=action_tools,
             help_tools=help_tools,

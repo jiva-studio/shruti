@@ -63,6 +63,17 @@ export type RunChatTurnEvent =
       readonly transliteration: string
       readonly translation: { readonly [lang: string]: string }
     }
+  /** Chapter-location region for one `[chapter:source/region|label]`
+   *  marker (locate intent), streamed ahead of its marker. The store
+   *  caches it so `ChapterCard.vue` renders the chapter list; absent ⇒
+   *  the chip fallback. */
+  | {
+      readonly kind: "chapter-payload"
+      readonly sourceId: string
+      readonly regionToken: string
+      readonly regionLabel: string
+      readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+    }
   /** Transcript snippet for one `[cite:track@start-end|caption]`
    *  fragment, streamed ahead of its marker. The store caches it so
    *  `CitationCard.vue` renders the full quote block; absent ⇒ the chip
@@ -324,6 +335,16 @@ export async function* runChatTurn(
               startMs: event.payload.payload.start_ms,
               endMs: event.payload.payload.end_ms,
               text: event.payload.payload.text,
+            }
+            break
+          }
+          if (event.payload.kind === "chapter") {
+            yield {
+              kind: "chapter-payload",
+              sourceId: event.payload.payload.source_id,
+              regionToken: event.payload.payload.region_token,
+              regionLabel: event.payload.payload.region_label,
+              chapters: event.payload.payload.chapters,
             }
             break
           }

@@ -25,7 +25,7 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import build_prompt
-from lectorium_chat.agent.turn_aliases import ChunkRef, VerseRef
+from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, VerseRef
 from lectorium_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
     ResearchResult,
@@ -187,6 +187,43 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
                         "sanskrit": body["sanskrit"],
                         "transliteration": body["transliteration"],
                         "translation": body["translation"],
+                    },
+                },
+            }
+        )
+
+
+async def flush_chapter_payloads(ctx: TurnContext) -> None:
+    """Emit `action.kind=chapter` events for every chapter-location alias
+    minted this turn that hasn't been emitted yet. Mirrors
+    `flush_verse_payloads`: the payload MUST arrive BEFORE the
+    `[chapter:source/region|label]` marker in the delta so `ChapterCard.vue`
+    renders the chapter list (titles verbatim from `library_titles`) rather
+    than a bare chip. Titles already ride on the alias — no DB re-read.
+    """
+    if ctx.aliases is None:
+        return
+    writer = get_stream_writer()
+    for ref_num, cref in ctx.aliases.chapter_refs():
+        if ref_num in ctx.emitted_chapter_refs:
+            continue
+        ctx.emitted_chapter_refs.add(ref_num)
+        if not isinstance(cref, ChapterRef):
+            continue
+        writer(
+            {
+                "type": "action",
+                "data": {
+                    "kind": "chapter",
+                    "id": f"chapter_{cref.source_id}_{cref.region_token}",
+                    "payload": {
+                        "source_id": cref.source_id,
+                        "region_token": cref.region_token,
+                        "region_label": cref.region_label,
+                        "chapters": [
+                            {"tokens": tok, "title": title}
+                            for tok, title in cref.chapters
+                        ],
                     },
                 },
             }
