@@ -25,7 +25,7 @@ from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
-from shruti_chat.agent.turn_aliases import VerseRef
+from shruti_chat.agent.turn_aliases import ChunkRef, VerseRef
 from shruti_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
     ResearchResult,
@@ -193,6 +193,42 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         )
 
 
+async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
+    """Re-fetch a cited fragment's transcript text from the chunk repo
+    when it wasn't stashed in `chunk_texts` during research. Returns ""
+    on any miss (no repo, no timestamps, DB error) so the caller falls
+    back to the chip rather than failing the SSE stream.
+
+    `cref.lang` (captured at mint) filters to the fragment's transcript
+    language; it's None only for the pre-minted focus fragment and
+    history-side refs without a stored lang, where we accept the
+    deterministic-ordered first-language rows the query returns.
+    """
+    repo = ctx.chunk_repo
+    if repo is None or cref.start_ms is None or cref.end_ms is None:
+        return ""
+    try:
+        rows = await repo.get_anchor_texts(
+            cref.track_id,
+            start_ms=cref.start_ms,
+            end_ms=cref.end_ms,
+            lang=cref.lang,
+            limit=4,
+        )
+    except Exception as exc:
+        log.warning(
+            "cite_payload_fetch_failed",
+            request_id=ctx.request_id,
+            track_id=cref.track_id,
+            start_ms=cref.start_ms,
+            end_ms=cref.end_ms,
+            error=str(exc),
+        )
+        return ""
+    parts = [t.strip() for t in rows if isinstance(t, str) and t.strip()]
+    return " ".join(parts)
+
+
 async def flush_cite_payloads(ctx: TurnContext) -> None:
     """Emit `action.kind=cite_transcript` events for every cite-able
     lecture fragment whose transcript text is known and hasn't been
@@ -202,9 +238,13 @@ async def flush_cite_payloads(ctx: TurnContext) -> None:
     attributes) instead of the small chip fallback.
 
     Text comes from `aliases.chunk_texts`, filled by the research
-    pipeline over the same cite-able set the caption pass uses. When a
-    fragment has no stashed text (ReAct fallback path / older harnesses)
-    it's skipped — the chip fallback covers it.
+    pipeline over the same cite-able set the caption pass uses. A fragment
+    aliased OUTSIDE that pass — by a catalog/action/help ReAct worker, the
+    pre-minted focus fragment, or round-tripped from a prior turn — has no
+    stashed text, so the snippet is re-fetched on demand from the chunk
+    repo (mirroring how `flush_verse_payloads` re-reads verse bodies).
+    Only a genuine miss (no repo / DB error / fragment gone) degrades to
+    the chip.
     """
     if ctx.aliases is None:
         return
@@ -213,6 +253,8 @@ async def flush_cite_payloads(ctx: TurnContext) -> None:
         if ref_num in ctx.emitted_cite_refs:
             continue
         text = ctx.aliases.chunk_texts.get(ref_num)
+        if not text:
+            text = await _fetch_cite_text(ctx, cref)
         if not text:
             continue
         ctx.emitted_cite_refs.add(ref_num)
