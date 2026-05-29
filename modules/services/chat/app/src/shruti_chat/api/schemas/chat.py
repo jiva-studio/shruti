@@ -115,6 +115,30 @@ class ProactiveRequestDto(BaseModel):
     rule_context: dict = Field(default_factory=dict)
 
 
+class ChatTurnConfigDto(BaseModel):
+    """Per-turn experimental tweaks for ad-hoc A/B comparisons without
+    rebuilding the image. All fields default to "no change" so a client
+    that doesn't send `config` (or sends `null`) gets the production
+    path verbatim.
+
+    Adding a new toggle:
+      1. Add a Pydantic field here defaulting to the production value
+         (e.g. `enable_stage2: bool = True`).
+      2. Read it in the node that cares:
+         `state.get("config", {}).get("enable_stage2", True)`.
+
+    Defaults always reflect prod behaviour so omitting the field gives
+    the prod path. Bool toggles only — no nested DTOs. Document each
+    field with WHY it exists; most we'll delete after the experiment.
+    """
+
+    # When False, the synthesis_planner node returns `outline=None`
+    # immediately so the synthesizer runs free-form over all notes
+    # (legacy pre-#716 behaviour). Used to compare structured vs
+    # free-form prose on the same retrieval.
+    enable_planner: bool = True
+
+
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)
     lang: Literal["ru", "en"] = "ru"
@@ -128,6 +152,7 @@ class ChatRequestDto(BaseModel):
     # context (e.g. one-off API calls) still trace.
     session_id: str | None = None
     session_title: str | None = None
+    config: ChatTurnConfigDto | None = None
 
 
 def _parse_iso(s: str | None) -> datetime | None:

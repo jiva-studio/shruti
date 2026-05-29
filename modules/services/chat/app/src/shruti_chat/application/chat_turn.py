@@ -174,6 +174,7 @@ async def run_chat_turn(
     session_id: str | None = None,
     session_title: str | None = None,
     client_trace_id: str | None = None,
+    turn_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Drive one chat turn through the LangGraph chat graph.
 
@@ -326,6 +327,7 @@ async def run_chat_turn(
             "current_track_ref": current_track_ref,
             "now_iso": now_iso,
             "history_summary": history_summary,
+            "config": turn_config or {},
         }
 
         # ── Drive the graph; bridge custom events to AgentEvents ─────

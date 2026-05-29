@@ -42,6 +42,13 @@ async def synthesis_planner_node(
     bind_node_role("synthesis_planner")
     ctx = runtime.context
 
+    # Per-turn experimental toggle from POST /chat body.config. Default
+    # True matches prod; clients pass `enable_planner: false` to compare
+    # plan-driven vs free-form synthesis on the same retrieval.
+    if not state.get("config", {}).get("enable_planner", True):
+        log.info("synthesis_planner_disabled_by_config", request_id=ctx.request_id)
+        return {"outline": None}
+
     # ReAct loop appends each tool result as-is, so `tool_results` can
     # contain both flat dicts (single-result tools) AND nested lists
     # (chunks_search / chunks_get_by_address etc., which return list[dict]).
