@@ -57,6 +57,13 @@ class ChatState(TypedDict, total=False):
     now_iso: str | None
     history_summary: str | None
 
+    # ── Per-turn experimental config (POST /chat body.config) ─────────
+    # Bool toggles minted from ChatTurnConfigDto.model_dump(). Empty
+    # dict when the client sent no `config` — node reads should default
+    # each key to its prod-path value (see `enable_planner` lookup in
+    # `synthesis_planner_node`).
+    config: dict[str, Any]
+
     # ── Router output ─────────────────────────────────────────────────
     intent: str               # one of domain.routing.Intent
     confidence: float

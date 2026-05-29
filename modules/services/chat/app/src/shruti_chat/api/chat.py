@@ -182,6 +182,7 @@ async def chat(
                     session_id=body.session_id,
                     session_title=body.session_title,
                     client_trace_id=client_trace_id,
+                    turn_config=(body.config.model_dump() if body.config else None),
                 )
             async for ev in stream:
                 yield {
