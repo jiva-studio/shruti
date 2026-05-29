@@ -14,6 +14,7 @@ import {
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
+import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import {
@@ -152,6 +153,7 @@ export const useChatStore = defineStore("chat", () => {
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
   const verseBodyStore = useVerseBodyStore()
+  const citeTranscriptStore = useCiteTranscriptStore()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -874,6 +876,15 @@ export const useChatStore = defineStore("chat", () => {
           transliteration: event.transliteration,
           translation: event.translation,
         })
+        return
+      }
+      case "cite-transcript-payload": {
+        // Server-streamed transcript snippet for one cited fragment.
+        // Cached (with persistence) so `CitationCard.vue` renders the
+        // full quote card; arrives BEFORE the prose delta with the
+        // `[cite:...]` marker, and a late arrival upgrades the chip
+        // reactively. Does NOT touch the message list.
+        citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text)
         return
       }
       case "finalised": {

@@ -19,8 +19,11 @@ absent or unsupported). The current set is **9 event types**:
 - `action`     — client-side widget       `{kind, id, payload: {...}}`
                  — discriminated by `kind`. Auto-render kinds pair
                  with inline markers in delta text: `card`,
-                 `outline`, `verse`. Interactive kinds get a button +
-                 on-click mutation: `share_pdf`,
+                 `outline`, `verse`, `cite_transcript` (carries the
+                 transcript text for a `[cite:track@s-e|…]` fragment so
+                 the client can render the full quote card; absent ⇒
+                 the small citation chip). Interactive kinds get a
+                 button + on-click mutation: `share_pdf`,
                  `enable_daily_reminder`, `configure_smart_library`,
                  `upgrade_to_pro`.
 - `research_question` — sub-query the research pipeline is about

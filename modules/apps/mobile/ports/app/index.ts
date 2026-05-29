@@ -40,6 +40,7 @@ export type {
   ChatStreamEvent,
   ChatTurn,
   ChatVersePayloadWire,
+  ChatCiteTranscriptPayloadWire,
   ChatSharePdfItemPayload,
   ResearchSourceKind,
   StreamChatOptions,

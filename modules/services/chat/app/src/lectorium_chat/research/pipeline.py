@@ -538,6 +538,11 @@ def _kick_caption_gen(
         if not text:
             continue
         targets.append((ref, text))
+        # Stash the full fragment transcript so `flush_cite_payloads`
+        # can push it to the client as a `cite_transcript` event. Same
+        # cite-able set the caption pass runs over; unlike the caption
+        # this is the verbatim snippet text, not an LLM tag.
+        alias_map.chunk_texts[ref] = text
 
     if not targets:
         return

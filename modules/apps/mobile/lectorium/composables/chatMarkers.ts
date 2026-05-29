@@ -321,7 +321,16 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
   const TRAIL = /(?:\s|<br\s*\/?>)+$/i
   const isBlank = (html: string) => /^(?:\s|<br\s*\/?>)*$/i.test(html)
   const blockLike = (k: ChatToken["kind"] | undefined) =>
-    k === "cards" || k === "outline" || k === "action" || k === "quote" || k === "verse"
+    k === "cards" ||
+    k === "outline" ||
+    k === "action" ||
+    k === "quote" ||
+    k === "verse" ||
+    // `cite` now renders as a block quote-card (CitationCard) when its
+    // transcript text is present; collapse surrounding <br>/whitespace
+    // like the other block tokens. (In chip-fallback mode it's inline —
+    // same dual nature as `verse`, which is already listed here.)
+    k === "cite"
   const out: ChatToken[] = []
   for (let i = 0; i < tokens.length; i++) {
     const tok = tokens[i]

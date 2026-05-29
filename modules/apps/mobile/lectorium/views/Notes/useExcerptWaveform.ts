@@ -108,8 +108,18 @@ export interface ExcerptRef {
   readonly timeEnd: number
 }
 
+/**
+ * The excerpt ref, or a getter returning the current ref. Prefer the
+ * getter form when the consumer rebuilds the ref object on every render
+ * (e.g. an inline `:note="{ … }"` literal whose `sourceKey` is filled in
+ * asynchronously once tracks load): a plain-value `ref` is snapshotted at
+ * setup and goes stale, so `resolveExcerptUrl()` would `cut()` with the
+ * empty `sourceKey` from the very first render → `400 source_key required`.
+ */
+export type ExcerptRefSource = ExcerptRef | (() => ExcerptRef)
+
 export interface UseExcerptWaveformOptions {
-  readonly ref: ExcerptRef
+  readonly ref: ExcerptRefSource
   /** Template ref to the player's outer element — used as the
    *  IntersectionObserver target for lazy peak hydration. */
   readonly rootEl: Ref<HTMLElement | undefined | null>
@@ -148,35 +158,42 @@ export interface UseExcerptWaveformReturn {
  */
 export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptWaveformReturn {
   const app = useLectorium()
-  const { ref: noteRef, rootEl } = opts
+  const { rootEl } = opts
+  // Read the ref FRESH on every access — never snapshot it. The consumer
+  // may rebuild it each render with an async-filled `sourceKey`; a captured
+  // copy would keep the first render's empty `sourceKey`. `noteId` is stable
+  // per instance, so the setup-time reads below are safe either way.
+  const refSource = opts.ref
+  const getRef: () => ExcerptRef = typeof refSource === "function" ? refSource : () => refSource
 
-  const realPeaks = ref<number[] | null>(peaksByNote.get(noteRef.noteId) ?? null)
-  const placeholder = computed(() => buildPlaceholderPeaks(noteRef.noteId))
+  const realPeaks = ref<number[] | null>(peaksByNote.get(getRef().noteId) ?? null)
+  const placeholder = computed(() => buildPlaceholderPeaks(getRef().noteId))
   const peaks = computed<number[]>(() => realPeaks.value ?? placeholder.value)
   const hasRealPeaks = computed(() => realPeaks.value !== null)
 
-  let cachedUrl: string | null = excerptUrlByNote.get(noteRef.noteId) ?? null
+  let cachedUrl: string | null = excerptUrlByNote.get(getRef().noteId) ?? null
   let visible = false
   let observer: IntersectionObserver | null = null
 
   function predictedExcerptUrl(): string {
-    return buildServerUrl(app.activeServer.value, `public/shares/audio/${noteRef.noteId}.mp3`)
+    return buildServerUrl(app.activeServer.value, `public/shares/audio/${getRef().noteId}.mp3`)
   }
 
   async function resolveExcerptUrl(): Promise<string> {
     if (cachedUrl) return cachedUrl
+    const r = getRef()
     const result = await app.shareAudioService.cut({
-      sourceKey: noteRef.sourceKey,
-      startMs: noteRef.timeStart,
-      endMs: noteRef.timeEnd,
-      excerptId: noteRef.noteId,
+      sourceKey: r.sourceKey,
+      startMs: r.timeStart,
+      endMs: r.timeEnd,
+      excerptId: r.noteId,
     })
     cachedUrl = result.url || predictedExcerptUrl()
     // Server returns ready:false right after dispatching the background
     // cut; the audio element must wait for the upload to land or the
     // first play() races the worker and 404s.
     if (!result.ready) await pollUntilReady(cachedUrl)
-    excerptUrlByNote.set(noteRef.noteId, cachedUrl)
+    excerptUrlByNote.set(r.noteId, cachedUrl)
     void maybeLoadRealPeaks()
     return cachedUrl
   }
@@ -194,7 +211,7 @@ export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptW
    * note whose excerpt isn't on the CDN yet.
    */
   async function maybeLoadRealPeaks(): Promise<void> {
-    const noteId = noteRef.noteId
+    const noteId = getRef().noteId
     if (peaksByNote.has(noteId)) {
       realPeaks.value = peaksByNote.get(noteId)!
       return
