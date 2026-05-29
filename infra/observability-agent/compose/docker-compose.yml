@@ -94,12 +94,22 @@ services:
     container_name: lectorium-cadvisor
     restart: unless-stopped
     privileged: true
+    # cgroup v2 hosts default to a private cgroup namespace, so cAdvisor sees
+    # only its own scope as root and reports just container_last_seen{id="/"} —
+    # no per-container series, which silently blinds container_restart_loop /
+    # container_oom_killed. host cgroupns exposes the full hierarchy.
+    cgroup: host
     labels: *no-watchtower
     command:
       - --listen_ip=0.0.0.0
       - --port=8090
       - --housekeeping_interval=30s
       - --docker_only=true
+    # The image's baked HEALTHCHECK wgets $CADVISOR_HEALTHCHECK_URL, which
+    # defaults to :8080 — but we run on :8090, so the default probe is refused
+    # and the container is perpetually "unhealthy". Point it at the real port.
+    environment:
+      - CADVISOR_HEALTHCHECK_URL=http://localhost:8090/healthz
     ports:
       - "${PROD_EU_TS_IP}:8090:8090"
     volumes:

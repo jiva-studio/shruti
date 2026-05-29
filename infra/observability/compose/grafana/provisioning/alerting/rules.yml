@@ -150,7 +150,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: increase(container_last_seen{name!=""}[5m]) and increase(container_start_time_seconds{name!=""}[5m]) > 3
+        expr: changes(container_start_time_seconds{name!=""}[5m]) > 3
         instant: true
     - refId: B
       datasourceUid: __expr__
@@ -163,8 +163,10 @@ groups:
             type: gt
             params:
             - 3
-    noDataState: OK
-    execErrState: OK
+    # NoData here means cAdvisor stopped emitting per-container series — the
+    # safety net is blind, which is itself an incident. Alert, don't go silent.
+    noDataState: Alerting
+    execErrState: Alerting
   - uid: container_oom_killed
     title: container_oom_killed
     condition: B
@@ -194,13 +196,82 @@ groups:
             type: gt
             params:
             - 0
-    noDataState: OK
-    execErrState: OK
+    noDataState: Alerting
+    execErrState: Alerting
+  # Watchdog: catches a degraded/broken cAdvisor directly. On cgroup v2 a
+  # private cgroupns made it emit only container_last_seen{id="/"} (no name=
+  # series), silently blinding the two rules above. absent() fires when there
+  # are zero per-container series at all.
+  - uid: cadvisor_metrics_missing
+    title: cadvisor_metrics_missing
+    condition: B
+    for: 10m
+    labels:
+      severity: P2
+    annotations:
+      summary: cAdvisor per-container metrics missing — blind to container restarts/OOM
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: absent(container_last_seen{name!=""})
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: gt
+            params:
+            - 0
+    noDataState: Alerting
+    execErrState: Alerting
 - orgId: 1
   name: app-health
   folder: Lectorium-Alerts
   interval: 30s
   rules:
+  # Probes the public edge THROUGH caddy (https/443). The chat/auth/share
+  # probes below hit service ports directly and stay green when only the
+  # reverse proxy is down — this is the rule that catches that outage.
+  - uid: edge_unhealthy
+    title: edge_unhealthy
+    condition: B
+    for: 1m
+    labels:
+      severity: P1
+    annotations:
+      summary: Public edge https /healthz failing — caddy / 443 / public backend down
+    data:
+    - refId: A
+      datasourceUid: prometheus
+      relativeTimeRange:
+        from: 300
+        to: 0
+      model:
+        refId: A
+        expr: probe_success{instance=~"https://.*/healthz"}
+        instant: true
+    - refId: B
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: threshold
+        expression: A
+        conditions:
+        - evaluator:
+            type: lt
+            params:
+            - 1
+    noDataState: Alerting
+    execErrState: Alerting
   - uid: chat_unhealthy
     title: chat_unhealthy
     condition: B
@@ -231,8 +302,8 @@ groups:
             type: lt
             params:
             - 1
-    noDataState: OK
-    execErrState: OK
+    noDataState: Alerting
+    execErrState: Alerting
   - uid: auth_unhealthy
     title: auth_unhealthy
     condition: B
@@ -263,8 +334,8 @@ groups:
             type: lt
             params:
             - 1
-    noDataState: OK
-    execErrState: OK
+    noDataState: Alerting
+    execErrState: Alerting
   - uid: share_audio_unhealthy
     title: share_audio_unhealthy
     condition: B

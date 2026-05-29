@@ -59,6 +59,25 @@ scrape_configs:
       - target_label: __address__
         replacement: ${PROD_HOST_TS_IP}:9115
 
+  # Public edge probe — goes THROUGH caddy (https + 443), unlike blackbox-prod-eu
+  # which hits the service ports directly and stays green when only the reverse
+  # proxy is down. http_2xx validates the TLS cert too, so this also feeds
+  # probe_ssl_earliest_cert_expiry for the public cert (tls_cert_expiring_soon).
+  - job_name: blackbox-edge
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://${LECTORIUM_DOMAIN}/healthz
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: ${PROD_HOST_TS_IP}:9115
+
   - job_name: promtail-prod-eu
     static_configs:
       - targets: ['${PROD_HOST_TS_IP}:9080']
