@@ -170,13 +170,16 @@ func (s *stubEvents) MarkProcessedWithError(_ context.Context, _ string, msg str
 	return nil
 }
 
-// stubFetcher returns a canned response/error from GetSubscriber.
+// stubFetcher returns a canned response/error from GetSubscriber and
+// records the app_user_id it was asked to refetch.
 type stubFetcher struct {
-	resp *rcclient.SubscriberResponse
-	err  error
+	resp          *rcclient.SubscriberResponse
+	err           error
+	lastAppUserID string
 }
 
-func (s *stubFetcher) GetSubscriber(_ context.Context, _ string) (*rcclient.SubscriberResponse, error) {
+func (s *stubFetcher) GetSubscriber(_ context.Context, appUserID string) (*rcclient.SubscriberResponse, error) {
+	s.lastAppUserID = appUserID
 	return s.resp, s.err
 }
 
@@ -287,6 +290,76 @@ func TestRCWebhookRateLimited500AndRecordError(t *testing.T) {
 	}
 	if got := metrics.RCAPIRateLimitedTotal.Value() - beforeCounter; got != 1 {
 		t.Fatalf("expected rc_api_rate_limited_total +1, got +%d", got)
+	}
+}
+
+// TestRCWebhookTransferReconcilesDestination — a TRANSFER event carries
+// no app_user_id; the entitlement now belongs to the id(s) in
+// transferred_to. The handler must resolve the identified (non-anonymous)
+// destination, refetch + apply THAT id, and return 200 — not 400.
+func TestRCWebhookTransferReconcilesDestination(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &stubApplier{applyUserID: uuid.New(), applyMatched: true}
+	events := &stubEvents{}
+	fetcher := &stubFetcher{resp: &rcclient.SubscriberResponse{}}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        events,
+		Fetcher:       fetcher,
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":               "evt_transfer_1",
+			"type":             "TRANSFER",
+			"environment":      "PRODUCTION",
+			"transferred_from": []string{"$RCAnonymousID:anon123"},
+			"transferred_to":   []string{"auth-uuid-dest"},
+		},
+	}))
+
+	if w.Code != http.StatusOK {
+		body, _ := io.ReadAll(w.Body)
+		t.Fatalf("TRANSFER must reconcile destination → 200, got %d body=%s", w.Code, string(body))
+	}
+	if applier.applyCalls != 1 {
+		t.Fatalf("expected Apply once for the transfer destination, got %d", applier.applyCalls)
+	}
+	if fetcher.lastAppUserID != "auth-uuid-dest" {
+		t.Fatalf("expected refetch of identified destination, got %q", fetcher.lastAppUserID)
+	}
+}
+
+// TestRCWebhookTransferOnlyAnonymousDestination400 — when the only
+// transfer destination is itself anonymous, no auth.users row could ever
+// match it, so there's nothing to reconcile: keep the 400 so RC stops.
+func TestRCWebhookTransferOnlyAnonymousDestination400(t *testing.T) {
+	const secret = "rc-secret"
+	applier := &stubApplier{}
+	h := &RCWebhookHandler{
+		SecretPrimary: secret,
+		Applier:       applier,
+		Events:        &stubEvents{},
+		Fetcher:       &stubFetcher{resp: &rcclient.SubscriberResponse{}},
+	}
+
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, mkRequest(t, secret, map[string]any{
+		"event": map[string]any{
+			"id":             "evt_transfer_anon",
+			"type":           "TRANSFER",
+			"environment":    "PRODUCTION",
+			"transferred_to": []string{"$RCAnonymousID:onlyAnon"},
+		},
+	}))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400 when no identified destination, got %d", w.Code)
+	}
+	if applier.applyCalls != 0 {
+		t.Fatalf("apply must not run, got %d", applier.applyCalls)
 	}
 }
 
