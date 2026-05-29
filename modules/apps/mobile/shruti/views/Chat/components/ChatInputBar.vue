@@ -4,10 +4,10 @@
          is consumed (we used to split the threshold by tier; the lower
          number for everyone gives Free users an earlier nudge and Pro
          users earlier awareness — the chip is unobtrusive enough that
-         a longer visible window doesn't read as nagging). Hidden once
-         the quota lockout kicks in: the composer placeholder already
-         carries "Limit resets …" at that point and a second copy was
-         the duplicate we got UX feedback on.
+         a longer visible window doesn't read as nagging). Also stays
+         visible once the quota lockout kicks in: the composer placeholder
+         is now a plain static prompt, so the chip is the single place
+         that carries "resets {date} at {time}".
          Tap → opens the subscription page directly for non-Pro users
          (RC modal handles "already subscribed" if state goes stale).
          Pro users see the chip as a static info badge — no tap target,
@@ -34,8 +34,6 @@
         class="input"
         @keydown="onKeydown"
         @input="resize"
-        @focus="focused = true"
-        @blur="focused = false"
       />
       <button
         type="button"
@@ -54,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, nextTick, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import { IconArrowUp } from "@tabler/icons-vue"
@@ -80,30 +78,14 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ send: [text: string]; cancel: [] }>()
 
-const { t, tm } = useI18n()
+const { t, locale } = useI18n()
 
 const text = ref("")
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const focused = ref(false)
 
 const hasText = computed(() => text.value.trim().length > 0)
 const canSend = computed(() => !props.sending && hasText.value && !props.quotaLocked)
 
-/** Pool the placeholder rotates through — pure suggestion list. The
- *  generic "ask a question" string used to live here too, but it's dead
- *  weight: every suggestion is itself a usable question, so showing the
- *  generic prompt just wastes a rotation slot. Keeping this in sync with
- *  the chips means newcomers see the same beginner-friendly questions in
- *  both places. */
-const placeholderPool = computed<string[]>(() => {
-  const raw = tm("chat.suggestions") as unknown
-  return Array.isArray(raw)
-    ? raw.filter((x): x is string => typeof x === "string" && x.length > 0)
-    : []
-})
-
-/** Random start so different sessions don't all open on the same question. */
-const placeholderIndex = ref(Math.floor(Math.random() * 1000))
 /** Format the `{when}` fragment for the lockout copy: `"at HH:MM"` when
  *  the reset lands later today (local), `"tomorrow at HH:MM"` when it
  *  rolls past local midnight. Server's `resets_at_epoch` is next UTC
@@ -123,19 +105,11 @@ function formatLockoutWhen(deadlineMs: number): string {
   return sameLocalDay ? t("chat.retryAtTime", { time }) : t("chat.retryAtTimeTomorrow", { time })
 }
 
-const placeholder = computed<string>(() => {
-  // Quota lock wins — show the user exactly when they can compose again
-  // instead of the cheerful "Ask a question" rotation.
-  if (props.quotaLocked) {
-    if (typeof props.quotaResetsAt === "number") {
-      return t("chat.composeLimitedPlaceholder", { when: formatLockoutWhen(props.quotaResetsAt) })
-    }
-    return t("chat.composeLimitedPlaceholderNoTime")
-  }
-  const pool = placeholderPool.value
-  if (pool.length === 0) return t("chat.placeholder")
-  return pool[placeholderIndex.value % pool.length] ?? t("chat.placeholder")
-})
+// A single static prompt — no rotation, and no limit copy even while
+// locked. When the quota is exhausted the textarea is disabled and the
+// usage chip above carries the "resets {date} at {time}" detail, so the
+// placeholder stays a plain, calm invitation.
+const placeholder = computed<string>(() => t("chat.placeholder"))
 
 /** Screen-reader label. The rotating placeholder ("Where did I stop?",
  *  "What is karma?", …) is decorative copy that SRs typically don't
@@ -170,35 +144,6 @@ const sendAriaLabel = computed<string>(() => {
   }
   return t("chat.send")
 })
-
-let rotationTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearRotation(): void {
-  if (rotationTimer !== null) {
-    clearTimeout(rotationTimer)
-    rotationTimer = null
-  }
-}
-
-/** Schedule the next placeholder swap. Random 5–7s so the cycle feels
- *  alive rather than metronomic. Paused while the textarea is focused or
- *  already has text — moving the placeholder under the user's caret would
- *  be jarring, and when there's text the placeholder isn't visible anyway. */
-function scheduleNextRotation(): void {
-  clearRotation()
-  if (focused.value || hasText.value) return
-  if (placeholderPool.value.length <= 1) return
-  const delay = 5000 + Math.floor(Math.random() * 2001)
-  rotationTimer = setTimeout(() => {
-    placeholderIndex.value = (placeholderIndex.value + 1) % placeholderPool.value.length
-    scheduleNextRotation()
-  }, delay)
-}
-
-watch([focused, hasText], scheduleNextRotation)
-
-onMounted(scheduleNextRotation)
-onUnmounted(clearRotation)
 
 function resize(): void {
   const el = textareaRef.value
@@ -254,9 +199,12 @@ const usageRatio = computed<number | null>(() => {
 })
 
 const usageChipVisible = computed<boolean>(() => {
+  // Lockout always shows the chip: it's now the only surface carrying the
+  // "resets {date} at {time}" detail (the placeholder went static). This
+  // also covers the locked-but-no-snapshot case — see `usageChipLabel`.
+  if (props.quotaLocked) return true
   const r = usageRatio.value
   if (r === null) return false
-  if (props.quotaLocked || r >= 1) return false
   return r >= 0.5
 })
 
@@ -269,24 +217,34 @@ const usageWarning = computed<boolean>(() => (usageRatio.value ?? 0) >= 0.95)
 // after a webhook race, so we don't need a second guard here.
 const usageChipTappable = computed<boolean>(() => !isPro.value)
 
-/** Wall-clock HH:MM of the reset boundary in the user's local TZ. The
- *  server's `resets_at_epoch` is next UTC midnight; for users east of
- *  UTC the local time can roll past local midnight — the placeholder
- *  copy on the existing lockdown already wraps with "tomorrow at" when
- *  needed; the chip is short enough that just "at HH:MM" reads fine. */
-function localTimeFromEpoch(epochS: number): string {
+/** Local-TZ reset boundary as `{ date, time }`. The server's
+ *  `resets_at_epoch` is next UTC midnight, so for users east of UTC it
+ *  routinely lands on the local next day — showing the date (not just
+ *  HH:MM) is what disambiguates it. Date is localized via Intl using the
+ *  active i18n locale ("30 мая" / "30 May"). */
+function localResetParts(epochS: number): { date: string; time: string } {
   const d = new Date(epochS * 1000)
   const hh = d.getHours().toString().padStart(2, "0")
   const mm = d.getMinutes().toString().padStart(2, "0")
-  return `${hh}:${mm}`
+  const date = new Intl.DateTimeFormat(locale.value, {
+    day: "numeric",
+    month: "long",
+  }).format(d)
+  return { date, time: `${hh}:${mm}` }
 }
 
 const usageChipLabel = computed<string>(() => {
   const u = props.chatUsage
-  if (!u) return ""
-  const time = localTimeFromEpoch(u.resetsAtEpoch)
-  const p = Math.round((u.current / u.limit) * 100)
-  return t("chat.usage.chip", { p, time })
+  if (!u) {
+    // Locked without a usage snapshot (IP-bucket 429, or a 429 body
+    // lacking current/limit). The textarea is disabled but the chip is
+    // the only thing on screen, so fall back to the generic lock copy
+    // rather than rendering an empty pill that explains nothing.
+    return props.quotaLocked ? t("chat.composeLimitedPlaceholderNoTime") : ""
+  }
+  const { date, time } = localResetParts(u.resetsAtEpoch)
+  const p = Math.round((usageRatio.value ?? 0) * 100)
+  return t("chat.usage.chip", { p, date, time })
 })
 
 function onUsageChipTap(): void {
