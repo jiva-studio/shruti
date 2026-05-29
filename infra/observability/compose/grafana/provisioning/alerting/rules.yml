@@ -325,7 +325,7 @@ groups:
         to: 0
       model:
         refId: A
-        expr: probe_success{instance=~".*:8081/healthz"}
+        expr: probe_success{instance=~".*:8081/auth/healthz"}
         instant: true
     - refId: B
       datasourceUid: __expr__
