@@ -806,6 +806,36 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   text-decoration: underline;
 }
 
+/* Section header (`## Label` from the synthesizer): centered label with a
+ * fading gradient rule on EACH side, all on one line —
+ * `──gradient──  Label  ──gradient──`. The rules are the h2's ::before /
+ * ::after flex items; reuse the soft tertiary tone of the VerseCard divider. */
+.bubble.assistant :deep(h2.chat-header) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 8px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ion-color-primary);
+  text-align: center;
+}
+.bubble.assistant :deep(h2.chat-header)::before,
+.bubble.assistant :deep(h2.chat-header)::after {
+  content: "";
+  flex: 1;
+  min-width: 16px;
+  height: 1px;
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    rgba(var(--ion-color-tertiary-rgb), 0.3)
+  );
+}
+.bubble.assistant :deep(h2.chat-header)::after {
+  background-image: linear-gradient(to left, transparent, rgba(var(--ion-color-tertiary-rgb), 0.3));
+}
+
 /* Trailing "(прервано)" / "(cut off)" suffix on a message that ended
  * without a clean `done`. Inline, lower-key colour, so it reads as a
  * note rather than competing with the bubble text. */

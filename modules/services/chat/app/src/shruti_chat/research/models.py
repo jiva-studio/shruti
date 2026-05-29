@@ -57,8 +57,8 @@ class Thesis(BaseModel):
 
     `header` is an optional 3-5 word terse label that summarizes the
     claim (NO markdown, NO punctuation at the end). When set, the
-    synthesizer renders it as `**header**` on its own line above the
-    paragraph — gives the answer scannable structure for longer multi-
+    synthesizer renders it as `## header` (markdown H2) on its own line
+    above the paragraph — gives the answer scannable structure for multi-
     thesis replies. Skip on single-thesis answers.
 
     `sub_query_types` is diagnostic-only: lists the sub-question types

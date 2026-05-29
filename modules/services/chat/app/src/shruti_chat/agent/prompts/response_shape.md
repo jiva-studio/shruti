@@ -8,13 +8,14 @@ Response shape
      paragraph. NO header, NO citation.
 
   2. **For each thesis**, in order:
-     - If the thesis has `header="..."`: write `**header**` on its OWN
-       line first. **Render the `header` field VERBATIM — DO NOT
-       substitute the thesis sentence as the header.** The header is a
-       3-5 word LABEL (chapter-title style); the thesis sentence is
-       what becomes the paragraph body. They are different fields —
-       don't conflate them. If a header looks too long to be a label,
-       OMIT it entirely rather than bolding a sentence.
+     - If the thesis has `header="..."`: write it as a markdown H2
+       header — `## header` — on its OWN line first. **Render the
+       `header` field VERBATIM — DO NOT substitute the thesis sentence
+       as the header.** The header is a 3-5 word LABEL (chapter-title
+       style); the thesis sentence is what becomes the paragraph body.
+       They are different fields — don't conflate them. If a header
+       looks too long to be a label, OMIT it entirely rather than
+       turning a sentence into a header.
      - Then ONE substantive paragraph (typically 3-6 sentences, longer
        when the notes carry rich material — don't artificially shorten)
        that fully expands the thesis claim. End with EXACTLY ONE `[^N]`
@@ -34,15 +35,15 @@ The rendered shape for a 3-thesis answer with headers + intro + conclusion looks
 
     Прабхупада объясняет это в трёх аспектах.
 
-    **Природа кармы**
+    ## Природа кармы
 
     У души есть три типа кармы… [^3]
 
-    **Что меняет бхакти**
+    ## Что меняет бхакти
 
     Чистое преданное служение сжигает… [^5]
 
-    **Свидетельство шастр**
+    ## Свидетельство шастр
 
     Канонический пример из «Бхагаватам»… [^18]
 

@@ -42,7 +42,7 @@ You will receive:
 
 ## Optional structural fields
 
-- `header` on each thesis (optional): a 3-5 word **label**, NOT a sentence. Maximum 6 words / 50 characters. Plain text, no markdown, no trailing punctuation. The synthesizer renders it as bold above the paragraph — gives the reader scannable structure. **Include headers when there are 2+ theses; skip on single-thesis answers** (a lone bold label above one paragraph looks silly).
+- `header` on each thesis (optional): a 3-5 word **label**, NOT a sentence. Maximum 6 words / 50 characters. Plain text, no markdown, no trailing punctuation. The synthesizer renders it as a header above the paragraph — gives the reader scannable structure. **Include headers when there are 2+ theses; skip on single-thesis answers** (a lone header above one paragraph looks silly).
 
   CORRECT headers (short, terse, label-like):
     - "Природа кармы"
@@ -157,7 +157,7 @@ Output:
 }
 ```
 
-Note: header, intro, conclusion all null because this is a single-thesis answer — bold header above a lone paragraph would look silly, and intro/conclusion would just repeat the one thesis.
+Note: header, intro, conclusion all null because this is a single-thesis answer — a header above a lone paragraph would look silly, and intro/conclusion would just repeat the one thesis.
 
 ## Example 3 — corpus has no relevant material → refusal
 
