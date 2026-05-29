@@ -78,9 +78,11 @@ class _FakeEmbedder:
 class _FakeChunkRepo:
     def __init__(self, scored):
         self._scored = scored
+        self.last_source_id = "UNSET"
 
     async def search_library_by_embedding(self, embedding, *, kinds, source_id=None,
                                           lang=None, top_k=8, **kw):
+        self.last_source_id = source_id
         return self._scored
 
 
@@ -136,6 +138,52 @@ async def test_run_locate_verse_cue_returns_verses(tmp_path):
     assert result.regions == []
     assert len(result.verses) == 1
     assert result.verses[0].tokens == "12.8.10"
+
+
+@pytest.mark.asyncio
+async def test_run_locate_drops_short_source_code(tmp_path):
+    # Regression: the router emits a SHORT code ("SB"); it must NOT be passed
+    # as the opaque ANN source filter (would match nothing). Bug B.
+    db = _make_library_db(tmp_path)
+    repo = _FakeChunkRepo([_scored("verse", SB, "12.8.10", "ШБ 12.8.10", 0.7)])
+    await locate.run_locate(
+        question="в какой песни ШБ история Маркандеи", lang="ru",
+        router_args={"source_id": "SB"},
+        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_db=db,
+    )
+    assert repo.last_source_id is None
+
+
+@pytest.mark.asyncio
+async def test_run_locate_keeps_opaque_source_id(tmp_path):
+    db = _make_library_db(tmp_path)
+    repo = _FakeChunkRepo([])
+    await locate.run_locate(
+        question="…", lang="ru",
+        router_args={"source_id": "source_NoY8sAlXF1IT"},
+        chunk_repo=repo, embedder=_FakeEmbedder(), pool=None, library_db=db,
+    )
+    assert repo.last_source_id == "source_NoY8sAlXF1IT"
+
+
+@pytest.mark.asyncio
+async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
+    # Regression: locate must consult BOTH question- and topic-kind
+    # attributions (seeded stories are topics). Bug A.
+    db = _make_library_db(tmp_path)
+    seen: list[str] = []
+
+    async def _fake_find(**kw):
+        seen.append(kw["kind"])
+        return []
+
+    monkeypatch.setattr(locate, "find_attributions", _fake_find)
+    await locate.run_locate(
+        question="история Махараджи Прахлады", lang="ru", router_args={},
+        chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
+        pool=object(), llm=None, embed_model="m", embed_dim=8, library_db=db,
+    )
+    assert set(seen) == {"question", "topic"}
 
 
 @pytest.mark.asyncio
