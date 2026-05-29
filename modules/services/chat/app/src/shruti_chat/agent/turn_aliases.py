@@ -46,11 +46,19 @@ class ChunkRef:
     (chunks). Whole-track aliases (from list_tracks / get_track) leave
     them None — the marker expander emits `[card:track_X]` instead of
     `[cite:track_X@...|caption]` for those.
+
+    `lang` is the transcript language of the cited fragment, captured at
+    mint time from the chunk. `flush_cite_payloads` passes it when it has
+    to re-fetch the snippet text on demand (fragments aliased outside the
+    research pipeline never reach `chunk_texts`). Needed because the UI
+    language and the lecture's transcript language differ — an English
+    lecture cited in a ru-UI turn would miss with a `lang='ru'` filter.
     """
 
     track_id: str
     start_ms: int | None = None
     end_ms: int | None = None
+    lang: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,12 +145,17 @@ class TurnAliasMap:
         return set(self._chunks.keys())
 
     def alias_chunk(
-        self, track_id: str, start_ms: int, end_ms: int,
+        self, track_id: str, start_ms: int, end_ms: int, lang: str | None = None,
     ) -> int:
         """Mint an alias for a chunk-level reference (search result).
-        Returns the integer the LLM should cite by."""
+        Returns the integer the LLM should cite by. `lang` is the
+        fragment's transcript language — carried so `flush_cite_payloads`
+        can re-fetch the snippet text with the right language filter when
+        it wasn't stashed in `chunk_texts`."""
         n = self._alloc_ref()
-        self._chunks[n] = ChunkRef(track_id=track_id, start_ms=int(start_ms), end_ms=int(end_ms))
+        self._chunks[n] = ChunkRef(
+            track_id=track_id, start_ms=int(start_ms), end_ms=int(end_ms), lang=lang,
+        )
         return n
 
     def alias_track(self, track_id: str) -> int:
@@ -248,6 +261,8 @@ class TurnAliasMap:
                     entry["start_ms"] = ref.start_ms
                 if ref.end_ms is not None:
                     entry["end_ms"] = ref.end_ms
+                if ref.lang is not None:
+                    entry["lang"] = ref.lang
             elif isinstance(ref, VerseRef):
                 entry = {"kind": "verse", "source_id": ref.source_id, "tokens": ref.tokens}
             elif isinstance(ref, CommentaryRef):
@@ -293,10 +308,12 @@ class TurnAliasMap:
                     continue
                 start = entry.get("start_ms")
                 end = entry.get("end_ms")
+                lang = entry.get("lang")
                 self._chunks[n] = ChunkRef(
                     track_id=tid,
                     start_ms=int(start) if isinstance(start, int) else None,
                     end_ms=int(end) if isinstance(end, int) else None,
+                    lang=lang if isinstance(lang, str) else None,
                 )
             if n >= self._next:
                 self._next = n + 1
