@@ -167,8 +167,27 @@ export const usePurchasesStore = defineStore("purchases", () => {
             // warning + counter so we don't double-log.
             const p = purchases
               .logIn(newId)
-              .then((s) => {
+              .then(async (s) => {
                 applyState(s)
+                // logIn can hit RC's "no merge" branch when `newId`
+                // already had an anonymous alias (reinstall / account
+                // recreate). A purchase made before signing in then
+                // stays stranded on the old anon id and the user loses
+                // Pro. If we land here with no active entitlement,
+                // silently re-attach this device's store purchase to
+                // `newId`: RC aliases the anon owner into it and fires a
+                // TRANSFER webhook, so the server reconciles too. Gated
+                // on "no entitlement" so we don't sync users who already
+                // have Pro (RC warns against indiscriminate syncs).
+                if (!s.activePackageId) {
+                  try {
+                    const recovered = await purchases.recoverPurchases()
+                    applyState(recovered)
+                    if (recovered.activePackageId) await auth.refreshTokens()
+                  } catch (e) {
+                    console.warn("[purchases] recoverPurchases failed", e)
+                  }
+                }
               })
               .catch((e) => {
                 console.warn("[purchases] logIn failed", e)
