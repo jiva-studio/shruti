@@ -23,7 +23,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { useI18n } from "vue-i18n"
 import { IonItem, IonLabel } from "@ionic/vue"
 import { CloudIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
@@ -37,15 +36,8 @@ const props = defineProps<Props>()
 const value = defineModel<string>({ required: true, default: "" })
 
 const open = ref(false)
-const { t } = useI18n()
 
-// Two lines: which server is currently active, plus the fall-through
-// reassurance. Keeps users from worrying that picking the "wrong" one
-// would break the app if it's unreachable.
-const subtitle = computed(() => {
-  const name = props.items.find((i) => i.id === value.value)?.title ?? value.value
-  return `${name} · ${t("settings.preferredServer.fallbackHint")}`
-})
+const subtitle = computed(() => props.items.find((i) => i.id === value.value)?.title ?? value.value)
 
 function onSelect(next?: string): void {
   if (!next) return
