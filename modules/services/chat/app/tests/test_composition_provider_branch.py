@@ -1,8 +1,7 @@
-"""Tests for `main.build_llm_provider` — the LLM_PROVIDER → adapter dispatch.
+"""Tests for `build_llm_provider` — the LLM_PROVIDER → adapter dispatch.
 
-Asserts each branch instantiates the matching adapter class and that
-the settings-level validator already rejected the bogus case so
-`build_llm_provider` never sees an unknown value at runtime.
+Single-provider deployment: only `openrouter` is accepted. Pydantic's
+Literal on `Settings.llm_provider` rejects anything else at construction.
 """
 
 from __future__ import annotations
@@ -14,9 +13,7 @@ from pydantic import ValidationError
 
 from shruti_chat.config import Settings
 from shruti_chat.infra.llm_provider import (
-    GigaChatLLMProvider,
     OpenRouterLLMProvider,
-    YandexLLMProvider,
     build_llm_provider,
 )
 
@@ -34,36 +31,6 @@ def test_openrouter_branch() -> None:
     assert isinstance(provider, OpenRouterLLMProvider)
 
 
-def test_yandex_branch() -> None:
-    s = _settings(
-        llm_provider="yandex",
-        yandex_gpt_folder_id="folder-x",
-        yandex_gpt_api_key="key-x",
-    )
-    provider = build_llm_provider(s)
-    assert isinstance(provider, YandexLLMProvider)
-
-
-def test_yandex_branch_with_iam_token() -> None:
-    s = _settings(
-        llm_provider="yandex",
-        yandex_gpt_folder_id="folder-x",
-        yandex_iam_token="t1.test",
-    )
-    provider = build_llm_provider(s)
-    assert isinstance(provider, YandexLLMProvider)
-
-
-def test_gigachat_branch() -> None:
-    s = _settings(
-        llm_provider="gigachat",
-        gigachat_client_id="id-x",
-        gigachat_client_secret="secret-x",
-    )
-    provider = build_llm_provider(s)
-    assert isinstance(provider, GigaChatLLMProvider)
-
-
 def test_unknown_provider_rejected_at_settings_construction() -> None:
     """The Literal on Settings.llm_provider catches typos before they
     reach `build_llm_provider` — pydantic raises ValidationError."""
@@ -71,20 +38,16 @@ def test_unknown_provider_rejected_at_settings_construction() -> None:
         _settings(llm_provider="bogus")  # type: ignore[arg-type]
 
 
-def test_yandex_branch_fails_without_folder() -> None:
-    """Settings.model_validator rejects yandex without folder id."""
-    with pytest.raises(ValidationError, match="YANDEX_GPT_FOLDER_ID"):
-        _settings(llm_provider="yandex", yandex_gpt_api_key="key")
+def test_legacy_yandex_provider_rejected() -> None:
+    """Yandex was dropped in #728; the Literal must refuse it."""
+    with pytest.raises(ValidationError):
+        _settings(llm_provider="yandex")  # type: ignore[arg-type]
 
 
-def test_yandex_branch_fails_without_credentials() -> None:
-    with pytest.raises(ValidationError, match="API_KEY or"):
-        _settings(llm_provider="yandex", yandex_gpt_folder_id="folder")
-
-
-def test_gigachat_branch_fails_without_secret() -> None:
-    with pytest.raises(ValidationError, match="GIGACHAT_CLIENT"):
-        _settings(llm_provider="gigachat", gigachat_client_id="id-only")
+def test_legacy_gigachat_provider_rejected() -> None:
+    """GigaChat was dropped in #728; the Literal must refuse it."""
+    with pytest.raises(ValidationError):
+        _settings(llm_provider="gigachat")  # type: ignore[arg-type]
 
 
 def test_openrouter_branch_fails_without_key_at_adapter_construction() -> None:

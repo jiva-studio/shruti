@@ -49,35 +49,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://chat:chat@localhost:5432/chat"
 
     # ── LLM providers ───────────────────────────────────────────────────
-    # Selects the active adapter at composition root. The Russia VPS will
-    # deploy with `yandex` or `gigachat`; global stays on `openrouter`.
-    # The chosen branch must have its credentials populated — boot fails
-    # otherwise (see `_validate_llm_provider_credentials` below).
-    llm_provider: Literal["openrouter", "yandex", "gigachat"] = "openrouter"
+    # Single-provider deployment: every region ships OpenRouter. Russia
+    # traffic reaches us through the RU proxy (see #728); there is no
+    # in-region LLM stack anymore.
+    llm_provider: Literal["openrouter"] = "openrouter"
 
     openrouter_api_key: str | None = None
-
-    # GigaChat (Sber) — OAuth2 client-credentials flow. The new
-    # `GigaChatLLMProvider` reads CLIENT_ID + CLIENT_SECRET (+ scope)
-    # and exchanges them for a short-lived access token. The legacy
-    # `gigachat_api_key` field stays for the litellm shim in
-    # `agent/llm.py` until that's removed in Wave 9.
-    gigachat_api_key: str | None = None
-    gigachat_scope: str = "GIGACHAT_API_PERS"
-    gigachat_client_id: str | None = None
-    gigachat_client_secret: str | None = None
-    # Optional path to the Russian Trusted Root CA bundle. GigaChat ships
-    # its own CA chain — production must mount it here. Empty falls back
-    # to httpx's default verification.
-    gigachat_ca_path: str | None = None
-
-    # YandexGPT 5 (Foundation Models). The adapter accepts either an
-    # Api-Key (simpler) or an IAM token (short-lived, refreshed by the
-    # deploy host). Folder id is always required to build the model URI
-    # `gpt://<folder>/<model>/<version>`.
-    yandex_gpt_api_key: str | None = None
-    yandex_gpt_folder_id: str | None = None
-    yandex_iam_token: str | None = None
 
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
@@ -105,19 +82,14 @@ class Settings(BaseSettings):
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.
-    embed_provider: Literal["openrouter", "openai", "yandex", "gigachat"] = "openrouter"
+    embed_provider: Literal["openrouter", "openai"] = "openrouter"
     # Provider-specific model id, e.g. "openai/text-embedding-3-small" via
-    # OpenRouter, or "text-embedding-3-small" via OpenAI direct. For
-    # Yandex's asymmetric pair this is the document-side model
-    # (`text-search-doc/latest`); the query side reads `embed_query_model`.
+    # OpenRouter, or "text-embedding-3-small" via OpenAI direct.
     embed_model: str = "openai/text-embedding-3-small"
-    # Must match what the model returns — 1536 for text-embedding-3-small,
-    # 256 (verify against API) for Yandex text-search-doc, 1024 for
-    # GigaChat EmbeddingsGigaR.
+    # Must match what the model returns — 1536 for text-embedding-3-small.
     embed_dim: int = 1536
-    # Only used by asymmetric embedding providers (Yandex). The query
-    # encoder differs from the document encoder; both must share the
-    # same dimensionality.
+    # Reserved for future asymmetric embedding providers; both encoders
+    # must share dimensionality. Unused today.
     embed_query_model: str = ""
     # Prefixes prepended to inputs before embedding. Required by the e5
     # family (`query: ` / `passage: `) and similar instruction-tuned
@@ -127,24 +99,14 @@ class Settings(BaseSettings):
     embed_query_prefix: str = ""
     embed_doc_prefix: str = ""
 
-    yandex_embed_api_key: str | None = None
-    yandex_embed_folder_id: str | None = None
-    gigachat_embed_api_key: str | None = None
-
     # Base URL override for the embedder. When unset, the openai
-    # embed_provider branch hits the public OpenAI endpoint (EU
-    # behaviour, unchanged). When set, it hits an OpenAI-compatible
-    # upstream — e.g. the self-hosted TEI container at
-    # http://embedder:8080/v1 on RU. Any future deployment swapping
+    # embed_provider branch hits the public OpenAI endpoint. When set, it
+    # routes to an OpenAI-compatible upstream. Any deployment swapping
     # embedding backends only needs to flip this env var; no code change.
     embed_base_url: str | None = None
 
-    # Bounded parallelism for any LLM/embedding provider that respects
-    # it. Default 2 is conservative for a fresh Yandex Cloud folder
-    # where Foundation Models RPS quota is ~3-5; operators with bumped
-    # quotas (or providers without strict RPS limits — OpenRouter,
-    # GigaChat) can raise via env. Provider adapters read these via
-    # the composition root.
+    # Bounded parallelism for LLM / embedding provider calls. Provider
+    # adapters read these via the composition root.
     embed_concurrency: int = 2
     llm_concurrency: int = 2
 
@@ -158,14 +120,15 @@ class Settings(BaseSettings):
     app_shared_token: str = ""
 
     # ── JWT verification ────────────────────────────────────────────────
-    # Path to the auth service's public key. Mounted into the container
-    # at /secrets/public.pem by compose (read-only). RS256 only.
+    # Path to the auth service's `v1` public key. Mounted into the
+    # container at /secrets/public.pem by compose (read-only). RS256
+    # only. Single-kid deployment — see jwt_verifier.py.
     jwt_public_key_path: Path = Path("/secrets/public.pem")
-    # Optional directory of `<kid>.pub.pem` files. When set the verifier
-    # loads them into a kid → key map so the auth service can rotate
-    # signing keys without invalidating outstanding tokens. The legacy
-    # `public.pem` filename inside the dir is mapped to kid `v1`.
-    jwt_public_keys_dir: Path | None = None
+
+    # Salt for the salted-sha256 hash applied to `user_id` on Langfuse
+    # traces originating in the RU region. Empty / unset disables the
+    # hashing and the raw `user_id` is sent — leave unset outside prod.
+    langfuse_pii_salt: str | None = None
 
     # Per-(scope, user) daily limits. Three tiers:
     #   anon     — /auth/anonymous-minted JWT (`anonymous=true`)
@@ -221,6 +184,16 @@ class Settings(BaseSettings):
         default_factory=lambda: ["172.16.0.0/12", "192.168.0.0/16", "10.0.0.0/8"],
     )
 
+    # Additional source IPs / CIDRs allowed to set X-Shruti-Region.
+    # Loopback + RFC1918 are always trusted (sibling compose services);
+    # this knob is for the RU proxy's PUBLIC egress IP, which is what
+    # `request.client.host` resolves to after ProxyHeadersMiddleware
+    # rewrites the peer to the leftmost untrusted XFF entry. Empty in
+    # dev / single-region deploys. Comma-separated env form.
+    region_header_trusted_sources: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+    )
+
     @field_validator("trusted_proxy_cidrs", mode="before")
     @classmethod
     def _split_trusted_proxy_cidrs(cls, value):
@@ -233,41 +206,13 @@ class Settings(BaseSettings):
             return [s.strip() for s in value.split(",") if s.strip()]
         return value
 
-    @model_validator(mode="after")
-    def _validate_llm_provider_credentials(self) -> "Settings":
-        """Fail-boot when a NEW LLM provider (yandex/gigachat) has no creds.
-
-        Catches misconfiguration at startup instead of at first request
-        for the Russia-resident providers. The check intentionally does
-        NOT cover the `openrouter` branch — `OpenRouterLLMProvider`'s
-        constructor has raised on missing API key since long before
-        this PR, and existing tests construct `Settings(...)` without
-        passing the key (they never reach the adapter). Keeping the
-        openrouter check at adapter level preserves that contract.
-
-        For `yandex` / `gigachat` the fields are new and no test
-        constructs a Settings with `llm_provider` set to those values
-        without also providing creds, so the validator is safe to make
-        unconditional. The Russia VPS at Wave 7 will boot with these
-        envs populated.
-        """
-        if self.llm_provider == "yandex":
-            if not self.yandex_gpt_folder_id:
-                raise ValueError(
-                    "LLM_PROVIDER=yandex requires YANDEX_GPT_FOLDER_ID"
-                )
-            if not self.yandex_gpt_api_key and not self.yandex_iam_token:
-                raise ValueError(
-                    "LLM_PROVIDER=yandex requires YANDEX_GPT_API_KEY or "
-                    "YANDEX_IAM_TOKEN"
-                )
-        elif self.llm_provider == "gigachat":
-            if not self.gigachat_client_id or not self.gigachat_client_secret:
-                raise ValueError(
-                    "LLM_PROVIDER=gigachat requires GIGACHAT_CLIENT_ID and "
-                    "GIGACHAT_CLIENT_SECRET"
-                )
-        return self
+    @field_validator("region_header_trusted_sources", mode="before")
+    @classmethod
+    def _split_region_header_trusted_sources(cls, value):
+        """Same comma-split shape as trusted_proxy_cidrs."""
+        if isinstance(value, str):
+            return [s.strip() for s in value.split(",") if s.strip()]
+        return value
 
     @model_validator(mode="after")
     def _forbid_insecure_prod_defaults(self) -> "Settings":

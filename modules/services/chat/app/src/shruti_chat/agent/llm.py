@@ -1,7 +1,7 @@
 """LLM access via LiteLLM.
 
 LiteLLM picks the provider based on model prefix (`openrouter/...`,
-`gigachat/...`, `anthropic/...`, ...). We register the active providers'
+`anthropic/...`, `openai/...`). We register the active providers'
 credentials in env at process start; LiteLLM reads them globally.
 """
 
@@ -32,13 +32,6 @@ def configure_providers(settings: Settings | None = None) -> None:
         os.environ["ANTHROPIC_API_KEY"] = s.anthropic_api_key
     if s.openai_api_key:
         os.environ["OPENAI_API_KEY"] = s.openai_api_key
-    if s.gigachat_api_key:
-        os.environ["GIGACHAT_API_KEY"] = s.gigachat_api_key
-        os.environ["GIGACHAT_SCOPE"] = s.gigachat_scope
-    if s.yandex_gpt_api_key:
-        os.environ["YANDEX_API_KEY"] = s.yandex_gpt_api_key
-        if s.yandex_gpt_folder_id:
-            os.environ["YANDEX_FOLDER_ID"] = s.yandex_gpt_folder_id
 
     # Quieter — LiteLLM tends to be chatty
     litellm.suppress_debug_info = True
@@ -48,8 +41,6 @@ def configure_providers(settings: Settings | None = None) -> None:
         openrouter=bool(s.openrouter_api_key),
         anthropic=bool(s.anthropic_api_key),
         openai=bool(s.openai_api_key),
-        gigachat=bool(s.gigachat_api_key),
-        yandex=bool(s.yandex_gpt_api_key),
         default=s.llm_default,
     )
 

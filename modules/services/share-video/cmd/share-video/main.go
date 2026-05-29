@@ -112,13 +112,11 @@ func main() {
 		TitleIconPath:     iconPath,
 	}
 
-	// HTTP layer.
-	var verifier *httpx.JWTVerifier
-	if cfg.JWTPublicKeysDir != "" {
-		verifier = httpx.NewJWTVerifierFromDir(cfg.JWTPublicKeysDir)
-	} else {
-		verifier = httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
-	}
+	// HTTP layer. Single-key verifier — multi-kid dir scanning was
+	// dropped with the #728 single-region collapse (a stale
+	// `<retired-kid>.pub.pem` left on disk after a redeploy would
+	// otherwise still verify forged tokens).
+	verifier := httpx.NewJWTVerifier(cfg.JWTPublicKeyPath)
 	srvHandlers := &httpx.Server{
 		Pool:             pool,
 		Redis:            rdb,

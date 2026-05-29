@@ -30,7 +30,6 @@ container's logs.
 | ------------------------- | ------------------------------------------------------------------------------------ |
 | `user.deleted`            | Delete all Langfuse traces tagged with the user's id (REST).                         |
 | `subscription.changed`    | Locally-emitted RC tier flip; observed for telemetry, no extra side effect today.    |
-| `subscription.broadcast`  | Cross-region RC webhook fan-out: HMAC-POST each remote region's `/internal/subscription/apply`. Infinite retry per the dead-letter policy below. |
 
 Unknown event types are logged at `warn` and **left unprocessed** —
 they're an operational bug worth inspection, not a no-op.
@@ -81,8 +80,8 @@ This worker drains `app.outbox` with **infinite retry** — events never
 move to a dead-letter table, never get dropped. Justification:
 
 - Outbox events represent durable user-visible state (`user.deleted`,
-  `subscription.changed`, `subscription.broadcast`). Dropping them
-  silently produces orphan state on other regions.
+  `subscription.changed`). Dropping them silently produces orphan
+  state (e.g. an undeleted Langfuse trace tagged with a purged user).
 - The cost of unbounded retry is bounded: one row per stuck event,
   Postgres handles millions of rows cheaply, the
   `outbox_unprocessed_idx` partial index keeps `WHERE processed_at IS

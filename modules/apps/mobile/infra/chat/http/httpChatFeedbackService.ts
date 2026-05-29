@@ -3,13 +3,12 @@ import type {
   IChatFeedbackService,
   SubmitChatFeedbackOptions,
 } from "@ports/app/index.js"
-import { postFeedback, type AccessTokenProvider } from "./chatClient.js"
+import { postFeedback, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatFeedbackServiceDeps {
   readonly getAccessToken: AccessTokenProvider
-  /** Lazy resolver for the chat service base URL. See
-   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
-  readonly baseUrl: () => string
+  /** Failover-aware HTTP client for the chat service. */
+  readonly request: ChatRequest
 }
 
 /**
@@ -25,7 +24,7 @@ export function createHttpChatFeedbackService(
       return postFeedback(payload, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
-        baseUrl: deps.baseUrl,
+        request: deps.request,
       })
     },
   }

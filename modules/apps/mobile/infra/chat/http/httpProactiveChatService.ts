@@ -4,13 +4,12 @@ import type {
   ProactiveTurnResult,
 } from "@ports/app/index.js"
 
-import { streamChat, type AccessTokenProvider } from "./chatClient.js"
+import { streamChat, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpProactiveChatServiceDeps {
   readonly getAccessToken: AccessTokenProvider
-  /** Lazy resolver for the chat service base URL — typically
-   *  `() => shruti.activeServer.value.chatBaseUrl`. */
-  readonly baseUrl: () => string
+  /** Failover-aware HTTP client for the chat service. */
+  readonly request: ChatRequest
 }
 
 /**
@@ -40,7 +39,7 @@ export function useHttpProactiveChatService(
 
       for await (const event of streamChat(placeholderMessages, wireLocale, {
         getAccessToken: deps.getAccessToken,
-        baseUrl: deps.baseUrl,
+        request: deps.request,
         proactive: {
           ruleKind: req.ruleKind,
           ruleDate: req.ruleDate,

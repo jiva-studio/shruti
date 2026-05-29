@@ -119,8 +119,8 @@ const props = defineProps<{
   picture: string | null
   isSubscribed: boolean
   serverItems: SelectorItem[]
-  /** Currently-active region id. Read-only from this component's
-   *  perspective — changes flow through `request-region-change`. */
+  /** Currently-preferred server id. Read-only from this component's
+   *  perspective — changes flow through `preferred-server-change`. */
   activeServerId: string
 }>()
 
@@ -135,25 +135,16 @@ const emit = defineEmits<{
   "open-paywall": []
   "manage-subscription": []
   "delete-account": [opts: { wipeLocal: boolean }]
-  /**
-   * User selected a new region. Parent runs the confirm dialog +
-   * migration flow (signed-in) or signOut+reboot (anonymous). The
-   * activeServer flip is the parent's job; this component never
-   * mutates region state directly.
-   */
-  "request-region-change": [newRegionId: string]
+  /** User picked a new preferred server. Parent flips `activeServer`;
+   *  the HTTP client handles failover transparently from then on. */
+  "preferred-server-change": [newServerId: string]
 }>()
 
-// Proxy bound to ServerSettingsItem's v-model. Reads pass through to
-// the active id so the selector dialog highlights the current region;
-// writes get intercepted — they emit `request-region-change` instead
-// of mutating anything locally. The parent runs the confirm/migration
-// flow and flips activeServer once the destination region is live.
 const activeServerIdProxy = computed<string>({
   get: () => props.activeServerId,
   set: (next) => {
     if (next === props.activeServerId) return
-    emit("request-region-change", next)
+    emit("preferred-server-change", next)
   },
 })
 

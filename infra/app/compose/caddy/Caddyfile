@@ -8,6 +8,16 @@
 # - handle_path strips the matched prefix before reverse_proxy so each
 #   service sees its own internal paths (`/excerpts`, `/reels`, `/auth/...`).
 # - request_body limits cap PUT/POST payload size at the edge.
+#
+# DUAL-ROLE: this server file is shared between two deployment shapes,
+# selected at container start by SHRUTI_REGION_ROLE:
+#   - origin (global) → imports role-origin.conf
+#                       (terminates /auth/* + /chat locally)
+#   - proxy  (RU)     → imports role-proxy.conf
+#                       (reverse-proxies /auth/* + /chat to global host;
+#                        only /share/* terminates locally)
+# Both snippets are baked into the shruti-caddy image alongside this
+# Caddyfile (see infra/app/compose/caddy/Dockerfile).
 
 {
     email {$ACME_EMAIL}
@@ -17,6 +27,12 @@
         level WARN
     }
 }
+
+# Both role snippets are defined here at global scope; only the one
+# named by SHRUTI_REGION_ROLE is *invoked* inside the route block
+# below. Defining the unused one is free — snippet defs don't execute.
+import role-origin.conf
+import role-proxy.conf
 
 {$DOMAIN} {
     # No `encode` — /chat is SSE (zstd/gzip buffers byte-frames before
@@ -44,14 +60,17 @@
         # don't, so put them on the edge once and for all.
         Access-Control-Allow-Origin "*"
         Access-Control-Allow-Methods "GET, POST, OPTIONS"
-        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, X-Lookup-Only, Accept"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Chat-Protocol-Version, X-Request-Id, Idempotency-Key, X-Trace-Id, Accept"
         Access-Control-Max-Age "600"
         Access-Control-Expose-Headers "Retry-After, X-Request-Id"
     }
 
     # Per-IP rate limits. Each zone has its own matcher; a request that
     # matches multiple zones (shouldn't happen with our path partitioning)
-    # would be tested against all of them.
+    # would be tested against all of them. Zones fire on the path the
+    # client requested, regardless of whether the handler terminates
+    # locally (origin) or reverse-proxies upstream (proxy) — so RU's edge
+    # cap still bounds /chat traffic before forwarding to global.
     rate_limit {
         # /auth/anonymous — CGNAT-tolerant. Carrier IP can serve hundreds
         # of subscribers; 30/hour is wide enough for viral install spikes.
@@ -138,24 +157,18 @@
         @options method OPTIONS
         respond @options 204
 
-        # ── /auth/* — auth service ─────────────────────────────────
-        handle /auth/* {
-            reverse_proxy auth:8081
-        }
-
-        # ── /webhooks/revenuecat — RC webhook → auth service ───────
-        # Carries its own Bearer secret (from the RC dashboard), not a
-        # user JWT. Sits outside /auth/* on purpose so the user-token
-        # middleware in the auth service doesn't try to validate it.
-        handle /webhooks/revenuecat {
-            reverse_proxy auth:8081
-        }
-
         # ── /share/audio/* — share-audio service ───────────────────
+        # Same on both roles: terminates locally so the resulting S3 URL
+        # belongs to the regional bucket (RU → Yandex S3, global → AWS).
         # handle_path strips the prefix so the FastAPI app sees /excerpts.
         # Body cap is generous for a JSON envelope (<1KB in practice) but
         # forbids someone POSTing a multi-MB blob to chew worker memory.
+        # X-Shruti-Region strip mirrors role-origin.conf's policy on
+        # chat/auth: only the trusted proxy may set the header on egress,
+        # so any inbound value reaching share-* here is forged and dropped.
+        # Low-impact today (share-* don't read it) but keeps the invariant.
         handle_path /share/audio/* {
+            request_header -X-Shruti-Region
             request_body {
                 max_size 100KB
             }
@@ -164,6 +177,7 @@
 
         # ── /share/video/* — share-video service ───────────────────
         handle_path /share/video/* {
+            request_header -X-Shruti-Region
             request_body {
                 max_size 100KB
             }
@@ -175,21 +189,13 @@
             }
         }
 
-        # ── chat (root catch-all) ──────────────────────────────────
-        # SSE streaming endpoint — flush_interval -1 sends chunks as they
-        # arrive. 1MB body limit fits any reasonable chat turn (history +
-        # current message); a malicious 50MB POST is rejected at the edge.
-        handle {
-            request_body {
-                max_size 1MB
-            }
-            reverse_proxy chat:8080 {
-                flush_interval -1
-                transport http {
-                    read_buffer 8192
-                }
-            }
-        }
+        # ── Role-specific handlers ─────────────────────────────────
+        # origin → role-origin.conf (terminates /auth/* + chat locally
+        #          and strips inbound X-Shruti-Region so only trusted
+        #          proxy egress can set it).
+        # proxy  → role-proxy.conf  (reverse-proxies same paths upstream
+        #          to {$SHRUTI_GLOBAL_HOST} with X-Shruti-Region: ru).
+        import role-{$SHRUTI_REGION_ROLE}
     }
 
     log {

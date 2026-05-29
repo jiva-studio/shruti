@@ -3,13 +3,16 @@ import type {
   FetchSuggestedQuestionsOptions,
   IChatQuestionsService,
 } from "@ports/app/index.js"
-import { fetchSuggestedQuestions, type AccessTokenProvider } from "./chatClient.js"
+import {
+  fetchSuggestedQuestions,
+  type AccessTokenProvider,
+  type ChatRequest,
+} from "./chatClient.js"
 
 export interface HttpChatQuestionsServiceDeps {
   readonly getAccessToken: AccessTokenProvider
-  /** Lazy resolver for the chat service base URL. See
-   *  `HttpChatStreamClientDeps.baseUrl` for the rationale. */
-  readonly baseUrl: () => string
+  /** Failover-aware HTTP client for the chat service. */
+  readonly request: ChatRequest
 }
 
 /**
@@ -30,7 +33,7 @@ export function createHttpChatQuestionsService(
       return fetchSuggestedQuestions(focus, lang, {
         signal: opts?.signal,
         getAccessToken: deps.getAccessToken,
-        baseUrl: deps.baseUrl,
+        request: deps.request,
       })
     },
   }

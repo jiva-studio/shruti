@@ -55,7 +55,6 @@ Env vars (all wired through `infra/.env`):
 | `DATABASE_URL` | postgres://... |
 | `JWT_PRIVATE_KEY_PATH` | RSA private PEM (default `/secrets/private.pem`) |
 | `JWT_PUBLIC_KEY_PATH`  | RSA public PEM  (default `/secrets/public.pem`)  |
-| `JWT_KID` | Key id in JWT header. Default `v1`. |
 | `GOOGLE_CLIENT_IDS` | Comma-separated Google OAuth client IDs (Android/iOS/Web). |
 | `APPLE_BUNDLE_IDS`  | Comma-separated Apple bundle / service IDs. |
 | `PORT` | Default 8081. |
