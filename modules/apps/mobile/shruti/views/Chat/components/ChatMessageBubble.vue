@@ -707,7 +707,6 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
   border-radius: 4px;
-  font-style: italic;
   color: var(--ion-color-medium-shade, #4d4d4d);
   line-height: 1.4;
 }
