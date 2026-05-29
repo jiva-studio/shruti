@@ -112,8 +112,10 @@ class FakeAliasMap:
         self.verse_counter = 0
         self._lec: dict[tuple, int] = {}
         self._verse: dict[tuple, int] = {}
+        # `lecture_to_envelope` stashes the exact chunk text here at mint.
+        self.chunk_texts: dict[int, str] = {}
 
-    def alias_chunk(self, track_id, start_ms, end_ms) -> int:
+    def alias_chunk(self, track_id, start_ms, end_ms, lang=None) -> int:
         key = (track_id, start_ms, end_ms)
         if key in self._lec:
             return self._lec[key]

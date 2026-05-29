@@ -128,8 +128,10 @@ class FakeAliasMap:
         # Background caption generator writes here. Real `TurnAliasMap`
         # exposes the same attribute — pipeline expects it.
         self.captions: dict[int, str] = {}
+        # `lecture_to_envelope` stashes the exact chunk text here at mint.
+        self.chunk_texts: dict[int, str] = {}
 
-    def alias_chunk(self, track_id, start_ms, end_ms):
+    def alias_chunk(self, track_id, start_ms, end_ms, lang=None):
         key = (track_id, start_ms, end_ms)
         if key in self._lec_map:
             return self._lec_map[key]

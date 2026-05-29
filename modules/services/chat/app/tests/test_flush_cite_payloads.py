@@ -2,9 +2,11 @@
 
 A cited fragment renders as a full quote card on the client only if a
 `cite_transcript` SSE payload precedes its `[cite:...]` marker. The text
-comes from `aliases.chunk_texts` when the research pipeline stashed it,
-and is re-fetched from the chunk repo otherwise (fragments aliased by a
-ReAct worker, the focus fragment, or round-tripped from a prior turn).
+comes from `aliases.chunk_texts` when it was stashed at mint time
+(`lecture_to_envelope`), and is re-fetched by EXACT bounds otherwise (the
+pre-minted focus fragment, history-restored refs). The fetch must be
+exact — never an overlap query — so the snippet matches the cited
+[start_ms, end_ms] window rather than bleeding in overlapping chunks.
 """
 
 from __future__ import annotations
@@ -20,19 +22,19 @@ from shruti_chat.domain.turn_context import TurnContext
 
 
 class FakeChunkRepo:
-    """Records get_anchor_texts calls and replays a canned answer."""
+    """Records get_chunk_text_exact calls and replays a canned answer."""
 
-    def __init__(self, rows: list[str]) -> None:
-        self.rows = rows
+    def __init__(self, text: str | None) -> None:
+        self.text = text
         self.calls: list[dict] = []
 
-    async def get_anchor_texts(
-        self, track_id, *, start_ms, end_ms, lang, limit
-    ) -> list[str]:
+    async def get_chunk_text_exact(
+        self, track_id, *, start_ms, end_ms, lang
+    ) -> str | None:
         self.calls.append(
             {"track_id": track_id, "start_ms": start_ms, "end_ms": end_ms, "lang": lang}
         )
-        return self.rows
+        return self.text
 
 
 @pytest.fixture
@@ -43,12 +45,13 @@ def capture_writer(monkeypatch):
     return events
 
 
-async def test_fetch_cite_text_joins_and_strips() -> None:
-    repo = FakeChunkRepo(["  first  ", "second", "", "  "])
+async def test_fetch_cite_text_returns_exact_text() -> None:
+    repo = FakeChunkRepo("  exact snippet  ")
     ctx = TurnContext(chunk_repo=repo)
     cref = wc.ChunkRef(track_id="t1", start_ms=1000, end_ms=2000, lang="en")
     text = await _fetch_cite_text(ctx, cref)
-    assert text == "first second"
+    assert text == "exact snippet"
+    # Looked up by EXACT bounds + lang — not an overlap window.
     assert repo.calls == [{"track_id": "t1", "start_ms": 1000, "end_ms": 2000, "lang": "en"}]
 
 
@@ -58,9 +61,18 @@ async def test_fetch_cite_text_no_repo_returns_empty() -> None:
     assert await _fetch_cite_text(ctx, cref) == ""
 
 
+async def test_fetch_cite_text_no_row_returns_empty() -> None:
+    # Exact lookup misses (e.g. a focus span that isn't a chunk boundary) —
+    # degrade to the chip, never to over-broad overlapping text.
+    repo = FakeChunkRepo(None)
+    ctx = TurnContext(chunk_repo=repo)
+    cref = wc.ChunkRef(track_id="t1", start_ms=1234, end_ms=5678, lang=None)
+    assert await _fetch_cite_text(ctx, cref) == ""
+
+
 async def test_fetch_cite_text_swallows_repo_error() -> None:
     class Boom:
-        async def get_anchor_texts(self, *a, **k):
+        async def get_chunk_text_exact(self, *a, **k):
             raise RuntimeError("db down")
 
     ctx = TurnContext(chunk_repo=Boom())
@@ -69,8 +81,8 @@ async def test_fetch_cite_text_swallows_repo_error() -> None:
 
 
 async def test_flush_prefers_stashed_chunk_text(capture_writer) -> None:
-    """When research already stashed the text, no DB re-fetch happens."""
-    repo = FakeChunkRepo(["should-not-be-used"])
+    """When the text was stashed at mint, no DB re-fetch happens."""
+    repo = FakeChunkRepo("should-not-be-used")
     ctx = TurnContext(chunk_repo=repo)
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "stashed snippet"
@@ -88,9 +100,9 @@ async def test_flush_prefers_stashed_chunk_text(capture_writer) -> None:
 
 
 async def test_flush_refetches_when_text_missing(capture_writer) -> None:
-    """ReAct-worker / focus / history aliases have no stashed text — the
-    snippet is re-fetched on demand so the card still renders."""
-    repo = FakeChunkRepo(["re-fetched snippet"])
+    """Focus / history aliases have no stashed text — the snippet is
+    re-fetched by exact bounds so the card still renders the right text."""
+    repo = FakeChunkRepo("re-fetched snippet")
     ctx = TurnContext(chunk_repo=repo)
     n = ctx.aliases.alias_chunk("t9", 5000, 6000, lang="ru")
     # no chunk_texts entry
@@ -103,8 +115,8 @@ async def test_flush_refetches_when_text_missing(capture_writer) -> None:
 
 
 async def test_flush_skips_when_fetch_empty(capture_writer) -> None:
-    """A genuine miss (DB returns nothing) degrades to the chip — no event."""
-    repo = FakeChunkRepo([])
+    """A genuine miss (no exact row) degrades to the chip — no event."""
+    repo = FakeChunkRepo(None)
     ctx = TurnContext(chunk_repo=repo)
     ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
 
