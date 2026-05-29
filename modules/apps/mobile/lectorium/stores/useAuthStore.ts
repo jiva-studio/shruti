@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue"
 import { App, type AppState } from "@capacitor/app"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
+import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
@@ -62,20 +63,24 @@ export const useAuthStore = defineStore("auth", () => {
   let lastSyncAt = 0
   const ENSURE_FRESH_MAX_AGE_MS = 5 * 60 * 1000
 
+  // Release any composer lockdown the chat store is holding. `useChatStore`
+  // imports this store back, but a static circular import between two Pinia
+  // setup-stores is safe as long as neither calls the other at module-eval
+  // time — we only call inside watcher callbacks (runtime), the pattern
+  // Pinia's docs prescribe for cross-store calls and the same one
+  // `usePurchasesStore` already uses against this store. Shared by the four
+  // identity watchers below.
+  function releaseChatComposeLock(): void {
+    useChatStore().resetComposeLock()
+  }
+
   // Identity-change watcher: signin (null→id), signout (id→null), and
   // switch-account (idA→idB) all invalidate any composer lockdown the
   // chat store may be holding — the deadline was bound to the previous
   // identity's quota bucket and means nothing for the new one.
-  //
-  // `useChatStore` is imported lazily here so this module doesn't pull
-  // the chat store graph at auth-store registration time, which would
-  // race Pinia's init order (chat store depends on `useLectorium()`
-  // wiring that lands after auth restore kicks off).
   watch(userId, (newId, oldId) => {
     if (newId === oldId) return
-    void import("@lectorium/stores/useChatStore.js").then(({ useChatStore }) => {
-      useChatStore().resetComposeLock()
-    })
+    releaseChatComposeLock()
   })
 
   // Tier-upgrade watcher: free → pro within the same user_id (in-place
@@ -87,9 +92,7 @@ export const useAuthStore = defineStore("auth", () => {
   // (if anything, the new tier deserves its own rate-limit bookkeeping).
   watch(isPro, (next, prev) => {
     if (!next || prev) return
-    void import("@lectorium/stores/useChatStore.js").then(({ useChatStore }) => {
-      useChatStore().resetComposeLock()
-    })
+    releaseChatComposeLock()
   })
 
   // Quota-bucket watcher: when the JWT rotates under the same userId
@@ -104,9 +107,22 @@ export const useAuthStore = defineStore("auth", () => {
   watch(quotaId, (next, prev) => {
     if (next === prev) return
     if (!prev || !next) return
-    void import("@lectorium/stores/useChatStore.js").then(({ useChatStore }) => {
-      useChatStore().resetComposeLock()
-    })
+    releaseChatComposeLock()
+  })
+
+  // Anon-upgrade watcher: signing in from an anonymous session is the
+  // exact path the chat limit banner's "authorize" CTA drives. The server
+  // may link the account in place, keeping the same userId AND quota_id
+  // while only flipping `anonymous` false — in which case none of the
+  // three watchers above fire, and the free-anon `composeBlockedUntil`
+  // deadline + upsell banner would linger on the current page (input
+  // disabled, "limit resets tomorrow" placeholder stuck) until a restart
+  // or a new session: the user authorizes and nothing visibly happens.
+  // Only the false→true edge; signout (true→false) is already covered by
+  // the userId watcher (id→null).
+  watch(signedIn, (next, prev) => {
+    if (!next || prev) return
+    releaseChatComposeLock()
   })
 
   function applySession(s: AuthSession | null): void {
