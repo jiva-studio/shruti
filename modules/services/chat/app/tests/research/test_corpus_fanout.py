@@ -14,6 +14,7 @@ import pytest
 
 from shruti_chat.research.corpus_fanout import (
     _label_for_library_chunk,
+    _parse_addresses,
     fanout_search_with_boost,
     merge_fanout,
 )
@@ -67,15 +68,31 @@ class FakeCatalogRepo:
 
 
 class FakeChunkRepo:
-    def __init__(self, lecture_results: list[_Scored], library_results: list[_Scored]) -> None:
+    def __init__(
+        self,
+        lecture_results: list[_Scored],
+        library_results: list[_Scored],
+        lexical_results: list[_Scored] | None = None,
+        addr_results: dict[str, list[Any]] | None = None,
+    ) -> None:
         self.lecture_results = lecture_results
         self.library_results = library_results
+        self.lexical_results = lexical_results or []
+        self.addr_results = addr_results or {}
+        self.lexical_calls = 0
 
     async def search_by_embedding(self, q_vec, *, eligible_track_ids=None, lang=None, top_k=8):
         return self.lecture_results[:top_k]
 
     async def search_library_by_embedding(self, q_vec, *, kinds, lang=None, **kwargs):
         return [s for s in self.library_results if s.chunk.item_kind in kinds][: kwargs.get("top_k", 8)]
+
+    async def search_chunks_lexical(self, query_text, query_embedding, *, kinds, **kwargs):
+        self.lexical_calls += 1
+        return [s for s in self.lexical_results if s.chunk.item_kind in kinds][: kwargs.get("top_k", 24)]
+
+    async def get_chunks_by_addr_label(self, addr_label, *, kinds, lang=None):
+        return [c for c in self.addr_results.get(addr_label, []) if c.item_kind in kinds]
 
 
 class FakeReranker:
@@ -324,3 +341,102 @@ def test_merge_fanout_dedupes_by_internal_key():
     assert len(merged.chunks) == 1
     assert merged.chunks[0]["score"] == pytest.approx(0.8)
     assert merged.rounds_executed == 2
+
+
+# ---- hybrid lexical lane (P2) ---------------------------------------------
+
+
+class _RerankPrefer:
+    """Cross-encoder stub that ranks one target text #1 (simulates the real
+    reranker valuing a short verse on its TEXT, not its weak cosine)."""
+
+    def __init__(self, top_text: str) -> None:
+        self.top_text = top_text
+
+    async def rerank(self, query, texts, top_k=None):
+        scored = [
+            (i, 2.0 if t == self.top_text else 1.0 - i * 0.001)
+            for i, t in enumerate(texts)
+        ]
+        return sorted(scored, key=lambda x: x[1], reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_lexical_surfaces_verse_dense_missed():
+    # Dense finds NO verse; the lexical lane finds one at a low cosine (0.35).
+    # It enters the pool (forced) and the cross-encoder — ranking it on text —
+    # promotes it into the kept set. This is the prod "0 verses" fix.
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(i, 0.60) for i in range(16)],
+        library_results=[],
+        lexical_results=[_verse(1, 0.35)],
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+        reranker=_RerankPrefer("verse_1"), rerank_query="q",
+    )
+    assert len(res.by_kind.get("verse", [])) == 1
+    assert repo.lexical_calls > 0
+    # max_score stays the true max COSINE of the ranked set (lectures at 0.60),
+    # NOT inflated by the forced verse — proves no synthetic score leaked.
+    assert res.max_score == pytest.approx(0.60)
+
+
+@pytest.mark.asyncio
+async def test_lexical_inert_without_reranker():
+    # Cosine-only path (no reranker): the lexical lane must not run at all.
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(0, 0.60)],
+        library_results=[],
+        lexical_results=[_verse(1, 0.35)],
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+    )
+    assert repo.lexical_calls == 0
+    assert "verse" not in res.by_kind
+
+
+@pytest.mark.asyncio
+async def test_lexical_and_dense_dedup_same_chunk():
+    # Same verse surfaced by BOTH dense and lexical → one envelope.
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(i, 0.50) for i in range(3)],
+        library_results=[_verse(7, 0.65)],
+        lexical_results=[_verse(7, 0.65)],
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+        reranker=FakeReranker(), rerank_query="q",
+    )
+    assert len(res.by_kind.get("verse", [])) == 1
+
+
+@pytest.mark.asyncio
+async def test_address_fastpath_fetches_named_verse():
+    # "БГ 2.13" in the question → exact verse fetched deterministically even
+    # though dense + lexical found nothing.
+    verse = _LibChunk("verse_bg213", "verse", "krishna verse", "ru",
+                      source_id="BG", tokens="2.13", addr_label="БГ 2.13")
+    repo = FakeChunkRepo(
+        lecture_results=[_lec(i, 0.55) for i in range(3)],
+        library_results=[],
+        addr_results={"БГ 2.13": [verse]},
+    )
+    res = await fanout_search_with_boost(
+        queries=[(0, "что Прабхупада говорит в БГ 2.13")],
+        embedder=FakeEmbedder(), chunk_repo=repo,
+        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
+        reranker=FakeReranker(), rerank_query="что Прабхупада говорит в БГ 2.13",
+    )
+    assert len(res.by_kind.get("verse", [])) == 1
+
+
+def test_parse_addresses():
+    assert _parse_addresses("что в БГ 2.13?") == ["БГ 2.13"]
+    assert _parse_addresses("ШБ 1.1.1 и BG 2.13") == ["ШБ 1.1.1", "BG 2.13"]
+    assert _parse_addresses("БГ 1.2.28,1.2.29") == ["БГ 1.2.28,1.2.29"]
+    assert _parse_addresses("что такое душа") == []
