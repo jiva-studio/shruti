@@ -538,11 +538,11 @@ def _kick_caption_gen(
         if not text:
             continue
         targets.append((ref, text))
-        # Stash the full fragment transcript so `flush_cite_payloads`
-        # can push it to the client as a `cite_transcript` event. Same
-        # cite-able set the caption pass runs over; unlike the caption
-        # this is the verbatim snippet text, not an LLM tag.
-        alias_map.chunk_texts[ref] = text
+        # NOTE: the fragment transcript for `flush_cite_payloads` is now
+        # stashed at mint time in `lecture_to_envelope`
+        # (alias_map.chunk_texts[ref] = chunk.text), the single choke point
+        # for every cite-able lecture ref. This loop only builds caption
+        # targets; it no longer writes chunk_texts.
 
     if not targets:
         return

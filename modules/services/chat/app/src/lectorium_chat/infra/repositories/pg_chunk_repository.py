@@ -341,6 +341,29 @@ class PgChunkRepository:
             rows = await conn.fetch(sql, *params)
         return [r["text"] for r in rows]
 
+    async def get_chunk_text_exact(
+        self,
+        track_id: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+        lang: str | None,
+    ) -> str | None:
+        where = [
+            "track_id = $1",
+            "start_ms = $2",
+            "end_ms = $3",
+            "kind = 'track_transcript'",
+        ]
+        params: list[Any] = [track_id, int(start_ms), int(end_ms)]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        sql = f"SELECT text FROM chunks WHERE {' AND '.join(where)} LIMIT 1"
+        async with self._pool.acquire() as conn:
+            row = await conn.fetchrow(sql, *params)
+        return row["text"] if row is not None else None
+
     async def search_library_by_embedding(
         self,
         embedding: list[float],

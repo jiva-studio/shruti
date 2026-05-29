@@ -108,6 +108,22 @@ class ChunkRepository(Protocol):
         omitted, returns the first `limit` chunks of the track."""
         ...
 
+    async def get_chunk_text_exact(
+        self,
+        track_id: str,
+        *,
+        start_ms: int,
+        end_ms: int,
+        lang: str | None,
+    ) -> str | None:
+        """Transcript text of the ONE lecture chunk whose bounds exactly
+        equal (start_ms, end_ms). Unlike `get_anchor_texts` (overlap match)
+        this never bleeds in neighbouring/overlapping chunks, so the text
+        corresponds 1:1 to the cited [start_ms, end_ms] window. Restricted
+        to `kind='track_transcript'`. Returns None when no row matches
+        (e.g. a focus span the user tapped that isn't a chunk boundary)."""
+        ...
+
     async def get_first_chunk_embeddings(
         self,
         track_ids: list[str],

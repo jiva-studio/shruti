@@ -95,6 +95,14 @@ def lecture_to_envelope(
     already shows.
     """
     ref = alias_map.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms, lang=chunk.lang)
+    # Stash the exact per-chunk transcript so `flush_cite_payloads` can emit
+    # the `cite_transcript` payload verbatim. This is the single mint point
+    # for every in-turn lecture fragment (research, fanout, thesis
+    # augmentation, ReAct tools), so the cited text always corresponds 1:1
+    # to this fragment's [start_ms, end_ms] — never a wider, overlapping
+    # span. Transcript chunks overlap by design (see indexer/chunker.py), so
+    # a later bounds-based re-fetch can't reconstruct this exact slice.
+    alias_map.chunk_texts[ref] = chunk.text
     meta: dict[str, Any] = {"start_ms": chunk.start_ms, "end_ms": chunk.end_ms}
     if chunk.reference_source_id:
         meta["reference_source_id"] = chunk.reference_source_id

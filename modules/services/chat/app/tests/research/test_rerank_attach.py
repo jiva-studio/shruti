@@ -43,6 +43,7 @@ class FakeAliasMap:
     def __init__(self) -> None:
         self._next = 100  # high so we don't collide with base note indices
         self.captions: dict[int, str] = {}
+        self.chunk_texts: dict[int, str] = {}
 
     def alias_chunk(self, *_a, **_k): return 0
     def alias_verse(self, *_a, **_k): return 0

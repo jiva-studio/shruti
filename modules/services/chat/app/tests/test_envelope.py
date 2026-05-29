@@ -40,6 +40,19 @@ def test_lecture_to_envelope_strips_track_id() -> None:
     )
 
 
+def test_lecture_to_envelope_stashes_exact_chunk_text() -> None:
+    # The mint point stashes the chunk's verbatim text so flush_cite_payloads
+    # emits the snippet that corresponds 1:1 to this fragment's window —
+    # never a wider, overlapping span re-derived from the DB later.
+    chunk = Chunk(
+        track_id="t1", lang="ru", start_ms=12_000, end_ms=15_000,
+        text="exact fragment text", reference_source_id=None,
+    )
+    aliases = TurnAliasMap()
+    env = lecture_to_envelope(chunk, alias_map=aliases)
+    assert aliases.chunk_texts[env["ref"]] == "exact fragment text"
+
+
 def test_lecture_to_envelope_includes_reference_source_id() -> None:
     chunk = Chunk(
         track_id="t1", lang="ru", start_ms=0, end_ms=1000,

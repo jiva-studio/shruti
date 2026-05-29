@@ -195,25 +195,31 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
 
 async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
     """Re-fetch a cited fragment's transcript text from the chunk repo
-    when it wasn't stashed in `chunk_texts` during research. Returns ""
-    on any miss (no repo, no timestamps, DB error) so the caller falls
-    back to the chip rather than failing the SSE stream.
+    when it wasn't stashed in `chunk_texts` at mint time. Reached only for
+    refs minted outside `lecture_to_envelope` — the pre-minted focus
+    fragment and history-restored refs. Returns "" on any miss (no repo,
+    no timestamps, no exact row, DB error) so the caller degrades to the
+    chip rather than failing the SSE stream.
 
-    `cref.lang` (captured at mint) filters to the fragment's transcript
-    language; it's None only for the pre-minted focus fragment and
-    history-side refs without a stored lang, where we accept the
-    deterministic-ordered first-language rows the query returns.
+    Uses an EXACT (track_id, start_ms, end_ms) lookup, NOT an overlap
+    query: transcript chunks overlap by design (indexer/chunker.py), so an
+    overlap fetch would join neighbouring chunks and return text spanning a
+    far wider range than the cited [start_ms, end_ms] window. History refs
+    carry real chunk bounds and resolve exactly; a focus span the user
+    tapped may not be a chunk boundary, in which case the exact lookup
+    misses and the card falls back to the chip — better than over-broad
+    text that doesn't match the audio. `cref.lang` (captured at mint /
+    round-tripped through history) pins the transcript language.
     """
     repo = ctx.chunk_repo
     if repo is None or cref.start_ms is None or cref.end_ms is None:
         return ""
     try:
-        rows = await repo.get_anchor_texts(
+        text = await repo.get_chunk_text_exact(
             cref.track_id,
             start_ms=cref.start_ms,
             end_ms=cref.end_ms,
             lang=cref.lang,
-            limit=4,
         )
     except Exception as exc:
         log.warning(
@@ -225,8 +231,7 @@ async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
             error=str(exc),
         )
         return ""
-    parts = [t.strip() for t in rows if isinstance(t, str) and t.strip()]
-    return " ".join(parts)
+    return text.strip() if isinstance(text, str) else ""
 
 
 async def flush_cite_payloads(ctx: TurnContext) -> None:
