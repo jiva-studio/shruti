@@ -248,8 +248,8 @@ def _format_outline_block(outline: Any) -> str:
     synthesizer to a structured plan. Empty theses → an explicit refusal
     directive so the synthesizer doesn't try to paper over.
 
-    The rendered shape (intro paragraph + per-thesis [optional bold
-    header + paragraph + citation] + optional conclusion paragraph)
+    The rendered shape (intro paragraph + per-thesis [optional markdown
+    H2 header + paragraph + citation] + optional conclusion paragraph)
     matches the rendering rules in `response_shape.md`. Keeping the
     formatting here (not in models.py) lets the schema stay prompt-
     agnostic and lets us tune the LLM directives without touching the
@@ -274,7 +274,8 @@ def _format_outline_block(outline: Any) -> str:
         parts.append(f'1. INTRO paragraph (no citation): "{intro}"')
     parts.append(
         "2. For each thesis below: if it has a header, write it as "
-        "`**header**` on its own line, then ONE short paragraph that "
+        "`## header` (a markdown H2 header) on its own line, then ONE "
+        "short paragraph that "
         "expands the claim, ending with EXACTLY ONE `[^N]` marker from "
         "that thesis's supporting_notes. Do NOT cite notes from other "
         "theses. Do NOT introduce extra theses."
