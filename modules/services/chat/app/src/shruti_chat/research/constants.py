@@ -30,6 +30,20 @@ COVERAGE_MIN_LECTURES = 2
 MAX_FANOUT_ROUNDS = 2
 TOPK_PER_QUERY = 8
 
+# ---- Cross-encoder rerank (Stage A) ----------------------------------------
+# Primary cutoff is TOP-K everywhere. Cross-encoder scores are NOT calibrated
+# across queries (Voyage/Cohere: relative-rank-within-a-query only), so an
+# absolute rerank floor is NEVER the primary selector.
+RERANK_POOL_CAP = 60      # rerank input: top-N by cosine. Chat sweet spot is
+                          # 20–50; 60 leaves headroom while bounding the call.
+RERANK_FETCH_TOP_K = 24   # per-sub-query ANN fetch used to build that pool
+RERANK_TOP_K = 16         # keep top-N by rerank_score; feeds the outline.
+                          # Stage B narrows per-thesis.
+RERANK_MIN_LECTURES = 2   # reserve ≥N lecture slots in the cut (= COVERAGE_MIN_LECTURES)
+                          # so lecture starvation can't trip a spurious coverage round.
+RERANK_NOISE_PREFLOOR = 0.18  # permissive COSINE pre-floor — drops pure garbage only,
+                              # well below the ~0.30 verses the old 0.45 floor killed.
+
 # Topic-boost: added to chunk.score when item_id is referenced by a matched
 # topic-attribution. Capped at 1.0 downstream to avoid breaking score-based
 # refusal checks in the synthesizer (which expects [0, 1]).

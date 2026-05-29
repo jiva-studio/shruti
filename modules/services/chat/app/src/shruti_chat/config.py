@@ -110,6 +110,18 @@ class Settings(BaseSettings):
     embed_concurrency: int = 2
     llm_concurrency: int = 2
 
+    # ── Reranker ────────────────────────────────────────────────────────
+    # Cross-encoder rerank over the ANN candidate pool. ON by default, but
+    # `get_reranker` returns None when the key is missing (provider=voyage)
+    # → the pipeline degrades to the cosine path. So default-on never
+    # bricks a keyless deploy.
+    rerank_provider: Literal["none", "voyage", "tei"] = "voyage"
+    rerank_model: str = "rerank-2"
+    voyage_api_key: str | None = None       # required for provider=voyage
+    rerank_base_url: str | None = None      # future self-hosted (tei)
+    rerank_concurrency: int = 2
+    rerank_timeout_s: float = 10.0
+
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
     indexer_interval_hours: int = 6
