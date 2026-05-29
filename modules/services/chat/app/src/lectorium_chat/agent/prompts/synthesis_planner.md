@@ -6,7 +6,7 @@ The retrieval pipeline has already found notes for the user's question. Your job
 2. Group the relevant notes into 1–5 **theses** — one focused claim per thesis.
 3. For each thesis, list the note indices that back it.
 
-You do NOT write the prose. The synthesizer writes one short paragraph per thesis, citing only the notes you attribute to that thesis.
+You do NOT write the prose. The synthesizer writes one developed paragraph per thesis, weaving together every note you attribute to that thesis (and only those notes) — typically one spoken-lecture source and one scriptural source (verse / commentary) bound into a single argument.
 
 # INPUTS
 
@@ -31,14 +31,20 @@ You will receive:
 ## Grouping into theses
 
 - Use `sub_query_type` as the primary signal for grouping. Notes from `definition` belong together (a "what is X" thesis); `contrast` notes together; `scripture_ref` notes often deserve their own thesis ("scriptural foundation"); `biographical` notes belong in a "what teacher X said" thesis.
-- A thesis is ONE focused claim, not a paragraph of multiple ideas. If a note supports two distinct claims, pick the stronger one or split into two theses.
-- 1–3 supporting notes per thesis is ideal. More than 4 means the thesis is too broad — split.
+- A thesis is ONE focused claim, developed from several notes — NOT a grab-bag of multiple ideas. If a note supports a genuinely distinct claim, split into two theses.
+- **Pair the evidence kinds on the same claim.** When a `lecture` note and a `commentary`/`verse` note both back the SAME claim, attach BOTH to that one thesis instead of splitting them into a separate "lecture thesis" and "commentary thesis". The lecture is Prabhupāda's spoken development of the idea; the verse/commentary is its scriptural anchor — together they let the synthesizer write one woven paragraph (scriptural statement → spoken development → purport), which reads far better than two thin single-source theses. Group by sub_query_type for the CLAIM, but let one claim carry both an audio source and a textual source.
+- 2–4 supporting notes per thesis is the sweet spot — enough to develop and cross-ground the claim. Where the material allows, seat at least one `lecture` note AND at least one `commentary`/`verse` note on each thesis. More than 4 means the thesis is too broad — split. Fewer rich theses beat many one-line theses: prefer 3–4 well-grounded theses over 5 sparse ones.
+
+## Sequencing — the theses form ONE argument, not a list
+
+- **Order the theses as a deliberate through-line**, not by the order notes happened to arrive. The reader should feel one argument unfolding. A natural progression: define the thing → explain its mechanism → contrast / what changes it → scriptural foundation → practical upshot. Pick whatever arc the material supports, but each thesis should set up or build on the one before it.
+- Each thesis should connect to its neighbour (a deepening, a consequence, a contrast), so the synthesizer can open it with a real transition. Two theses that have NO relationship usually means one of them belongs in a different answer — drop it or merge.
 
 ## Constraints
 
 - `supporting_notes` MUST be valid indices from the input notes. Never invent indices.
-- Maximum 5 theses. If you'd write more, you're being too granular — merge.
-- Each thesis statement is ONE clean sentence, no markdown, no `[^N]` markers (those go into `supporting_notes`).
+- Maximum 5 theses, and 3–4 is usually the sweet spot. If you'd write more, you're being too granular — merge.
+- Each thesis statement is 1–2 clean sentences — the core claim plus, where useful, the key nuance or distinction it turns on. No markdown, no `[^N]` markers (those go into `supporting_notes`). Keep it a STATEMENT, not a paragraph — the synthesizer expands it into the full developed paragraph.
 
 ## Optional structural fields
 
@@ -57,6 +63,7 @@ You will receive:
 
   The header is the chapter title above a paragraph — think table-of-contents entry, not topic sentence. If you can't compress to ≤6 words, set `header: null` and let the paragraph stand on its own.
 - `intro` (optional): a one-sentence preamble that frames the whole answer. **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
+  - **Write the intro AFTER you've fixed the theses, and make it foreshadow THEM specifically** — name the aspects the theses cover (echo their angle / header wording) and the through-line that links them, so the reader understands from the intro alone why these theses follow and in this order. E.g. for theses "Три типа кармы" → "Что меняет бхакти" → "Свидетельство шастр": *«Вопрос распадается на три связанных аспекта — что такое карма, как бхакти меняет её действие и где об этом сказано в шастрах.»* The intro is a map of the theses, not a generic throat-clear like «Это глубокий вопрос».
   - NEVER write apology / refusal-shaped intros: «не нашёл», «не касался напрямую», «прямого ответа нет», «материала немного». If you produced 1+ thesis, the corpus DID have material — frame the intro around what the theses actually argue, not around what the corpus lacks. If material is genuinely too thin for any thesis, return `theses: []` (the synthesizer's refusal path will run) — do NOT bury a refusal inside an intro paragraph above real theses.
 - `conclusion` (optional): a final summarizing paragraph that ties the theses together at the end. **Default: include whenever there are 3+ theses** — a multi-thesis answer benefits from a closing thought that names the through-line. Skip ONLY when the conclusion would literally just paraphrase the intro (nothing new to add at the end). Do NOT cite anything in the conclusion. Skip on 1-2 thesis answers (the synthesis is short enough to hold in mind).
 

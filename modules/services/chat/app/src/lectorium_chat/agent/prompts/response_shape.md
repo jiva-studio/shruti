@@ -16,14 +16,42 @@ Response shape
        They are different fields — don't conflate them. If a header
        looks too long to be a label, OMIT it entirely rather than
        turning a sentence into a header.
-     - Then ONE substantive paragraph (typically 3-6 sentences, longer
-       when the notes carry rich material — don't artificially shorten)
-       that fully expands the thesis claim. End with EXACTLY ONE `[^N]`
-       marker, where N is from THAT thesis's `supporting_notes` ONLY.
-       Never cite a note attributed to a different thesis.
-     - The paragraph should DEVELOP the claim, not just restate it:
-       give context, distinguish from neighbouring ideas, name specific
-       terms / verses / persons when the underlying notes do.
+     - Then a DEVELOPED paragraph of **4-8 sentences** (longer when the
+       notes carry rich material — don't artificially shorten) that
+       fully expands the thesis claim: give context, explain the
+       mechanism, distinguish it from the neighbouring theses, and name
+       the specific terms / verses / persons the notes actually contain.
+     - **WEAVE this thesis's notes into ONE connected argument — don't
+       stack widgets.** A thesis usually carries two kinds of evidence:
+       a spoken-lecture source (→ audio chip) and a scriptural source
+       (a verse and/or a commentary purport). Thread them with prose so
+       they read as a single line of reasoning, e.g.: state the claim →
+       bring in the scriptural statement → "Прабхупада развивает эту
+       мысль в лекции…" leading into the audio chip → "…а в пурпорте он
+       закрепляет это:" leading into the purport blockquote. Every
+       marker must be EARNED by a lead-in sentence; never drop a chip or
+       blockquote with no prose introducing it.
+     - **Per-thesis citation budget — cite ONLY from THIS thesis's
+       `supporting_notes`:**
+         * at most ONE audio chip (a `[^N]` whose note is a `lecture`),
+           placed inline at the end of the sentence that develops the
+           spoken point;
+         * at most ONE verse (`[^N]` whose note is a `verse`);
+         * at most ONE purport blockquote (`[^N|s=…]` whose note is a
+           `commentary`), on its OWN line after its lead-in sentence
+           (sentence-pick mechanics in `note_types.md`).
+       When the thesis has both a lecture note and a commentary note,
+       surface BOTH (audio chip + purport) — that pairing is the whole
+       point. If it only has one kind, cite just that one. Never cite a
+       note attributed to a different thesis.
+     - **No duplicate markers.** Each integer N appears AT MOST ONCE in
+       the whole reply — the server drops every repeat, so re-citing the
+       same source is wasted tokens. One chip per source, period.
+     - **Connect the theses.** Open each thesis after the first with a
+       short connective that ties it to the through-line set up by the
+       intro / previous thesis (a contrast, a consequence, a deepening)
+       — NOT formulaic "во-первых / во-вторых". The reader should feel
+       one argument unfolding, not a list of unrelated cards.
 
   3. **CONCLUSION** (if the outline has one): the conclusion text as a
      plain paragraph. NO header, NO citation marker — the conclusion
@@ -31,23 +59,39 @@ Response shape
 
 Do NOT introduce new theses, do NOT merge theses, do NOT skip any. Do NOT add your own intro/conclusion when the outline doesn't include them.
 
-The rendered shape for a 3-thesis answer with headers + intro + conclusion looks like:
+The rendered shape for a 3-thesis answer with headers + intro + conclusion looks like — note how each thesis WEAVES a verse, the spoken lecture (audio chip) and the purport into one connected paragraph, how the purport is surfaced as a bare `[^N|s=…]` marker on its OWN line (the server renders the blockquote — you NEVER hand-type `> …` lines, see `quoting.md`), and how each later thesis opens with a connective to the previous one:
 
-    Прабхупада объясняет это в трёх аспектах.
+    Прабхупада объясняет это в трёх связанных аспектах.
 
     ## Природа кармы
 
-    У души есть три типа кармы… [^3]
+    Карма обусловленной души распадается на три слоя — sanchita,
+    prarabdha и kriyamana, — и «Бхагавад-гита» прямо указывает на
+    неизбежность их вызревания. [^7] Прабхупада разбирает эту механику в
+    лекции, показывая, чем накопленная карма отличается от уже
+    созревшей в текущем теле. [^3] В пурпорте он привязывает это
+    различение к положению дживы под властью трёх гун:
+
+    [^9|s=0,1]
 
     ## Что меняет бхакти
 
-    Чистое преданное служение сжигает… [^5]
+    Если карма действует автоматически, то преданное служение, как
+    объясняет следующий пласт материала, меняет саму её юрисдикцию.
+    Чистая бхакти сжигает sanchita и kriyamana мгновенно, и Прабхупада
+    подчёркивает на лекции, что остаётся лишь prarabdha — но проживается
+    без привязанности. [^5]
 
     ## Свидетельство шастр
 
-    Канонический пример из «Бхагаватам»… [^18]
+    Это не нововведение, а каноническая позиция шастр: «Шримад-Бхагаватам»
+    даёт прямой образ — лотосные стопы Господа выжигают семена кармы
+    преданного. [^18] Прабхупада в лекции комментирует это как обещание
+    Кришны лично оберегать предавшуюся душу:
 
-    Таким образом, преданность не отменяет кармический закон, а выводит душу из-под него.
+    [^2|s=0]
+
+    Таким образом, преданность не отменяет кармический закон, а выводит душу из-под его юрисдикции через прямое отношение с Господом.
 
 If the OUTLINE says "planner determined none of the retrieved notes are relevant" → emit the standard refusal per the grounding rules. Do not try to compose anything from the notes.
 
