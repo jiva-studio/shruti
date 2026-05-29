@@ -423,6 +423,120 @@ class PgChunkRepository:
             for r in rows
         ]
 
+    async def search_chunks_lexical(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        *,
+        kinds: list[str],
+        lang: str | None = None,
+        source_id: str | None = None,
+        author_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        top_k: int = 24,
+        trgm_min_sim: float = 0.3,
+    ) -> list[ScoredLibraryChunk]:
+        """Lexical (full-text + trigram) recall lane for hybrid retrieval.
+
+        Matches `text` via tsvector (`russian` morphology OR `simple` for
+        Sanskrit transliteration) AND the canonical address via pg_trgm —
+        exactly the classes dense ANN misses. Results are ordered by lexical
+        relevance (caller uses the position as the lexical rank for RRF), and
+        each carries its TRUE cosine vs `query_embedding` (INNER JOIN to the
+        embedding table) so the downstream coverage/max_score gates stay honest.
+        Rows lacking an embedding for the active model (a rare indexing
+        inconsistency) are dropped rather than surfaced unscored.
+
+        Not cached: lexical queries have no embedding-keyed cache contract, and
+        they're cheap GIN lookups.
+        """
+        if not kinds or not query_text.strip():
+            return []
+        emb_table = self._router.chunk_table
+        # $1 embed_model, $2 kinds, $3 query_text; optional filters appended;
+        # then embedding and limit appended last.
+        where: list[str] = [
+            "c.embed_model = $1",
+            "c.kind = ANY($2::text[])",
+            # FTS (either config) OR trigram address match. The OR lets the
+            # planner BitmapOr the three GIN indexes from migration 0032.
+            (
+                "(to_tsvector('russian', c.text) @@ websearch_to_tsquery('russian', $3)"
+                " OR to_tsvector('simple', c.text) @@ websearch_to_tsquery('simple', $3)"
+                " OR (c.source_id IS NOT NULL AND"
+                "     (coalesce(c.addr_label,'') || ' ' || coalesce(c.source_id,'')"
+                "      || ' ' || coalesce(c.tokens,'')) % $3))"
+            ),
+        ]
+        params: list[Any] = [self._embed_model, kinds, query_text]
+        if lang:
+            where.append(f"c.lang = ${len(params) + 1}")
+            params.append(lang)
+        if source_id:
+            where.append(f"c.source_id = ${len(params) + 1}")
+            params.append(source_id)
+        if author_id:
+            where.append(f"c.author_id = ${len(params) + 1}")
+            params.append(author_id)
+        if date_from:
+            where.append(f"c.doc_date >= ${len(params) + 1}")
+            params.append(date_from)
+        if date_to:
+            where.append(f"c.doc_date <= ${len(params) + 1}")
+            params.append(date_to)
+        params.append(query_embedding)
+        emb_pos = len(params)
+        params.append(top_k)
+        limit_pos = len(params)
+        sql = f"""
+          SELECT c.item_id, c.kind, c.source_id, c.tokens, c.author_id, c.doc_date,
+                 c.lang, c.segment_index, c.text, c.addr_label,
+                 1 - (e.embedding <=> ${emb_pos}::vector) AS score,
+                 GREATEST(
+                     ts_rank(to_tsvector('russian', c.text), websearch_to_tsquery('russian', $3)),
+                     ts_rank(to_tsvector('simple',  c.text), websearch_to_tsquery('simple',  $3)),
+                     CASE WHEN c.source_id IS NOT NULL
+                          THEN similarity(
+                              coalesce(c.addr_label,'') || ' ' || coalesce(c.source_id,'')
+                              || ' ' || coalesce(c.tokens,''), $3)
+                          ELSE 0 END
+                 ) AS lex_rank
+          FROM chunks c
+          JOIN {emb_table} e ON e.chunk_id = c.id
+          WHERE {' AND '.join(where)}
+          ORDER BY lex_rank DESC
+          LIMIT ${limit_pos}
+        """
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                # pg_trgm `%` operator honours this threshold and uses the
+                # trgm GIN index from 0032. SET doesn't take bind params, so
+                # use set_config(..., is_local=true) — scoped to this txn.
+                await conn.execute(
+                    "SELECT set_config('pg_trgm.similarity_threshold', $1, true)",
+                    str(trgm_min_sim),
+                )
+                rows = await conn.fetch(sql, *params)
+        return [
+            ScoredLibraryChunk(
+                chunk=LibraryChunk(
+                    item_id=r["item_id"],
+                    item_kind=r["kind"],
+                    source_id=r["source_id"],
+                    tokens=r["tokens"],
+                    author_id=r["author_id"],
+                    doc_date=r["doc_date"],
+                    lang=r["lang"],
+                    segment_index=r["segment_index"],
+                    text=r["text"],
+                    addr_label=r["addr_label"],
+                ),
+                score=float(r["score"]),
+            )
+            for r in rows
+        ]
+
     async def get_chunks_by_addr_label(
         self,
         addr_label: str,
