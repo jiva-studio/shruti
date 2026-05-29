@@ -3,29 +3,11 @@
 from __future__ import annotations
 
 from shruti_chat.agent.tools._envelope import (
-    _format_hms,
-    _lecture_label,
     lecture_to_envelope,
     library_to_envelope,
 )
 from shruti_chat.agent.turn_aliases import TurnAliasMap, ChunkRef, VerseRef
 from shruti_chat.domain.entities import Chunk, LibraryChunk
-
-
-def test_format_hms_under_hour() -> None:
-    assert _format_hms(0) == "00:00"
-    assert _format_hms(45_000) == "00:45"
-    assert _format_hms(125_000) == "02:05"
-
-
-def test_format_hms_over_hour() -> None:
-    assert _format_hms(3_600_000) == "01:00:00"
-    assert _format_hms(3_725_000) == "01:02:05"
-
-
-def test_lecture_label() -> None:
-    assert _lecture_label(0, 60_000) == "Lecture [00:00–01:00]"
-    assert _lecture_label(720_000, 765_000) == "Lecture [12:00–12:45]"
 
 
 def test_lecture_to_envelope_strips_track_id() -> None:
@@ -67,11 +49,15 @@ def test_lecture_to_envelope_includes_reference_source_id() -> None:
     assert env["meta"]["reference_source_id"] == "BG"
 
 
-def test_lecture_to_envelope_label_format() -> None:
+def test_lecture_to_envelope_label_is_empty() -> None:
+    # The timecode label ("Lecture [12:00–12:45]") was intentionally
+    # dropped — surfacing it in the LLM-facing header only primed the
+    # model to copy timecodes into its prose. The timecode now lives in
+    # `meta` and rides to the client via the alias map.
     chunk = Chunk(track_id="t1", lang="ru", start_ms=720_000, end_ms=765_000,
                   text="x", reference_source_id=None)
     env = lecture_to_envelope(chunk, alias_map=TurnAliasMap())
-    assert env["label"] == "Lecture [12:00–12:45]"
+    assert env["label"] == ""
 
 
 def test_lecture_to_envelope_score_none_for_exact_lookup() -> None:
