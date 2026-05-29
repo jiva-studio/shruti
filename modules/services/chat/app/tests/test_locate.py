@@ -187,6 +187,35 @@ async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypatch):
+    # When a curated attribution matches, its scope is authoritative — a
+    # stray semantic hit (12.2) must NOT pollute the curated chapter list.
+    from shruti_chat.research.models import AttributionMatch, AttributionRef
+
+    db = _make_library_db(tmp_path)
+
+    async def _fake_find(**kw):
+        if kw["kind"] == "topic":
+            return [AttributionMatch(
+                attribution_id="a1", kind="topic",
+                refs=[AttributionRef(ref_kind="title", target_id=f"{SB}/12.8")],
+                score=0.9, stage="native",
+            )]
+        return []
+
+    monkeypatch.setattr(locate, "find_attributions", _fake_find)
+    repo = _FakeChunkRepo([_scored("verse", SB, "12.2.5", "ШБ 12.2.5", 0.8)])
+    res = await locate.run_locate(
+        question="история Маркандеи", lang="ru", router_args={},
+        chunk_repo=repo, embedder=_FakeEmbedder(), pool=object(), llm=None,
+        embed_model="m", embed_dim=8, library_db=db,
+    )
+    assert len(res.regions) == 1
+    assert [c.tokens for c in res.regions[0].chapters] == ["12.8"]
+    assert "a1" in res.matched_attribution_ids
+
+
+@pytest.mark.asyncio
 async def test_run_locate_empty_when_no_hits(tmp_path):
     db = _make_library_db(tmp_path)
     result = await locate.run_locate(
