@@ -140,8 +140,9 @@ async def test_question_attribution_short_path(pg_conn):
     assert target_ids == ["verse_BG_2_13", "verse_BG_2_20"]
 
 
-async def test_topic_attribution_drives_boost_set(pg_conn):
-    """LONG path: topic-attribution match collects target_ids for boost."""
+async def test_topic_attribution_collects_target_ids(pg_conn):
+    """LONG path: topic-attribution match resolves to its ref target_ids
+    (consumed by the direct-fetch path that pins them into the pool)."""
     aid = f"attribution_itest_t_{uuid.uuid4().hex[:8]}"
     await _insert_attribution(
         pg_conn, aid=aid, kind="topic",
@@ -169,8 +170,8 @@ async def test_topic_attribution_drives_boost_set(pg_conn):
     )
     assert len(rows) == 1
     refs = json.loads(rows[0]["refs_json"])
-    boost_ids = {r["target_id"] for r in refs}
-    assert boost_ids == {"verse_BG_2_20", "verse_SB_7_7_19"}
+    target_ids = {r["target_id"] for r in refs}
+    assert target_ids == {"verse_BG_2_20", "verse_SB_7_7_19"}
 
 
 async def test_cascade_delete_clears_embeddings(pg_conn):

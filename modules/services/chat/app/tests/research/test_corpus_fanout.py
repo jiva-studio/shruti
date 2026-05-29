@@ -133,7 +133,7 @@ async def test_batched_embed_single_http_call():
 
 
 @pytest.mark.asyncio
-async def test_no_boost_when_ids_empty():
+async def test_single_chunk_score_passthrough():
     repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("track_a", 0, 1000, "x", "ru"), 0.7)],
         library_results=[],
@@ -143,64 +143,7 @@ async def test_no_boost_when_ids_empty():
         catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
     )
     assert len(res.chunks) == 1
-    assert res.chunks[0].get("topic_boosted") is None
     assert res.chunks[0]["score"] == pytest.approx(0.7)
-
-
-@pytest.mark.asyncio
-async def test_boost_applied_to_matching_lecture_chunks():
-    repo = FakeChunkRepo(
-        lecture_results=[
-            _Scored(_LecChunk("track_boosted", 0, 1000, "x", "ru"), 0.60),
-            _Scored(_LecChunk("track_normal", 0, 1000, "y", "ru"), 0.80),
-        ],
-        library_results=[],
-    )
-    res = await fanout_search_with_boost(
-        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
-        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_boosted"}, boost_by_kind={"lecture": 0.15},
-    )
-    # Find boosted envelope by inspecting refs (ref number is per-chunk; we
-    # match on text content which our fake passes through).
-    by_text = {env["text"]: env for env in res.chunks}
-    assert by_text["x"]["score"] == pytest.approx(0.75)
-    assert by_text["x"]["topic_boosted"] is True
-    assert by_text["y"]["score"] == pytest.approx(0.80)
-    assert by_text["y"].get("topic_boosted") is None
-
-
-@pytest.mark.asyncio
-async def test_boost_can_reorder_results():
-    repo = FakeChunkRepo(
-        lecture_results=[
-            _Scored(_LecChunk("track_boost", 0, 1000, "BOOST", "ru"), 0.70),
-            _Scored(_LecChunk("track_no", 0, 1000, "NO", "ru"), 0.78),
-        ],
-        library_results=[],
-    )
-    res = await fanout_search_with_boost(
-        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
-        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_boost"}, boost_by_kind={"lecture": 0.15},
-    )
-    # boosted=0.85, normal=0.78 → boosted first
-    assert res.chunks[0]["text"] == "BOOST"
-    assert res.chunks[0]["score"] == pytest.approx(0.85)
-
-
-@pytest.mark.asyncio
-async def test_boost_capped_at_1():
-    repo = FakeChunkRepo(
-        lecture_results=[_Scored(_LecChunk("track_x", 0, 1000, "X", "ru"), 0.96)],
-        library_results=[],
-    )
-    res = await fanout_search_with_boost(
-        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
-        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"track_x"}, boost_by_kind={"lecture": 0.15},
-    )
-    assert res.chunks[0]["score"] == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio
@@ -237,26 +180,6 @@ async def test_by_kind_partition_preserved():
     assert "lecture" in res.by_kind
     assert "verse" in res.by_kind
     assert "commentary" in res.by_kind
-
-
-@pytest.mark.asyncio
-async def test_boost_on_library_item_id():
-    # Boost applies to library chunks too when their item_id is in boost_ids.
-    repo = FakeChunkRepo(
-        lecture_results=[],
-        library_results=[
-            _Scored(_LibChunk("verse_boost", "verse", "BOOST", "ru", source_id="src", tokens="2.13"), 0.55),
-            _Scored(_LibChunk("verse_no", "verse", "NO", "ru", source_id="src", tokens="2.14"), 0.65),
-        ],
-    )
-    res = await fanout_search_with_boost(
-        queries=[(0, "q")], embedder=FakeEmbedder(), chunk_repo=repo,
-        catalog_repo=FakeCatalogRepo(), alias_map=FakeAliasMap(),
-        boost_ids={"verse_boost"}, boost_by_kind={"verse": 0.15},
-    )
-    by_text = {env["text"]: env for env in res.chunks}
-    assert by_text["BOOST"]["score"] == pytest.approx(0.70)
-    assert by_text["BOOST"]["topic_boosted"] is True
 
 
 # ---- per-family rerank reserve (1c) ---------------------------------------

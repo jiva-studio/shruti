@@ -17,10 +17,10 @@ env var so unit-test CI runs stay fast.
 6. `POST /chat` "природа души" lang=ru → SSE includes `[verse:N|...]` markers for all 3 БГ verses
 7. Assert log: `pipeline_short_path` fired with stage=native
 
-**B. Topic-attribution long path with boost:**
+**B. Topic-attribution long path:**
 1. Seed a topic-attribution "вечность души" → refs БГ 2.20, ШБ 7.7.19
 2. `POST /chat` "как Прабхупада объяснял неизменность атмана" (deliberately no question match)
-3. Assert: `pipeline_long_path` log shows non-empty `boost_ids`
+3. Assert: `pipeline_long_path` log shows non-zero `topic_matches`, and `long_path_topic_refs_fetched` pulled the refs
 4. Assert response chunks include БГ 2.20 / ШБ 7.7.19 ranked higher than baseline (compare to no-attribution-table run)
 
 **C. Cross-lingual fallback:**
