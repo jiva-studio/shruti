@@ -101,6 +101,11 @@ export type ActionPayload =
       readonly id: string
       readonly payload: VersePayload
     }
+  | {
+      readonly kind: "cite_transcript"
+      readonly id: string
+      readonly payload: CiteTranscriptPayload
+    }
 
 /** Discriminator for `research_source` events — what kind of corpus
  *  item the research pipeline is inspecting right now. */
@@ -192,6 +197,18 @@ export interface VersePayload {
   readonly sanskrit: string
   readonly transliteration: string
   readonly translation: { readonly [lang: string]: string }
+}
+
+/** Wire shape of a citation transcript snippet — carried by an `action`
+ *  event with `kind: "cite_transcript"`, arriving ahead of the prose
+ *  delta with the `[cite:track@start-end|caption]` marker it backs.
+ *  The store caches it under `${track_id}|${start_ms}-${end_ms}` so
+ *  CitationCard renders the full quote block instead of the chip. */
+export interface CiteTranscriptPayload {
+  readonly track_id: string
+  readonly start_ms: number
+  readonly end_ms: number
+  readonly text: string
 }
 
 /** Wire shape of the alias map emitted by the agent. Keys are integer
@@ -1020,6 +1037,17 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
   }
 }
 
+function parseCiteTranscriptPayload(p: Record<string, unknown>): CiteTranscriptPayload | null {
+  const trackId = typeof p.track_id === "string" ? p.track_id : ""
+  const startMs = typeof p.start_ms === "number" ? p.start_ms : null
+  const endMs = typeof p.end_ms === "number" ? p.end_ms : null
+  const text = typeof p.text === "string" ? p.text.trim() : ""
+  // Empty text is useless — the card would fall back to the chip anyway,
+  // so drop the event rather than caching a blank snippet.
+  if (!trackId || startMs === null || endMs === null || !text) return null
+  return { track_id: trackId, start_ms: startMs, end_ms: endMs, text }
+}
+
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
   const trackId = typeof p.track_id === "string" ? p.track_id : null
   const itemsRaw = Array.isArray(p.items) ? p.items : null
@@ -1114,6 +1142,10 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
   if (kind === "verse") {
     const vp = parseVersePayload(body)
     return vp ? { kind: "verse", id, payload: vp } : null
+  }
+  if (kind === "cite_transcript") {
+    const cp = parseCiteTranscriptPayload(body)
+    return cp ? { kind: "cite_transcript", id, payload: cp } : null
   }
   return null
 }

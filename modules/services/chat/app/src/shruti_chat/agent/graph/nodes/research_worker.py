@@ -17,6 +17,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.nodes._worker_common import (
+    flush_cite_payloads,
     flush_verse_payloads,
     run_worker,
 )
@@ -111,6 +112,10 @@ async def research_worker_node(
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams
     # `[^N]` markers — the mobile client expects the payload first.
     await flush_verse_payloads(ctx)
+    # Same ordering contract for cite_transcript payloads: push the
+    # fragment transcript text before the `[cite:...]` marker so the
+    # client renders the full card rather than the chip.
+    await flush_cite_payloads(ctx)
 
     log.info(
         "research_worker_pipeline_complete",

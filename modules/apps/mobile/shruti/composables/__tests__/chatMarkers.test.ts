@@ -89,6 +89,25 @@ describe("parseChatMarkers — card grouping (playlists as card stacks)", () => 
   })
 })
 
+describe("parseChatMarkers — citation block spacing", () => {
+  it("emits a cite token and collapses <br>/whitespace hugging it", () => {
+    // `cite` renders as a block quote-card now, so surrounding line
+    // breaks must be collapsed like the other block tokens — otherwise a
+    // stray <br> stacks an empty line above/below the card.
+    const tokens = parseChatMarkers("Before\n[cite:track_x@0-1000|cap]\nAfter")
+    const cite = tokens.find((t) => t.kind === "cite")
+    expect(cite?.kind).toBe("cite")
+    for (const tk of tokens) {
+      if (tk.kind !== "text") continue
+      // No text token should be only whitespace/<br>, nor lead/trail with
+      // a <br> run hugging the block.
+      expect(tk.html.trim()).not.toBe("")
+      expect(tk.html).not.toMatch(/^\s*<br\s*\/?>/i)
+      expect(tk.html).not.toMatch(/<br\s*\/?>\s*$/i)
+    }
+  })
+})
+
 describe("parseChatMarkers — followup markers (strip from prose)", () => {
   it("strips [followup:..] markers from the rendered token stream", () => {
     const tokens = parseChatMarkers(

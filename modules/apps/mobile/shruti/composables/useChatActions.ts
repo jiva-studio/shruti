@@ -30,6 +30,10 @@ export function useChatActions() {
     startMs: number
     endMs: number
     caption: string
+    /** Preloaded snippet text (chat cite_transcript). When the card has
+     *  it, the note body uses it verbatim instead of re-fetching the
+     *  transcript (which the client may not hold). */
+    text?: string
   }): Promise<boolean> {
     void toast.info(t("chat.noteSaving"))
     const result = await saveCitationAsNote(
@@ -38,6 +42,7 @@ export function useChatActions() {
         startMs: input.startMs,
         endMs: input.endMs,
         caption: input.caption,
+        ...(input.text ? { text: input.text } : {}),
         preferredLanguage: appLanguage.value,
       },
       {

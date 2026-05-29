@@ -13,6 +13,11 @@ export interface SaveCitationAsNoteInput {
   /** Chip caption — shown when the chip rendered. Used as fallback note
    *  text when the transcript fetch fails or the overlap is empty. */
   readonly caption: string
+  /** Preloaded snippet text (the chat `cite_transcript` SSE payload).
+   *  When present it's used verbatim as the note body — the client may
+   *  not hold the track's transcript locally to re-derive it. Absent ⇒
+   *  fall through to the transcript fetch / caption. */
+  readonly text?: string
   readonly preferredLanguage: LanguageCode
 }
 
@@ -44,29 +49,35 @@ export async function saveCitationAsNote(
 ): Promise<Result<Note, SaveCitationAsNoteError>> {
   const startMs = Math.max(0, input.startMs)
   const endMs = Math.max(startMs, input.endMs)
-  let text = ""
+  // Preloaded snippet text wins — it's the exact fragment the server
+  // already resolved (chat cite_transcript), so we don't need (and may
+  // not be able) to re-derive it from a local transcript.
+  let text = input.text?.trim() ?? ""
 
   // Transcript-based note text: every sentence block that overlaps
   // [startMs; endMs] contributes. Block intersects when block.end >=
-  // startMs AND block.start <= endMs (closed interval).
-  try {
-    const result = await loadTranscript(
-      { trackId: input.trackId, preferredLanguage: input.preferredLanguage },
-      { transcripts: deps.transcripts }
-    )
-    if (result.ok) {
-      const parts: string[] = []
-      for (const b of result.value.transcript.blocks) {
-        if (b.type !== "sentence") continue
-        if (b.end >= startMs && b.start <= endMs) {
-          const trimmed = b.text.trim()
-          if (trimmed) parts.push(trimmed)
+  // startMs AND block.start <= endMs (closed interval). Skipped when we
+  // already have preloaded text.
+  if (!text) {
+    try {
+      const result = await loadTranscript(
+        { trackId: input.trackId, preferredLanguage: input.preferredLanguage },
+        { transcripts: deps.transcripts }
+      )
+      if (result.ok) {
+        const parts: string[] = []
+        for (const b of result.value.transcript.blocks) {
+          if (b.type !== "sentence") continue
+          if (b.end >= startMs && b.start <= endMs) {
+            const trimmed = b.text.trim()
+            if (trimmed) parts.push(trimmed)
+          }
         }
+        text = parts.join(" ")
       }
-      text = parts.join(" ")
+    } catch {
+      // Fall through — caption fallback below.
     }
-  } catch {
-    // Fall through — caption fallback below.
   }
 
   if (!text) text = input.caption.trim()
