@@ -33,7 +33,10 @@ from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
 from shruti_chat.research.constants import (
     BOOST_BY_KIND,
+    FINAL_CUT_MIN_LIBRARY,
+    FINAL_CUT_MIN_VERSES,
     MAX_FANOUT_ROUNDS,
+    RERANK_RESERVE_FLOOR,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
     TIMEOUT_PLAN_S,
@@ -147,6 +150,43 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
             status=status,
             request_id=request_id,
         )
+
+
+_LIBRARY_DOC_TYPES = ("commentary", "prose_chapter", "letter")
+
+
+def _balanced_cut(
+    envs: list[dict[str, Any]],
+    n: int,
+    *,
+    min_verses: int = FINAL_CUT_MIN_VERSES,
+    min_library: int = FINAL_CUT_MIN_LIBRARY,
+) -> list[dict[str, Any]]:
+    """Take the top-`n` envelopes by their existing order, then back-fill verse
+    and library-doc types from the tail so a hard cap doesn't drop the kinds the
+    rerank reserve fought to seat. Back-fill is gated by RERANK_RESERVE_FLOOR on
+    the cosine `score`, so we never promote low-relevance junk past the cut.
+
+    Envelope order is assumed already meaningful (rerank/tier sort). Mirrors the
+    membership-not-ordering rationale of the `_rerank_pool` reserve: the planner
+    reads the whole set, so a slightly-larger-than-`n` set is fine."""
+    if len(envs) <= n:
+        return list(envs)
+    top = list(envs[:n])
+    tail = envs[n:]
+
+    def _back_fill(pred: Callable[[str | None], bool], minimum: int) -> None:
+        have = sum(1 for e in top if pred(e.get("type")))
+        for e in tail:
+            if have >= minimum:
+                break
+            if pred(e.get("type")) and (e.get("score") or 0.0) >= RERANK_RESERVE_FLOOR:
+                top.append(e)
+                have += 1
+
+    _back_fill(lambda t: t == "verse", min_verses)
+    _back_fill(lambda t: t in _LIBRARY_DOC_TYPES, min_library)
+    return top
 
 
 def _plan_to_fanout_queries(plan: QueryPlan) -> list[tuple[int, str]]:
@@ -445,7 +485,7 @@ async def run_research(
             name="supplementary_fanout", request_id=request_id,
         )
 
-        supplementary_top = supplementary.chunks[:8]
+        supplementary_top = _balanced_cut(supplementary.chunks, 8)
         # Commentary attachment moved POST-planner: `synthesis_planner_node`
         # calls `rerank_and_attach_commentaries` which pulls purports only
         # for verses the planner actually picked into supporting_notes, then
@@ -755,9 +795,9 @@ async def _research_path(
         if rs is None:
             return (1, e.get("score") or 0.0)   # authoritative ref tier
         return (0, rs)                           # reranked chunk tier
-    top_chunks = sorted(
-        merged_by_key.values(), key=_tier_key, reverse=True,
-    )[:20]
+    top_chunks = _balanced_cut(
+        sorted(merged_by_key.values(), key=_tier_key, reverse=True), 20,
+    )
 
     # Commentary attachment moved POST-planner: see SHORT path comment
     # above. `synthesis_planner_node` now calls

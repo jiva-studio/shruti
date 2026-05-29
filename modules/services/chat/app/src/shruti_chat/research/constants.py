@@ -44,6 +44,25 @@ RERANK_MIN_LECTURES = 2   # reserve ≥N lecture slots in the cut (= COVERAGE_MI
 RERANK_NOISE_PREFLOOR = 0.18  # permissive COSINE pre-floor — drops pure garbage only,
                               # well below the ~0.30 verses the old 0.45 floor killed.
 
+# Per-family reserve in the rerank cut. The Voyage cross-encoder favours
+# conversational lecture/prose text and its scores are within-query-relative
+# (not comparable across kinds), so terse verse chunks get 0 of the top-K even
+# when topically dead-on. Mirror RERANK_MIN_LECTURES for verses and the rest of
+# the library so shlokas + commentary survive the cut. Gated by a cosine floor
+# so we never force low-relevance junk (honours the empty-result discipline).
+RERANK_MIN_VERSES = 2       # reserve ≥N verse slots past the top-K cut
+RERANK_MIN_LIBRARY = 2      # reserve ≥N commentary/prose_chapter/letter slots
+RERANK_RESERVE_FLOOR = 0.40  # cosine floor for reserve eligibility — above
+                             # NOISE_PREFLOOR (0.18), below RELEVANCE_FLOOR (0.45).
+                             # The one value to calibrate from prod verse cosines.
+
+# Final-cut membership guarantee for the LONG-path top_chunks[:20] and SHORT-path
+# supplementary[:8] slices: even when the rerank reserve seats verses into a round,
+# the cross-round merge + final cap can drop them again. Back-fill this many from
+# the tail (same RERANK_RESERVE_FLOOR gate) so the planner actually sees them.
+FINAL_CUT_MIN_VERSES = 1
+FINAL_CUT_MIN_LIBRARY = 1
+
 # Topic-boost: added to chunk.score when item_id is referenced by a matched
 # topic-attribution. Capped at 1.0 downstream to avoid breaking score-based
 # refusal checks in the synthesizer (which expects [0, 1]).
