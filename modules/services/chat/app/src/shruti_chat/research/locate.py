@@ -51,6 +51,15 @@ _SCORE_FLOOR = 0.45
 _MAX_REGIONS = 4
 # Max individual verses surfaced in verse-granularity mode.
 _MAX_VERSES = 4
+# Topic-attribution accept thresholds for LOCATE specifically. Locate matches
+# the user's FULL QUESTION against curated topic LABELS, so cosines run lower
+# than the topic-vs-extracted-topic case the global 0.70/0.65 (TOPIC_ACCEPT_*)
+# were tuned for. Measured: the correct «История Махараджи Прахлады» topic
+# scored 0.633 for "в какой песни ШБ история Прахлады" (just under 0.65) while
+# the next, unrelated candidate sat at 0.544 — so ~0.60 catches the real story
+# and still rejects the noise.
+_LOCATE_TOPIC_ACCEPT_NATIVE = 0.60
+_LOCATE_TOPIC_ACCEPT_CROSS = 0.58
 
 # Lexical cues that force a granularity. Russian + English stems.
 _VERSE_CUE = re.compile(r"стих|шлок|śloka|shloka|\bverse\b|\bтекст\b", re.IGNORECASE)
@@ -216,12 +225,20 @@ async def run_locate(
     # drops the other half of the curated corpus.
     if pool is not None and embed_model is not None and embed_dim is not None:
         async def _lookup(kind: str) -> list[AttributionMatch]:
+            # Lower the topic accept bar for locate (see _LOCATE_TOPIC_ACCEPT_*).
+            extra: dict = {}
+            if kind == "topic":
+                extra = {
+                    "accept_native": _LOCATE_TOPIC_ACCEPT_NATIVE,
+                    "accept_cross": _LOCATE_TOPIC_ACCEPT_CROSS,
+                }
             try:
                 return await asyncio.wait_for(
                     find_attributions(
                         kind=kind, user_q_embedding=embedding, lang=lang,
                         embed_model=embed_model, embed_dim=embed_dim, pool=pool,
                         llm=llm if kind == "question" else None,
+                        **extra,
                     ),
                     timeout=TIMEOUT_QUESTION_LOOKUP_S,
                 )
