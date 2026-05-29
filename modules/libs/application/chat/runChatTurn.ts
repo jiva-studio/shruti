@@ -63,6 +63,17 @@ export type RunChatTurnEvent =
       readonly transliteration: string
       readonly translation: { readonly [lang: string]: string }
     }
+  /** Transcript snippet for one `[cite:track@start-end|caption]`
+   *  fragment, streamed ahead of its marker. The store caches it so
+   *  `CitationCard.vue` renders the full quote block; absent ⇒ the chip
+   *  fallback. */
+  | {
+      readonly kind: "cite-transcript-payload"
+      readonly trackId: string
+      readonly startMs: number
+      readonly endMs: number
+      readonly text: string
+    }
   /** Sub-query the research pipeline just generated — append to the
    *  live "investigating" list under the streaming bubble. The store
    *  does not persist these: when the prose deltas start landing the
@@ -303,6 +314,16 @@ export async function* runChatTurn(
               sanskrit: event.payload.payload.sanskrit,
               transliteration: event.payload.payload.transliteration,
               translation: event.payload.payload.translation,
+            }
+            break
+          }
+          if (event.payload.kind === "cite_transcript") {
+            yield {
+              kind: "cite-transcript-payload",
+              trackId: event.payload.payload.track_id,
+              startMs: event.payload.payload.start_ms,
+              endMs: event.payload.payload.end_ms,
+              text: event.payload.payload.text,
             }
             break
           }

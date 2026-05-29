@@ -193,6 +193,46 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         )
 
 
+async def flush_cite_payloads(ctx: TurnContext) -> None:
+    """Emit `action.kind=cite_transcript` events for every cite-able
+    lecture fragment whose transcript text is known and hasn't been
+    emitted yet. Mirrors `flush_verse_payloads`: the payload MUST arrive
+    BEFORE the `[cite:track@s-e|caption]` marker in the delta text, so
+    `CitationCard.vue` can render the full quote block (player + text +
+    attributes) instead of the small chip fallback.
+
+    Text comes from `aliases.chunk_texts`, filled by the research
+    pipeline over the same cite-able set the caption pass uses. When a
+    fragment has no stashed text (ReAct fallback path / older harnesses)
+    it's skipped — the chip fallback covers it.
+    """
+    if ctx.aliases is None:
+        return
+    writer = get_stream_writer()
+    for ref_num, cref in ctx.aliases.cite_refs():
+        if ref_num in ctx.emitted_cite_refs:
+            continue
+        text = ctx.aliases.chunk_texts.get(ref_num)
+        if not text:
+            continue
+        ctx.emitted_cite_refs.add(ref_num)
+        writer(
+            {
+                "type": "action",
+                "data": {
+                    "kind": "cite_transcript",
+                    "id": f"cite_{cref.track_id}_{cref.start_ms}_{cref.end_ms}",
+                    "payload": {
+                        "track_id": cref.track_id,
+                        "start_ms": cref.start_ms,
+                        "end_ms": cref.end_ms,
+                        "text": text,
+                    },
+                },
+            }
+        )
+
+
 async def run_worker(
     state: ChatState,
     runtime: Runtime[TurnContext],
@@ -267,4 +307,5 @@ async def run_worker(
     )
 
     await flush_verse_payloads(ctx)
+    await flush_cite_payloads(ctx)
     return result

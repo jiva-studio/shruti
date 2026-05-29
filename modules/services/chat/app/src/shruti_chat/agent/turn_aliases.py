@@ -115,6 +115,14 @@ class TurnAliasMap:
         # emits `[^N]`, the audio chip renders without a caption
         # (widget still shows title + timestamp).
         self.captions: dict[int, str] = {}
+        # Per-turn transcript text for cite-able lecture fragments,
+        # keyed by alias int. Populated in `research.pipeline` over the
+        # final cite-able set (same loop that seeds `captions`). The SSE
+        # transport reads it in `flush_cite_payloads` to push the snippet
+        # text to the client as an `action.kind=cite_transcript` event so
+        # `CitationCard.vue` can render the full quote block. Empty until
+        # the research path fills it — clients fall back to the chip.
+        self.chunk_texts: dict[int, str] = {}
 
     def _alloc_ref(self) -> int:
         """Allocate the next sequential alias integer for this turn."""
@@ -192,6 +200,19 @@ class TurnAliasMap:
         return [
             (n, ref) for n, ref in self._chunks.items()
             if isinstance(ref, VerseRef)
+        ]
+
+    def cite_refs(self) -> list[tuple[int, ChunkRef]]:
+        """All currently-minted lecture-FRAGMENT aliases (ChunkRef with
+        timestamps), in mint order. Used by the SSE transport to emit a
+        `cite_transcript` payload per fragment so the client can render
+        the full quote card. Whole-track ChunkRefs (no timestamps) are
+        excluded — they render as track tiles, not quotes."""
+        return [
+            (n, ref) for n, ref in self._chunks.items()
+            if isinstance(ref, ChunkRef)
+            and ref.start_ms is not None
+            and ref.end_ms is not None
         ]
 
     def lookup_ref(

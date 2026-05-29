@@ -43,7 +43,7 @@
               `marked.parseInline` for a DOMPurify pass first.
             -->
             <span v-if="token.kind === 'text'" v-html="token.html" />
-            <CitationChip
+            <CitationCard
               v-else-if="token.kind === 'cite'"
               :track-id="token.trackId"
               :start-ms="token.startMs"
@@ -140,7 +140,7 @@ import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
 import type { ChatActionPayload, QuotaTier } from "@lib/domain/chatMessage.js"
-import CitationChip from "./CitationChip.vue"
+import CitationCard from "./CitationCard.vue"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"

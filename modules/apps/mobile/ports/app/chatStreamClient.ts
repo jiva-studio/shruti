@@ -49,6 +49,11 @@ export type ChatActionPayload =
       readonly id: string
       readonly payload: ChatVersePayloadWire
     }
+  | {
+      readonly kind: "cite_transcript"
+      readonly id: string
+      readonly payload: ChatCiteTranscriptPayloadWire
+    }
 
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
@@ -78,6 +83,18 @@ export interface ChatVersePayloadWire {
   readonly sanskrit: string
   readonly transliteration: string
   readonly translation: Readonly<Record<string, string>>
+}
+
+/** Transcript snippet shipped ahead of the prose deltas containing the
+ *  `[cite:track@start-end|caption]` marker that references it. The store
+ *  subscriber caches it under `${track_id}|${start_ms}-${end_ms}` so
+ *  CitationCard renders the full quote block instead of the chip
+ *  placeholder. Wire fields are snake_case to match the agent's JSON. */
+export interface ChatCiteTranscriptPayloadWire {
+  readonly track_id: string
+  readonly start_ms: number
+  readonly end_ms: number
+  readonly text: string
 }
 
 export type ChatRole = "user" | "assistant"

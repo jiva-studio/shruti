@@ -84,6 +84,10 @@ class TurnContext:
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     expander: MarkerExpander | None = None
     emitted_verse_refs: set[int] = field(default_factory=set)
+    # Dedup tracker for `action.kind=cite_transcript` events — once a
+    # fragment's transcript text is pushed it's NOT re-emitted within
+    # the same turn. Mirrors `emitted_verse_refs`.
+    emitted_cite_refs: set[int] = field(default_factory=set)
 
     # ── Injected services ──────────────────────────────────────────────
     # Optional fields are typed as `Any | None` at runtime to avoid

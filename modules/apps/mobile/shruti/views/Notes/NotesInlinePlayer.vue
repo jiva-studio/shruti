@@ -55,7 +55,11 @@ const positionMs = ref(0)
 const durationMs = ref(0)
 
 const { peaks, cachedUrl, resolveExcerptUrl } = useExcerptWaveform({
-  ref: props.note,
+  // Getter form: `props.note` is rebuilt each render (inline literal in
+  // NotesView) and its `sourceKey` is empty until tracks finish loading.
+  // Passing the value directly would snapshot that empty key and `cut()`
+  // would fail with `400 source_key required`.
+  ref: () => props.note,
   rootEl,
 })
 
