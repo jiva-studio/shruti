@@ -58,6 +58,30 @@ class ChunkRepository(Protocol):
         """
         ...
 
+    async def search_chunks_lexical(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        *,
+        kinds: list[str],
+        lang: str | None = None,
+        source_id: str | None = None,
+        author_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        top_k: int = 24,
+        trgm_min_sim: float = 0.3,
+    ) -> list[ScoredLibraryChunk]:
+        """Lexical recall lane for hybrid retrieval over library chunks:
+        full-text (`russian` morphology + `simple` for Sanskrit translit) +
+        pg_trgm on the canonical address. Catches what dense ANN misses
+        (addresses, transliteration, short verses). Ordered by lexical
+        relevance (position = lexical rank for RRF); `score` carries the TRUE
+        cosine vs `query_embedding` so downstream coverage/max_score gates stay
+        honest. Rows lacking an embedding for the active model are dropped.
+        """
+        ...
+
     async def get_window(
         self,
         track_id: str,

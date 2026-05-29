@@ -10,6 +10,7 @@ aliases, so we don't pollute TurnAliasMap with chunks that get filtered out.
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -17,8 +18,12 @@ from lectorium_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
 )
+from lectorium_chat.agent.tools._helpers import BOOK_PREFIX
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import (
+    ADDRESS_HIT_SCORE,
+    LEXICAL_FETCH_TOP_K,
+    LEXICAL_TRGM_MIN_SIM,
     RERANK_FETCH_TOP_K,
     RERANK_MIN_LECTURES,
     RERANK_MIN_LIBRARY,
@@ -30,6 +35,37 @@ from lectorium_chat.research.constants import (
     TOPK_PER_QUERY,
 )
 from lectorium_chat.research.models import FanoutResult
+
+
+# Every book prefix (ru + en) → canonical addr_label form, e.g. "БГ"/"BG" →
+# matched against the chunks' stored `addr_label`. Built once from BOOK_PREFIX.
+_ADDR_PREFIXES: list[str] = sorted(
+    {p for m in BOOK_PREFIX.values() for p in m.values()},
+    key=len, reverse=True,   # longest-first so "ЧЧ Мадхйа" wins over "ЧЧ"
+)
+_ADDR_RE = re.compile(
+    r"(?P<prefix>" + "|".join(re.escape(p) for p in _ADDR_PREFIXES) + r")\s*"
+    r"(?P<tokens>\d[\d.,\-–]*)",
+    re.IGNORECASE,
+)
+
+
+def _parse_addresses(text: str) -> list[str]:
+    """Extract canonical `addr_label`s ("БГ 2.13", "SB 1.1.1") mentioned in the
+    query, so the fanout can fetch the exact verse/commentary deterministically
+    instead of hoping dense ANN matches a number. Returns composed addr_labels
+    (e.g. "БГ 2.13") ready for `get_chunks_by_addr_label`."""
+    out: list[str] = []
+    for m in _ADDR_RE.finditer(text or ""):
+        prefix = m.group("prefix")
+        tokens = m.group("tokens").rstrip(".,-–")
+        # Normalise the matched prefix to its canonical stored casing by
+        # finding the BOOK_PREFIX value it case-insensitively equals.
+        canon = next(
+            (p for p in _ADDR_PREFIXES if p.lower() == prefix.lower()), prefix
+        )
+        out.append(f"{canon} {tokens}")
+    return out
 
 
 OnEvent = Callable[[str, dict[str, Any]], None]
@@ -155,6 +191,11 @@ class _RawScored:
     # Cross-encoder relevance, set only on the rerank path. Drives ordering
     # and the final cut; `score` (cosine) stays untouched for the gates.
     rerank_score: float | None = None
+    # Hybrid recall: surfaced by the lexical lane / address fast-path, not
+    # dense ANN. Forced members bypass the cosine floor and are guaranteed
+    # into the rerank pool (the cross-encoder then judges them on text).
+    # They still carry their TRUE cosine in `score`, so the gates stay honest.
+    forced: bool = False
 
 
 def _lecture_dedup_key(c: Any) -> tuple:
@@ -176,9 +217,17 @@ async def _rerank_pool(
     `score` stays untouched). On any rerank failure, falls back to the
     cosine ordering for this round.
 
-    Pool is pre-capped to RERANK_POOL_CAP by cosine to bound the call.
+    Pool is pre-capped to RERANK_POOL_CAP by cosine to bound the call. Forced
+    (hybrid lexical / address) hits are guaranteed into the pool past that cap —
+    a lexical-surfaced verse often has a low cosine and would be cut by the
+    pre-cap before the cross-encoder ever judged it on its text.
     """
-    pool = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:RERANK_POOL_CAP]
+    by_cos = sorted(deduped.values(), key=lambda r: r.score, reverse=True)
+    pool = by_cos[:RERANK_POOL_CAP]
+    if len(pool) < len(by_cos):
+        in_pool = {r.dedup_key for r in pool}
+        pool += [r for r in by_cos[RERANK_POOL_CAP:]
+                 if r.forced and r.dedup_key not in in_pool]
     if len(pool) <= 1:
         for r in pool:
             r.rerank_score = r.score
@@ -305,7 +354,7 @@ async def fanout_search_with_boost(
     )
     lectures_disabled = eligible_track_ids is not None and not eligible_track_ids
 
-    async def _one_query(q_vec: list[float], sq_id: int) -> list[_RawScored]:
+    async def _one_query(q_vec: list[float], q_text: str, sq_id: int) -> list[_RawScored]:
         async def _lecture(use_lang: str | None) -> list[_RawScored]:
             if lectures_disabled:
                 return []
@@ -327,17 +376,44 @@ async def fanout_search_with_boost(
                 for s in scored
             ]
 
+        async def _lexical(use_lang: str | None) -> list[_RawScored]:
+            # Hybrid recall lane: full-text (russian + simple) + trigram address
+            # over library chunks — catches addresses / translit / short verses
+            # dense cosine misses. Only on the rerank path (the cross-encoder
+            # re-scores these on text). Never fails the turn — errors → [].
+            if not rerank_active:
+                return []
+            try:
+                scored = await chunk_repo.search_chunks_lexical(
+                    q_text, q_vec, kinds=list(_LIBRARY_KINDS),
+                    source_id=book_id, author_id=author_id, lang=use_lang,
+                    date_from=date_from, date_to=date_to,
+                    top_k=LEXICAL_FETCH_TOP_K, trgm_min_sim=LEXICAL_TRGM_MIN_SIM,
+                )
+            except Exception as exc:  # noqa: BLE001 — lexical must never fail a turn
+                log.warning("fanout_lexical_failed", error=str(exc))
+                return []
+            return [
+                _RawScored(
+                    s.chunk, s.score, s.chunk.item_kind,
+                    _library_dedup_key(s.chunk), sq_id, forced=True,
+                )
+                for s in scored
+            ]
+
         async def _run(use_lang: str | None) -> list[_RawScored]:
             # Verses fetched in their OWN ANN call (own LIMIT) so short verse
             # chunks aren't starved by long commentary/prose that win the shared
-            # cosine top-K. Other library kinds keep one combined fetch.
+            # cosine top-K. Other library kinds keep one combined fetch. The
+            # lexical lane runs alongside (forced members).
             other_lib = [k for k in _LIBRARY_KINDS if k != "verse"]
-            lec, verse_lib, rest_lib = await asyncio.gather(
+            lec, verse_lib, rest_lib, lex = await asyncio.gather(
                 _lecture(use_lang),
                 _library(use_lang, ["verse"]),
                 _library(use_lang, other_lib),
+                _lexical(use_lang),
             )
-            return lec + verse_lib + rest_lib
+            return lec + verse_lib + rest_lib + lex
 
         rows = await _run(lang)
         if not rows and lang is not None:
@@ -347,28 +423,72 @@ async def fanout_search_with_boost(
         # "I picked these after thinking". Floor matches the post-dedup
         # filter so we don't stream obvious noise.
         for r in rows:
-            if r.score < _RELEVANCE_FLOOR:
+            if r.score < _RELEVANCE_FLOOR and not r.forced:
                 continue
             _emit_research_source(on_event, r)
         return rows
 
     # 3. Run the parallel fanout queries.
-    per_query = await asyncio.gather(
-        *(_one_query(v, sq_id) for v, sq_id in zip(q_vecs, sub_query_ids))
-    )
+    per_query = list(await asyncio.gather(
+        *(
+            _one_query(v, txt, sq_id)
+            for v, txt, sq_id in zip(q_vecs, query_texts, sub_query_ids)
+        )
+    ))
+
+    # 3b. Address fast-path. An explicit "БГ 2.13" in the question → exact
+    # verse + commentary fetched deterministically. The lexical lane's trgm
+    # address match dilutes on a verbose query (it compares the WHOLE query
+    # string), so this exact-equality lookup is the robust path. Forced +
+    # authoritative score. Rerank-path only (cosine path stays unchanged).
+    if rerank_active and rerank_query:
+        addr_labels = _parse_addresses(rerank_query)
+        if addr_labels:
+            async def _address(addr: str) -> list[_RawScored]:
+                try:
+                    chunks = await chunk_repo.get_chunks_by_addr_label(
+                        addr, kinds=["verse", "commentary"], lang=lang,
+                    )
+                    if not chunks and lang is not None:
+                        chunks = await chunk_repo.get_chunks_by_addr_label(
+                            addr, kinds=["verse", "commentary"], lang=None,
+                        )
+                except Exception as exc:  # noqa: BLE001 — never fail a turn
+                    log.warning("fanout_address_failed", addr=addr, error=str(exc))
+                    return []
+                return [
+                    _RawScored(
+                        c, ADDRESS_HIT_SCORE, c.item_kind,
+                        _library_dedup_key(c), None, forced=True,
+                    )
+                    for c in chunks
+                ]
+            addr_batches = await asyncio.gather(*(_address(a) for a in addr_labels))
+            for batch in addr_batches:
+                for r in batch:
+                    _emit_research_source(on_event, r)
+                per_query.append(batch)
 
     # 4. Dedup + relevance floor. The rerank path uses a permissive cosine
     # junk-floor instead of 0.45 so the cross-encoder can see the low-cosine
-    # verses; the cosine path keeps the 0.45 floor verbatim.
+    # verses; the cosine path keeps the 0.45 floor verbatim. Forced (hybrid
+    # lexical / address) hits bypass the floor — that's the whole point: they
+    # carry a real (often low) cosine and need the cross-encoder to judge them.
     floor = RERANK_NOISE_PREFLOOR if rerank_active else _RELEVANCE_FLOOR
     deduped: dict[tuple, _RawScored] = {}
     for batch in per_query:
         for r in batch:
-            if r.score < floor:
+            if r.score < floor and not r.forced:
                 continue
             prev = deduped.get(r.dedup_key)
             if prev is None or prev.score < r.score:
+                # Preserve `forced` across the collision: a chunk surfaced by
+                # both dense and the lexical lane stays guaranteed into the pool.
+                if prev is not None and prev.forced:
+                    r.forced = True
                 deduped[r.dedup_key] = r
+            elif r.forced:
+                prev.forced = True
 
     # 5. Rank. Cosine path: sort by cosine, take top-K (unchanged).
     # Rerank path: pre-cap the pool by cosine, cross-encode it, sort by

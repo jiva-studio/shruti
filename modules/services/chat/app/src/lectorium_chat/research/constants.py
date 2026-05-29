@@ -63,6 +63,22 @@ RERANK_RESERVE_FLOOR = 0.40  # cosine floor for reserve eligibility — above
 FINAL_CUT_MIN_VERSES = 1
 FINAL_CUT_MIN_LIBRARY = 1
 
+# ---- Hybrid lexical retrieval (P2) -----------------------------------------
+# A non-cosine recall lane (full-text + pg_trgm address) fused with dense ANN
+# via Reciprocal Rank Fusion. Catches what the English-centric embedder misses:
+# canonical addresses ("БГ 2.13"), Sanskrit transliteration, and short verses.
+# Membership only — the cross-encoder still orders. Active only on the rerank
+# path (the lexical hit needs the reranker to re-score it on its text).
+RRF_K = 60                  # standard RRF constant: score = Σ 1/(RRF_K + rank)
+LEXICAL_FETCH_TOP_K = 24    # per-sub-query lexical fetch (mirror RERANK_FETCH_TOP_K);
+                            # caps the lexical arm so it can't crowd the rerank pool.
+LEXICAL_TRGM_MIN_SIM = 0.3  # pg_trgm similarity threshold for the address `%` match.
+# Authoritative score for an EXACT address the user named in the query
+# ("БГ 2.13"), fetched deterministically. Mirrors the SHORT-path question-ref
+# convention (`canonical_score=0.85`) — an explicitly-named, existing verse is
+# as authoritative as a curator question-attribution.
+ADDRESS_HIT_SCORE = 0.85
+
 # ---- Stage timeouts (asyncio.wait_for) -------------------------------------
 
 # Bumped from initial dev-machine values after a prod smoke run hit
