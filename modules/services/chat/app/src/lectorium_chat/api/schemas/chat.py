@@ -138,6 +138,12 @@ class ChatTurnConfigDto(BaseModel):
     # free-form prose on the same retrieval.
     enable_planner: bool = True
 
+    # When False, the cross-encoder reranker is bypassed in BOTH Stage A
+    # (fanout pool ordering) and Stage B (per-thesis grounding) so the
+    # pipeline runs the bi-encoder cosine path. Default True. Per-turn
+    # kill-switch for eval A/B against the cosine baseline.
+    enable_reranker: bool = True
+
 
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)

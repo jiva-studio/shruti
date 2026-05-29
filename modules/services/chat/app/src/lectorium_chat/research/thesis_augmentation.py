@@ -121,6 +121,7 @@ async def augment_thin_theses(
     router_args: dict[str, Any] | None = None,
     top_k_per_thesis: int = 5,
     fresh_top_k: int = AUGMENT_FRESH_TOP_K,
+    reranker: Any = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Stage 2 — for each thin thesis, do a fresh thesis-targeted ANN
     fetch + re-rank.
@@ -332,6 +333,39 @@ async def augment_thin_theses(
 
         rescored.sort(reverse=True)
         new_top = [idx for _, idx in rescored[:top_k_per_thesis]]
+
+        # Cross-encoder owns the final selection when present: rerank the
+        # SAME pool (current supporting_notes + fresh chunks) against the
+        # thesis statement alone. `_is_thin` detection above stays on
+        # cosine. Any failure ⇒ keep the cosine `new_top` for this thesis.
+        if reranker is not None:
+            pool_idx = [idx for _, idx in rescored]
+            pool_texts: list[str] = []
+            for idx in pool_idx:
+                if 1 <= idx <= len(base_notes):
+                    txt = (base_notes[idx - 1].get("text") or "").strip()
+                else:
+                    env = next(
+                        (e for j, e in fresh_for_this_thesis if j == idx), None
+                    )
+                    txt = (env.get("text") or "").strip() if env else ""
+                pool_texts.append(txt)
+            rerankable = [(idx, txt) for idx, txt in zip(pool_idx, pool_texts) if txt]
+            if rerankable and t.thesis.strip():
+                try:
+                    scored_rr = await reranker.rerank(
+                        t.thesis, [txt for _, txt in rerankable],
+                        top_k=top_k_per_thesis,
+                    )
+                except Exception as exc:  # noqa: BLE001 — never fail a turn
+                    log.warning("augment_rerank_failed", thesis_idx=i, error=str(exc))
+                    scored_rr = None
+                if scored_rr:
+                    new_top = [
+                        rerankable[j][0] for j, _ in scored_rr[:top_k_per_thesis]
+                        if 0 <= j < len(rerankable)
+                    ]
+
         # Defensive: never let augment empty out a thesis. If something
         # weird happened (no fresh, no original), keep the original picks.
         if not new_top:

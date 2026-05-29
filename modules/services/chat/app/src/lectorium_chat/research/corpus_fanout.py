@@ -18,7 +18,15 @@ from lectorium_chat.agent.tools._envelope import (
     library_to_envelope,
 )
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.research.constants import BOOST_BY_KIND, TOPK_PER_QUERY
+from lectorium_chat.research.constants import (
+    BOOST_BY_KIND,
+    RERANK_FETCH_TOP_K,
+    RERANK_MIN_LECTURES,
+    RERANK_NOISE_PREFLOOR,
+    RERANK_POOL_CAP,
+    RERANK_TOP_K,
+    TOPK_PER_QUERY,
+)
 from lectorium_chat.research.models import FanoutResult
 
 
@@ -142,6 +150,9 @@ class _RawScored:
     kind: str           # "lecture" | "verse" | "commentary" | "prose_chapter" | "letter"
     dedup_key: tuple    # used to dedupe across queries and rounds
     sub_query_id: int | None = None
+    # Cross-encoder relevance, set only on the rerank path. Drives ordering
+    # and the final cut; `score` (cosine) stays untouched for the gates.
+    rerank_score: float | None = None
 
 
 def _lecture_dedup_key(c: Any) -> tuple:
@@ -158,6 +169,76 @@ def _lecture_item_id(c: Any) -> str:
 
 def _library_item_id(c: Any) -> str:
     return c.item_id
+
+
+async def _rerank_pool(
+    deduped: dict[tuple, _RawScored],
+    *,
+    reranker: Any,
+    rerank_query: str | None,
+    boosted_flags: dict[tuple, bool],
+) -> list[_RawScored]:
+    """Cross-encode the deduped pool against the question and cut by fixed
+    top-k with a lecture reserve. Sets `rerank_score` on survivors (cosine
+    `score` stays untouched). On any rerank failure, falls back to the
+    cosine ordering for this round.
+
+    Pool is pre-capped to RERANK_POOL_CAP by cosine to bound the call.
+    Curator-boosted items are force-included past the top-k cut.
+    """
+    pool = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:RERANK_POOL_CAP]
+    if len(pool) <= 1:
+        for r in pool:
+            r.rerank_score = r.score
+        return pool
+
+    texts = [(getattr(r.chunk, "text", "") or "").strip() for r in pool]
+    try:
+        scored = await reranker.rerank(rerank_query, texts)
+    except Exception as exc:  # noqa: BLE001 — a turn never fails on the reranker
+        log.warning("fanout_rerank_failed", error=str(exc), pool=len(pool))
+        return sorted(pool, key=lambda r: r.score, reverse=True)[:RERANK_TOP_K]
+
+    for idx, rs in scored:
+        if 0 <= idx < len(pool):
+            pool[idx].rerank_score = rs
+    # Reranker may omit some indices (top_k on its side); anything unscored
+    # sinks below scored items but keeps cosine as a stable tiebreak.
+    ranked_all = sorted(
+        pool,
+        key=lambda r: (r.rerank_score if r.rerank_score is not None else -1.0, r.score),
+        reverse=True,
+    )
+
+    kept = ranked_all[:RERANK_TOP_K]
+    kept_keys = {r.dedup_key for r in kept}
+
+    # Force-include curator-boosted items dropped by the cut.
+    for r in ranked_all[RERANK_TOP_K:]:
+        if boosted_flags.get(r.dedup_key):
+            kept.append(r)
+            kept_keys.add(r.dedup_key)
+
+    # Lecture reserve: guarantee the top RERANK_MIN_LECTURES lectures (by
+    # rerank_score) survive, so a lecture-starved cut can't trip a spurious
+    # coverage-gate regeneration downstream.
+    lectures_in = sum(1 for r in kept if r.kind == "lecture")
+    if lectures_in < RERANK_MIN_LECTURES:
+        for r in ranked_all:
+            if lectures_in >= RERANK_MIN_LECTURES:
+                break
+            if r.kind == "lecture" and r.dedup_key not in kept_keys:
+                kept.append(r)
+                kept_keys.add(r.dedup_key)
+                lectures_in += 1
+
+    # Re-sort the final set so reserve/force-include additions land in
+    # rerank order, not appended at the tail.
+    kept.sort(
+        key=lambda r: (r.rerank_score if r.rerank_score is not None else -1.0, r.score),
+        reverse=True,
+    )
+    return kept
 
 
 async def fanout_search_with_boost(
@@ -178,6 +259,8 @@ async def fanout_search_with_boost(
     date_to: str | None = None,
     book_id: str | None = None,
     on_event: OnEvent | None = None,
+    reranker: Any = None,
+    rerank_query: str | None = None,
 ) -> FanoutResult:
     """One round of fanout. Returns top-K (boosted) envelopes.
 
@@ -192,6 +275,12 @@ async def fanout_search_with_boost(
         return FanoutResult()
     boost_ids = boost_ids or set()
     k = max(1, min(top_k, 16))
+    # Rerank path widens per-sub-query ANN fetch (recall) and drops the
+    # 0.45 cosine pre-floor so the cross-encoder can see ~0.30 verses the
+    # old floor silently killed. Inactive (reranker is None / no query) ⇒
+    # everything below stays on the original cosine path verbatim.
+    rerank_active = reranker is not None and bool((rerank_query or "").strip())
+    fetch_k = RERANK_FETCH_TOP_K if rerank_active else k
 
     # 1. Batched embed.
     query_texts = [q[1] for q in queries]
@@ -214,7 +303,7 @@ async def fanout_search_with_boost(
             if lectures_disabled:
                 return []
             scored = await chunk_repo.search_by_embedding(
-                q_vec, eligible_track_ids=eligible_track_ids, lang=use_lang, top_k=k,
+                q_vec, eligible_track_ids=eligible_track_ids, lang=use_lang, top_k=fetch_k,
             )
             return [
                 _RawScored(s.chunk, s.score, "lecture", _lecture_dedup_key(s.chunk), sq_id)
@@ -224,7 +313,7 @@ async def fanout_search_with_boost(
         async def _library(use_lang: str | None, kinds: list[str]) -> list[_RawScored]:
             scored = await chunk_repo.search_library_by_embedding(
                 q_vec, kinds=kinds, source_id=book_id, author_id=author_id,
-                lang=use_lang, date_from=date_from, date_to=date_to, top_k=k,
+                lang=use_lang, date_from=date_from, date_to=date_to, top_k=fetch_k,
             )
             return [
                 _RawScored(s.chunk, s.score, s.chunk.item_kind, _library_dedup_key(s.chunk), sq_id)
@@ -276,18 +365,31 @@ async def fanout_search_with_boost(
                         boosted_flags[r.dedup_key] = True
 
     # 5. Dedup + relevance floor (after boost so curator-flagged chunks
-    # get a chance to clear the floor).
+    # get a chance to clear the floor). The rerank path uses a permissive
+    # cosine junk-floor instead of 0.45 so the cross-encoder can see the
+    # low-cosine verses; curator-boosted items always clear either floor.
+    floor = RERANK_NOISE_PREFLOOR if rerank_active else _RELEVANCE_FLOOR
     deduped: dict[tuple, _RawScored] = {}
     for batch in per_query:
         for r in batch:
-            if r.score < _RELEVANCE_FLOOR:
+            # Cosine path: floor only (verbatim). Rerank path: curator-
+            # boosted items are force-included past the permissive floor.
+            if r.score < floor and not (rerank_active and boosted_flags.get(r.dedup_key)):
                 continue
             prev = deduped.get(r.dedup_key)
             if prev is None or prev.score < r.score:
                 deduped[r.dedup_key] = r
 
-    # 5. Sort + take top-K.
-    ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
+    # 5. Rank. Cosine path: sort by cosine, take top-K (unchanged).
+    # Rerank path: pre-cap the pool by cosine, cross-encode it, sort by
+    # rerank_score, cut by fixed top-k with a lecture reserve.
+    if rerank_active:
+        ranked = await _rerank_pool(
+            deduped, reranker=reranker, rerank_query=rerank_query,
+            boosted_flags=boosted_flags,
+        )
+    else:
+        ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
 
     # Telemetry: per-kind distribution in the dedup pool (before slicing)
     # vs the top-K. Lets us see when verse-chunks exist in the candidate
@@ -327,12 +429,21 @@ async def fanout_search_with_boost(
             )
         if boosted_flags.get(r.dedup_key):
             env["topic_boosted"] = True
+        # Dual score: cosine `score` set by the envelope builder is left
+        # untouched (every coverage / thin-thesis / attribution gate reads
+        # it); the cross-encoder relevance rides in a separate field that
+        # drives ordering + the final cut only.
+        if r.rerank_score is not None:
+            env["rerank_score"] = r.rerank_score
         # Add dedup_key to envelope for merge_fanout — caller-private field.
         env["_dedup_key"] = r.dedup_key
         envelopes.append(env)
         by_kind.setdefault(r.kind, []).append(env)
 
-    max_score = ranked[0].score if ranked else 0.0
+    # max_score stays the max COSINE of the ranked set so the coverage gate
+    # keeps its tuned semantics (the top-reranked item isn't necessarily the
+    # top-cosine one).
+    max_score = max((r.score for r in ranked), default=0.0)
     return FanoutResult(
         chunks=envelopes,
         by_kind=by_kind,
@@ -341,9 +452,24 @@ async def fanout_search_with_boost(
     )
 
 
+def _order_key(env: dict[str, Any]) -> float:
+    """Ordering score: rerank_score when present (reranked chunks),
+    falling back to cosine `score` (reranker off, or refs that never went
+    through rerank). Keeps the rerank order from being undone by a cosine
+    re-sort."""
+    rs = env.get("rerank_score")
+    if rs is not None:
+        return rs
+    return env.get("score") or 0.0
+
+
 def merge_fanout(a: FanoutResult, b: FanoutResult) -> FanoutResult:
     """Merge two rounds. Dedup on the internal `_dedup_key` field added by
-    `fanout_search_with_boost`; keep max score on conflicts."""
+    `fanout_search_with_boost`; keep the higher cosine score on conflicts;
+    order the merged list by rerank_score (fallback cosine `score`).
+
+    `max_score` stays the max COSINE so the coverage gate's scale-tuned
+    thresholds keep reading the value they were calibrated against."""
     by_key: dict[tuple, dict[str, Any]] = {}
     for r in (a, b):
         for env in r.chunks:
@@ -354,13 +480,13 @@ def merge_fanout(a: FanoutResult, b: FanoutResult) -> FanoutResult:
             prev = by_key.get(key)
             if prev is None or (prev.get("score") or 0.0) < score:
                 by_key[key] = env
-    merged = sorted(by_key.values(), key=lambda e: e.get("score") or 0.0, reverse=True)
+    merged = sorted(by_key.values(), key=_order_key, reverse=True)
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for env in merged:
         by_kind.setdefault(env.get("type") or "unknown", []).append(env)
     return FanoutResult(
         chunks=merged,
         by_kind=by_kind,
-        max_score=merged[0].get("score") if merged else 0.0,
+        max_score=max((e.get("score") or 0.0 for e in merged), default=0.0),
         rounds_executed=max(a.rounds_executed, b.rounds_executed),
     )

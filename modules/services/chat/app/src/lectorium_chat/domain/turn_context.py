@@ -108,6 +108,9 @@ class TurnContext:
     chunk_repo: Any | None = None       # ChunkRepository
     catalog_repo: Any | None = None     # CatalogRepository
     embedder: Any | None = None         # EmbedderPort
+    # Cross-encoder reranker (RerankerPort). None when no provider is
+    # configured / the key is missing → research pipeline uses cosine.
+    reranker: Any | None = None
     pool: Any | None = None             # asyncpg.Pool — for direct attribution lookup
     embed_model: str | None = None      # settings.embed_model — required for attribution lookup
     # Per-deployment embedding dimensionality. The attribution-lookup SQL

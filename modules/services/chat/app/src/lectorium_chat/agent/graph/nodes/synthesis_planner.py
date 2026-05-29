@@ -115,12 +115,18 @@ async def synthesis_planner_node(
         has_intro=outline.intro is not None,
     )
 
-    # Stage 1: lazy commentary attach + per-thesis cosine rerank.
+    # Per-turn cross-encoder kill-switch (Stage B). Off ⇒ pass None so the
+    # per-thesis grounding selection runs the cosine path verbatim.
+    enable_reranker = state.get("config", {}).get("enable_reranker", True)
+    reranker = ctx.reranker if enable_reranker else None
+
+    # Stage 1: lazy commentary attach + per-thesis rerank.
     # Pulls purports ONLY for verses the planner picked, then re-ranks
     # the pool against each thesis text — replaces planner's tentative
-    # LLM-attribution with embedding-based per-thesis ranking. Graceful
-    # degrade: on missing embedder / fetch failure, returns the original
-    # outline + no new notes (synthesizer keeps the planner's picks).
+    # LLM-attribution with per-thesis ranking (cross-encoder when a
+    # reranker is present, else cosine). Graceful degrade: on missing
+    # embedder / fetch failure, returns the original outline + no new
+    # notes (synthesizer keeps the planner's picks).
     enriched, new_commentaries = await rerank_and_attach_commentaries(
         outline,
         tool_results,
@@ -130,6 +136,7 @@ async def synthesis_planner_node(
         lang=state.get("lang"),
         catalog_repo=ctx.catalog_repo,
         on_event=None,  # planner runs after the live SSE progress panel
+        reranker=reranker,
     )
 
     # Stage 2: per-thesis thin-support augmentation.
@@ -146,6 +153,7 @@ async def synthesis_planner_node(
         catalog_repo=ctx.catalog_repo,
         lang=state.get("lang"),
         router_args=state.get("extracted_args") or {},
+        reranker=reranker,
     )
 
     # Emit a one-shot summary event so chat_turn can pull outline-shape

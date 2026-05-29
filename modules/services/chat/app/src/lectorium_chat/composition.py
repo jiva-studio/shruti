@@ -25,6 +25,7 @@ from lectorium_chat.domain.ports.llm_provider import LLMPort
 from lectorium_chat.domain.ports.idempotency_store import IdempotencyStore
 from lectorium_chat.domain.ports.outline_cache import OutlineCache
 from lectorium_chat.domain.ports.pdf_storage import PdfStorage
+from lectorium_chat.domain.ports.reranker import RerankerPort
 from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
 
 
@@ -49,6 +50,9 @@ class AppDeps:
     # Pregel — built once at startup, reused for every chat turn.
     llm: LLMPort
     chat_graph: Any  # langgraph.pregel.Pregel — kept as Any to avoid import here
+    # Cross-encoder reranker. None when no provider is configured / the
+    # API key is missing → the research pipeline degrades to cosine.
+    reranker: RerankerPort | None = None
 
 
 def get_deps(request: Request) -> AppDeps:

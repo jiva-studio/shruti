@@ -311,6 +311,7 @@ async def run_chat_turn(
             chunk_repo=deps.chunk_repo,
             catalog_repo=deps.catalog_repo,
             embedder=deps.embedder,
+            reranker=deps.reranker,
             pool=deps.pool,
             embed_model=deps.settings.embed_model,
             embed_dim=deps.settings.embed_dim,

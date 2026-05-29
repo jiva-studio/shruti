@@ -18,8 +18,8 @@ class _Ctx:
     """Minimal stand-in for TurnContext. Carries the fields the node
     accesses: `llm`, `request_id`, `langfuse_trace_id`, plus the
     rerank-stage collaborators (`embedder`, `chunk_repo`, `aliases`,
-    `catalog_repo`). Real TurnContext has many more fields but they're
-    irrelevant to planning."""
+    `catalog_repo`, `reranker`). Real TurnContext has many more fields but
+    they're irrelevant to planning."""
 
     llm: Any | None = None
     request_id: str = "req-test"
@@ -28,6 +28,7 @@ class _Ctx:
     chunk_repo: Any | None = None
     catalog_repo: Any | None = None
     aliases: Any | None = None
+    reranker: Any | None = None
 
 
 @dataclass

@@ -70,6 +70,11 @@ async def research_worker_node(
     lang = state.get("lang", "ru")
     router_args = state.get("extracted_args", {}) or {}
 
+    # Per-turn cross-encoder kill-switch (Stage A). Off ⇒ pass None so the
+    # fanout runs the cosine path verbatim.
+    enable_reranker = state.get("config", {}).get("enable_reranker", True)
+    reranker = ctx.reranker if enable_reranker else None
+
     cb = (
         langfuse_node_callback(ctx.langfuse_trace_id, "research_worker")
         if ctx.langfuse_trace_id
@@ -91,6 +96,7 @@ async def research_worker_node(
         request_id=ctx.request_id,
         on_event=on_event,
         kv_cache=ctx.kv_cache,
+        reranker=reranker,
         precomputed_query_embedding_task=ctx.embed_task,
         callbacks=[cb] if cb is not None else None,
     )
