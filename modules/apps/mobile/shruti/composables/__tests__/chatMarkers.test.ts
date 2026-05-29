@@ -207,6 +207,36 @@ describe("parseChatMarkers — library verse markers", () => {
   })
 })
 
+describe("parseChatMarkers — chapter-location markers", () => {
+  it("parses [chapter:source/region|label]", () => {
+    const tokens = parseChatMarkers(
+      "Это в Седьмой песни: [chapter:source_NoY8sAlXF1IT/7|Песнь 7 «Наука о Боге»]"
+    )
+    const ch = tokens.find((t) => t.kind === "chapter")
+    expect(ch).toBeTruthy()
+    if (ch && ch.kind === "chapter") {
+      expect(ch.sourceId).toBe("source_NoY8sAlXF1IT")
+      expect(ch.regionToken).toBe("7")
+      expect(ch.caption).toBe("Песнь 7 «Наука о Боге»")
+    }
+  })
+
+  it("treats chapter label as optional", () => {
+    const tokens = parseChatMarkers("[chapter:source_x/12]")
+    const ch = tokens.find((t) => t.kind === "chapter")
+    if (ch?.kind === "chapter") expect(ch.caption).toBe("")
+  })
+
+  it("strips the chapter marker from exported markdown", () => {
+    const md = messageToMarkdown("Ответ. [chapter:source_x/7|Песнь 7]", {
+      lang: "ru",
+      verseLookup: () => null,
+      citeLookup: () => null,
+    })
+    expect(md).toBe("Ответ.")
+  })
+})
+
 describe("parseChatMarkers — markdown blockquote", () => {
   it("parses a simple blockquote run into a 'quote' token", () => {
     const tokens = parseChatMarkers(

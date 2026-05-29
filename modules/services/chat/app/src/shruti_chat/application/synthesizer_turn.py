@@ -165,6 +165,13 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # on the client renders the address; the LLM doesn't need
             # to see it in the note header.
             header = f"[^{ref}]"
+        elif note_type == "location":
+            # Chapter-location note (locate intent). Bare `[^N]` header;
+            # `text` carries the book + canto + chapter-range facts the LLM
+            # frames its one-line answer around. The chapter TITLES render
+            # client-side in `ChapterCard` from the SSE payload, kept out of
+            # the header to avoid the verse-style hallucination priming.
+            header = f"[^{ref}]"
         elif note_type == "commentary":
             # Bare `[^N]` header — symmetric with the verse case above.
             #

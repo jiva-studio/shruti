@@ -88,6 +88,9 @@ class TurnContext:
     # fragment's transcript text is pushed it's NOT re-emitted within
     # the same turn. Mirrors `emitted_verse_refs`.
     emitted_cite_refs: set[int] = field(default_factory=set)
+    # Dedup tracker for `action.kind=chapter` events (locate worker) —
+    # mirrors `emitted_verse_refs`.
+    emitted_chapter_refs: set[int] = field(default_factory=set)
 
     # ── Injected services ──────────────────────────────────────────────
     # Optional fields are typed as `Any | None` at runtime to avoid
@@ -95,6 +98,7 @@ class TurnContext:
     # LLMPort / full toolset. Production composition root supplies them.
     llm: Any | None = None
     research_tools: ToolMap = field(default_factory=dict)
+    locate_tools: ToolMap = field(default_factory=dict)
     catalog_tools: ToolMap = field(default_factory=dict)
     action_tools: ToolMap = field(default_factory=dict)
     help_tools: ToolMap = field(default_factory=dict)

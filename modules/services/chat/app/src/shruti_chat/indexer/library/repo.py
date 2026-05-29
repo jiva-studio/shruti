@@ -14,9 +14,20 @@ behaviour when `library_db_path` is swapped.
 from __future__ import annotations
 
 import asyncio
+import re
 import sqlite3
 from pathlib import Path
 from typing import TypedDict
+
+
+# Imported titles carry stray `\r\n` inside the heading text (gitabase
+# source). Collapse any run of whitespace to a single space so the chapter
+# widget / addr labels render on one clean line.
+_WS = re.compile(r"\s+")
+
+
+def _clean_title(s: str | None) -> str:
+    return _WS.sub(" ", (s or "")).strip()
 
 
 class VerseBody(TypedDict):
@@ -56,3 +67,44 @@ async def fetch_verse_body(
     if not library_db.exists():
         return None
     return await asyncio.to_thread(_fetch_verse_body_sync, library_db, source_id, tokens)
+
+
+def _fetch_titles_sync(
+    library_db: Path, source_id: str, token_prefix: str, lang: str,
+) -> dict[str, str]:
+    """{tokens: title} for one book, optionally limited to a token prefix.
+
+    Per-(source_id, tokens) the title is picked with a lang fallback chain
+    (requested lang → en → any), so a missing localization still yields a
+    heading instead of a blank. Whitespace in titles is normalized.
+    """
+    out: dict[str, str] = {}
+    by_lang: dict[str, dict[str, str]] = {}  # tokens → {lang: title}
+    sql = "SELECT tokens, language, title FROM library_titles WHERE source_id = ?"
+    args: list[str] = [source_id]
+    if token_prefix:
+        sql += " AND tokens LIKE ?"
+        args.append(token_prefix + "%")
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        for tokens, language, title in conn.execute(sql, args):
+            by_lang.setdefault(tokens, {})[language or ""] = _clean_title(title)
+    for tokens, variants in by_lang.items():
+        title = variants.get(lang) or variants.get("en") or next(iter(variants.values()), "")
+        if title:
+            out[tokens] = title
+    return out
+
+
+async def fetch_titles(
+    library_db: Path, source_id: str, token_prefix: str = "", lang: str = "ru",
+) -> dict[str, str]:
+    """Async wrapper around the section-title (canto/chapter heading) read.
+
+    Returns `{tokens: title}` for the book — e.g. {"7": "Песнь 7 …",
+    "7.5": "Махараджа Прахлада …"}. Empty dict if the DB is absent or the
+    book has no titles, so locate degrades to bare addresses."""
+    if not library_db.exists():
+        return {}
+    return await asyncio.to_thread(
+        _fetch_titles_sync, library_db, source_id, token_prefix, lang,
+    )

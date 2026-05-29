@@ -94,6 +94,8 @@ def route_after_router(state: ChatState) -> str:
         return "catalog_worker" if _has_catalog_hint(state) else "research_worker"
     if intent == "research":
         return "research_worker"
+    if intent == "locate":
+        return "locate_worker"
     return "synthesizer"
 
 

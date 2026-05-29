@@ -106,6 +106,11 @@ export type ActionPayload =
       readonly id: string
       readonly payload: CiteTranscriptPayload
     }
+  | {
+      readonly kind: "chapter"
+      readonly id: string
+      readonly payload: ChapterPayload
+    }
 
 /** Discriminator for `research_source` events — what kind of corpus
  *  item the research pipeline is inspecting right now. */
@@ -209,6 +214,18 @@ export interface CiteTranscriptPayload {
   readonly start_ms: number
   readonly end_ms: number
   readonly text: string
+}
+
+/** Wire shape of a chapter-location region — carried by an `action`
+ *  event with `kind: "chapter"` (locate intent), arriving ahead of the
+ *  prose delta with the `[chapter:source_id/region_token|label]` marker.
+ *  The store caches it under `${source_id}|${region_token}` so
+ *  ChapterCard renders the canto/chapter list instead of the chip. */
+export interface ChapterPayload {
+  readonly source_id: string
+  readonly region_token: string
+  readonly region_label: string
+  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
 }
 
 /** Wire shape of the alias map emitted by the agent. Keys are integer
@@ -1048,6 +1065,32 @@ function parseCiteTranscriptPayload(p: Record<string, unknown>): CiteTranscriptP
   return { track_id: trackId, start_ms: startMs, end_ms: endMs, text }
 }
 
+function parseChapterPayload(p: Record<string, unknown>): ChapterPayload | null {
+  const sourceId = typeof p.source_id === "string" ? p.source_id : ""
+  // region_token may be "" for book-level regions (e.g. BG) — that's valid.
+  const regionToken = typeof p.region_token === "string" ? p.region_token : null
+  if (!sourceId || regionToken === null) return null
+  const regionLabel = typeof p.region_label === "string" ? p.region_label : ""
+  const chapters: { tokens: string; title: string }[] = []
+  if (Array.isArray(p.chapters)) {
+    for (const c of p.chapters) {
+      if (c && typeof c === "object") {
+        const tokens =
+          typeof (c as Record<string, unknown>).tokens === "string"
+            ? (c as Record<string, string>).tokens
+            : ""
+        const title =
+          typeof (c as Record<string, unknown>).title === "string"
+            ? (c as Record<string, string>).title
+            : ""
+        if (tokens) chapters.push({ tokens, title })
+      }
+    }
+  }
+  if (chapters.length === 0) return null
+  return { source_id: sourceId, region_token: regionToken, region_label: regionLabel, chapters }
+}
+
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
   const trackId = typeof p.track_id === "string" ? p.track_id : null
   const itemsRaw = Array.isArray(p.items) ? p.items : null
@@ -1146,6 +1189,10 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
   if (kind === "cite_transcript") {
     const cp = parseCiteTranscriptPayload(body)
     return cp ? { kind: "cite_transcript", id, payload: cp } : null
+  }
+  if (kind === "chapter") {
+    const chp = parseChapterPayload(body)
+    return chp ? { kind: "chapter", id, payload: chp } : null
   }
   return null
 }
