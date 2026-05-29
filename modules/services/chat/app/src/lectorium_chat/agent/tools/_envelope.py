@@ -94,7 +94,7 @@ def lecture_to_envelope(
     timecodes into its prose, duplicating what the citation chip
     already shows.
     """
-    ref = alias_map.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms)
+    ref = alias_map.alias_chunk(chunk.track_id, chunk.start_ms, chunk.end_ms, lang=chunk.lang)
     meta: dict[str, Any] = {"start_ms": chunk.start_ms, "end_ms": chunk.end_ms}
     if chunk.reference_source_id:
         meta["reference_source_id"] = chunk.reference_source_id

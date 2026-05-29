@@ -50,8 +50,12 @@ def test_lecture_to_envelope_strips_track_id() -> None:
     assert env["meta"]["start_ms"] == 12_000
     assert env["meta"]["end_ms"] == 15_000
 
-    # Ref resolves back to original track_id (the alias map owns the secret)
-    assert aliases.resolve(env["ref"]) == ChunkRef("track_OkPVGYhR5PPu", 12_000, 15_000)
+    # Ref resolves back to original track_id (the alias map owns the secret).
+    # The fragment's transcript lang rides along so flush_cite_payloads can
+    # re-fetch the snippet text with the right language filter.
+    assert aliases.resolve(env["ref"]) == ChunkRef(
+        "track_OkPVGYhR5PPu", 12_000, 15_000, lang="ru"
+    )
 
 
 def test_lecture_to_envelope_includes_reference_source_id() -> None:
