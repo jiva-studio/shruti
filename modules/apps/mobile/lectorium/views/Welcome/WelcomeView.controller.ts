@@ -9,6 +9,8 @@ import {
 } from "./composables/checkForUpdatesInBackground.js"
 import { useDbSchemeRetry } from "./composables/useDbSchemeRetry.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
+import { findRegion, getRegions, setRegions } from "@lectorium/services/regionsRegistry.js"
+import type { RemoteAppConfig } from "@lib/domain/config.js"
 
 const crossfadeAnimation: AnimationBuilder = (_, opts) => {
   const enter = createAnimation().addElement(opts.enteringEl).fromTo("opacity", 0, 1).duration(300)
@@ -65,6 +67,20 @@ export function useWelcomeController(
   const error = ref<string | null>(null)
   const progress = ref<number>(0)
 
+  /**
+   * Adopt a freshly-fetched `regions` block: replace + persist the runtime
+   * region list, then re-point the active server. Same id → picks up the
+   * new endpoints; a removed active region → falls back to the first
+   * region. An empty/invalid block is ignored (keeps the current list).
+   */
+  function applyRemoteRegions(config: RemoteAppConfig): void {
+    if (!config.regions) return
+    if (!setRegions(config.regions)) return
+    const activeId = lectorium.activeServer.value.id
+    const targetId = findRegion(activeId) ? activeId : getRegions()[0]!.id
+    lectorium.setActiveServerById(targetId)
+  }
+
   function buildLocatorDeps(): ResolveContentDatabaseDeps {
     return {
       config: {
@@ -78,6 +94,7 @@ export function useWelcomeController(
       databaseFetcher: lectorium.databaseFetcher,
       serverProber: lectorium.serverProber,
       onServerResolved: (result) => lectorium.setActiveServerById(result.serverId),
+      applyRemoteConfig: applyRemoteRegions,
       loadSavedPreferredServerId: async () => {
         const stored = await lectorium.preferences.get(PREFERRED_SERVER_KEY)
         return stored ?? undefined
@@ -124,6 +141,7 @@ export function useWelcomeController(
       databaseFetcher: base.databaseFetcher,
       serverProber: lectorium.serverProber,
       onServerResolved: base.onServerResolved,
+      applyRemoteConfig: base.applyRemoteConfig,
       loadSavedPreferredServerId: base.loadSavedPreferredServerId,
       persistPreferredServerIdIfChanged: async (resolvedId) => {
         const current = await lectorium.preferences.get(PREFERRED_SERVER_KEY)

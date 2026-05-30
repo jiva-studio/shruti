@@ -222,6 +222,32 @@ returns a `run_id`. Same four management tools cover them all:
 | `catalog.status` | Snapshot version + dictionary counts |
 | `catalog.publish` | **Async**: bump version, copy `current.db` → `public/db/lectorium.{ver}.db`, upload `public/` and `artifacts/` to S3, merge `public/config.json`. Returns `{run_id, kind: "publish"}`. **Incremental by default** — HEAD on each S3 object, skips when size matches. Pass `force_full=true` to re-upload everything. Excludes runtime-only files (`*.db-shm`, `*.db-wal`, `*.bak-*`). |
 
+### Config (local `config.json`: `regions` + `proactive`)
+
+The human-edited config sections live in a local
+`artifacts/catalog/config.json` (package `configdoc`):
+
+- **`regions`** — CDN/region endpoints (`id`, `name`, `urlTemplate`,
+  `shareAudioUrl`, `shareVideoUrl`, `authBaseUrl`, `chatBaseUrl` — the mobile
+  `CdnServer` shape) the app downloads on startup.
+- **`proactive`** — agent-initiated chat rules + holiday calendar + master
+  switch (edited via the `catalog.proactive.*` tools, same file).
+
+The CRUD tools **edit the local file only — they do NOT publish to S3.**
+Publishing is a separate, explicit step so a server/IP or proactive change
+never rides on the catalog DB's version ladder:
+
+| Tool | Purpose |
+|---|---|
+| `catalog.config.regions.list` | List regions from local `config.json` |
+| `catalog.config.regions.get` | One region by `id` (`not_found` if absent) |
+| `catalog.config.regions.upsert` | Add/replace one region by `id` (validated: https URLs, `urlTemplate` must contain `{path}`) |
+| `catalog.config.regions.remove` | Remove one region by `id` (`conflict` if it's the last one) |
+| `catalog.config.publish` | **Push `regions` + `proactive` from local `config.json` to S3 `public/config.json` on every target — config only, no DB, no version bump.** Preserves `databases` / `library`. Sections absent locally are left untouched on S3. |
+
+`catalog.publish` (the full publish, above) re-ships these same sections from
+the local `config.json` alongside the DB, so config + DB stay in sync.
+
 ### Dictionaries (CRUD; `author`, `location`, `source`, `tag`)
 
 | Tool | Purpose |

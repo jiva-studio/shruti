@@ -21,6 +21,7 @@ export interface CheckForUpdatesDeps extends DatabaseLocatorDeps {
   databaseFetcher: IDatabaseFetcher
   serverProber: IServerProber
   onServerResolved(result: ServerProbeResult): void
+  applyRemoteConfig(config: RemoteAppConfig): void
   loadSavedPreferredServerId(): Promise<string | undefined>
   persistPreferredServerIdIfChanged(resolvedId: string): void
 }
@@ -35,6 +36,7 @@ export async function checkForUpdatesInBackground(deps: CheckForUpdatesDeps): Pr
     deps.onServerResolved(probeResult)
 
     const config = probeResult.config as RemoteAppConfig
+    deps.applyRemoteConfig(config)
     const latestVersion = findLatestCompatibleVersion(deps, config)
     if (!latestVersion) return
 

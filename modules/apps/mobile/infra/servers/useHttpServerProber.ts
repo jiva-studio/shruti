@@ -1,4 +1,4 @@
-import { buildServerUrl, SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import type { IServerProber, ServerProbeResult } from "@ports/app/index.js"
 
 /**
@@ -6,11 +6,17 @@ import type { IServerProber, ServerProbeResult } from "@ports/app/index.js"
  * returning the first that responds with valid JSON for `configPath`,
  * plus the parsed body (which is the remote config — reused by the
  * Welcome flow so the successful probe doubles as the config download).
+ *
+ * `getServers` is injected by the composition root (it reads the runtime
+ * region registry) — infra must not reach into the app layer itself.
  */
-export function useHttpServerProber(timeoutMs = 8000): IServerProber {
+export function useHttpServerProber(
+  getServers: () => readonly CdnServer[],
+  timeoutMs = 8000
+): IServerProber {
   return {
     async probe(configPath, preferredServerId) {
-      const ordered = buildOrderedList(preferredServerId)
+      const ordered = buildOrderedList(getServers(), preferredServerId)
 
       for (const server of ordered) {
         const url = buildServerUrl(server, configPath)
@@ -32,9 +38,9 @@ export function useHttpServerProber(timeoutMs = 8000): IServerProber {
   }
 }
 
-function buildOrderedList(preferredServerId?: string): CdnServer[] {
-  if (!preferredServerId) return [...SERVERS]
-  const preferred = SERVERS.find((s) => s.id === preferredServerId)
-  if (!preferred) return [...SERVERS]
-  return [preferred, ...SERVERS.filter((s) => s.id !== preferredServerId)]
+function buildOrderedList(servers: readonly CdnServer[], preferredServerId?: string): CdnServer[] {
+  if (!preferredServerId) return [...servers]
+  const preferred = servers.find((s) => s.id === preferredServerId)
+  if (!preferred) return [...servers]
+  return [preferred, ...servers.filter((s) => s.id !== preferredServerId)]
 }

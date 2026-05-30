@@ -17,63 +17,65 @@ import (
 
 	adminconfigapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
-	titleuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/title"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
+	configpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/dictcrud"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/refresh"
+	catalogregions "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/regions"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/commit"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/extractmeta"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/ingest"
+	attributionapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/attribution"
 	librarypublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/publish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/normalize"
 	reviewuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/review"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runner"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/runpipeline"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/selecttracks"
+	titleuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/title"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/transcribe"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/config"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
+	adminconfigrt "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/adminconfig/runtime"
+	pythonalign "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/alignpdf/python"
+	openaicompatattribtranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/audiostore/fs"
 	resolverchain "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/chain"
 	exactresolver "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/exact"
 	openaicompatresolver "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/catalog/sqlite"
-	sqlitelibrary "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/library/sqlite"
 	httpcdn "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/cdn/http"
 	openaicompattranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/dicttranslate/openaicompat"
-	openaicompatattribtranslate "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/attributiontranslate/openaicompat"
-	attributionapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/library/attribution"
+	osfs "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/fs/os"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/glossary"
+	sha256hash "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/hashing/sha256"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/ids/nanoid"
-	adminconfigrt "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/adminconfig/runtime"
 	sqliteregistry "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/lakeregistry/sqlite"
+	sqlitelibrary "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/library/sqlite"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/metadata/openaicompat"
-	openaicompattitle "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/title/openaicompat"
 	reviewreg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review"
 	openaicompatreview "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/openaicompat"
 	throttledreview "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/review/throttled"
-	pythonalign "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/alignpdf/python"
 	sqliteruns "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/runregistry/sqlite"
-	razdelsplit "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sentencesplit/razdel"
-	alignpdfport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
-	glossaryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/glossary"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
 	awss3 "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/s3/aws"
-	osfs "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/fs/os"
-	sha256hash "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/hashing/sha256"
+	razdelsplit "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/tagger/id3v2"
+	openaicompattitle "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/title/openaicompat"
 	transcribereg "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcribe"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcribe/transcriberservice"
 	fstranscript "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/transcriptstore/fs"
-	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 	mcpsrv "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/tools"
+	alignpdfport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/alignpdf"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/dicttranslate"
+	glossaryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/glossary"
+	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/sentencesplit"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/worker"
 )
 
@@ -442,12 +444,12 @@ func main() {
 			OutDir: cfg.Out,
 		},
 		Review: reviewuc.UseCase{
-			Registry:           registry,
-			Transcripts:        transcriptStore,
-			Reviewers:          reviewRegistry,
-			Splitter:           splitterOrNil(sentenceSplitter),
-			AlignPDF:           alignPDFOrNil(pdfAligner, &alignPDFUC),
-			OutDir:             cfg.Out,
+			Registry:    registry,
+			Transcripts: transcriptStore,
+			Reviewers:   reviewRegistry,
+			Splitter:    splitterOrNil(sentenceSplitter),
+			AlignPDF:    alignPDFOrNil(pdfAligner, &alignPDFUC),
+			OutDir:      cfg.Out,
 			DefaultAttemptsFor: func(language string) []reviewuc.Attempt {
 				src := cfg.Review.DefaultReviewAttempts(language)
 				out := make([]reviewuc.Attempt, len(src))
@@ -601,6 +603,19 @@ func main() {
 		UseCase: catalogproactive.UseCase{
 			OutDir: cfg.Out,
 			Mu:     catalogOpMutex,
+		},
+	}
+	deps.Regions = tools.RegionsDeps{
+		UseCase: catalogregions.UseCase{
+			OutDir: cfg.Out,
+			Mu:     catalogOpMutex, // share with proactive + publishers (one config.json writer at a time)
+		},
+	}
+	deps.ConfigPublish = tools.ConfigPublishDeps{
+		UseCase: configpublish.UseCase{
+			OutDir:  cfg.Out,
+			Targets: publishTargets,
+			OpMutex: catalogOpMutex,
 		},
 	}
 
@@ -807,7 +822,6 @@ func loadGlossaryOrNil(override string) *glossary.Glossary {
 	fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(g.Entries), path)
 	return g
 }
-
 
 func mustMkdirAll(p string) {
 	if err := os.MkdirAll(p, 0o755); err != nil {

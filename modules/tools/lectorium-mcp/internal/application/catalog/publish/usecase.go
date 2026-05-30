@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configdoc"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	s3port "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/s3"
 )
@@ -80,14 +81,6 @@ func (m configManifest) setDatabases(entries []databaseEntry) {
 	m["databases"] = raw
 }
 
-func (m configManifest) setProactive(raw json.RawMessage) {
-	if len(raw) == 0 {
-		delete(m, "proactive")
-		return
-	}
-	m["proactive"] = raw
-}
-
 func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 	if uc.OpMutex != nil {
 		uc.OpMutex.Lock()
@@ -124,17 +117,21 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("current.db missing — refresh first: %w", err)
 	}
 
-	// Optional proactive block. Edit this JSON to ship new holidays or
-	// retune rule cooldowns without an app release; absence is fine and
-	// reverts the published config to "no proactive" (clients fall back
-	// to bundled defaults).
-	proactivePath := filepath.Join(uc.OutDir, "artifacts", "catalog", "proactive.json")
-	var proactiveBlock json.RawMessage
-	if data, readErr := os.ReadFile(proactivePath); readErr == nil {
-		if !json.Valid(data) {
-			return Result{}, fmt.Errorf("proactive.json is not valid JSON")
+	// Config sections (regions + proactive) live in the local config.json,
+	// edited by catalog.config.regions.* / catalog.proactive.*. A full
+	// publish re-ships whichever sections exist locally so config + DB stay
+	// in sync; a section absent locally is left untouched on the bucket
+	// (never cleared — clearing regions would strand clients).
+	cfgStore := configdoc.Store{OutDir: uc.OutDir}
+	managedSections := map[string]json.RawMessage{}
+	for _, key := range []string{"proactive", "regions"} {
+		raw, present, secErr := cfgStore.Section(key)
+		if secErr != nil {
+			return Result{}, secErr
 		}
-		proactiveBlock = json.RawMessage(data)
+		if present {
+			managedSections[key] = raw
+		}
 	}
 	dbKey := fmt.Sprintf("public/db/lectorium.%d.db", cur)
 
@@ -205,12 +202,14 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 			filtered = filtered[:5]
 		}
 		cfg.setDatabases(filtered)
-		// Always write the latest proactive block from disk — never
-		// merge with whatever existed on the bucket. The on-disk file
-		// is the source of truth (under git, reviewed in PRs).
-		cfg.setProactive(proactiveBlock)
-		// Other top-level keys (e.g. `library` written by library.publish)
-		// stay untouched because we never touched cfg[<other>].
+		// Re-ship the locally-edited config sections (regions + proactive)
+		// from config.json — the local file is the source of truth. Sections
+		// absent locally are left as-is on the bucket. Other top-level keys
+		// (e.g. `library` written by library.publish) stay untouched because
+		// we never touch them.
+		for key, raw := range managedSections {
+			cfg[key] = raw
+		}
 		body, _ := json.MarshalIndent(cfg, "", "  ")
 		if err := target.Put(ctx, "public/config.json", "application/json", bytes.NewReader(body), int64(len(body))); err != nil {
 			return Result{}, fmt.Errorf("put config.json (%s): %w", target.Name(), err)
