@@ -28,7 +28,9 @@ const wrapStyle = computed(() => ({
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  overflow: hidden;
+  /* No `overflow: hidden` here: the disc background and the <img> are both
+   * already circular via border-radius, so clipping buys nothing visually
+   * but lets the tab button crop the bottom of the icon on iOS (#769). */
   /* Subtle tinted disc behind the icon so the tab bar reads it as a
    * "branded" entry rather than a stray PNG floating among Tabler
    * glyphs. Opacity tuned to feel translucent without washing the icon. */
