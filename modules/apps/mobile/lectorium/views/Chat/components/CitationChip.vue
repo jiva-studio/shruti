@@ -105,7 +105,7 @@ function pauseSelf(): void {
   el.pause()
 }
 
-inline.registerPauser(pauseSelf)
+const unregisterPauser = inline.registerPauser(pauseSelf)
 
 const isPlaying = ref(false)
 const isPreparing = ref(false)
@@ -383,6 +383,7 @@ watch(
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
   audioEl.value?.pause()
+  unregisterPauser()
 })
 </script>
 

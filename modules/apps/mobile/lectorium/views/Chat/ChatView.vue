@@ -82,8 +82,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonContent, IonPage } from "@ionic/vue"
+import { IonContent, IonPage, onIonViewWillLeave } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
+import { pauseAllInlineAudio } from "@lectorium/composables/useNotesInlineAudio.js"
 import { PageSticker } from "@ui/primitives/index.js"
 import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
@@ -134,6 +135,15 @@ watch(inputFocusToken, () => {
   // Ping from `chatStore.requestInputFocus()` — bring the textarea up
   // so the user can type immediately after the Ask-Sadhu navigation.
   inputBarRef.value?.focus()
+})
+
+// Ionic keeps this page mounted in the tab's router outlet, so no
+// per-component unmount fires when the user navigates away. Stop any
+// inline citation audio on leave so it doesn't keep playing in the
+// background. (Session switch is handled in the controller's
+// route.query.session watcher.)
+onIonViewWillLeave(() => {
+  pauseAllInlineAudio()
 })
 
 const headerTitle = computed<string>(() => {

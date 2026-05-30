@@ -23,6 +23,23 @@ export function registerMainPlayerPauser(fn: () => void): () => void {
   return () => pausers.delete(fn)
 }
 
+/**
+ * Pause every registered inline player. Views that host a stack of
+ * inline players (e.g. Chat citation chips) call this on view-leave and
+ * session switch: Ionic keeps the page mounted in the router outlet, so
+ * per-chip unmount cleanup never fires and audio would otherwise keep
+ * playing after the user navigates away.
+ */
+export function pauseAllInlineAudio(): void {
+  for (const fn of pausers) {
+    try {
+      fn()
+    } catch {
+      // best-effort — one player's failure must not block the rest
+    }
+  }
+}
+
 export function useNotesInlineAudio(): {
   registerPauser: (fn: () => void) => () => void
   notifyPlaying: (selfPause: () => void) => void
