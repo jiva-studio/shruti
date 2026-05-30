@@ -84,6 +84,15 @@ ion-tab-button {
   --ripple-color: rgba(0, 0, 0, 0);
 }
 
+/* The Sadhu icon is rendered at 48px — larger than the 26px Tabler glyphs —
+ * so it overflows the tab button's content box. Ionic's native button clips
+ * that overflow, cutting the bottom of the icon on iOS (#769). Let the chat
+ * tab and its native part render the icon in full. */
+.chat-tab-button,
+.chat-tab-button::part(native) {
+  overflow: visible;
+}
+
 /* When the chat tab is active, just bump the disc behind the Sadhu icon
  * a bit brighter — same colour family, no ring, no halo. */
 ion-tab-button.chat-tab-button.tab-selected :deep(.app-icon-wrap) {
