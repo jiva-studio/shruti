@@ -10,8 +10,6 @@ export { default as SmartLibrarySettingsItem } from "./SmartLibrarySettingsItem.
 export { default as SmartLibraryDialog } from "./SmartLibraryDialog.vue"
 export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vue"
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"
-export { default as TimePicker } from "./TimePicker.vue"
-export { default as TimePickerDialog } from "./TimePickerDialog.vue"
 export { default as SettingsAppearanceGroup } from "./groups/SettingsAppearanceGroup.vue"
 export { default as SettingsDangerGroup } from "./groups/SettingsDangerGroup.vue"
 export { default as SettingsDataGroup } from "./groups/SettingsDataGroup.vue"
