@@ -26,7 +26,7 @@ const props = defineProps<{ pageCount: number; initialPage?: number }>()
 const emit = defineEmits<{ "update:index": [index: number] }>()
 
 const viewportRef = ref<HTMLElement | null>(null)
-const { page, dragOffset, pointerId, onPointerDown, goTo } = useHorizontalCarousel({
+const { page, dragOffset, pointerId, viewportWidth, onPointerDown, goTo } = useHorizontalCarousel({
   pageCount: props.pageCount,
   initialPage: props.initialPage,
   viewportEl: () => viewportRef.value,
@@ -37,12 +37,13 @@ watch(
   () => props.initialPage,
   (v) => {
     if (typeof v === "number") goTo(v)
-  }
+  },
+  // Run after layout so the transform is recomputed against a measured width.
+  { flush: "post" }
 )
 
 const trackStyle = computed(() => {
-  const w = viewportRef.value?.getBoundingClientRect().width ?? 0
-  const tx = -page.value * w + dragOffset.value
+  const tx = -page.value * viewportWidth.value + dragOffset.value
   return { transform: `translate3d(${tx}px, 0, 0)` }
 })
 </script>
