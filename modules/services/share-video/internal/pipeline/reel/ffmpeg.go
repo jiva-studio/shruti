@@ -120,6 +120,13 @@ func (c Composer) runTextTrack(ctx context.Context, listPath, outPath string) er
 		"-f", "concat", "-safe", "0",
 		"-i", listPath,
 		"-c:v", "qtrle",
+		// Pin the alpha-carrying pixel format. Without this, ffmpeg infers
+		// the track's pix_fmt from the FIRST frame: when a title card is
+		// prepended it is an opaque PNG (gg fills the whole canvas), so the
+		// whole qtrle track is encoded as rgb24 and every transparent word
+		// frame collapses to opaque black — Pass 2's overlay then hides the
+		// background entirely. argb keeps the alpha channel regardless.
+		"-pix_fmt", "argb",
 		"-vsync", "vfr",
 		"-loglevel", "warning",
 		outPath,
@@ -202,4 +209,3 @@ func runFFmpeg(ctx context.Context, bin string, args []string) error {
 	}
 	return nil
 }
-
