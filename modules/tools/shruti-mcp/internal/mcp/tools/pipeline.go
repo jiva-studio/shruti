@@ -22,17 +22,20 @@ import (
 // pipeline_run is the single async dispatcher for selector-driven work.
 //
 // `op` chooses the kind of work:
-//   pipeline       (default) — linear ingest→committed pipeline. Honours
-//                              from / only / up_to / force / review_models.
-//   audio_tag      — re-tag mp3 ID3 tags for matched (track, language) pairs.
-//   align_pdf      — run PDF→ASR aligner; auto-narrows has_pdf=true.
-//   audit          — corpus health walk; aggregator output lives in run.Result.
-//   titles_refresh — LLM-rederive titles for matched (track, language) pairs.
+//
+//	pipeline       (default) — linear ingest→committed pipeline. Honours
+//	                           from / only / up_to / force / review_models.
+//	audio_tag      — re-tag mp3 ID3 tags for matched (track, language) pairs.
+//	align_pdf      — run PDF→ASR aligner; auto-narrows has_pdf=true.
+//	audit          — corpus health walk; aggregator output lives in run.Result.
+//	titles_refresh — LLM-rederive titles for matched (track, language) pairs.
 //
 // Per-stage re-run on a selector:
-//   only=<stage>           run exactly that stage (cascade-resets dependents,
-//                          rolls back commits if upstream of committed).
-//   from=<stage> up_to=<Y> run the stage range, same reset semantics.
+//
+//	only=<stage>           run exactly that stage (cascade-resets dependents,
+//	                       rolls back commits if upstream of committed).
+//	from=<stage> up_to=<Y> run the stage range, same reset semantics.
+//
 // only=ingested is rejected (re-ingesting re-hashes the file → mints a new
 // track_id → orphans every catalog row; pass force=true with a fresh path
 // instead).
@@ -324,6 +327,8 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterCatalogStatus(s, deps.Catalog)
 	RegisterCatalogPublish(s, deps)
 	RegisterCatalogProactive(s, deps.Proactive)
+	RegisterCatalogRegions(s, deps.Regions)
+	RegisterConfigPublish(s, deps.ConfigPublish)
 	RegisterCatalogReadTools(s, deps.Catalog)
 	RegisterDictFinds(s, deps.Find)
 	RegisterLibrary(s, deps.Library)

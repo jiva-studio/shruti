@@ -30,7 +30,7 @@ function makeClient(
   }
 ) {
   return createFailoverClient({
-    servers: SERVERS,
+    getServers: () => SERVERS,
     getPreferredId: () => opts.preferredId ?? "global",
     pickBaseUrl: (s) => s.authBaseUrl,
     ...opts,
@@ -173,7 +173,7 @@ describe("createFailoverClient", () => {
     const fetchImpl = vi.fn()
     const onPromoteFallback = vi.fn()
     const client = createFailoverClient({
-      servers: SERVERS,
+      getServers: () => SERVERS,
       getPreferredId: () => preferred,
       pickBaseUrl: (s) => s.authBaseUrl,
       onPromoteFallback,
@@ -225,7 +225,7 @@ describe("createFailoverClient", () => {
   it("resolveUrl uses the current preferred server", async () => {
     let preferred = "global"
     const client = createFailoverClient({
-      servers: SERVERS,
+      getServers: () => SERVERS,
       getPreferredId: () => preferred,
       pickBaseUrl: (s) => s.chatBaseUrl,
       fetchImpl: vi.fn(),

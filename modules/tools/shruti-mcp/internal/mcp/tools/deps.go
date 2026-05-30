@@ -25,34 +25,36 @@ import (
 // Deps is the bundle of use cases and ports the MCP tools need. As phases land,
 // new fields get added; main.go wires them in the composition root.
 type Deps struct {
-	Registry    lakeport.Registry
-	Transcripts transcriptport.Store
-	Ingest     ingest.UseCase
-	Normalize  normalize.UseCase
-	Metadata   extractmeta.UseCase
-	Transcribe transcribe.UseCase
-	Review     review.UseCase
-	AlignPDF   alignpdf.UseCase
-	RefreshTitle title.UseCase
-	Commit           commit.UseCase
-	SetTrackMetadata commit.SetTrackMetadataUseCase
-	AudioTag         audiotag.UseCase
-	Pipeline         runpipeline.UseCase
-	Pool             *worker.Pool
-	Publish          publish.UseCase
-	SelectTracks     selecttracks.UseCase
-	Runs             runregistry.Registry
-	Runner           *runner.Runner
-	DictCRUD         DictCRUDDeps
-	PackCRUD         PackCRUDDeps
-	Catalog          CatalogDeps
-	Library             LibraryDeps
-	LibraryAttribution  LibraryAttributionDeps
-	LibraryPublish      LibraryPublishDeps
-	Proactive        ProactiveDeps
-	Find       FindDeps
-	InDir      string
-	OutDir     string
+	Registry           lakeport.Registry
+	Transcripts        transcriptport.Store
+	Ingest             ingest.UseCase
+	Normalize          normalize.UseCase
+	Metadata           extractmeta.UseCase
+	Transcribe         transcribe.UseCase
+	Review             review.UseCase
+	AlignPDF           alignpdf.UseCase
+	RefreshTitle       title.UseCase
+	Commit             commit.UseCase
+	SetTrackMetadata   commit.SetTrackMetadataUseCase
+	AudioTag           audiotag.UseCase
+	Pipeline           runpipeline.UseCase
+	Pool               *worker.Pool
+	Publish            publish.UseCase
+	SelectTracks       selecttracks.UseCase
+	Runs               runregistry.Registry
+	Runner             *runner.Runner
+	DictCRUD           DictCRUDDeps
+	PackCRUD           PackCRUDDeps
+	Catalog            CatalogDeps
+	Library            LibraryDeps
+	LibraryAttribution LibraryAttributionDeps
+	LibraryPublish     LibraryPublishDeps
+	Proactive          ProactiveDeps
+	Regions            RegionsDeps
+	ConfigPublish      ConfigPublishDeps
+	Find               FindDeps
+	InDir              string
+	OutDir             string
 
 	// AdminConfig backs admin_config_get / admin_config_set. The MCP
 	// handler is a thin dispatcher; validation + dispatch lives in

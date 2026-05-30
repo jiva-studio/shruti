@@ -1,11 +1,12 @@
 import { useShruti } from "@shruti/shruti.js"
-import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import type { CdnServer } from "@lib/domain/servers.js"
+import { getRegions } from "@shruti/services/regionsRegistry.js"
 
 export interface ServerFallbackReturn {
   /**
    * Build the runtime fallback candidate list: the currently-active CDN
    * first (so the happy path hits it on the first attempt), then every
-   * other registered server in `SERVERS` order. Read fresh on every
+   * other region in registry order. Read fresh on every
    * call — `activeServer` is a `Ref` and may have been promoted by a
    * previous fallback in this session.
    */
@@ -37,7 +38,7 @@ export function useServerFallback(): ServerFallbackReturn {
 
   function candidates(): CdnServer[] {
     const active = app.activeServer.value
-    return [active, ...SERVERS.filter((s) => s.id !== active.id)]
+    return [active, ...getRegions().filter((s) => s.id !== active.id)]
   }
 
   async function tryServers<T>(attempt: () => Promise<T>): Promise<T | null> {

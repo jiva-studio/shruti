@@ -17,63 +17,65 @@ import (
 
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
-	titleuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/title"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	configpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
+	catalogregions "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/regions"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
+	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
 	librarypublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/publish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	reviewuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runner"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/runpipeline"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/selecttracks"
+	titleuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/title"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/transcribe"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/config"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	adminconfigrt "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
+	pythonalign "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/alignpdf/python"
+	openaicompatattribtranslate "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
 	fsaudio "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/audiostore/fs"
 	resolverchain "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/chain"
 	exactresolver "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/exact"
 	openaicompatresolver "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/resolver/openaicompat"
 	sqlitecatalog "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/catalog/sqlite"
-	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	httpcdn "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/cdn/http"
 	openaicompattranslate "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/dicttranslate/openaicompat"
-	openaicompatattribtranslate "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/attributiontranslate/openaicompat"
-	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
+	osfs "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/fs/os"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
+	sha256hash "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
-	adminconfigrt "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/adminconfig/runtime"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
+	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
 	openaicompatmeta "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/openaicompat"
-	openaicompattitle "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/title/openaicompat"
 	reviewreg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review"
 	openaicompatreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/openaicompat"
 	throttledreview "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/review/throttled"
-	pythonalign "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/alignpdf/python"
 	sqliteruns "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/runregistry/sqlite"
-	razdelsplit "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sentencesplit/razdel"
-	alignpdfport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
-	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
 	awss3 "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/s3/aws"
-	osfs "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/fs/os"
-	sha256hash "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
+	razdelsplit "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/sentencesplit/razdel"
 	id3v2tagger "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/tagger/id3v2"
+	openaicompattitle "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/title/openaicompat"
 	transcribereg "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcribe"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcribe/transcriberservice"
 	fstranscript "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/transcriptstore/fs"
-	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 	mcpsrv "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/tools"
+	alignpdfport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/alignpdf"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/dicttranslate"
+	glossaryport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/glossary"
+	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/sentencesplit"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/worker"
 )
 
@@ -442,12 +444,12 @@ func main() {
 			OutDir: cfg.Out,
 		},
 		Review: reviewuc.UseCase{
-			Registry:           registry,
-			Transcripts:        transcriptStore,
-			Reviewers:          reviewRegistry,
-			Splitter:           splitterOrNil(sentenceSplitter),
-			AlignPDF:           alignPDFOrNil(pdfAligner, &alignPDFUC),
-			OutDir:             cfg.Out,
+			Registry:    registry,
+			Transcripts: transcriptStore,
+			Reviewers:   reviewRegistry,
+			Splitter:    splitterOrNil(sentenceSplitter),
+			AlignPDF:    alignPDFOrNil(pdfAligner, &alignPDFUC),
+			OutDir:      cfg.Out,
 			DefaultAttemptsFor: func(language string) []reviewuc.Attempt {
 				src := cfg.Review.DefaultReviewAttempts(language)
 				out := make([]reviewuc.Attempt, len(src))
@@ -601,6 +603,19 @@ func main() {
 		UseCase: catalogproactive.UseCase{
 			OutDir: cfg.Out,
 			Mu:     catalogOpMutex,
+		},
+	}
+	deps.Regions = tools.RegionsDeps{
+		UseCase: catalogregions.UseCase{
+			OutDir: cfg.Out,
+			Mu:     catalogOpMutex, // share with proactive + publishers (one config.json writer at a time)
+		},
+	}
+	deps.ConfigPublish = tools.ConfigPublishDeps{
+		UseCase: configpublish.UseCase{
+			OutDir:  cfg.Out,
+			Targets: publishTargets,
+			OpMutex: catalogOpMutex,
 		},
 	}
 
@@ -807,7 +822,6 @@ func loadGlossaryOrNil(override string) *glossary.Glossary {
 	fmt.Fprintf(os.Stderr, "[review] glossary loaded: %d entries from %s\n", len(g.Entries), path)
 	return g
 }
-
 
 func mustMkdirAll(p string) {
 	if err := os.MkdirAll(p, 0o755); err != nil {

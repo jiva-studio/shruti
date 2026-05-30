@@ -22,8 +22,11 @@ function isTransientStatus(status: number): boolean {
 }
 
 export interface FailoverClientOptions {
-  /** All known servers, in fallback order after the preferred. */
-  servers: readonly CdnServer[]
+  /** Lazy getter for all known servers, in fallback order after the
+   *  preferred. Read at every request so a region list refreshed from the
+   *  remote config (regionsRegistry) takes effect without rebuilding the
+   *  client. Must never return an empty array. */
+  getServers: () => readonly CdnServer[]
   /** Lazy getter for the currently-preferred server id. Read at every
    *  request so a settings flip takes effect on the next call. */
   getPreferredId: () => string
@@ -83,14 +86,16 @@ export function createFailoverClient(opts: FailoverClientOptions): FailoverClien
   let lastObservedPreferredId: string | null = null
 
   function orderedCandidates(preferredId: string): CdnServer[] {
-    const preferred = opts.servers.find((s) => s.id === preferredId)
-    const rest = opts.servers.filter((s) => s.id !== preferredId)
-    return preferred ? [preferred, ...rest] : [...opts.servers]
+    const servers = opts.getServers()
+    const preferred = servers.find((s) => s.id === preferredId)
+    const rest = servers.filter((s) => s.id !== preferredId)
+    return preferred ? [preferred, ...rest] : [...servers]
   }
 
   function resolveUrl(path: string): string {
-    const preferred = opts.servers.find((s) => s.id === opts.getPreferredId())
-    const base = preferred ? opts.pickBaseUrl(preferred) : opts.pickBaseUrl(opts.servers[0]!)
+    const servers = opts.getServers()
+    const preferred = servers.find((s) => s.id === opts.getPreferredId())
+    const base = preferred ? opts.pickBaseUrl(preferred) : opts.pickBaseUrl(servers[0]!)
     return joinUrl(base, path)
   }
 
