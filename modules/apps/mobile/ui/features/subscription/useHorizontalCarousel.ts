@@ -1,4 +1,4 @@
-import { onBeforeUnmount, ref, type Ref } from "vue"
+import { onBeforeUnmount, onMounted, ref, type Ref } from "vue"
 
 export interface UseHorizontalCarouselOptions {
   readonly pageCount: number
@@ -10,6 +10,7 @@ export interface UseHorizontalCarouselReturn {
   readonly page: Ref<number>
   readonly dragOffset: Ref<number>
   readonly pointerId: Ref<number | null>
+  readonly viewportWidth: Ref<number>
   readonly onPointerDown: (e: PointerEvent) => void
   goTo: (index: number) => void
 }
@@ -25,10 +26,26 @@ export function useHorizontalCarousel(
   const page = ref<number>(initial)
   const dragOffset = ref<number>(0)
   const pointerId = ref<number | null>(null)
+  const viewportWidth = ref<number>(0)
 
   let gestureOriginX = 0
   let gestureOriginY = 0
   let dragLocked: "horizontal" | "vertical" | null = null
+  let resizeObserver: ResizeObserver | null = null
+
+  function measure(): void {
+    const el = options.viewportEl()
+    if (el) viewportWidth.value = el.getBoundingClientRect().width
+  }
+
+  onMounted(() => {
+    const el = options.viewportEl()
+    measure()
+    if (el && typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(measure)
+      resizeObserver.observe(el)
+    }
+  })
 
   function onPointerDown(e: PointerEvent): void {
     pointerId.value = e.pointerId
@@ -64,8 +81,8 @@ export function useHorizontalCarousel(
   function onPointerUp(e: PointerEvent): void {
     if (e.pointerId !== pointerId.value) return
     if (dragLocked === "horizontal") {
-      const viewport = options.viewportEl()
-      const w = viewport?.getBoundingClientRect().width ?? 0
+      measure()
+      const w = viewportWidth.value
       if (w > 0) {
         const ratio = dragOffset.value / w
         if (ratio < -PAGE_SWITCH_THRESHOLD && page.value < options.pageCount - 1) page.value += 1
@@ -87,9 +104,13 @@ export function useHorizontalCarousel(
     page.value = clamp(index, 0, options.pageCount - 1)
   }
 
-  onBeforeUnmount(cleanup)
+  onBeforeUnmount(() => {
+    cleanup()
+    resizeObserver?.disconnect()
+    resizeObserver = null
+  })
 
-  return { page, dragOffset, pointerId, onPointerDown, goTo }
+  return { page, dragOffset, pointerId, viewportWidth, onPointerDown, goTo }
 }
 
 function clamp(n: number, min: number, max: number): number {
