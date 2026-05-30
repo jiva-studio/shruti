@@ -121,20 +121,31 @@ const showActivity = computed(
 // available — on builds with empty IAP keys the subscription UI is
 // hidden everywhere.
 //
-// Wait for `subscription.ready` so we don't render the nag during the
-// 1–2s RevenueCat takes to fetch customer info — otherwise subscribed
-// users see the banner flash on first home-screen visit and then
-// disappear once entitlements load.
+// Wait for `subscription.ready && !subscription.reconciling` so we don't
+// render the nag before the *final* subscribed answer is in: `ready`
+// flips after the first anonymous getCustomerState(), but an
+// account-tied subscription only surfaces once the post-sign-in RC
+// logIn lands a beat later — gating on `ready` alone still flashes the
+// banner for subscribed users, then hides it once entitlements arrive.
+//
+// We also hold the nag for the first week after install: asking for
+// money before the user has had a chance to get value from the app is
+// the wrong first impression. Install age comes from the shared
+// `proactive.firstSeenAtMs` stamp; until it's known we stay quiet.
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
+const NAG_GRACE_MS = 7 * 24 * 60 * 60 * 1000
 const paywall = usePaywallStore()
 const subscription = useSubscriptionBinding()
+const firstSeenAt = useConfig<number | null>("proactive.firstSeenAtMs", null)
 const subscriptionNagDismissedAt = useConfig<number | null>(
   "home.subscriptionNag.dismissedAt",
   null
 )
 const showSubscriptionNag = computed(() => {
-  if (!subscription.ready) return false
+  if (!subscription.ready || subscription.reconciling) return false
   if (!subscription.available || subscription.isSubscribed) return false
+  const installedAt = firstSeenAt.value
+  if (installedAt === null || Date.now() - installedAt < NAG_GRACE_MS) return false
   const ts = subscriptionNagDismissedAt.value
   if (!ts) return true
   return Date.now() - ts >= FOURTEEN_DAYS_MS
