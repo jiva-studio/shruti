@@ -419,15 +419,6 @@ async def run_research(
             stage=question_matches[0].stage,
         )
 
-        authoritative = await _safe(
-            lambda: _fetch_refs(
-                all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=lang, canonical_score=top_score, on_event=on_event,
-            ),
-            default=[], timeout=TIMEOUT_FETCH_REFS_S,
-            name="fetch_refs", request_id=request_id,
-        )
-
         # Supplementary fanout — broader semantic exploration around the
         # canonical theme. No topic-boost in SHORT path. We cap at the
         # first 3 sub_queries' primary texts only (no alt_phrasings) so
@@ -436,23 +427,37 @@ async def run_research(
         supplementary_queries = [
             (sq.id, sq.text) for sq in plan.sub_queries[:3]
         ]
-        supplementary = await _safe(
-            lambda: fanout_search_with_boost(
-                queries=supplementary_queries,
-                embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
-                author_id=router_args.get("author_id"),
-                location_id=router_args.get("location_id"),
-                tag_ids=router_args.get("tag_ids"),
-                date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
-                date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
-                book_id=router_args.get("source_id"),
-                on_event=on_event,
-                reranker=reranker,
-                rerank_query=question,
+        # fetch_refs (authoritative) and the supplementary fanout are
+        # independent reads — run them concurrently so the SHORT path costs
+        # max(fetch, fanout) instead of their sum (~2-3s saved). Each keeps
+        # its own stage timeout + stage_timing through its own `_safe`.
+        authoritative, supplementary = await asyncio.gather(
+            _safe(
+                lambda: _fetch_refs(
+                    all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
+                    lang=lang, canonical_score=top_score, on_event=on_event,
+                ),
+                default=[], timeout=TIMEOUT_FETCH_REFS_S,
+                name="fetch_refs", request_id=request_id,
             ),
-            default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
-            name="supplementary_fanout", request_id=request_id,
+            _safe(
+                lambda: fanout_search_with_boost(
+                    queries=supplementary_queries,
+                    embedder=embedder, chunk_repo=chunk_repo,
+                    catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
+                    author_id=router_args.get("author_id"),
+                    location_id=router_args.get("location_id"),
+                    tag_ids=router_args.get("tag_ids"),
+                    date_from=router_args.get("date_from") or router_args.get("doc_date_from"),
+                    date_to=router_args.get("date_to") or router_args.get("doc_date_to"),
+                    book_id=router_args.get("source_id"),
+                    on_event=on_event,
+                    reranker=reranker,
+                    rerank_query=question,
+                ),
+                default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
+                name="supplementary_fanout", request_id=request_id,
+            ),
         )
 
         supplementary_top = _balanced_cut(supplementary.chunks, 8)

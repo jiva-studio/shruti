@@ -107,18 +107,22 @@ async def test_rerank_truncates_oversize_document(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_rerank_noop_for_single_doc(monkeypatch):
-    # <=1 doc: no HTTP call, identity ordering returned.
-    called = {"n": 0}
+    # <=1 doc: identity ordering and NO HTTP POST. The client is pooled
+    # (built once at init), so the invariant is "no network call", not
+    # "no client constructed".
+    constructed = {"n": 0}
+    client = _FakeAsyncClient({"data": []})
 
     def _factory(*a, **k):
-        called["n"] += 1
-        return _FakeAsyncClient({"data": []})
+        constructed["n"] += 1
+        return client
 
     monkeypatch.setattr(rerank_mod.httpx, "AsyncClient", _factory)
     rr = VoyageReranker(model="rerank-2", api_key="k")
     assert await rr.rerank("q", ["only"]) == [(0, 0.0)]
     assert await rr.rerank("q", []) == []
-    assert called["n"] == 0
+    assert client.posts == []        # no network call for <=1 doc
+    assert constructed["n"] == 1     # pooled: client built once at init
 
 
 def test_truncate_doc_keeps_short_text():
