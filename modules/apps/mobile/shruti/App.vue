@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, useTemplateRef } from "vue"
+import { computed, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import router from "@shruti/router/index.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
@@ -87,7 +87,6 @@ import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
 import { useChatStoreProactiveSync } from "@shruti/composables/useChatStoreProactiveSync.js"
 import { useProactiveDeepLink } from "@shruti/composables/useProactiveDeepLink.js"
 import { useProactiveScheduler } from "@shruti/composables/useProactiveScheduler.js"
-import { registerMainPlayerPauser } from "@shruti/composables/useNotesInlineAudio.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
@@ -144,20 +143,9 @@ useProactiveScheduler()
 useProactiveDeepLink()
 useChatStoreProactiveSync()
 
-// When a Notes inline excerpt starts playing, pause the main lecture so
-// the user never hears two streams at once. The notes coordinator owns
-// the pauser set; we register a callback that asks the player store to
-// pause if it's currently playing.
-let disposeMainPauser: (() => void) | null = null
-onMounted(() => {
-  disposeMainPauser = registerMainPlayerPauser(() => {
-    if (player.playing) void player.togglePause()
-  })
-})
-onBeforeUnmount(() => {
-  disposeMainPauser?.()
-  disposeMainPauser = null
-})
+// Cross-source audio coordination (lecture ↔ chat/notes snippets) lives
+// in the player store, which registers itself with useAudioOrchestrator.
+// App.vue no longer needs to wire it.
 
 // LanguageSelector wants a mutable string[] v-model. Wrap the readonly
 // controller ref so two-way binding still compiles.
