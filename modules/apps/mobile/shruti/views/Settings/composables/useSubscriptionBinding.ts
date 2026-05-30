@@ -27,6 +27,13 @@ export interface SubscriptionBinding {
    * respond, then flickers off once the customer info arrives.
    */
   readonly ready: boolean
+  /**
+   * `true` while an RC.logIn/logOut is in flight. Gate on `ready &&
+   * !reconciling` when you need the *final* subscribed answer — an
+   * account-tied subscription only surfaces after the post-sign-in logIn
+   * round-trip, so `ready` alone still flashes the non-subscribed UI.
+   */
+  readonly reconciling: boolean
   readonly packages: PurchasePackage[]
   readonly purchasing: boolean
   readonly restoring: boolean
@@ -134,6 +141,7 @@ export function useSubscriptionBinding(): SubscriptionBinding {
     available: computed(() => store.available),
     isSubscribed: computed(() => store.isSubscribed),
     ready: computed(() => store.ready),
+    reconciling: computed(() => store.reconciling),
     packages: computed(() => store.packages),
     purchasing: computed(() => store.purchasing),
     restoring: computed(() => store.restoring),
