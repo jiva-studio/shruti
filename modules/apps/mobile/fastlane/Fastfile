@@ -51,6 +51,14 @@ before_all do |lane|
   # Sync Capacitor — copies web bundle into native project.
   sh("cd #{MOBILE_ROOT.shellescape} && npx cap sync #{platform_flag}")
 
+  # Keep the iOS Google Sign-In config (GIDClientID + reversed-client-id URL
+  # scheme) in Info.plist matched to whatever iOS client id the web bundle was
+  # built with. No-op unless LECTORIUM_GOOGLE_IOS_CLIENT_ID overrides the
+  # committed default. cap sync doesn't touch Info.plist, so this is safe after.
+  if platform_flag == "ios"
+    sh("bash #{File.join(MOBILE_ROOT, 'scripts/ios-google-signin.sh').shellescape}")
+  end
+
   # Bundle production DB into native app assets. Must run after sync,
   # which may clean the assets directory. The shared db-sync script
   # (modules/db-sync.sh) reads the supported scheme from the single

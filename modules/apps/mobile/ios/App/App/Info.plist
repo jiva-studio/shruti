@@ -22,6 +22,23 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- Google Sign-In OAuth redirect. The reversed-client-id URL scheme MUST
+	     be present or GIDSignIn.signIn() raises and the app crashes on tap.
+	     These default to the iOS client id baked into the web bundle
+	     (vite.config.ts __GOOGLE_IOS_CLIENT_ID__); scripts/ios-google-signin.sh
+	     rewrites both at `cap sync` time when LECTORIUM_GOOGLE_IOS_CLIENT_ID
+	     overrides that default, so plist and bundle stay in lock-step. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.315690032552-l2vl1h7qqdidpnem255ng6v04j3icq47</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>315690032552-l2vl1h7qqdidpnem255ng6v04j3icq47.apps.googleusercontent.com</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
