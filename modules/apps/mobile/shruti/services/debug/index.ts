@@ -9,6 +9,7 @@
  */
 import { useShruti } from "@shruti/shruti.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { currentLocale, setLocale, type SupportedLocale } from "@shruti/i18n/index.js"
 import router from "@shruti/router/index.js"
@@ -48,6 +49,7 @@ interface ShrutiDebugApi {
   demoTrackId(): string
   demoPositionMs(): number
   navigateTo(path: string): Promise<void>
+  openChatSession(sessionId: string): Promise<void>
   openTranscript(trackId: string): Promise<void>
   setPlayerState(trackId: string, positionMs: number): Promise<void>
   setLocale(loc: SupportedLocale): void
@@ -65,6 +67,19 @@ export function installDebugApi(): void {
 
     async navigateTo(path: string): Promise<void> {
       await router.push(path)
+    },
+
+    // Open a chat session deterministically. ChatView normally opens the
+    // session reactively from `?session=<id>` (ensureSessionFromRoute),
+    // but `useRoute()` inside that controller is flaky under the Vite-dev
+    // DI race (see ChatView.controller.ts) — in the dev-served screenshots
+    // build the query watcher never fires, so the deep link silently
+    // no-ops. Drive the store directly (the same `openSession` that
+    // `onPickSession` calls) and sync the URL so the captured frame
+    // matches a real shared-link/recent-tap open.
+    async openChatSession(sessionId: string): Promise<void> {
+      await useChatStore().openSession(sessionId)
+      await router.replace({ name: "chat", query: { session: sessionId } })
     },
 
     async openTranscript(trackId: string): Promise<void> {

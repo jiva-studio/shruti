@@ -2,15 +2,15 @@ import type { Page } from "@playwright/test"
 
 export interface Scenario {
   name: string
-  route: "/tabs/home" | "/tabs/search" | "/tabs/notes" | `/tabs/chat/${string}`
+  route: "/tabs/home" | "/tabs/search" | "/tabs/notes" | "/tabs/chat"
   waitFor: string
   settle?: number
   beforeCapture?: (page: Page) => Promise<void>
 }
 
 /** Stable session id seeded by generate-fixtures/seedChat for the
- *  `05_chat` scenario. Same id in both EN and RU fixtures so the
- *  scenario can carry one literal `/tabs/chat/<id>` route. */
+ *  `05_chat` scenario. Same id in both EN and RU fixtures so one literal
+ *  drives `debug.openChatSession(...)` for both locales. */
 export const DEMO_CHAT_SESSION_ID = "chat_demo_soul"
 /** Id of the user-question row inside the demo session — pinned to
  *  the top of the viewport in `beforeCapture` so the screenshot
@@ -25,6 +25,7 @@ declare global {
         demoTrackId: () => string
         demoPositionMs: () => number
         navigateTo: (path: string) => Promise<void>
+        openChatSession: (sessionId: string) => Promise<void>
         openTranscript: (trackId: string) => Promise<void>
         setPlayerState: (trackId: string, positionMs: number) => Promise<void>
         setLocale: (loc: "en" | "ru") => void
@@ -49,6 +50,22 @@ async function openTranscriptMidPlayback(page: Page): Promise<void> {
   // Wait for the modal portal to mount in DOM so the selector wait can
   // resolve. Ionic adds the open class once it has appended the modal.
   await page.locator("ion-modal.transcript-dialog").waitFor({ state: "attached", timeout: 10_000 })
+}
+
+async function openDemoChatSession(page: Page): Promise<void> {
+  // Open the seeded demo session through the debug bridge rather than a
+  // `?session=` deep link. ChatView opens a session reactively from the
+  // route query (ensureSessionFromRoute), but `useRoute()` in that
+  // controller is unreliable under the Vite-dev DI race — in the
+  // dev-served screenshots build the query watcher never fires, so a
+  // deep link lands on the empty chat home. `openChatSession` drives the
+  // store's `openSession` directly (same call the recent-chat tap makes)
+  // and syncs the URL, so the captured frame is a genuinely-open session.
+  await page.evaluate(
+    (id) => window.__shruti!.debug!.openChatSession(id),
+    DEMO_CHAT_SESSION_ID
+  )
+  await pinChatUserMessageToTop(page)
 }
 
 async function pinChatUserMessageToTop(page: Page): Promise<void> {
@@ -106,9 +123,10 @@ export const scenarios: Scenario[] = [
   },
   {
     name: "05_chat",
-    // Demo session seeded by generate-fixtures/seedChat — same id in
-    // both locales so this literal works for phone-en + phone-ru.
-    route: `/tabs/chat/${DEMO_CHAT_SESSION_ID}`,
+    // Land on the stable chat pathname, then open the seeded demo
+    // session in `beforeCapture` via the debug bridge (see
+    // openDemoChatSession for why we don't deep-link the session here).
+    route: "/tabs/chat",
     // Wait for the assistant bubble to mount: it carries the verse
     // card + citation chip which are the visual centrepiece. Until
     // the verseBodyStore has hydrated the verse falls back to a
@@ -116,6 +134,6 @@ export const scenarios: Scenario[] = [
     // the Preferences round-trip.
     waitFor: ".bubble.assistant",
     settle: 800,
-    beforeCapture: pinChatUserMessageToTop,
+    beforeCapture: openDemoChatSession,
   },
 ]
