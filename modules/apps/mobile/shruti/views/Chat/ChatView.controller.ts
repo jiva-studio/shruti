@@ -7,6 +7,7 @@ import { useChatStore, type ChatMessage, type ChatSession } from "@shruti/stores
 import { useToast } from "@shruti/services/useToast.js"
 import { useTrackUserState } from "@shruti/composables/useTrackUserState.js"
 import { formatTimestamp } from "@shruti/composables/formatTimestamp.js"
+import { pauseAllInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 
 export interface OutlineChapterPick {
@@ -443,6 +444,10 @@ export function useChatController(): ChatControllerReturn {
   watch(
     () => route?.query?.session,
     () => {
+      // Stop any citation audio from the previous session — the chips
+      // stay mounted across the in-screen query change (stable pathname,
+      // no re-mount), so nothing else pauses them on switch.
+      pauseAllInlineAudio()
       void ensureSessionFromRoute()
     }
   )
