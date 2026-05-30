@@ -3,7 +3,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { scenarios, type Scenario } from "../scenarios.js"
-import { verseBodyCache } from "../generate-fixtures/chat.js"
+import { verseBodyCache, citeTranscriptCache } from "../generate-fixtures/chat.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TOOL_ROOT = path.resolve(__dirname, "..")
@@ -158,6 +158,34 @@ async function preseedVerseBodyCache(page: Page): Promise<void> {
 }
 
 /**
+ * Pre-seed the cite-transcript cache so the chat scenario's `[cite:…]`
+ * markers render as the full excerpt card (player + quote + author /
+ * title / date) instead of the small chip fallback. The live app fills
+ * this from the server's `cite_transcript` SSE event; with no chat
+ * server in the capture run we seed it directly. Same `CapacitorStorage.`
+ * prefix + `STORAGE_KEY` (`shruti.cite_transcript_cache.v1`) and
+ * `{ text, touchedAt }` entry shape that useCiteTranscriptStore reads.
+ */
+async function preseedCiteTranscriptCache(page: Page): Promise<void> {
+  const now = Date.now()
+  const serialised: Record<string, unknown> = {}
+  for (const [key, text] of Object.entries(citeTranscriptCache)) {
+    serialised[key] = { text, touchedAt: now }
+  }
+  await page.addInitScript(
+    ({ value }: { value: string }) => {
+      try {
+        localStorage.setItem("CapacitorStorage.shruti.cite_transcript_cache.v1", value)
+      } catch {
+        // unavailable origin — non-fatal, CitationCard falls back to
+        // its inline chip.
+      }
+    },
+    { value: JSON.stringify(serialised) }
+  )
+}
+
+/**
  * Write the seeded user.db into IndexedDB BEFORE the app boots. The Vite
  * `useSqlJsPersistence` reads from `(shruti, databases, user.db)` on
  * `open()` and creates an empty DB only when the key is missing — so a
@@ -211,6 +239,7 @@ async function boot(page: Page, code: "en" | "ru"): Promise<void> {
   await preseedUserDb(page, code)
   await preseedSearchFilter(page, code)
   await preseedVerseBodyCache(page)
+  await preseedCiteTranscriptCache(page)
 
   await page.goto(`/?locale=${code}`)
   await page.waitForURL("**/tabs/home", { timeout: 60_000 })
