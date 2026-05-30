@@ -84,7 +84,7 @@ import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage, onIonViewWillLeave } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
-import { pauseAllInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
+import { pauseGroup } from "@shruti/composables/useAudioOrchestrator.js"
 import { PageSticker } from "@ui/primitives/index.js"
 import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
@@ -143,7 +143,7 @@ watch(inputFocusToken, () => {
 // background. (Session switch is handled in the controller's
 // route.query.session watcher.)
 onIonViewWillLeave(() => {
-  pauseAllInlineAudio()
+  pauseGroup("inline")
 })
 
 const headerTitle = computed<string>(() => {

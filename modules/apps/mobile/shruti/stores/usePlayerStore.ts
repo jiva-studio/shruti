@@ -10,6 +10,7 @@ import { useTranscriptStore } from "@shruti/stores/useTranscriptStore.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import { registerAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
 import { usePlayerResumePosition } from "./player/usePlayerResumePosition.js"
 import { usePlayerSession } from "./player/usePlayerSession.js"
 
@@ -248,6 +249,33 @@ export const usePlayerStore = defineStore("player", () => {
     if (itemId.value) patchPlaylistProgress(itemId.value, positionMs.value)
   }
 
+  /** Idempotent pause — only ever pauses, never resumes. `togglePause`
+   *  toggles, so guarding on `playing` here keeps a stray double-claim
+   *  from flipping a paused lecture back into playback. Keeps the resume
+   *  position (unlike inline snippets, which rewind to 0). */
+  async function pause(): Promise<void> {
+    if (!open.value || !playing.value) return
+    await app.audioPlayer.togglePause()
+    if (itemId.value) patchPlaylistProgress(itemId.value, positionMs.value)
+  }
+
+  // Register the lecture as the orchestrator's "main" audio source: it
+  // pauses inline snippets when it starts AND gets paused when a snippet
+  // starts (see useAudioOrchestrator). `playing` flips true on every
+  // start — in-app tap, openTrack, and native lock-screen / headphone
+  // resume, all arriving through the progress listener — so claiming on
+  // the false→true edge covers them all. The edge guard keeps steady
+  // ticks and the pause edge from re-firing.
+  const mainAudioSource = registerAudioSource("main", () => {
+    void pause()
+  })
+  watch(playing, (now, prev) => {
+    if (now && !prev) mainAudioSource.claim()
+  })
+  onScopeDispose(() => {
+    mainAudioSource.release()
+  })
+
   async function seek(ms: number): Promise<void> {
     if (!open.value) return
     const safe = Number.isFinite(ms) ? ms : 0
@@ -302,6 +330,7 @@ export const usePlayerStore = defineStore("player", () => {
     open,
     openTrack,
     togglePause,
+    pause,
     seek,
     skipBack,
     skipForward,

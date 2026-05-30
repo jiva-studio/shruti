@@ -59,7 +59,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
-import { useNotesInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
+import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
 import { useToast } from "@shruti/services/useToast.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
@@ -89,14 +89,6 @@ const studioHandoff = useStudioHandoffStore()
 const { resolveUrl } = useCitationSnippet()
 const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
-// Cross-player coordinator: registering `pauseSelf` here makes this
-// chip pause when ANY other inline player (other chip, focus card,
-// main lecture player) calls notifyPlaying — and vice versa via the
-// notifyPlaying call in onPlay below. Replaces the previous DOM-sweep
-// pause-other-chips approach which only paused sibling chips and
-// left the focus card / main player running in parallel.
-const inline = useNotesInlineAudio()
-
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
 function pauseSelf(): void {
@@ -105,7 +97,10 @@ function pauseSelf(): void {
   el.pause()
 }
 
-const unregisterPauser = inline.registerPauser(pauseSelf)
+// Register as an "inline" audio source. `claim()` (in onPlay) pauses
+// every other source — sibling chips, the focus card, AND the main
+// lecture player; `pauseSelf` runs whenever any of them claims.
+const { claim } = useAudioSource("inline", pauseSelf)
 
 const isPlaying = ref(false)
 const isPreparing = ref(false)
@@ -347,7 +342,7 @@ function onPointerCancel(): void {
 
 function onPlay(): void {
   isPlaying.value = true
-  inline.notifyPlaying(pauseSelf)
+  claim()
 }
 
 function onPause(): void {
@@ -383,7 +378,6 @@ watch(
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
   audioEl.value?.pause()
-  unregisterPauser()
 })
 </script>
 

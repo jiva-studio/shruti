@@ -53,7 +53,7 @@ import { computed, onBeforeUnmount, ref, useTemplateRef } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useShruti } from "@shruti/shruti.js"
-import { useNotesInlineAudio } from "@shruti/composables/useNotesInlineAudio.js"
+import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
 import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
 
 const BAR_COUNT = 96
@@ -71,7 +71,6 @@ const props = defineProps<{
 }>()
 
 const app = useShruti()
-const inline = useNotesInlineAudio()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
 const isPlaying = ref(false)
@@ -115,7 +114,7 @@ function pauseAndResetSelf(): void {
   positionMs.value = 0
 }
 
-const unregister = inline.registerPauser(pauseAndResetSelf)
+const { claim } = useAudioSource("inline", pauseAndResetSelf)
 
 async function onToggle(): Promise<void> {
   const el = audioEl.value
@@ -141,7 +140,7 @@ async function onToggle(): Promise<void> {
   } else if (!el.src) {
     el.src = cachedUrl
   }
-  inline.notifyPlaying(pauseAndResetSelf)
+  claim()
   try {
     await el.play()
   } catch (err) {
@@ -186,7 +185,6 @@ function onMetadata(): void {
 }
 
 onBeforeUnmount(() => {
-  unregister()
   audioEl.value?.pause()
 })
 
