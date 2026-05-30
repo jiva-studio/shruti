@@ -309,7 +309,7 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       throw e
     }
     if (result.provider !== "apple") return null
-    const idToken = result.result?.accessToken?.token
+    const idToken = result.result?.idToken
     if (!idToken) return null
     const { givenName, familyName } = result.result.profile ?? {}
     const fullName = [givenName, familyName].filter(Boolean).join(" ").trim() || undefined
