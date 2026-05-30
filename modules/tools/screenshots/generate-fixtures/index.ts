@@ -50,8 +50,24 @@ function parseArgs(argv: string[]): Args {
     out,
     seed: opts.seed ? Number(opts.seed) : 42,
     days: opts.days ? Number(opts.days) : 120,
-    now: opts.now ? Number(opts.now) : Date.parse("2026-05-13T09:00:00Z"),
+    // Anchor to the START of the generation day (local midnight), NOT a
+    // frozen date. The activity heatmap computes "today" and the streak
+    // from the real clock at render time, so a hardcoded `now` drifts:
+    // as days pass the current-day cell marches away from the seeded
+    // sessions and the streak vanishes. Capture runs the same day as
+    // generation (CI does both back-to-back), so today's local-day cell
+    // lines up with the seeded streak. Midnight (not Date.now()) keeps
+    // each day's sessions — which fan out up to +15h — inside their own
+    // calendar day instead of spilling into tomorrow.
+    now: opts.now ? Number(opts.now) : startOfLocalDay(),
   }
+}
+
+/** Local-midnight (00:00) of the current day, in unix ms. */
+function startOfLocalDay(): number {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
 }
 
 /* -------------------------- mulberry32 PRNG ---------------------------- */

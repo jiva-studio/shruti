@@ -140,3 +140,24 @@ export const verseBodyCache: Record<string, VerseBodyEntry> = {
     },
   },
 }
+
+/**
+ * Transcript snippets for the `[cite:…]` markers above. The live app
+ * receives these from the server's `cite_transcript` SSE event the
+ * first time a fragment is cited; with no chat server in the capture
+ * run we seed them directly, keyed exactly like useCiteTranscriptStore
+ * (`${trackId}|${startMs}-${endMs}`). Without the entry CitationCard
+ * degrades to the small chip fallback instead of the full excerpt card
+ * (player + quote + attribution) — the richer UI the screenshot exists
+ * to show.
+ *
+ * Text is authentic, drawn from each track's canonical transcript
+ * (`resources/lake-out/public/tracks/<id>/transcripts/<lc>.json`),
+ * trimmed to a couple of sentences so the card stays screenshot-sized.
+ */
+export const citeTranscriptCache: Record<string, string> = {
+  "track_0dRAV1Swc3ak|0-300000":
+    "This instruction of Prahlāda Mahārāja to his class fellows we are discussing for the last few days. Everyone is engaged in a particular type of occupational duty, never mind what is that occupation.",
+  "track_k1a4Ah1CZ8ac|0-300000":
+    "Верховный Господь сказал: ведя ученые речи, ты сокрушаешься о том, что недостойно скорби. Мудрые люди не скорбят ни о мертвых, ни о живых.",
+}
