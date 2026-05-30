@@ -365,20 +365,25 @@ async def fanout_search_with_boost(
     rerank_active = reranker is not None and bool((rerank_query or "").strip())
     fetch_k = RERANK_FETCH_TOP_K if rerank_active else k
 
-    # 1. Batched embed.
+    # 1. Batched embed ∥ eligible-track filter. The catalog-driven filter is
+    # independent of the query embedding, so overlap the two round-trips
+    # (OpenRouter embed + catalog query) instead of paying their sum before
+    # the per-query fanout.
     query_texts = [q[1] for q in queries]
     sub_query_ids = [q[0] for q in queries]
-    q_vecs = await embedder.embed_documents(query_texts)
+    q_vecs, eligible_track_ids = await asyncio.gather(
+        embedder.embed_documents(query_texts),
+        catalog_repo.filter_track_ids(
+            author_id=author_id, source_id=book_id, location_id=location_id,
+            tag_ids=tag_ids, date_from=date_from, date_to=date_to,
+        ),
+    )
     if len(q_vecs) != len(query_texts):
         log.warning("fanout_embed_mismatch", queries=len(query_texts), vectors=len(q_vecs))
         q_vecs = q_vecs[: len(query_texts)]
         sub_query_ids = sub_query_ids[: len(q_vecs)]
 
-    # 2. Eligible-track filter (catalog-driven; independent of query).
-    eligible_track_ids = await catalog_repo.filter_track_ids(
-        author_id=author_id, source_id=book_id, location_id=location_id,
-        tag_ids=tag_ids, date_from=date_from, date_to=date_to,
-    )
+    # 2. Lecture lane is disabled when the catalog filter matched zero tracks.
     lectures_disabled = eligible_track_ids is not None and not eligible_track_ids
 
     async def _one_query(q_vec: list[float], q_text: str, sq_id: int) -> list[_RawScored]:

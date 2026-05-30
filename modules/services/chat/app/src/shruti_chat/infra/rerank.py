@@ -68,6 +68,11 @@ class VoyageReranker(RerankerPort):
         self._url = (base_url or "https://api.voyageai.com/v1").rstrip("/") + "/rerank"
         self._timeout_s = timeout_s
         self._sem = asyncio.Semaphore(max(1, concurrency))
+        # One pooled client for the reranker's lifetime — a research turn
+        # reranks once per fanout round (up to MAX_FANOUT_ROUNDS), so a
+        # fresh AsyncClient per call paid a TLS handshake to api.voyageai.com
+        # every round. Keep-alive reuse removes that per-round setup cost.
+        self._client = httpx.AsyncClient(timeout=self._timeout_s)
         log.info("reranker_loaded", name=self.name, model=model, base_url=base_url)
 
     async def rerank(
@@ -88,12 +93,11 @@ class VoyageReranker(RerankerPort):
             body["top_k"] = top_k
 
         async with self._sem:
-            async with httpx.AsyncClient(timeout=self._timeout_s) as client:
-                resp = await client.post(
-                    self._url,
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                    json=body,
-                )
+            resp = await self._client.post(
+                self._url,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=body,
+            )
         resp.raise_for_status()
         data = resp.json().get("data") or []
         scored = [
