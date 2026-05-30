@@ -16,7 +16,7 @@ android {
         // the fallbacks below are used. Without this wiring the hardcoded `1`
         // makes every Play upload collide with the previously published code.
         def resolvedVersionCode = (project.findProperty('versionCode') ?: 1).toString().toInteger()
-        def resolvedVersionName = (project.findProperty('versionName') ?: '1.1.0').toString()
+        def resolvedVersionName = (project.findProperty('versionName') ?: '1.1.1').toString()
         versionCode resolvedVersionCode
         versionName resolvedVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
