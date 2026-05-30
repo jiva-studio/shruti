@@ -22,6 +22,13 @@ export const usePurchasesStore = defineStore("purchases", () => {
   const purchasing = ref(false)
   const restoring = ref(false)
   const ready = ref(false)
+  // True while an RC.logIn/logOut kicked off by the userId watcher is in
+  // flight. `ready` flips after the first (anonymous) getCustomerState(),
+  // but an account-tied subscription only surfaces once that logIn lands a
+  // beat later — so any UI that gates on "is this user subscribed?" must
+  // also wait for `reconciling` to clear, or it renders the non-subscribed
+  // branch in the gap and flickers off when the entitlement arrives.
+  const reconciling = ref(false)
   let unsubscribe: (() => void) | undefined
   let resumeHandle: { remove(): Promise<void> } | undefined
   let stopAuthWatch: WatchStopHandle | undefined
@@ -94,6 +101,24 @@ export const usePurchasesStore = defineStore("purchases", () => {
     } finally {
       if (timer) clearTimeout(timer)
     }
+  }
+
+  /**
+   * Registers an in-flight RC.logIn/logOut from the userId watcher as the
+   * current reconciliation. `reconciling` stays true until the *latest*
+   * such promise settles; the identity guard means a superseding logIn
+   * keeps the flag up until it too lands. `waitForLogin` reads the same
+   * `loginPromise`.
+   */
+  function trackReconcile(p: Promise<void>): void {
+    loginPromise = p
+    reconciling.value = true
+    void p.finally(() => {
+      if (loginPromise === p) {
+        loginPromise = null
+        reconciling.value = false
+      }
+    })
   }
 
   async function refresh(): Promise<void> {
@@ -193,10 +218,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
                 console.warn("[purchases] logIn failed", e)
                 throw e
               })
-            loginPromise = p
-            void p.finally(() => {
-              if (loginPromise === p) loginPromise = null
-            })
+            trackReconcile(p)
           } else if (!newId && oldId) {
             const p = purchases
               .logOut()
@@ -207,10 +229,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
                 console.warn("[purchases] logOut failed", e)
                 throw e
               })
-            loginPromise = p
-            void p.finally(() => {
-              if (loginPromise === p) loginPromise = null
-            })
+            trackReconcile(p)
           }
         },
         { immediate: true }
@@ -286,6 +305,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     stopAuthWatch?.()
     stopAuthWatch = undefined
     ready.value = false
+    reconciling.value = false
   }
 
   return {
@@ -297,6 +317,7 @@ export const usePurchasesStore = defineStore("purchases", () => {
     purchasing,
     restoring,
     ready,
+    reconciling,
     available,
     isSubscribed,
     init,
