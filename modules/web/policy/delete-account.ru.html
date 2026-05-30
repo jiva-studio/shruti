@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Слушай Садху — Удаление аккаунта</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; color: #222; }
+  @media (prefers-color-scheme: dark) { body { background: #111; color: #ddd; } a { color: #7cb5ff; } }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  strong.section { display: block; margin-top: 1.75rem; margin-bottom: 0.25rem; font-size: 1.05rem; }
+  .lang { float: right; font-size: 0.9rem; }
+  .meta { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+  code { background: rgba(127,127,127,0.15); padding: 0 0.25rem; border-radius: 3px; }
+  .app-header { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.5rem; }
+  .app-header img { width: 64px; height: 64px; border-radius: 14px; flex: 0 0 auto; }
+  .app-header .name { font-size: 1.15rem; font-weight: 600; line-height: 1.2; }
+  .app-header .dev { color: #666; font-size: 0.9rem; }
+  ol li { margin-bottom: 0.4rem; }
+</style>
+</head>
+<body>
+
+<p class="lang"><a href="delete-account.html">English</a></p>
+
+<div class="app-header">
+  <img src="icon.png" alt="Иконка приложения «Слушай Садху»">
+  <div>
+    <div class="name">Слушай Садху</div>
+    <div class="dev">Разработчик: Aleksei Leontev</div>
+  </div>
+</div>
+
+<h1>Удаление аккаунта</h1>
+<p class="meta">Как удалить аккаунт и данные в приложении «Слушай Садху»</p>
+
+<p>Вы можете удалить свой аккаунт и все связанные с ним данные в любой момент прямо в мобильном приложении «Слушай Садху». На этой странице описано, как это сделать и что именно удаляется.</p>
+
+<strong class="section">Как удалить аккаунт</strong>
+<p>Кнопка удаления аккаунта доступна внутри приложения, когда вы вошли в аккаунт:</p>
+<ol>
+  <li>Откройте вкладку <strong>Настройки</strong> в приложении.</li>
+  <li>Нажмите на свой аккаунт (имя или электронная почта вверху раздела <strong>Аккаунт</strong>).</li>
+  <li>В появившемся меню нажмите <strong>Удалить аккаунт</strong>.</li>
+  <li>Подтвердите, выбрав один из двух вариантов:
+    <ul>
+      <li><strong>Удалить аккаунт и стереть данные</strong> — удаляет аккаунт на наших серверах <em>и</em> стирает все локальные данные на этом устройстве.</li>
+      <li><strong>Удалить аккаунт, оставить данные</strong> — удаляет аккаунт на наших серверах, но оставляет локальные данные (чаты, заметки, плейлисты, скачанные аудио, историю прослушивания) на устройстве, чтобы вы могли продолжить пользоваться приложением анонимно.</li>
+    </ul>
+  </li>
+</ol>
+<p>Если пункта «Удалить аккаунт» нет, значит вы не вошли в аккаунт. Приложением можно полностью пользоваться анонимно: без аккаунта на сервере нечего удалять, а чтобы удалить всё, достаточно просто удалить приложение с устройства.</p>
+
+<strong class="section">Что удаляется</strong>
+<p>При удалении аккаунта <strong>все ваши данные удаляются полностью</strong>. На нашей стороне ничего не остаётся. А именно:</p>
+<ul>
+  <li><strong>Ваш аккаунт</strong> — идентификатор, электронная почта, имя и ссылка на фото профиля.</li>
+  <li><strong>Привязки входа</strong> — связи входа через Apple и Google, привязанные к аккаунту.</li>
+  <li><strong>Все сессии</strong> — выполняется выход из аккаунта на всех устройствах.</li>
+  <li><strong>Логи серверов и записи чата</strong> — история чата (ваши сообщения, найденные фрагменты лекций, ответы модели), а также связанные диагностические записи и счётчики удаляются с наших серверов.</li>
+</ul>
+
+<strong class="section">Что остаётся</strong>
+<p>Единственное, что может остаться, — это <strong>локальные данные на вашем собственном устройстве</strong>: чаты, заметки, плейлисты, скачанные аудио и история прослушивания. Эти данные никогда не покидают устройство. Их тоже можно удалить, выбрав при удалении вариант <strong>«Удалить аккаунт и стереть данные»</strong> или удалив приложение.</p>
+
+<strong class="section">Сроки хранения</strong>
+<p>Аккаунт, логи серверов и записи чата удаляются <strong>сразу же</strong> при удалении аккаунта — мы не храним их в течение какого-либо срока.</p>
+<p>Две вещи находятся вне нашего контроля: сообщения, отправленные в чате, проходят через <a href="https://openrouter.ai/privacy">OpenRouter</a> к поставщику языковой модели (сейчас это <a href="https://policies.google.com/privacy">модели Google Gemini</a>), который хранит их недолго (обычно до 30 дней) согласно своим правилам защиты от злоупотреблений; а также записи о покупках, которые Apple или Google хранят в течение срока, установленного этими платформами.</p>
+
+<strong class="section">Нужна помощь?</strong>
+<p>Если не получается удалить аккаунт, напишите нам на <a href="mailto:support@akdasa.studio">support@akdasa.studio</a>, и мы удалим ваши данные за вас.</p>
+<p>Подробнее о том, как приложение работает с вашими данными, см. в <a href="ru.html">Политике конфиденциальности</a>.</p>
+
+</body>
+</html>
