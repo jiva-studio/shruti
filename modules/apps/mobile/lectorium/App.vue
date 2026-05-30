@@ -127,7 +127,7 @@ const floatingPlayerHidden = computed<boolean>(() => {
   if (overlays.actionSheetOpen) return true
   if (transcriptStore.open && !dialog.mirrorsActivePlayer.value) return true
   const routeName = currentRoute.value.name
-  if (routeName === "chat" || routeName === "chat-session") return true
+  if (routeName === "chat") return true
   return false
 })
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)

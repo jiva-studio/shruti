@@ -40,7 +40,7 @@ export function useProactiveDeepLink(): void {
     void LocalNotifications.addListener("localNotificationActionPerformed", (action) => {
       const sessionId = readChatSessionId(action.notification.extra)
       if (sessionId === null) return
-      void router.push({ name: "chat-session", params: { sessionId } })
+      void router.push({ name: "chat", query: { session: sessionId } })
     }).then((h) => {
       handle = h
     })

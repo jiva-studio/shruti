@@ -30,15 +30,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@lectorium/views/Notes/NotesView.vue"),
       },
       {
+        // Single route for the chat screen. The active session rides in
+        // a `?session=<id>` QUERY param, NOT a path param. This is
+        // deliberate: Ionic's IonRouterOutlet keys views by matched
+        // route + pathname, and treats a parameterised path
+        // (`chat/:sessionId`) as a brand-new view per id — so opening a
+        // session would tear down and re-mount ChatView with a full
+        // page-push transition (the source of the "tap chat → it opens,
+        // scrolls, then bounces back" flicker). A query param keeps the
+        // pathname stable at `/tabs/chat`, so the SAME ChatView instance
+        // is reused and only its reactive `route.query.session` updates.
         path: "chat",
         name: "chat",
         component: () => import("@lectorium/views/Chat/ChatView.vue"),
-      },
-      {
-        path: "chat/:sessionId",
-        name: "chat-session",
-        component: () => import("@lectorium/views/Chat/ChatView.vue"),
-        props: true,
       },
       {
         path: "settings",
@@ -77,8 +81,8 @@ const router = createRouter({
 // already-active tab. It looks up the FIRST entry for that tab in the
 // location history and calls `router.go(firstPos - currentPos)` to
 // walk back. If the user landed directly on a child URL (e.g.
-// `/tabs/chat/<id>` via deep link or Ask Sadhu without ever visiting
-// `/tabs/chat`), the first entry IS the current entry — delta = 0.
+// `/tabs/chat?session=<id>` via deep link or Ask Sadhu without ever
+// visiting `/tabs/chat`), the first entry IS the current entry — delta = 0.
 // `router.go(0)` resolves to `history.go(0)`, which the browser
 // treats as a full page reload. Intercept the degenerate case so the
 // tap becomes a harmless no-op instead of nuking the SPA.
