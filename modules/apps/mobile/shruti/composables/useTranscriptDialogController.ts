@@ -212,11 +212,11 @@ export function useTranscriptDialogController(
         // `store.startNewSession()` and wiped the active session the
         // controller had just set up — leaving the user staring at
         // the empty chat list instead of the per-track session.
-        // Awaiting the push first guarantees `route.params.sessionId`
+        // Awaiting the push first guarantees `route.query.session`
         // matches the freshly-created session before ChatView's
         // watcher or onMounted reads it; the modal then dismisses
         // over the already-correct chat view.
-        await router.push({ name: "chat-session", params: { sessionId } })
+        await router.push({ name: "chat", query: { session: sessionId } })
         transcriptStore.close()
       } catch (err) {
         console.warn("[transcript] ask-sadhu dispatch failed:", err)

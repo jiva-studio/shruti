@@ -90,7 +90,7 @@ export interface ChatControllerReturn {
 export function useChatController(): ChatControllerReturn {
   const store = useChatStore()
   const player = usePlayerStore()
-  // `useRoute()` is reactive (needed for the chat-session watcher
+  // `useRoute()` is reactive (needed for the `?session=` query watcher
   //  below), but we add optional chains everywhere because the
   //  Vite-dev DI race + IonRouterOutlet quirks occasionally surface
   //  `undefined` here on first render. `router` uses the singleton
@@ -98,6 +98,16 @@ export function useChatController(): ChatControllerReturn {
   const route = useRoute()
   const { t } = useI18n()
   const toast = useToast()
+
+  // The active session rides in `?session=<id>`. Reading it from a query
+  // param (not a path param) is what keeps the chat screen on a single
+  // stable pathname — see the route definition in `router/index.ts` for
+  // why a path param would re-mount ChatView on every session open.
+  function sessionIdFromRoute(): string | null {
+    const q = route?.query?.session
+    const id = Array.isArray(q) ? q[0] : q
+    return typeof id === "string" && id.length > 0 ? id : null
+  }
 
   const isHistoryOpen = ref(false)
   // The IonContent's inner scroller element — captured via template ref
@@ -113,12 +123,7 @@ export function useChatController(): ChatControllerReturn {
   // via `visibility: hidden` (layout preserved, scrollHeight valid)
   // during that window prevents the user from ever seeing the wrong
   // frame. Defaults true so empty-state / chat-root renders instantly.
-  const initialSessionId = (() => {
-    const param = route?.params?.sessionId
-    const id = Array.isArray(param) ? param[0] : param
-    return typeof id === "string" && id.length > 0 ? id : null
-  })()
-  const scrollReady = ref<boolean>(initialSessionId === null)
+  const scrollReady = ref<boolean>(sessionIdFromRoute() === null)
 
   const hasMessages = computed(() => store.messages.length > 0)
   /** Drives the "Recap what I just listened to" suggestion chip. */
@@ -137,9 +142,8 @@ export function useChatController(): ChatControllerReturn {
   const filteredSessions = computed<ChatSession[]>(() => store.searchSessions(searchQuery.value))
 
   async function ensureSessionFromRoute(): Promise<void> {
-    const param = route?.params?.sessionId
-    const sessionId = Array.isArray(param) ? param[0] : param
-    if (typeof sessionId === "string" && sessionId.length > 0) {
+    const sessionId = sessionIdFromRoute()
+    if (sessionId !== null) {
       // Hide the scroller ONLY when we're swapping to a different
       // session — re-entering the same one doesn't need the blink.
       // We still run `openSession → nextTick → scrollToBottom` either
@@ -160,13 +164,13 @@ export function useChatController(): ChatControllerReturn {
         scrollReady.value = true
       }
     } else {
-      // Route has no sessionId — we're on the empty chat home. Clear
-      // any previously-loaded session so the view actually shows the
-      // empty state. Without this, navigating from `/tabs/chat/<id>`
-      // back to `/tabs/chat` (e.g. via the chat-tab back-navigation)
-      // leaves the store holding the old session's messages — URL
-      // says "chat root" but ChatMessageList still renders the
-      // session's bubbles. `startNewSession` is idempotent: cheap
+      // No `?session=` — we're on the empty chat home. Clear any
+      // previously-loaded session so the view actually shows the
+      // empty state. Without this, dropping the query (e.g. via the
+      // chat-tab back-navigation or onNewSession) leaves the store
+      // holding the old session's messages — URL says "chat root" but
+      // ChatMessageList still renders the session's bubbles.
+      // `startNewSession` is idempotent: cheap
       // no-op when the store is already empty (initial app mount),
       // an actual reset when coming from a session view.
       store.startNewSession()
@@ -194,8 +198,8 @@ export function useChatController(): ChatControllerReturn {
 
   function onNewSession(): void {
     store.startNewSession()
-    if (route?.name === "chat-session") {
-      void router.replace({ name: "chat" })
+    if (sessionIdFromRoute() !== null) {
+      void router.replace({ name: "chat", query: {} })
     }
   }
 
@@ -219,14 +223,14 @@ export function useChatController(): ChatControllerReturn {
     } finally {
       scrollReady.value = true
     }
-    void router.replace({ name: "chat-session", params: { sessionId: id } })
+    void router.replace({ name: "chat", query: { session: id } })
   }
 
   async function onDeleteSession(id: string): Promise<void> {
     const wasActive = store.activeSessionId === id
     await store.deleteSession(id)
-    if (wasActive && route?.name === "chat-session") {
-      void router.replace({ name: "chat" })
+    if (wasActive && sessionIdFromRoute() !== null) {
+      void router.replace({ name: "chat", query: {} })
     }
   }
 
@@ -244,8 +248,8 @@ export function useChatController(): ChatControllerReturn {
               try {
                 await store.clearAll()
                 searchQuery.value = ""
-                if (route?.name === "chat-session") {
-                  void router.replace({ name: "chat" })
+                if (sessionIdFromRoute() !== null) {
+                  void router.replace({ name: "chat", query: {} })
                 }
                 toast.info(t("chat.clearedToast"))
               } catch (err) {
@@ -437,29 +441,33 @@ export function useChatController(): ChatControllerReturn {
   )
 
   watch(
-    () => route?.params?.sessionId,
+    () => route?.query?.session,
     () => {
       void ensureSessionFromRoute()
     }
   )
 
   /**
-   * URL sync — when `sendMessage` mints a session while we're on the
-   * chat home (no `sessionId` in the URL — pill tap or first-message
-   * direct-input send), promote the URL to `chat-session/:id` so the
-   * session has a real route, history-back lands on the empty home,
-   * and the route-watcher above stops resetting the store on the next
-   * tick. We can't navigate inside the store, and we don't want to
-   * pre-create a session in the controller (the previous shape did
-   * that and produced duplicates under racing awaits — see
-   * `onPickSuggestion` above), so the cleanest path is to react to the
-   * store's own activeSessionId.
+   * URL sync — when `sendMessage` mints a session while the URL has no
+   * `?session=` (pill tap or first-message direct-input send), promote
+   * the URL to `?session=<id>` so the session has a shareable route,
+   * history-back lands on the empty home, and deep-links round-trip.
+   * The `!== id` guard makes this a no-op when the URL already reflects
+   * the active session (e.g. after `onPickSession` replaced it), which
+   * stops the route-watcher ↔ activeSessionId-watcher feedback loop
+   * from re-firing. We can't navigate inside the store, and we don't
+   * want to pre-create a session in the controller (the previous shape
+   * did that and produced duplicates under racing awaits — see
+   * `onPickSuggestion` above), so reacting to the store's own
+   * activeSessionId is the cleanest path. Because session selection is
+   * now a query change on a STABLE pathname, this `router.replace`
+   * never re-mounts ChatView or triggers an Ionic page transition.
    */
   watch(
     () => store.activeSessionId,
     (id) => {
-      if (id && route?.name === "chat") {
-        void router.replace({ name: "chat-session", params: { sessionId: id } })
+      if (id && sessionIdFromRoute() !== id) {
+        void router.replace({ name: "chat", query: { session: id } })
       }
     }
   )
