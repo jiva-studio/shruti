@@ -142,7 +142,26 @@ def _chunk_to_domain(chunk: AIMessageChunk) -> CompletionChunk:
             out["prompt_tokens"] = pt
         if (ct := usage.get("output_tokens")) is not None:
             out["completion_tokens"] = ct
+        # Cached-prefix hits land in input_token_details.cache_read
+        # (langchain maps OpenRouter's prompt_tokens_details.cached_tokens
+        # here). Surface it so we can see implicit-cache hits.
+        if (cr := (usage.get("input_token_details") or {}).get("cache_read")) is not None:
+            out["cached_tokens"] = cr
     return out
+
+
+def _usage_details(input_tokens: int, output_tokens: int, cached_tokens: int) -> dict[str, int]:
+    """Langfuse `usage_details` payload. On a prompt-cache hit, split the
+    prompt tokens into the uncached `input` and a `cache_read` bucket so
+    the rollup total (input+output) is unchanged while the cache hit is
+    visible. No hit → identical shape to the old `{input, output}`."""
+    if cached_tokens > 0:
+        return {
+            "input": max(0, input_tokens - cached_tokens),
+            "cache_read": cached_tokens,
+            "output": output_tokens,
+        }
+    return {"input": input_tokens, "output": output_tokens}
 
 
 @lru_cache(maxsize=32)
@@ -330,6 +349,7 @@ class OpenRouterLLMProvider:
         tool_call_acc: list[dict[str, Any]] = []
         usage_in = 0
         usage_out = 0
+        usage_cached = 0
         with gen_ctx as gen:
             try:
                 async for chunk in client.astream(lc_msgs):
@@ -349,6 +369,8 @@ class OpenRouterLLMProvider:
                         usage_in = pt
                     if (ct := domain_chunk.get("completion_tokens")) is not None:
                         usage_out = ct
+                    if (cr := domain_chunk.get("cached_tokens")) is not None:
+                        usage_cached = cr
                     yield domain_chunk
             finally:
                 if gen is not None:
@@ -358,7 +380,7 @@ class OpenRouterLLMProvider:
                             gen_output["tool_calls"] = tool_call_acc
                         gen.update(
                             output=gen_output,
-                            usage_details={"input": usage_in, "output": usage_out},
+                            usage_details=_usage_details(usage_in, usage_out, usage_cached),
                         )
                     except Exception as exc:  # noqa: BLE001
                         log.warning("langfuse_generation_update_failed", error=str(exc))
@@ -410,6 +432,7 @@ class OpenRouterLLMProvider:
                 try:
                     usage_in = 0
                     usage_out = 0
+                    usage_cached = 0
                     raw_msg = (
                         raw_and_parsed.get("raw")
                         if isinstance(raw_and_parsed, dict)
@@ -419,9 +442,10 @@ class OpenRouterLLMProvider:
                         usage_meta = getattr(raw_msg, "usage_metadata", None) or {}
                         usage_in = usage_meta.get("input_tokens") or 0
                         usage_out = usage_meta.get("output_tokens") or 0
+                        usage_cached = (usage_meta.get("input_token_details") or {}).get("cache_read") or 0
                     gen.update(
                         output=parsed.model_dump(),
-                        usage_details={"input": usage_in, "output": usage_out},
+                        usage_details=_usage_details(usage_in, usage_out, usage_cached),
                     )
                 except Exception as exc:  # noqa: BLE001
                     log.warning("langfuse_generation_update_failed", error=str(exc))
