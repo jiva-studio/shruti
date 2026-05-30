@@ -19,7 +19,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import initSqlJs, { type Database } from "sql.js"
 import type { IDatabase, QueryParams } from "@ports/app/index.js"
-import { runUserMigrations } from "@lectorium/services/migrations/user/runMigrations.js"
+import { runUserMigrations } from "@infra/persistence/migrations/user/runMigrations.js"
 import { playlistTracksFor, demoTranscriptTrackId } from "./tracks.js"
 import { chatFixtureFor, DEMO_SESSION_ID } from "./chat.js"
 
