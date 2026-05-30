@@ -31,6 +31,9 @@ export interface ResolveContentDatabaseDeps extends DatabaseLocatorDeps {
   filesStorage: IRemoteFilesStorage
   serverProber: IServerProber
   onServerResolved(result: ServerProbeResult): void
+  /** Apply the `regions` block (if any) from the freshly-fetched remote
+   *  config to the runtime region registry. No-op when absent/invalid. */
+  applyRemoteConfig(config: RemoteAppConfig): void
   loadSavedPreferredServerId(): Promise<string | undefined>
   setViewState(
     value: "server:probing" | "config:downloading" | "database:check" | "database:downloading"
@@ -71,6 +74,11 @@ async function fetchDatabaseFromCdn(deps: ResolveContentDatabaseDeps): Promise<s
   if (latestVersion === null) {
     throw new Error(`No compatible database for scheme ${deps.supportedScheme}`)
   }
+
+  // Adopt the region list from the (final) remote config before building
+  // any URLs — a refreshed regions block may have changed the active
+  // region's endpoints.
+  deps.applyRemoteConfig(config)
 
   const databaseUrl = buildDatabaseUrl(deps, latestVersion)
   const databaseStoragePath = buildDatabaseStoragePath(deps, latestVersion)

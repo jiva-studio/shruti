@@ -8,6 +8,7 @@ import {
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { applyDailyReminder } from "@shruti/composables/useDailyReminder.js"
 import type { CdnServer } from "@lib/domain/servers.js"
+import { getRegions } from "@shruti/services/regionsRegistry.js"
 import { useAppLanguageList, type SelectorItem } from "./composables/useAppLanguageList.js"
 import { useActiveServerBinding } from "./composables/useActiveServerBinding.js"
 import {
@@ -103,7 +104,7 @@ export function useSettingsController(): SettingsControllerReturn {
   )
 
   const { activeServerId, serverItems } = useActiveServerBinding({
-    servers: app.appConfig.servers,
+    servers: getRegions(),
     activeServer: app.activeServer,
   })
 

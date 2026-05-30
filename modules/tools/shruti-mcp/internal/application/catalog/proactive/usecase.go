@@ -1,25 +1,23 @@
-// Package proactive owns the on-disk `<OutDir>/artifacts/catalog/proactive.json`
-// — the source-of-truth file that `catalog.publish` reads and inlines into
-// the published config.json. The mobile app fetches that config and uses
-// the `proactive` block for its agent-initiated chat features (rule
-// overrides + holiday calendar + master kill switch).
+// Package proactive owns the `proactive` section of the local config.json
+// (see package configdoc) — the editable source-of-truth that
+// catalog.config.publish / catalog.publish push into the published
+// config.json. The mobile app fetches that config and uses the `proactive`
+// block for its agent-initiated chat features (rule overrides + holiday
+// calendar + master kill switch).
 //
-// The file is intentionally parsed/serialized through `map[string]any` so
-// unknown top-level fields (`_comment` in the example) and forward-compatible
-// keys survive round-trips. Strict structs would silently drop them.
+// The section is parsed/serialized through `map[string]any` so unknown /
+// forward-compatible keys survive round-trips. Strict structs would drop them.
 package proactive
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configdoc"
 )
 
 // Allowed enum values mirror modules/libs/domain/config.ts:23-92 on the
@@ -80,51 +78,42 @@ type UseCase struct {
 	Mu     *sync.Mutex
 }
 
-func (u UseCase) path() string {
-	return filepath.Join(u.OutDir, "artifacts", "catalog", "proactive.json")
+func (u UseCase) store() configdoc.Store {
+	return configdoc.Store{OutDir: u.OutDir, Mu: u.Mu}
 }
 
-// load parses proactive.json into a generic map. Returns `(nil, false, nil)`
-// when the file does not exist.
+// load returns the `proactive` sub-document of the local config.json. Returns
+// `(nil, false, nil)` when config.json is absent OR carries no proactive
+// section (so callers seed a fresh doc).
 func (u UseCase) load() (map[string]any, bool, error) {
-	raw, err := os.ReadFile(u.path())
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, false, nil
-		}
+	doc, ok, err := u.store().Load()
+	if err != nil || !ok {
 		return nil, false, err
 	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, false, fmt.Errorf("decode proactive.json: %w", err)
+	raw, present := doc["proactive"]
+	if !present {
+		return nil, false, nil
 	}
-	if m == nil {
-		m = map[string]any{}
+	m, isMap := raw.(map[string]any)
+	if !isMap {
+		return nil, false, fmt.Errorf("config.json proactive is not an object")
 	}
 	return m, true, nil
 }
 
-// save writes `doc` atomically via tmp+rename. Mirrors the convention in
-// internal/infra/catalog/sqlite/meta.go:49-54. Two-space indent matches
-// the rest of the catalog artifacts.
-func (u UseCase) save(doc map[string]any) (string, error) {
-	path := u.path()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("mkdir: %w", err)
-	}
-	body, err := json.MarshalIndent(doc, "", "  ")
+// save merges the proactive sub-doc into config.json (preserving regions and
+// any other top-level keys) and returns the config.json path. The CRUD tools
+// only edit this local file; catalog.config.publish / catalog.publish push it.
+func (u UseCase) save(proactiveDoc map[string]any) (string, error) {
+	doc, _, err := u.store().Load()
 	if err != nil {
-		return "", fmt.Errorf("encode: %w", err)
-	}
-	body = append(body, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o644); err != nil {
 		return "", err
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		return "", err
+	if doc == nil {
+		doc = map[string]any{}
 	}
-	return path, nil
+	doc["proactive"] = proactiveDoc
+	return u.store().Save(doc)
 }
 
 // freshDoc seeds a brand-new proactive.json with sensible defaults so a

@@ -39,15 +39,17 @@ func TestHolidayAdd_createsFreshDocAndAtomicallyWrites(t *testing.T) {
 	if !res.Ok || res.WrittenPath == "" {
 		t.Fatalf("bad result: %+v", res)
 	}
-	// File exists and is valid JSON with expected nesting.
+	// File exists and is valid JSON; proactive lives under the `proactive`
+	// key of the shared config.json.
 	raw, err := os.ReadFile(res.WrittenPath)
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	var got map[string]any
-	if err := json.Unmarshal(raw, &got); err != nil {
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	got := cfg["proactive"].(map[string]any)
 	cals := got["calendars"].(map[string]any)
 	holidays := cals["holidays"].([]any)
 	if len(holidays) != 1 {
@@ -57,8 +59,8 @@ func TestHolidayAdd_createsFreshDocAndAtomicallyWrites(t *testing.T) {
 	if h["id"] != "janmashtami_2026" || h["date"] != "2026-08-26" {
 		t.Fatalf("bad holiday entry: %+v", h)
 	}
-	// MkdirAll created the artifacts/catalog/ tree.
-	want := filepath.Join(uc.OutDir, "artifacts", "catalog", "proactive.json")
+	// MkdirAll created the artifacts/catalog/ tree; the file is config.json.
+	want := filepath.Join(uc.OutDir, "artifacts", "catalog", "config.json")
 	if res.WrittenPath != want {
 		t.Fatalf("path mismatch: got %s want %s", res.WrittenPath, want)
 	}
@@ -281,28 +283,32 @@ func TestMasterSet_roundTrip(t *testing.T) {
 	}
 }
 
-// Critical: unknown top-level keys (_comment) survive a round-trip. The
-// catalog convention is that examples/proactive.json carries a top-level
-// `_comment` describing the file; round-tripping through strict structs
-// would silently strip it. This test pins the map[string]any behaviour.
-func TestRoundTrip_preservesUnknownTopLevelKeys(t *testing.T) {
+// Critical: unknown keys survive a round-trip, both inside the proactive
+// section (_comment) and at the config.json top level (regions, written by a
+// different tool). Round-tripping through strict structs would silently strip
+// them. This test pins the map[string]any behaviour.
+func TestRoundTrip_preservesUnknownKeys(t *testing.T) {
 	uc := newUC(t)
-	// Hand-seed a file with _comment.
 	dir := filepath.Join(uc.OutDir, "artifacts", "catalog")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Seed config.json with a proactive section (carrying _comment) AND a
+	// sibling regions section owned by the regions tool.
 	seed := map[string]any{
-		"_comment":       "do not remove",
-		"master_enabled": true,
-		"rules":          []any{},
-		"calendars":      map[string]any{"holidays": []any{}},
+		"regions": []any{map[string]any{"id": "global"}},
+		"proactive": map[string]any{
+			"_comment":       "do not remove",
+			"master_enabled": true,
+			"rules":          []any{},
+			"calendars":      map[string]any{"holidays": []any{}},
+		},
 	}
 	body, _ := json.MarshalIndent(seed, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "proactive.json"), body, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), body, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Add a holiday — this triggers the load-mutate-save cycle.
+	// Add a holiday — this triggers the load-mutate-save cycle on proactive.
 	if _, err := uc.HolidayAdd(HolidayInput{
 		ID:   "test",
 		Name: map[string]string{"en": "T"},
@@ -310,16 +316,20 @@ func TestRoundTrip_preservesUnknownTopLevelKeys(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Re-read raw and verify _comment is still there.
-	raw, err := os.ReadFile(filepath.Join(dir, "proactive.json"))
+	// Re-read raw and verify both unknown keys are still there.
+	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got map[string]any
-	if err := json.Unmarshal(raw, &got); err != nil {
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
 		t.Fatal(err)
 	}
-	if got["_comment"] != "do not remove" {
-		t.Fatalf("_comment dropped: %v", got["_comment"])
+	if _, ok := cfg["regions"]; !ok {
+		t.Fatalf("sibling regions section dropped by a proactive edit")
+	}
+	pro := cfg["proactive"].(map[string]any)
+	if pro["_comment"] != "do not remove" {
+		t.Fatalf("_comment dropped: %v", pro["_comment"])
 	}
 }

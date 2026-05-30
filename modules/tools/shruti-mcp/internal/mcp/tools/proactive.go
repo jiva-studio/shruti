@@ -281,4 +281,3 @@ func requireInt(args map[string]any, key string) (int, error) {
 	}
 	return 0, fmt.Errorf("%q must be a number", key)
 }
-

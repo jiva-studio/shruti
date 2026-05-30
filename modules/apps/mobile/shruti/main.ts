@@ -33,7 +33,7 @@ import router from "./router/index.js"
 import { i18n } from "./i18n/index.js"
 import { initShruti } from "./shruti.js"
 import { DEFAULT_APP_CONFIG } from "./services/app.config.js"
-import { SERVERS } from "@lib/domain/servers.js"
+import { getRegions, hydrateRegions } from "@shruti/services/regionsRegistry.js"
 import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
 import { useCapacitorSqlPersistence } from "@infra/persistence/capacitor/index.js"
 import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
@@ -78,18 +78,20 @@ if (isNative) {
 const preferences = useCapacitorPreferences()
 
 // Two failover-aware HTTP clients — one for the auth service, one for
-// chat. Both walk SERVERS in preferred-first order on transient
-// failures; if the preferred has been unreachable for >5 min and a
-// fallback succeeds, the active server is promoted (which persists
-// preferredServerId via the watcher in initShruti).
+// chat. Both walk the runtime region list (regionsRegistry) in
+// preferred-first order on transient failures; if the preferred has been
+// unreachable for >5 min and a fallback succeeds, the active server is
+// promoted (which persists preferredServerId via the watcher in
+// initShruti). `getServers` is read per request, so a region list
+// refreshed from the remote config is picked up without rebuilding.
 const authHttp = createFailoverClient({
-  servers: SERVERS,
+  getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.authBaseUrl,
   onPromoteFallback: (id) => useShruti().setActiveServerById(id),
 })
 const chatHttp = createFailoverClient({
-  servers: SERVERS,
+  getServers: () => getRegions(),
   getPreferredId: () => useShruti().activeServer.value.id,
   pickBaseUrl: (s) => s.chatBaseUrl,
   onPromoteFallback: (id) => useShruti().setActiveServerById(id),
@@ -141,8 +143,11 @@ initShruti({
       ? useCapacitorDatabaseTransfer(getUserDb)
       : useWebDatabaseTransfer(config.database.userLocalPath, getUserDb),
   platform,
-  initialServer: SERVERS[0],
-  serverProber: useHttpServerProber(),
+  // Bootstrap seed only — the Welcome probe immediately overrides this via
+  // setActiveServerById(probedId). After hydrateRegions() this is already
+  // the last-persisted region, not necessarily the bundled default.
+  initialServer: getRegions()[0]!,
+  serverProber: useHttpServerProber(() => getRegions()),
   proactiveChat: useHttpProactiveChatService({
     getAccessToken: () => useShruti().auth.getAccessToken(),
     request: (path, init) => chatHttp.request(path, init),
@@ -160,21 +165,27 @@ if (import.meta.env.VITE_DEBUG_API === "true") {
   })
 }
 
-router.isReady().then(() => {
-  app.mount("#app")
-  // Fire-and-forget: RevenueCat SDK configure + initial customer fetch
-  // + live-update subscription. Failures must not block app startup —
-  // the purchase UI just stays hidden if init fails.
-  void usePurchasesStore()
-    .init()
-    .catch((e) => {
-      console.warn("purchases.init failed", e)
-    })
-  // Bootstrap anonymous-by-device session. Resolves the persistent
-  // userId asynchronously; the rest of the app reads it via useAuthStore.
-  void useAuthStore()
-    .restore()
-    .catch((e) => {
-      console.warn("auth.restore failed", e)
-    })
-})
+// Hydrate the region list from the last-persisted (downloaded) config
+// BEFORE mounting, so the first CDN probe in the Welcome flow goes to the
+// latest regions from the file rather than the bundled bootstrap seed.
+// Failure is non-fatal — hydrateRegions falls back to the bundled list.
+void hydrateRegions(preferences)
+  .then(() => router.isReady())
+  .then(() => {
+    app.mount("#app")
+    // Fire-and-forget: RevenueCat SDK configure + initial customer fetch
+    // + live-update subscription. Failures must not block app startup —
+    // the purchase UI just stays hidden if init fails.
+    void usePurchasesStore()
+      .init()
+      .catch((e) => {
+        console.warn("purchases.init failed", e)
+      })
+    // Bootstrap anonymous-by-device session. Resolves the persistent
+    // userId asynchronously; the rest of the app reads it via useAuthStore.
+    void useAuthStore()
+      .restore()
+      .catch((e) => {
+        console.warn("auth.restore failed", e)
+      })
+  })

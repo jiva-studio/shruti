@@ -1,3 +1,5 @@
+import type { CdnServer } from "./servers.js"
+
 /**
  * Remote config published at `{server}/public/config.json` and fetched
  * on every cold start / background refresh.
@@ -5,6 +7,15 @@
 export interface RemoteAppConfig {
   readonly databases: readonly RemoteDbEntry[]
   readonly proactive?: ProactiveConfig
+  /**
+   * CDN/region endpoints, managed server-side via shruti-mcp
+   * (`catalog.config.regions.*`). When present (and non-empty), this list
+   * fully REPLACES the bundled `SERVERS` bootstrap — see
+   * `shruti/services/regionsRegistry.ts`. Same shape as the compiled-in
+   * `CdnServer` so it drops straight in with no mapping. Omitted/empty →
+   * the client keeps its current (bundled or last-persisted) list.
+   */
+  readonly regions?: readonly CdnServer[]
 }
 
 export interface RemoteDbEntry {

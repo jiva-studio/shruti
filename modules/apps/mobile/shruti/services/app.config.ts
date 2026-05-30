@@ -1,9 +1,11 @@
-import { SERVERS } from "@lib/domain/servers.js"
 import type { AppConfig } from "../shruti.js"
 
 /**
  * Default runtime configuration. `__DB_SCHEME__` comes from Vite `define`
- * and is the source of truth for the scheme this client expects.
+ * and is the source of truth for the scheme this client expects. The region
+ * list is no longer here — it lives in the runtime registry
+ * (regionsRegistry), bootstrapped from servers.ts and refreshed from the
+ * downloaded config.json.
  */
 export const DEFAULT_APP_CONFIG: AppConfig = {
   database: {
@@ -12,5 +14,4 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     userLocalPath: "shruti/databases/user.db",
   },
   publicRemoteConfigPath: "public/config.json",
-  servers: SERVERS,
 }

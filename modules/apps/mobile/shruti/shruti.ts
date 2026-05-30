@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from "vue"
-import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { type CdnServer } from "@lib/domain/servers.js"
+import { findRegion } from "./services/regionsRegistry.js"
 import { PREFERRED_SERVER_KEY } from "./services/preferredServer.js"
 import type {
   AuthPort,
@@ -44,7 +45,6 @@ export interface AppConfig {
   }
   /** Path to the remote config manifest (relative to bucket root). */
   readonly publicRemoteConfigPath: string
-  readonly servers: readonly CdnServer[]
 }
 
 /**
@@ -120,9 +120,9 @@ export interface Shruti {
 
   setActiveServer(server: CdnServer): void
   /**
-   * Resolve `serverId` against the in-domain SERVERS registry and
-   * activate it. Used by the Welcome flow after `IServerProber.probe`
-   * returns the chosen server's id.
+   * Resolve `serverId` against the runtime region registry
+   * (regionsRegistry) and activate it. Used by the Welcome flow after
+   * `IServerProber.probe` returns the chosen server's id.
    */
   setActiveServerById(serverId: string): void
 
@@ -243,7 +243,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     },
 
     setActiveServerById(serverId) {
-      const server = SERVERS.find((s) => s.id === serverId)
+      const server = findRegion(serverId)
       if (!server) throw new Error(`Unknown server id: ${serverId}`)
       activeServer.value = server
     },
