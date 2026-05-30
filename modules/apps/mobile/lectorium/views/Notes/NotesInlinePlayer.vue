@@ -36,7 +36,7 @@
 import { computed, onBeforeUnmount, ref, useTemplateRef } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { useNotesInlineAudio } from "@lectorium/composables/useNotesInlineAudio.js"
+import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
 import { useExcerptWaveform, type ExcerptRef } from "./useExcerptWaveform.js"
 
 interface NoteAudioRef extends ExcerptRef {
@@ -45,7 +45,6 @@ interface NoteAudioRef extends ExcerptRef {
 
 const props = defineProps<{ note: NoteAudioRef }>()
 
-const inline = useNotesInlineAudio()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 const rootEl = useTemplateRef<HTMLDivElement>("rootEl")
 
@@ -75,9 +74,10 @@ const progressFraction = computed(() => {
  * initial state — leaving them mid-clip / mid-pause means the user sees
  * "multiple players in different positions, none at the beginning."
  *
- * The main lecture player intentionally keeps its position (registered
- * with its own pause-only callback in App.vue) so a tap on a note
- * excerpt doesn't lose the lecture's resume point.
+ * The main lecture player intentionally keeps its position (it registers
+ * its own pause-only callback with the orchestrator from the player
+ * store) so a tap on a note excerpt doesn't lose the lecture's resume
+ * point.
  */
 function pauseAndResetSelf(): void {
   const el = audioEl.value
@@ -87,7 +87,7 @@ function pauseAndResetSelf(): void {
   positionMs.value = 0
 }
 
-const unregister = inline.registerPauser(pauseAndResetSelf)
+const { claim } = useAudioSource("inline", pauseAndResetSelf)
 
 async function onToggle(): Promise<void> {
   const el = audioEl.value
@@ -114,7 +114,7 @@ async function onToggle(): Promise<void> {
   } else if (!el.src) {
     el.src = knownUrl
   }
-  inline.notifyPlaying(pauseAndResetSelf)
+  claim()
   try {
     await el.play()
   } catch (err) {
@@ -159,7 +159,6 @@ function onMetadata(): void {
 }
 
 onBeforeUnmount(() => {
-  unregister()
   audioEl.value?.pause()
 })
 </script>

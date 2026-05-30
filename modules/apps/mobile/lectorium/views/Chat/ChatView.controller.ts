@@ -7,7 +7,7 @@ import { useChatStore, type ChatMessage, type ChatSession } from "@lectorium/sto
 import { useToast } from "@lectorium/services/useToast.js"
 import { useTrackUserState } from "@lectorium/composables/useTrackUserState.js"
 import { formatTimestamp } from "@lectorium/composables/formatTimestamp.js"
-import { pauseAllInlineAudio } from "@lectorium/composables/useNotesInlineAudio.js"
+import { pauseGroup } from "@lectorium/composables/useAudioOrchestrator.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 
 export interface OutlineChapterPick {
@@ -446,8 +446,9 @@ export function useChatController(): ChatControllerReturn {
     () => {
       // Stop any citation audio from the previous session — the chips
       // stay mounted across the in-screen query change (stable pathname,
-      // no re-mount), so nothing else pauses them on switch.
-      pauseAllInlineAudio()
+      // no re-mount), so nothing else pauses them on switch. Only the
+      // inline group — never the main lecture.
+      pauseGroup("inline")
       void ensureSessionFromRoute()
     }
   )
