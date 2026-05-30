@@ -170,3 +170,7 @@ class CompletionChunk(TypedDict, total=False):
     finish_reason: str
     prompt_tokens: int
     completion_tokens: int
+    # Subset of prompt_tokens served from the provider's prompt cache
+    # (OpenRouter implicit caching for Gemini/DeepSeek). Lets us confirm
+    # cache hits and the cost saved; 0/absent means no cached prefix.
+    cached_tokens: int
