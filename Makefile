@@ -334,7 +334,7 @@ stack-setup: ## First-time local setup: generate .env.dev + JWT keys + npm insta
 	@infra/app/scripts/gen-jwt-keys.sh
 	@$(MAKE) mobile-install
 
-stack-up: ## Start local backend stack (chat 11080, auth 11081, pg 11082, redis 11083)
+stack-up: ## Start the local stack (builds all services from source; chat 11080, auth 11081, pg 11082, redis 11083, share-audio 11084)
 	@cd infra/app/compose && $(STACK_COMPOSE) up -d
 
 stack-down: ## Stop local backend stack (keeps pg/redis volumes; add -v by hand to wipe)
