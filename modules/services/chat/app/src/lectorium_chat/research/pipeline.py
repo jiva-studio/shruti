@@ -205,6 +205,11 @@ async def _fetch_refs(
         return []
 
     async def _one(ref: AttributionRef) -> list[dict[str, Any]]:
+        # Lecture-fragment refs resolve to transcript chunks (which have no
+        # item_id/addr_label), so they take the lecture envelope path, not the
+        # library one. target_id = "<track_id>@<start_ms>-<end_ms>".
+        if ref.ref_kind == "track":
+            return await _one_track(ref)
         try:
             chunks = await chunk_repo.get_chunks_by_target(
                 ref_kind=ref.ref_kind, target_id=ref.target_id, lang=lang,
@@ -235,6 +240,36 @@ async def _fetch_refs(
             # Same shape as fanout's _library_dedup_key so merge_fanout-style
             # callers can dedup these alongside fanout output.
             env["_dedup_key"] = (c.item_kind, c.item_id, c.segment_index)
+            envelopes.append(env)
+        return envelopes
+
+    async def _one_track(ref: AttributionRef) -> list[dict[str, Any]]:
+        try:
+            chunks = await chunk_repo.get_chunks_by_track_fragment(
+                target_id=ref.target_id, lang=lang,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "fetch_refs_track_failed",
+                target_id=ref.target_id, error=str(exc),
+            )
+            return []
+        # Native-lang fallback, mirroring the library path above.
+        if not chunks and lang is not None:
+            try:
+                chunks = await chunk_repo.get_chunks_by_track_fragment(
+                    target_id=ref.target_id, lang=None,
+                )
+            except Exception:  # noqa: BLE001
+                chunks = []
+        envelopes: list[dict[str, Any]] = []
+        for c in chunks:
+            # lecture_to_envelope mints the cite alias the client dedups on.
+            # _dedup_key mirrors corpus_fanout's _lecture_dedup_key shape so
+            # merge_fanout collapses a fragment surfaced by both attribution
+            # and fanout (the helper is private to corpus_fanout, so inline).
+            env = lecture_to_envelope(c, alias_map=alias_map, score=canonical_score)
+            env["_dedup_key"] = ("lecture", c.track_id, c.start_ms, c.end_ms)
             envelopes.append(env)
         return envelopes
 
