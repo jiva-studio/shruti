@@ -703,6 +703,70 @@ class PgChunkRepository:
             for r in rows
         ]
 
+    async def get_chunks_by_track_fragment(
+        self,
+        *,
+        target_id: str,
+        lang: str | None = None,
+    ) -> list[Chunk]:
+        """Resolve a ref_kind='track' target into transcript chunks.
+
+        target_id is "<track_id>@<start_ms>-<end_ms>" — the address a curator
+        attributes via shruti-mcp. Returns the track's transcript chunks
+        overlapping [start_ms, end_ms] (same overlap predicate as
+        _get_window_raw). Whole-lecture refs (a bare track_id, no "@range")
+        are NOT supported — attribution always points at a specific passage —
+        so a target_id without a parseable range yields no chunks (logged).
+        """
+        track_id, sep, rng = target_id.partition("@")
+        if not sep or not track_id:
+            log.warning("track_ref_no_range", target_id=target_id)
+            return []
+        start_s, dash, end_s = rng.partition("-")
+        if not dash:
+            log.warning("track_ref_bad_range", target_id=target_id)
+            return []
+        try:
+            lo = int(start_s)
+            hi = int(end_s)
+        except ValueError:
+            log.warning("track_ref_bad_range", target_id=target_id)
+            return []
+        if hi < lo:
+            log.warning("track_ref_bad_range", target_id=target_id)
+            return []
+
+        where = [
+            "track_id = $1",
+            "embed_model = $2",
+            "kind = 'track_transcript'",
+            "end_ms >= $3",
+            "start_ms <= $4",
+        ]
+        params: list[Any] = [track_id, self._embed_model, lo, hi]
+        if lang:
+            where.append(f"lang = ${len(params) + 1}")
+            params.append(lang)
+        sql = f"""
+          SELECT track_id, lang, start_ms, end_ms, text, reference_source_id
+          FROM chunks
+          WHERE {' AND '.join(where)}
+          ORDER BY start_ms
+        """
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+        return [
+            Chunk(
+                track_id=r["track_id"],
+                lang=r["lang"],
+                start_ms=r["start_ms"],
+                end_ms=r["end_ms"],
+                text=r["text"],
+                reference_source_id=r["reference_source_id"],
+            )
+            for r in rows
+        ]
+
     async def get_first_chunk_embeddings(
         self,
         track_ids: list[str],

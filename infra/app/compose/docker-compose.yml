@@ -396,6 +396,45 @@ services:
       retries: 40
       start_period: 30s
 
+  search-mcp:
+    # origin only — read-only MCP over pgvector, reached over tailscale.
+    profiles: [origin]
+    image: ${SHRUTI_REGISTRY:-ghcr.io/akdasa-studios}/shruti-search-mcp:${SHRUTI_SEARCH_MCP_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${SHRUTI_ENV_FILE:-../../../.env}
+    environment:
+      DATABASE_URL: postgresql://shruti:${SHRUTI_POSTGRES_PASSWORD:?}@postgres:5432/shruti
+      ENV: ${SHRUTI_ENV:-dev}
+      SERVICE_VERSION: ${SHRUTI_SEARCH_MCP_TAG:-latest}
+      # Mirror chat's embedder so query vectors land in the corpus's space.
+      # Unset here = the same defaults chat runs on (text-embedding-3-small,
+      # dim 1536); override only if chat's EMBED_* are overridden too.
+      EMBED_PROVIDER: ${EMBED_PROVIDER:-openrouter}
+      EMBED_MODEL: ${EMBED_MODEL:-openai/text-embedding-3-small}
+      EMBED_DIM: ${EMBED_DIM:-1536}
+      EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX:-}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      SEARCH_MCP_ADDR: 0.0.0.0:8086
+    # Published ONLY on the host's tailscale IP — the curator's machine reaches
+    # it over the tailnet (no public exposure; ufw denies the public NIC).
+    ports:
+      - "${SHRUTI_TS_IP:?set SHRUTI_TS_IP to the host tailscale IP}:8086:8086"
+    networks: [shruti]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "/search-mcp", "-healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
 networks:
   shruti:
 
