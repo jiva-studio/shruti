@@ -12,6 +12,14 @@
 #   COMPOSE_PROFILES=origin   # required since the base compose is now
 #                             # profile-tagged for origin/proxy roles
 #
+# Host ports live in lectorium's reserved 11xxx band (per the workspace
+# port convention — one thousands-block per project; lectorium = 11000-11999,
+# see dotfiles personal/projects/akdasa-studios/lectorium.nix) so a sibling
+# project's local stack can't collide. Container ports are unchanged; only
+# the host side is remapped, overridable via the LECTORIUM_*_PORT vars:
+#   chat 11080  auth 11081  postgres 11082  redis 11083
+# (11000 = docs, 11001 = app dev server, 111xx = worktree dev servers.)
+#
 # Usage:
 #   docker compose -f infra/app/compose/docker-compose.yml \
 #                  -f infra/app/compose/docker-compose.dev.yml \
@@ -21,11 +29,11 @@
 services:
   postgres:
     ports:
-      - "5432:5432"
+      - "${LECTORIUM_PG_PORT:-11082}:5432"
 
   redis:
     ports:
-      - "6379:6379"
+      - "${LECTORIUM_REDIS_PORT:-11083}:6379"
 
   # Migrator image is private on GHCR; local dev builds it from
   # source so nobody needs a registry token to bring the stack up.
@@ -44,7 +52,7 @@ services:
       context: ../../../modules
       dockerfile: services/chat/Dockerfile
     ports:
-      - "8080:8080"
+      - "${LECTORIUM_CHAT_PORT:-11080}:8080"
     volumes:
       # Mount tests/ read-only so `docker compose exec chat python -m
       # tests.evals.run_chunk_tools_eval` works against the running
@@ -59,9 +67,7 @@ services:
       context: ../../../modules
       dockerfile: services/auth/Dockerfile
     ports:
-      # Host port shifted to 18081 — local dev shares the box with
-      # lectorium-mcp on 8081.
-      - "18081:8081"
+      - "${LECTORIUM_AUTH_PORT:-11081}:8081"
 
   cleanup-worker:
     image: lectorium-cleanup-worker:dev

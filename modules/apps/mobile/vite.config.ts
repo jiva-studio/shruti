@@ -69,7 +69,11 @@ export default defineConfig({
   },
   server: {
     host: "0.0.0.0",
-    port: 11001,
+    // Default 11001 = lectorium's app dev port (workspace port convention,
+    // 11xxx band). `VITE_PORT` overrides it — set per-project in the dotfiles
+    // envrc and per-worktree by `make worktree-serve` (11100 + issue), which
+    // were previously ignored because this was hard-coded.
+    port: Number(process.env.VITE_PORT) || 11001,
     strictPort: true,
     allowedHosts: ["mobile.lectorium.dev"],
   },

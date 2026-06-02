@@ -7,6 +7,7 @@
 .PHONY: transcriber-service-build transcriber-service-up transcriber-service-down transcriber-service-restart transcriber-service-status transcriber-service-logs
 .PHONY: transcriber-mcp-build transcriber-mcp-up transcriber-mcp-down transcriber-mcp-restart transcriber-mcp-status transcriber-mcp-logs
 .PHONY: lectorium-mcp-build lectorium-mcp-test lectorium-mcp-lint lectorium-mcp-up lectorium-mcp-down lectorium-mcp-restart lectorium-mcp-status lectorium-mcp-logs
+.PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
 
 # --- Variables ---
 ISSUE ?= 0
@@ -318,3 +319,36 @@ lectorium-mcp-status: ## Show lectorium-mcp daemon status
 
 lectorium-mcp-logs: ## Tail lectorium-mcp daemon logs
 	@$(MAKE) -C modules/tools/lectorium-mcp logs
+
+# --- Local backend stack (infra/app/compose/docker-compose.dev.yml:
+#     postgres + redis + chat + auth + cleanup-worker). Project name
+#     `lectorium`, `origin` profile, host ports in the 11xxx band. ---
+
+# Canonical compose invocation, run from infra/app/compose. Reused by every
+# stack-* target so the project name / profile / file set / env file stay in
+# one place.
+STACK_COMPOSE = COMPOSE_PROFILES=origin docker compose -p lectorium -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env.dev
+
+stack-setup: ## First-time local setup: generate .env.dev + JWT keys + npm install
+	@infra/app/scripts/gen-dev-env.sh
+	@infra/app/scripts/gen-jwt-keys.sh
+	@$(MAKE) mobile-install
+
+stack-up: ## Start local backend stack (chat 11080, auth 11081, pg 11082, redis 11083)
+	@cd infra/app/compose && $(STACK_COMPOSE) up -d
+
+stack-down: ## Stop local backend stack (keeps pg/redis volumes; add -v by hand to wipe)
+	@cd infra/app/compose && $(STACK_COMPOSE) down
+
+stack-restart: ## Restart local backend stack
+	@cd infra/app/compose && $(STACK_COMPOSE) restart
+
+stack-status: ## Show local backend stack containers + chat readiness
+	@cd infra/app/compose && $(STACK_COMPOSE) ps
+	@curl -fsS http://localhost:11080/readyz && echo || echo "chat not ready (stack down or still indexing)"
+
+stack-logs: ## Tail local backend stack logs (Ctrl-C to stop)
+	@cd infra/app/compose && $(STACK_COMPOSE) logs -f
+
+stack-app: ## Serve the mobile app against the local stack (dev region, port 11001)
+	@cd modules/apps/mobile && VITE_DEV_REGION=true npm run dev
