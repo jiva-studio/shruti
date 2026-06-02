@@ -26,9 +26,56 @@ import type { IPreferences } from "@ports/app/index.js"
 /** `IPreferences` key under which the last-fetched regions list is cached. */
 export const REGIONS_KEY = "remoteRegions"
 
+/**
+ * Local-dev region. Content (S3) + share-* stay on the prod `global`
+ * endpoints — only auth + chat point at the locally-running stack
+ * (`infra/app/compose/docker-compose.dev.yml`: chat on :11080, auth on
+ * :11081 — shruti's reserved 11xxx port band). It sits FIRST so the
+ * startup prober picks it (its `urlTemplate` is prod S3, so the config.json
+ * probe succeeds) and routes auth/chat traffic to localhost.
+ *
+ * Opt-in via `VITE_DEV_REGION=true` (the `local-stack` skill sets it when it
+ * launches the dev server). Vite statically inlines `import.meta.env.
+ * VITE_DEV_REGION` at build time, so any build that doesn't set the var —
+ * every production build, the test runner, the screenshots pipeline, and a
+ * plain `npm run dev` for contributors not running the local stack — compiles
+ * the comparison to a constant `false` and tree-shakes the literal and
+ * `withDev()` away. The dev region never ships and never shows in the Settings
+ * region picker. Override the host:port via VITE_DEV_AUTH_URL /
+ * VITE_DEV_CHAT_URL if your stack runs elsewhere. Web dev only; a native
+ * dev build's `localhost` resolves to the device, not the host machine.
+ */
+const DEV_REGIONS: readonly CdnServer[] = import.meta.env.VITE_DEV_REGION === "true"
+  ? [
+      {
+        id: "dev",
+        name: "Local (dev)",
+        urlTemplate: SERVERS[0]!.urlTemplate,
+        shareAudioUrl: SERVERS[0]!.shareAudioUrl,
+        shareVideoUrl: SERVERS[0]!.shareVideoUrl,
+        authBaseUrl:
+          (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ?? "http://localhost:11081/auth",
+        chatBaseUrl:
+          (import.meta.env.VITE_DEV_CHAT_URL as string | undefined) ?? "http://localhost:11080",
+      },
+    ]
+  : []
+
+/**
+ * Prepend the dev region (if any) to a region list, dropping any incoming
+ * entry that collides on id so a published config.json can't shadow it.
+ * Identity (returns the list unchanged) in production builds.
+ */
+function withDev(list: readonly CdnServer[]): readonly CdnServer[] {
+  if (DEV_REGIONS.length === 0) return list
+  const devIds = new Set(DEV_REGIONS.map((r) => r.id))
+  return [...DEV_REGIONS, ...list.filter((r) => !devIds.has(r.id))]
+}
+
 // Seed with the compiled-in bootstrap list. Replaced by hydrateRegions()
-// (persisted) and setRegions() (freshly fetched).
-const regions = ref<readonly CdnServer[]>(SERVERS)
+// (persisted) and setRegions() (freshly fetched). In dev the local region
+// is kept pinned at the front through `withDev()`.
+const regions = ref<readonly CdnServer[]>(withDev(SERVERS))
 
 let prefs: IPreferences | null = null
 
@@ -85,7 +132,7 @@ export async function hydrateRegions(preferences: IPreferences): Promise<void> {
     if (!raw) return
     const parsed: unknown = JSON.parse(raw)
     if (isValidRegionList(parsed)) {
-      regions.value = parsed
+      regions.value = withDev(parsed)
     } else {
       console.warn("[regions] persisted list invalid — using bundled defaults")
     }
@@ -102,7 +149,7 @@ export async function hydrateRegions(preferences: IPreferences): Promise<void> {
  */
 export function setRegions(list: unknown): boolean {
   if (!isValidRegionList(list)) return false
-  regions.value = list
+  regions.value = withDev(list)
   if (prefs) {
     void prefs
       .set(REGIONS_KEY, JSON.stringify(list))
