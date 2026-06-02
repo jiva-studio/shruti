@@ -208,18 +208,22 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 	const kind = "library.attribution.ref_add"
 	t := mcp.NewTool(kind,
 		mcp.WithDescription(
-			"Attach a ref (verse, document or title) to an attribution. Accepts these input shapes:\n"+
+			"Attach a ref (verse, document, title or track) to an attribution. Accepts these input shapes:\n"+
 				"  1. {ref_kind, target_id}                   — direct opaque id\n"+
 				"  2. {ref_kind=verse, source_id, tokens}    — shortcut for verses (MCP resolves to verse.id)\n"+
 				"  3. {ref_kind=document, document_id}        — shortcut for documents (same as direct target_id)\n"+
 				"  4. {ref_kind=title, source_id, tokens}    — a chapter/canto heading (library_titles), e.g. source_NoY8sAlXF1IT + \"7.5\". Use for verse-structured books (SB/BG/CC) where a chapter is not a document.\n"+
+				"  5. {ref_kind=track, track_id, start_ms, end_ms} — a FRAGMENT of a lecture transcript (the chunk(s) covering that time range). Whole-lecture refs are not supported — point at the specific passage.\n"+
 				"Existence is validated against library.db; missing target → validation_failed."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("Attribution id.")),
-		mcp.WithString("ref_kind", mcp.Required(), mcp.Description("verse | document | title")),
-		mcp.WithString("target_id", mcp.Description("Direct opaque ID (verse.id or library_document.id). Mutually exclusive with source_id+tokens / document_id shortcuts.")),
+		mcp.WithString("ref_kind", mcp.Required(), mcp.Description("verse | document | title | track")),
+		mcp.WithString("target_id", mcp.Description("Direct opaque ID (verse.id / library_document.id, or a precomposed track \"<track_id>@<start_ms>-<end_ms>\"). Mutually exclusive with the shortcut params.")),
 		mcp.WithString("source_id", mcp.Description("For ref_kind=verse or ref_kind=title shortcut: catalog source id (e.g. source_dsicuBsFvinZ).")),
 		mcp.WithString("tokens", mcp.Description("For ref_kind=verse shortcut: verse address (e.g. \"2.13\"). For ref_kind=title: chapter/canto address (e.g. \"7\" or \"7.5\").")),
 		mcp.WithString("document_id", mcp.Description("For ref_kind=document shortcut: library_document_<id>.")),
+		mcp.WithString("track_id", mcp.Description("For ref_kind=track shortcut: lecture track id (e.g. track_05IvjZ0RI7vs).")),
+		mcp.WithNumber("start_ms", mcp.Description("For ref_kind=track shortcut: fragment start in ms.")),
+		mcp.WithNumber("end_ms", mcp.Description("For ref_kind=track shortcut: fragment end in ms.")),
 		mcp.WithNumber("position", mcp.Description("Ordering hint within the attribution (default 0).")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -233,7 +237,7 @@ func registerAttributionRefAdd(s *server.MCPServer, deps LibraryAttributionDeps)
 		}
 		if !validRefKind(refKind) {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
-				fmt.Sprintf("invalid ref_kind %q (must be 'verse', 'document' or 'title')", refKind), nil), nil
+				fmt.Sprintf("invalid ref_kind %q (must be 'verse', 'document', 'title' or 'track')", refKind), nil), nil
 		}
 		target, err := resolveRefTarget(ctx, deps, refKind, req)
 		if err != nil {
@@ -266,6 +270,9 @@ func registerAttributionRefRemove(s *server.MCPServer, deps LibraryAttributionDe
 		mcp.WithString("source_id"),
 		mcp.WithString("tokens"),
 		mcp.WithString("document_id"),
+		mcp.WithString("track_id"),
+		mcp.WithNumber("start_ms"),
+		mcp.WithNumber("end_ms"),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, err := req.RequireString("id")
@@ -362,6 +369,29 @@ func resolveRefTarget(ctx context.Context, deps LibraryAttributionDeps, refKind 
 			return "", fmt.Errorf("ref_kind=title: must provide target_id OR (source_id, tokens)")
 		}
 	}
+	if refKind == "track" {
+		// A track ref addresses a FRAGMENT of a lecture by time range:
+		// target_id = "<track_id>@<start_ms>-<end_ms>". The chat service
+		// resolves it via the transcript-chunk overlap window. Whole-lecture
+		// refs are intentionally unsupported — a lecture covers many topics,
+		// so attribution is always to a specific passage.
+		trackID := req.GetString("track_id", "")
+		switch {
+		case target != "" && trackID != "":
+			return "", fmt.Errorf("ref_kind=track: provide either target_id OR (track_id, start_ms, end_ms), not both")
+		case target != "":
+			return target, nil
+		case trackID != "":
+			startMs := int(req.GetFloat("start_ms", -1))
+			endMs := int(req.GetFloat("end_ms", -1))
+			if startMs < 0 || endMs < 0 || endMs < startMs {
+				return "", fmt.Errorf("ref_kind=track: start_ms and end_ms are required (end_ms >= start_ms)")
+			}
+			return fmt.Sprintf("%s@%d-%d", trackID, startMs, endMs), nil
+		default:
+			return "", fmt.Errorf("ref_kind=track: must provide target_id OR (track_id, start_ms, end_ms)")
+		}
+	}
 	// document
 	switch {
 	case target != "" && (srcID != "" || tokens != "" || docID != ""):
@@ -376,7 +406,7 @@ func resolveRefTarget(ctx context.Context, deps LibraryAttributionDeps, refKind 
 }
 
 func validRefKind(k string) bool {
-	return k == "verse" || k == "document" || k == "title"
+	return k == "verse" || k == "document" || k == "title" || k == "track"
 }
 
 func mapAttributionError(kind string, err error) *mcp.CallToolResult {

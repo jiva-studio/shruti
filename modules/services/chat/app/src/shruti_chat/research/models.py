@@ -133,7 +133,7 @@ class AttributionRef:
     """One ref entry as stored in `attributions.refs` JSONB and returned
     from find_attributions matches."""
 
-    ref_kind: str   # "verse" | "document"
+    ref_kind: str   # "verse" | "document" | "title" | "track"
     target_id: str
 
 
