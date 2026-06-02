@@ -1,5 +1,15 @@
 /// <reference types="vite/client" />
 
+interface ImportMetaEnv {
+  /** Opt-in flag (`"true"`) that injects the local-dev region — set by the
+   *  `local-stack` skill when serving against the local backend stack. */
+  readonly VITE_DEV_REGION?: string
+  /** Override the local-dev region's auth base URL (default http://localhost:11081/auth). */
+  readonly VITE_DEV_AUTH_URL?: string
+  /** Override the local-dev region's chat base URL (default http://localhost:11080). */
+  readonly VITE_DEV_CHAT_URL?: string
+}
+
 declare const __APP_VERSION__: string
 declare const __BUILD_TIME__: string
 declare const __BUILD_ID__: string
