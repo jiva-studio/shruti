@@ -77,3 +77,26 @@ services:
       dockerfile: services/cleanup-worker/Dockerfile
     # No host port mapping: cleanup-worker has no API surface beyond
     # /healthz, and the in-container HEALTHCHECK dogfoods the binary.
+
+  # share-audio / share-video are in the `origin` profile, so a full
+  # `up` would otherwise try to PULL their private ghcr images. Restore
+  # `build:` (same modules/ context as chat/auth) so they compile from
+  # source locally — no registry token needed. The default `make stack-up`
+  # leaves them out (the mobile dev region keeps share-* on prod and the
+  # share-video build is heavy); `make stack-up-all` builds + runs them.
+  # They need SHRUTI_S3_BUCKET (+ AWS creds) in .env.dev to do real work.
+  share-audio:
+    image: shruti-share-audio:dev
+    pull_policy: never
+    build:
+      context: ../../../modules
+      dockerfile: services/share-audio/Dockerfile
+    ports:
+      - "${SHRUTI_SHARE_AUDIO_PORT:-11084}:8082"
+
+  share-video:
+    image: shruti-share-video:dev
+    pull_policy: never
+    build:
+      context: ../../../modules
+      dockerfile: services/share-video/Dockerfile
