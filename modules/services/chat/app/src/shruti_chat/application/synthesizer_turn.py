@@ -172,7 +172,10 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # client-side in `ChapterCard` from the SSE payload, kept out of
             # the header to avoid the verse-style hallucination priming.
             header = f"[^{ref}]"
-        elif note_type == "commentary":
+        elif note_type in ("commentary", "prose_chapter", "letter"):
+            # All three quotable document kinds render identically: a bare
+            # `[^N]` header + the indexed sentence body, so the LLM can pick
+            # `[^N|s=…]` and the marker expander inlines a verbatim blockquote.
             # Bare `[^N]` header — symmetric with the verse case above.
             #
             # Why no `addr_label` / `author` adjacency: weaker models

@@ -498,12 +498,15 @@ class MarkerExpander:
                 )
                 return ""
 
+        # Language-neutral attribution: `author, addr_label` (or just
+        # addr_label). No service word like "комментарий к" — addr_label is
+        # already self-describing for every quotable kind ("ШБ 4.1.39",
+        # "Letter to …, 1972", "Founding, глава 2.2 «…»"), and a hardcoded
+        # Russian word would leak into English answers (the expander has no
+        # response-language signal). This same path serves commentary,
+        # prose_chapter and letter — see library_to_envelope.
         author = ref.author_name or ""
-        attribution = (
-            f"{author}, комментарий к {ref.addr_label}"
-            if author
-            else f"комментарий к {ref.addr_label}"
-        )
+        attribution = f"{author}, {ref.addr_label}" if author else ref.addr_label
 
         # Same-source MERGE: if `_pending` is still a commentary
         # blockquote with the SAME attribution (no prose has flushed

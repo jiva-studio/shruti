@@ -348,7 +348,7 @@ async def test_commentary_marker_nonconsecutive_picks_joined_with_ellipsis() -> 
     assert "> Sentence ONE." not in out
     # Picked sentences must not be on separate `> ` lines.
     assert "> Sentence ZERO.\n> Sentence TWO." not in out
-    assert "— А.Ч. Бхактиведанта Свами Прабхупада, комментарий к БГ 2.13" in out
+    assert "— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13" in out
 
 
 async def test_commentary_marker_consecutive_picks_joined_with_space() -> None:
@@ -454,7 +454,7 @@ async def test_two_adjacent_same_source_commentary_markers_merge() -> None:
     out = await _expand(e, f"[^{ref_a}|s=0]\n[^{ref_b}|s=0]\n")
     # Single attribution line — proves the two markers MERGED into one
     # blockquote (not two glued ones with separate attributions).
-    assert out.count("— А.Ч. Прабхупада, комментарий к БГ 18.66") == 1
+    assert out.count("— А.Ч. Прабхупада, БГ 18.66") == 1
     # Both picked sentences present and on the SAME blockquote line.
     assert "First sentence." in out
     assert "Fourth sentence." in out

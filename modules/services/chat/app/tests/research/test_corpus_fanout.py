@@ -131,7 +131,7 @@ class FakeAliasMap:
         self._verse[key] = self.verse_counter
         return self.verse_counter
 
-    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences) -> int:
+    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences, kind="commentary") -> int:
         self.verse_counter += 1
         return self.verse_counter
 
