@@ -1,11 +1,9 @@
 """Prometheus metrics for the chat service.
 
 Single module-level registry so counters/gauges are import-safe and
-re-importable in tests (process-wide singleton). The chat service does
-not yet expose a `/metrics` endpoint — counters defined here land in
-the default `prometheus_client.REGISTRY` and will be scraped once
-PR-5 wires the HTTP exporter. Defining them now keeps the production
-code path observable without waiting for the exporter.
+re-importable in tests (process-wide singleton). Counters defined here
+land in the default `prometheus_client.REGISTRY`, exposed at `/metrics`
+(mounted as a sub-app in `main.py`) for Prometheus to scrape.
 
 Importing this module is side-effect-only (no setup function needed).
 Test code that wants a clean slate per-test can do

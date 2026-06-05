@@ -109,6 +109,12 @@ class Settings(BaseSettings):
     # adapters read these via the composition root.
     embed_concurrency: int = 2
     llm_concurrency: int = 2
+    # Per-request timeout (seconds) on the embeddings HTTP client. Without
+    # this the OpenAI SDK defaults to 600s — a hung embedding call on the
+    # query hot path would stall the turn far past the research-stage
+    # wait_for budgets that wrap downstream of it. 30s comfortably covers
+    # a 96-input indexing batch while bounding the single-query call.
+    embed_timeout_s: float = 30.0
 
     # ── Reranker ────────────────────────────────────────────────────────
     # Cross-encoder rerank over the ANN candidate pool. ON by default, but

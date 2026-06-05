@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import make_asgi_app
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from lectorium_chat.agent import llm
@@ -289,3 +290,13 @@ app.include_router(admin.router)
 app.include_router(title.router)
 app.include_router(questions.router)
 app.include_router(feedback.router)
+
+# Prometheus scrape target. Mounted as a sub-app so it sits outside the
+# CORS / proxy-headers middleware (internal scrape, no browser origin)
+# and serves the default REGISTRY the counters in `observability.metrics`
+# register into. `metrics` is already imported transitively via
+# `application.rate_limiter`; importing it here too makes the dependency
+# explicit and import-order-independent.
+from lectorium_chat.observability import metrics as _metrics  # noqa: F401,E402
+
+app.mount("/metrics", make_asgi_app())
