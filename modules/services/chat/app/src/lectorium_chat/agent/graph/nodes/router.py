@@ -12,7 +12,7 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.application.router_turn import run_router_turn
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role
 

@@ -23,19 +23,19 @@ keep working.
 from __future__ import annotations
 
 import asyncio
-import re
 from time import perf_counter
 from typing import Any, AsyncIterator, Awaitable, Callable
 from uuid import uuid4
 
 from lectorium_chat.agent.aliased_tools import build_aliased_tools
 from lectorium_chat.agent.events import AgentEvent
+from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.marker_expander import MarkerExpander
+from lectorium_chat.agent.markers import CARD_RE, CITE_RE, OUTLINE_RE
 from lectorium_chat.agent.tools import TOOLS, build_personalized_tools
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.composition import AppDeps
 from lectorium_chat.domain import UserContext
-from lectorium_chat.domain.turn_context import TurnContext
 from lectorium_chat.observability.auto_scores import (
     TurnSummary,
     audit_post_expansion_text,
@@ -103,15 +103,12 @@ def _subset(
     return {n: tools[n] for n in names if n in tools}
 
 
-# Inline chip-class markers the LLM is FORBIDDEN to write directly —
-# it must use the numbered-ref protocol (`[^N]`, `[^N]`, ...)
-# and the MarkerExpander expands those into the real track-id form
-# below before they hit the client. Anything matching these regexes
-# in the LLM-typed prose means the model bypassed the protocol — log
-# the slip for prompt-engineering follow-up.
-_CITE_MARKER_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
-_CARD_MARKER_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
-_OUTLINE_MARKER_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
+# Chip-class markers the LLM is FORBIDDEN to write directly — it must
+# use the numbered-ref protocol (`[^N]`) and let the MarkerExpander
+# expand those into the real track-id form before they hit the client.
+# Anything matching the canonical expanded grammar (agent/markers.py) in
+# the LLM-typed prose means the model bypassed the protocol — log the
+# slip for prompt-engineering follow-up.
 
 
 async def _audit_bypass_markers(
@@ -125,11 +122,11 @@ async def _audit_bypass_markers(
     `propose_*` tool side-events; anything in the LLM-prose buffer is
     an instruction-following slip we want visible in metrics."""
     findings: list[tuple[str, str]] = []
-    for m in _CITE_MARKER_RE.finditer(llm_prose):
+    for m in CITE_RE.finditer(llm_prose):
         findings.append(("cite", m.group(1)))
-    for m in _CARD_MARKER_RE.finditer(llm_prose):
+    for m in CARD_RE.finditer(llm_prose):
         findings.append(("card", m.group(1)))
-    for m in _OUTLINE_MARKER_RE.finditer(llm_prose):
+    for m in OUTLINE_RE.finditer(llm_prose):
         findings.append(("outline", m.group(1)))
     if not findings:
         return
@@ -235,6 +232,9 @@ async def run_chat_turn(
     outline_has_intro: bool | None = None
     outline_has_conclusion: bool | None = None
     outline_skipped_notes_ratio: float | None = None
+    # Hoisted above the try so the `finally` teardown can always reference
+    # it — even if turn setup raises before the task is created.
+    embed_task: Any | None = None
 
     try:
         # ── Build per-turn services (aliases + expander + tools) ──────
@@ -295,7 +295,6 @@ async def run_chat_turn(
         # off every research turn — the embed_query was previously the
         # first step inside research/pipeline, blocking the rest.
         user_query_text = _extract_latest_user_query(history)
-        embed_task: Any | None = None
         if user_query_text and deps.embedder is not None:
             embed_task = asyncio.create_task(
                 deps.embedder.embed_query(user_query_text),
@@ -427,18 +426,8 @@ async def run_chat_turn(
                                     request_id=request_id,
                                     error=str(exc),
                                 )
-                        # Cancel the speculative embed if it's still in
-                        # flight — otherwise the asyncio task lingers
-                        # until GC, holding the embedding-API
-                        # connection slot for nothing. No central
-                        # registry of in-flight tool-call futures
-                        # exists today: LangGraph's `astream` drives
-                        # tool execution synchronously inside graph
-                        # nodes, so cancelling the consumer (this
-                        # generator returning) implicitly tears them
-                        # down. See PR-1b body note.
-                        if embed_task is not None and not embed_task.done():
-                            embed_task.cancel()
+                        # Returning here runs the `finally`, which cancels
+                        # the speculative embed task — no need to repeat it.
                         return
             except Exception as exc:
                 log.exception("chat_graph_failed", request_id=request_id, error=str(exc))
@@ -449,11 +438,11 @@ async def run_chat_turn(
                 )
                 return
 
-            # ── Flush any partial-marker tail still in expander ──────────
-            tail = await expander.flush()
-            if tail:
-                yield AgentEvent(type="delta", data={"text": tail})
-                full_prose.append(tail)
+            # The expander is fed and flushed entirely inside the
+            # synthesizer node (the only node that streams prose through
+            # it — see synthesizer_turn). It has already emitted its tail
+            # by the time the graph stream completes, so there is no
+            # second flush to do here.
 
             # ── Record final answer on the Langfuse trace ────────────────
             # Write to BOTH the root span (latency / span output pane) AND
@@ -538,4 +527,14 @@ async def run_chat_turn(
         yield AgentEvent(type="done", data=done_data)
 
     finally:
+        # Authoritative teardown for the speculative embed. The router
+        # cancels it early for intents that don't consume the embedding,
+        # and the disconnect path cancels it mid-stream — but neither
+        # fires on a normally-completing find_track / unknown turn (those
+        # route to catalog_worker / synthesizer, which never await it).
+        # Without this backstop the orphaned task lingers until GC,
+        # holding an embedding-API connection slot and, if it raised,
+        # surfacing as "Task exception was never retrieved".
+        if embed_task is not None and not embed_task.done():
+            embed_task.cancel()
         clear_turn_context()

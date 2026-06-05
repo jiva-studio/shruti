@@ -12,7 +12,8 @@ populated by a background Flash-Lite pass. Missing caption → bare
 `[cite:track@…]`, no `|`. Graceful degradation.
 
 Defenses against model failure:
-  - String-stuffed `[^НП 6]` → single-candidate recovery or drop
+  - String-stuffed / hallucinated `[^НП 6]` / `[^1022]` → drop (never
+    guessed back to a source)
   - Duplicate `[^N]` (same alias twice in a response) → drop 2nd+
   - Trailing punctuation after marker → server swaps order
 """
@@ -107,15 +108,18 @@ async def test_string_stuffed_footnote_dropped_when_no_unused() -> None:
     assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] tail"
 
 
-async def test_string_stuffed_recovered_when_single_unused() -> None:
-    """`[^НП 6]` + exactly one unused alias → recovered."""
+async def test_string_stuffed_marker_dropped_never_recovered() -> None:
+    """`[^НП 6]` is unresolvable → drop it, even if exactly one alias is
+    unused. We no longer guess the source from a single remaining
+    candidate (the old single-candidate recovery); a missing chip beats a
+    confidently-wrong one."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
     aliases.alias_chunk("track_C", 0, 1000)   # 3
     e = MarkerExpander(aliases)
     out = await _expand(e, "[^1] [^2] [^НП 6]")
-    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] [cite:track_C@0-1000]"
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000]"
 
 
 async def test_string_stuffed_addr_shape_dropped() -> None:
@@ -131,17 +135,21 @@ async def test_string_stuffed_addr_shape_dropped() -> None:
     assert out == "[cite:track_A@0-1000]"
 
 
-# ── Single-candidate recovery on numeric hallucination ───────────────
+# ── Numeric hallucination is always dropped, never recovered ─────────
 
 
-async def test_numeric_hallucination_recovered_when_one_alias_unused() -> None:
+async def test_numeric_hallucination_dropped_when_one_alias_unused() -> None:
+    """An invented numeric ref (`[^1022]`) is dropped even when exactly
+    one alias remains unused. The sequential 1..K allocation removed the
+    root cause that single-candidate recovery used to paper over, so the
+    guess is no longer worth its mis-attribution risk."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_A", 0, 1000)   # 1
     aliases.alias_chunk("track_B", 0, 1000)   # 2
     aliases.alias_chunk("track_C", 0, 1000)   # 3
     e = MarkerExpander(aliases)
     out = await _expand(e, "[^1] [^2] [^1022]")
-    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000] [cite:track_C@0-1000]"
+    assert out == "[cite:track_A@0-1000] [cite:track_B@0-1000]"
 
 
 async def test_numeric_hallucination_dropped_when_multiple_unused() -> None:
@@ -309,18 +317,14 @@ async def test_period_after_dedupped_duplicate_swaps_to_first() -> None:
     assert out == "text. [cite:track_X@0-1000]"
 
 
-async def test_dedup_does_not_steal_alias_via_recovery() -> None:
-    """A duplicate `[^N]` (already emitted) must NOT trigger the
-    single-candidate recovery path — that would silently swap it to
-    an unrelated unused alias. Dedup short-circuits before recovery."""
+async def test_duplicate_ref_dropped_never_reassigned() -> None:
+    """A duplicate `[^N]` (already emitted) is dropped, never swapped to
+    a different unused alias. (Recovery that could have done such a swap
+    is gone, but the dedup-drop guarantee is load-bearing on its own.)"""
     aliases = TurnAliasMap()
     a = aliases.alias_chunk("track_A", 0, 1000)   # 1
-    b = aliases.alias_chunk("track_B", 0, 1000)   # 2
+    aliases.alias_chunk("track_B", 0, 1000)       # 2 (must never be stolen)
     e = MarkerExpander(aliases)
-    # Emit [^1] then [^1] again. Without dedup short-circuit, second
-    # [^1] would see "1 is emitted, only 2 unused, single-candidate →
-    # recover" — substituting track_B incorrectly. With dedup it just
-    # drops.
     out = await _expand(e, f"[^{a}] dup [^{a}] tail")
     assert out == "[cite:track_A@0-1000] dup tail"
     assert "track_B" not in out

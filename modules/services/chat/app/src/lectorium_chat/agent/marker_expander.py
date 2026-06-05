@@ -7,8 +7,8 @@ LLM stream and the client SSE stream:
   1. Buffer characters between `[` and `]` to detect markers.
   2. When a marker closes, parse it:
        * `[^N]` with integer N           → expand by alias type
-       * `[^anything]` (string-stuffed)  → recover via single-candidate
-                                            heuristic or drop
+       * `[^anything]` (string-stuffed)  → drop (unresolvable, never
+                                            guessed)
        * any other bracket-text          → pass through verbatim
   3. After emitting the expansion, peek look-ahead chars. If the next
      non-whitespace char is trailing punctuation (`.,!?…:;`) — swap
@@ -122,8 +122,8 @@ class MarkerExpander:
         self._marker_buffer: list[str] = []
         self._in_marker = False
 
-        # Aliases successfully expanded so far — used by single-
-        # candidate recovery in `_format_ref`.
+        # Aliases successfully expanded so far — used for within-response
+        # dedup in `_format_ref`.
         self._emitted: set[int] = set()
 
         # Count of `[<keyword>...]` brackets we DROPPED because they
@@ -340,7 +340,7 @@ class MarkerExpander:
                         continue
             return self._format_ref(int(m.group(1)), sentence_indices)
 
-        # Non-integer footnote — try single-candidate recovery.
+        # Non-integer footnote (e.g. `[^НП 6]`) — unresolvable, drop it.
         if _FOOTNOTE_CATCH_RE.match(marker):
             log.info(
                 "chat_marker_footnote_string_stuffed",
@@ -384,9 +384,8 @@ class MarkerExpander:
         return self._malformed_count
 
     def _format_ref(self, n: int | None, sentence_indices: list[int] | None = None) -> str:
-        """Resolve alias N. If N is None or unknown, try single-
-        candidate recovery (exactly one alias still unused → use it).
-        Otherwise drop with diagnostic log.
+        """Resolve alias N. If N is None or unknown, drop the marker with
+        a diagnostic log — never guess.
 
         Deduplicates within a response: if the alias has already been
         emitted in this stream, drop the second+ occurrence silently.
@@ -396,9 +395,7 @@ class MarkerExpander:
         ref: ChunkRef | VerseRef | None = None
         if isinstance(n, int):
             # Dedup: if this exact alias has already been expanded in
-            # this response, drop with log. Do this BEFORE recovery so
-            # a "[^1] … [^1]" repeat doesn't accidentally recover to a
-            # neighbouring unused alias.
+            # this response, drop with log.
             if n in self._emitted:
                 log.info(
                     "chat_marker_dedup_dropped",
@@ -409,29 +406,23 @@ class MarkerExpander:
             ref = self._aliases.resolve(n)
 
         if ref is None:
-            remaining = self._aliases.known_keys() - self._emitted
-            if len(remaining) == 1:
-                recovered = next(iter(remaining))
-                log.info(
-                    "chat_marker_alias_recovered",
-                    request_id=self._request_id,
-                    requested=n,
-                    recovered=recovered,
-                    known_max=len(self._aliases),
-                )
-                n = recovered
-                ref = self._aliases.resolve(n)
-            else:
-                log.info(
-                    "chat_marker_alias_miss",
-                    request_id=self._request_id,
-                    kind="ref",
-                    ref=n,
-                    known_max=len(self._aliases),
-                    emitted=sorted(self._emitted),
-                    remaining=sorted(remaining),
-                )
-                return ""
+            # Unresolvable marker (no number, or an alias the LLM
+            # invented). Drop it — a missing citation is a safe failure;
+            # substituting a guessed source risks attaching a confident
+            # chip to an unrelated lecture, which for this product is far
+            # worse than no chip. The sequential 1..K alias allocation
+            # (see TurnAliasMap) already removed the root cause that the
+            # old single-candidate recovery was bolted on to handle.
+            log.info(
+                "chat_marker_alias_miss",
+                request_id=self._request_id,
+                kind="ref",
+                ref=n,
+                known_max=len(self._aliases),
+                emitted=sorted(self._emitted),
+                remaining=sorted(self._aliases.known_keys() - self._emitted),
+            )
+            return ""
 
         assert isinstance(n, int)
         self._emitted.add(n)

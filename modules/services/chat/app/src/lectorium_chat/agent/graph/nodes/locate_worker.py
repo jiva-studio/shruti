@@ -22,7 +22,7 @@ from lectorium_chat.agent.graph.nodes._worker_common import (
     run_worker,
 )
 from lectorium_chat.agent.graph.state import ChatState
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 from lectorium_chat.research.locate import run_locate
 from lectorium_chat.research.models import LocateResult

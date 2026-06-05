@@ -32,6 +32,9 @@ class _FakeStore:
         self._keys[key] = now + ttl_seconds
         return True
 
+    async def release(self, key: str) -> None:
+        self._keys.pop(key, None)
+
 
 @pytest.mark.asyncio
 async def test_first_acquire_wins() -> None:
@@ -64,8 +67,27 @@ async def test_expired_key_reacquireable() -> None:
 
 
 @pytest.mark.asyncio
+async def test_release_lets_key_be_reacquired() -> None:
+    """A released key is immediately re-acquirable — this is what lets a
+    failed/cancelled turn be retried instead of 409-blocked for the TTL."""
+    s = _FakeStore()
+    assert await s.try_acquire("k", 60) is True
+    assert await s.try_acquire("k", 60) is False  # held
+    await s.release("k")
+    assert await s.try_acquire("k", 60) is True  # freed → retry allowed
+
+
+@pytest.mark.asyncio
+async def test_release_unknown_key_is_noop() -> None:
+    """Releasing a key that was never acquired must not raise."""
+    s = _FakeStore()
+    await s.release("never-acquired")  # no error
+
+
+@pytest.mark.asyncio
 async def test_noop_always_acquires() -> None:
     """The dev fallback must never block legitimate requests."""
     s = NoopIdempotencyStore()
     assert await s.try_acquire("k", 60) is True
     assert await s.try_acquire("k", 60) is True
+    await s.release("k")  # no-op, must not raise

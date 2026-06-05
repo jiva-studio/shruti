@@ -58,7 +58,7 @@ from lectorium_chat.agent.graph.nodes.synthesis_planner import (
     synthesis_planner_node,
 )
 from lectorium_chat.agent.graph.state import ChatState
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 
 
 def build_chat_graph() -> Pregel:

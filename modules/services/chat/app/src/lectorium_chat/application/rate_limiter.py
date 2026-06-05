@@ -7,7 +7,7 @@ quota than signed-in ones (the `anonymous` claim selects which limit).
 Storage is plugged via `RateLimitStore` (Redis in prod). Endpoints call
 `check_and_increment` directly — no module-level singleton.
 
-When the backing store raises `RedisUnavailableError` the use-case
+When the backing store raises `RateLimitStoreUnavailable` the use-case
 applies a tier-aware fallback policy (PR-1b):
 
 - Pro tier → process-local LRU brownout counter so paying users keep
@@ -29,8 +29,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from lectorium_chat.config import Settings
-from lectorium_chat.domain.ports.rate_limit_store import CounterRecord, RateLimitStore
-from lectorium_chat.infra.rate_limit.redis_rate_limit_store import RedisUnavailableError
+from lectorium_chat.domain.ports.rate_limit_store import (
+    CounterRecord,
+    RateLimitStore,
+    RateLimitStoreUnavailable,
+)
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.observability.metrics import rate_limit_hits_counter
 from lectorium_chat.observability.metrics import redis_unavailable_counter
@@ -60,7 +63,7 @@ class RateLimitResult:
     # PR-1b: Redis-store sentinel. When True the caller MUST raise 503
     # instead of 429 — the rate-limit decision is unknown, not denied.
     # Only ever set when the underlying store raises
-    # `RedisUnavailableError` AND the tier policy is fail-closed.
+    # `RateLimitStoreUnavailable` AND the tier policy is fail-closed.
     backend_unavailable: bool = False
     # Per-user counter AFTER the increment for THIS request. Populated
     # on both the allowed path and the reject path so the API layer can
@@ -268,7 +271,7 @@ class RateLimiter:
             rec = await self._store.increment(
                 scoped_key=scoped_user_key, key_type="user", limit=user_limit, day=today,
             )
-        except RedisUnavailableError:
+        except RateLimitStoreUnavailable:
             return self._on_backend_unavailable(
                 scoped_key=scoped_user_key, key_type="user",
                 limit=user_limit, echoed_tier=echoed_tier, tier=tier,
@@ -295,7 +298,7 @@ class RateLimiter:
                 rec = await self._store.increment(
                     scoped_key=scoped_ip_key, key_type="ip", limit=ip_limit, day=today,
                 )
-            except RedisUnavailableError:
+            except RateLimitStoreUnavailable:
                 return self._on_backend_unavailable(
                     scoped_key=scoped_ip_key, key_type="ip",
                     limit=ip_limit, echoed_tier=echoed_tier, tier=tier,

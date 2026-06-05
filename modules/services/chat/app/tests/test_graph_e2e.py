@@ -23,7 +23,7 @@ from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain.entities import CompletionChunk, Message
 from lectorium_chat.domain.routing import RoutingDecision
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 
 
 T = TypeVar("T", bound=BaseModel)

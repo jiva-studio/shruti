@@ -18,16 +18,18 @@ from __future__ import annotations
 from prometheus_client import Counter
 
 
-# Increments every time the Redis-backed rate-limit store raises
-# `RedisUnavailableError` during a rate-limit check. The `tier` label
+# Increments every time the rate-limit store raises
+# `RateLimitStoreUnavailable` during a rate-limit check. The `tier` label
 # lets us split the "Pro went brownout" (degraded but allowed) signal
 # from the "non-Pro got 503" (fail-closed) signal in Grafana.
 #
 # Cardinality is bounded: {anonymous, free, pro}. No user-derived
-# labels — that would blow the time-series count.
+# labels — that would blow the time-series count. (The metric series
+# name keeps the historical `redis` token so existing dashboards/alerts
+# don't break.)
 redis_unavailable_counter = Counter(
     "lectorium_chat_rate_limit_redis_unavailable_total",
-    "RedisUnavailableError occurrences during rate-limit checks, by tier",
+    "Rate-limit store-unavailable occurrences during rate-limit checks, by tier",
     labelnames=["tier"],
 )
 

@@ -6,10 +6,10 @@ out). Keys are `rl:{scoped_key}:{YYYYMMDD}`; TTL is seconds-to-next-UTC-
 midnight + a full-day buffer, plus ±300s jitter to spread out the
 midnight expiry burst.
 
-On Redis errors raises `RedisUnavailableError` so the caller can decide
-the fail-open vs fail-closed policy per tier (PR-1b: non-Pro fails
-closed with 503, Pro gracefully degrades to a process-local brownout
-counter). The previous behaviour returned `CounterRecord(count=0)`,
+On Redis errors raises the port-level `RateLimitStoreUnavailable` so the
+caller can decide the fail-open vs fail-closed policy per tier (PR-1b:
+non-Pro fails closed with 503, Pro gracefully degrades to a process-local
+brownout counter). The previous behaviour returned `CounterRecord(count=0)`,
 which silently bypassed enforcement during a Redis outage.
 """
 
@@ -20,21 +20,15 @@ from datetime import date, datetime, timezone
 from redis import asyncio as redis_async
 from redis.exceptions import RedisError
 
-from lectorium_chat.domain.ports.rate_limit_store import CounterRecord
+from lectorium_chat.domain.ports.rate_limit_store import (
+    CounterRecord,
+    RateLimitStoreUnavailable,
+)
 from lectorium_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
 
-
-class RedisUnavailableError(Exception):
-    """Raised when Redis is unreachable during a rate-limit check.
-
-    The application-layer caller (`RateLimiter`) decides fail-open vs
-    fail-closed per tier — Pro gets a process-local brownout counter,
-    non-Pro gets a 503 so anonymous abuse traffic doesn't slip past
-    enforcement during a Redis outage.
-    """
 
 _OP_TIMEOUT_S = 0.2
 _TTL_JITTER_S = 300
@@ -87,7 +81,7 @@ class RedisRateLimitStore:
             return CounterRecord(key_type=key_type, count=int(raw), limit=limit)
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("rate_limit_redis_error", err=str(exc), key=full_key)
-            raise RedisUnavailableError(str(exc)) from exc
+            raise RateLimitStoreUnavailable(str(exc)) from exc
 
     async def close(self) -> None:
         try:

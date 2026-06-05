@@ -22,7 +22,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 
 

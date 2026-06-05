@@ -32,7 +32,7 @@ from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.config import get_settings
 from lectorium_chat.db.client import get_pool, init_pool
 from lectorium_chat.db.assert_schema import assert_schema_ready
-from lectorium_chat.domain.turn_context import TurnContext
+from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.domain.user_context import FocusFragment, UserContext, UserContextTrack
 from lectorium_chat.indexer.embed import get_embedder
 from lectorium_chat.infra.llm_provider import OpenRouterLLMProvider
