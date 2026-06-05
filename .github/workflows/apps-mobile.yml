@@ -44,7 +44,7 @@ jobs:
   # -------------------------------------------------------------------------- #
   detect-changes:
     name: detect changes
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     outputs:
       ios: ${{ steps.filter.outputs.ios }}
@@ -80,12 +80,14 @@ jobs:
   # -------------------------------------------------------------------------- #
   lint:
     name: lint
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/build-audio-player
       - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
@@ -93,12 +95,14 @@ jobs:
 
   test:
     name: test / unit
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/build-audio-player
       - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
@@ -106,12 +110,14 @@ jobs:
 
   build-web:
     name: build
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
       - uses: ./.github/actions/build-audio-player
       - uses: ./.github/actions/build-media-downloader
       - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
@@ -137,7 +143,7 @@ jobs:
   e2e:
     name: test / e2e
     needs: [build-web]
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - name: detect e2e suite
@@ -153,6 +159,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: modules/tests/e2e/package-lock.json
       - if: steps.check_e2e.outputs.present == 'true'
         uses: actions/download-artifact@v8
         with:
@@ -160,11 +168,17 @@ jobs:
           path: modules/apps/mobile/dist
       - if: steps.check_e2e.outputs.present == 'true'
         run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
-      # `playwright install` is a no-op when the requested browser is already
-      # in $HOME/Library/Caches/ms-playwright, which persists on the
-      # self-hosted runner across ephemeral cycles.
+      # Cache the Playwright browser binaries across runs (GitHub-hosted).
       - if: steps.check_e2e.outputs.present == 'true'
-        run: cd modules/tests/e2e && npx playwright install chromium
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('modules/tests/e2e/package-lock.json') }}
+      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd modules/tests/e2e && npx playwright install --with-deps chromium
+      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd modules/tests/e2e && npx playwright install-deps chromium
       # Self-hosted runners share localhost — a fixed port collides between
       # parallel jobs and with stale dev-server processes from prior runs.
       # Pick a random ephemeral port; playwright.config.ts reads E2E_PORT.
@@ -195,7 +209,7 @@ jobs:
     # Dependabot PR contexts get an empty `secrets` map, so wrangler would fail
     # with "CLOUDFLARE_API_TOKEN must be set". Skip preview for those PRs.
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
@@ -232,7 +246,7 @@ jobs:
     name: web / main
     needs: [lint, test, build-web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       deployments: write
@@ -278,7 +292,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.android == 'true')
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/mobile-android-setup
@@ -313,7 +327,7 @@ jobs:
       needs.build-android.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -323,7 +337,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-          bundler-cache: false
+          bundler-cache: true
           working-directory: modules/apps/mobile
       - shell: bash
         run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
@@ -362,7 +376,7 @@ jobs:
       github.actor != 'dependabot[bot]' &&
       (github.event_name != 'pull_request' ||
        needs.detect-changes.outputs.ios == 'true')
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
       - name: check ios project
@@ -426,7 +440,7 @@ jobs:
       needs.build-ios.result == 'success' &&
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -442,7 +456,7 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-          bundler-cache: false
+          bundler-cache: true
           working-directory: modules/apps/mobile
       - if: steps.check_ipa.outcome == 'success'
         shell: bash
