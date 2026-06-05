@@ -7,7 +7,7 @@ Holds turn data that conceptually "advances" as the graph runs:
 
 Does NOT hold:
 - aliases / expander / emitted_verse_refs / llm / tools — those are
-  per-turn injected services, live in `domain.turn_context.TurnContext`,
+  per-turn injected services, live in `agent.graph.turn_context.TurnContext`,
   passed via LangGraph's `context_schema`. See plan section 9.4.
 - conversation history — that's input from the client per request,
   threaded into `history` once at graph entry; the worker's internal

@@ -22,7 +22,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.observability.logging import bind_node_role, get_logger
 
 

@@ -67,6 +67,7 @@ class _FakeDeps:
     catalog_repo: Any
     pool: Any
     kv_cache: Any
+    reranker: Any = None
 
 
 def _make_deps() -> _FakeDeps:
@@ -206,3 +207,41 @@ async def test_no_disconnect_does_not_tag():
         assert "cancelled_by_client" not in kwargs.get("tags", []) if kwargs.get("tags") else True
         assert not kwargs.get("metadata", {}).get("cancelled_by_client"), \
             "cancelled_by_client must only appear on the disconnect path"
+
+
+async def test_normal_completion_cancels_speculative_embed():
+    """A turn that completes normally (no disconnect) must still cancel
+    the speculative embed task in its `finally`. The router/disconnect
+    cancels don't fire on find_track / unknown turns that route to
+    catalog_worker / synthesizer — without the finally backstop the task
+    leaks (held embedding-API slot + "exception never retrieved")."""
+    deps = _make_deps()
+
+    async def _never_disconnected() -> bool:
+        return False
+
+    @asynccontextmanager
+    async def _fake_trace_cm(*args, **kwargs):
+        yield None
+
+    with patch.object(chat_turn, "get_langfuse", return_value=MagicMock()), \
+         patch.object(chat_turn, "with_langfuse_trace", _fake_trace_cm):
+        async for _ in run_chat_turn(
+            history=[{"role": "user", "content": "find a lecture"}],
+            lang="en",
+            request_id="r-leak-1",
+            user_context=None,
+            is_disconnected=_never_disconnected,
+            deps=deps,
+        ):
+            pass
+
+    # The _FakeEmbedder sleeps 60s; if the finally didn't cancel it, the
+    # task would still be pending here. Give the cancellation a tick to
+    # settle, then assert no speculative embed task survives un-cancelled.
+    await asyncio.sleep(0)
+    leaked = [
+        t for t in asyncio.all_tasks()
+        if t.get_name() == "speculative_embed_query" and not t.done()
+    ]
+    assert not leaked, "speculative embed task leaked past a normal turn"

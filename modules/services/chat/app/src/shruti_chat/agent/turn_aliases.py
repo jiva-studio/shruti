@@ -20,10 +20,8 @@ Why small sequential integers (not random or canonical track_X):
   * Hallucination prime is still gone — there's no `track_…` / `BG_…`
     token shape anywhere in the model's context to imitate.
   * Detection of invalid refs is a dict lookup (`int in self._chunks`),
-    not a catalog query.
-  * With a small alias space (≤K) the server-side expander can recover
-    from a hallucinated `[^N]` when exactly ONE valid integer in
-    [1..K] has not yet been emitted in the response (see
+    not a catalog query. An unresolvable `[^N]` is dropped by the
+    expander — we never guess a substitute (see
     `MarkerExpander._format_ref`).
 
 Re-aliasing the same `track_id` from a later tool call returns a NEW
@@ -167,8 +165,8 @@ class TurnAliasMap:
 
     def known_keys(self) -> set[int]:
         """All alias integers minted so far. Used by `MarkerExpander`
-        to recover from a hallucinated `[^N]` when exactly one valid
-        alias has not yet been emitted in the response."""
+        for the `chat_marker_alias_miss` diagnostic (which minted
+        aliases went uncited when an unresolvable `[^N]` is dropped)."""
         return set(self._chunks.keys())
 
     def alias_chunk(

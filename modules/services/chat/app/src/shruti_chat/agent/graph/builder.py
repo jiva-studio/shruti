@@ -58,7 +58,7 @@ from shruti_chat.agent.graph.nodes.synthesis_planner import (
     synthesis_planner_node,
 )
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 
 
 def build_chat_graph() -> Pregel:

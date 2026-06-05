@@ -30,3 +30,16 @@ class IdempotencyStore(Protocol):
         rejected for an infra reason.
         """
         ...
+
+    async def release(self, key: str) -> None:
+        """Drop a previously-acquired `key`.
+
+        Called when the request that acquired the key did NOT succeed
+        (in-turn error or client disconnect), so a retry isn't bounced
+        with 409 for the full TTL. Idempotency exists to dedup
+        *successful* side-effects; a turn that produced no answer should
+        not hold the gate. Best-effort: implementations MUST swallow
+        backing-store errors — a failed release just lets the key expire
+        at its TTL, which is the pre-existing behaviour.
+        """
+        ...

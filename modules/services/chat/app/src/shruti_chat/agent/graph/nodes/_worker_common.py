@@ -31,7 +31,7 @@ from shruti_chat.application.react_loop import (
     ResearchResult,
     run_react_loop,
 )
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.indexer.library.repo import fetch_verse_body
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role, get_logger

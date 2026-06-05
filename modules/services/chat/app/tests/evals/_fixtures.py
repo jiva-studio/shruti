@@ -32,7 +32,7 @@ from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.config import get_settings
 from shruti_chat.db.client import get_pool, init_pool
 from shruti_chat.db.assert_schema import assert_schema_ready
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.domain.user_context import FocusFragment, UserContext, UserContextTrack
 from shruti_chat.indexer.embed import get_embedder
 from shruti_chat.infra.llm_provider import OpenRouterLLMProvider

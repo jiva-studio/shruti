@@ -11,6 +11,17 @@ from datetime import date
 from typing import Protocol
 
 
+class RateLimitStoreUnavailable(Exception):
+    """The backing store could not service an increment (outage, timeout).
+
+    Part of the port contract: implementations raise this — store-neutral,
+    not tied to any one backend — and the `RateLimiter` use-case decides
+    the degradation policy (Pro → process-local brownout, free/anon →
+    fail-closed 503). Keeping it here is what lets the application layer
+    catch it without importing a concrete infra adapter.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class CounterRecord:
     """One bucket's atomic increment result."""
