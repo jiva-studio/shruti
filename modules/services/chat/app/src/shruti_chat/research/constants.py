@@ -15,8 +15,19 @@ from __future__ import annotations
 # pinned-attribution (authoritative; SHORT path)
 PINNED_ACCEPT_SCORE_NATIVE = 0.85
 PINNED_ACCEPT_SCORE_CROSS = 0.80
-PINNED_BORDER_SCORE = 0.70             # 0.70..accept → LLM-confirm for top1
+PINNED_BORDER_SCORE = 0.70             # 0.70..accept → cross-encoder gate for top1
 PINNED_MAX_MATCHES = 3                 # multi-match cap
+# Border-zone gate: a bi-encoder cosine of 0.70–0.85 is "maybe" — it never read
+# the two texts together. So we re-judge the top candidate with the SAME Voyage
+# cross-encoder the fanout uses, scoring (user query × the curated phrasing) as a
+# pair. Accept iff that relevance ≥ PINNED_RERANK_ACCEPT. This replaces the old
+# LLM-confirm, which was fed neither the query nor the canonical text and so
+# coin-flipped. Voyage relevance is uncalibrated; 0.50 is a deliberate midpoint —
+# tune from the `attribution_rerank` log line on real border traces.
+PINNED_RERANK_ACCEPT = 0.50
+PINNED_RERANK_CANDIDATE_POOL = 5       # rerank curated phrasings from the top-N
+                                       # border candidates (guarantees ≥2 docs;
+                                       # Voyage no-ops on a single document)
 
 # boost-attribution (ranking signal; LONG path)
 BOOST_ACCEPT_SCORE_NATIVE = 0.70

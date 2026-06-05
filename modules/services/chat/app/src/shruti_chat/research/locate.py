@@ -237,6 +237,9 @@ async def run_locate(
                     find_attributions(
                         kind=kind, user_q_embedding=embedding, lang=lang,
                         embed_model=embed_model, embed_dim=embed_dim, pool=pool,
+                        # locate has no reranker wired — the border gate falls
+                        # back to the LLM judge, now fed the real query text.
+                        user_query=question if kind == "pinned" else None,
                         llm=llm if kind == "pinned" else None,
                         **extra,
                     ),

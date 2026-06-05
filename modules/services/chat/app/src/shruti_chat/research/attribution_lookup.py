@@ -16,7 +16,6 @@ returned. The synthesizer / fanout consumes the union of their refs.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any, Literal
 
@@ -27,6 +26,8 @@ from shruti_chat.research.constants import (
     PINNED_ACCEPT_SCORE_NATIVE,
     PINNED_BORDER_SCORE,
     PINNED_MAX_MATCHES,
+    PINNED_RERANK_ACCEPT,
+    PINNED_RERANK_CANDIDATE_POOL,
     BOOST_ACCEPT_SCORE_CROSS,
     BOOST_ACCEPT_SCORE_NATIVE,
     BOOST_MAX_MATCHES_PER_TOPIC,
@@ -46,7 +47,9 @@ async def find_attributions(
     embed_model: str,
     embed_dim: int,
     pool: Any,                           # asyncpg pool
-    llm: Any | None = None,              # for border-zone confirm; topic ignores
+    reranker: Any | None = None,         # cross-encoder gate for border-zone pinned
+    user_query: str | None = None,       # raw query text — needed by the gate
+    llm: Any | None = None,              # fixed-prompt fallback when reranker absent
     confirm_model: str | None = None,
     accept_native: float | None = None,
     accept_cross: float | None = None,
@@ -77,10 +80,15 @@ async def find_attributions(
     if accepted_native:
         return _take(accepted_native, mm, stage="native")
 
-    # Border-zone for question only — at most one LLM-confirm round-trip.
+    # Border-zone (pinned only) — re-judge top1 with the cross-encoder gate.
     if kind == "pinned" and bs is not None and native and native[0].score >= bs:
         top = native[0]
-        if llm is None or await _confirm(llm, top, lang, model=confirm_model):
+        if await _gate_border(
+            native, top, lang,
+            reranker=reranker, user_query=user_query, pool=pool,
+            emb_table=router.attribution_table, embed_model=embed_model,
+            llm=llm, model=confirm_model,
+        ):
             return [_with_stage(top, "native")]
         # Explicit no — fall through, do NOT try cross stage (the closest
         # native-lang attribution was rejected; a worse cross-lang match is
@@ -101,10 +109,15 @@ async def find_attributions(
     if accepted_cross:
         return _take(accepted_cross, mm, stage="cross")
 
-    # Question-only: border-zone in cross stage also gets LLM-confirm.
+    # Cross-stage border-zone also goes through the cross-encoder gate.
     if kind == "pinned" and bs is not None and cross and cross[0].score >= bs:
         top = cross[0]
-        if llm is None or await _confirm(llm, top, lang, model=confirm_model):
+        if await _gate_border(
+            cross, top, lang,
+            reranker=reranker, user_query=user_query, pool=pool,
+            emb_table=router.attribution_table, embed_model=embed_model,
+            llm=llm, model=confirm_model,
+        ):
             return [_with_stage(top, "cross")]
 
     return []
@@ -183,30 +196,147 @@ async def _query(
     return out
 
 
-async def _confirm(
-    llm: Any, match: AttributionMatch, lang: str, *, model: str | None = None,
+async def _gate_border(
+    candidates: list[AttributionMatch],
+    top: AttributionMatch,
+    lang: str,
+    *,
+    reranker: Any | None,
+    user_query: str | None,
+    pool: Any,
+    emb_table: str,
+    embed_model: str,
+    llm: Any | None,
+    model: str | None,
 ) -> bool:
-    """One Haiku-class LLM round-trip to confirm a border-zone question match.
-    Returns True on yes / unparseable response (lean toward keeping the match
-    when uncertain — refusal is the wrong default for a curator-validated entry).
+    """Decide whether a border-zone (0.70..accept) pinned match is real.
+
+    Order of judges, strongest first:
+      1. Cross-encoder (Voyage): score (user query × each curated phrasing) as a
+         pair and accept iff the top candidate's best phrasing ≥ threshold. This
+         is the same model the fanout ranks with — it actually reads both texts.
+      2. LLM fallback (only if no reranker): a fixed-prompt yes/no, now fed the
+         REAL query and the REAL canonical phrasings (the old version got neither).
+      3. No judge available → keep the curator's pick (refusal is the wrong
+         default for a hand-curated entry).
     """
+    if reranker is not None and user_query:
+        decided = await _rerank_gate(
+            reranker, pool, emb_table, embed_model, user_query, candidates, top, lang,
+        )
+        if decided is not None:
+            return decided
+
+    if llm is not None and user_query:
+        texts = await _fetch_variant_texts(pool, emb_table, embed_model, top.attribution_id, lang)
+        if texts:
+            return await _confirm_llm(llm, user_query, texts, lang, top.score, model=model)
+
+    return True
+
+
+async def _rerank_gate(
+    reranker: Any,
+    pool: Any,
+    emb_table: str,
+    embed_model: str,
+    query: str,
+    candidates: list[AttributionMatch],
+    top: AttributionMatch,
+    lang: str,
+) -> bool | None:
+    """Cross-encoder accept/reject for the top border candidate. Returns the
+    decision, or None when it can't be made (no usable texts / Voyage no-ops on
+    <2 documents / API error) so the caller falls back to the LLM judge.
+
+    Reranks the curated phrasings of the top-N border candidates in one call.
+    The cross-encoder scores each (query, phrasing) pair independently, so the
+    extra candidates don't perturb the top's score — they only guarantee Voyage
+    sees ≥2 documents and give a natural multi-match contrast."""
+    docs: list[str] = []
+    owner: list[str] = []
+    for m in candidates[:PINNED_RERANK_CANDIDATE_POOL]:
+        for txt in await _fetch_variant_texts(pool, emb_table, embed_model, m.attribution_id, lang):
+            docs.append(txt)
+            owner.append(m.attribution_id)
+    if len(docs) < 2:
+        return None  # Voyage no-ops on ≤1 doc → let the caller fall back.
+
+    try:
+        scored = await reranker.rerank(query, docs)
+    except Exception as exc:  # noqa: BLE001 — best-effort; fall back on failure
+        log.warning("attribution_rerank_failed", error=str(exc), attribution_id=top.attribution_id)
+        return None
+
+    best = -1.0
+    for idx, score in scored:
+        if 0 <= idx < len(owner) and owner[idx] == top.attribution_id:
+            best = max(best, score)
+    if best < 0:
+        return None  # top had no scored doc — shouldn't happen, but be safe.
+
+    accepted = best >= PINNED_RERANK_ACCEPT
+    log.info(
+        "attribution_rerank_gate",
+        attribution_id=top.attribution_id,
+        cosine=round(top.score, 3),
+        rerank=round(best, 3),
+        threshold=PINNED_RERANK_ACCEPT,
+        accepted=accepted,
+    )
+    return accepted
+
+
+async def _fetch_variant_texts(
+    pool: Any, emb_table: str, embed_model: str, attribution_id: str, lang: str,
+) -> list[str]:
+    """The curated phrasings of one attribution. Prefer the user's language;
+    if it has none in that lang, fall back to all languages so a cross-lingual
+    border match still has text to rerank against."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT DISTINCT text FROM {emb_table} "
+            "WHERE attribution_id = $1 AND embed_model = $2 AND language = $3",
+            attribution_id, embed_model, lang,
+        )
+        if not rows:
+            rows = await conn.fetch(
+                f"SELECT DISTINCT text FROM {emb_table} "
+                "WHERE attribution_id = $1 AND embed_model = $2",
+                attribution_id, embed_model,
+            )
+    return [r["text"] for r in rows if r["text"]]
+
+
+async def _confirm_llm(
+    llm: Any,
+    user_query: str,
+    canonical_texts: list[str],
+    lang: str,
+    score: float,
+    *,
+    model: str | None = None,
+) -> bool:
+    """Fixed-prompt LLM yes/no — the reranker-less fallback. Unlike the old
+    `_confirm`, it is fed the REAL user query and the REAL curated phrasings, so
+    the model can actually compare. Returns True on yes / unparseable response
+    (lean toward keeping a curator-validated entry when uncertain)."""
     from pydantic import BaseModel, Field
 
     class Confirm(BaseModel):
-        yes: bool = Field(description="True if the curated question answers the user's query")
+        yes: bool = Field(description="True if a curated phrasing asks essentially the user's question")
 
     system = (
-        "You are a routing helper. Given a user query and a curated canonical "
-        "question, answer YES if the canonical question is asking essentially "
-        "the same thing (any phrasing). Answer NO if they are about different "
+        "You are a routing helper. Given a user query and a list of curated "
+        "canonical phrasings, answer YES if ANY phrasing is asking essentially "
+        "the same thing (any wording). Answer NO only if they are about different "
         "topics. Output strict JSON: {\"yes\": true|false}."
     )
-    # We don't have the canonical text easily here — fall back to attribution_id
-    # in the prompt. Caller can pass text in if needed via a follow-up enhancement.
+    bullets = "\n".join(f"- {t}" for t in canonical_texts[:10])
     user = (
-        f"User query lang={lang}: <unknown — see attribution id>\n"
-        f"Canonical attribution_id: {match.attribution_id}\n"
-        f"(retrieval score was {match.score:.2f} — borderline)"
+        f"User query (lang={lang}): {user_query}\n\n"
+        f"Curated phrasings:\n{bullets}\n\n"
+        f"(retrieval cosine was {score:.2f} — borderline)"
     )
     try:
         result: Confirm = await llm.structured_output(
@@ -220,7 +350,7 @@ async def _confirm(
         )
         return bool(result.yes)
     except Exception as exc:  # noqa: BLE001 — best-effort
-        log.warning("attribution_confirm_failed", error=str(exc), attribution_id=match.attribution_id)
+        log.warning("attribution_confirm_failed", error=str(exc))
         return True  # lean toward keeping the match
 
 
