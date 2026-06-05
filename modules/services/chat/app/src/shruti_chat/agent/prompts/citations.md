@@ -6,7 +6,7 @@ Every citable note in your research begins its header with `[^N]`, where N is an
 
 Every note kind (lecture, verse, commentary, prose_chapter, letter) arrives with a `[^N]` header — cite via the integer.
 
-Commentaries take an optional `|s=…` suffix that picks sentence indices for a verbatim purport blockquote (see library.md):
+Document notes — commentaries, prose chapters and letters — take an optional `|s=…` suffix that picks sentence indices for a verbatim blockquote of the source (see library.md). Use it to quote a charter, a letter or a purport in the author's own words instead of paraphrasing:
 
     [^7]         — defaults to the first 2 sentences of the chunk
     [^7|s=0,2]   — sentences 0 and 2 of the chunk
