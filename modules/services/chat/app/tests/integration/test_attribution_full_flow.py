@@ -106,7 +106,7 @@ async def test_question_attribution_short_path(pg_conn):
     """SHORT path: question-attribution match → authoritative refs."""
     aid = f"attribution_itest_q_{uuid.uuid4().hex[:8]}"
     await _insert_attribution(
-        pg_conn, aid=aid, kind="question",
+        pg_conn, aid=aid, kind="pinned",
         refs=[
             {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
             {"ref_kind": "verse", "target_id": "verse_BG_2_20"},
@@ -145,7 +145,7 @@ async def test_topic_attribution_collects_target_ids(pg_conn):
     (consumed by the direct-fetch path that pins them into the pool)."""
     aid = f"attribution_itest_t_{uuid.uuid4().hex[:8]}"
     await _insert_attribution(
-        pg_conn, aid=aid, kind="topic",
+        pg_conn, aid=aid, kind="boost",
         refs=[
             {"ref_kind": "verse", "target_id": "verse_BG_2_20"},
             {"ref_kind": "verse", "target_id": "verse_SB_7_7_19"},
@@ -178,7 +178,7 @@ async def test_cascade_delete_clears_embeddings(pg_conn):
     """FK CASCADE: deleting attribution removes its embeddings."""
     aid = f"attribution_itest_d_{uuid.uuid4().hex[:8]}"
     await _insert_attribution(
-        pg_conn, aid=aid, kind="question",
+        pg_conn, aid=aid, kind="pinned",
         refs=[{"ref_kind": "verse", "target_id": "verse_x"}],
         embed_texts={"ru": ["x"], "en": ["x"]},
     )
@@ -200,7 +200,7 @@ async def test_multi_variant_max_score_per_attribution(pg_conn):
     aid = f"attribution_itest_m_{uuid.uuid4().hex[:8]}"
     # All 3 variants share the same vector so MAX(score) == 1.0.
     await _insert_attribution(
-        pg_conn, aid=aid, kind="question",
+        pg_conn, aid=aid, kind="pinned",
         refs=[{"ref_kind": "verse", "target_id": "verse_x"}],
         embed_texts={"ru": ["что такое разум", "природа разума", "что значит buddhi"]},
     )
@@ -228,7 +228,7 @@ async def test_cross_lingual_fallback_no_lang_filter(pg_conn):
     aid = f"attribution_itest_x_{uuid.uuid4().hex[:8]}"
     # Use a vector specific to ru.
     await _insert_attribution(
-        pg_conn, aid=aid, kind="question",
+        pg_conn, aid=aid, kind="pinned",
         refs=[{"ref_kind": "verse", "target_id": "verse_x"}],
         embed_texts={"ru": ["природа души"]},   # no en variant
     )

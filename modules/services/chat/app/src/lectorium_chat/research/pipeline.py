@@ -2,14 +2,14 @@
 for `router.intent == "research"` turns.
 
 Two paths:
-  SHORT (question-attribution match):
-    plan_queries ∥ find_attributions(kind=question)
+  SHORT (pinned-attribution match):
+    plan_queries ∥ find_attributions(kind=pinned)
     → if matches: fetch_refs + supplementary fanout → return authoritative
 
   LONG (no match):
-    plan_queries ∥ find_attributions(kind=question) → no matches
-    → extract_topics → embed topics → find_attributions(kind=topic)
-    → fanout_search_with_boost (topic-matched item_ids get +0.15)
+    plan_queries ∥ find_attributions(kind=pinned) → no matches
+    → extract_topics → embed topics → find_attributions(kind=boost)
+    → fanout_search_with_boost (boost-matched item_ids get +0.15)
     → coverage gate; up to MAX_FANOUT_ROUNDS with regenerate_queries between
 
 Every external call is wrapped in `asyncio.wait_for` with a stage-specific
@@ -409,7 +409,7 @@ async def run_research(
     ))
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
-            kind="question", user_q_embedding=user_q_embedding, lang=lang,
+            kind="pinned", user_q_embedding=user_q_embedding, lang=lang,
             embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, llm=llm, confirm_model=confirm_model,
         ),
@@ -666,7 +666,7 @@ async def _research_path(
                 lookup_tasks = [
                     _safe(
                         lambda emb=emb: find_attributions(
-                            kind="topic", user_q_embedding=emb, lang=lang,
+                            kind="boost", user_q_embedding=emb, lang=lang,
                             embed_model=embed_model_for_lookup,
                             embed_dim=embed_dim_for_lookup,
                             pool=pool,

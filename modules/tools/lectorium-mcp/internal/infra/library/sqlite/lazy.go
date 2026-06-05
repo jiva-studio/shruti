@@ -120,6 +120,15 @@ func (l *Lazy) AttributionCreate(ctx context.Context, id string, kind library.At
 	return r.AttributionCreate(ctx, id, kind, language, firstText)
 }
 
+func (l *Lazy) AttributionFindByText(ctx context.Context, kind library.AttributionKind, language, text string) (string, bool, error) {
+	r, err := l.openRO(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer r.Close()
+	return r.AttributionFindByText(ctx, kind, language, text)
+}
+
 func (l *Lazy) AttributionGet(ctx context.Context, id string) (library.Attribution, bool, error) {
 	r, err := l.openRO(ctx)
 	if err != nil {

@@ -3,6 +3,7 @@ package attribution
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -13,10 +14,10 @@ import (
 // --- in-memory fakes ---------------------------------------------------------
 
 type fakeRepo struct {
-	mu         sync.Mutex
-	created    map[string]library.Attribution
-	textAdds   []struct{ ID, Lang, Text string }
-	refAdds    []struct {
+	mu       sync.Mutex
+	created  map[string]library.Attribution
+	textAdds []struct{ ID, Lang, Text string }
+	refAdds  []struct {
 		ID  string
 		Ref library.AttributionRef
 	}
@@ -34,6 +35,22 @@ func (f *fakeRepo) AttributionCreate(_ context.Context, id string, kind library.
 		Texts: map[string][]string{lang: {text}},
 	}
 	return nil
+}
+
+func (f *fakeRepo) AttributionFindByText(_ context.Context, kind library.AttributionKind, lang, text string) (string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for id, a := range f.created {
+		if a.Kind != kind {
+			continue
+		}
+		for _, t := range a.Texts[lang] {
+			if t == text {
+				return id, true, nil
+			}
+		}
+	}
+	return "", false, nil
 }
 
 func (f *fakeRepo) AttributionGet(_ context.Context, id string) (library.Attribution, bool, error) {
@@ -76,9 +93,12 @@ func (f *fakeRepo) AttributionRefRemove(_ context.Context, _ string, _ library.A
 func (f *fakeRepo) AttributionDelete(_ context.Context, _ string) error { return nil }
 
 type fakeTranslator struct {
-	mu          sync.Mutex
-	calls       []struct{ From, To, Text string; Kind library.AttributionKind }
-	failLang    string
+	mu    sync.Mutex
+	calls []struct {
+		From, To, Text string
+		Kind           library.AttributionKind
+	}
+	failLang     string
 	prefixByLang map[string]string // toLang → prefix to add to text (simulates translation)
 }
 
@@ -103,16 +123,22 @@ type fakeMinter struct{ tail string }
 
 func (m fakeMinter) MintTail() string { return m.tail }
 
+// seqMinter returns a distinct tail per call (mint1, mint2, …) so a test can
+// tell a reused id apart from a freshly-minted one.
+type seqMinter struct{ n int }
+
+func (m *seqMinter) MintTail() string { m.n++; return "mint" + strconv.Itoa(m.n) }
+
 // --- tests -------------------------------------------------------------------
 
 func TestCreate_MintsCorrectIDPrefix(t *testing.T) {
 	repo := newFakeRepo()
 	uc := UseCase{
-		Repo:    repo,
-		Minter:  fakeMinter{tail: "abc123"},
-		Langs:   []string{"ru"}, // no auto-translate to other langs
+		Repo:   repo,
+		Minter: fakeMinter{tail: "abc123"},
+		Langs:  []string{"ru"}, // no auto-translate to other langs
 	}
-	id, err := uc.Create(context.Background(), library.AttrQuestion, "ru", "что такое разум")
+	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -124,16 +150,50 @@ func TestCreate_MintsCorrectIDPrefix(t *testing.T) {
 	}
 }
 
+func TestCreate_IdempotentOnSameText(t *testing.T) {
+	repo := newFakeRepo()
+	uc := UseCase{
+		Repo:   repo,
+		Minter: &seqMinter{}, // distinct tail per mint so dupes are detectable
+		Langs:  []string{"ru"},
+	}
+	id1, err := uc.Create(context.Background(), library.AttrBoost, "ru", "природа души")
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	// Second create with the same (kind, lang, text) must reuse the existing
+	// attribution, not mint a duplicate — this is what lets a bulk import
+	// re-run safely without external checkpoints.
+	id2, err := uc.Create(context.Background(), library.AttrBoost, "ru", "природа души")
+	if err != nil {
+		t.Fatalf("second create: %v", err)
+	}
+	if id1 != id2 {
+		t.Fatalf("expected same id on repeat create, got %q then %q", id1, id2)
+	}
+	if len(repo.created) != 1 {
+		t.Fatalf("expected exactly 1 attribution row, got %d", len(repo.created))
+	}
+	// A different kind with the same text IS a distinct attribution.
+	id3, err := uc.Create(context.Background(), library.AttrPinned, "ru", "природа души")
+	if err != nil {
+		t.Fatalf("third create: %v", err)
+	}
+	if id3 == id1 {
+		t.Fatalf("different kind must not collide with existing attribution")
+	}
+}
+
 func TestCreate_RequiresText(t *testing.T) {
 	uc := UseCase{Repo: newFakeRepo(), Minter: fakeMinter{tail: "x"}, Langs: []string{"ru"}}
-	if _, err := uc.Create(context.Background(), library.AttrQuestion, "ru", ""); err == nil {
+	if _, err := uc.Create(context.Background(), library.AttrPinned, "ru", ""); err == nil {
 		t.Fatalf("expected error for empty text")
 	}
 }
 
 func TestCreate_RequiresLanguage(t *testing.T) {
 	uc := UseCase{Repo: newFakeRepo(), Minter: fakeMinter{tail: "x"}, Langs: []string{"ru"}}
-	if _, err := uc.Create(context.Background(), library.AttrQuestion, "", "x"); err == nil {
+	if _, err := uc.Create(context.Background(), library.AttrPinned, "", "x"); err == nil {
 		t.Fatalf("expected error for empty lang")
 	}
 }
@@ -154,7 +214,7 @@ func TestCreate_AutoTranslate_AllLangsCovered(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrQuestion, "ru", "что такое разум")
+	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -182,7 +242,7 @@ func TestCreate_TranslateFailure_NonFatal(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en", "hi"},
 	}
-	id, err := uc.Create(context.Background(), library.AttrQuestion, "ru", "что такое разум")
+	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "что такое разум")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -208,15 +268,15 @@ func TestCreate_TopicKind_PassesKindToTranslator(t *testing.T) {
 		Minter:     fakeMinter{tail: "x"},
 		Langs:      []string{"ru", "en"},
 	}
-	_, err := uc.Create(context.Background(), library.AttrTopic, "ru", "вечность души")
+	_, err := uc.Create(context.Background(), library.AttrBoost, "ru", "вечность души")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if len(tr.calls) != 1 {
 		t.Fatalf("expected 1 translate call, got %d", len(tr.calls))
 	}
-	if tr.calls[0].Kind != library.AttrTopic {
-		t.Fatalf("expected kind=topic propagated to translator, got %v", tr.calls[0].Kind)
+	if tr.calls[0].Kind != library.AttrBoost {
+		t.Fatalf("expected kind=boost propagated to translator, got %v", tr.calls[0].Kind)
 	}
 }
 
@@ -224,7 +284,7 @@ func TestCreate_NoTranslator_OK(t *testing.T) {
 	// Translator is optional; nil disables auto-translate but create still succeeds.
 	repo := newFakeRepo()
 	uc := UseCase{Repo: repo, Minter: fakeMinter{tail: "x"}, Langs: []string{"ru", "en"}}
-	id, err := uc.Create(context.Background(), library.AttrQuestion, "ru", "x")
+	id, err := uc.Create(context.Background(), library.AttrPinned, "ru", "x")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}

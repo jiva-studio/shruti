@@ -38,6 +38,32 @@ func (r *Repo) AttributionCreate(ctx context.Context, id string, kind library.At
 	return tx.Commit()
 }
 
+// AttributionFindByText returns the id of an attribution of the given kind
+// that already has an exact (language, text) variant, or ("", false) if none.
+// Used to make Create idempotent: re-running a bulk import (or a single
+// create) with the same text reuses the existing attribution instead of
+// minting a duplicate — the server is the source of truth, no external
+// checkpoint needed. Match is exact (case- and whitespace-sensitive), the
+// same dedup contract the YAML importer used.
+func (r *Repo) AttributionFindByText(ctx context.Context, kind library.AttributionKind, language, text string) (string, bool, error) {
+	var id string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT a.id
+		   FROM library_attributions a
+		   JOIN library_attribution_texts t ON t.attribution_id = a.id
+		  WHERE a.kind = ? AND t.language = ? AND t.text = ?
+		  LIMIT 1`,
+		string(kind), language, text,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}
+
 // AttributionGet loads a full Attribution by id (texts + refs included).
 func (r *Repo) AttributionGet(ctx context.Context, id string) (library.Attribution, bool, error) {
 	var a library.Attribution

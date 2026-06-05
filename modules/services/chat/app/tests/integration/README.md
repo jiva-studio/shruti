@@ -9,7 +9,7 @@ env var so unit-test CI runs stay fast.
 `test_attribution_full_flow.py` — three scenarios:
 
 **A. Question-attribution short path:**
-1. `library.attribution.create kind=question language=ru text="что такое душа"` via MCP
+1. `library.attribution.create kind=pinned language=ru text="что такое душа"` via MCP
 2. `library.attribution.ref_add` × 3 → БГ 2.13, 2.20, 2.22
 3. `library.publish` → S3 artifact
 4. Trigger chat-service indexer

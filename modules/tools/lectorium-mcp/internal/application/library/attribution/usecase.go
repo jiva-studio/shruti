@@ -10,8 +10,8 @@ import (
 	"log/slog"
 
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/library"
-	libraryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
+	libraryport "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/library"
 )
 
 const idPrefix = "attribution_"
@@ -30,6 +30,11 @@ type UseCase struct {
 // variant, then (best-effort) auto-translates that text into each other
 // supported language. Translation failures are logged and ignored — the
 // attribution is still created with the source-language text.
+//
+// Idempotent: if an attribution of the same kind already has this exact
+// (sourceLang, sourceText) variant, its id is returned and nothing is
+// created. This lets a bulk import (or a retried single create) re-run
+// safely without minting duplicates — no external checkpoint needed.
 func (uc UseCase) Create(ctx context.Context, kind library.AttributionKind, sourceLang, sourceText string) (string, error) {
 	if sourceText == "" {
 		return "", fmt.Errorf("create attribution: text required")
@@ -37,8 +42,13 @@ func (uc UseCase) Create(ctx context.Context, kind library.AttributionKind, sour
 	if sourceLang == "" {
 		return "", fmt.Errorf("create attribution: language required")
 	}
-	if kind != library.AttrQuestion && kind != library.AttrTopic {
+	if kind != library.AttrPinned && kind != library.AttrBoost {
 		return "", fmt.Errorf("create attribution: invalid kind %q", kind)
+	}
+	if existing, found, err := uc.Repo.AttributionFindByText(ctx, kind, sourceLang, sourceText); err != nil {
+		return "", err
+	} else if found {
+		return existing, nil
 	}
 	id := idPrefix + uc.Minter.MintTail()
 	if err := uc.Repo.AttributionCreate(ctx, id, kind, sourceLang, sourceText); err != nil {

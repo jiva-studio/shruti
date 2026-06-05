@@ -58,14 +58,14 @@ func openWithVerse(t *testing.T, verseID, sourceID, tokens string) *Repo {
 func TestAttributionCreate_BasicFlow(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	if err := r.AttributionCreate(ctx, "attribution_xyz", library.AttrQuestion, "ru", "что такое разум"); err != nil {
+	if err := r.AttributionCreate(ctx, "attribution_xyz", library.AttrPinned, "ru", "что такое разум"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	got, ok, err := r.AttributionGet(ctx, "attribution_xyz")
 	if err != nil || !ok {
 		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}
-	if got.Kind != library.AttrQuestion {
+	if got.Kind != library.AttrPinned {
 		t.Fatalf("kind mismatch: %v", got.Kind)
 	}
 	if len(got.Texts["ru"]) != 1 || got.Texts["ru"][0] != "что такое разум" {
@@ -79,7 +79,7 @@ func TestAttributionCreate_BasicFlow(t *testing.T) {
 func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "что такое разум")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "что такое разум")
 	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "природа разума"); err != nil {
 		t.Fatalf("add 2: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestAttributionTextAdd_MultipleVariants(t *testing.T) {
 func TestAttributionTextAdd_DuplicateGracefulNoOp(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "что такое разум")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "что такое разум")
 	// Same text again — INSERT OR IGNORE makes this a no-op.
 	if err := r.AttributionTextAdd(ctx, "attribution_a", "ru", "что такое разум"); err != nil {
 		t.Fatalf("dup add: %v", err)
@@ -115,7 +115,7 @@ func TestAttributionTextAdd_DuplicateGracefulNoOp(t *testing.T) {
 func TestAttributionRefAdd_VerseValidation(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 
 	// Existing verse → OK.
 	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
@@ -140,7 +140,7 @@ func TestAttributionRefAdd_DocumentValidation(t *testing.T) {
 		"library_document_abc", "source_BG", "2.13", "author_p", "commentary", ""); err != nil {
 		t.Fatalf("seed doc: %v", err)
 	}
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 
 	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
 		Kind: "document", TargetID: "library_document_abc",
@@ -168,7 +168,7 @@ func TestAttributionRefAdd_TitleValidation(t *testing.T) {
 		"source_SB", "7.5", "ru", "Махараджа Прахлада, святой сын Хираньякашипу"); err != nil {
 		t.Fatalf("seed title: %v", err)
 	}
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrTopic, "ru", "история Прахлады")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrBoost, "ru", "история Прахлады")
 
 	// Existing chapter → OK; target stored as composite "source/tokens".
 	if err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
@@ -244,7 +244,7 @@ func TestRelaxAttributionRefKindCheck_LegacyDBAcceptsTitle(t *testing.T) {
 func TestAttributionRefAdd_InvalidKind(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	err := r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{
 		Kind: "playlist", TargetID: "x",
 	})
@@ -256,7 +256,7 @@ func TestAttributionRefAdd_InvalidKind(t *testing.T) {
 func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	_ = r.AttributionTextAdd(ctx, "attribution_a", "en", "y")
 	_ = r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"})
 
@@ -281,18 +281,18 @@ func TestAttributionDelete_CascadesTextsAndRefs(t *testing.T) {
 func TestAttributionList_FilterByKind(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_q1", library.AttrQuestion, "ru", "вопрос про душу")
-	_ = r.AttributionCreate(ctx, "attribution_q2", library.AttrQuestion, "ru", "вопрос про карму")
-	_ = r.AttributionCreate(ctx, "attribution_t1", library.AttrTopic, "ru", "вечность души")
+	_ = r.AttributionCreate(ctx, "attribution_q1", library.AttrPinned, "ru", "вопрос про душу")
+	_ = r.AttributionCreate(ctx, "attribution_q2", library.AttrPinned, "ru", "вопрос про карму")
+	_ = r.AttributionCreate(ctx, "attribution_t1", library.AttrBoost, "ru", "вечность души")
 
-	got, err := r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrQuestion})
+	got, err := r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrPinned})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 question rows, got %d", len(got))
 	}
-	got, err = r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrTopic})
+	got, err = r.AttributionList(ctx, library.ListAttributionsOpts{Kind: library.AttrBoost})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -304,8 +304,8 @@ func TestAttributionList_FilterByKind(t *testing.T) {
 func TestAttributionList_QueryLike(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "природа души")
-	_ = r.AttributionCreate(ctx, "attribution_b", library.AttrQuestion, "ru", "вопрос про карму")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "природа души")
+	_ = r.AttributionCreate(ctx, "attribution_b", library.AttrPinned, "ru", "вопрос про карму")
 
 	got, err := r.AttributionList(ctx, library.ListAttributionsOpts{Query: "душ"})
 	if err != nil {
@@ -334,7 +334,7 @@ func TestAttribution_NotFoundErrors(t *testing.T) {
 func TestAttributionTextRemove(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "", "", "")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "v1")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "v1")
 	_ = r.AttributionTextAdd(ctx, "attribution_a", "ru", "v2")
 
 	if err := r.AttributionTextRemove(ctx, "attribution_a", "ru", "v1"); err != nil {
@@ -349,7 +349,7 @@ func TestAttributionTextRemove(t *testing.T) {
 func TestAttributionRefRemove(t *testing.T) {
 	ctx := context.Background()
 	r := openWithVerse(t, "verse_xyz", "source_BG", "2.13")
-	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrQuestion, "ru", "x")
+	_ = r.AttributionCreate(ctx, "attribution_a", library.AttrPinned, "ru", "x")
 	_ = r.AttributionRefAdd(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"})
 
 	if err := r.AttributionRefRemove(ctx, "attribution_a", library.AttributionRef{Kind: "verse", TargetID: "verse_xyz"}); err != nil {
@@ -358,5 +358,37 @@ func TestAttributionRefRemove(t *testing.T) {
 	got, _, _ := r.AttributionGet(ctx, "attribution_a")
 	if len(got.Refs) != 0 {
 		t.Fatalf("expected refs empty after remove, got %v", got.Refs)
+	}
+}
+
+func TestAttributionFindByText(t *testing.T) {
+	ctx := context.Background()
+	r := openWithVerse(t, "", "", "")
+	if err := r.AttributionCreate(ctx, "attribution_a", library.AttrBoost, "ru", "природа души"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Exact (kind, lang, text) → found.
+	id, found, err := r.AttributionFindByText(ctx, library.AttrBoost, "ru", "природа души")
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if !found || id != "attribution_a" {
+		t.Fatalf("expected found attribution_a, got found=%v id=%q", found, id)
+	}
+
+	// Same text, different kind → not found (kinds are distinct attributions).
+	if _, found, _ := r.AttributionFindByText(ctx, library.AttrPinned, "ru", "природа души"); found {
+		t.Fatalf("kind=pinned must not match a boost attribution")
+	}
+
+	// Different text → not found.
+	if _, found, _ := r.AttributionFindByText(ctx, library.AttrBoost, "ru", "что-то ещё"); found {
+		t.Fatalf("unexpected match for absent text")
+	}
+
+	// Different language → not found (text variant is per-language).
+	if _, found, _ := r.AttributionFindByText(ctx, library.AttrBoost, "en", "природа души"); found {
+		t.Fatalf("lang=en must not match a ru-only variant")
 	}
 }

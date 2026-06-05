@@ -6,9 +6,9 @@ Two-stage with asymmetric thresholds:
   2. CROSS: if native top1 < border, retry across all languages with
      accept_cross (slightly lower to compensate cross-lingual penalty).
 
-Question kind (critical): border-zone (0.70..accept_native) triggers an
+pinned kind (critical): border-zone (0.70..accept_native) triggers an
 optional LLM-confirm for the top1; rejection there returns [].
-Topic kind: no LLM-confirm — boost is not worth a second LLM round-trip.
+boost kind: no LLM-confirm — the boost is not worth a second LLM round-trip.
 
 Multi-match: up to `max_matches` attributions above accept threshold are
 returned. The synthesizer / fanout consumes the union of their refs.
@@ -23,13 +23,13 @@ from typing import Any, Literal
 from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.constants import (
-    QUESTION_ACCEPT_SCORE_CROSS,
-    QUESTION_ACCEPT_SCORE_NATIVE,
-    QUESTION_BORDER_SCORE,
-    QUESTION_MAX_MATCHES,
-    TOPIC_ACCEPT_SCORE_CROSS,
-    TOPIC_ACCEPT_SCORE_NATIVE,
-    TOPIC_MAX_MATCHES_PER_TOPIC,
+    PINNED_ACCEPT_SCORE_CROSS,
+    PINNED_ACCEPT_SCORE_NATIVE,
+    PINNED_BORDER_SCORE,
+    PINNED_MAX_MATCHES,
+    BOOST_ACCEPT_SCORE_CROSS,
+    BOOST_ACCEPT_SCORE_NATIVE,
+    BOOST_MAX_MATCHES_PER_TOPIC,
 )
 from lectorium_chat.research.models import AttributionMatch, AttributionRef
 
@@ -37,10 +37,10 @@ from lectorium_chat.research.models import AttributionMatch, AttributionRef
 log = get_logger(__name__)
 
 
-# Lookup is parameterised so the same helper covers question + topic.
+# Lookup is parameterised so the same helper covers pinned + boost.
 async def find_attributions(
     *,
-    kind: Literal["question", "topic"],
+    kind: Literal["pinned", "boost"],
     user_q_embedding: list[float],
     lang: str,
     embed_model: str,
@@ -55,16 +55,16 @@ async def find_attributions(
 ) -> list[AttributionMatch]:
     """Two-stage native + cross-lingual lookup. See module docstring."""
 
-    if kind == "question":
-        an = accept_native if accept_native is not None else QUESTION_ACCEPT_SCORE_NATIVE
-        ac = accept_cross if accept_cross is not None else QUESTION_ACCEPT_SCORE_CROSS
-        bs = border_score if border_score is not None else QUESTION_BORDER_SCORE
-        mm = max_matches if max_matches is not None else QUESTION_MAX_MATCHES
-    elif kind == "topic":
-        an = accept_native if accept_native is not None else TOPIC_ACCEPT_SCORE_NATIVE
-        ac = accept_cross if accept_cross is not None else TOPIC_ACCEPT_SCORE_CROSS
+    if kind == "pinned":
+        an = accept_native if accept_native is not None else PINNED_ACCEPT_SCORE_NATIVE
+        ac = accept_cross if accept_cross is not None else PINNED_ACCEPT_SCORE_CROSS
+        bs = border_score if border_score is not None else PINNED_BORDER_SCORE
+        mm = max_matches if max_matches is not None else PINNED_MAX_MATCHES
+    elif kind == "boost":
+        an = accept_native if accept_native is not None else BOOST_ACCEPT_SCORE_NATIVE
+        ac = accept_cross if accept_cross is not None else BOOST_ACCEPT_SCORE_CROSS
         bs = None  # topic does not use LLM-confirm
-        mm = max_matches if max_matches is not None else TOPIC_MAX_MATCHES_PER_TOPIC
+        mm = max_matches if max_matches is not None else BOOST_MAX_MATCHES_PER_TOPIC
     else:
         return []
 
@@ -78,7 +78,7 @@ async def find_attributions(
         return _take(accepted_native, mm, stage="native")
 
     # Border-zone for question only — at most one LLM-confirm round-trip.
-    if kind == "question" and bs is not None and native and native[0].score >= bs:
+    if kind == "pinned" and bs is not None and native and native[0].score >= bs:
         top = native[0]
         if llm is None or await _confirm(llm, top, lang, model=confirm_model):
             return [_with_stage(top, "native")]
@@ -102,7 +102,7 @@ async def find_attributions(
         return _take(accepted_cross, mm, stage="cross")
 
     # Question-only: border-zone in cross stage also gets LLM-confirm.
-    if kind == "question" and bs is not None and cross and cross[0].score >= bs:
+    if kind == "pinned" and bs is not None and cross and cross[0].score >= bs:
         top = cross[0]
         if llm is None or await _confirm(llm, top, lang, model=confirm_model):
             return [_with_stage(top, "cross")]

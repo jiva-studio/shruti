@@ -142,7 +142,7 @@ class AttributionMatch:
     """A single attribution returned by `find_attributions`."""
 
     attribution_id: str
-    kind: Literal["question", "topic"]
+    kind: Literal["pinned", "boost"]
     refs: list[AttributionRef]
     score: float
     stage: Literal["native", "cross"]    # which lookup stage produced it
