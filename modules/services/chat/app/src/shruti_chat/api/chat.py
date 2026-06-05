@@ -161,6 +161,14 @@ async def chat(
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         turn_started = perf_counter()
+        # Track turn outcome so the idempotency key is released on any
+        # non-success: an in-turn `error` event (the graph catches its
+        # own exceptions and streams an error frame rather than raising)
+        # or a client disconnect (sse-starlette raises into this loop,
+        # so `completed` stays False). A successful turn keeps the key,
+        # which is the genuine dedup case.
+        had_error = False
+        completed = False
         try:
             if body.proactive is not None:
                 # Proactive turn — rule-specific prompt swap. Same tool
@@ -190,16 +198,25 @@ async def chat(
                     turn_config=(body.config.model_dump() if body.config else None),
                 )
             async for ev in stream:
+                if ev.type == "error":
+                    had_error = True
                 yield {
                     "event": ev.type,
                     "data": json.dumps(ev.data, ensure_ascii=False),
                 }
+            completed = True
         finally:
+            # Release the idempotency key on a failed / cancelled turn so
+            # a retry isn't 409-blocked for the full TTL. Skipped for a
+            # clean success (key stays to dedup genuine duplicate sends)
+            # and when no key was supplied. Best-effort by contract.
+            if idempotency_key and (had_error or not completed):
+                await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
             log.info(
                 "stage_timing",
                 stage="turn_total",
                 stage_ms=round((perf_counter() - turn_started) * 1000, 1),
-                status="ok",
+                status="error" if had_error else ("cancelled" if not completed else "ok"),
                 request_id=request_id,
                 proactive=body.proactive is not None,
             )

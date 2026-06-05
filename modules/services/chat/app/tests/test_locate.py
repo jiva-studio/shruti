@@ -242,7 +242,7 @@ from shruti_chat.agent.graph import build_chat_graph  # noqa: E402
 from shruti_chat.agent.marker_expander import MarkerExpander  # noqa: E402
 from shruti_chat.agent.turn_aliases import TurnAliasMap  # noqa: E402
 from shruti_chat.domain.routing import RoutingDecision  # noqa: E402
-from shruti_chat.domain.turn_context import TurnContext  # noqa: E402
+from shruti_chat.agent.graph.turn_context import TurnContext  # noqa: E402
 
 
 @dataclass

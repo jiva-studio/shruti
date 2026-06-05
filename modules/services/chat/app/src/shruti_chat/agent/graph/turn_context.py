@@ -45,7 +45,6 @@ if TYPE_CHECKING:
     # Import-time avoidance: tool registry pulls in side-effect imports
     # of every tool module — heavy and not needed for type-checking.
     from shruti_chat.agent.tools._registry import ToolFn
-    from shruti_chat.domain.ports.llm_provider import LLMPort
 
     ToolMap = dict[str, ToolFn]
 else:

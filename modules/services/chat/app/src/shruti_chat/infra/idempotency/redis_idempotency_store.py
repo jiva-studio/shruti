@@ -50,6 +50,15 @@ class RedisIdempotencyStore:
             log.warning("idempotency_redis_error", err=str(exc))
             return True
 
+    async def release(self, key: str) -> None:
+        # Best-effort DEL — used to free the key after a turn that did
+        # not succeed. A failed release just lets the key expire at its
+        # TTL, so swallow every backing-store error.
+        try:
+            await self._client.delete(f"idem:{key}")
+        except (RedisError, TimeoutError, OSError) as exc:
+            log.warning("idempotency_release_error", err=str(exc))
+
     async def close(self) -> None:
         try:
             await self._client.aclose()

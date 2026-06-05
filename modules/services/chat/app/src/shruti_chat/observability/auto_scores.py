@@ -35,40 +35,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from shruti_chat.agent.markers import (
+    CARD_RE,
+    CITE_RE,
+    OUTLINE_RE,
+    SENTENCE_MARKER_LEAK_RE,
+    VERSE_RE,
+)
 from shruti_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
 
 
-# ── Marker grammars ────────────────────────────────────────────────────
-# Strict per-kind regexes mirroring useMarkerParser.ts on the client,
-# scoped to the audit fields we actually consume:
-#   - cite/card/outline → track_id for the broken-refs check
-#   - verse → (source_id, tokens) for the library check
-#   - cite total → `cite_count` score
-# Malformed markers are not regex'd here: the `MarkerExpander` drops
-# them inline before they hit `final_text` and reports the count via
-# `malformed_dropped_count`.
-_CITE_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]")
-_CARD_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
-_OUTLINE_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
-_VERSE_RE = re.compile(r"\[verse:([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|([^\]\n]*))?\]")
-
-# Bypass-protocol markers — LLM wrote the expanded form directly in the
-# prose instead of the numbered `[^N]` protocol. Reuses the regexes
-# from `application/chat_turn.py::_audit_bypass_markers`.
-_BYPASS_CITE_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@\d+-\d+(?:\|[^\]]*)?\]")
-_BYPASS_CARD_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
-_BYPASS_OUTLINE_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
-
-# Standalone `[s=…]` sentence-suffix tokens. The `|s=N,…` payload is
-# only valid as a SUFFIX inside `[^N|s=…]`; if the LLM emits a bare
-# `[s=0,1]` (no `^N` wrapper, no leading `^`) the MarkerExpander has
-# nothing to attach it to and it ends up in `final_text` as visible
-# garbage. We measure the leak so the prompt regression is observable
-# without waiting for user feedback.
-_SENTENCE_MARKER_LEAK_RE = re.compile(r"\[s=[0-9,]+\]")
+# Marker grammars live in `agent/markers.py` (single source of truth,
+# mirrors the client parser). The same per-kind regex serves both the
+# strict scan (track / verse ids for the broken-ref + cite_count scores)
+# and the bypass count below — group(1) is the track_id in every case.
 
 
 @dataclass(frozen=True)
@@ -110,13 +93,13 @@ async def audit_post_expansion_text(
     outline_track_ids: list[str] = []
     verse_refs: list[tuple[str, str]] = []
 
-    for m in _CITE_RE.finditer(final_text):
+    for m in CITE_RE.finditer(final_text):
         cite_track_ids.append(m.group(1))
-    for m in _CARD_RE.finditer(final_text):
+    for m in CARD_RE.finditer(final_text):
         card_track_ids.append(m.group(1))
-    for m in _OUTLINE_RE.finditer(final_text):
+    for m in OUTLINE_RE.finditer(final_text):
         outline_track_ids.append(m.group(1))
-    for m in _VERSE_RE.finditer(final_text):
+    for m in VERSE_RE.finditer(final_text):
         verse_refs.append((m.group(1), m.group(2)))
 
     # Broken refs: batch-check tracks via catalog_repo, verses against
@@ -144,9 +127,9 @@ async def audit_post_expansion_text(
     # LLM-raw buffer (which IS pre-expansion); on current trunk this is
     # the same as final_text.
     bypass = (
-        sum(1 for _ in _BYPASS_CITE_RE.finditer(llm_raw_prose))
-        + sum(1 for _ in _BYPASS_CARD_RE.finditer(llm_raw_prose))
-        + sum(1 for _ in _BYPASS_OUTLINE_RE.finditer(llm_raw_prose))
+        sum(1 for _ in CITE_RE.finditer(llm_raw_prose))
+        + sum(1 for _ in CARD_RE.finditer(llm_raw_prose))
+        + sum(1 for _ in OUTLINE_RE.finditer(llm_raw_prose))
     )
 
     cite_count = len(cite_track_ids)
@@ -157,7 +140,7 @@ async def audit_post_expansion_text(
     # the expander passed through as plain-bracket prose. Count is on
     # `final_text` (post-expansion), so it ONLY counts the visible
     # leak users actually see.
-    sentence_marker_leak = sum(1 for _ in _SENTENCE_MARKER_LEAK_RE.finditer(final_text))
+    sentence_marker_leak = sum(1 for _ in SENTENCE_MARKER_LEAK_RE.finditer(final_text))
 
     return MarkerAudit(
         malformed=malformed_dropped_count,

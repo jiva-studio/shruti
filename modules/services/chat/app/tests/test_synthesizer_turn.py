@@ -170,8 +170,8 @@ async def test_ref_marker_split_across_chunks_buffers_correctly() -> None:
 async def test_unknown_integer_ref_dropped() -> None:
     """LLM hallucinates an integer ref not in the alias map →
     MarkerExpander drops it silently (logs a `chat_marker_alias_miss`).
-    Surrounding prose still streams. With multiple aliases unused, no
-    single-candidate recovery can fire."""
+    Surrounding prose still streams; the dropped ref is never guessed
+    back to one of the unused aliases."""
     aliases = TurnAliasMap()
     aliases.alias_chunk("track_X", 0, 100)
     aliases.alias_chunk("track_Y", 0, 100)

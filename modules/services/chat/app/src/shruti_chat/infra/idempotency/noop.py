@@ -10,3 +10,6 @@ from __future__ import annotations
 class NoopIdempotencyStore:
     async def try_acquire(self, key: str, ttl_seconds: int) -> bool:
         return True
+
+    async def release(self, key: str) -> None:
+        return None

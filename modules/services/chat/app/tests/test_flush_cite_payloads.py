@@ -18,7 +18,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     _fetch_cite_text,
     flush_cite_payloads,
 )
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 
 
 class FakeChunkRepo:

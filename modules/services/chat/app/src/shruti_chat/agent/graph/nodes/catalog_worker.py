@@ -15,7 +15,7 @@ from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.nodes._worker_common import run_worker
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 
 
 # Catalog work is shallow — `resolve_X` then `tracks_list`, or a single

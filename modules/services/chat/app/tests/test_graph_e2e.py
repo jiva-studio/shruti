@@ -23,7 +23,7 @@ from shruti_chat.agent.marker_expander import MarkerExpander
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.domain.entities import CompletionChunk, Message
 from shruti_chat.domain.routing import RoutingDecision
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 
 
 T = TypeVar("T", bound=BaseModel)

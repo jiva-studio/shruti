@@ -8,7 +8,7 @@ Verifies:
 - Pro tier → process-local brownout counter is used. Requests under
   the limit are allowed; over the limit returns a normal 429 result.
 - Prometheus counter `shruti_chat_rate_limit_redis_unavailable_total`
-  increments by exactly 1 per `RedisUnavailableError` occurrence,
+  increments by exactly 1 per `RateLimitStoreUnavailable` occurrence,
   labelled by tier.
 """
 
@@ -24,19 +24,19 @@ from shruti_chat.application.rate_limiter import (
     _local_brownout_counter,
 )
 from shruti_chat.config import Settings
-from shruti_chat.domain.ports.rate_limit_store import CounterRecord
-from shruti_chat.infra.rate_limit.redis_rate_limit_store import (
-    RedisUnavailableError,
+from shruti_chat.domain.ports.rate_limit_store import (
+    CounterRecord,
+    RateLimitStoreUnavailable,
 )
 from shruti_chat.observability.metrics import redis_unavailable_counter
 
 
 @dataclass
 class _AlwaysFailingStore:
-    """Every `increment` call raises `RedisUnavailableError` — the
-    exact contract the real `RedisRateLimitStore` exposes when Redis is
-    unreachable. Tests against this fake exercise the use-case's
-    fallback paths without spinning up an actual Redis."""
+    """Every `increment` call raises `RateLimitStoreUnavailable` — the
+    exact contract the real `RedisRateLimitStore` exposes when its
+    backend is unreachable. Tests against this fake exercise the
+    use-case's fallback paths without spinning up an actual Redis."""
 
     calls: int = 0
 
@@ -49,7 +49,7 @@ class _AlwaysFailingStore:
         day: date,
     ) -> CounterRecord:
         self.calls += 1
-        raise RedisUnavailableError("simulated outage")
+        raise RateLimitStoreUnavailable("simulated outage")
 
 
 def _settings() -> Settings:

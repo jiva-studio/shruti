@@ -36,7 +36,7 @@ from typing import Any
 import structlog
 
 from shruti_chat.agent.graph.state import ChatState
-from shruti_chat.domain.turn_context import TurnContext
+from shruti_chat.agent.graph.turn_context import TurnContext
 from tests.evals.observation import ToolInvocation, TurnObservation
 
 
