@@ -15,10 +15,13 @@ google/gemini-3.1-flash-lite (default) and Claude (premium tier).
 
 from __future__ import annotations
 
+import asyncio
+import random
 from contextlib import nullcontext
 from functools import lru_cache
 from typing import Any, AsyncIterator, TypeVar
 
+import openai
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -39,6 +42,27 @@ from shruti_chat.observability.logging import get_logger
 log = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+
+# Transient provider errors worth retrying / escalating to the fallback
+# model. The openai SDK (which langchain_openai wraps) raises these for
+# timeouts, rate limits, 5xx, and connection drops. A BadRequestError /
+# AuthenticationError is NOT here — those fail identically on a retry, so
+# we surface them immediately rather than burning the retry budget.
+_RETRYABLE_EXC = (
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.RateLimitError,
+    openai.InternalServerError,
+)
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, _RETRYABLE_EXC):
+        return True
+    # Some providers surface 429/5xx as a generic APIStatusError.
+    status = getattr(exc, "status_code", None)
+    return isinstance(status, int) and (status == 429 or 500 <= status < 600)
 
 
 # OpenRouter speaks OpenAI's chat-completions wire format verbatim.
@@ -223,10 +247,28 @@ class OpenRouterLLMProvider:
             )
         self._api_key = settings.openrouter_api_key
         self._default_model = settings.llm_default
+        self._fallback_model = settings.llm_fallback
+        self._max_retries = max(0, settings.llm_max_retries)
+        self._retry_base_s = settings.llm_retry_base_delay_s
         self._allowlist = _build_model_allowlist(settings)
         # Pre-warm the default-model client so the first turn doesn't
         # pay the construction cost on the request path.
         _build_client(self._api_key, self._default_model, None)
+
+    def _fallback_for(self, primary_model: str) -> str | None:
+        """The escalation model for `primary_model`, or None when no
+        distinct fallback is configured (don't re-try the same model as
+        its own fallback)."""
+        fb = self._fallback_model
+        if not fb or _normalise_model(fb) == _normalise_model(primary_model):
+            return None
+        return fb
+
+    def _backoff_delay(self, attempt: int) -> float:
+        """Exponential backoff with full jitter: base·2^attempt, then a
+        uniform [0, that] draw so concurrent turns don't retry in lockstep."""
+        ceiling = self._retry_base_s * (2 ** attempt)
+        return random.uniform(0, ceiling)
 
     def _validate_model(self, model: str | None) -> str:
         """Whitelist gate. Unknown models fall back to `llm_default` with
@@ -309,7 +351,91 @@ class OpenRouterLLMProvider:
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> AsyncIterator[CompletionChunk]:
+        """Stream a completion with transient-retry + model-fallback.
+
+        Resilience is bounded by a hard streaming constraint: once the
+        first chunk has been yielded to the consumer it is already on the
+        wire, so a mid-stream failure CANNOT be re-rolled onto another
+        attempt (that would duplicate/corrupt the client's output). All
+        retries + the fallback escalation therefore only fire while
+        nothing has been produced yet; a failure after first output is
+        re-raised verbatim.
+        """
         validated_model = self._validate_model(model)
+        fallback_model = self._fallback_for(validated_model)
+        produced = False
+        last_exc: BaseException | None = None
+
+        # Primary model: initial attempt + same-model transient retries.
+        for attempt in range(self._max_retries + 1):
+            try:
+                async for chunk in self._raw_stream(
+                    validated_model, messages, tools=tools,
+                    tool_choice=tool_choice, temperature=temperature,
+                    run_name=run_name,
+                ):
+                    produced = True
+                    yield chunk
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if produced:
+                    log.warning(
+                        "llm_stream_failed_after_output",
+                        model=validated_model, error=str(exc),
+                    )
+                    raise
+                if attempt < self._max_retries and _is_retryable(exc):
+                    delay = self._backoff_delay(attempt)
+                    log.warning(
+                        "llm_stream_retry", model=validated_model,
+                        attempt=attempt + 1, delay_s=round(delay, 3),
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                break  # exhausted retries OR non-retryable → try fallback
+
+        # Fallback model: one attempt, only if nothing has streamed yet.
+        if fallback_model is not None and not produced:
+            log.warning(
+                "llm_stream_fallback", primary=validated_model,
+                fallback=fallback_model, error=str(last_exc),
+            )
+            try:
+                async for chunk in self._raw_stream(
+                    fallback_model, messages, tools=tools,
+                    tool_choice=tool_choice, temperature=temperature,
+                    run_name=run_name,
+                ):
+                    produced = True
+                    yield chunk
+                return
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if produced:
+                    raise
+                log.warning(
+                    "llm_stream_fallback_failed",
+                    fallback=fallback_model, error=str(exc),
+                )
+
+        assert last_exc is not None
+        raise last_exc
+
+    async def _raw_stream(
+        self,
+        validated_model: str,
+        messages: list[Message],
+        *,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | None,
+        temperature: float | None,
+        run_name: str | None,
+    ) -> AsyncIterator[CompletionChunk]:
+        """One streaming attempt against `validated_model`, wrapped in its
+        own Langfuse generation. No retry/fallback logic — that lives in
+        `stream_completion`."""
         client = self._client_for(validated_model, temperature=temperature)
         if tools:
             # langchain_openai accepts tool_choice as:
@@ -395,14 +521,72 @@ class OpenRouterLLMProvider:
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> T:
-        # temperature is forced to 0 for structured_output regardless of
-        # what a Langfuse prompt-config carries. Routing / topic
-        # extraction / query expansion all rely on deterministic JSON
-        # output; non-zero temperature flaps the parser. The bootstrap
-        # script for Langfuse documents this explicitly so prompt
-        # editors don't expect temperature changes to take effect for
-        # structured_output prompts.
+        """Structured JSON call with transient-retry + model-fallback.
+
+        One-shot (not streamed), so — unlike `stream_completion` — there's
+        no partial-output constraint: every attempt is fully safe to
+        retry. Same-model transient retries, then escalate to the
+        fallback model (which also covers a model-specific parse failure).
+        """
         validated_model = self._validate_model(model)
+        fallback_model = self._fallback_for(validated_model)
+        last_exc: BaseException | None = None
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                return await self._raw_structured(
+                    validated_model, messages, schema, run_name=run_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if attempt < self._max_retries and _is_retryable(exc):
+                    delay = self._backoff_delay(attempt)
+                    log.warning(
+                        "llm_structured_retry", model=validated_model,
+                        attempt=attempt + 1, delay_s=round(delay, 3),
+                        error=str(exc),
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                break
+
+        if fallback_model is not None:
+            log.warning(
+                "llm_structured_fallback", primary=validated_model,
+                fallback=fallback_model, error=str(last_exc),
+            )
+            try:
+                return await self._raw_structured(
+                    fallback_model, messages, schema, run_name=run_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                log.warning(
+                    "llm_structured_fallback_failed",
+                    fallback=fallback_model, error=str(exc),
+                )
+
+        assert last_exc is not None
+        raise last_exc
+
+    async def _raw_structured(
+        self,
+        validated_model: str,
+        messages: list[Message],
+        schema: type[T],
+        *,
+        run_name: str | None,
+    ) -> T:
+        """One structured-output attempt against `validated_model`. No
+        retry/fallback — that lives in `structured_output`.
+
+        temperature is forced to 0 regardless of what a Langfuse
+        prompt-config carries. Routing / topic extraction / query
+        expansion all rely on deterministic JSON output; non-zero
+        temperature flaps the parser. The bootstrap script for Langfuse
+        documents this explicitly so prompt editors don't expect
+        temperature changes to take effect for structured_output prompts.
+        """
         # `streaming=False`: see `_build_client` docstring — streaming
         # clients drop `usage_metadata` from the final AIMessage, which
         # we need to feed Langfuse generation tokens. Structured output

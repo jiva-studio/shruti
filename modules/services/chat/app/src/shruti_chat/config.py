@@ -60,7 +60,18 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
 
     llm_default: str = "openrouter/deepseek/deepseek-chat"
+    # Escalation model the provider switches to when the primary model
+    # errors (after exhausting same-model transient retries). For
+    # streaming calls it only fires before the first chunk reaches the
+    # client — a mid-stream failure can't be re-rolled onto another model.
     llm_fallback: str = "openrouter/anthropic/claude-3-haiku"
+    # Transient-error resilience for every provider LLM call. On a
+    # retryable error (timeout / 429 / 5xx / connection) the provider
+    # retries the SAME model up to `llm_max_retries` times with
+    # exponential backoff (`llm_retry_base_delay_s * 2**attempt` + jitter)
+    # before escalating to `llm_fallback`. Set retries to 0 to disable.
+    llm_max_retries: int = 2
+    llm_retry_base_delay_s: float = 0.5
     # Outline generation is a one-shot JSON-mode call, not the chat agent
     # itself — picked separately for cost (~$0.0007 per lecture, see
     # /tmp/outline_bench.py).
