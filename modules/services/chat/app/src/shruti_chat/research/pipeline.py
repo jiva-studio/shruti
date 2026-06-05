@@ -28,6 +28,7 @@ from typing import Any, Callable
 from shruti_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
+    resolve_commentary_author_names,
 )
 from shruti_chat.indexer.library.repo import fetch_document_body
 from shruti_chat.observability.logging import get_logger
@@ -197,6 +198,7 @@ async def _fetch_refs(
     canonical_score: float,
     on_event: OnEvent | None = None,
     library_db: Any | None = None,
+    catalog_repo: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve each AttributionRef → chunks → envelopes. Envelopes carry
     `score = canonical_score` (>= 0.85 for accept) so the synthesizer's
@@ -232,6 +234,20 @@ async def _fetch_refs(
                 )
             except Exception:  # noqa: BLE001
                 chunks = []
+        # Resolve commentary author_id → human name (e.g. "А. Ч. Бхактиведанта
+        # Свами Прабхупада") so a pinned commentary's blockquote carries its
+        # author, not just the address. The fanout + commentary_expansion paths
+        # already do this; authoritative refs skipped it, so a pinned purport
+        # rendered as "— БГ 2.13" with no author. Best-effort (empty map when no
+        # catalog / non-commentary chunks).
+        author_names = await resolve_commentary_author_names(
+            chunks, catalog_repo=catalog_repo, lang=lang,
+        )
+
+        def _author_meta(c: Any) -> dict[str, Any] | None:
+            name = author_names.get(c.author_id) if c.author_id else None
+            return {"author_name": name} if name else None
+
         # Document refs (commentary / prose_chapter / letter): cite the
         # WHOLE document as ONE source, from its canonical library.db body —
         # NOT reassembled from the overlapping Postgres search chunks (which
@@ -244,7 +260,10 @@ async def _fetch_refs(
             if body:
                 emit_library_research_source(on_event, item_kind=head.item_kind, chunk=head)
                 full = replace(head, text=body, segment_index=0)
-                env = library_to_envelope(full, alias_map=alias_map, score=canonical_score)
+                env = library_to_envelope(
+                    full, alias_map=alias_map, score=canonical_score,
+                    extra_meta=_author_meta(head),
+                )
                 env["_dedup_key"] = (head.item_kind, head.item_id, 0)
                 return [env]
 
@@ -255,7 +274,10 @@ async def _fetch_refs(
             # the `verse:`/`library:` id namespace with the fanout path, so
             # the client's dedup-by-id collapses a source seen by both.
             emit_library_research_source(on_event, item_kind=c.item_kind, chunk=c)
-            env = library_to_envelope(c, alias_map=alias_map, score=canonical_score)
+            env = library_to_envelope(
+                c, alias_map=alias_map, score=canonical_score,
+                extra_meta=_author_meta(c),
+            )
             # Same shape as fanout's _library_dedup_key so merge_fanout-style
             # callers can dedup these alongside fanout output.
             env["_dedup_key"] = (c.item_kind, c.item_id, c.segment_index)
@@ -501,7 +523,7 @@ async def run_research(
                 lambda: _fetch_refs(
                     all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                     lang=lang, canonical_score=top_score, on_event=on_event,
-                    library_db=library_db,
+                    library_db=library_db, catalog_repo=catalog_repo,
                 ),
                 default=[], timeout=TIMEOUT_FETCH_REFS_S,
                 name="fetch_refs", request_id=request_id,
@@ -764,7 +786,7 @@ async def _research_path(
             lambda: _fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=lang, canonical_score=0.75, on_event=on_event,
-                library_db=library_db,
+                library_db=library_db, catalog_repo=catalog_repo,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_topic_refs", request_id=request_id,

@@ -88,14 +88,22 @@ class FakeEmbedder:
 
 
 class FakeCatalogRepo:
-    def __init__(self, titles: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        titles: dict[str, str] | None = None,
+        author_names: dict[str, str] | None = None,
+    ) -> None:
         self._titles = titles or {}
+        self._author_names = author_names or {}
 
     async def filter_track_ids(self, **_kwargs) -> list[str] | None:
         return None
 
     async def get_titles(self, track_ids, *, lang=None) -> dict[str, str]:
         return {t: self._titles[t] for t in track_ids if t in self._titles}
+
+    async def get_author_names(self, author_ids, *, lang) -> dict[str, str]:
+        return {a: self._author_names[a] for a in author_ids if a in self._author_names}
 
 
 @dataclass
@@ -131,6 +139,9 @@ class FakeAliasMap:
         self.captions: dict[int, str] = {}
         # `lecture_to_envelope` stashes the exact chunk text here at mint.
         self.chunk_texts: dict[int, str] = {}
+        # Records the author_name passed to each minted commentary alias, so
+        # tests can assert the pinned path resolved it (not None).
+        self.commentary_authors: dict[int, str | None] = {}
 
     def alias_chunk(self, track_id, start_ms, end_ms, lang=None):
         key = (track_id, start_ms, end_ms)
@@ -150,6 +161,7 @@ class FakeAliasMap:
 
     def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences, kind="commentary"):
         self._verse += 1
+        self.commentary_authors[self._verse] = author_name
         return self._verse
 
 
@@ -769,3 +781,43 @@ def test_balanced_cut_noop_when_already_present_or_short():
     # Shorter than n → returned as-is.
     short = [_env("lecture", 0.7), _env("verse", 0.6)]
     assert _balanced_cut(short, 8) == short
+
+
+@pytest.mark.asyncio
+async def test_short_path_commentary_ref_resolves_author_name():
+    """A pinned attribution referencing a commentary resolves the author name
+    so its blockquote carries '— А. Ч. …', not just the address. Regression:
+    the authoritative path skipped author resolution (fanout/commentary_expansion
+    did it), so a pinned purport rendered with no author. Chunk path (library_db
+    defaults to None) → one envelope per commentary chunk."""
+    AUTHOR = "author_jcC2O92Hi1kT"
+    pool = FakePool({
+        ("ru", "pinned"): [
+            _row("attribution_comm", 0.95, [
+                {"ref_kind": "document", "target_id": "doc_purport"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(by_target={
+        ("document", "doc_purport"): [
+            _LibChunk("doc_purport", "commentary", "Душа атомарна по природе.", "ru",
+                      source_id="src", tokens="2.17", addr_label="БГ 2.17",
+                      author_id=AUTHOR),
+        ],
+    })
+    catalog = FakeCatalogRepo(
+        author_names={AUTHOR: "А. Ч. Бхактиведанта Свами Прабхупада"},
+    )
+    alias = FakeAliasMap()
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("душа")})
+
+    kwargs = _common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo, catalog_repo=catalog)
+    kwargs["alias_map"] = alias
+    result = await run_research(
+        question="что такое душа", lang="ru", router_args={}, **kwargs,
+    )
+
+    assert result.matched_question_ids == ["attribution_comm"]
+    assert len(result.authoritative_refs) == 1
+    # The commentary alias was minted WITH the resolved author name.
+    assert "А. Ч. Бхактиведанта Свами Прабхупада" in alias.commentary_authors.values()
