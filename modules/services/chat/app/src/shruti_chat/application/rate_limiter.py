@@ -141,6 +141,17 @@ class RateLimiter:
         self._store = store
         self._settings = settings
 
+    async def store_healthy(self) -> bool:
+        """Readiness probe: is the backing store reachable? Delegates to
+        the store's `ping` when it has one (the Redis adapter), else
+        reports healthy — an in-memory / fake store has no external
+        service to be down. Used by `/readyz`; the rate-limit store is
+        mandatory in prod, so a dead backend must fail readiness."""
+        ping = getattr(self._store, "ping", None)
+        if ping is None:
+            return True
+        return bool(await ping())
+
     def _user_limit_for(
         self,
         scope: str,

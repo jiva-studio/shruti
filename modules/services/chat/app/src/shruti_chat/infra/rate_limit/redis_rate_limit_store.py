@@ -83,6 +83,15 @@ class RedisRateLimitStore:
             log.warning("rate_limit_redis_error", err=str(exc), key=full_key)
             raise RateLimitStoreUnavailable(str(exc)) from exc
 
+    async def ping(self) -> bool:
+        """Liveness probe for `/readyz`. True if Redis answers PING,
+        False on any connection/timeout error. Never raises — readiness
+        checks must not 500."""
+        try:
+            return bool(await self._client.ping())
+        except (RedisError, TimeoutError, OSError):
+            return False
+
     async def close(self) -> None:
         try:
             await self._client.aclose()

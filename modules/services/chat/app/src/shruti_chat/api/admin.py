@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from shruti_chat.config import get_settings
@@ -47,7 +47,7 @@ async def root() -> dict[str, Any]:
                                "(requires Authorization: Bearer <jwt>)",
             "POST /reindex": "force indexer run (admin, requires X-App-Token)",
             "GET /healthz": "liveness",
-            "GET /readyz": "readiness (db + embedder + catalog)",
+            "GET /readyz": "readiness (db + embedder + catalog + redis)",
             "GET /status": "detailed runtime status (admin, requires X-App-Token)",
             "GET /version": "build info",
         },
@@ -68,12 +68,13 @@ class ReadyResponse(BaseModel):
 
 
 @router.get("/readyz", response_model=ReadyResponse)
-async def readyz() -> ReadyResponse:
+async def readyz(request: Request) -> ReadyResponse:
     s = get_settings()
     checks = {
         "db": False,
         "embedder": False,
         "catalog": False,
+        "redis": False,
     }
     # DB
     try:
@@ -95,6 +96,15 @@ async def readyz() -> ReadyResponse:
     try:
         get_embedder()  # cached; raises if not init'd
         checks["embedder"] = True
+    except Exception:
+        pass
+    # Redis — mandatory for the rate-limit store in prod (main.py refuses
+    # to boot without REDIS_URL). Without this gate a pod with a wedged
+    # Redis reports ready and then 503s every free/anon chat. Probed via
+    # the rate-limiter so admin.py doesn't reach into the infra adapter.
+    try:
+        deps = getattr(request.app.state, "deps", None)
+        checks["redis"] = bool(deps and await deps.rate_limiter.store_healthy())
     except Exception:
         pass
 
