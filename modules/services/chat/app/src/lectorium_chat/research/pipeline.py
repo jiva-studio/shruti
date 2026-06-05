@@ -63,6 +63,7 @@ from lectorium_chat.research.models import (
     ResearchResult,
     SubQuery,
 )
+from lectorium_chat.research.locate import build_pinned_chapter_notes
 from lectorium_chat.research.query_planner import plan_queries
 from lectorium_chat.research.topic_extractor import extract_topics
 
@@ -296,6 +297,18 @@ async def _fetch_refs(
     flat: list[dict[str, Any]] = []
     for batch in per_ref:
         flat.extend(batch)
+
+    # Title refs resolve to a chapter-location card (ChapterCard), not chunks —
+    # get_chunks_by_target has no 'title' branch, so without this a curated
+    # chapter would be a silent no-op. Reuses the locate region logic; the verse
+    # cards still come from the verse refs above, the chapter card rides on top.
+    if any(r.ref_kind == "title" for r in refs):
+        chapter_notes = await build_pinned_chapter_notes(
+            refs, chunk_repo=chunk_repo, library_db=library_db,
+            lang=lang or "ru", alias_map=alias_map, score=canonical_score,
+        )
+        flat.extend(chapter_notes)
+
     return flat
 
 

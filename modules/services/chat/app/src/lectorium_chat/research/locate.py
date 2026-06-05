@@ -34,6 +34,7 @@ from lectorium_chat.research.constants import (
 )
 from lectorium_chat.research.models import (
     AttributionMatch,
+    AttributionRef,
     LocateChapter,
     LocateRegion,
     LocateResult,
@@ -168,6 +169,59 @@ async def _titles_for(library_db: Any, source_id: str, lang: str) -> dict[str, s
     titles = await fetch_titles(library_db, source_id, lang=lang)
     _titles_cache[key] = titles
     return titles
+
+
+async def build_pinned_chapter_notes(
+    refs: list[AttributionRef],
+    *,
+    chunk_repo: Any,
+    library_db: Any,
+    lang: str,
+    alias_map: Any,
+    score: float,
+) -> list[dict]:
+    """Build chapter-location notes for a pinned attribution that carries a
+    `title` ref — the SAME ChapterCard the locate intent renders, reached now
+    from the research SHORT path so a curated chapter shows as a chapter (not a
+    dropped no-op). Returns [] when there is no title ref or it can't resolve.
+
+    Reuses `_resolve_attribution_hits` + `_build_regions`. Verse refs in the
+    same attribution are fed in only to source a clean book-level region label
+    (their `_short_name` → "ЧЧ Мадхйа") and are processed FIRST so they win the
+    label over a title hit (whose addr_label is the chapter heading itself). The
+    verses are NOT emitted here — the SHORT path already renders them as verse
+    cards; this adds only the chapter card on top."""
+    if library_db is None or not any(r.ref_kind == "title" for r in refs):
+        return []
+
+    hits = await _resolve_attribution_hits(
+        [AttributionMatch(attribution_id="", kind="pinned", refs=refs, score=score, stage="native")],
+        chunk_repo=chunk_repo, library_db=library_db, lang=lang,
+    )
+    if not any(h.item_kind == "title" for h in hits):
+        return []
+    # Verse/commentary hits first → their book-level label wins in _build_regions.
+    hits.sort(key=lambda h: 1 if h.item_kind == "title" else 0)
+
+    regions = await _build_regions(hits, library_db=library_db, lang=lang)
+    notes: list[dict] = []
+    for region in regions:
+        if not region.chapters:
+            continue
+        ref_int = alias_map.alias_chapter(
+            region.source_id,
+            region.region_token,
+            region.region_label,
+            [(c.tokens, c.title) for c in region.chapters],
+        )
+        chapter_list = ", ".join(c.tokens for c in region.chapters)
+        label = region.region_label or chapter_list
+        notes.append({
+            "type": "location",
+            "ref": ref_int,
+            "text": f"{label} — глава {chapter_list}".strip(" —"),
+        })
+    return notes
 
 
 def _decide_verse_granularity(

@@ -315,3 +315,107 @@ async def test_graph_locate_intent_emits_chapter_payload_and_marker(tmp_path):
     assert payload["source_id"] == SB and payload["region_token"] == "12"
     toks = [c["tokens"] for c in payload["chapters"]]
     assert toks == ["12.8", "12.9", "12.10"]
+
+
+# ---- build_pinned_chapter_notes (research SHORT-path title refs) -----------
+
+
+class _FakeAliasMap:
+    """Records alias_chapter calls; returns a 1-based int alias like the real one."""
+
+    def __init__(self) -> None:
+        self.chapters: list[tuple] = []
+
+    def alias_chapter(self, source_id, region_token, region_label, chapters):
+        self.chapters.append((source_id, region_token, region_label, tuple(chapters)))
+        return len(self.chapters)
+
+
+class _FakeChunkRepoByTarget:
+    def __init__(self, by_target: dict) -> None:
+        self.by_target = by_target
+
+    async def get_chunks_by_target(self, *, ref_kind, target_id, lang=None):
+        return self.by_target.get(target_id, [])
+
+
+def _verse_chunk(source_id, tokens, addr_label):
+    return LibraryChunk(
+        item_id=f"v_{tokens}", item_kind="verse", source_id=source_id,
+        tokens=tokens, author_id=None, doc_date=None, lang="ru",
+        segment_index=0, text="…", addr_label=addr_label,
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_pinned_chapter_notes_3level_canto_region(tmp_path):
+    # 3-level book (SB canto.chapter.verse): title ref to chapter 12.8 + a verse
+    # ref → one canto-12 region with the 12.8 chapter row.
+    from lectorium_chat.research.models import AttributionRef
+
+    db = _make_library_db(tmp_path)
+    repo = _FakeChunkRepoByTarget({"verse_x": [_verse_chunk(SB, "12.8.10", "ШБ 12.8.10")]})
+    am = _FakeAliasMap()
+    refs = [
+        AttributionRef(ref_kind="title", target_id=f"{SB}/12.8"),
+        AttributionRef(ref_kind="verse", target_id="verse_x"),
+    ]
+    notes = await locate.build_pinned_chapter_notes(
+        refs, chunk_repo=repo, library_db=db, lang="ru", alias_map=am, score=0.9,
+    )
+    assert len(notes) == 1
+    assert notes[0]["type"] == "location"
+    assert notes[0]["ref"] == 1
+    src, region_token, region_label, chapters = am.chapters[0]
+    assert src == SB
+    assert region_token == "12"
+    assert region_label == "Песнь 12 «Век деградации»"
+    assert chapters == (("12.8", "Молитвы Маркандейи Нара-Нараяне Риши"),)
+
+
+@pytest.mark.asyncio
+async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path):
+    # 2-level book (CC chapter.verse): the region is book-level (region_token="")
+    # and its label must come from the verse's short-name ("ЧЧ Мадхья"), NOT the
+    # title hit's addr_label (the chapter heading). Mirrors the real brahmana pin.
+    from lectorium_chat.research.models import AttributionRef
+
+    CC = "source_CC"
+    db = tmp_path / "cc.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE library_titles (source_id TEXT, tokens TEXT, language TEXT, title TEXT)")
+    conn.execute(
+        "INSERT INTO library_titles VALUES (?,?,?,?)",
+        (CC, "9", "ru", "Паломничество Шри Чайтаньи Махапрабху"),
+    )
+    conn.commit()
+    conn.close()
+
+    repo = _FakeChunkRepoByTarget({"v9": [_verse_chunk(CC, "9.102", "ЧЧ Мадхья 9.102")]})
+    am = _FakeAliasMap()
+    refs = [
+        AttributionRef(ref_kind="title", target_id=f"{CC}/9"),
+        AttributionRef(ref_kind="verse", target_id="v9"),
+    ]
+    notes = await locate.build_pinned_chapter_notes(
+        refs, chunk_repo=repo, library_db=db, lang="ru", alias_map=am, score=0.9,
+    )
+    assert len(notes) == 1
+    src, region_token, region_label, chapters = am.chapters[0]
+    assert src == CC
+    assert region_token == ""           # book-level region for a 2-level book
+    assert region_label == "ЧЧ Мадхья"  # from the verse short-name, not the chapter title
+    assert chapters == (("9", "Паломничество Шри Чайтаньи Махапрабху"),)
+
+
+@pytest.mark.asyncio
+async def test_build_pinned_chapter_notes_no_title_returns_empty(tmp_path):
+    from lectorium_chat.research.models import AttributionRef
+
+    db = _make_library_db(tmp_path)
+    notes = await locate.build_pinned_chapter_notes(
+        [AttributionRef(ref_kind="verse", target_id="verse_x")],
+        chunk_repo=_FakeChunkRepoByTarget({}), library_db=db, lang="ru",
+        alias_map=_FakeAliasMap(), score=0.9,
+    )
+    assert notes == []
