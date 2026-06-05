@@ -332,17 +332,26 @@ class _FakeAliasMap:
 
 
 class _FakeChunkRepoByTarget:
+    """target_id → chunks. A value may be a plain list (lang-agnostic) or a
+    {lang: [chunks]} dict; for the dict form, `lang=None` returns the FIRST
+    variant (mimicking prod's lang=None picking whichever row comes first)."""
+
     def __init__(self, by_target: dict) -> None:
         self.by_target = by_target
 
     async def get_chunks_by_target(self, *, ref_kind, target_id, lang=None):
-        return self.by_target.get(target_id, [])
+        val = self.by_target.get(target_id, [])
+        if isinstance(val, dict):
+            if lang is None:
+                return next(iter(val.values()), [])
+            return val.get(lang, [])
+        return val
 
 
-def _verse_chunk(source_id, tokens, addr_label):
+def _verse_chunk(source_id, tokens, addr_label, lang="ru"):
     return LibraryChunk(
         item_id=f"v_{tokens}", item_kind="verse", source_id=source_id,
-        tokens=tokens, author_id=None, doc_date=None, lang="ru",
+        tokens=tokens, author_id=None, doc_date=None, lang=lang,
         segment_index=0, text="…", addr_label=addr_label,
     )
 
@@ -391,7 +400,12 @@ async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path)
     conn.commit()
     conn.close()
 
-    repo = _FakeChunkRepoByTarget({"v9": [_verse_chunk(CC, "9.102", "ЧЧ Мадхья 9.102")]})
+    # Verse resolves to BOTH en and ru variants; en is first (mimics lang=None
+    # leaking the EN "CC Madhya"). Fix B must request lang="ru" → "ЧЧ Мадхья".
+    repo = _FakeChunkRepoByTarget({"v9": {
+        "en": [_verse_chunk(CC, "9.102", "CC Madhya 9.102", lang="en")],
+        "ru": [_verse_chunk(CC, "9.102", "ЧЧ Мадхья 9.102", lang="ru")],
+    }})
     am = _FakeAliasMap()
     refs = [
         AttributionRef(ref_kind="title", target_id=f"{CC}/9"),
@@ -404,7 +418,8 @@ async def test_build_pinned_chapter_notes_2level_book_label_from_verse(tmp_path)
     src, region_token, region_label, chapters = am.chapters[0]
     assert src == CC
     assert region_token == ""           # book-level region for a 2-level book
-    assert region_label == "ЧЧ Мадхья"  # from the verse short-name, not the chapter title
+    # ru variant wins (NOT the EN "CC Madhya" a lang=None lookup would leak).
+    assert region_label == "ЧЧ Мадхья"
     assert chapters == (("9", "Паломничество Шри Чайтаньи Махапрабху"),)
 
 
