@@ -14,11 +14,11 @@ import (
 	libraryport "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/ports/library"
 )
 
-//go:embed prompt.question.txt
-var questionPrompt string
+//go:embed prompt.pinned.txt
+var pinnedPrompt string
 
-//go:embed prompt.topic.txt
-var topicPrompt string
+//go:embed prompt.boost.txt
+var boostPrompt string
 
 const ProviderName = "openai-compat-attribution"
 
@@ -63,9 +63,9 @@ func (t *Translator) Translate(ctx context.Context, text, fromLang, toLang strin
 	if text == "" {
 		return "", fmt.Errorf("attribution translate: empty text")
 	}
-	prompt := questionPrompt
-	if kind == library.AttrTopic {
-		prompt = topicPrompt
+	prompt := pinnedPrompt
+	if kind == library.AttrBoost {
+		prompt = boostPrompt
 	}
 	system, user := splitPrompt(prompt)
 	user = strings.ReplaceAll(user, "__FROM__", fromLang)

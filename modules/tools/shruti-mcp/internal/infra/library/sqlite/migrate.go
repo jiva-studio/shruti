@@ -27,6 +27,9 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := relaxAttributionRefKindCheck(ctx, db); err != nil {
 		return fmt.Errorf("relax attribution ref_kind check: %w", err)
 	}
+	if err := migrateAttributionKindToPinnedBoost(ctx, db); err != nil {
+		return fmt.Errorf("migrate attribution kind to pinned/boost: %w", err)
+	}
 	return nil
 }
 
@@ -47,7 +50,7 @@ func ensureAttributionTables(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS library_attributions (
 			id          TEXT PRIMARY KEY,
-			kind        TEXT NOT NULL CHECK (kind IN ('question', 'topic')),
+			kind        TEXT NOT NULL CHECK (kind IN ('pinned', 'boost')),
 			created_at  TIMESTAMP NOT NULL,
 			updated_at  TIMESTAMP NOT NULL
 		)`,
@@ -130,6 +133,87 @@ func relaxAttributionRefKindCheck(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// migrateAttributionKindToPinnedBoost renames the attribution kinds
+// question→pinned and topic→boost, matching the search-industry pin/boost
+// naming. The kind column carries a CHECK constraint, and SQLite can neither
+// alter a CHECK in place nor UPDATE a row to a value the *old* CHECK forbids,
+// so this is the standard create-copy-drop-rename rebuild with the value map
+// applied during the copy. Idempotent: a no-op once the table's CHECK no
+// longer mentions 'question' (fresh DBs, or already-migrated ones).
+func migrateAttributionKindToPinnedBoost(ctx context.Context, db *sql.DB) error {
+	var ddl string
+	err := db.QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type='table' AND name='library_attributions'`,
+	).Scan(&ddl)
+	if err == sql.ErrNoRows {
+		return nil // table not present yet
+	}
+	if err != nil {
+		return err
+	}
+	// ensureAttributionTables creates fresh DBs with the new CHECK already, so
+	// the presence of the old value in the DDL is the migration trigger.
+	if !strings.Contains(ddl, "'question'") {
+		return nil // already migrated
+	}
+
+	// library_attributions is the FK parent of *_texts and *_refs with ON
+	// DELETE CASCADE. The pool's connections run with _foreign_keys=ON, so a
+	// naive DROP would cascade-delete every text and ref. PRAGMA foreign_keys
+	// is per-connection AND a no-op inside a transaction, so pin the whole
+	// rebuild to one dedicated connection: toggle FK OFF on it, rebuild in a
+	// txn, restore FK, verify. The child rows reference id (unchanged), so
+	// they stay valid across the parent swap.
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("disable foreign_keys: %w", err)
+	}
+	defer func() { _, _ = conn.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmts := []string{
+		`CREATE TABLE library_attributions_new (
+			id          TEXT PRIMARY KEY,
+			kind        TEXT NOT NULL CHECK (kind IN ('pinned', 'boost')),
+			created_at  TIMESTAMP NOT NULL,
+			updated_at  TIMESTAMP NOT NULL
+		)`,
+		`INSERT INTO library_attributions_new (id, kind, created_at, updated_at)
+			SELECT id,
+			       CASE kind WHEN 'question' THEN 'pinned'
+			                 WHEN 'topic'    THEN 'boost'
+			                 ELSE kind END,
+			       created_at, updated_at
+			FROM library_attributions`,
+		`DROP TABLE library_attributions`,
+		`ALTER TABLE library_attributions_new RENAME TO library_attributions`,
+		`CREATE INDEX IF NOT EXISTS library_attributions_by_kind
+			ON library_attributions(kind)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("rebuild %q: %w", firstLine(s), err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// Verify the FK graph is still intact after the parent swap.
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_key_check`); err != nil {
+		return fmt.Errorf("foreign_key_check after rebuild: %w", err)
+	}
+	return nil
 }
 
 func firstLine(s string) string {

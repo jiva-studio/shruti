@@ -95,16 +95,19 @@ type ListTitlesOpts struct {
 }
 
 // AttributionKind discriminates how chat-service consumes the attribution.
+// Named after the search-industry pin/boost distinction (cf. Elasticsearch
+// pinned queries vs boosting):
 //
-//   - AttrQuestion: curated canonical question; matched user query takes
-//     the SHORT path in the research pipeline (refs become authoritative).
-//   - AttrTopic:    short topical label; matched extracted topics BOOST
+//   - AttrPinned: a curated canonical query; a matched user query takes the
+//     SHORT path in the research pipeline (refs become authoritative — the
+//     answer is pinned to these sources).
+//   - AttrBoost:  a short topical label; matched extracted topics BOOST
 //     scores (+0.15) of referenced chunks in the fanout.
 type AttributionKind string
 
 const (
-	AttrQuestion AttributionKind = "question"
-	AttrTopic    AttributionKind = "topic"
+	AttrPinned AttributionKind = "pinned"
+	AttrBoost  AttributionKind = "boost"
 )
 
 // Attribution is a curated mapping: one or more text phrasings (per language)
@@ -112,7 +115,7 @@ const (
 // only changes how the chat-service pipeline uses the matched refs.
 type Attribution struct {
 	ID        string                // "attribution_<nanoid>"
-	Kind      AttributionKind       // "question" | "topic"
+	Kind      AttributionKind       // "pinned" | "boost"
 	Texts     map[string][]string   // language → list of phrasings (N variants per lang)
 	Refs      []AttributionRef
 	CreatedAt string                // RFC3339, set by repo on insert
@@ -120,8 +123,8 @@ type Attribution struct {
 }
 
 // AttributionRef points to a library entity. Kind here is the REFERENCED
-// entity type (verse|document|title) — separate from Attribution.Kind
-// (question|topic).
+// entity type (verse|document|title|track) — separate from Attribution.Kind
+// (pinned|boost).
 //
 // TargetID encoding by Kind:
 //   - verse / document: the opaque entity id (verse.id / library_document.id).

@@ -32,6 +32,7 @@ func RegisterLibraryAttribution(s *server.MCPServer, deps LibraryAttributionDeps
 	registerAttributionRefAdd(s, deps)
 	registerAttributionRefRemove(s, deps)
 	registerAttributionDelete(s, deps)
+	registerAttributionImport(s, deps)
 }
 
 // ---------- CREATE ----------
@@ -39,10 +40,10 @@ func RegisterLibraryAttribution(s *server.MCPServer, deps LibraryAttributionDeps
 func registerAttributionCreate(s *server.MCPServer, deps LibraryAttributionDeps) {
 	const kind = "library.attribution.create"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("Create a new attribution (kind=question or kind=topic). Auto-translates the source text into every supported language as a best-effort side-effect."),
-		mcp.WithString("kind", mcp.Required(), mcp.Description("question | topic")),
+		mcp.WithDescription("Create a new attribution (kind=pinned or kind=boost). Auto-translates the source text into every supported language as a best-effort side-effect."),
+		mcp.WithString("kind", mcp.Required(), mcp.Description("pinned | boost")),
 		mcp.WithString("language", mcp.Required(), mcp.Description("Source-text language (ISO-639-1, e.g. \"ru\" or \"en\").")),
-		mcp.WithString("text", mcp.Required(), mcp.Description("Canonical text (question phrasing for kind=question; topic label for kind=topic).")),
+		mcp.WithString("text", mcp.Required(), mcp.Description("Canonical text (the query phrasing for kind=pinned; the topical label for kind=boost).")),
 	)
 	s.AddTool(t, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		kindIn, err := req.RequireString("kind")
@@ -58,9 +59,9 @@ func registerAttributionCreate(s *server.MCPServer, deps LibraryAttributionDeps)
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		ak := library.AttributionKind(kindIn)
-		if ak != library.AttrQuestion && ak != library.AttrTopic {
+		if ak != library.AttrPinned && ak != library.AttrBoost {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
-				fmt.Sprintf("invalid kind %q (must be 'question' or 'topic')", kindIn), nil), nil
+				fmt.Sprintf("invalid kind %q (must be 'pinned' or 'boost')", kindIn), nil), nil
 		}
 		id, err := deps.UseCase.Create(ctx, ak, lang, text)
 		if err != nil {
@@ -108,8 +109,8 @@ func registerAttributionGet(s *server.MCPServer, deps LibraryAttributionDeps) {
 func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 	const kind = "library.attribution.list"
 	t := mcp.NewTool(kind,
-		mcp.WithDescription("List attributions (paginated). Filter by kind (question|topic), by substring match on any text, optionally restricted to a language."),
-		mcp.WithString("kind", mcp.Description("question | topic")),
+		mcp.WithDescription("List attributions (paginated). Filter by kind (pinned|boost), by substring match on any text, optionally restricted to a language."),
+		mcp.WithString("kind", mcp.Description("pinned | boost")),
 		mcp.WithString("query", mcp.Description("Substring match (LIKE) on any text variant.")),
 		mcp.WithString("language", mcp.Description("Restrict the query substring-match to this language only.")),
 		mcp.WithNumber("limit", mcp.Description("Page size (default 50, max 500).")),
@@ -123,7 +124,7 @@ func registerAttributionList(s *server.MCPServer, deps LibraryAttributionDeps) {
 			Limit:    int(req.GetFloat("limit", 50)),
 			Cursor:   req.GetString("cursor", ""),
 		}
-		if opts.Kind != "" && opts.Kind != library.AttrQuestion && opts.Kind != library.AttrTopic {
+		if opts.Kind != "" && opts.Kind != library.AttrPinned && opts.Kind != library.AttrBoost {
 			return envelope.Err(kind, envelope.CodeValidationFailed,
 				fmt.Sprintf("invalid kind filter %q", opts.Kind), nil), nil
 		}
