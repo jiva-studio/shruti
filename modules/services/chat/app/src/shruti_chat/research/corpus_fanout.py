@@ -17,6 +17,7 @@ from typing import Any, Callable
 from shruti_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
+    resolve_commentary_author_names,
 )
 from shruti_chat.agent.tools._helpers import BOOK_PREFIX
 from shruti_chat.observability.logging import get_logger
@@ -564,6 +565,15 @@ async def fanout_search_with_boost(
     )
 
     # 6. Envelope (mints aliases) and build by_kind partition.
+    # Batch-resolve commentary author names up front so a purport surfaced by
+    # fanout cites with a real author ("А.Ч. Прабхупада, ШБ 4.1.39"), not a
+    # bare address — same lookup the SHORT-path commentary_expansion already
+    # does. Best-effort: empty map if no catalog/lang, envelope falls back to
+    # the address alone.
+    library_chunks = [r.chunk for r in ranked if r.kind != "lecture"]
+    author_names = await resolve_commentary_author_names(
+        library_chunks, catalog_repo=catalog_repo, lang=lang,
+    )
     envelopes: list[dict[str, Any]] = []
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for r in ranked:
@@ -573,9 +583,13 @@ async def fanout_search_with_boost(
                 sub_query_id=r.sub_query_id,
             )
         else:
+            author_name = (
+                author_names.get(r.chunk.author_id) if getattr(r.chunk, "author_id", None) else None
+            )
             env = library_to_envelope(
                 r.chunk, alias_map=alias_map, score=r.score,
                 sub_query_id=r.sub_query_id,
+                extra_meta={"author_name": author_name} if author_name else None,
             )
         # Dual score: cosine `score` set by the envelope builder is left
         # untouched (every coverage / thin-thesis / attribution gate reads
