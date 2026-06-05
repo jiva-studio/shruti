@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from pathlib import Path
 
 from shruti_chat.research.models import (
     AttributionMatch,
@@ -303,6 +304,93 @@ async def test_short_path_multi_match_unions_refs():
     # 3 unique verses (13, 20, 22) — dedupe killed the duplicate 2.13.
     target_ids = sorted(env["meta"]["tokens"] for env in result.authoritative_refs)
     assert target_ids == ["2.13", "2.20", "2.22"]
+
+
+@pytest.mark.asyncio
+async def test_short_path_document_cites_full_body_not_chunks(monkeypatch):
+    """A pinned document ref cites ONE envelope built from the canonical
+    library.db body (clean, no chunk-overlap), not N overlapping chunks."""
+    import shruti_chat.research.pipeline as pl
+
+    async def fake_body(library_db, item_id, lang="ru"):
+        assert item_id == "doc_charter"
+        return "Цель один.\n\nЦель два.\n\nЦель три."
+
+    monkeypatch.setattr(pl, "fetch_document_body", fake_body)
+
+    pool = FakePool({
+        ("ru", "pinned"): [
+            _row("attribution_doc", 0.95, [
+                {"ref_kind": "document", "target_id": "doc_charter"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(by_target={
+        # Three overlapping chunks in Postgres — the OLD path would emit 3
+        # envelopes with repeated text; the new path collapses to the body.
+        ("document", "doc_charter"): [
+            _LibChunk("doc_charter", "prose_chapter", "Цель один. Цель два.", "ru",
+                      source_id="src", tokens="2.2", addr_label="Цели ISKCON", segment_index=0),
+            _LibChunk("doc_charter", "prose_chapter", "Цель два. Цель три.", "ru",
+                      source_id="src", tokens="2.2", addr_label="Цели ISKCON", segment_index=1),
+        ],
+    })
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("цели")})
+
+    result = await run_research(
+        question="цели ИСККОН", lang="ru", router_args={},
+        library_db=Path("/fake/library.db"),
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    # ONE authoritative envelope (collapsed), carrying the full clean body.
+    assert len(result.authoritative_refs) == 1
+    assert result.authoritative_refs[0]["text"] == "Цель один.\n\nЦель два.\n\nЦель три."
+
+
+@pytest.mark.asyncio
+async def test_short_path_drops_supplementary_chunks_of_pinned_document():
+    """When a pinned ref pulls a document IN FULL, supplementary fanout hits
+    of that SAME document are dropped (no piecemeal re-citation), while
+    fanout hits of OTHER documents survive."""
+    pool = FakePool({
+        ("ru", "pinned"): [
+            _row("attribution_doc", 0.95, [
+                {"ref_kind": "document", "target_id": "doc_charter"},
+            ]),
+        ],
+    })
+    chunk_repo = FakeChunkRepo(
+        by_target={
+            # Authoritative: the whole charter (one segment here for brevity).
+            ("document", "doc_charter"): [
+                _LibChunk("doc_charter", "prose_chapter", "the seven aims …", "ru",
+                          source_id="src", tokens="2.2", addr_label="Цели ISKCON"),
+            ],
+        },
+        library_results=[
+            # Supplementary fanout surfaces a FRAGMENT of the same charter …
+            _Scored(_LibChunk("doc_charter", "prose_chapter", "aim two fragment", "ru",
+                              source_id="src", tokens="2.2", segment_index=3), 0.7),
+            # … and a chunk of a DIFFERENT document.
+            _Scored(_LibChunk("doc_other", "commentary", "unrelated purport", "ru",
+                              source_id="src", tokens="9.9", addr_label="ШБ 9.9"), 0.66),
+        ],
+    )
+    llm = FakeLLM(by_schema={"QueryPlan": _plan("цели общества", "цели")})
+
+    result = await run_research(
+        question="цели ИСККОН", lang="ru", router_args={},
+        **_common_kwargs(llm=llm, pool=pool, chunk_repo=chunk_repo),
+    )
+
+    assert result.matched_question_ids == ["attribution_doc"]
+    # Authoritative carries the full charter.
+    assert len(result.authoritative_refs) == 1
+    # Supplementary: the same-document fragment is gone; the other doc stays.
+    texts = {e["text"] for e in result.research_chunks}
+    assert "aim two fragment" not in texts, "same-document fanout fragment must be dropped"
+    assert "unrelated purport" in texts, "other-document fanout chunk must survive"
 
 
 @pytest.mark.asyncio

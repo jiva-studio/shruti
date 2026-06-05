@@ -94,6 +94,7 @@ async def research_worker_node(
         llm=ctx.llm,
         embed_model=ctx.embed_model,
         embed_dim=ctx.embed_dim,
+        library_db=ctx.library_db_path,
         request_id=ctx.request_id,
         on_event=on_event,
         kv_cache=ctx.kv_cache,

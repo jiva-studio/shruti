@@ -20,6 +20,7 @@ block the whole turn.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from itertools import chain
 from time import perf_counter
 from typing import Any, Callable
@@ -28,6 +29,7 @@ from shruti_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
 )
+from shruti_chat.indexer.library.repo import fetch_document_body
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.attribution_lookup import find_attributions
 from shruti_chat.research.caption_generator import generate_captions
@@ -194,6 +196,7 @@ async def _fetch_refs(
     lang: str | None,
     canonical_score: float,
     on_event: OnEvent | None = None,
+    library_db: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Resolve each AttributionRef → chunks → envelopes. Envelopes carry
     `score = canonical_score` (>= 0.85 for accept) so the synthesizer's
@@ -229,6 +232,22 @@ async def _fetch_refs(
                 )
             except Exception:  # noqa: BLE001
                 chunks = []
+        # Document refs (commentary / prose_chapter / letter): cite the
+        # WHOLE document as ONE source, from its canonical library.db body —
+        # NOT reassembled from the overlapping Postgres search chunks (which
+        # repeat text at segment boundaries and, for some imports, carry
+        # duplicated paragraphs). Falls back to the chunk path if the body
+        # isn't available. Verse refs always take the chunk path.
+        if ref.ref_kind == "document" and library_db is not None and chunks:
+            head = chunks[0]
+            body = await fetch_document_body(library_db, head.item_id, lang or head.lang)
+            if body:
+                emit_library_research_source(on_event, item_kind=head.item_kind, chunk=head)
+                full = replace(head, text=body, segment_index=0)
+                env = library_to_envelope(full, alias_map=alias_map, score=canonical_score)
+                env["_dedup_key"] = (head.item_kind, head.item_id, 0)
+                return [env]
+
         envelopes: list[dict[str, Any]] = []
         for c in chunks:
             # Surface the consulted source with its real (normalized) label
@@ -324,6 +343,7 @@ async def run_research(
     llm: Any,                            # LLMPort
     embed_model: str,                    # settings.embed_model
     embed_dim: int,                      # settings.embed_dim — selects attribution_emb_d{N} table
+    library_db: Any | None = None,       # Path to library.db snapshot — full document bodies for pinned doc refs
     expand_model: str | None = None,
     topic_model: str | None = None,
     confirm_model: str | None = None,
@@ -384,6 +404,7 @@ async def run_research(
             chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
             alias_map=alias_map, llm=llm, router_args=router_args,
             expand_model=expand_model,
+            library_db=library_db,
             request_id=request_id, on_event=on_event,
             reranker=reranker,
             callbacks=callbacks,
@@ -471,6 +492,7 @@ async def run_research(
                 lambda: _fetch_refs(
                     all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                     lang=lang, canonical_score=top_score, on_event=on_event,
+                    library_db=library_db,
                 ),
                 default=[], timeout=TIMEOUT_FETCH_REFS_S,
                 name="fetch_refs", request_id=request_id,
@@ -495,7 +517,33 @@ async def run_research(
             ),
         )
 
-        supplementary_top = _balanced_cut(supplementary.chunks, 8)
+        # Drop supplementary fanout chunks that belong to a document already
+        # pulled IN FULL via the authoritative pinned refs. The pinned ref
+        # fetches every chunk of the document (get_chunks_by_target by
+        # item_id), so any fanout hit from the same item_id is a redundant
+        # fragment of a source we already have whole — keeping it just lets
+        # the LLM cite the document piecemeal alongside the full version.
+        # Both envelope paths key `_dedup_key = (kind, item_id, segment)`;
+        # element [1] is the library item_id (or a track_id for lectures,
+        # which never collides with an item_id namespace).
+        authoritative_item_ids = {
+            env["_dedup_key"][1]
+            for env in authoritative
+            if env.get("_dedup_key")
+        }
+        deduped_supplementary = [
+            ch for ch in supplementary.chunks
+            if not (ch.get("_dedup_key") and ch["_dedup_key"][1] in authoritative_item_ids)
+        ]
+        dropped = len(supplementary.chunks) - len(deduped_supplementary)
+        if dropped:
+            log.info(
+                "short_path_supplementary_deduped",
+                request_id=request_id,
+                dropped=dropped,
+                kept=len(deduped_supplementary),
+            )
+        supplementary_top = _balanced_cut(deduped_supplementary, 8)
         # Commentary attachment moved POST-planner: `synthesis_planner_node`
         # calls `rerank_and_attach_commentaries` which pulls purports only
         # for verses the planner actually picked into supporting_notes, then
@@ -529,6 +577,7 @@ async def run_research(
         expand_model=expand_model,
         topic_model=topic_model, embed_model_for_lookup=embed_model,
         embed_dim_for_lookup=embed_dim, pool=pool,
+        library_db=library_db,
         request_id=request_id, on_event=on_event,
         precomputed_topics=speculative_topics,
         kv_cache=kv_cache,
@@ -618,6 +667,7 @@ async def _research_path(
     embed_model_for_lookup: str | None = None,
     embed_dim_for_lookup: int | None = None,
     pool: Any | None = None,
+    library_db: Any | None = None,
     request_id: str | None = None,
     on_event: OnEvent | None = None,
     precomputed_topics: list[str] | None = None,
@@ -705,6 +755,7 @@ async def _research_path(
             lambda: _fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
                 lang=lang, canonical_score=0.75, on_event=on_event,
+                library_db=library_db,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
             name="fetch_topic_refs", request_id=request_id,

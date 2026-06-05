@@ -65,8 +65,14 @@ class FakeEmbedder:
 
 
 class FakeCatalogRepo:
+    def __init__(self, author_names: dict[str, str] | None = None) -> None:
+        self._author_names = author_names or {}
+
     async def filter_track_ids(self, **_kwargs) -> list[str] | None:
         return None
+
+    async def get_author_names(self, ids, *, lang=None) -> dict[str, str]:
+        return {i: self._author_names[i] for i in ids if i in self._author_names}
 
 
 class FakeChunkRepo:
@@ -114,6 +120,8 @@ class FakeAliasMap:
         self._verse: dict[tuple, int] = {}
         # `lecture_to_envelope` stashes the exact chunk text here at mint.
         self.chunk_texts: dict[int, str] = {}
+        # Records author_name passed to alias_commentary (for assertions).
+        self.commentary_authors: dict[str, str | None] = {}
 
     def alias_chunk(self, track_id, start_ms, end_ms, lang=None) -> int:
         key = (track_id, start_ms, end_ms)
@@ -133,10 +141,36 @@ class FakeAliasMap:
 
     def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences, kind="commentary") -> int:
         self.verse_counter += 1
+        self.commentary_authors[item_id] = author_name
         return self.verse_counter
 
 
 # ---- tests ----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fanout_commentary_resolves_author_name():
+    """A commentary surfaced by fanout cites with the resolved author name
+    (from catalog), not a bare address — same as the SHORT-path expansion."""
+    chunk = _LibChunk(
+        item_id="doc_purport", item_kind="commentary", text="Первое. Второе.",
+        lang="ru", addr_label="ШБ 4.1.39", source_id="src",
+        tokens="4.1.39", author_id="author_prabhupada", segment_index=0,
+    )
+    alias_map = FakeAliasMap()
+    res = await fanout_search_with_boost(
+        queries=[(0, "q")],
+        embedder=FakeEmbedder(),
+        chunk_repo=FakeChunkRepo([], [_Scored(chunk, 0.7)]),
+        catalog_repo=FakeCatalogRepo(
+            {"author_prabhupada": "А.Ч. Бхактиведанта Свами Прабхупада"}
+        ),
+        alias_map=alias_map,
+        lang="ru",
+    )
+    assert len(res.chunks) == 1
+    # The resolved author name reached alias_commentary (→ blockquote attribution).
+    assert alias_map.commentary_authors["doc_purport"] == "А.Ч. Бхактиведанта Свами Прабхупада"
 
 
 @pytest.mark.asyncio
