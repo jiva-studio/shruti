@@ -108,3 +108,36 @@ async def fetch_titles(
     return await asyncio.to_thread(
         _fetch_titles_sync, library_db, source_id, token_prefix, lang,
     )
+
+
+def _fetch_document_body_sync(
+    library_db: Path, item_id: str, lang: str,
+) -> str | None:
+    """The full body of one library document, lang-fallback
+    (requested → en → any). None if the document/variant is absent."""
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        rows = conn.execute(
+            "SELECT language, body FROM library_document_variants "
+            "WHERE document_id = ?",
+            (item_id,),
+        ).fetchall()
+    if not rows:
+        return None
+    by_lang = {language or "": (body or "") for language, body in rows}
+    body = by_lang.get(lang) or by_lang.get("en") or next(iter(by_lang.values()), "")
+    if not body.strip():
+        return None
+    return body.strip()
+
+
+async def fetch_document_body(
+    library_db: Path, item_id: str, lang: str = "ru",
+) -> str | None:
+    """Async wrapper. Returns the canonical full body of a library document
+    (commentary / prose_chapter / letter) straight from library.db, NOT
+    reassembled from the overlapping Postgres search chunks — so a pinned
+    document cites cleanly, with no chunk-overlap repeats. None if absent,
+    so the caller degrades to the chunk path."""
+    if not library_db.exists():
+        return None
+    return await asyncio.to_thread(_fetch_document_body_sync, library_db, item_id, lang)
