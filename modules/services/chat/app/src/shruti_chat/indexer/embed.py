@@ -48,16 +48,24 @@ class OpenAICompatEmbedder(Embedder):
 
     def __init__(self, *, name: str, model: str, dim: int,
                  api_key: str, base_url: str | None = None,
-                 query_prefix: str = "", doc_prefix: str = "") -> None:
+                 query_prefix: str = "", doc_prefix: str = "",
+                 timeout_s: float = 30.0) -> None:
         self.name = name
         self.dim = dim
         self._model = model
         self._query_prefix = query_prefix
         self._doc_prefix = doc_prefix
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        # Explicit timeout: the SDK default is 600s, which would let a
+        # hung embedding call outlive the research-stage wait_for budgets.
+        # max_retries=2 is the SDK default, pinned here so a version bump
+        # can't silently change the retry behaviour the hot path relies on.
+        self._client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url, timeout=timeout_s, max_retries=2,
+        )
         log.info(
             "embedder_loaded", name=name, model=model, dim=dim, base_url=base_url,
             query_prefix=bool(query_prefix), doc_prefix=bool(doc_prefix),
+            timeout_s=timeout_s,
         )
 
     async def embed_query(self, text: str) -> list[float]:
@@ -104,6 +112,7 @@ def _build_embedder(s: Settings) -> Embedder:
             base_url="https://openrouter.ai/api/v1",
             query_prefix=s.embed_query_prefix,
             doc_prefix=s.embed_doc_prefix,
+            timeout_s=s.embed_timeout_s,
         )
     if s.embed_provider == "openai":
         # EMBED_BASE_URL routes to a self-hosted OpenAI-compatible
@@ -125,6 +134,7 @@ def _build_embedder(s: Settings) -> Embedder:
             base_url=s.embed_base_url,
             query_prefix=s.embed_query_prefix,
             doc_prefix=s.embed_doc_prefix,
+            timeout_s=s.embed_timeout_s,
         )
     raise NotImplementedError(
         f"Embed provider {s.embed_provider!r} not implemented yet. "
