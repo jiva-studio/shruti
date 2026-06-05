@@ -24,12 +24,25 @@ class _FakeRow(dict):
 
 
 class FakeConn:
-    def __init__(self, rows_by_query: dict[tuple, list[_FakeRow]]) -> None:
+    def __init__(
+        self,
+        rows_by_query: dict[tuple, list[_FakeRow]],
+        texts_by_attr: dict[str, list[str]] | None = None,
+    ) -> None:
         self.rows_by_query = rows_by_query
+        # Curated phrasings per attribution_id, returned by the border gate's
+        # `_fetch_variant_texts`. Defaults to one phrasing per seen attribution.
+        self.texts_by_attr = texts_by_attr or {}
         self.calls: list[tuple] = []
 
     async def fetch(self, sql: str, *args) -> list[_FakeRow]:
-        # Key is (lang_or_none, kind). Args layout differs by stage:
+        # Border gate's variant-text fetch:
+        #   "SELECT DISTINCT text ... WHERE attribution_id=$1 AND embed_model=$2 [AND language=$3]"
+        if sql.lstrip().startswith("SELECT DISTINCT text"):
+            attribution_id = args[0]
+            self.calls.append(("texts", attribution_id))
+            return [_FakeRow(text=t) for t in self.texts_by_attr.get(attribution_id, [])]
+        # Lookup. Args layout differs by stage:
         #   native: (embedding, lang, embed_model, kind)
         #   cross:  (embedding, embed_model, kind)
         if "WHERE e.language" in sql:
@@ -41,6 +54,21 @@ class FakeConn:
             self.calls.append(("cross", None, kind))
             key = (None, kind)
         return self.rows_by_query.get(key, [])
+
+
+class FakeReranker:
+    """Cross-encoder stub: scores every (query, doc) pair with a fixed
+    relevance, mirroring VoyageReranker's `(orig_index, score)` contract."""
+
+    def __init__(self, score: float) -> None:
+        self.score = score
+        self.calls: list[tuple[str, list[str]]] = []
+
+    async def rerank(self, query: str, documents: list[str], *, top_k=None):
+        self.calls.append((query, list(documents)))
+        if len(documents) <= 1:
+            return [(i, 0.0) for i in range(len(documents))]
+        return [(i, self.score) for i in range(len(documents))]
 
 
 class FakePool:
@@ -122,32 +150,97 @@ async def test_native_below_accept_falls_to_cross() -> None:
 
 
 @pytest.mark.asyncio
-async def test_question_border_zone_triggers_llm_confirm_yes() -> None:
-    class YesLLM:
-        async def structured_output(self, messages, schema, *, model=None, **_extra):
-            return schema(yes=True)
-
-    conn = FakeConn({("ru", "pinned"): [_row("a1", 0.78)]})
+async def test_border_zone_reranker_accepts_above_threshold() -> None:
+    # Border-zone cosine 0.78; the cross-encoder scores the curated phrasing
+    # 0.80 ≥ PINNED_RERANK_ACCEPT (0.50) → keep. No LLM needed.
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["неграмотный брахман плакал над Гитой", "брахман и Гита"]},
+    )
     matches = await find_attributions(
         kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", embed_dim=1536, pool=FakePool(conn), llm=YesLLM(),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        reranker=FakeReranker(0.80), user_query="история про брахмана и Гиту",
     )
     assert len(matches) == 1
     assert matches[0].attribution_id == "a1"
 
 
 @pytest.mark.asyncio
-async def test_question_border_zone_llm_says_no_returns_empty() -> None:
+async def test_border_zone_reranker_rejects_below_threshold() -> None:
+    # Same border cosine, but the cross-encoder says 0.20 < 0.50 → reject.
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["совсем другая тема", "ещё одна формулировка"]},
+    )
+    matches = await find_attributions(
+        kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        reranker=FakeReranker(0.20), user_query="что-то совершенно иное",
+    )
+    assert matches == []
+
+
+@pytest.mark.asyncio
+async def test_border_zone_reranker_single_doc_falls_back_to_llm() -> None:
+    # Only ONE phrasing total → Voyage no-ops on <2 docs → gate falls back to
+    # the (now correctly-fed) LLM judge, which says YES here.
+    class YesLLM:
+        def __init__(self): self.seen = None
+        async def structured_output(self, messages, schema, *, model=None, **_extra):
+            self.seen = messages[-1]["content"]
+            return schema(yes=True)
+
+    llm = YesLLM()
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["единственная формулировка"]},
+    )
+    matches = await find_attributions(
+        kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        reranker=FakeReranker(0.99), user_query="живой запрос пользователя",
+        llm=llm,
+    )
+    assert len(matches) == 1
+    # The LLM fallback was actually fed the real query + canonical text
+    # (the bug this PR fixes — old code passed "<unknown>").
+    assert "живой запрос пользователя" in llm.seen
+    assert "единственная формулировка" in llm.seen
+
+
+@pytest.mark.asyncio
+async def test_border_zone_llm_fallback_says_no_returns_empty() -> None:
+    # No reranker → LLM judge, fed real query+texts, says NO → drop.
     class NoLLM:
         async def structured_output(self, messages, schema, *, model=None, **_extra):
             return schema(yes=False)
 
-    conn = FakeConn({("ru", "pinned"): [_row("a1", 0.78)]})
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["каноническая формулировка"]},
+    )
     matches = await find_attributions(
         kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
-        embed_model="m", embed_dim=1536, pool=FakePool(conn), llm=NoLLM(),
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        user_query="запрос про другое", llm=NoLLM(),
     )
     assert matches == []
+
+
+@pytest.mark.asyncio
+async def test_border_zone_no_judge_keeps_match() -> None:
+    # Neither reranker nor llm available → lean toward keeping the curated pick.
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["формулировка"]},
+    )
+    matches = await find_attributions(
+        kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+    )
+    assert len(matches) == 1
+    assert matches[0].attribution_id == "a1"
 
 
 @pytest.mark.asyncio
