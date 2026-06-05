@@ -185,25 +185,55 @@ async def build_pinned_chapter_notes(
     from the research SHORT path so a curated chapter shows as a chapter (not a
     dropped no-op). Returns [] when there is no title ref or it can't resolve.
 
-    Reuses `_resolve_attribution_hits` + `_build_regions`. Verse refs in the
-    same attribution are fed in only to source a clean book-level region label
-    (their `_short_name` → "ЧЧ Мадхйа") and are processed FIRST so they win the
-    label over a title hit (whose addr_label is the chapter heading itself). The
-    verses are NOT emitted here — the SHORT path already renders them as verse
+    Builds region hits from the title ref (chapter heading via `fetch_titles`)
+    plus the verse refs in the same attribution. The verses are resolved in the
+    USER's language and fed FIRST so their `_short_name` ("ЧЧ Мадхйа") wins the
+    book-level region label over the title hit (whose addr_label is the chapter
+    heading itself) — locate's own `_resolve_attribution_hits` forces lang=None
+    for cross-lingual locate, which would leak the EN "CC Madhya". The verses
+    are NOT emitted as notes here — the SHORT path already renders them as verse
     cards; this adds only the chapter card on top."""
     if library_db is None or not any(r.ref_kind == "title" for r in refs):
         return []
 
-    hits = await _resolve_attribution_hits(
-        [AttributionMatch(attribution_id="", kind="pinned", refs=refs, score=score, stage="native")],
-        chunk_repo=chunk_repo, library_db=library_db, lang=lang,
-    )
-    if not any(h.item_kind == "title" for h in hits):
+    title_hits: list[_Hit] = []
+    for ref in refs:
+        if ref.ref_kind != "title":
+            continue
+        sid, _, tok = ref.target_id.partition("/")
+        if not sid or not tok:
+            continue
+        titles = await _titles_for(library_db, sid, lang)
+        title_hits.append(_Hit(sid, tok, titles.get(tok, ""), "title", score))
+    if not title_hits:
         return []
-    # Verse/commentary hits first → their book-level label wins in _build_regions.
-    hits.sort(key=lambda h: 1 if h.item_kind == "title" else 0)
 
-    regions = await _build_regions(hits, library_db=library_db, lang=lang)
+    # Verse refs → region-label source only, resolved in the user's lang
+    # (fallback to any lang) so the book name renders in the right script.
+    verse_hits: list[_Hit] = []
+    if chunk_repo is not None:
+        for ref in refs:
+            if ref.ref_kind != "verse":
+                continue
+            try:
+                chunks = await chunk_repo.get_chunks_by_target(
+                    ref_kind="verse", target_id=ref.target_id, lang=lang,
+                )
+                if not chunks:
+                    chunks = await chunk_repo.get_chunks_by_target(
+                        ref_kind="verse", target_id=ref.target_id, lang=None,
+                    )
+            except Exception as exc:  # noqa: BLE001 — label enrichment is best-effort
+                log.warning(
+                    "pinned_chapter_verse_ref_failed",
+                    target_id=ref.target_id, error=str(exc),
+                )
+                continue
+            for c in chunks:
+                verse_hits.append(_Hit(c.source_id, c.tokens, c.addr_label, "verse", score))
+
+    # Verse hits first → their book-level short-name wins the region label.
+    regions = await _build_regions(verse_hits + title_hits, library_db=library_db, lang=lang)
     notes: list[dict] = []
     for region in regions:
         if not region.chapters:

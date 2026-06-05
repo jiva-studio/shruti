@@ -653,3 +653,53 @@ def test_aliased_tracks_list_results_tagged_kind_lecture() -> None:
     # And the track id was stripped + replaced with an integer ref.
     assert "track_id" not in row
     assert isinstance(row.get("ref"), int)
+
+
+@pytest.mark.asyncio
+async def test_chapter_location_note_forced_when_llm_omits_it() -> None:
+    """A pinned `type=location` note must surface as a ChapterCard even when the
+    planner/LLM never cites its `[^N]` — the synthesizer appends the marker."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_chapter(
+        "source_TjXzVgg41Z4s", "", "ЧЧ Мадхья",
+        [("9", "Паломничество Шри Чайтаньи Махапрабху")],
+    )
+    expander = MarkerExpander(aliases)
+    # LLM writes prose but never emits [^n].
+    llm = StreamingLLM(chunks=["История про брахмана. ", "Он плакал над Гитой."])
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "история про брахмана",
+            tool_results=[{"type": "location", "ref": n, "text": "ЧЧ Мадхья — глава 9"}],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    text = "".join(ev.data["text"] for ev in events if ev.type == "delta")
+    # The chapter marker was force-appended and expanded to the client form.
+    assert "[chapter:source_TjXzVgg41Z4s/" in text
+    assert text.count("[chapter:") == 1
+
+
+@pytest.mark.asyncio
+async def test_chapter_location_note_not_duplicated_when_llm_cites_it() -> None:
+    """If the LLM already cites the chapter `[^N]`, the deterministic surface
+    must NOT append a second one."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_chapter("source_X", "", "Книга", [("9", "Глава 9")])
+    expander = MarkerExpander(aliases)
+    llm = StreamingLLM(chunks=[f"Смотри главу [^{n}]", " подробнее."])
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "где это",
+            tool_results=[{"type": "location", "ref": n, "text": "Книга — глава 9"}],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    text = "".join(ev.data["text"] for ev in events if ev.type == "delta")
+    assert text.count("[chapter:") == 1  # exactly one, no duplicate
