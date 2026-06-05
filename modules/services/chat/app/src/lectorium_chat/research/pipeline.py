@@ -63,7 +63,6 @@ from lectorium_chat.research.models import (
     ResearchResult,
     SubQuery,
 )
-from lectorium_chat.research.locate import build_pinned_chapter_notes
 from lectorium_chat.research.query_planner import plan_queries
 from lectorium_chat.research.topic_extractor import extract_topics
 
@@ -298,16 +297,12 @@ async def _fetch_refs(
     for batch in per_ref:
         flat.extend(batch)
 
-    # Title refs resolve to a chapter-location card (ChapterCard), not chunks —
-    # get_chunks_by_target has no 'title' branch, so without this a curated
-    # chapter would be a silent no-op. Reuses the locate region logic; the verse
-    # cards still come from the verse refs above, the chapter card rides on top.
-    if any(r.ref_kind == "title" for r in refs):
-        chapter_notes = await build_pinned_chapter_notes(
-            refs, chunk_repo=chunk_repo, library_db=library_db,
-            lang=lang or "ru", alias_map=alias_map, score=canonical_score,
-        )
-        flat.extend(chapter_notes)
+    # Title refs are intentionally NOT surfaced as a chapter card here: the
+    # ChapterCard renders poorly on mobile and the chapter pointer added noise
+    # to the answer. The title→chapter resolver (`build_pinned_chapter_notes`)
+    # is kept for potential reuse, but a pinned `title` ref is a no-op in the
+    # research path — only its verse refs render (as verse cards). Verse refs in
+    # the same attribution still come from the per-ref loop above.
 
     return flat
 

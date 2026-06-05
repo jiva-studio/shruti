@@ -370,23 +370,6 @@ async def run_synthesizer_turn(
     """
     notes = _format_tool_results(tool_results) if tool_results else "(no research notes)"
 
-    # Safety net for authoritative chapter-location notes (pinned `title` refs).
-    # The synthesis planner attaches them to the first thesis so the model cites
-    # them INLINE in the relevant paragraph — but if the model still ignores a
-    # `type=location` note (it reads as navigational, not evidence), the curated
-    # chapter would silently vanish. Collect their alias ints now; after the
-    # stream we append the `[^N]` for any the model didn't emit (the alias int
-    # IS the [^N] number). No-op when the model already cited it inline.
-    _chapter_refs: list[int] = []
-    for _r in tool_results:
-        for _n in (_r if isinstance(_r, list) else [_r]):
-            if (
-                isinstance(_n, dict)
-                and (_n.get("type") or "").lower() == "location"
-                and isinstance(_n.get("ref"), int)
-            ):
-                _chapter_refs.append(_n["ref"])
-
     # Build the message list. Order matters:
     #   1. system prompt with grounding rules + research notes inline
     #      + optional outline block (when provided)
@@ -452,21 +435,6 @@ async def run_synthesizer_turn(
         if cleaned:
             prose_chars += len(cleaned)
             yield SynthesizerEvent(type="delta", data={"text": cleaned})
-
-    # Safety net (see above): emit any curated chapter marker the model skipped
-    # despite the planner attaching it to a thesis, so a pinned chapter never
-    # silently disappears. Fed through the expander (→ `[chapter:...]`) BEFORE
-    # flush so it joins the stream cleanly. Skipped when already cited inline.
-    if _chapter_refs:
-        emitted = "".join(full_prose)
-        missing = [r for r in _chapter_refs if f"[^{r}]" not in emitted]
-        if missing:
-            inject = "\n\n" + "".join(f"[^{r}]" for r in missing)
-            full_prose.append(inject)
-            cleaned = await expander.feed(inject)
-            if cleaned:
-                prose_chars += len(cleaned)
-                yield SynthesizerEvent(type="delta", data={"text": cleaned})
 
     tail = await expander.flush()
     if tail:

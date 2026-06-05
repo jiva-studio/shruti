@@ -17,7 +17,6 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
-    flush_chapter_payloads,
     flush_cite_payloads,
     flush_verse_payloads,
     run_worker,
@@ -114,9 +113,6 @@ async def research_worker_node(
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams
     # `[^N]` markers — the mobile client expects the payload first.
     await flush_verse_payloads(ctx)
-    # Chapter-location payloads (ChapterCard) for any title-ref pinned match —
-    # same ordering contract: payload before the inline `[chapter:...]` marker.
-    await flush_chapter_payloads(ctx)
     # Same ordering contract for cite_transcript payloads: push the
     # fragment transcript text before the `[cite:...]` marker so the
     # client renders the full card rather than the chip.
