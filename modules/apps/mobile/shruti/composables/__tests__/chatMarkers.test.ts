@@ -227,6 +227,28 @@ describe("parseChatMarkers — chapter-location markers", () => {
     if (ch?.kind === "chapter") expect(ch.caption).toBe("")
   })
 
+  it("parses an EMPTY region token (book-level region, 2-level books)", () => {
+    // 2-level books (BG/CC) have no canto → empty region token. The region
+    // token is an opaque join key; the client must not assume it's numeric.
+    const tokens = parseChatMarkers("[chapter:source_TjXzVgg41Z4s/|ЧЧ Мадхья]")
+    const ch = tokens.find((t) => t.kind === "chapter")
+    expect(ch).toBeTruthy()
+    if (ch?.kind === "chapter") {
+      expect(ch.sourceId).toBe("source_TjXzVgg41Z4s")
+      expect(ch.regionToken).toBe("")
+      expect(ch.caption).toBe("ЧЧ Мадхья")
+    }
+  })
+
+  it("strips an empty-region chapter marker from exported markdown", () => {
+    const md = messageToMarkdown("Текст. [chapter:source_x/|Книга]", {
+      lang: "ru",
+      verseLookup: () => null,
+      citeLookup: () => null,
+    })
+    expect(md).toBe("Текст.")
+  })
+
   it("strips the chapter marker from exported markdown", () => {
     const md = messageToMarkdown("Ответ. [chapter:source_x/7|Песнь 7]", {
       lang: "ru",

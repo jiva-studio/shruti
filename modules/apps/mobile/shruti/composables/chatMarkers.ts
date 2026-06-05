@@ -77,10 +77,14 @@ const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
 // permissive class for safety; tokens are digit groups separated by `.` or `,`
 // (combined verses like "1.2.28,1.2.29").
 const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
-// Chapter-location widget marker. Same address grammar as verse: a
-// source_id and a region token (canto "12" or chapter "2"), optional
-// `|label` carrying the canto heading / book name.
-const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
+// Chapter-location widget marker: a source_id and a region token, optional
+// `|label` carrying the canto heading / book name. The region token is an
+// OPAQUE join key (marker ↔ `chapter` payload / body store) — the client must
+// NOT assume its shape. The server owns source structure: it's a canto ("12"),
+// a chapter ("9"), EMPTY for book-level regions (2-level books like BG/CC), or
+// anything a future book layout needs. Match any run up to `|`/`]` (incl.
+// empty) so new source shapes never require a client regex change.
+const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([^|\]\n]*)(?:\|([^\]\n]*))?\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture
 // group keeps the raw lines (each still prefixed by `>`) so the parser can
