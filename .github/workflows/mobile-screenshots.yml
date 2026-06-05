@@ -59,7 +59,7 @@ jobs:
   screenshots:
     name: capture + upload (${{ matrix.platform }})
     needs: prepare
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: macos-latest
     strategy:
       # Serialize matrix entries — both jobs land on the same self-hosted
       # mac-host and the Playwright `webServer` config takes a fixed port
@@ -75,6 +75,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: modules/apps/mobile/package-lock.json
 
       # The mobile app's package.json depends on two in-house Capacitor
       # plugins via `file:` paths. Their dist/ is gitignored, so vite's
@@ -88,7 +90,7 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'
-          bundler-cache: false
+          bundler-cache: true
           working-directory: modules/apps/mobile
 
       - name: bundle install

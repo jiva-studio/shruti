@@ -3,10 +3,8 @@ description: >
   Node + Java + Android SDK + Ruby + bundler + npm deps + web artifact.
   Shared setup for any job that runs Fastlane / gradle in the mobile Android project.
 
-  No actions/cache here — the self-hosted runner persists tool installs
-  (RUNNER_TOOL_CACHE: Node, JDK; ANDROID_SDK_ROOT) and the user's HOME
-  (~/.npm, ~/.gradle/caches, bundler) across ephemeral cycles, which gives
-  warm-cache behavior without the GitHub upload/download round trip.
+  GitHub-hosted runners: caching restored (npm via setup-node, gradle via
+  setup-java, bundler via ruby/setup-ruby) so cold ephemeral runners stay fast.
 
 runs:
   using: composite
@@ -14,11 +12,14 @@ runs:
     - uses: actions/setup-node@v5
       with:
         node-version: 24
+        cache: npm
+        cache-dependency-path: modules/apps/mobile/package-lock.json
 
     - uses: actions/setup-java@v4
       with:
         distribution: zulu
         java-version: 21
+        cache: gradle
 
     - uses: android-actions/setup-android@v3
       with:
@@ -31,11 +32,8 @@ runs:
     - uses: ruby/setup-ruby@v1
       with:
         ruby-version: "3.3"
-        bundler-cache: false
+        bundler-cache: true
         working-directory: modules/apps/mobile
-
-    - shell: bash
-      run: cd modules/apps/mobile && bundle install --jobs 4 --retry 3
 
     - shell: bash
       run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit

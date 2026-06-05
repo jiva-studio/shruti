@@ -15,7 +15,7 @@ on:
 jobs:
   cleanup:
     name: web / preview
-    runs-on: [self-hosted, macos, mac-host]
+    runs-on: ubuntu-latest
     steps:
       - name: delete cf preview deployments
         env:
