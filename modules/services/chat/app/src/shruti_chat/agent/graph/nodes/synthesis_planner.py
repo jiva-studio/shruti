@@ -193,6 +193,27 @@ async def synthesis_planner_node(
     await flush_verse_payloads(ctx)
     await flush_cite_payloads(ctx)
 
+    # Pinned chapter (`type=location`) notes are auxiliary "where to find it"
+    # pointers — the planner LLM tends to drop them as non-evidence, so they
+    # never land in a thesis. Attach them to the first thesis so the synthesizer
+    # weaves the chapter card INTO the relevant opening paragraph (not bolted
+    # onto the end). A note's `ref` IS its [^N] number — the planner and
+    # synthesizer share that numbering. The synthesizer keeps a safety net that
+    # appends any still-uncited chapter, so it can never silently vanish even if
+    # the model ignores the plan.
+    if augmented.theses:
+        location_refs = [
+            n["ref"]
+            for n in tool_results
+            if isinstance(n, dict)
+            and (n.get("type") or "").lower() == "location"
+            and isinstance(n.get("ref"), int)
+        ]
+        first = augmented.theses[0]
+        for ref in location_refs:
+            if ref not in first.supporting_notes:
+                first.supporting_notes.append(ref)
+
     update: dict = {"outline": augmented}
     combined_appends = list(new_commentaries) + list(fresh_chunks)
     if combined_appends:
