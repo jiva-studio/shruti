@@ -1,8 +1,9 @@
 """Thresholds and timeouts for the research pipeline.
 
-Asymmetric thresholds by attribution kind and lookup stage:
-  - question (becomes authoritative, cited literally) → high bar
-  - topic (just boosts score, error = missing boost) → lower bar
+Asymmetric thresholds by attribution kind and lookup stage (the kinds are
+named after the search-industry pin/boost distinction):
+  - pinned (becomes authoritative, cited literally) → high bar
+  - boost (just boosts score, error = missing boost) → lower bar
   - cross-lingual fallback gets a small concession for the ~10-15pt MIRACL
     penalty inherent to text-embedding-3-small on non-English queries
 """
@@ -11,17 +12,17 @@ from __future__ import annotations
 
 # ---- Attribution lookup ----------------------------------------------------
 
-# question-attribution
-QUESTION_ACCEPT_SCORE_NATIVE = 0.85
-QUESTION_ACCEPT_SCORE_CROSS = 0.80
-QUESTION_BORDER_SCORE = 0.70           # 0.70..accept → LLM-confirm for top1
-QUESTION_MAX_MATCHES = 3               # multi-match cap
+# pinned-attribution (authoritative; SHORT path)
+PINNED_ACCEPT_SCORE_NATIVE = 0.85
+PINNED_ACCEPT_SCORE_CROSS = 0.80
+PINNED_BORDER_SCORE = 0.70             # 0.70..accept → LLM-confirm for top1
+PINNED_MAX_MATCHES = 3                 # multi-match cap
 
-# topic-attribution
-TOPIC_ACCEPT_SCORE_NATIVE = 0.70
-TOPIC_ACCEPT_SCORE_CROSS = 0.65
-TOPIC_MAX_MATCHES_PER_TOPIC = 3
-TOPIC_MAX_TOPICS_EXTRACTED = 5         # cap on LLM output
+# boost-attribution (ranking signal; LONG path)
+BOOST_ACCEPT_SCORE_NATIVE = 0.70
+BOOST_ACCEPT_SCORE_CROSS = 0.65
+BOOST_MAX_MATCHES_PER_TOPIC = 3
+TOPIC_MAX_TOPICS_EXTRACTED = 5         # cap on LLM output (query topic extraction)
 
 # ---- Fanout / coverage -----------------------------------------------------
 

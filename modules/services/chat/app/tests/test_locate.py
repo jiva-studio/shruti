@@ -168,8 +168,8 @@ async def test_run_locate_keeps_opaque_source_id(tmp_path):
 
 @pytest.mark.asyncio
 async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
-    # Regression: locate must consult BOTH question- and topic-kind
-    # attributions (seeded stories are topics). Bug A.
+    # Regression: locate must consult BOTH pinned- and boost-kind
+    # attributions (seeded stories are boost-kind). Bug A.
     db = _make_library_db(tmp_path)
     seen: dict[str, dict] = {}
 
@@ -183,13 +183,13 @@ async def test_run_locate_queries_both_attribution_kinds(tmp_path, monkeypatch):
         chunk_repo=_FakeChunkRepo([]), embedder=_FakeEmbedder(),
         pool=object(), llm=None, embed_model="m", embed_dim=8, library_db=db,
     )
-    assert set(seen) == {"question", "topic"}
-    # Topic lookup uses the lowered locate-specific accept thresholds so a
+    assert set(seen) == {"pinned", "boost"}
+    # Boost lookup uses the lowered locate-specific accept thresholds so a
     # full-question-vs-topic-label match (~0.63) isn't rejected by the global
-    # 0.70/0.65 bar. Question lookup keeps the defaults.
-    assert seen["topic"]["accept_native"] == locate._LOCATE_TOPIC_ACCEPT_NATIVE
-    assert seen["topic"]["accept_cross"] == locate._LOCATE_TOPIC_ACCEPT_CROSS
-    assert "accept_native" not in seen["question"]
+    # 0.70/0.65 bar. Pinned lookup keeps the defaults.
+    assert seen["boost"]["accept_native"] == locate._LOCATE_BOOST_ACCEPT_NATIVE
+    assert seen["boost"]["accept_cross"] == locate._LOCATE_BOOST_ACCEPT_CROSS
+    assert "accept_native" not in seen["pinned"]
 
 
 @pytest.mark.asyncio
@@ -201,9 +201,9 @@ async def test_run_locate_attribution_excludes_semantic_noise(tmp_path, monkeypa
     db = _make_library_db(tmp_path)
 
     async def _fake_find(**kw):
-        if kw["kind"] == "topic":
+        if kw["kind"] == "boost":
             return [AttributionMatch(
-                attribution_id="a1", kind="topic",
+                attribution_id="a1", kind="boost",
                 refs=[AttributionRef(ref_kind="title", target_id=f"{SB}/12.8")],
                 score=0.9, stage="native",
             )]

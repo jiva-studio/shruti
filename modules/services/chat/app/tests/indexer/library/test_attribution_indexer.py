@@ -53,7 +53,7 @@ def library_db(tmp_path: Path) -> Path:
     return p
 
 
-def _insert_attr(db: Path, aid: str, kind: str = "question") -> None:
+def _insert_attr(db: Path, aid: str, kind: str = "pinned") -> None:
     with sqlite3.connect(str(db)) as conn:
         conn.execute(
             "INSERT INTO library_attributions (id, kind, created_at, updated_at) VALUES (?,?,?,?)",
@@ -81,7 +81,7 @@ def _insert_ref(db: Path, aid: str, ref_kind: str, target_id: str, position: int
 
 
 def test_walk_assembles_variants_sorted(library_db: Path) -> None:
-    _insert_attr(library_db, "attribution_a", "question")
+    _insert_attr(library_db, "attribution_a", "pinned")
     # Insert in non-alphabetical order to verify sorting.
     _insert_text(library_db, "attribution_a", "ru", "природа разума")
     _insert_text(library_db, "attribution_a", "ru", "что такое разум")
@@ -89,14 +89,14 @@ def test_walk_assembles_variants_sorted(library_db: Path) -> None:
 
     attrs, variants, refs = _walk_attributions(library_db)
 
-    assert attrs == {"attribution_a": "question"}
+    assert attrs == {"attribution_a": "pinned"}
     assert len(variants[("attribution_a", "ru")]) == 3
     # Sorted alphabetically (cyrillic + latin).
     assert variants[("attribution_a", "ru")] == sorted(variants[("attribution_a", "ru")])
 
 
 def test_walk_multiple_languages(library_db: Path) -> None:
-    _insert_attr(library_db, "attribution_a", "question")
+    _insert_attr(library_db, "attribution_a", "pinned")
     _insert_text(library_db, "attribution_a", "ru", "что такое разум")
     _insert_text(library_db, "attribution_a", "en", "what is intelligence")
 
@@ -106,7 +106,7 @@ def test_walk_multiple_languages(library_db: Path) -> None:
 
 
 def test_walk_refs_normalized(library_db: Path) -> None:
-    _insert_attr(library_db, "attribution_a", "question")
+    _insert_attr(library_db, "attribution_a", "pinned")
     # Insert refs in random order; expect ORDER BY position, ref_kind, target_id.
     _insert_ref(library_db, "attribution_a", "verse", "verse_z", 1)
     _insert_ref(library_db, "attribution_a", "verse", "verse_a", 0)
@@ -123,7 +123,7 @@ def test_walk_refs_normalized(library_db: Path) -> None:
 
 
 def test_walk_empty_attribution_has_no_variants_or_refs(library_db: Path) -> None:
-    _insert_attr(library_db, "attribution_orphan", "topic")
+    _insert_attr(library_db, "attribution_orphan", "boost")
     attrs, variants, refs = _walk_attributions(library_db)
     assert "attribution_orphan" in attrs
     assert ("attribution_orphan", "ru") not in variants
@@ -131,10 +131,10 @@ def test_walk_empty_attribution_has_no_variants_or_refs(library_db: Path) -> Non
 
 
 def test_walk_both_kinds(library_db: Path) -> None:
-    _insert_attr(library_db, "attribution_q", "question")
-    _insert_attr(library_db, "attribution_t", "topic")
+    _insert_attr(library_db, "attribution_q", "pinned")
+    _insert_attr(library_db, "attribution_t", "boost")
     attrs, _, _ = _walk_attributions(library_db)
-    assert attrs == {"attribution_q": "question", "attribution_t": "topic"}
+    assert attrs == {"attribution_q": "pinned", "attribution_t": "boost"}
 
 
 # ---------- _etag ----------

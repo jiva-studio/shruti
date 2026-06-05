@@ -27,7 +27,7 @@ func TestLazy_AttributionRoundTrip(t *testing.T) {
 
 	// First op: create an attribution. openRW auto-creates the file.
 	if err := l.AttributionCreate(
-		ctx, "attribution_xyz", library.AttrQuestion, "ru", "что такое разум",
+		ctx, "attribution_xyz", library.AttrPinned, "ru", "что такое разум",
 	); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestLazy_AttributionRoundTrip(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("get: ok=%v err=%v", ok, err)
 	}
-	if got.Kind != library.AttrQuestion {
+	if got.Kind != library.AttrPinned {
 		t.Fatalf("kind mismatch: %v", got.Kind)
 	}
 	if len(got.Texts["ru"]) != 2 {
@@ -53,7 +53,7 @@ func TestLazy_AttributionRoundTrip(t *testing.T) {
 
 	// List filtering still works across connections.
 	items, err := l.AttributionList(ctx, library.ListAttributionsOpts{
-		Kind: library.AttrQuestion,
+		Kind: library.AttrPinned,
 	})
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -84,7 +84,7 @@ func TestLazy_LegacyReadOpenStillWorks(t *testing.T) {
 	// openRW once to create + migrate.
 	l := NewLazy(path)
 	if err := l.AttributionCreate(
-		ctx, "attribution_x", library.AttrTopic, "ru", "x",
+		ctx, "attribution_x", library.AttrBoost, "ru", "x",
 	); err != nil {
 		t.Fatalf("seed via RW: %v", err)
 	}

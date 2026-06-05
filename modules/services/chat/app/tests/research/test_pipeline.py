@@ -236,7 +236,7 @@ async def test_short_path_question_match():
     """Question-attribution found → authoritative refs populated, no topic
     lookup, no extract_topics LLM call."""
     pool = FakePool({
-        ("ru", "question"): [
+        ("ru", "pinned"): [
             _row("attribution_q1", 0.92, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
             ]),
@@ -276,7 +276,7 @@ async def test_short_path_question_match():
 async def test_short_path_multi_match_unions_refs():
     """Two question-matches with partially overlapping refs → deduped union."""
     pool = FakePool({
-        ("ru", "question"): [
+        ("ru", "pinned"): [
             _row("attribution_a", 0.95, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
                 {"ref_kind": "verse", "target_id": "verse_BG_2_20"},
@@ -310,10 +310,10 @@ async def test_long_path_no_question_match():
     """No question match → extract_topics → topic lookup → fanout."""
     pool = FakePool({
         # No question matches.
-        ("ru", "question"): [],
-        (None, "question"): [],
+        ("ru", "pinned"): [],
+        (None, "pinned"): [],
         # Topic match returns refs to verse_boost.
-        ("ru", "topic"): [
+        ("ru", "boost"): [
             _row("attribution_t1", 0.75, [
                 {"ref_kind": "verse", "target_id": "verse_boost"},
             ]),
@@ -349,7 +349,7 @@ async def test_long_path_no_question_match():
 @pytest.mark.asyncio
 async def test_long_path_no_topics_extracted_no_boost():
     """LLM returns 0 topics → no topic matches → plain fanout."""
-    pool = FakePool({("ru", "question"): []})
+    pool = FakePool({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("track_a", 0, 1000, "x", "ru"), 0.6)],
         library_results=[],
@@ -393,7 +393,7 @@ async def test_cold_start_empty_attributions_pure_fanout():
 async def test_expand_failure_falls_back_to_question_only():
     """plan_queries raises → degraded QueryPlan with a single sub_query
     containing the raw question."""
-    pool = FakePool({("ru", "question"): []})
+    pool = FakePool({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(
         lecture_results=[_Scored(_LecChunk("t", 0, 1000, "x", "ru"), 0.7)],
         library_results=[],
@@ -434,7 +434,7 @@ async def test_embed_failure_falls_through_to_fanout():
 @pytest.mark.asyncio
 async def test_router_args_propagated_to_fanout(monkeypatch):
     """Filter args from router_args (author_id, tag_ids, dates) reach fanout."""
-    pool = FakePool({("ru", "question"): []})
+    pool = FakePool({("ru", "pinned"): []})
     captured: list[dict] = []
 
     class _CatalogRepoCapture:
@@ -465,7 +465,7 @@ async def test_authoritative_carries_canonical_score():
     """Authoritative envelopes MUST carry score = top_match.score so the
     synthesizer doesn't refuse them as junk (score < 0.45)."""
     pool = FakePool({
-        ("ru", "question"): [
+        ("ru", "pinned"): [
             _row("attribution_q", 0.91, [{"ref_kind": "verse", "target_id": "verse_x"}]),
         ],
     })
@@ -485,7 +485,7 @@ async def test_on_event_emits_research_questions_short_path():
     """SHORT path: on_event receives one research_question per non-echo
     sub-query, and a research_source per attribution ref consulted."""
     pool = FakePool({
-        ("ru", "question"): [
+        ("ru", "pinned"): [
             _row("attribution_q", 0.92, [
                 {"ref_kind": "verse", "target_id": "verse_BG_2_13"},
                 {"ref_kind": "document", "target_id": "doc_letter_42"},
@@ -543,9 +543,9 @@ async def test_on_event_emits_research_sources_from_fanout():
     """LONG path: corpus_fanout emits research_source per inspected raw
     chunk (lecture / verse / library), keyed for client-side dedup."""
     pool = FakePool({
-        ("ru", "question"): [],
-        (None, "question"): [],
-        ("ru", "topic"): [],
+        ("ru", "pinned"): [],
+        (None, "pinned"): [],
+        ("ru", "boost"): [],
     })
     chunk_repo = FakeChunkRepo(
         lecture_results=[
@@ -603,7 +603,7 @@ async def test_on_event_emits_research_sources_from_fanout():
 async def test_on_event_no_callback_is_safe():
     """Pipeline must run identically when on_event is omitted — the
     research worker passes None for the legacy fallback path."""
-    pool = FakePool({("ru", "question"): []})
+    pool = FakePool({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("q"),
@@ -621,7 +621,7 @@ async def test_on_event_no_callback_is_safe():
 async def test_on_event_callback_exception_does_not_break_research():
     """A misbehaving on_event must not unwind the research loop — log
     and move on, since this is pure UI observability."""
-    pool = FakePool({("ru", "question"): []})
+    pool = FakePool({("ru", "pinned"): []})
     chunk_repo = FakeChunkRepo(lecture_results=[], library_results=[])
     llm = FakeLLM(by_schema={
         "QueryPlan": _plan("вечность"),
