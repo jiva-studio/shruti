@@ -45,21 +45,23 @@ export const REGIONS_KEY = "remoteRegions"
  * VITE_DEV_CHAT_URL if your stack runs elsewhere. Web dev only; a native
  * dev build's `localhost` resolves to the device, not the host machine.
  */
-const DEV_REGIONS: readonly CdnServer[] = import.meta.env.VITE_DEV_REGION === "true"
-  ? [
-      {
-        id: "dev",
-        name: "Local (dev)",
-        urlTemplate: SERVERS[0]!.urlTemplate,
-        shareAudioUrl: SERVERS[0]!.shareAudioUrl,
-        shareVideoUrl: SERVERS[0]!.shareVideoUrl,
-        authBaseUrl:
-          (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ?? "http://localhost:11081/auth",
-        chatBaseUrl:
-          (import.meta.env.VITE_DEV_CHAT_URL as string | undefined) ?? "http://localhost:11080",
-      },
-    ]
-  : []
+const DEV_REGIONS: readonly CdnServer[] =
+  import.meta.env.VITE_DEV_REGION === "true"
+    ? [
+        {
+          id: "dev",
+          name: "Local (dev)",
+          urlTemplate: SERVERS[0]!.urlTemplate,
+          shareAudioUrl: SERVERS[0]!.shareAudioUrl,
+          shareVideoUrl: SERVERS[0]!.shareVideoUrl,
+          authBaseUrl:
+            (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ??
+            "http://localhost:11081/auth",
+          chatBaseUrl:
+            (import.meta.env.VITE_DEV_CHAT_URL as string | undefined) ?? "http://localhost:11080",
+        },
+      ]
+    : []
 
 /**
  * Prepend the dev region (if any) to a region list, dropping any incoming
