@@ -146,14 +146,18 @@ def library_to_envelope(
         ref = alias_map.alias_verse(chunk.source_id, chunk.tokens, addr_label=chunk.addr_label)
         meta["source_id"] = chunk.source_id
         meta["tokens"] = chunk.tokens
-    elif item_kind == "commentary":
-        # Mint a ref so the LLM cites via `[^N|s=...]` (server expands
-        # to a verbatim blockquote with picked sentences). Sentences
-        # are split here once and stashed in the alias so the marker
-        # expander stays a pure lookup. author_name (when present in
+    elif item_kind in ("commentary", "prose_chapter", "letter"):
+        # All three quotable document kinds share one citation mechanism:
+        # mint a ref so the LLM cites via `[^N|s=...]` and the marker
+        # expander unfolds it into a verbatim blockquote with the picked
+        # sentences. Sentences are split here once and stashed in the alias
+        # so the expander stays a pure lookup. author_name (when present in
         # meta) is wired in by callers that have a catalog handy (e.g.
-        # commentary_expansion); a fresh envelope from chunks_search
-        # has only author_id and renders without the human name.
+        # commentary_expansion); a fresh envelope from chunks_search has
+        # only author_id and renders without the human name. The blockquote
+        # attribution is language-neutral (author + addr_label), so the same
+        # path works for prose chapters (e.g. the ISKCON charter) and letters
+        # without any per-kind service word.
         sentences = split_into_sentences(chunk.text)
         author_name = (extra_meta or {}).get("author_name") if extra_meta else None
         ref = alias_map.alias_commentary(
@@ -162,6 +166,7 @@ def library_to_envelope(
             addr_label=chunk.addr_label,
             author_name=author_name,
             sentences=sentences,
+            kind=item_kind,
         )
         if chunk.source_id:
             meta["source_id"] = chunk.source_id
@@ -171,20 +176,11 @@ def library_to_envelope(
             meta["author_id"] = chunk.author_id
         if author_name:
             meta["author_name"] = author_name
+        if chunk.doc_date:
+            meta["doc_date"] = chunk.doc_date
         # Expose sentence count so the synth note renderer can show
         # `[s=0]`..`[s=N-1]` markers without re-splitting.
         meta["sentences"] = sentences
-    else:
-        # letter / prose_chapter: no marker protocol yet — quoted inline.
-        ref = None
-        if chunk.source_id:
-            meta["source_id"] = chunk.source_id
-        if chunk.tokens:
-            meta["tokens"] = chunk.tokens
-        if chunk.author_id:
-            meta["author_id"] = chunk.author_id
-        if chunk.doc_date:
-            meta["doc_date"] = chunk.doc_date
     if sub_query_id is not None:
         meta["sub_query_id"] = sub_query_id
     return {

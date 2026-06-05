@@ -161,7 +161,10 @@ def test_letter_envelope_carries_author_and_date() -> None:
     env = library_to_envelope(chunk, alias_map=TurnAliasMap())
 
     assert env["type"] == "letter"
-    assert env["ref"] is None
+    # Letters are now quotable: they mint an integer ref and carry split
+    # sentences, sharing the commentary `[^N|s=…]` blockquote mechanism.
+    assert isinstance(env["ref"], int)
+    assert env["meta"]["sentences"]  # body split for sentence-pick
     assert env["label"] == "Letter to Yamuna, 1971-05-12"
     assert env["meta"]["author_id"] == "prabhupada"
     assert env["meta"]["doc_date"] == "1971-05-12"

@@ -48,7 +48,7 @@ class FakeAliasMap:
     def alias_chunk(self, *_a, **_k): return 0
     def alias_verse(self, *_a, **_k): return 0
 
-    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences):
+    def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences, kind="commentary"):
         self._next += 1
         return self._next
 

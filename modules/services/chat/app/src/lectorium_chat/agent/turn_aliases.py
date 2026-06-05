@@ -82,17 +82,20 @@ class VerseRef:
 
 @dataclass(frozen=True, slots=True)
 class CommentaryRef:
-    """The real-library metadata behind one integer alias for a commentary
-    (purport / tika) chunk.
+    """The real-library metadata behind one integer alias for a quotable
+    library document chunk — a commentary (purport / tika), a prose chapter,
+    or a letter. All three share one citation mechanism (pre-split sentences
+    + `[^N|s=…]` → verbatim blockquote); only `kind` records which is which.
 
     Sentences is the pre-split body of the chunk: when the LLM emits
     `[^N|s=0,2]` the marker expander pulls those sentences verbatim and
-    builds a markdown blockquote with `author_name + addr_label` as
-    attribution. The split happens once at envelope-mint time so the
-    expander stays a pure lookup with no parsing surprises.
+    builds a markdown blockquote attributed via `author_name + addr_label`
+    (language-neutral — no per-kind service word). The split happens once at
+    envelope-mint time so the expander stays a pure lookup.
 
-    addr_label is the human address ("БГ 2.13"); author_name is the
-    resolved author full name from catalog (or None if lookup missed).
+    addr_label is the human address ("БГ 2.13" / a chapter or letter title);
+    author_name is the resolved author full name from catalog (or None).
+    kind is the source item_kind ("commentary" | "prose_chapter" | "letter").
     """
 
     item_id: str
@@ -100,6 +103,7 @@ class CommentaryRef:
     addr_label: str
     author_name: str | None
     sentences: tuple[str, ...]
+    kind: str = "commentary"
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,11 +200,13 @@ class TurnAliasMap:
         addr_label: str,
         author_name: str | None,
         sentences: list[str],
+        kind: str = "commentary",
     ) -> int:
-        """Mint an alias for a commentary (purport / tika) chunk. The LLM
-        cites it via `[^N|s=...]`; the marker expander unfolds N into a
-        markdown blockquote with the picked sentences pulled verbatim
-        from `sentences` and attributed via `author_name + addr_label`."""
+        """Mint an alias for a quotable library document chunk — a commentary
+        (purport / tika), a prose chapter, or a letter (`kind`). The LLM cites
+        it via `[^N|s=...]`; the marker expander unfolds N into a markdown
+        blockquote with the picked sentences pulled verbatim from `sentences`
+        and attributed via `author_name + addr_label` (language-neutral)."""
         n = self._alloc_ref()
         self._chunks[n] = CommentaryRef(
             item_id=item_id,
@@ -208,6 +214,7 @@ class TurnAliasMap:
             addr_label=addr_label,
             author_name=author_name,
             sentences=tuple(sentences),
+            kind=kind,
         )
         return n
 
