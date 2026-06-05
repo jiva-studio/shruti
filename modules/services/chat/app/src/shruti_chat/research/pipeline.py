@@ -432,7 +432,8 @@ async def run_research(
         lambda: find_attributions(
             kind="pinned", user_q_embedding=user_q_embedding, lang=lang,
             embed_model=embed_model, embed_dim=embed_dim,
-            pool=pool, llm=llm, confirm_model=confirm_model,
+            pool=pool, reranker=reranker, user_query=question,
+            llm=llm, confirm_model=confirm_model,
         ),
         default=[], timeout=TIMEOUT_QUESTION_LOOKUP_S,
         name="question_lookup", request_id=request_id,
