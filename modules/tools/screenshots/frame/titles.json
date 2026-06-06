@@ -18,5 +18,9 @@
   "05_chat": {
     "en": "Ask Sadhu",
     "ru": "Спроси Садху"
+  },
+  "06_filters": {
+    "en": "Filter to find what you need",
+    "ru": "Фильтры под любой запрос"
   }
 }
