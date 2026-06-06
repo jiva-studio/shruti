@@ -2,7 +2,7 @@ import type { TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export interface AddTrackToPlaylistInput {
   readonly trackId: TrackId
