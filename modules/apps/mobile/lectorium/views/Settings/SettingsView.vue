@@ -70,10 +70,9 @@
     <BuildInfo
       :version="version"
       :build-id="buildId"
-      :db-number="dbNumber"
+      :db-number="dbNumber ?? undefined"
       :db-scheme="dbScheme"
-      :app-user-id="debugUnlocked ? subscription.appUserId : undefined"
-      :lectorium-user-id="debugUnlocked ? (auth.userId ?? undefined) : undefined"
+      :debug-ids="buildInfoDebugIds"
       @tap="debugTrigger.onTap"
     />
 
@@ -82,8 +81,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
+import type { BuildInfoId } from "@kit/ui"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
   SettingsAccountGroup,
@@ -143,6 +143,16 @@ const {
 
 const debugTrigger = useDebugUnlockTrigger()
 const debugUnlocked = debugTrigger.unlocked
+
+// Debug-only identifiers surfaced in the build footer once the hidden
+// debug menu is unlocked: RevenueCat customer id + auth-service user id.
+const buildInfoDebugIds = computed<BuildInfoId[]>(() => {
+  if (!debugUnlocked.value) return []
+  const ids: BuildInfoId[] = []
+  if (auth.userId) ids.push({ label: "uid", value: auth.userId })
+  if (subscription.appUserId) ids.push({ label: "rc", value: subscription.appUserId })
+  return ids
+})
 const { triggerSignIn } = useAnonymousSignInFlow()
 
 const helpOpen = ref(false)
