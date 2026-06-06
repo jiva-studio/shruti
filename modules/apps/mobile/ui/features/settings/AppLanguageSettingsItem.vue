@@ -1,16 +1,14 @@
 <template>
-  <IonItem button detail lines="none" @click="open = true">
-    <!-- Item Icon -->
-    <IconChip slot="start">
-      <LanguageIcon />
-    </IconChip>
-
-    <!-- Text -->
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.appLanguage.title") }}</h2>
-      <p>{{ $t("settings.appLanguage.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsSelectItem
+    v-model="value"
+    :title="$t('settings.appLanguage.title')"
+    :subtitle="$t('settings.appLanguage.description')"
+    @activate="open = true"
+  >
+    <template #icon>
+      <IconChip><LanguageIcon /></IconChip>
+    </template>
+  </SettingsSelectItem>
 
   <!-- Language Selection Dialog -->
   <ListItemSelectorDialog
@@ -26,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { IonItem, IonLabel } from "@ionic/vue"
+import { SettingsSelectItem } from "@kit/ui"
 import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 import { LanguageIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
