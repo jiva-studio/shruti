@@ -1,5 +1,5 @@
 <template>
-  <AppPage :reserve-player-space="player.open">
+  <AppPage :reserve-bottom-space="player.open">
     <SettingsAccountGroup
       :active-server-id="activeServerId"
       :anonymous="auth.anonymous"

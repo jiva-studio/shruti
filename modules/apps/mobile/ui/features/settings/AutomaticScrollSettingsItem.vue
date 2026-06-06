@@ -7,7 +7,7 @@
     <IonLabel class="ion-text-nowrap">
       <h2>
         {{ $t("settings.transcript.autoScroll.title") }}
-        <ProBadge />
+        <ProBadge :label="$t('app.proBadge')" />
       </h2>
       <p>{{ $t("settings.transcript.autoScroll.description") }}</p>
     </IonLabel>

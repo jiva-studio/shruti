@@ -1,5 +1,5 @@
 <template>
-  <AppPage :reserve-player-space="player.open">
+  <AppPage :reserve-bottom-space="player.open">
     <!-- Search Query -->
     <SearchInput
       v-if="!isEmpty"
