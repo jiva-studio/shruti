@@ -21,6 +21,10 @@ export interface UiTrackRow {
   readonly references: readonly string[]
   /** Tag display names used when no reference is present. */
   readonly tags: readonly string[]
+  /** Pre-formatted audio length ("M:SS" / "H:MM:SS"); undefined when the
+   *  track has no playable audio. Shown only by the optional "duration"
+   *  metadata field. */
+  readonly duration?: string
   /** Track state indicator (drives TrackStateIndicator / IconIndicator). */
   readonly state: UiTrackState
   /**

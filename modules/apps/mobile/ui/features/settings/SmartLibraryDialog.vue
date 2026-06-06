@@ -187,6 +187,15 @@ function onClose(): void {
 }
 </script>
 
+<style scoped>
+/* The bare hint paragraph would otherwise span the full content width,
+   flush to the dialog's left/right edges. Indent it to line up with the
+   list items above and below. */
+.hint {
+  margin-inline: 16px;
+}
+</style>
+
 <style>
 .smart-library-dialog ion-header,
 .smart-library-dialog ion-header::after {

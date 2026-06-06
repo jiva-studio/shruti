@@ -3,16 +3,33 @@
     <slot name="state" :track-id="trackId" />
 
     <IonLabel class="ion-text-nowrap">
-      <TrackHeader class="info" :title="title" :references="references" :tags="tags" />
-      <TrackDetails class="details" :author="author" :location="location" :date="date" />
+      <TrackHeader
+        class="info"
+        :title="title"
+        :references="references"
+        :tags="tags"
+        :date="date"
+        :config="config"
+      />
+      <TrackMetaLine
+        class="details"
+        :references="references"
+        :tags="tags"
+        :author="author"
+        :location="location"
+        :date="date"
+        :duration="duration"
+        :config="config"
+      />
     </IonLabel>
   </IonItem>
 </template>
 
 <script setup lang="ts">
 import { IonItem, IonLabel } from "@ionic/vue"
-import TrackDetails from "./TrackDetails.vue"
 import TrackHeader from "./TrackHeader.vue"
+import TrackMetaLine from "./TrackMetaLine.vue"
+import type { TrackMetaConfig } from "./trackMetaFields.js"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Interface                                 */
@@ -32,6 +49,10 @@ defineProps<{
   author?: string
   location?: string
   date?: string
+  duration?: string
+  /** Config override forwarded to the metadata line — only the settings
+   *  preview sets it; lists inherit the app-wide provided config. */
+  config?: TrackMetaConfig
 }>()
 
 defineEmits<{ select: [trackId: string] }>()

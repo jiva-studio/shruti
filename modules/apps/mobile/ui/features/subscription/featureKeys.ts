@@ -4,6 +4,7 @@ export type SubscriptionFeatureKey =
   | "smartLibrary"
   | "chat"
   | "autoScroll"
+  | "trackInfo"
   | "notesStudio"
 
 export interface FeatureSlideDef {
@@ -19,6 +20,7 @@ export const FEATURE_SLIDES: readonly FeatureSlideDef[] = [
   { key: "bookmarks", i18nKey: "benefit1", icon: "/subscription/bookmarks.png", soon: false },
   { key: "smartLibrary", i18nKey: "benefit2", icon: "/subscription/smartLibrary.png", soon: false },
   { key: "autoScroll", i18nKey: "autoScroll", icon: "/subscription/autoScroll.png", soon: false },
+  { key: "trackInfo", i18nKey: "trackInfo", icon: "/subscription/trackInfo.png", soon: false },
   {
     key: "notesStudio",
     i18nKey: "notesStudio",
