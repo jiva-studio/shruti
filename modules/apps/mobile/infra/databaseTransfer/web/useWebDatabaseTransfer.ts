@@ -1,4 +1,4 @@
-import { getBlob, saveData } from "@infra/idbKv/index.js"
+import { getBlob, saveData } from "@kit/infra"
 import type { IDatabase, IDatabaseTransfer } from "@ports/app/index.js"
 
 /**
