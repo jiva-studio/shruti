@@ -35,7 +35,7 @@ import { IconFileTypePdf } from "@tabler/icons-vue"
 import type { ActionPayload } from "@shruti/stores/useChatStore.js"
 import type { ChatSharePdfItemPayload as SharePdfItemPayload } from "@lib/domain/chatMessage.js"
 import { useShruti } from "@shruti/shruti.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
 
 type RowState = "idle" | "sharing" | "shared" | "error"

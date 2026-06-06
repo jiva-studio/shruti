@@ -45,7 +45,7 @@ import { groupReferences } from "@lib/domain/services/references.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@shruti/composables/useTrackRowAsync.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 
 const props = defineProps<{ trackId: string }>()

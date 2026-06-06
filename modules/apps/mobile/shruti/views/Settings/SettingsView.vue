@@ -103,7 +103,7 @@ import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
 import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@shruti/composables/useDebugUnlockTrigger.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
