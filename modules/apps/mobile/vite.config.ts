@@ -2,6 +2,7 @@ import vue from "@vitejs/plugin-vue"
 import path from "node:path"
 import { readFileSync } from "node:fs"
 import { defineConfig } from "vite"
+import { kitVitePlugin } from "../../kit/vite.aliases"
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
 const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8"))
@@ -77,7 +78,7 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["mobile.shruti.dev"],
   },
-  plugins: [shrutiAlias, vue()],
+  plugins: [shrutiAlias, kitVitePlugin(__dirname), vue()],
   resolve: {
     preserveSymlinks: true,
     alias: [

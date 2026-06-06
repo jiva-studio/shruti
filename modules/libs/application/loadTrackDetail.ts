@@ -4,7 +4,7 @@ import type { IAuthorRepository } from "@lib/domain/ports/authorRepository.js"
 import type { ITrackRepository } from "@lib/domain/ports/trackRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Track } from "@lib/domain/track.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export interface LoadTrackDetailInput {
   readonly trackId: TrackId
