@@ -45,7 +45,7 @@ import { groupReferences } from "@lib/domain/services/references.js"
 import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useTrackRowAsync } from "@lectorium/composables/useTrackRowAsync.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 
 const props = defineProps<{ trackId: string }>()

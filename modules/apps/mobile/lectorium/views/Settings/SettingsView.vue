@@ -103,7 +103,7 @@ import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 

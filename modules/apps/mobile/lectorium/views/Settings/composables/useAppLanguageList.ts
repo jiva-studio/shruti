@@ -1,6 +1,6 @@
 import { onMounted, ref, type Ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import type { Language } from "@lib/domain/language.js"
 import type { ILanguageRepository } from "@lib/domain/ports/languageRepository.js"
 

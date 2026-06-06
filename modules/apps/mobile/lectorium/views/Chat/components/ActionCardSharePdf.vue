@@ -35,7 +35,7 @@ import { IconFileTypePdf } from "@tabler/icons-vue"
 import type { ActionPayload } from "@lectorium/stores/useChatStore.js"
 import type { ChatSharePdfItemPayload as SharePdfItemPayload } from "@lib/domain/chatMessage.js"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
 
 type RowState = "idle" | "sharing" | "shared" | "error"

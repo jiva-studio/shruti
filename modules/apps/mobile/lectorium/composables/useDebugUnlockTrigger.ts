@@ -1,5 +1,5 @@
 import { computed, type ComputedRef } from "vue"
-import { toastController } from "@ionic/vue"
+import { useDebugUnlock, useToast } from "@kit/composables"
 import { useDebugStore } from "@lectorium/stores/useDebugStore.js"
 
 export interface UseDebugUnlockTriggerReturn {
@@ -9,27 +9,28 @@ export interface UseDebugUnlockTriggerReturn {
 }
 
 /**
- * Thin wrapper around `useDebugStore` that records a tap and surfaces a
- * confirmation toast the moment debug mode unlocks. View code stays free
- * of toast wiring and store imports.
+ * App-specific wiring around kit's generic `useDebugUnlock`: records a tap
+ * and surfaces a confirmation toast the moment debug mode unlocks. The
+ * unlocked flag is persisted (session-scoped) in `useDebugStore`, which is
+ * the host that owns it. View code stays free of toast/store plumbing.
  */
 export function useDebugUnlockTrigger(message = "Debug mode enabled"): UseDebugUnlockTriggerReturn {
   const debug = useDebugStore()
+  const toast = useToast()
+
+  const unlocker = useDebugUnlock({
+    initialUnlocked: debug.unlocked,
+    onUnlock: () => debug.setUnlocked(true),
+  })
 
   async function onTap(): Promise<void> {
-    if (debug.registerUnlockTap()) {
-      const toast = await toastController.create({
-        message,
-        duration: 1500,
-        position: "top",
-        color: "success",
-      })
-      await toast.present()
+    if (unlocker.registerTap()) {
+      await toast.show(message, { durationMs: 1500, position: "top", color: "success" })
     }
   }
 
   return {
-    unlocked: computed(() => debug.unlocked),
+    unlocked: computed(() => unlocker.unlocked.value),
     onTap,
   }
 }

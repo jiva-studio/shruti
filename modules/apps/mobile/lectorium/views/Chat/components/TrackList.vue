@@ -24,7 +24,7 @@ import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import LectureCard from "./LectureCard.vue"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 
 const props = defineProps<{ trackIds: readonly string[] }>()
 

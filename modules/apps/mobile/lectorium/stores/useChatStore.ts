@@ -4,7 +4,7 @@ import { useNow } from "@vueuse/core"
 import { toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { openStorePage } from "@lectorium/utils/openStorePage.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import {

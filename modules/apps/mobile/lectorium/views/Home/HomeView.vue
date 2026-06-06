@@ -73,7 +73,7 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
 import { useStarterPacks } from "@lectorium/composables/useStarterPacks.js"
 import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
-import { useToast } from "@lectorium/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
 
