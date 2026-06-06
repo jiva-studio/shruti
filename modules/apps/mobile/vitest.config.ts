@@ -24,7 +24,6 @@ export default defineConfig({
       "@lib/application": path.resolve(__dirname, "./submodules/application"),
       "@lib/persistence/main": path.resolve(__dirname, "./submodules/persistence-main"),
       "@lib/persistence/user": path.resolve(__dirname, "./submodules/persistence-user"),
-      "@kit": path.resolve(__dirname, "../../kit/src"),
     },
   },
   test: {

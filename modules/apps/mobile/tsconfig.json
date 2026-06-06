@@ -25,9 +25,7 @@
       "@lib/application/*":    ["./submodules/application/*"],
       "@lib/persistence/main": ["./submodules/persistence-main/index.ts"],
       "@lib/persistence/user": ["./submodules/persistence-user/index.ts"],
-      "@docs/*":               ["./submodules/docs/*"],
-      "@kit/core":             ["../../kit/src/core/index.ts"],
-      "@kit/*":                ["../../kit/src/*"]
+      "@docs/*":               ["./submodules/docs/*"]
     }
   },
   "include": [
@@ -41,8 +39,6 @@
     "submodules/application/**/*.ts",
     "submodules/persistence-main/**/*.ts",
     "submodules/persistence-user/**/*.ts",
-    "../../kit/src/**/*.ts",
-    "../../kit/src/**/*.vue",
     "vite-env.d.ts"
   ],
   "exclude": [
@@ -52,7 +48,6 @@
     "src",
     "dist",
     "android",
-    "ios",
-    "../../kit/src/**/__tests__/**"
+    "ios"
   ]
 }
