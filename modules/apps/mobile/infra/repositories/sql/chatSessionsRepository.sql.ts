@@ -5,6 +5,7 @@ import type {
   CreateChatSessionInput,
   IChatSessionRepository,
 } from "@lib/domain/ports/chatSessionRepository.js"
+import { mutate, queryMany, queryOne } from "@kit/persistence"
 
 interface ChatSessionRow {
   readonly id: string
@@ -27,33 +28,35 @@ function rowToSession(r: ChatSessionRow): ChatSession {
 export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepository {
   return {
     async list(limit = 200): Promise<readonly ChatSession[]> {
-      const rows = await db.query<ChatSessionRow>(
+      return queryMany<ChatSessionRow, ChatSession>(
+        db,
         `SELECT id, title, created_at, updated_at, track_id
            FROM chat_sessions
           ORDER BY updated_at DESC
           LIMIT ?`,
-        [limit]
+        [limit],
+        rowToSession
       )
-      return rows.map(rowToSession)
     },
 
     async getById(id: ChatSessionId): Promise<ChatSession | null> {
-      const rows = await db.query<ChatSessionRow>(
+      return queryOne<ChatSessionRow, ChatSession>(
+        db,
         `SELECT id, title, created_at, updated_at, track_id
            FROM chat_sessions WHERE id = ? LIMIT 1`,
-        [id]
+        [id],
+        rowToSession
       )
-      return rows[0] ? rowToSession(rows[0]) : null
     },
 
     async create(input: CreateChatSessionInput): Promise<ChatSession> {
       const now = Date.now()
       const trackId = input.trackId ?? null
-      await db.execute(
+      await mutate(
+        db,
         "INSERT INTO chat_sessions (id, title, created_at, updated_at, track_id) VALUES (?, ?, ?, ?, ?)",
         [input.id, input.title, now, now, trackId]
       )
-      await db.save()
       return {
         id: input.id,
         title: input.title,
@@ -64,35 +67,32 @@ export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepos
     },
 
     async updateTitle(id: ChatSessionId, title: string): Promise<void> {
-      await db.execute("UPDATE chat_sessions SET title = ? WHERE id = ?", [title, id])
-      await db.save()
+      await mutate(db, "UPDATE chat_sessions SET title = ? WHERE id = ?", [title, id])
     },
 
     async touch(id: ChatSessionId, updatedAtMs: number): Promise<void> {
-      await db.execute("UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [updatedAtMs, id])
-      await db.save()
+      await mutate(db, "UPDATE chat_sessions SET updated_at = ? WHERE id = ?", [updatedAtMs, id])
     },
 
     async delete(id: ChatSessionId): Promise<void> {
-      await db.execute("DELETE FROM chat_sessions WHERE id = ?", [id])
-      await db.save()
+      await mutate(db, "DELETE FROM chat_sessions WHERE id = ?", [id])
     },
 
     async clearAll(): Promise<void> {
-      await db.execute("DELETE FROM chat_sessions")
-      await db.save()
+      await mutate(db, "DELETE FROM chat_sessions")
     },
 
     async findLatestByTrack(trackId: TrackId): Promise<ChatSession | null> {
-      const rows = await db.query<ChatSessionRow>(
+      return queryOne<ChatSessionRow, ChatSession>(
+        db,
         `SELECT id, title, created_at, updated_at, track_id
            FROM chat_sessions
           WHERE track_id = ?
           ORDER BY updated_at DESC
           LIMIT 1`,
-        [trackId]
+        [trackId],
+        rowToSession
       )
-      return rows[0] ? rowToSession(rows[0]) : null
     },
   }
 }

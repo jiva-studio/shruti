@@ -15,6 +15,7 @@ import type {
   CreateChatMessageInput,
   IChatMessageRepository,
 } from "@lib/domain/ports/chatMessageRepository.js"
+import { mutate, queryMany } from "@kit/persistence"
 
 const FEEDBACK_CATEGORIES: ReadonlySet<ChatFeedbackCategory> = new Set([
   "off_topic",
@@ -241,7 +242,8 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       // (`p.visible_at`). Regular messages have no sidecar row, so the
       // LEFT JOIN's `p.*` come back NULL and the OR-branch admits them.
       // `dismissed` / `superseded` prep_state rows stay hidden as before.
-      const rows = await db.query<ChatMessageRow>(
+      return queryMany<ChatMessageRow, ChatMessage>(
+        db,
         `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta
            FROM chat_messages m
            LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
@@ -249,9 +251,9 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
             AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
             AND (p.prep_state IS NULL OR p.prep_state NOT IN ('dismissed','superseded'))
           ORDER BY m.created_at ASC`,
-        [sessionId]
+        [sessionId],
+        rowToMessage
       )
-      return rows.map(rowToMessage)
     },
 
     async create(input: CreateChatMessageInput): Promise<ChatMessage> {
@@ -264,13 +266,13 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         aliases: input.aliases,
         focus: input.focus,
       })
-      await db.execute(
+      await mutate(
+        db,
         `INSERT INTO chat_messages
            (id, session_id, role, content, created_at, meta)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [input.id, input.sessionId, input.role, input.content, input.createdAt, meta]
       )
-      await db.save()
       const out: ChatMessage = {
         id: input.id,
         sessionId: input.sessionId,
@@ -308,8 +310,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         focus: current.focus,
         feedback: current.feedback,
       })
-      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      await db.save()
+      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async updateActionStates(
@@ -332,8 +333,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         focus: current.focus,
         feedback: current.feedback,
       })
-      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      await db.save()
+      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async updateFeedback(id: ChatMessageId, feedback: ChatFeedbackState): Promise<void> {
@@ -353,23 +353,19 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         focus: current.focus,
         feedback,
       })
-      await db.execute("UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
-      await db.save()
+      await mutate(db, "UPDATE chat_messages SET meta = ? WHERE id = ?", [next, id])
     },
 
     async delete(id: ChatMessageId): Promise<void> {
-      await db.execute("DELETE FROM chat_messages WHERE id = ?", [id])
-      await db.save()
+      await mutate(db, "DELETE FROM chat_messages WHERE id = ?", [id])
     },
 
     async deleteBySession(sessionId: ChatSessionId): Promise<void> {
-      await db.execute("DELETE FROM chat_messages WHERE session_id = ?", [sessionId])
-      await db.save()
+      await mutate(db, "DELETE FROM chat_messages WHERE session_id = ?", [sessionId])
     },
 
     async clearAll(): Promise<void> {
-      await db.execute("DELETE FROM chat_messages")
-      await db.save()
+      await mutate(db, "DELETE FROM chat_messages")
     },
   }
 }
