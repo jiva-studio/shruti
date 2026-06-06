@@ -52,7 +52,7 @@ html, body {
 .device-tablet10 #title { font-size: 3.8vh; }
 .device-iphone67 #title { font-size: 3.6vh; }
 .device-ipad13 #title { font-size: 3.8vh; }
-.device-surfaceduo #title { font-size: 3.6vh; }
+.device-surfaceduo #title { font-size: 4.2vh; margin-top: 1.6vh; }
 
 .phone {
   position: absolute;
@@ -93,8 +93,8 @@ html, body {
    letting an 84vw width blow past the bottom edge. */
 .device-surfaceduo .phone {
   width: auto;
-  height: 76vh;
-  bottom: 3vh;
+  height: 86vh;
+  bottom: 2.5vh;
   border-radius: 2vh;
   padding: 0.8vh;
 }
