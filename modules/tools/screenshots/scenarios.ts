@@ -34,6 +34,30 @@ declare global {
   }
 }
 
+/** Position (ms) the demo track's floating player is parked at on Home.
+ *  ~8 min into the ~33-min "Когда Господь улыбается" lecture → a ~25%
+ *  progress radial on both the floating player and that bottom row. */
+const HOME_PLAYER_POSITION_MS = 500_000
+
+async function openHomeWithPlayer(page: Page): Promise<void> {
+  // Drive the floating player into an open, mid-playback state so the
+  // Home screenshot shows there IS a player (otherwise it's invisible and
+  // the screen reads as "no playback"). `setPlayerState` sets the player
+  // store directly — it does NOT call `openTrack`, so the
+  // `openTranscriptAutomatically` setting won't pop the transcript dialog.
+  // The track is the demo (bottom row of the queue); the player owns its
+  // row → it renders the "playing" radial there.
+  await page.evaluate(async (positionMs) => {
+    const dbg = window.__shruti?.debug
+    if (!dbg) throw new Error("debug bridge not installed")
+    await dbg.setPlayerState(dbg.demoTrackId(), positionMs)
+  }, HOME_PLAYER_POSITION_MS)
+  // FloatingPlayer (root class `.player.floating`) shows once the player
+  // store has a track and the route isn't chat — see App.vue
+  // `floatingPlayerHidden`.
+  await page.locator(".player.floating").first().waitFor({ state: "visible", timeout: 10_000 })
+}
+
 async function openTranscriptMidPlayback(page: Page): Promise<void> {
   // Drive the floating player + transcript dialog into a known "currently
   // playing, mid-track" state: one block shows `.current`, another already
@@ -99,6 +123,9 @@ export const scenarios: Scenario[] = [
     // populate `playlist_items` first (see generate-fixtures/seedPlaylist.ts).
     waitFor: ".activity-heatmap",
     settle: 600,
+    // Park the floating player mid-playback so the screenshot shows the
+    // app has an active player (and the bottom row renders its radial).
+    beforeCapture: openHomeWithPlayer,
   },
   {
     name: "02_library",

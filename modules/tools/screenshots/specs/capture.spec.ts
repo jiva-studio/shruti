@@ -28,7 +28,7 @@ const DB_SCHEME: number = (JSON.parse(fs.readFileSync(DB_SCHEME_PATH, "utf-8")) 
  *  arbitrary; we just append `000000`. */
 const CONTENT_DB_VERSION = Number(`${DB_SCHEME}000000`)
 
-type Device = "phone" | "iphone67" | "ipad13"
+type Device = "phone" | "iphone67" | "ipad13" | "surfaceduo"
 
 interface ProjectInfo {
   code: "en" | "ru"
