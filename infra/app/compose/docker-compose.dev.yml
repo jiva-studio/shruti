@@ -26,6 +26,23 @@
 #                  --env-file infra/app/.env.dev \
 #                  up --build
 
+# Secret Manager-sourced secrets. Injected at `make stack-up` time by `op run`
+# (--env-file=secrets.op.tpl) into the compose process env, then passed through
+# to the containers via the merge below — so they never land in .env.dev on
+# disk. `${VAR:-}` resolves empty when op isn't used; since gen-dev-env.sh no
+# longer writes these vars, that's a clean "no key" rather than a stale value.
+x-op-secrets: &op-secrets
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  SHRUTI_RC_REST_API_KEY: ${SHRUTI_RC_REST_API_KEY:-}
+  SHRUTI_RC_WEBHOOK_SECRET: ${SHRUTI_RC_WEBHOOK_SECRET:-}
+  VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+  SHRUTI_OPENAI_API_KEY: ${SHRUTI_OPENAI_API_KEY:-}
+
 services:
   postgres:
     ports:
@@ -53,6 +70,8 @@ services:
       dockerfile: services/chat/Dockerfile
     ports:
       - "${SHRUTI_CHAT_PORT:-11080}:8080"
+    environment:
+      <<: *op-secrets
     volumes:
       # Mount tests/ read-only so `docker compose exec chat python -m
       # tests.evals.run_chunk_tools_eval` works against the running
@@ -68,6 +87,8 @@ services:
       dockerfile: services/auth/Dockerfile
     ports:
       - "${SHRUTI_AUTH_PORT:-11081}:8081"
+    environment:
+      <<: *op-secrets
 
   cleanup-worker:
     image: shruti-cleanup-worker:dev
@@ -75,16 +96,16 @@ services:
     build:
       context: ../../../modules
       dockerfile: services/cleanup-worker/Dockerfile
+    environment:
+      <<: *op-secrets
     # No host port mapping: cleanup-worker has no API surface beyond
     # /healthz, and the in-container HEALTHCHECK dogfoods the binary.
 
-  # share-audio / share-video are in the `origin` profile, so a full
-  # `up` would otherwise try to PULL their private ghcr images. Restore
-  # `build:` (same modules/ context as chat/auth) so they compile from
-  # source locally — no registry token needed. The default `make stack-up`
-  # leaves them out (the mobile dev region keeps share-* on prod and the
-  # share-video build is heavy); `make stack-up-all` builds + runs them.
-  # They need SHRUTI_S3_BUCKET (+ AWS creds) in .env.dev to do real work.
+  # share-audio / share-video are in the `origin` profile, so a full `up`
+  # would otherwise PULL their private ghcr images. Restore `build:` (same
+  # modules/ context as chat/auth) so they compile from source locally — no
+  # registry token. `make stack-up` builds + runs them; they need
+  # SHRUTI_S3_BUCKET + AWS creds (the latter from op) to do real work.
   share-audio:
     image: shruti-share-audio:dev
     pull_policy: never
@@ -93,6 +114,8 @@ services:
       dockerfile: services/share-audio/Dockerfile
     ports:
       - "${SHRUTI_SHARE_AUDIO_PORT:-11084}:8082"
+    environment:
+      <<: *op-secrets
 
   share-video:
     image: shruti-share-video:dev
@@ -100,3 +123,5 @@ services:
     build:
       context: ../../../modules
       dockerfile: services/share-video/Dockerfile
+    environment:
+      <<: *op-secrets
