@@ -11,6 +11,10 @@ export interface TrackListFilters {
   /** Filter by track duration (ms): inclusive-exclusive. */
   readonly durationMinMs?: number
   readonly durationMaxMs?: number
+  /** Filter by `tracks.date`: inclusive lower / exclusive upper, both
+   *  `"YYYY-MM-DD"` strings. Either may be absent for an open-ended range. */
+  readonly dateGte?: string
+  readonly dateLt?: string
 }
 
 export interface TrackListQuery {
@@ -48,6 +52,13 @@ export interface ITrackRepository {
   getByIds(ids: readonly TrackId[]): Promise<ReadonlyMap<TrackId, Track>>
   list(query: TrackListQuery): Promise<readonly Track[]>
   search(query: TrackSearchQuery): Promise<readonly Track[]>
+
+  /**
+   * Distinct calendar years present in the catalog (from `tracks.date`),
+   * descending. Powers the year picker in the Search date-range filter so
+   * it only offers years that actually have content.
+   */
+  listYears(): Promise<readonly number[]>
 
   /**
    * Lookup by an exact scripture reference — sourceId + dot-joined

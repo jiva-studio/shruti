@@ -5,6 +5,8 @@ export type {
   SearchFilterSectionDef,
   MultiSectionDef,
   SingleSectionDef,
+  DateSectionDef,
   MultiSectionKey,
   SingleSectionKey,
+  DateSectionKey,
 } from "./types.js"

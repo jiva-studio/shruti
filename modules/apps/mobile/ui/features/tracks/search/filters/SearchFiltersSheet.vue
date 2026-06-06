@@ -46,6 +46,15 @@
             @enter="enterSection"
           />
 
+          <!-- Date range gets its own picker (year + optional month per edge). -->
+          <SearchFiltersDateSection
+            v-else-if="activeSection.kind === 'date'"
+            :key="`section-${activeSection.key}`"
+            v-model:filters="filters"
+            class="view"
+            :section="activeSection"
+          />
+
           <!-- Section detail view: the picker for the focused dimension. -->
           <SearchFiltersSection
             v-else
@@ -67,7 +76,9 @@ import { IconChevronLeft } from "@tabler/icons-vue"
 import { Header } from "@ui/primitives/index.js"
 import SearchFiltersList from "./SearchFiltersList.vue"
 import SearchFiltersSection from "./SearchFiltersSection.vue"
+import SearchFiltersDateSection from "./SearchFiltersDateSection.vue"
 import type {
+  DateSectionKey,
   FiltersModel,
   MultiSectionKey,
   SearchFilterSectionDef,
@@ -87,7 +98,7 @@ const emit = defineEmits<{
   reset: []
 }>()
 
-const activeSectionKey = ref<MultiSectionKey | SingleSectionKey | null>(null)
+const activeSectionKey = ref<MultiSectionKey | SingleSectionKey | DateSectionKey | null>(null)
 const transitionName = ref<"drill-in" | "drill-out">("drill-in")
 
 const activeSection = computed<SearchFilterSectionDef | null>(() => {

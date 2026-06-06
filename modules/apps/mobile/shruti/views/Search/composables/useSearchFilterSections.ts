@@ -11,6 +11,7 @@ import IconSources from "@ui/features/tracks/search/filters/icons/IconSources.vu
 import IconTags from "@ui/features/tracks/search/filters/icons/IconTags.vue"
 import IconClock from "@ui/features/tracks/search/filters/icons/IconClock.vue"
 import IconSort from "@ui/features/tracks/search/filters/icons/IconSort.vue"
+import IconDates from "@ui/features/tracks/search/filters/icons/IconDates.vue"
 
 export interface UseSearchFilterSectionsReturn {
   /** Section definitions for the filters bottom-sheet. Reactive to UI
@@ -73,6 +74,17 @@ export function useSearchFilterSections(): UseSearchFilterSectionsReturn {
     { id: "byReference", title: t("search.filters.sortByReference") },
   ])
 
+  // Localised month names (index 0 = January), capitalised for menu display.
+  // Re-derives on UI-language change so the picker matches the active locale.
+  const monthLabels = computed<string[]>(() => {
+    const locale = appLanguage.value
+    const fmt = new Intl.DateTimeFormat(locale, { month: "long" })
+    return Array.from({ length: 12 }, (_, i) => {
+      const name = fmt.format(new Date(2000, i, 15))
+      return name.charAt(0).toLocaleUpperCase(locale) + name.slice(1)
+    })
+  })
+
   const sections = computed<readonly SearchFilterSectionDef[]>(() => [
     {
       kind: "multi",
@@ -113,6 +125,14 @@ export function useSearchFilterSections(): UseSearchFilterSectionsReturn {
       title: t("search.filters.tags"),
       icon: IconTags,
       items: tagsItems.value,
+    },
+    {
+      kind: "date",
+      key: "dates",
+      title: t("search.filters.dates"),
+      icon: IconDates,
+      years: dictionaries.years,
+      monthLabels: monthLabels.value,
     },
     {
       kind: "single",
