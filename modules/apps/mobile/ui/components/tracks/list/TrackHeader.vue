@@ -1,24 +1,53 @@
 <template>
   <h3 class="title-block">
-    <span v-if="references[0]" class="reference">
-      {{ references[0] }}
-    </span>
-    <span v-if="references?.length > 1" class="reference extra">
-      +{{ references.length - 1 }}
-    </span>
-    <span v-if="tags[0] && references?.length === 0" class="reference">
-      {{ tags[0] }}
-    </span>
+    <!-- The prominent top widget sits inline on the title row, exactly
+         where the scripture reference chip always lived. Which field it
+         shows (reference / date / nothing) is configurable. -->
+    <template v-if="top">
+      <span class="reference">{{ top.text }}</span>
+      <span v-if="top.extra" class="reference extra">+{{ top.extra }}</span>
+    </template>
     <span class="title">{{ title }}</span>
   </h3>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed, inject } from "vue"
+import {
+  DEFAULT_TRACK_META_CONFIG,
+  TRACK_META_CONFIG_KEY,
+  type TrackMetaConfig,
+} from "./trackMetaFields.js"
+
+const props = defineProps<{
   title: string
-  references: readonly string[]
-  tags: readonly string[]
+  references?: readonly string[]
+  tags?: readonly string[]
+  date?: string
+  /** Override the active config — used by the settings preview. */
+  config?: TrackMetaConfig
 }>()
+
+const provided = inject(TRACK_META_CONFIG_KEY, null)
+const activeConfig = computed<TrackMetaConfig>(
+  () => props.config ?? provided?.value ?? DEFAULT_TRACK_META_CONFIG
+)
+
+// Resolved top widget. Only "reference" / "date" are ever promoted here
+// (see TOP_FIELD_KEYS); reference falls back to the first tag, same as
+// the legacy chip, and counts the hidden extras as "+N".
+const top = computed<{ text: string; extra: number } | null>(() => {
+  const field = activeConfig.value.top
+  if (field === "reference") {
+    const refs = props.references ?? []
+    const text = refs[0] ?? (props.tags ?? [])[0]
+    return text ? { text, extra: Math.max(0, refs.length - 1) } : null
+  }
+  if (field === "date") {
+    return props.date ? { text: props.date, extra: 0 } : null
+  }
+  return null
+})
 </script>
 
 <style scoped>
@@ -34,6 +63,7 @@ defineProps<{
 }
 
 .reference {
+  flex: 0 0 auto;
   background-color: var(--ion-color-light-shade);
   font-weight: bold;
   color: var(--ion-color-medium);
@@ -44,8 +74,6 @@ defineProps<{
 }
 
 .reference.extra {
-  color: var(--ion-color-medium);
-  font-stretch: condensed;
   opacity: 0.5;
 }
 </style>

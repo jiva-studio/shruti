@@ -13,6 +13,7 @@
       :author="row.author"
       :location="row.location"
       :date="row.date"
+      :duration="row.duration"
       @select="$emit('select', $event)"
     >
       <template #state>

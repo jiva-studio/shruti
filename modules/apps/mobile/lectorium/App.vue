@@ -64,9 +64,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue"
+import { computed, provide, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import router from "@lectorium/router/index.js"
+import { TRACK_META_CONFIG_KEY } from "@ui/components/tracks/list/index.js"
+import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
 import type { SelectionActionEvent } from "@lectorium/composables/transcript/useTranscriptSelectionActions.js"
@@ -131,6 +133,11 @@ const floatingPlayerHidden = computed<boolean>(() => {
 })
 const showPlayerProgressConfig = useConfig<boolean>("settings.showPlayerProgress", true)
 const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
+
+// Provide the user's track-row metadata layout to every TrackMetaLine in
+// the app (Home / Search / Library / playlist). Settings edits this same
+// preference live; non-subscribers always get the default layout.
+provide(TRACK_META_CONFIG_KEY, useTrackMetadataFields().config)
 
 const playButtonSize = app.platform === "android" ? 48 : 44
 

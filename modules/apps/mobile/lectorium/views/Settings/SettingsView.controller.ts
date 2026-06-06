@@ -6,6 +6,8 @@ import {
   type AutoArchiveDelay,
 } from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataFields.js"
+import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import type { CdnServer } from "@lib/domain/servers.js"
 import { getRegions } from "@lectorium/services/regionsRegistry.js"
@@ -34,6 +36,7 @@ export interface SettingsControllerReturn {
   dbNumber: ComputedRef<string | null>
   /* Config v-models (backed by IPreferences via useConfig) */
   appLanguage: Ref<string>
+  trackMetaConfig: Ref<TrackMetaConfig>
   showPlayerProgress: Ref<boolean>
   showPlayerOnNotes: Ref<boolean>
   showActivityTracker: Ref<boolean>
@@ -79,6 +82,7 @@ export function useSettingsController(): SettingsControllerReturn {
 
   /* Config v-models */
   const appLanguage = useConfig<string>("settings.appLanguage", "en")
+  const { raw: trackMetaConfig } = useTrackMetadataFields()
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScroll = useConfig<boolean>("settings.autoScroll", false)
   const openTranscriptAutomatically = useConfig<boolean>(
@@ -139,6 +143,7 @@ export function useSettingsController(): SettingsControllerReturn {
     contentDbFile,
     dbNumber,
     appLanguage,
+    trackMetaConfig,
     showPlayerProgress,
     showPlayerOnNotes,
     showActivityTracker,
