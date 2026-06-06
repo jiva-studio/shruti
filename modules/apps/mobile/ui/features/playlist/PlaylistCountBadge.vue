@@ -1,15 +1,29 @@
 <template>
-  <SectionBadge v-if="value > 0">
-    <HeadphonesIcon />
+  <Badge v-if="value > 0" class="playlist-count-badge" :style="NEUTRAL">
+    <template #icon><HeadphonesIcon /></template>
     {{ value }}
-  </SectionBadge>
+  </Badge>
 </template>
 
 <script setup lang="ts">
-import { SectionBadge } from "@ui/primitives/index.js"
+import { Badge } from "@kit/ui"
 import { HeadphonesIcon } from "@ui/icons/index.js"
 
 defineProps<{
   value: number
 }>()
+
+// Neutral look (was SectionBadge default): light fill + medium text.
+const NEUTRAL: Record<string, string> = {
+  "--kit-badge-bg": "var(--ion-color-light)",
+  "--kit-badge-fg": "var(--ion-color-medium)",
+}
 </script>
+
+<style scoped>
+.playlist-count-badge :deep(svg) {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+</style>
