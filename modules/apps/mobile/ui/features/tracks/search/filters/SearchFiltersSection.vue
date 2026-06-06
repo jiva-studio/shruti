@@ -65,12 +65,16 @@ const innerSearch = ref<string>("")
 const multi = computed(() => asMulti(props.section))
 const single = computed(() => asSingle(props.section))
 
-const showInnerSearch = computed(() => props.section.items.length > INNER_SEARCH_THRESHOLD)
+// The date dimension renders in its own component, so this picker only ever
+// sees multi/single sections — both of which carry `items`.
+const items = computed<SelectorDialogItem[]>(() => (multi.value ?? single.value)?.items ?? [])
+
+const showInnerSearch = computed(() => items.value.length > INNER_SEARCH_THRESHOLD)
 
 const filteredItems = computed<SelectorDialogItem[]>(() => {
   const q = innerSearch.value.trim().toLocaleLowerCase()
-  if (!q) return props.section.items
-  return props.section.items.filter((i) => i.title.toLocaleLowerCase().includes(q))
+  if (!q) return items.value
+  return items.value.filter((i) => i.title.toLocaleLowerCase().includes(q))
 })
 
 // Reset the in-section search whenever the parent swaps sections.

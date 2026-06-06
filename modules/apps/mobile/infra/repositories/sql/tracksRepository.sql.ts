@@ -346,6 +346,16 @@ function buildFilterClauses(filters: TrackListFilters): {
     )
     params.push(filters.durationMaxMs)
   }
+  // `tracks.date` is a "YYYY-MM-DD" string; BINARY collation makes string
+  // comparison chronological, so the precomputed bounds compare directly.
+  if (filters.dateGte !== undefined) {
+    clauses.push(`t.date >= ?`)
+    params.push(filters.dateGte)
+  }
+  if (filters.dateLt !== undefined) {
+    clauses.push(`t.date < ?`)
+    params.push(filters.dateLt)
+  }
 
   return { clauses, params }
 }
@@ -508,6 +518,18 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
       const hydrated = await hydrate(contentDb, fullRows)
       const byId = new Map(hydrated.map((t) => [t.id, t]))
       return pageIds.map((id) => byId.get(id)).filter((t): t is Track => t !== undefined)
+    },
+
+    async listYears(): Promise<readonly number[]> {
+      // Distinct 4-digit year prefix of the date string, newest first.
+      // Empty/null dates are excluded so the picker never offers a blank.
+      const rows = await contentDb.query<{ y: string }>(
+        `SELECT DISTINCT substr(date, 1, 4) AS y
+           FROM tracks
+          WHERE hidden = 0 AND date IS NOT NULL AND date != ''
+          ORDER BY y DESC`
+      )
+      return rows.map((r) => Number(r.y)).filter((y) => Number.isInteger(y) && y > 0)
     },
 
     async getTranscriptPath(trackId: TrackId, language: LanguageCode): Promise<string | null> {

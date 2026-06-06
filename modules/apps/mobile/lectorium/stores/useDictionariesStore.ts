@@ -28,6 +28,8 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
   const sources = ref<readonly Source[]>([])
   const tags = ref<readonly Tag[]>([])
   const languages = ref<readonly Language[]>([])
+  /** Distinct catalog years (newest first) for the date-range filter. */
+  const years = ref<readonly number[]>([])
   const isLoading = ref<boolean>(false)
   const error = ref<string | null>(null)
   let loaded = false
@@ -39,18 +41,21 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     error.value = null
     try {
       const repos = app.repositories()
-      const [authorList, languageList, locationList, sourceList, tagList] = await Promise.all([
-        repos.authors.listAll(),
-        repos.languages.listAll(),
-        repos.locations.listAll(),
-        repos.sources.listAll(),
-        repos.tags.listAll(),
-      ])
+      const [authorList, languageList, locationList, sourceList, tagList, yearList] =
+        await Promise.all([
+          repos.authors.listAll(),
+          repos.languages.listAll(),
+          repos.locations.listAll(),
+          repos.sources.listAll(),
+          repos.tags.listAll(),
+          repos.tracks.listYears(),
+        ])
       authors.value = authorList
       languages.value = languageList
       locations.value = locationList
       sources.value = sourceList
       tags.value = tagList
+      years.value = yearList
       loaded = true
     } catch (err) {
       error.value = err instanceof Error ? err.message : "Failed to load dictionaries"
@@ -126,6 +131,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
     sources,
     tags,
     languages,
+    years,
     authorsById,
     locationsById,
     sourcesById,

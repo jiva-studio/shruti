@@ -33,6 +33,7 @@ function makeTrackRepo(tracks: ReadonlyMap<string, Track>): ITrackRepository {
     },
     list: async () => [],
     search: async () => [],
+    listYears: async () => [],
     findByReference: async () => null,
     getTranscriptPath: async () => null,
     listTranscriptLanguages: async () => [],
