@@ -3,7 +3,7 @@ import type { MediaItem } from "@lib/domain/mediaItem.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
 import { buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export interface DownloadMediaInput {
   readonly trackId: TrackId
