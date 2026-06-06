@@ -13,6 +13,8 @@ on:
       - .github/workflows/apps-mobile.yml
       - .github/actions/build-audio-player/**
       - .github/actions/build-media-downloader/**
+      - .gitmodules
+      - modules/kit/**
   pull_request:
     branches: [main]
     paths:
@@ -25,6 +27,8 @@ on:
       - .github/workflows/apps-mobile.yml
       - .github/actions/build-audio-player/**
       - .github/actions/build-media-downloader/**
+      - .gitmodules
+      - modules/kit/**
   workflow_dispatch:
 
 concurrency:
@@ -32,47 +36,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # -------------------------------------------------------------------------- #
-  lint:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
-      - uses: actions/checkout@v5
-      - name: fetch kit submodule (ssh)
-        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: modules/apps/mobile/package-lock.json
-      - uses: ./.github/actions/build-audio-player
-      - uses: ./.github/actions/build-media-downloader
-      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
-      - run: cd modules/apps/mobile && npm run lint
-
-  test:
-    name: test / unit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
-      - uses: actions/checkout@v5
-      - name: fetch kit submodule (ssh)
-        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: modules/apps/mobile/package-lock.json
-      - uses: ./.github/actions/build-audio-player
-      - uses: ./.github/actions/build-media-downloader
-      - run: cd modules/apps/mobile && npm ci --prefer-offline --no-audit
-      - run: cd modules/apps/mobile && npm test
-
+  # build-web stays app-local: it bakes app-specific compile-time config into
+  # the bundle (RevenueCat keys via fixed Vite env names) and builds the
+  # in-house Capacitor plugins. It uploads the mobile-web-dist artifact the
+  # reusable ci workflow's e2e/deploy jobs consume.
   build-web:
     name: build
     runs-on: ubuntu-latest
@@ -107,144 +74,13 @@ jobs:
           path: modules/apps/mobile/dist
           retention-days: 3
 
-  # The e2e suite isn't committed yet. Probe at runtime so the job no-ops
-  # cleanly until `modules/tests/e2e/` lands; deploy jobs don't depend on
-  # this one, so absence doesn't block releases (a failing suite still does).
-  e2e:
-    name: test / e2e
+  # Shared web CI: lint, unit test, e2e, Cloudflare Pages preview + production.
+  # Runs after build-web so its e2e/deploy jobs find the mobile-web-dist
+  # artifact. `plugins` are built generically by the reusable before npm ci.
+  ci:
     needs: [build-web]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
-      - uses: actions/checkout@v5
-      - name: fetch kit submodule (ssh)
-        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
-      - name: detect e2e suite
-        id: check_e2e
-        run: |
-          if [ -f modules/tests/e2e/package-lock.json ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::modules/tests/e2e/ not present yet — skipping Playwright."
-          fi
-      - if: steps.check_e2e.outputs.present == 'true'
-        uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: modules/tests/e2e/package-lock.json
-      - if: steps.check_e2e.outputs.present == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: mobile-web-dist
-          path: modules/apps/mobile/dist
-      - if: steps.check_e2e.outputs.present == 'true'
-        run: cd modules/tests/e2e && npm ci --prefer-offline --no-audit
-      # Cache the Playwright browser binaries across runs (GitHub-hosted).
-      - if: steps.check_e2e.outputs.present == 'true'
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('modules/tests/e2e/package-lock.json') }}
-      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
-        run: cd modules/tests/e2e && npx playwright install --with-deps chromium
-      - if: steps.check_e2e.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-        run: cd modules/tests/e2e && npx playwright install-deps chromium
-      # Self-hosted runners share localhost — a fixed port collides between
-      # parallel jobs and with stale dev-server processes from prior runs.
-      # Pick a random ephemeral port; playwright.config.ts reads E2E_PORT.
-      - if: steps.check_e2e.outputs.present == 'true'
-        name: pick e2e port
-        run: echo "E2E_PORT=$((20000 + RANDOM % 40000))" >> "$GITHUB_ENV"
-      - if: steps.check_e2e.outputs.present == 'true'
-        name: run playwright
-        env:
-          E2E_USE_BUNDLE: "1"
-        run: cd modules/tests/e2e && npx playwright test
-      - if: always() && steps.check_e2e.outputs.present == 'true'
-        name: upload playwright report
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-playwright-report
-          path: modules/tests/e2e/playwright-report/
-          retention-days: 30
-
-  # -------------------------------------------------------------------------- #
-  # Cloudflare Pages: PR preview and production web deploy.
-  # Both jobs no-op when CF secrets are absent so CI passes on repos that
-  # haven't wired up the lectorium-preview Pages project yet.
-  # -------------------------------------------------------------------------- #
-  deploy-preview:
-    name: web / pr
-    needs: [lint, test, build-web]
-    # Dependabot PR contexts get an empty `secrets` map, so wrangler would fail
-    # with "CLOUDFLARE_API_TOKEN must be set". Skip preview for those PRs.
-    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      deployments: write
-    concurrency:
-      group: preview-pr-${{ github.event.number }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: mobile-web-dist
-          path: dist
-      - id: deploy
-        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
-        env:
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=lectorium-preview --branch=pr-${{ github.event.number }}
-      - if: steps.deploy.outputs.deployment-url != ''
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: preview
-          message: |
-            ### 🚀 Preview deploy ready
-            - **Stable alias (follows this PR):** https://pr-${{ github.event.number }}.lectorium-preview.pages.dev
-            - **This exact build:** ${{ steps.deploy.outputs.deployment-url }}
-            - **Commit:** `${{ github.event.pull_request.head.sha }}`
-
-  deploy-production:
-    name: web / main
-    needs: [lint, test, build-web]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-    concurrency:
-      group: production-main
-      cancel-in-progress: false
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: mobile-web-dist
-          path: dist
-      - id: deploy
-        if: env.CF_API_TOKEN != '' && env.CF_ACCOUNT_ID != ''
-        env:
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=lectorium-preview --branch=main
-      - if: steps.deploy.outputs.deployment-url != ''
-        run: |
-          echo "Production: https://lectorium-preview.pages.dev"
-          echo "This build: ${{ steps.deploy.outputs.deployment-url }}"
-
+    uses: akdasa-studios/kit/.github/workflows/mobile-ci.yml@main
+    with:
+      pages_project: lectorium-preview
+      plugins: '["audio-player", "media-downloader"]'
+    secrets: inherit
