@@ -27,7 +27,9 @@
       "@lib/persistence/user": ["./submodules/persistence-user/index.ts"],
       "@docs/*":               ["./submodules/docs/*"],
       "@kit/core":             ["../../kit/src/core/index.ts"],
-      "@kit/*":                ["../../kit/src/*"]
+      "@kit/*":                ["../../kit/src/*"],
+      "vue":                   ["./node_modules/vue"],
+      "vue/*":                 ["./node_modules/vue/*"]
     }
   },
   "include": [

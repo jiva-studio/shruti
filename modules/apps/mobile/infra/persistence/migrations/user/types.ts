@@ -1,6 +1,2 @@
-import type { IDatabase } from "@ports/app/index.js"
-
-export interface Migration {
-  name: string
-  up: (db: IDatabase) => Promise<void>
-}
+// The Migration shape is the generic one from the kit user-DB engine.
+export type { Migration } from "@kit/persistence"

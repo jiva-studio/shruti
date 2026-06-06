@@ -78,7 +78,7 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["mobile.shruti.dev"],
   },
-  plugins: [shrutiAlias, kitVitePlugin(__dirname), vue()],
+  plugins: [shrutiAlias, kitVitePlugin(path.resolve(__dirname, "../../kit/src")), vue()],
   resolve: {
     preserveSymlinks: true,
     alias: [
