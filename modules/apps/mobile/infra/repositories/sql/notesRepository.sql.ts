@@ -7,6 +7,7 @@ import type {
   UpdateNoteInput,
 } from "@lib/domain/ports/noteRepository.js"
 import type { NoteRow } from "@lib/persistence/user"
+import { mutate, queryMany, queryOne } from "@kit/persistence"
 import { createIdGenerator } from "./idGenerator.js"
 import { rowToNote } from "./rowMappers.js"
 
@@ -20,23 +21,25 @@ function serializeMeta(meta: NoteMeta | null | undefined): string | null {
 export function createSqlNoteRepository(db: IDatabase): INoteRepository {
   return {
     async getById(id: NoteId): Promise<Note | null> {
-      const rows = await db.query<NoteRow>("SELECT * FROM notes WHERE id = ?", [id])
-      return rows[0] ? rowToNote(rows[0]) : null
+      return queryOne<NoteRow, Note>(db, "SELECT * FROM notes WHERE id = ?", [id], rowToNote)
     },
 
     async listByTrack(trackId: TrackId): Promise<readonly Note[]> {
-      const rows = await db.query<NoteRow>(
+      return queryMany<NoteRow, Note>(
+        db,
         "SELECT * FROM notes WHERE track_id = ? ORDER BY time_start ASC",
-        [trackId]
+        [trackId],
+        rowToNote
       )
-      return rows.map(rowToNote)
     },
 
     async listRecent(limit: number): Promise<readonly Note[]> {
-      const rows = await db.query<NoteRow>("SELECT * FROM notes ORDER BY created_at DESC LIMIT ?", [
-        limit,
-      ])
-      return rows.map(rowToNote)
+      return queryMany<NoteRow, Note>(
+        db,
+        "SELECT * FROM notes ORDER BY created_at DESC LIMIT ?",
+        [limit],
+        rowToNote
+      )
     },
 
     async create(input: CreateNoteInput): Promise<Note> {
@@ -50,12 +53,12 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
       const id = input.id ?? newNoteId()
       const now = Date.now()
       const meta = input.meta ?? null
-      await db.execute(
+      await mutate(
+        db,
         `INSERT INTO notes (id, track_id, text, time_start, time_end, created_at, meta)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [id, input.trackId, input.text, input.timeStart, input.timeEnd, now, serializeMeta(meta)]
       )
-      await db.save()
       return {
         id,
         trackId: input.trackId,
@@ -78,22 +81,20 @@ export function createSqlNoteRepository(db: IDatabase): INoteRepository {
         timeEnd: input.timeEnd ?? existing.timeEnd,
         meta: nextMeta,
       }
-      await db.execute(
+      await mutate(
+        db,
         "UPDATE notes SET text = ?, time_start = ?, time_end = ?, meta = ? WHERE id = ?",
         [next.text, next.timeStart, next.timeEnd, serializeMeta(next.meta), input.id]
       )
-      await db.save()
       return next
     },
 
     async delete(id: NoteId): Promise<void> {
-      await db.execute("DELETE FROM notes WHERE id = ?", [id])
-      await db.save()
+      await mutate(db, "DELETE FROM notes WHERE id = ?", [id])
     },
 
     async clearAll(): Promise<void> {
-      await db.execute("DELETE FROM notes")
-      await db.save()
+      await mutate(db, "DELETE FROM notes")
     },
   }
 }

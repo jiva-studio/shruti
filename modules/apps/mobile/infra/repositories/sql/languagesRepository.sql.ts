@@ -3,20 +3,27 @@ import type { LanguageCode } from "@lib/domain/core.js"
 import type { Language } from "@lib/domain/language.js"
 import type { ILanguageRepository } from "@lib/domain/ports/languageRepository.js"
 import type { LanguageRow } from "@lib/persistence/main"
+import { queryMany, queryOne } from "@kit/persistence"
 import { rowToLanguage } from "./contentRowMappers.js"
 
 export function createSqlLanguageRepository(contentDb: IDatabase): ILanguageRepository {
   return {
     async getByCode(code: LanguageCode): Promise<Language | null> {
-      const rows = await contentDb.query<LanguageRow>("SELECT * FROM languages WHERE code = ?", [
-        code,
-      ])
-      return rows[0] ? rowToLanguage(rows[0]) : null
+      return queryOne<LanguageRow, Language>(
+        contentDb,
+        "SELECT * FROM languages WHERE code = ?",
+        [code],
+        rowToLanguage
+      )
     },
 
     async listAll(): Promise<readonly Language[]> {
-      const rows = await contentDb.query<LanguageRow>("SELECT * FROM languages ORDER BY code ASC")
-      return rows.map(rowToLanguage)
+      return queryMany<LanguageRow, Language>(
+        contentDb,
+        "SELECT * FROM languages ORDER BY code ASC",
+        [],
+        rowToLanguage
+      )
     },
   }
 }

@@ -8,6 +8,7 @@ import type {
   ProactivePrepState,
   ProactiveStateEntry,
 } from "@lib/domain/ports/proactiveStateRepository.js"
+import { mutate, queryMany, queryOne } from "@kit/persistence"
 import { __META_INTERNAL } from "./chatMessagesRepository.sql.js"
 
 const { parseMeta, wrapMeta } = __META_INTERNAL
@@ -141,14 +142,14 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       // `create()` above and start with `seen_at = NULL`. Inline-hint
       // rows also have no future-visibility (already visible) and no
       // OS push (the user is already in the conversation).
-      await db.execute(
+      await mutate(
+        db,
         `INSERT INTO chat_messages_proactive_state
            (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
             visible_at, notify, seen_at)
          VALUES (?, ?, ?, ?, ?, NULL, 0, strftime('%s','now'))`,
         [chatMessageId, ruleKind, ruleDate, prepState, preparedAt ?? null]
       )
-      await db.save()
     },
 
     async listByPrepStates(
@@ -156,11 +157,12 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
     ): Promise<readonly ProactiveStateEntry[]> {
       if (states.length === 0) return []
       const placeholders = states.map(() => "?").join(",")
-      const rows = await db.query<ProactiveStateJoinRow>(
+      return queryMany<ProactiveStateJoinRow, ProactiveStateEntry>(
+        db,
         `${SELECT_JOIN} WHERE p.prep_state IN (${placeholders}) ORDER BY m.created_at ASC`,
-        [...states]
+        [...states],
+        rowToEntry
       )
-      return rows.map(rowToEntry)
     },
 
     async listUnseenSessionIds(): Promise<readonly ChatSessionId[]> {
@@ -184,7 +186,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       // chat_messages.session_id is the bridge — proactive_state
       // doesn't carry session_id directly. Idempotent: rows whose
       // seen_at is already set stay put.
-      await db.execute(
+      await mutate(
+        db,
         `UPDATE chat_messages_proactive_state
             SET seen_at = ?
           WHERE seen_at IS NULL
@@ -193,29 +196,30 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
             )`,
         [atSec, sessionId]
       )
-      await db.save()
     },
 
     async findByRuleAndDate(
       ruleKind: ProactiveRuleId,
       ruleDate: string
     ): Promise<ProactiveStateEntry | null> {
-      const rows = await db.query<ProactiveStateJoinRow>(
+      return queryOne<ProactiveStateJoinRow, ProactiveStateEntry>(
+        db,
         `${SELECT_JOIN} WHERE p.rule_kind = ? AND p.rule_date = ? LIMIT 1`,
-        [ruleKind, ruleDate]
+        [ruleKind, ruleDate],
+        rowToEntry
       )
-      return rows.length > 0 ? rowToEntry(rows[0]) : null
     },
 
     async listRecentByRule(
       ruleKind: ProactiveRuleId,
       limit: number
     ): Promise<readonly ProactiveStateEntry[]> {
-      const rows = await db.query<ProactiveStateJoinRow>(
+      return queryMany<ProactiveStateJoinRow, ProactiveStateEntry>(
+        db,
         `${SELECT_JOIN} WHERE p.rule_kind = ? ORDER BY m.created_at DESC LIMIT ?`,
-        [ruleKind, limit]
+        [ruleKind, limit],
+        rowToEntry
       )
-      return rows.map(rowToEntry)
     },
 
     async updatePrepState(
@@ -224,17 +228,18 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       preparedAt?: number
     ): Promise<void> {
       if (preparedAt !== undefined) {
-        await db.execute(
+        await mutate(
+          db,
           "UPDATE chat_messages_proactive_state SET prep_state = ?, prepared_at = ? WHERE chat_message_id = ?",
           [state, preparedAt, chatMessageId]
         )
       } else {
-        await db.execute(
+        await mutate(
+          db,
           "UPDATE chat_messages_proactive_state SET prep_state = ? WHERE chat_message_id = ?",
           [state, chatMessageId]
         )
       }
-      await db.save()
     },
 
     async updateContent(
@@ -260,18 +265,17 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
           focus: current.focus,
           feedback: current.feedback,
         })
-        await db.execute("UPDATE chat_messages SET content = ?, meta = ? WHERE id = ?", [
+        await mutate(db, "UPDATE chat_messages SET content = ?, meta = ? WHERE id = ?", [
           content,
           next,
           chatMessageId,
         ])
       } else {
-        await db.execute("UPDATE chat_messages SET content = ? WHERE id = ?", [
+        await mutate(db, "UPDATE chat_messages SET content = ? WHERE id = ?", [
           content,
           chatMessageId,
         ])
       }
-      await db.save()
     },
 
     async sweepTerminal(olderThanUnixSec: number): Promise<number> {
@@ -288,11 +292,11 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       )
       if (rows.length === 0) return 0
       const placeholders = rows.map(() => "?").join(",")
-      await db.execute(
+      await mutate(
+        db,
         `DELETE FROM chat_messages WHERE id IN (${placeholders})`,
         rows.map((r) => r.chat_message_id)
       )
-      await db.save()
       return rows.length
     },
   }

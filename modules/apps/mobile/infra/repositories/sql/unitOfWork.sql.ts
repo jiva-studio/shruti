@@ -1,5 +1,6 @@
 import type { IDatabase } from "@ports/app/index.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
+import { runInTransaction } from "@kit/persistence"
 
 /**
  * Wraps IUnitOfWork.run() around IDatabase.transaction(). Callers hand in
@@ -8,13 +9,8 @@ import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
  */
 export function createSqlUnitOfWork(db: IDatabase): IUnitOfWork {
   return {
-    async run<T>(fn: () => Promise<T>): Promise<T> {
-      let captured: T
-      await db.transaction(async () => {
-        captured = await fn()
-      })
-      // The transaction callback resolves only after COMMIT; captured is set.
-      return captured!
+    run<T>(fn: () => Promise<T>): Promise<T> {
+      return runInTransaction(db, fn)
     },
   }
 }

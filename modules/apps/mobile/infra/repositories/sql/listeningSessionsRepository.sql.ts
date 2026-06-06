@@ -13,6 +13,7 @@ import type {
   RecentTrackProgress,
 } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
+import { mutate, queryOne } from "@kit/persistence"
 import { createIdGenerator } from "./idGenerator.js"
 import { rowToListeningSession } from "./rowMappers.js"
 
@@ -24,11 +25,12 @@ function nowSec(): number {
 
 export function createSqlListeningSessionRepository(db: IDatabase): IListeningSessionRepository {
   async function lastToPositionForItem(itemId: PlaylistItemId): Promise<TrackPositionSec | null> {
-    const rows = await db.query<{ to_position: number }>(
+    return queryOne<{ to_position: number }, TrackPositionSec>(
+      db,
       "SELECT to_position FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
-      [itemId]
+      [itemId],
+      (r) => r.to_position
     )
-    return rows[0]?.to_position ?? null
   }
 
   async function insert(
@@ -38,13 +40,13 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
   ): Promise<ListeningSessionId> {
     const id = newSessionId()
     const t = nowSec()
-    await db.execute(
+    await mutate(
+      db,
       `INSERT INTO listening_sessions
          (id, item_id, started_at, ended_at, from_position, to_position)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [id, itemId, t, t, fromPosition, toPosition]
     )
-    await db.save()
     return id
   }
 
@@ -60,29 +62,28 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async tick(id, { position }) {
-      await db.execute("UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
         nowSec(),
         position,
         id,
       ])
-      await db.save()
     },
 
     async finish(id, { position }) {
-      await db.execute("UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
+      await mutate(db, "UPDATE listening_sessions SET ended_at = ?, to_position = ? WHERE id = ?", [
         nowSec(),
         position,
         id,
       ])
-      await db.save()
     },
 
     async getLastSessionForItem(itemId): Promise<ListeningSession | null> {
-      const rows = await db.query<ListeningSessionRow>(
+      return queryOne<ListeningSessionRow, ListeningSession>(
+        db,
         "SELECT * FROM listening_sessions WHERE item_id = ? ORDER BY ended_at DESC LIMIT 1",
-        [itemId]
+        [itemId],
+        rowToListeningSession
       )
-      return rows[0] ? rowToListeningSession(rows[0]) : null
     },
 
     async getProgressForItems(itemIds) {
@@ -189,8 +190,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async clearAll(): Promise<void> {
-      await db.execute("DELETE FROM listening_sessions")
-      await db.save()
+      await mutate(db, "DELETE FROM listening_sessions")
     },
   }
 }
