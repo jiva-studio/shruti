@@ -55,7 +55,7 @@ import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatS
 import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
 import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
-import { createFailoverClient } from "@infra/http/createFailoverClient.js"
+import { createFailoverClient } from "@kit/servers"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
 
