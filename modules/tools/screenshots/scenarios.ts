@@ -115,6 +115,19 @@ async function pinChatUserMessageToTop(page: Page): Promise<void> {
   }, DEMO_CHAT_USER_MESSAGE_ID)
 }
 
+async function openSearchFilters(page: Page): Promise<void> {
+  // Open the filters bottom-sheet the same way a tap does — there is no
+  // debug-bridge hook for it, so click the filter button in the search
+  // header (`.search-row-filter-button` → sets `filtersOpen = true`).
+  // The sheet is an IonModal (`.filters-sheet`) presented at its 0.9
+  // breakpoint, listing every filter dimension (author, source, place,
+  // tag, duration, sort).
+  await page.locator(".search-row-filter-button").click()
+  await page
+    .locator("ion-modal.filters-sheet")
+    .waitFor({ state: "visible", timeout: 10_000 })
+}
+
 export const scenarios: Scenario[] = [
   {
     name: "01_home",
@@ -162,5 +175,14 @@ export const scenarios: Scenario[] = [
     waitFor: ".bubble.assistant",
     settle: 800,
     beforeCapture: openDemoChatSession,
+  },
+  {
+    name: "06_filters",
+    route: "/tabs/search",
+    // Wait for the open filters sheet's content (the list of dimensions),
+    // not just the modal host, so the sheet has finished presenting.
+    waitFor: "ion-modal.filters-sheet .view",
+    settle: 700,
+    beforeCapture: openSearchFilters,
   },
 ]
