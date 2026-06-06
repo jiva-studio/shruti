@@ -5,6 +5,7 @@ import { useAutoDownloadFiltersStore } from "@lectorium/stores/useAutoDownloadFi
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { durationFilterBounds } from "@lib/domain/durationFilters.js"
+import { dateRangeBounds } from "@lib/domain/dateFilters.js"
 import type { TrackListFilters } from "@lib/domain/ports/trackRepository.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 
@@ -39,6 +40,7 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
     const duration = filtersStore.duration[0]
       ? durationFilterBounds(filtersStore.duration[0])
       : undefined
+    const dates = dateRangeBounds(filtersStore.dateFrom, filtersStore.dateTo)
     return {
       authorIds: filtersStore.authorIds,
       locationIds: filtersStore.locationIds,
@@ -47,6 +49,8 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
       tagIds: filtersStore.tagIds,
       durationMinMs: duration?.minMs,
       durationMaxMs: duration?.maxMs,
+      dateGte: dates.gte,
+      dateLt: dates.lt,
     }
   }
 
@@ -145,6 +149,8 @@ export function useAutoDownloadLoop(): { targetSeconds: ReturnType<typeof useCon
       t: filtersStore.tagIds,
       d: filtersStore.duration,
       so: filtersStore.sort ?? "",
+      df: filtersStore.dateFrom ?? "",
+      dt: filtersStore.dateTo ?? "",
     })
   )
 
