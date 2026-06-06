@@ -73,7 +73,7 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
 import { useStarterPacks } from "@shruti/composables/useStarterPacks.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
 

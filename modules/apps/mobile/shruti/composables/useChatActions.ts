@@ -2,7 +2,7 @@ import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { saveCitationAsNote } from "@lib/application"
 import type { TrackId } from "@lib/domain/core.js"
 

@@ -4,7 +4,7 @@ import { useNow } from "@vueuse/core"
 import { toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useShruti } from "@shruti/shruti.js"
-import { useToast } from "@shruti/services/useToast.js"
+import { useToast } from "@kit/composables"
 import { openStorePage } from "@shruti/utils/openStorePage.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import {
