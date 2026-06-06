@@ -52,6 +52,7 @@ html, body {
 .device-tablet10 #title { font-size: 3.8vh; }
 .device-iphone67 #title { font-size: 3.6vh; }
 .device-ipad13 #title { font-size: 3.8vh; }
+.device-surfaceduo #title { font-size: 3.6vh; }
 
 .phone {
   position: absolute;
@@ -86,6 +87,17 @@ html, body {
   border-radius: 1.6vh;
   padding: 1.0vh;
 }
+/* Surface Duo single screen is 3:4 (540×720) and the framing canvas is
+   that same short, wide viewport — unlike the tall phone frames. Size the
+   silhouette by HEIGHT so the headline still fits above it instead of
+   letting an 84vw width blow past the bottom edge. */
+.device-surfaceduo .phone {
+  width: auto;
+  height: 76vh;
+  bottom: 3vh;
+  border-radius: 2vh;
+  padding: 0.8vh;
+}
 
 .screen {
   width: 100%;
@@ -108,6 +120,14 @@ html, body {
 .device-ipad13 .screen {
   aspect-ratio: 1024 / 1366;
   border-radius: 1.0vh;
+}
+/* Match the capture aspect exactly so `object-fit: cover` shows the whole
+   shot with no crop, and drive size from the height-bound phone above. */
+.device-surfaceduo .screen {
+  width: auto;
+  height: 100%;
+  aspect-ratio: 540 / 720;
+  border-radius: 1.4vh;
 }
 
 #shot {
