@@ -1,5 +1,5 @@
 export { default as AppPage } from "./AppPage.vue"
-export { default as BuildInfo } from "./BuildInfo.vue"
+export { BuildInfo } from "@kit/ui"
 export { default as FloatingChip } from "./FloatingChip.vue"
 export { default as Header } from "./Header.vue"
 export { default as IconChip } from "./IconChip.vue"
