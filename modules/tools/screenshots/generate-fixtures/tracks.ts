@@ -7,6 +7,9 @@
  * catalog/current.db`) — confirmed to have audio + transcript in the
  * target locale.
  */
+// Six tracks (in parity with the RU list) so the Home playlist fits the
+// viewport with the two newest, still-unfinished rows visible above the
+// floating player rather than pushed below the fold.
 export const PLAYLIST_TRACKS_EN: readonly string[] = [
   "track_0M6TgFqYKo01", // transcript demo: "Caitanya Mahaprabhu and the Sankirtan Movement"
   "track_0aDNopWvLFpq", // "Kirtana and Prayers of Love"
@@ -14,8 +17,6 @@ export const PLAYLIST_TRACKS_EN: readonly string[] = [
   "track_0JkscmDgrJ2A", // "Yoga as Linking with the Supreme Lord"
   "track_0dRAV1Swc3ak", // "Prahlāda Mahārāja's Instruction to His Classmates"
   "track_6WmfTZDnwivk", // "Lord Chaitanya's Six Opulences"
-  "track_sMVq2UeZa3kP", // "Transcendental Versus Material Happiness"
-  "track_2g1C375QPkwB", // "Learning Through Proper Experience"
 ]
 
 export const PLAYLIST_TRACKS_RU: readonly string[] = [
