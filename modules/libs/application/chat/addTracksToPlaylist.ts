@@ -1,5 +1,5 @@
 import type { TrackId } from "@lib/domain/core.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export type AddTracksToPlaylistError = "empty-tracks" | "playlist-add-failed"
 

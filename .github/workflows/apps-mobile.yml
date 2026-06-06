@@ -82,7 +82,12 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -97,7 +102,12 @@ jobs:
     name: test / unit
     runs-on: ubuntu-latest
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -112,7 +122,12 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -145,7 +160,12 @@ jobs:
     needs: [build-web]
     runs-on: ubuntu-latest
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - name: detect e2e suite
         id: check_e2e
         run: |
@@ -294,7 +314,12 @@ jobs:
        needs.detect-changes.outputs.android == 'true')
     runs-on: ubuntu-latest
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - uses: ./.github/actions/mobile-android-setup
       - name: build apk + aab
         env:
@@ -378,7 +403,12 @@ jobs:
        needs.detect-changes.outputs.ios == 'true')
     runs-on: macos-26
     steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.KIT_DEPLOY_KEY }}
       - uses: actions/checkout@v5
+      - name: fetch kit submodule (ssh)
+        run: git -c core.sshCommand="ssh -o StrictHostKeyChecking=accept-new" submodule update --init --recursive
       - name: check ios project
         id: check_ios
         shell: bash

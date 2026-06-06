@@ -1,6 +1,6 @@
 import type { TrackId } from "@lib/domain/core.js"
 import type { IMediaItemRepository } from "@lib/domain/ports/mediaItemRepository.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export interface RemoveDownloadedMediaInput {
   readonly trackId: TrackId
