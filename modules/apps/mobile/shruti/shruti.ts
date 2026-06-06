@@ -25,7 +25,7 @@ import type {
 } from "@ports/app/index.js"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { useStoragePublicUrl } from "@infra/storagePublicUrl/index.js"
+import { useStoragePublicUrl } from "@kit/infra"
 import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
 import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"

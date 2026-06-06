@@ -3,8 +3,8 @@
  * can share, back up, or move between devices. Adapter selection (native
  * Filesystem + Share vs. web Blob download + IndexedDB write) happens at
  * composition-root level.
+ *
+ * The port lives in the shared kit (`@kit/infra`); re-exported here so app
+ * code keeps importing it from `@ports/app`.
  */
-export interface IDatabaseTransfer {
-  exportDatabase(): Promise<void>
-  importDatabase(file: File): Promise<void>
-}
+export type { IDatabaseTransfer } from "@kit/infra"
