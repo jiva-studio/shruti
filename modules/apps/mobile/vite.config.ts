@@ -81,6 +81,7 @@ export default defineConfig({
   plugins: [lectoriumAlias, kitVitePlugin(path.resolve(__dirname, "../../kit/src")), vue()],
   resolve: {
     preserveSymlinks: true,
+    dedupe: ["vue", "@ionic/vue", "@ionic/core", "@ionic/vue-router"],
     alias: [
       { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
       { find: "@infra", replacement: path.resolve(__dirname, "./infra") },

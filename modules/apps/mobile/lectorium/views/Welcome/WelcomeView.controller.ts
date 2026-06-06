@@ -1,13 +1,13 @@
-import { computed, onMounted, ref, type Ref } from "vue"
+import { computed, onMounted, type ComputedRef, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
+import {
+  createBootstrapController,
+  type BootstrapPhase,
+  type ProbeResult,
+  type ResolveContentDatabaseOptions,
+} from "@kit/bootstrap"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { bootstrapUserDatabaseFromApp } from "@lectorium/services/bootstrap.js"
-import { type ResolveContentDatabaseDeps } from "./composables/resolveContentDatabase.js"
-import {
-  checkForUpdatesInBackground as checkForUpdatesInBackgroundImpl,
-  type CheckForUpdatesDeps,
-} from "./composables/checkForUpdatesInBackground.js"
-import { useDbSchemeRetry } from "./composables/useDbSchemeRetry.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
 import { findRegion, getRegions, setRegions } from "@lectorium/services/regionsRegistry.js"
 import type { RemoteAppConfig } from "@lib/domain/config.js"
@@ -29,14 +29,7 @@ const SUPPORTED_DB_SCHEME = __DB_SCHEME__
 /*                                    Types                                   */
 /* -------------------------------------------------------------------------- */
 
-export type WelcomeViewState =
-  | "server:probing"
-  | "config:downloading"
-  | "database:check"
-  | "database:downloading"
-  | "database:migrations"
-  | "complete"
-  | "error"
+export type { BootstrapPhase as WelcomeViewState }
 
 export interface WelcomeControllerOptions {
   navigateToRoute?: string
@@ -44,17 +37,27 @@ export interface WelcomeControllerOptions {
 }
 
 export interface WelcomeControllerReturn {
-  viewState: Ref<WelcomeViewState>
+  /** Coarse SWR lifecycle phase, bound by the status-message composable. */
+  phase: Ref<BootstrapPhase>
   error: Ref<string | null>
   progress: Ref<number>
-  isError: Ref<boolean>
+  isError: ComputedRef<boolean>
+  /** Show the welcome screen only when this launch has no usable local DB. */
+  showWelcomeScreen: ComputedRef<boolean>
   onRetry: () => Promise<void>
 }
 
 /* -------------------------------------------------------------------------- */
-/*                              Core Dependencies                             */
+/*                                 Controller                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Drives Lectorium startup via the generic kit Stale-While-Revalidate
+ * orchestrator (`@kit/bootstrap`). All the resolve / probe / scheme-retry /
+ * background-refresh logic now lives in kit; this controller only injects the
+ * Lectorium-specific ports (composition root, region registry, preferences)
+ * and handles navigation.
+ */
 export function useWelcomeController(
   options: WelcomeControllerOptions = {}
 ): WelcomeControllerReturn {
@@ -63,15 +66,11 @@ export function useWelcomeController(
   const ionRouter = useIonRouter()
   const lectorium = useLectorium()
 
-  const viewState = ref<WelcomeViewState>("server:probing")
-  const error = ref<string | null>(null)
-  const progress = ref<number>(0)
-
   /**
    * Adopt a freshly-fetched `regions` block: replace + persist the runtime
-   * region list, then re-point the active server. Same id → picks up the
-   * new endpoints; a removed active region → falls back to the first
-   * region. An empty/invalid block is ignored (keeps the current list).
+   * region list, then re-point the active server. Same id → picks up the new
+   * endpoints; a removed active region → falls back to the first region. An
+   * empty/invalid block is ignored.
    */
   function applyRemoteRegions(config: RemoteAppConfig): void {
     if (!config.regions) return
@@ -81,106 +80,85 @@ export function useWelcomeController(
     lectorium.setActiveServerById(targetId)
   }
 
-  function buildLocatorDeps(): ResolveContentDatabaseDeps {
+  /**
+   * Build the kit resolver options. The probe is adapted to the kit
+   * `ProbeFn` shape (server + config); region adoption + active-server
+   * re-pointing ride along via the resolved callbacks.
+   */
+  function buildResolveOptions(
+    incompatibleDbPaths: ReadonlySet<string>
+  ): ResolveContentDatabaseOptions<RemoteAppConfig> {
     return {
-      config: {
-        remotePathTemplate: lectorium.appConfig.database.remotePathTemplate,
-        localPathTemplate: lectorium.appConfig.database.localPathTemplate,
-        publicRemoteConfigPath: lectorium.appConfig.publicRemoteConfigPath,
+      store: lectorium.databaseFetcher,
+      probe: async (configPath, preferredServerId) => {
+        const result = await lectorium.serverProber.probe(
+          configPath,
+          preferredServerId ?? undefined
+        )
+        return {
+          server: findRegion(result.serverId) ?? getRegions()[0]!,
+          config: result.config as RemoteAppConfig,
+        } satisfies ProbeResult<RemoteAppConfig>
       },
+      configPath: lectorium.appConfig.publicRemoteConfigPath,
+      remotePathTemplate: lectorium.appConfig.database.remotePathTemplate,
+      localPathTemplate: lectorium.appConfig.database.localPathTemplate,
       supportedScheme: SUPPORTED_DB_SCHEME,
-      getPublicUrl: (path) => lectorium.storagePublicUrl.get(path),
-      filesStorage: lectorium.filesStorage,
-      databaseFetcher: lectorium.databaseFetcher,
-      serverProber: lectorium.serverProber,
-      onServerResolved: (result) => lectorium.setActiveServerById(result.serverId),
-      applyRemoteConfig: applyRemoteRegions,
-      loadSavedPreferredServerId: async () => {
-        const stored = await lectorium.preferences.get(PREFERRED_SERVER_KEY)
-        return stored ?? undefined
-      },
-      setViewState: (value) => {
-        viewState.value = value
-      },
-      setProgress: (percent) => {
-        progress.value = percent
-      },
+      incompatibleDbPaths,
+      preferredServerId: lectorium.activeServer.value.id,
+      onServerResolved: (probe) => lectorium.setActiveServerById(probe.server.id),
+      onConfigResolved: applyRemoteRegions,
     }
   }
 
-  const { resolveAndValidate } = useDbSchemeRetry({
-    buildLocatorDeps,
+  const controller = createBootstrapController<RemoteAppConfig, unknown>({
     supportedScheme: SUPPORTED_DB_SCHEME,
+    buildResolveOptions,
     openContentDatabase: (path) => lectorium.openContentDatabase(path),
     closeContentDatabase: () => lectorium.closeContentDatabase(),
     readContentSchemeVersion: () => lectorium.readContentSchemeVersion(),
-    deleteLocalDb: (path) => lectorium.databaseFetcher.delete(path),
-    invalidateRemoteConfigCache: () =>
+    deleteLocalDatabase: (path) => lectorium.databaseFetcher.delete(path),
+    invalidateConfigCache: () =>
       lectorium.filesStorage.delete(
         lectorium.storagePublicUrl.get(lectorium.appConfig.publicRemoteConfigPath)
       ),
+    // Phase 3 of startup: open the user DB + run pending user migrations.
+    runUserDatabaseMigrations: () => bootstrapUserDatabaseFromApp(lectorium),
+    // Best-effort background refresh: persist the winning preferred server so
+    // the next cold start lands on the same region.
+    onBackgroundRefreshComplete: () => {
+      void lectorium.preferences.set(PREFERRED_SERVER_KEY, lectorium.activeServer.value.id)
+    },
+    onBackgroundRefreshError: (err) => {
+      console.warn("[lectorium] background content refresh failed:", err)
+    },
   })
 
-  async function bootstrapApp(): Promise<void> {
-    viewState.value = "database:migrations"
-    await bootstrapUserDatabaseFromApp(lectorium)
-
-    viewState.value = "complete"
-    if (autoNavigate) {
+  async function initialize(): Promise<void> {
+    await controller.start()
+    if (controller.isReady.value && autoNavigate) {
       ionRouter.replace(navigateToRoute, crossfadeAnimation)
     }
   }
 
-  function buildUpdatesDeps(): CheckForUpdatesDeps {
-    const base = buildLocatorDeps()
-    return {
-      config: base.config,
-      supportedScheme: base.supportedScheme,
-      getPublicUrl: base.getPublicUrl,
-      filesStorage: base.filesStorage,
-      databaseFetcher: base.databaseFetcher,
-      serverProber: lectorium.serverProber,
-      onServerResolved: base.onServerResolved,
-      applyRemoteConfig: base.applyRemoteConfig,
-      loadSavedPreferredServerId: base.loadSavedPreferredServerId,
-      persistPreferredServerIdIfChanged: async (resolvedId) => {
-        const current = await lectorium.preferences.get(PREFERRED_SERVER_KEY)
-        if (current !== resolvedId) {
-          await lectorium.preferences.set(PREFERRED_SERVER_KEY, resolvedId)
-        }
-      },
-    }
-  }
-
-  async function initialize(): Promise<void> {
-    try {
-      error.value = null
-      progress.value = 0
-
-      await resolveAndValidate()
-      await bootstrapApp()
-
-      // Fire-and-forget: download newer DB version for next launch
-      checkForUpdatesInBackgroundImpl(buildUpdatesDeps())
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to initialize"
-      viewState.value = "error"
-      error.value = errorMessage
-      console.error("Initialization error:", err)
-    }
-  }
-
-  const isError = computed(() => viewState.value === "error")
+  // Show the welcome screen only during a first-launch (no usable local DB)
+  // foreground download / migration, or on error. The cache-hit fast path
+  // enters silently — no welcome screen at all.
+  const showWelcomeScreen = computed(
+    () =>
+      !controller.startedFromCache.value && (controller.isWelcome.value || controller.isError.value)
+  )
 
   onMounted(() => {
-    initialize()
+    void initialize()
   })
 
   return {
-    viewState,
-    error,
-    progress,
-    isError,
+    phase: controller.phase,
+    error: controller.error,
+    progress: controller.progress,
+    isError: controller.isError,
+    showWelcomeScreen,
     onRetry: initialize,
   }
 }
