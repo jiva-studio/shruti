@@ -62,6 +62,10 @@ export default defineConfig({
     // Surface Duo single screen: 540×720 × DPR 2.5 → 1350×1800 PNG
     // (Play Console foldable / large-screen form factor).
     {
+      name: "surfaceduo-en",
+      use: { locale: "en-US", viewport: { width: 540, height: 720 }, deviceScaleFactor: 2.5 },
+    },
+    {
       name: "surfaceduo-ru",
       use: { locale: "ru-RU", viewport: { width: 540, height: 720 }, deviceScaleFactor: 2.5 },
     },
