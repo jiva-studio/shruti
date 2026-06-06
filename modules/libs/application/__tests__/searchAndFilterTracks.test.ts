@@ -21,6 +21,7 @@ function makeRepo(overrides: Partial<ITrackRepository> = {}): ITrackRepository {
     getByIds: async () => new Map(),
     list: async () => [],
     search: async () => [],
+    listYears: async () => [],
     findByReference: async () => null,
     getTranscriptPath: async () => null,
     listTranscriptLanguages: async () => [],
@@ -237,6 +238,50 @@ describe("searchAndFilterTracks", () => {
       limit: undefined,
       offset: undefined,
     })
+  })
+
+  it("expands a year-only date range into inclusive/exclusive bounds", async () => {
+    const listSpy = vi.fn<ITrackRepository["list"]>().mockResolvedValue([])
+    const repo = makeRepo({ list: listSpy })
+    await searchAndFilterTracks({ dateFrom: "2001", dateTo: "2012" }, { tracks: repo })
+    expect(listSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ dateGte: "2001-01-01", dateLt: "2013-01-01" }),
+      })
+    )
+  })
+
+  it("narrows the bounds to month granularity when a month is given", async () => {
+    const listSpy = vi.fn<ITrackRepository["list"]>().mockResolvedValue([])
+    const repo = makeRepo({ list: listSpy })
+    await searchAndFilterTracks({ dateFrom: "2001-03", dateTo: "2001-06" }, { tracks: repo })
+    expect(listSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ dateGte: "2001-03-01", dateLt: "2001-07-01" }),
+      })
+    )
+  })
+
+  it("leaves the upper bound open when only dateFrom is set", async () => {
+    const listSpy = vi.fn<ITrackRepository["list"]>().mockResolvedValue([])
+    const repo = makeRepo({ list: listSpy })
+    await searchAndFilterTracks({ dateFrom: "1974" }, { tracks: repo })
+    expect(listSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ dateGte: "1974-01-01", dateLt: undefined }),
+      })
+    )
+  })
+
+  it("pushes date bounds down to tracks.search on the text path too", async () => {
+    const searchSpy = vi.fn<ITrackRepository["search"]>().mockResolvedValue([])
+    const repo = makeRepo({ search: searchSpy })
+    await searchAndFilterTracks({ query: "krishna", dateTo: "1977-12" }, { tracks: repo })
+    expect(searchSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ dateGte: undefined, dateLt: "1978-01-01" }),
+      })
+    )
   })
 
   it("returns search results untouched when no filters are active", async () => {

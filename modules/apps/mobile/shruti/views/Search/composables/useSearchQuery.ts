@@ -68,6 +68,8 @@ export function useSearchQuery(options: UseSearchQueryOptions): UseSearchQueryRe
         sourceIds: options.filters.value.sources,
         tagIds: options.filters.value.tags,
         durationFilter: options.filters.value.duration as DurationFilterId | undefined,
+        dateFrom: options.filters.value.dateFrom,
+        dateTo: options.filters.value.dateTo,
         sortBy: options.filters.value.sort as SortMethod | undefined,
         limit: PAGE_SIZE,
         offset: pageOffset,

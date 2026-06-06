@@ -19,6 +19,9 @@ export interface PersistedFilters {
   tagIds: readonly string[]
   duration: readonly DurationFilterId[]
   sort: SortMethod | undefined
+  /** Date-range edges — `"YYYY"` / `"YYYY-MM"` or undefined for open ends. */
+  dateFrom: string | undefined
+  dateTo: string | undefined
 }
 
 const EMPTY: PersistedFilters = {
@@ -29,6 +32,8 @@ const EMPTY: PersistedFilters = {
   tagIds: [],
   duration: [],
   sort: undefined,
+  dateFrom: undefined,
+  dateTo: undefined,
 }
 
 /**
@@ -46,6 +51,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
   const tagIds = ref<readonly string[]>([])
   const duration = ref<readonly DurationFilterId[]>([])
   const sort = ref<PersistedFilters["sort"]>(undefined)
+  const dateFrom = ref<string | undefined>(undefined)
+  const dateTo = ref<string | undefined>(undefined)
   const loaded = ref<boolean>(false)
 
   async function load(): Promise<void> {
@@ -61,6 +68,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
         tagIds.value = parsed.tagIds ?? EMPTY.tagIds
         duration.value = parsed.duration ?? EMPTY.duration
         sort.value = parsed.sort ?? EMPTY.sort
+        dateFrom.value = parsed.dateFrom ?? EMPTY.dateFrom
+        dateTo.value = parsed.dateTo ?? EMPTY.dateTo
       } catch {
         // Corrupt value — reset silently.
       }
@@ -89,6 +98,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
       tagIds: tagIds.value,
       duration: duration.value,
       sort: sort.value,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
     }
     await app.preferences.set(STORAGE_KEY, JSON.stringify(payload))
   }
@@ -128,6 +139,16 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     await persist()
   }
 
+  async function setDateFrom(value: string | undefined): Promise<void> {
+    dateFrom.value = value
+    await persist()
+  }
+
+  async function setDateTo(value: string | undefined): Promise<void> {
+    dateTo.value = value
+    await persist()
+  }
+
   async function clearAll(): Promise<void> {
     authorIds.value = []
     languageCodes.value = []
@@ -136,6 +157,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     tagIds.value = []
     duration.value = []
     sort.value = undefined
+    dateFrom.value = undefined
+    dateTo.value = undefined
     await persist()
   }
 
@@ -154,6 +177,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     tagIds.value = []
     duration.value = []
     sort.value = undefined
+    dateFrom.value = undefined
+    dateTo.value = undefined
     loaded.value = false
   }
 
@@ -165,6 +190,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     tagIds,
     duration,
     sort,
+    dateFrom,
+    dateTo,
     loaded,
     load,
     setAuthors,
@@ -174,6 +201,8 @@ export const useSearchFiltersStore = defineStore("searchFilters", () => {
     setTags,
     setDuration,
     setSort,
+    setDateFrom,
+    setDateTo,
     clearAll,
     reset,
   }

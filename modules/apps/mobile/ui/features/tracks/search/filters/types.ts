@@ -9,10 +9,15 @@ export type FiltersModel = {
   tags?: string[]
   duration?: string
   sort?: string
+  /** Coarse date-range edges. Each is `"YYYY"` or `"YYYY-MM"`, or absent
+   *  for an open end. A month is only set alongside its year. */
+  dateFrom?: string
+  dateTo?: string
 }
 
 export type MultiSectionKey = "authors" | "languages" | "locations" | "sources" | "tags"
 export type SingleSectionKey = "duration" | "sort"
+export type DateSectionKey = "dates"
 
 export interface MultiSectionDef {
   kind: "multi"
@@ -32,4 +37,15 @@ export interface SingleSectionDef {
   items: SelectorDialogItem[]
 }
 
-export type SearchFilterSectionDef = MultiSectionDef | SingleSectionDef
+export interface DateSectionDef {
+  kind: "date"
+  key: DateSectionKey
+  title: string
+  icon: Component
+  /** Selectable years, newest first — sourced from the catalog. */
+  years: readonly number[]
+  /** Localised month names, index 0 = January. Length 12. */
+  monthLabels: readonly string[]
+}
+
+export type SearchFilterSectionDef = MultiSectionDef | SingleSectionDef | DateSectionDef

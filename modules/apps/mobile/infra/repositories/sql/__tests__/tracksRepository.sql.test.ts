@@ -772,3 +772,68 @@ describe("tracksRepository.sql — list sort order", () => {
     expect(bg.map((t) => t.id)).toEqual(["bg-6-32", "bg-6-32-older"])
   })
 })
+
+/* -------------------------------------------------------------------------- */
+/*                              date-range filter                             */
+/* -------------------------------------------------------------------------- */
+
+describe("tracksRepository.sql — date range filter", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "en" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(db, SOURCES, TRACKS, LOCATIONS, TAGS)
+  })
+
+  it("narrows list() to a single year via gte/lt bounds", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.list({
+      filters: { dateGte: "1974-01-01", dateLt: "1975-01-01" },
+      sortBy: "byDateAsc",
+    })
+    expect(results.map((t) => t.id)).toEqual(["t-bg-1974-2-12", "t-bg-1974-2-13"])
+  })
+
+  it("treats the upper bound as exclusive and excludes undated tracks", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.list({ filters: { dateGte: "1975-01-01" }, sortBy: "byDateAsc" })
+    // 1975 + 1976 tracks; the null-dated track is dropped by `t.date >= ?`.
+    expect(results.map((t) => t.id)).toEqual(["t-bg-1975-2-13", "t-sb-1976-1-1"])
+  })
+
+  it("supports month-granularity bounds spanning a year boundary", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.list({
+      filters: { dateGte: "1974-11-01", dateLt: "1975-06-01" },
+      sortBy: "byDateAsc",
+    })
+    expect(results.map((t) => t.id)).toEqual(["t-bg-1974-2-13", "t-bg-1975-2-13"])
+  })
+
+  it("applies the date bounds on the search() path too", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    const results = await repo.search({
+      text: "BG",
+      filters: { dateGte: "1974-01-01", dateLt: "1975-01-01" },
+    })
+    expect(results.map((t) => t.id).sort()).toEqual(["t-bg-1974-2-12", "t-bg-1974-2-13"])
+  })
+})
+
+describe("tracksRepository.sql — listYears", () => {
+  let db: IDatabase
+  const getLang = (): LanguageCode => "en" as LanguageCode
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await applyContentSchemaForTests(db)
+    await seedFixture(db, SOURCES, TRACKS, LOCATIONS, TAGS)
+  })
+
+  it("returns distinct catalog years newest-first, skipping undated tracks", async () => {
+    const repo = createSqlTrackRepository({ contentDb: db, getActiveLanguage: getLang })
+    expect(await repo.listYears()).toEqual([1976, 1975, 1974])
+  })
+})

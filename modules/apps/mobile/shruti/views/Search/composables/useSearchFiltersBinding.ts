@@ -39,6 +39,8 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       tags: [...store.tagIds],
       duration: store.duration[0],
       sort: store.sort,
+      dateFrom: store.dateFrom,
+      dateTo: store.dateTo,
     }
   })()
 
@@ -56,6 +58,8 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       void store.setTags(next.tags ?? [])
       void store.setDuration(next.duration ? [next.duration as DurationFilterId] : [])
       void store.setSort(next.sort as SortMethod | undefined)
+      void store.setDateFrom(next.dateFrom)
+      void store.setDateTo(next.dateTo)
     },
     { deep: true }
   )
@@ -69,7 +73,9 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       (f.sources?.length ?? 0) > 0 ||
       (f.tags?.length ?? 0) > 0 ||
       (f.duration !== undefined && f.duration !== "") ||
-      (f.sort !== undefined && f.sort !== "")
+      (f.sort !== undefined && f.sort !== "") ||
+      f.dateFrom !== undefined ||
+      f.dateTo !== undefined
     )
   }
 
@@ -82,7 +88,8 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       (f.sources?.length ?? 0) +
       (f.tags?.length ?? 0) +
       (f.duration !== undefined && f.duration !== "" ? 1 : 0) +
-      (f.sort !== undefined && f.sort !== "" ? 1 : 0)
+      (f.sort !== undefined && f.sort !== "" ? 1 : 0) +
+      (f.dateFrom !== undefined || f.dateTo !== undefined ? 1 : 0)
     )
   })
 
@@ -95,6 +102,8 @@ export function useSearchFiltersBinding(): UseSearchFiltersBindingReturn {
       tags: [],
       duration: undefined,
       sort: undefined,
+      dateFrom: undefined,
+      dateTo: undefined,
     }
   }
 
