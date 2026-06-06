@@ -38,23 +38,25 @@ import { useSqlJsPersistence } from "@infra/persistence/sqljs/index.js"
 import { useCapacitorSqlPersistence } from "@infra/persistence/capacitor/index.js"
 import { useDatabaseToIndexedDbFetcher } from "@infra/persistence/fetchers/idb/index.js"
 import { useDatabaseToFsFetcher } from "@infra/persistence/fetchers/fs/index.js"
-import { useWebRemoteFilesStorage } from "@infra/files/web/index.js"
 import { useCapacitorRemoteFilesStorage } from "@infra/files/capacitor/index.js"
-import { useCapacitorPreferences } from "@infra/preferences/capacitor/index.js"
 import { useCapacitorAudioPlayer } from "@infra/audio/capacitor/index.js"
-import { useCapacitorNotificationScheduler } from "@infra/notifications/capacitor/index.js"
-import { useCapacitorShareService } from "@infra/share/capacitor/index.js"
-import { useCapacitorHaptics } from "@infra/haptics/capacitor/index.js"
 import { useCapacitorPurchases } from "@infra/purchases/capacitor/index.js"
 import { useCapacitorAuth } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useShruti } from "@shruti/shruti.js"
-import { useWebHaptics } from "@infra/haptics/web/index.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
 import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
-import { useCapacitorDatabaseTransfer } from "@infra/databaseTransfer/capacitor/index.js"
-import { useWebDatabaseTransfer } from "@infra/databaseTransfer/web/index.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
+import {
+  useWebRemoteFilesStorage,
+  useCapacitorPreferences,
+  useCapacitorNotificationScheduler,
+  useCapacitorShareService,
+  useCapacitorHaptics,
+  useWebHaptics,
+  useCapacitorDatabaseTransfer,
+  useWebDatabaseTransfer,
+} from "@kit/infra"
 import { createFailoverClient } from "@kit/servers"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
@@ -140,8 +142,24 @@ initShruti({
   // invoked inside `initShruti` where that closure is available.
   databaseTransferFactory: (getUserDb) =>
     isNative
-      ? useCapacitorDatabaseTransfer(getUserDb)
-      : useWebDatabaseTransfer(config.database.userLocalPath, getUserDb),
+      ? useCapacitorDatabaseTransfer({
+          getUserDb,
+          exportFileName: () => `shruti.${Date.now()}.db`,
+          shareTitle: "Shruti Database",
+          // Hard reload: bootstrap re-opens the user DB and `runUserMigrations`
+          // brings any older imported schema forward to current.
+          onImported: () => {
+            window.location.href = "/welcome"
+          },
+        })
+      : useWebDatabaseTransfer({
+          userDbPath: config.database.userLocalPath,
+          getUserDb,
+          exportFileName: () => `shruti.${Date.now()}.db`,
+          onImported: () => {
+            window.location.href = "/welcome"
+          },
+        }),
   platform,
   // Bootstrap seed only — the Welcome probe immediately overrides this via
   // setActiveServerById(probedId). After hydrateRegions() this is already
