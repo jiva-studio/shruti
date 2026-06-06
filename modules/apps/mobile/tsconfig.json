@@ -29,7 +29,10 @@
       "@kit/core":             ["../../kit/src/core/index.ts"],
       "@kit/*":                ["../../kit/src/*"],
       "vue":                   ["./node_modules/vue"],
-      "vue/*":                 ["./node_modules/vue/*"]
+      "vue/*":                 ["./node_modules/vue/*"],
+      "@ionic/vue":            ["./node_modules/@ionic/vue"],
+      "@ionic/vue/*":          ["./node_modules/@ionic/vue/*"],
+      "@capacitor/*":          ["./node_modules/@capacitor/*"]
     }
   },
   "include": [

@@ -1,16 +1,14 @@
 <template>
-  <IonItem lines="none" button :detail="false" @click="onOpen">
-    <IconChip slot="start">
-      <ClockIcon />
-    </IconChip>
-
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.notifications.daily.title") }}</h2>
-      <p>{{ $t("settings.notifications.daily.description") }}</p>
-    </IonLabel>
-
-    <div slot="end" class="time-chip">{{ display }}</div>
-  </IonItem>
+  <SettingsTimeItem
+    v-model:time="value"
+    :title="$t('settings.notifications.daily.title')"
+    :subtitle="$t('settings.notifications.daily.description')"
+    @activate="onOpen"
+  >
+    <template #icon>
+      <IconChip><ClockIcon /></IconChip>
+    </template>
+  </SettingsTimeItem>
 
   <!-- Bottom-anchored, content-sized sheet (slides up like an action sheet).
        Uses ion-picker directly — ion-datetime's wheel is fixed-width and
@@ -43,10 +41,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { ref } from "vue"
 import {
-  IonItem,
-  IonLabel,
   IonModal,
   IonToolbar,
   IonButtons,
@@ -56,6 +52,7 @@ import {
   IonPickerColumnOption,
 } from "@ionic/vue"
 import type { PickerColumnChangeEventDetail } from "@ionic/core"
+import { SettingsTimeItem } from "@kit/ui"
 import { ClockIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 
@@ -63,6 +60,8 @@ import { IconChip } from "@ui/primitives/index.js"
 /*                                    State                                   */
 /* -------------------------------------------------------------------------- */
 
+// Row display + tap is kit's SettingsTimeItem (chip shows HH : MM); the picker
+// modal below is app-specific and commits into this same model on Save.
 const value = defineModel<[number, number] | undefined>({ default: undefined, required: true })
 const open = ref(false)
 // Picked-but-not-yet-saved time, seeded from the committed value on open so
@@ -75,11 +74,6 @@ const minutes = Array.from({ length: 12 }, (_, i) => i * 5)
 function pad(n: number): string {
   return n.toString().padStart(2, "0")
 }
-
-const display = computed(() => {
-  const [h, m] = value.value ?? [9, 0]
-  return `${pad(h)} : ${pad(m)}`
-})
 
 /* -------------------------------------------------------------------------- */
 /*                                  Handlers                                  */
@@ -112,13 +106,6 @@ function onCancel(): void {
 </script>
 
 <style scoped>
-.time-chip {
-  background-color: var(--ion-color-light-shade);
-  padding: 0.25rem 0.5rem;
-  border-radius: 5px;
-  font-size: 0.8rem;
-}
-
 ion-modal.daily-time-modal {
   --width: 100%;
   --max-width: 100%; /* beat Ionic's centered-dialog max-width on wide screens */

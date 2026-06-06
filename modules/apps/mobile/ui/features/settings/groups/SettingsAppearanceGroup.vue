@@ -3,12 +3,55 @@
     <IonLabel>{{ $t("settings.groups.appearance") }}</IonLabel>
   </IonListHeader>
   <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
-  <ShowPlayerProgressSettingsItem v-model="showPlayerProgress" />
-  <ShowPlayerOnNotesSettingsItem v-model="showPlayerOnNotes" />
-  <HighlightCurrentSentenceSettingsItem v-model="highlightCurrentSentence" />
-  <OpenTranscriptAutomaticallySettingsItem v-model="openTranscriptAutomatically" />
+
+  <!-- Plain appearance toggles use kit's generic SettingsToggleItem shell
+       (IonItem + IonLabel + IonToggle). App owns the icon, i18n text and the
+       bound store value; kit owns the row markup. -->
+  <SettingsToggleItem
+    v-model:checked="showPlayerProgress"
+    :title="$t('settings.player.showProgress.title')"
+    :subtitle="$t('settings.player.showProgress.description')"
+  >
+    <template #icon>
+      <IconChip><ClockIcon /></IconChip>
+    </template>
+  </SettingsToggleItem>
+
+  <SettingsToggleItem
+    v-model:checked="showPlayerOnNotes"
+    :title="$t('settings.notes.showPlayer.title')"
+    :subtitle="$t('settings.notes.showPlayer.description')"
+  >
+    <template #icon>
+      <IconChip><IconPlayerPlayFilled :size="22" /></IconChip>
+    </template>
+  </SettingsToggleItem>
+
+  <SettingsToggleItem
+    v-model:checked="highlightCurrentSentence"
+    :title="$t('settings.transcript.highlightCurrentSentence.title')"
+    :subtitle="$t('settings.transcript.highlightCurrentSentence.description')"
+  >
+    <template #icon>
+      <IconChip><HighlightTextIcon /></IconChip>
+    </template>
+  </SettingsToggleItem>
+
+  <SettingsToggleItem
+    v-model:checked="openTranscriptAutomatically"
+    :title="$t('settings.transcript.showAutomatically.title')"
+    :subtitle="$t('settings.transcript.showAutomatically.description')"
+  >
+    <template #icon>
+      <IconChip><AnnotationIcon /></IconChip>
+    </template>
+  </SettingsToggleItem>
+
   <!-- Pro items grouped at the bottom — keeps the plain toggles together
-       and the paywalled entries visually set apart. Track Info sits last. -->
+       and the paywalled entries visually set apart. Track Info sits last.
+       These keep bespoke components: AutomaticScroll vetoes flips behind the
+       paywall (kit toggle is veto-able but the ProBadge + effective-checked
+       remount logic is app domain); TrackInfo opens an app dialog. -->
   <AutomaticScrollSettingsItem
     v-model="autoScroll"
     :is-subscribed="isSubscribed"
@@ -23,13 +66,13 @@
 
 <script setup lang="ts">
 import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsToggleItem } from "@kit/ui"
+import { IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { ClockIcon, HighlightTextIcon, AnnotationIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
 import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
 import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
 import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
-import HighlightCurrentSentenceSettingsItem from "../HighlightCurrentSentenceSettingsItem.vue"
-import OpenTranscriptAutomaticallySettingsItem from "../OpenTranscriptAutomaticallySettingsItem.vue"
-import ShowPlayerOnNotesSettingsItem from "../ShowPlayerOnNotesSettingsItem.vue"
-import ShowPlayerProgressSettingsItem from "../ShowPlayerProgressSettingsItem.vue"
 
 interface SelectorItem {
   id: string

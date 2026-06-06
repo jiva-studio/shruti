@@ -3,29 +3,32 @@
     <IonLabel>{{ $t("settings.groups.help") }}</IonLabel>
   </IonListHeader>
 
-  <IonItem button :detail="true" lines="none" @click="emit('openHelp')">
-    <IconChip slot="start">
-      <HelpIcon />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.help.open.title") }}</h2>
-      <p>{{ $t("settings.help.open.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsActionItem
+    detail
+    :title="$t('settings.help.open.title')"
+    :subtitle="$t('settings.help.open.description')"
+    @activate="emit('openHelp')"
+  >
+    <template #icon>
+      <IconChip><HelpIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
 
-  <IonItem button :detail="true" lines="none" @click="emit('openPrivacyPolicy')">
-    <IconChip slot="start">
-      <ShieldIcon />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.help.privacyPolicy.title") }}</h2>
-      <p>{{ $t("settings.help.privacyPolicy.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsActionItem
+    detail
+    :title="$t('settings.help.privacyPolicy.title')"
+    :subtitle="$t('settings.help.privacyPolicy.description')"
+    @activate="emit('openPrivacyPolicy')"
+  >
+    <template #icon>
+      <IconChip><ShieldIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonListHeader } from "@ionic/vue"
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsActionItem } from "@kit/ui"
 import { HelpIcon, ShieldIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 
