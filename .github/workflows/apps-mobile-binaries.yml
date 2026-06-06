@@ -1,0 +1,57 @@
+name: Mobile / Binaries
+
+# STRICTLY manual native-binary builds — no auto-build on push/PR/release tag.
+# Per-push CI (apps-mobile.yml) stays web-only; native binaries and store
+# uploads happen on demand from here. Delegates to the kit reusable workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which platform(s) to build
+        type: choice
+        options: [both, android, ios]
+        default: both
+      action:
+        description: Build artifacts only, or build and upload to the store
+        type: choice
+        options: [build-only, build-and-deploy]
+        default: build-only
+      track:
+        description: Play track for android deploy (ignored for build-only)
+        type: choice
+        options: [internal, beta, production]
+        default: internal
+
+concurrency:
+  group: apps-mobile-binaries-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  binaries:
+    # Pin: kit reusable workflow. Bump to a tag/SHA once kit is released.
+    uses: akdasa-studios/kit/.github/workflows/mobile-binaries.yml@main
+    with:
+      platform: ${{ inputs.platform }}
+      action: ${{ inputs.action }}
+      track: ${{ inputs.track }}
+    # Explicit mapping: this app's iOS cert is stored as LECTORIUM_APPLE_CERTIFICATES
+    # but kit's reusable workflow expects the generic APPLE_CERTIFICATES.
+    secrets:
+      KIT_DEPLOY_KEY: ${{ secrets.KIT_DEPLOY_KEY }}
+      GOOGLE_PLAY_KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
+      GOOGLE_PLAY_KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
+      GOOGLE_PLAY_KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
+      GOOGLE_PLAY_KEY_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEY_PASSWORD }}
+      GOOGLE_PLAY_JSON_KEY: ${{ secrets.GOOGLE_PLAY_JSON_KEY }}
+      APPLE_CERTIFICATES: ${{ secrets.LECTORIUM_APPLE_CERTIFICATES }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_STORE_TEAM_ID: ${{ secrets.APPLE_STORE_TEAM_ID }}
+      APPLE_STORE_CONNECT_API_KEY: ${{ secrets.APPLE_STORE_CONNECT_API_KEY }}
+      APPLE_STORE_CONNECT_API_KEY_ID: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ID }}
+      APPLE_STORE_CONNECT_API_KEY_ISSUER: ${{ secrets.APPLE_STORE_CONNECT_API_KEY_ISSUER }}
+      BETA_FEEDBACK_EMAIL: ${{ secrets.BETA_FEEDBACK_EMAIL }}
+      BETA_CONTACT_FIRST_NAME: ${{ secrets.BETA_CONTACT_FIRST_NAME }}
+      BETA_CONTACT_LAST_NAME: ${{ secrets.BETA_CONTACT_LAST_NAME }}
+      BETA_CONTACT_PHONE_NUMBER: ${{ secrets.BETA_CONTACT_PHONE_NUMBER }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

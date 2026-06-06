@@ -114,12 +114,12 @@ platform :android do
     )
   end
 
-  desc "Upload existing signed AAB to Google Play internal (no rebuild)"
+  desc "Upload existing signed AAB to Google Play (no rebuild). Pass track:internal|alpha|beta|production (default internal)."
   lane :upload do |options|
     require_ci_build_id!
     aab = options[:aab] || File.join(MOBILE_ROOT, "android/app/build/outputs/bundle/release/app-release.aab")
     UI.user_error!("AAB not found at #{aab}") unless File.exist?(aab)
-    upload_to_play_store(**play_store_upload_params(aab: aab))
+    upload_to_play_store(**play_store_upload_params(aab: aab, track: options[:track]))
   end
 
   desc "Regenerate fixtures, capture screenshots via Playwright, upload to Google Play"
@@ -255,14 +255,18 @@ platform :android do
   # (reads from MOBILE_ROOT after fastlane's `Dir.chdir("..")`).
   PLAY_METADATA_PATH = File.join(MOBILE_ROOT, "fastlane/metadata/android")
 
-  def play_store_upload_params(aab: nil)
+  VALID_PLAY_TRACKS = %w[internal alpha beta production].freeze
+
+  def play_store_upload_params(aab: nil, track: nil)
+    track = "internal" if track.to_s.strip.empty?
+    UI.user_error!("Unknown Play track '#{track}' (expected: #{VALID_PLAY_TRACKS.join(', ')})") unless VALID_PLAY_TRACKS.include?(track)
     # `supply` doesn't accept inline release notes — it reads them from
     # metadata/android/<locale>/changelogs/<version_code>.txt. Generate
     # per-locale notes via ReleaseNotes (LLM-curated, with raw fallback)
     # and stage the files before upload.
     write_play_changelog_files!
     {
-      track: "internal",
+      track: track,
       aab: aab || File.join(MOBILE_ROOT, "android/app/build/outputs/bundle/release/app-release.aab"),
       json_key_data: ENV["GOOGLE_PLAY_JSON_KEY"],
       release_status: "draft", # Required while the app itself is in draft in Play Console
