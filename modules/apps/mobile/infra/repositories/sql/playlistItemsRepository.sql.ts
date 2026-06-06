@@ -3,6 +3,7 @@ import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
 import type { PlaylistItemRow } from "@lib/persistence/user"
+import { mutate, queryMany, queryOne } from "@kit/persistence"
 import { createIdGenerator } from "./idGenerator.js"
 import { rowToPlaylistItem } from "./rowMappers.js"
 
@@ -11,35 +12,41 @@ const newPlaylistItemId = createIdGenerator("playlist")
 export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRepository {
   return {
     async getById(id: PlaylistItemId): Promise<PlaylistItem | null> {
-      const rows = await db.query<PlaylistItemRow>("SELECT * FROM playlist_items WHERE id = ?", [
-        id,
-      ])
-      return rows[0] ? rowToPlaylistItem(rows[0]) : null
+      return queryOne<PlaylistItemRow, PlaylistItem>(
+        db,
+        "SELECT * FROM playlist_items WHERE id = ?",
+        [id],
+        rowToPlaylistItem
+      )
     },
 
     async listActive(): Promise<readonly PlaylistItem[]> {
-      const rows = await db.query<PlaylistItemRow>(
-        "SELECT * FROM playlist_items WHERE archived_at IS NULL ORDER BY added_at ASC"
+      return queryMany<PlaylistItemRow, PlaylistItem>(
+        db,
+        "SELECT * FROM playlist_items WHERE archived_at IS NULL ORDER BY added_at ASC",
+        [],
+        rowToPlaylistItem
       )
-      return rows.map(rowToPlaylistItem)
     },
 
     async listArchived(): Promise<readonly PlaylistItem[]> {
-      const rows = await db.query<PlaylistItemRow>(
-        "SELECT * FROM playlist_items WHERE archived_at IS NOT NULL ORDER BY archived_at DESC"
+      return queryMany<PlaylistItemRow, PlaylistItem>(
+        db,
+        "SELECT * FROM playlist_items WHERE archived_at IS NOT NULL ORDER BY archived_at DESC",
+        [],
+        rowToPlaylistItem
       )
-      return rows.map(rowToPlaylistItem)
     },
 
     async add(trackId: TrackId): Promise<PlaylistItem> {
       const id = newPlaylistItemId()
       const now = Date.now()
-      await db.execute(
+      await mutate(
+        db,
         `INSERT INTO playlist_items (id, track_id, added_at, archived_at)
          VALUES (?, ?, ?, NULL)`,
         [id, trackId, now]
       )
-      await db.save()
       return {
         id,
         trackId,
@@ -49,18 +56,15 @@ export function createSqlPlaylistItemRepository(db: IDatabase): IPlaylistItemRep
     },
 
     async archive(id: PlaylistItemId): Promise<void> {
-      await db.execute("UPDATE playlist_items SET archived_at = ? WHERE id = ?", [Date.now(), id])
-      await db.save()
+      await mutate(db, "UPDATE playlist_items SET archived_at = ? WHERE id = ?", [Date.now(), id])
     },
 
     async remove(id: PlaylistItemId): Promise<void> {
-      await db.execute("DELETE FROM playlist_items WHERE id = ?", [id])
-      await db.save()
+      await mutate(db, "DELETE FROM playlist_items WHERE id = ?", [id])
     },
 
     async clearAll(): Promise<void> {
-      await db.execute("DELETE FROM playlist_items")
-      await db.save()
+      await mutate(db, "DELETE FROM playlist_items")
     },
   }
 }
