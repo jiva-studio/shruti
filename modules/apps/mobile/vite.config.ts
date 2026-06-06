@@ -78,7 +78,7 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["mobile.lectorium.dev"],
   },
-  plugins: [lectoriumAlias, kitVitePlugin(__dirname), vue()],
+  plugins: [lectoriumAlias, kitVitePlugin(path.resolve(__dirname, "../../kit/src")), vue()],
   resolve: {
     preserveSymlinks: true,
     alias: [
