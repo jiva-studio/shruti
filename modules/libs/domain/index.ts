@@ -1,5 +1,4 @@
 export * from "./core.js"
-export * from "./result.js"
 export * from "./servers.js"
 export * from "./config.js"
 export * from "./track.js"
