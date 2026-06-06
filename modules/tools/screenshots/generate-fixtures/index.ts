@@ -218,16 +218,20 @@ async function seedSessions(
     }
   }
 
-  // Mark every item EXCEPT the two most-recently-added as finished, so
-  // the Home view reads as a mostly-completed queue with a couple of
+  // Mark every item EXCEPT the four most-recently-added as finished, so
+  // the Home view reads as a mostly-completed queue with several
   // still-in-progress lectures at the bottom — not a uniform column of
   // checkmarks. `to_position` way above any real lecture length trips the
   // `isCompletedSec(toPosition, durationSec)` check for every track.
   //
-  // (Items are added newest-first — index 0 is the most recent — and the
-  // Up Next list renders oldest-at-top, so `slice(2)` is everything but
-  // the bottom two rows.)
-  const completedItems = itemIds.slice(2)
+  // Items are added newest-first — index 0 is the most recent — and the
+  // Up Next list renders oldest-at-top, so `slice(IN_PROGRESS_COUNT)` is
+  // everything but the bottom rows. Four in-progress keeps at least one of
+  // them visible above the floating player on the short Surface Duo
+  // viewport (which only shows ~6 of the 9 rows), while filling the
+  // taller phone viewport with the rest.
+  const IN_PROGRESS_COUNT = 4
+  const completedItems = itemIds.slice(IN_PROGRESS_COUNT)
   let bias = 0
   for (const item of completedItems) {
     const startedAt = Math.floor((args.now - 2 * oneDayMs) / 1000) + bias
@@ -254,8 +258,8 @@ async function seedSessions(
   // day it touched non-empty while guaranteeing `to_position` never reaches
   // the lecture end. Then pin the LATEST session to a fixed partial value
   // so the in-progress radial is deterministic.
-  const inProgressItems = itemIds.slice(0, 2)
-  const partialToPosition = [500, 700] // seconds into a ~30-min lecture
+  const inProgressItems = itemIds.slice(0, IN_PROGRESS_COUNT)
+  const partialToPosition = [400, 700, 1000, 1300] // seconds into a ~30-min lecture
   const PROGRESS_CAP = 1500 // < every real lecture length, so never "completed"
   for (let k = 0; k < inProgressItems.length; k++) {
     const item = inProgressItems[k]!
@@ -278,10 +282,59 @@ async function seedSessions(
     total++
   }
 
+  await clampDailyTotals(db)
+
   console.log(
     `  wrote ${total} listening_sessions across ${args.days} days ` +
       `(${completedItems.length} completed, ${inProgressItems.length} in-progress)`
   )
+}
+
+/** Heatmap intensity ceiling (sec/day). The grid has four shades keyed on
+ *  daily listening time, the darkest being ≥2h. A lone day that randomly
+ *  spikes past 2h renders as a single very-dark cell that reads as an
+ *  outlier against the lighter gradient. Cap below the 2h tier so the
+ *  heatmap stays a smooth tiers-1–3 gradient with no glaring cell. */
+const DAILY_INTENSITY_CAP_SEC = 6000 // 1h40m — comfortably inside tier 3 (<2h)
+
+/**
+ * Scale down any day whose summed listening time exceeds
+ * `DAILY_INTENSITY_CAP_SEC`, preserving each session's share so relative
+ * intensity is kept. Completion markers (`to_position` ≈ 999999) carry no
+ * listening time and are excluded. Runs last so it also tames the
+ * in-progress fills — but the pinned 23:00 partials sit on `today`, whose
+ * total stays well under the cap, so the deterministic radials survive.
+ */
+async function clampDailyTotals(db: IDatabase): Promise<void> {
+  const rows = await db.query<{
+    id: string
+    started_at: number
+    from_position: number
+    to_position: number
+  }>(
+    `SELECT id, started_at, from_position, to_position FROM listening_sessions
+     WHERE to_position - from_position BETWEEN 0 AND 100000`
+  )
+  const byDay = new Map<number, typeof rows>()
+  for (const r of rows) {
+    const d = new Date(r.started_at * 1000)
+    d.setHours(0, 0, 0, 0)
+    const key = d.getTime()
+    if (!byDay.has(key)) byDay.set(key, [])
+    byDay.get(key)!.push(r)
+  }
+  for (const sessions of byDay.values()) {
+    const total = sessions.reduce((s, r) => s + (r.to_position - r.from_position), 0)
+    if (total <= DAILY_INTENSITY_CAP_SEC) continue
+    const factor = DAILY_INTENSITY_CAP_SEC / total
+    for (const r of sessions) {
+      const scaled = Math.max(1, Math.round((r.to_position - r.from_position) * factor))
+      await db.execute("UPDATE listening_sessions SET to_position = ? WHERE id = ?", [
+        r.from_position + scaled,
+        r.id,
+      ])
+    }
+  }
 }
 
 interface TranscriptBlock {
