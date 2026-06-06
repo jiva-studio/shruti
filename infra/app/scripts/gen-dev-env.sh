@@ -51,10 +51,13 @@ SHRUTI_S3_BUCKET=shruti-engine
 # Admin shared secret for chat /status + /reindex (random per checkout).
 APP_SHARED_TOKEN=$APP_TOKEN
 
-# API keys (OPENROUTER_API_KEY, AWS_ACCESS_KEY_ID/SECRET, LANGFUSE_*, RC_*,
-# VOYAGE, OPENAI) are NOT written here — \`make stack-up\` injects them at
-# launch from Secret Manager via \`op run\` (infra/app/secrets.op.tpl → item
-# "Dev :: App"), so they never sit on disk. Non-secret region config stays.
+# API keys — left EMPTY here. Fill from Secret Manager (vault Shruti, item
+# "Global / App", field = the var name) or the dotfiles credentials mirror.
+# Without OPENROUTER_API_KEY + AWS_* the stack boots but chat can't embed/
+# index (/readyz stays false) and share-* can't upload.
+OPENROUTER_API_KEY=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
 AWS_REGION=us-east-1
 EOF
 

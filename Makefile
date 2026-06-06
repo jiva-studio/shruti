@@ -7,7 +7,7 @@
 .PHONY: transcriber-service-build transcriber-service-up transcriber-service-down transcriber-service-restart transcriber-service-status transcriber-service-logs
 .PHONY: transcriber-mcp-build transcriber-mcp-up transcriber-mcp-down transcriber-mcp-restart transcriber-mcp-status transcriber-mcp-logs
 .PHONY: shruti-mcp-build shruti-mcp-test shruti-mcp-lint shruti-mcp-up shruti-mcp-down shruti-mcp-restart shruti-mcp-status shruti-mcp-logs
-.PHONY: stack-setup stack-up stack-up-noop stack-down stack-restart stack-status stack-logs stack-app
+.PHONY: stack-setup stack-up stack-down stack-restart stack-status stack-logs stack-app
 
 # --- Variables ---
 ISSUE ?= 0
@@ -334,11 +334,7 @@ stack-setup: ## First-time local setup: generate .env.dev + JWT keys + npm insta
 	@infra/app/scripts/gen-jwt-keys.sh
 	@$(MAKE) mobile-install
 
-stack-up: ## Start the local stack with secrets injected from Secret Manager (op run; requires op unlocked + a populated "Dev :: App" item)
-	@cd infra/app/compose && COMPOSE_PROFILES=origin op run --env-file=../secrets.op.tpl -- \
-		docker compose -p shruti -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env.dev up -d
-
-stack-up-noop: ## Start the stack WITHOUT Secret Manager (op-sourced API keys unset → chat degraded; for offline/CI)
+stack-up: ## Start the local stack (builds all services from source; chat 11080, auth 11081, pg 11082, redis 11083, share-audio 11084)
 	@cd infra/app/compose && $(STACK_COMPOSE) up -d
 
 stack-down: ## Stop local backend stack (keeps pg/redis volumes; add -v by hand to wipe)
