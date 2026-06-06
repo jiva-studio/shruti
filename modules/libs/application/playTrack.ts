@@ -2,7 +2,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
 import type { Track } from "@lib/domain/track.js"
 import type { TrackAudio, TrackVariant } from "@lib/domain/trackVariant.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export interface PlayTrackInput {
   readonly track: Track

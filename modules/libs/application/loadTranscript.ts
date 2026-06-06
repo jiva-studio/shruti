@@ -1,7 +1,7 @@
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
 import type { Transcript } from "@lib/domain/transcript.js"
-import { err, ok, type Result } from "@lib/domain/result.js"
+import { err, ok, type Result } from "@kit/core"
 
 export type LoadTranscriptError =
   | "language-not-available"
