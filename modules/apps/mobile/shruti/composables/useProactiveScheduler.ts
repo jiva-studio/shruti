@@ -16,6 +16,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { isEligible } from "@shruti/proactive/eligibility.js"
 import { notificationIdFor } from "@shruti/proactive/hash.js"
 import { validateAndScrubActions } from "@shruti/proactive/markerValidator.js"
+import { toNotificationPreview } from "@shruti/proactive/notificationPreview.js"
 import { resolveRules } from "@shruti/proactive/registry.js"
 // Side-effect import: each rule module calls `registerRule()` at load
 // time so the registry knows about it. Removing this line silently
@@ -274,7 +275,10 @@ export function useProactiveScheduler(): void {
     }
   }
 
-  async function scheduleNotificationIfNeeded(entry: ProactiveStateEntry): Promise<void> {
+  async function scheduleNotificationIfNeeded(
+    entry: ProactiveStateEntry,
+    repo: IProactiveStateRepository
+  ): Promise<void> {
     if (!entry.notify || entry.visibleAt === null) return
 
     // Past `visible_at` used to silently skip the schedule. That's fine
@@ -303,6 +307,28 @@ export function useProactiveScheduler(): void {
       fireAtMs = Date.now() + 5_000
     }
 
+    // `entry` was read by `listByPrepStates` BEFORE `prepIfStale` ran
+    // this same tick, so its `bodyMd` can be stale (empty for a row
+    // that just flipped pending → ready). Re-read the row so the
+    // notification carries the freshly-built content rather than "".
+    const fresh = await repo.findByRuleAndDate(entry.ruleKind, entry.ruleDate)
+    const bodyMd = fresh?.bodyMd ?? entry.bodyMd
+    const body = toNotificationPreview(bodyMd)
+    if (body === "") {
+      // Nothing to show yet (prep hasn't produced content, or it
+      // scrubbed down to markers only). Skip rather than schedule a
+      // blank notification — `schedule()` re-runs every tick, so we'll
+      // pick it up once the body lands, and any rule that pre-scheduled
+      // a static notification (inactivity) keeps its copy.
+      return
+    }
+
+    // Title comes from the chat session the message lives in — holiday
+    // names, "Weekly progress", etc. Sessions without a title (e.g.
+    // inactivity) fall back to the app's user-facing name.
+    const session = await app.repositories().chatSessions.getById(entry.sessionId)
+    const title = session?.title?.trim() || t("app.name")
+
     // Capacitor LocalNotifications.id is a 32-bit integer; chat_message
     // ids are random text. We hash to keep cancel-safety while staying
     // in-bounds. `schedule()` is idempotent on `id` — re-calling on
@@ -312,8 +338,8 @@ export function useProactiveScheduler(): void {
     try {
       await app.notifications.schedule({
         id,
-        title: "",
-        body: "",
+        title,
+        body,
         at: fireAtMs,
         extra: {
           chatSessionId: entry.sessionId,
@@ -445,7 +471,7 @@ export function useProactiveScheduler(): void {
       const stillValid = await reValidateRow(entry, rule, ctx, repo)
       if (!stillValid) continue
       await prepIfStale(entry, rule, ctx, repo)
-      await scheduleNotificationIfNeeded(entry)
+      await scheduleNotificationIfNeeded(entry, repo)
     }
   }
 
