@@ -7,7 +7,7 @@
     <IonLabel class="ion-text-nowrap">
       <h2>
         {{ $t("settings.trackInfo.label") }}
-        <ProBadge />
+        <ProBadge :label="$t('app.proBadge')" />
       </h2>
       <p>{{ $t("settings.trackInfo.description") }}</p>
     </IonLabel>

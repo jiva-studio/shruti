@@ -125,6 +125,17 @@
    * Single tuning point — change here to retune all three places. */
   --lectorium-content-max-width: 720px;
 
+  /* @kit/ui token contract — alias the generic kit tokens to Lectorium's own
+   * values so the extracted primitives (SafeAreaHeaderGradient, AppPage) render
+   * with the existing look. These reference the lectorium vars by name so they
+   * automatically pick up every per-platform / dark-mode override below. */
+  --kit-fade-bg-rgb: var(--lectorium-fade-bg-rgb);
+  --kit-page-content-max-width: var(--lectorium-content-max-width);
+  /* Matches the floating mini-player's visible height (FloatingPlayer.vue
+   * `.floating { height: 58px }`) plus the system safe-area inset, so AppPage's
+   * reserved bottom spacer keeps the last item above the player. */
+  --kit-page-reserved-space: calc(58px + env(safe-area-inset-bottom, 0px));
+
   /* Warm step colors — Ionic falls back to neutral grays (#666 etc.) for
    * secondary text / dividers if these aren't set, which leaks cool gray
    * into the warm cream theme. Keep the gradient warm. */

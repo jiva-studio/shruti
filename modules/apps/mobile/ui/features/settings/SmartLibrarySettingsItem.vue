@@ -7,7 +7,7 @@
     <IonLabel class="ion-text-nowrap">
       <h2>
         {{ $t("settings.smartLibrary.title") }}
-        <ProBadge />
+        <ProBadge :label="$t('app.proBadge')" />
       </h2>
       <p>{{ subtitle }}</p>
     </IonLabel>

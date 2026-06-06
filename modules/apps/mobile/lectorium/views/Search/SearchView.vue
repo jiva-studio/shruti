@@ -1,5 +1,5 @@
 <template>
-  <AppPage :reserve-player-space="player.open">
+  <AppPage :reserve-bottom-space="player.open">
     <!-- Pinned to the viewport so the tracks list scrolls underneath. The
          gradient's bottom 30% fades to transparent, making list rows
          visually dissolve as they pass under the search bar. -->
