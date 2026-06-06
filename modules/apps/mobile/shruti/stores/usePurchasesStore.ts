@@ -53,11 +53,23 @@ export const usePurchasesStore = defineStore("purchases", () => {
   // CI doesn't set `BUILD_ID` env var — production builds always
   // override it with the version+hash.
   //
+  // The Cloudflare Pages web deploys (`*.pages.dev` — both the PR
+  // previews `pr-N.shruti-preview.pages.dev` and the main alias) get
+  // the same treatment: that whole project is a build/preview of the
+  // app, never a paid product (RevenueCat isn't even available on web),
+  // so paywalled surfaces must be explorable there without a purchase.
+  // CI bakes a real BUILD_ID into those bundles, so the dev check alone
+  // wouldn't cover them — gate on the host instead.
+  //
   // Side effect: the `is_subscribed: false` eligibility predicate in
   // `smart_library_hint` won't hold on dev builds, so the autonomous
   // tutorial for it won't fire on dev devices. That's the trade-off —
   // pick "Pro is unlocked" over "non-Pro flows are reproducible".
-  const isSubscribed = computed(() => __BUILD_ID__ === "dev" || activePackageId.value !== undefined)
+  const isPreviewWeb =
+    typeof window !== "undefined" && window.location.hostname.endsWith(".pages.dev")
+  const isSubscribed = computed(
+    () => __BUILD_ID__ === "dev" || isPreviewWeb || activePackageId.value !== undefined
+  )
 
   function applyState(s: CustomerState): void {
     activePackageId.value = s.activePackageId

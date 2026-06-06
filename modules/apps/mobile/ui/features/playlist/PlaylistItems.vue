@@ -10,6 +10,7 @@
           :references="row.references"
           :tags="row.tags"
           :date="row.date"
+          :duration="row.duration"
           @select="emit('click', row.id)"
         >
           <template #state>

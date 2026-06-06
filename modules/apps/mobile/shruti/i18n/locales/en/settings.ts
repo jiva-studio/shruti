@@ -96,6 +96,11 @@ export default {
         title: "Notes Studio",
         description: "Turn your notes from lectures into short videos and share them with friends.",
       },
+      trackInfo: {
+        title: "Track Info Layout",
+        description:
+          "Choose which detail — reference, author, location, date — sits on the prominent top line under each lecture title, and which show in the line below.",
+      },
     },
     periods: {
       P1M: "month",
@@ -170,6 +175,29 @@ export default {
     title: "Preferred server",
   },
 
+  trackInfo: {
+    label: "Track info",
+    description: "Configure how the track list looks",
+    title: "Track info",
+    top: "Top line",
+    topField: "Field",
+    bottom: "Bottom line",
+    none: "Nothing",
+    fields: {
+      reference: "Reference",
+      author: "Author",
+      location: "Location",
+      date: "Date",
+      duration: "Duration",
+    },
+    preview: {
+      title: "Happiness Beyond The Senses",
+      author: "A.C. Bhaktivedanta Swami",
+      location: "Bombay",
+      date: "21 Apr 1974",
+      duration: "47m",
+    },
+  },
   player: {
     showProgress: {
       title: "Player progress",

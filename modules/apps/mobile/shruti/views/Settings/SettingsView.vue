@@ -25,7 +25,14 @@
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
       :is-subscribed="subscription.isSubscribed"
-      @request-paywall="paywall.requestOpen('autoScroll')"
+      @request-paywall="paywall.requestOpen($event)"
+      @open-track-info="trackInfoOpen = true"
+    />
+
+    <TrackInfoDialog
+      v-model:config="trackMetaConfig"
+      :open="trackInfoOpen"
+      @update:open="trackInfoOpen = $event"
     />
 
     <SettingsSadhanaGroup
@@ -86,6 +93,7 @@ import {
   SettingsHelpGroup,
   SettingsSadhanaGroup,
   SmartLibraryDialog,
+  TrackInfoDialog,
 } from "@ui/features/settings/index.js"
 import { HelpDialog } from "@ui/features/help/index.js"
 import { SearchFiltersSheet } from "@ui/features/tracks/search/filters/index.js"
@@ -112,6 +120,7 @@ const {
   dbScheme,
   dbNumber,
   appLanguage,
+  trackMetaConfig,
   showPlayerProgress,
   showPlayerOnNotes,
   showActivityTracker,
@@ -137,6 +146,7 @@ const debugUnlocked = debugTrigger.unlocked
 const { triggerSignIn } = useAnonymousSignInFlow()
 
 const helpOpen = ref(false)
+const trackInfoOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
 

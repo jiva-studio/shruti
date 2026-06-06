@@ -1,5 +1,7 @@
 import { computed, type ComputedRef } from "vue"
+import { useI18n } from "vue-i18n"
 import { buildTrackRow } from "@shruti/composables/buildTrackRow.js"
+import { formatListeningDuration } from "@shruti/composables/formatListeningDuration.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
@@ -55,6 +57,7 @@ export interface UseTrackUiStateMapperReturn {
  * the row should fall back to "none" (issue #378).
  */
 export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
+  const { t } = useI18n()
   const appLanguage = useAppLanguage()
   const dictionaries = useDictionariesStore()
   const downloads = useDownloadStore()
@@ -117,6 +120,7 @@ export function useTrackUiStateMapper(): UseTrackUiStateMapperReturn {
       locationsById: dictionaries.locationsById,
       sourcesById: dictionaries.sourcesById,
       tagNamesById: dictionaries.tagNamesById,
+      formatDuration: (ms) => formatListeningDuration(ms / 1000, t),
       state,
       progressPct,
     })
