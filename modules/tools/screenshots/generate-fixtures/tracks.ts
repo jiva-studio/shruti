@@ -7,9 +7,10 @@
  * catalog/current.db`) — confirmed to have audio + transcript in the
  * target locale.
  */
-// Six tracks (in parity with the RU list) so the Home playlist fits the
-// viewport with the two newest, still-unfinished rows visible above the
-// floating player rather than pushed below the fold.
+// Nine tracks (in parity with the RU list) so the Home playlist fills the
+// taller phone viewport with no empty space, while the four newest rows
+// stay in-progress — at least one of them still sits above the floating
+// player on the shorter Surface Duo viewport too.
 export const PLAYLIST_TRACKS_EN: readonly string[] = [
   "track_0M6TgFqYKo01", // transcript demo: "Caitanya Mahaprabhu and the Sankirtan Movement"
   "track_0aDNopWvLFpq", // "Kirtana and Prayers of Love"
@@ -17,6 +18,9 @@ export const PLAYLIST_TRACKS_EN: readonly string[] = [
   "track_0JkscmDgrJ2A", // "Yoga as Linking with the Supreme Lord"
   "track_0dRAV1Swc3ak", // "Prahlāda Mahārāja's Instruction to His Classmates"
   "track_6WmfTZDnwivk", // "Lord Chaitanya's Six Opulences"
+  "track_02D0Bp1GSaVz", // "The Supreme Lord's Infinite Potencies"
+  "track_0ABXho7APl2m", // "Divine and Demoniac Nature"
+  "track_0AphX6MLtwU9", // "Kṛṣṇa the Original Person and Source of All Pleasure"
 ]
 
 export const PLAYLIST_TRACKS_RU: readonly string[] = [
@@ -26,6 +30,9 @@ export const PLAYLIST_TRACKS_RU: readonly string[] = [
   "track_NHsgDTYRJf6J", // "Мы можем участвовать в наслаждении Бога"
   "track_F79Jy9lTKByn", // "Люди потеряли разум"
   "track_G3M4xu0yncJN", // "Ратха-Ятра"
+  "track_064LFEidL3To", // "Вечные и обусловленные живые существа"
+  "track_07z0KklOp0CQ", // "Йога медитации и контроль ума"
+  "track_0IMg8A6Mwvwk", // "Мы все ищем Кришну"
 ]
 
 export function playlistTracksFor(locale: string): readonly string[] {
