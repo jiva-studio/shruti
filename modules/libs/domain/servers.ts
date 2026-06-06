@@ -16,10 +16,17 @@
  * Russia entry will get its own host name once that lands.
  */
 
-export interface CdnServer {
-  readonly id: string
-  readonly name: string
-  readonly urlTemplate: string
+import type { CdnServer as KitCdnServer } from "@kit/servers"
+export { buildServerUrl } from "@kit/servers"
+
+/**
+ * Shruti's region descriptor. Extends kit's generic `CdnServer`
+ * ({ id, name, urlTemplate }) with the app-specific per-region service
+ * endpoints. The probe + failover machinery lives in `@kit/servers` and
+ * operates on the generic base; these extra fields are read only by app
+ * code (`pickBaseUrl` callbacks, the chat/auth HTTP clients).
+ */
+export interface CdnServer extends KitCdnServer {
   readonly shareAudioUrl: string
   readonly shareVideoUrl: string
   /** Base URL of the shruti auth service for this region, e.g.
@@ -66,13 +73,3 @@ export const SERVERS: readonly CdnServer[] = [
     chatBaseUrl: HOST_RU,
   },
 ]
-
-/**
- * Canonical `{path}` substitution. Use this anywhere a full URL has to be
- * assembled from a server template — `IStoragePublicUrl.get()` and the
- * startup probe both route through here so the rule "paths are already
- * full bucket keys; the client only swaps templates" stays in one place.
- */
-export function buildServerUrl(server: CdnServer, path: string): string {
-  return server.urlTemplate.replace("{path}", path)
-}
