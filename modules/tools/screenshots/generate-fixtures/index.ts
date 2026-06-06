@@ -218,13 +218,16 @@ async function seedSessions(
     }
   }
 
-  // Make the LAST half of the playlist look like the user already
-  // finished listening — that gives the Home view a mix of "completed"
-  // checkmarks and "in-progress" radials instead of a sea of empty
-  // circles that visually reads as "nothing downloaded yet".
-  // `to_position` way above any real lecture length trips the
+  // Mark every item EXCEPT the two most-recently-added as finished, so
+  // the Home view reads as a mostly-completed queue with a couple of
+  // still-in-progress lectures at the bottom — not a uniform column of
+  // checkmarks. `to_position` way above any real lecture length trips the
   // `isCompletedSec(toPosition, durationSec)` check for every track.
-  const completedItems = itemIds.slice(Math.ceil(itemIds.length / 2))
+  //
+  // (Items are added newest-first — index 0 is the most recent — and the
+  // Up Next list renders oldest-at-top, so `slice(2)` is everything but
+  // the bottom two rows.)
+  const completedItems = itemIds.slice(2)
   let bias = 0
   for (const item of completedItems) {
     const startedAt = Math.floor((args.now - 2 * oneDayMs) / 1000) + bias
@@ -242,8 +245,42 @@ async function seedSessions(
     bias += 600
   }
 
+  // The bottom two rows stay deliberately UNFINISHED ("not yet listened").
+  // The random per-day loop above may have handed them a long `to_position`
+  // that would trip completion (real lectures run ~30 min, sessions reach
+  // up to ~60 min). CAP those rows instead of deleting them — a delete
+  // would punch holes in the daily totals and shorten the current streak
+  // when one of these items was a day's only session. Capping keeps every
+  // day it touched non-empty while guaranteeing `to_position` never reaches
+  // the lecture end. Then pin the LATEST session to a fixed partial value
+  // so the in-progress radial is deterministic.
+  const inProgressItems = itemIds.slice(0, 2)
+  const partialToPosition = [500, 700] // seconds into a ~30-min lecture
+  const PROGRESS_CAP = 1500 // < every real lecture length, so never "completed"
+  for (let k = 0; k < inProgressItems.length; k++) {
+    const item = inProgressItems[k]!
+    const toPos = partialToPosition[k] ?? 600
+    await db.execute(
+      "UPDATE listening_sessions SET from_position = 0, to_position = ? WHERE item_id = ? AND to_position > ?",
+      [PROGRESS_CAP, item, PROGRESS_CAP]
+    )
+    // Stamp this late on the current day (23:00) so its ended_at beats any
+    // capped day-0 session the random loop may have left on this item —
+    // `getProgressForItems` reads MAX(ended_at), and we want THIS partial
+    // (not a capped 1500s row) to drive the radial.
+    const startedAt = Math.floor(args.now / 1000) + 23 * 60 * 60
+    await db.execute(
+      `INSERT INTO listening_sessions
+         (id, item_id, started_at, ended_at, from_position, to_position)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [`ls_${nanoId(rng)}`, item, startedAt, startedAt + toPos, 0, toPos]
+    )
+    total++
+  }
+
   console.log(
-    `  wrote ${total} listening_sessions across ${args.days} days (${completedItems.length} marked completed)`
+    `  wrote ${total} listening_sessions across ${args.days} days ` +
+      `(${completedItems.length} completed, ${inProgressItems.length} in-progress)`
   )
 }
 

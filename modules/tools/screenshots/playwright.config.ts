@@ -59,5 +59,11 @@ export default defineConfig({
       name: "ipad13-ru",
       use: { locale: "ru-RU", viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2 },
     },
+    // Surface Duo single screen: 540×720 × DPR 2.5 → 1350×1800 PNG
+    // (Play Console foldable / large-screen form factor).
+    {
+      name: "surfaceduo-ru",
+      use: { locale: "ru-RU", viewport: { width: 540, height: 720 }, deviceScaleFactor: 2.5 },
+    },
   ],
 })
