@@ -11,7 +11,7 @@ const TEMPLATE_URL = pathToFileURL(path.resolve(TOOL_ROOT, "frame/template.html"
 
 const titles = titlesRaw as Record<string, Record<string, string>>
 
-type Device = "phone" | "iphone67" | "ipad13"
+type Device = "phone" | "iphone67" | "ipad13" | "surfaceduo"
 
 function projectInfo(name: string): { device: Device; code: "en" | "ru" } {
   const [device, code] = name.split("-") as [Device, "en" | "ru"]
