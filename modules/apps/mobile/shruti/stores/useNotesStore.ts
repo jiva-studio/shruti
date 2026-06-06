@@ -5,7 +5,7 @@ import { searchNotes } from "@lib/application/searchNotes.js"
 import { updateNote, type UpdateNoteError } from "@lib/application/updateNote.js"
 import type { NoteId } from "@lib/domain/core.js"
 import type { Note, NoteMeta } from "@lib/domain/note.js"
-import type { Result } from "@kit/core"
+import type { Result } from "@lib/domain/result.js"
 import { useShruti } from "@shruti/shruti.js"
 
 /**

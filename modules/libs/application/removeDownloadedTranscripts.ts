@@ -1,6 +1,6 @@
 import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
-import { ok, type Result } from "@kit/core"
+import { ok, type Result } from "@lib/domain/result.js"
 
 export interface RemoveDownloadedTranscriptsInput {
   readonly trackId: TrackId

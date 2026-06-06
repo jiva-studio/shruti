@@ -1,7 +1,7 @@
 import type { NoteId } from "@lib/domain/core.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { err, ok, type Result } from "@kit/core"
+import { err, ok, type Result } from "@lib/domain/result.js"
 
 export interface DeleteNoteInput {
   readonly id: NoteId
