@@ -3,87 +3,77 @@
     <IonLabel>{{ $t("settings.groups.account") }}</IonLabel>
   </IonListHeader>
 
-  <IonItem button :detail="false" lines="none" :disabled="busy" @click="onItemClick">
-    <!-- Anonymous → neutral icon chip; signed-in → real avatar (image or
-         initials fallback). The avatar replaces the chip so signed-in users
-         get the personal touch. -->
-    <IconChip v-if="anonymous" slot="start">
-      <IconUserPlus />
-    </IconChip>
-    <!-- Signed-in with no personal data (provider didn't expose
-         email/picture, or the region's auth deliberately doesn't store
-         them — RU). Visually parallel to the anonymous IconChip variant
-         above: same chip shape, neutral palette. Strictly a data-presence
-         check — not gated on region — so any deployment that ends up
-         without user data lands here. -->
-    <IconChip v-else-if="!hasPersonalData" slot="start">
-      <IconUserFilled />
-    </IconChip>
-    <!-- Signed-in avatar shares the square-rounded-corners chip shape with
-         every other Settings row (see IconChip.vue / .settings-item-icon).
-         IonAvatar's circular crop made the avatar pop out visually; this
-         host is a plain div sized identically to the chip. The image fills
-         it edge-to-edge with the same border-radius, and the initials
-         fallback reuses the chip's neutral palette so a failed image looks
-         like just another chip rather than a broken portrait. -->
-    <div v-else slot="start" class="account-avatar settings-item-icon">
-      <img
-        v-if="picture && !pictureFailed"
-        :src="picture"
-        alt=""
-        referrerpolicy="no-referrer"
-        class="account-avatar__img"
-        @error="pictureFailed = true"
-      />
-      <span v-else class="account-avatar__initials">{{ initials }}</span>
-    </div>
-
-    <IonLabel class="ion-text-wrap">
-      <template v-if="anonymous">
-        <h2>{{ $t("settings.account.signInCta.title") }}</h2>
-        <p>{{ $t("settings.account.signInCta.description") }}</p>
-      </template>
-      <template v-else-if="!hasPersonalData">
-        <h2>{{ $t("settings.account.signedIn") }}</h2>
-        <p>{{ $t("settings.account.signedInNoDataSubtitle") }}</p>
-      </template>
-      <template v-else>
-        <h2>{{ name || email }}</h2>
-        <p>{{ $t("settings.account.signedIn") }}</p>
-      </template>
-    </IonLabel>
-  </IonItem>
+  <!-- Account row uses kit's SettingsAccountItem shell (IonItem + IonLabel).
+       The 3-way icon/avatar and text branches stay app domain: anonymous →
+       neutral chip; signed-in-no-data → neutral chip; signed-in-with-data →
+       avatar image or initials. -->
+  <SettingsAccountItem :disabled="busy" @activate="onItemClick">
+    <template #avatar>
+      <!-- Anonymous → neutral icon chip. -->
+      <IconChip v-if="anonymous">
+        <IconUserPlus />
+      </IconChip>
+      <!-- Signed-in with no personal data (provider didn't expose
+           email/picture, or the region's auth deliberately doesn't store
+           them — RU). Same chip shape + neutral palette as anonymous. -->
+      <IconChip v-else-if="!hasPersonalData">
+        <IconUserFilled />
+      </IconChip>
+      <!-- Signed-in avatar shares the square-rounded chip shape with every
+           other Settings row. Image fills it edge-to-edge; initials fallback
+           reuses the chip's neutral palette. -->
+      <div v-else class="account-avatar settings-item-icon">
+        <img
+          v-if="picture && !pictureFailed"
+          :src="picture"
+          alt=""
+          referrerpolicy="no-referrer"
+          class="account-avatar__img"
+          @error="pictureFailed = true"
+        />
+        <span v-else class="account-avatar__initials">{{ initials }}</span>
+      </div>
+    </template>
+    <template #title>
+      <h2 v-if="anonymous">{{ $t("settings.account.signInCta.title") }}</h2>
+      <h2 v-else-if="!hasPersonalData">{{ $t("settings.account.signedIn") }}</h2>
+      <h2 v-else>{{ name || email }}</h2>
+    </template>
+    <template #subtitle>
+      <p v-if="anonymous">{{ $t("settings.account.signInCta.description") }}</p>
+      <p v-else-if="!hasPersonalData">{{ $t("settings.account.signedInNoDataSubtitle") }}</p>
+      <p v-else>{{ $t("settings.account.signedIn") }}</p>
+    </template>
+  </SettingsAccountItem>
 
   <!-- Subscription row sits inside Account so the "who you are + what you've
        unlocked + where you fetch from" trio reads as one logical block.
        Always visible — including on builds without RC keys, where tapping
        it falls through to the paywall stack the same as any other Pro
        call-to-action. -->
-  <IonItem
+  <SettingsActionItem
     v-if="isSubscribed"
-    button
-    :detail="true"
-    lines="none"
-    @click="emit('manage-subscription')"
+    detail
+    :title="$t('settings.subscription.subscriptionIsActive')"
+    :subtitle="$t('settings.subscription.tapToManage')"
+    @activate="emit('manage-subscription')"
   >
-    <IconChip slot="start">
-      <IconRosetteDiscountCheckFilled />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.subscription.subscriptionIsActive") }}</h2>
-      <p>{{ $t("settings.subscription.tapToManage") }}</p>
-    </IonLabel>
-  </IonItem>
+    <template #icon>
+      <IconChip><IconRosetteDiscountCheckFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
 
-  <IonItem v-else button :detail="true" lines="none" @click="emit('open-paywall')">
-    <IconChip slot="start">
-      <IconRosetteDiscountCheckFilled />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.subscription.title") }}</h2>
-      <p>{{ $t("settings.subscription.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsActionItem
+    v-else
+    detail
+    :title="$t('settings.subscription.title')"
+    :subtitle="$t('settings.subscription.description')"
+    @activate="emit('open-paywall')"
+  >
+    <template #icon>
+      <IconChip><IconRosetteDiscountCheckFilled /></IconChip>
+    </template>
+  </SettingsActionItem>
 
   <ServerSettingsItem v-model="activeServerIdProxy" :items="serverItems" />
 
@@ -102,7 +92,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonActionSheet, IonItem, IonLabel, IonListHeader } from "@ionic/vue"
+import { IonActionSheet, IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsAccountItem, SettingsActionItem } from "@kit/ui"
 import { IconRosetteDiscountCheckFilled, IconUserFilled, IconUserPlus } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ServerSettingsItem from "../ServerSettingsItem.vue"

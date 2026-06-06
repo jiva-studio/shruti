@@ -3,32 +3,33 @@
     <IonLabel>{{ $t("settings.groups.data") }}</IonLabel>
   </IonListHeader>
 
-  <IonItem button :detail="false" lines="none" @click="emit('export')">
-    <IconChip slot="start">
-      <DatabaseExportIcon />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.data.export.title") }}</h2>
-      <p>{{ $t("settings.data.export.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsActionItem
+    :title="$t('settings.data.export.title')"
+    :subtitle="$t('settings.data.export.description')"
+    @activate="emit('export')"
+  >
+    <template #icon>
+      <IconChip><DatabaseExportIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
 
-  <IonItem button :detail="false" lines="none" @click="onImportClick">
-    <IconChip slot="start">
-      <DatabaseImportIcon />
-    </IconChip>
-    <IonLabel class="ion-text-nowrap">
-      <h2>{{ $t("settings.data.import.title") }}</h2>
-      <p>{{ $t("settings.data.import.description") }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsActionItem
+    :title="$t('settings.data.import.title')"
+    :subtitle="$t('settings.data.import.description')"
+    @activate="onImportClick"
+  >
+    <template #icon>
+      <IconChip><DatabaseImportIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
 
   <input ref="fileInput" type="file" accept=".db" style="display: none" @change="onFileChange" />
 </template>
 
 <script setup lang="ts">
 import { ref } from "vue"
-import { IonItem, IonLabel, IonListHeader } from "@ionic/vue"
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { SettingsActionItem } from "@kit/ui"
 import { DatabaseExportIcon, DatabaseImportIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 

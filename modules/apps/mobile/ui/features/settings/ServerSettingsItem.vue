@@ -1,14 +1,14 @@
 <template>
-  <IonItem button :detail="true" lines="none" @click="open = true">
-    <IconChip slot="start">
-      <CloudIcon />
-    </IconChip>
-
-    <IonLabel class="ion-text-wrap">
-      <h2>{{ $t("settings.preferredServer.title") }}</h2>
-      <p>{{ subtitle }}</p>
-    </IonLabel>
-  </IonItem>
+  <SettingsSelectItem
+    v-model="value"
+    :title="$t('settings.preferredServer.title')"
+    :options="items"
+    @activate="open = true"
+  >
+    <template #icon>
+      <IconChip><CloudIcon /></IconChip>
+    </template>
+  </SettingsSelectItem>
 
   <ListItemSelectorDialog
     v-model:open="open"
@@ -22,22 +22,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import { IonItem, IonLabel } from "@ionic/vue"
+import { ref } from "vue"
+import { SettingsSelectItem } from "@kit/ui"
 import { CloudIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
 
-interface Props {
+defineProps<{
   items: { id: string; title: string }[]
-}
-
-const props = defineProps<Props>()
+}>()
 const value = defineModel<string>({ required: true, default: "" })
 
 const open = ref(false)
-
-const subtitle = computed(() => props.items.find((i) => i.id === value.value)?.title ?? value.value)
 
 function onSelect(next?: string): void {
   if (!next) return
