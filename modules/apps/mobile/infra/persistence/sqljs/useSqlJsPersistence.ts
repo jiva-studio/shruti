@@ -2,7 +2,7 @@ import initSqlJs, { type Database } from "sql.js"
 // Bundle the wasm locally via Vite so we don't depend on sql.js.org (which 404s).
 import sqlWasmUrl from "sql.js/dist/sql-wasm-browser.wasm?url"
 import type { IDatabase, IPersistence, QueryParams } from "@ports/app/index.js"
-import { saveData, getBlob } from "@infra/idbKv/index.js"
+import { saveData, getBlob } from "@kit/infra"
 
 export function useSqlJsPersistence(): IPersistence {
   return {
