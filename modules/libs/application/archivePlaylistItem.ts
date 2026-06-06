@@ -1,7 +1,7 @@
 import type { PlaylistItemId } from "@lib/domain/core.js"
 import type { IPlaylistItemRepository } from "@lib/domain/ports/playlistItemRepository.js"
 import type { IUnitOfWork } from "@lib/domain/ports/unitOfWork.js"
-import { err, ok, type Result } from "@kit/core"
+import { err, ok, type Result } from "@lib/domain/result.js"
 
 export interface ArchivePlaylistItemInput {
   readonly itemId: PlaylistItemId

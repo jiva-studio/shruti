@@ -2,7 +2,7 @@ import type { LanguageCode, TrackId } from "@lib/domain/core.js"
 import type { Note } from "@lib/domain/note.js"
 import type { INoteRepository } from "@lib/domain/ports/noteRepository.js"
 import type { ITranscriptRepository } from "@lib/domain/ports/transcriptRepository.js"
-import { err, ok, type Result } from "@kit/core"
+import { err, ok, type Result } from "@lib/domain/result.js"
 import { createNote } from "../createNote.js"
 import { loadTranscript, type LoadTranscriptError } from "../loadTranscript.js"
 

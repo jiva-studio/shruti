@@ -1,5 +1,5 @@
 import type { NoteId, TrackId, UnixMs } from "./core.js"
-import { err, ok, type Result } from "@kit/core"
+import { err, ok, type Result } from "./result.js"
 
 /**
  * Free-form JSON sidecar persisted alongside the note. The shape is
