@@ -1,5 +1,8 @@
 export default {
   title: "Lectorium",
+  // User-facing brand name (store listing / notifications), distinct
+  // from the legacy internal `title`.
+  name: "Shruti",
   home: "Home",
   search: "Search",
   settings: "Settings",

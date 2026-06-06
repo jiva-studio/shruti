@@ -103,10 +103,16 @@ const handler: ProactiveRuleHandler = {
     // same id are idempotent at the Capacitor layer — no DB flag
     // needed to track "already scheduled".
     try {
+      // Static copy on purpose: this is scheduled while the app is
+      // backgrounded and `buildContent` hasn't run yet (and may never
+      // run before the alarm fires, since the user is gone). If a
+      // foreground tick later preps the body, the scheduler re-arms the
+      // same id with the real preview — but until then this is what the
+      // user sees, so it can't be empty.
       await app.notifications.schedule({
         id: notificationIdFor(chatMessageId),
-        title: "",
-        body: "",
+        title: ctx.t("app.name"),
+        body: ctx.t("notifications.proactiveInactivityBody"),
         at: fireAt.getTime(),
         extra: { chatSessionId: sessionId, chatMessageId },
       })
