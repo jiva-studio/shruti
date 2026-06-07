@@ -77,6 +77,10 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       if (safe > 2) safe = 2
       await AudioPlayer.setPlaybackRate({ rate: safe })
     },
+    async setProgressInterval(intervalMs: number): Promise<void> {
+      const safe = Number.isFinite(intervalMs) && intervalMs > 0 ? Math.round(intervalMs) : 1000
+      await AudioPlayer.setProgressInterval({ intervalMs: safe })
+    },
     onProgress(listener): () => void {
       listeners.add(listener)
       return () => listeners.delete(listener)

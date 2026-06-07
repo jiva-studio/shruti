@@ -50,5 +50,14 @@ export interface IAudioPlayer {
   setMix(params: AudioMixParams): Promise<void>
   /** Set playback rate (1.0 = normal). Engines preserve pitch. */
   setPlaybackRate(rate: number): Promise<void>
+  /**
+   * Set how often the engine pushes progress to the WebView while playing,
+   * in milliseconds. Governs only the JS bridge — the system player / lock
+   * screen interpolates position independently and stays smooth. Callers
+   * adapt it to context (fast for transcript highlighting, slow/heartbeat
+   * when backgrounded) to avoid a backlog of events building up while the
+   * WebView is throttled.
+   */
+  setProgressInterval(intervalMs: number): Promise<void>
   onProgress(listener: AudioProgressListener): () => void
 }

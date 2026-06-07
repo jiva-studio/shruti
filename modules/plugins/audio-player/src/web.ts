@@ -7,6 +7,7 @@ import type {
   SeekByParams,
   SetMixParams,
   SetPlaybackRateParams,
+  SetProgressIntervalParams,
   Status,
 } from "./definitions"
 
@@ -32,6 +33,14 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   private currentItemId: string | null = null
   private pendingSeekSec: number | null = null
   private intervalId: ReturnType<typeof setInterval> | null = null
+  /** Progress emit cadence. Adjusted by `setProgressInterval()` so the
+   *  page can stream fast while a transcript is visible and slow down (or
+   *  go to a heartbeat) when only a progress ring is shown / backgrounded. */
+  private intervalMs = 1000
+  /** Tracks the last emitted playing-state so we send one final frame on
+   *  the pause/stop edge and then stay quiet — no point streaming an
+   *  unchanging position once playback has stopped (incl. track end). */
+  private wasPlaying = false
 
   // Web Audio graph for stereo→mono blending. Built lazily on first
   // setMix() — pages that never use the feature don't pay for an
@@ -65,18 +74,26 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   }
 
   /** Idempotent. Started lazily on first `onProgressChanged()` so a
-   *  page that never registers a listener doesn't burn a 1Hz timer. */
+   *  page that never registers a listener doesn't burn a timer. */
   private startProgressTimer(): void {
     if (this.intervalId !== null) return
-    this.intervalId = setInterval(() => {
-      if (!this.callback) return
-      this.callback({
-        position: this.audio.currentTime,
-        playing: !this.audio.paused,
-        duration: isFinite(this.audio.duration) ? this.audio.duration : 0,
-        itemId: this.currentItemId || "",
-      })
-    }, 1000)
+    this.intervalId = setInterval(() => this.emitProgress(), this.intervalMs)
+  }
+
+  private emitProgress(): void {
+    if (!this.callback) return
+    const playing = !this.audio.paused
+    // While playing, emit every tick. Once stopped (pause / track end),
+    // emit exactly one final frame and then go quiet until playback
+    // resumes — the native engines behave the same way.
+    if (!playing && !this.wasPlaying) return
+    this.wasPlaying = playing
+    this.callback({
+      position: this.audio.currentTime,
+      playing,
+      duration: isFinite(this.audio.duration) ? this.audio.duration : 0,
+      itemId: this.currentItemId || "",
+    })
   }
 
   /** For tests / HMR teardown. The plugin is a singleton in production
@@ -167,6 +184,20 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     if (rate < 0.25) rate = 0.25
     if (rate > 4) rate = 4
     this.audio.playbackRate = rate
+  }
+
+  async setProgressInterval(params: SetProgressIntervalParams): Promise<void> {
+    let next = Math.floor(params.intervalMs)
+    if (!Number.isFinite(next) || next <= 0) next = 1000
+    if (next < 250) next = 250
+    if (next === this.intervalMs) return
+    this.intervalMs = next
+    // Restart the timer at the new cadence if one is already running.
+    if (this.intervalId !== null) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+      this.startProgressTimer()
+    }
   }
 
   /**

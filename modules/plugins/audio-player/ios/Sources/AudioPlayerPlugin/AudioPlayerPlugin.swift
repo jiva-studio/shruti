@@ -16,6 +16,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "seekBy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMix", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setProgressInterval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
 
     ]
@@ -35,7 +36,11 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// newRate` while paused — it'd resume playback. Store the user's
     /// chosen speed here and apply it whenever we transition into play.
     private var targetPlaybackRate: Float = 1.0
-    
+    /// How often the periodic time observer fires (seconds). Adjusted by
+    /// `setProgressInterval` so we stream fast for transcript highlighting,
+    /// slower for the floating player, and a heartbeat when backgrounded.
+    private var progressIntervalSec: Double = 1.0
+
     override public func load() {
         // Setup audio session for background playback
         setupAudioSession()
@@ -263,8 +268,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
     
     private func setupProgressObserver() {
-        // Monitor playback progress every 0.5 second
-        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        // Monitor playback progress at the current adaptive cadence.
+        let interval = CMTime(seconds: progressIntervalSec, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         progressObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             self?.updatePlaybackInfo()
             self?.notifyProgressChanged()
@@ -366,6 +371,25 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             // Already playing — apply immediately. While paused we just
             // store the target; play() / togglePause() picks it up.
             player.rate = rate
+        }
+        call.resolve()
+    }
+
+    /// Change how often progress is pushed to the WebView. The lock-screen
+    /// Now Playing info interpolates position from the reported rate, so it
+    /// stays smooth regardless of this cadence.
+    @objc func setProgressInterval(_ call: CAPPluginCall) {
+        let ms = call.getDouble("intervalMs") ?? 1000
+        var sec = ms / 1000.0
+        if !sec.isFinite || sec <= 0 { sec = 1.0 }
+        if sec < 0.25 { sec = 0.25 }
+        if sec != progressIntervalSec {
+            progressIntervalSec = sec
+            // Rebuild the observer at the new cadence if one is active.
+            if progressObserver != nil {
+                removeProgressObserver()
+                setupProgressObserver()
+            }
         }
         call.resolve()
     }
