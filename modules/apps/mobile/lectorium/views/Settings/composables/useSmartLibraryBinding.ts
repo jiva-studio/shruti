@@ -41,9 +41,13 @@ export function useSmartLibraryBinding(
   const { sections } = useSearchFilterSections()
 
   const filters = ref<FiltersModel>({})
+  // Set while the initial hydration assigns `filters.value`, so the deep
+  // watcher doesn't echo every just-loaded value straight back to the store.
+  let hydrating = false
 
   const ready = (async () => {
     await store.load()
+    hydrating = true
     filters.value = {
       authors: [...store.authorIds],
       languages: [...store.languageCodes],
@@ -64,6 +68,11 @@ export function useSmartLibraryBinding(
   watch(
     filters,
     (next) => {
+      // Skip the echo from the hydration assignment above.
+      if (hydrating) {
+        hydrating = false
+        return
+      }
       void store.setAuthors(next.authors ?? [])
       void store.setLanguages(next.languages ?? [])
       void store.setLocations(next.locations ?? [])

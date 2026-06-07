@@ -64,12 +64,10 @@ describe("resolveLocalizedName", () => {
     ).toBeUndefined()
   })
 
-  it("returns undefined when the first map entry (fallback) is empty — matches the legacy buildTrackRow pattern", () => {
-    // The four original duplicates all used the chain
-    // `names.get(lang) ?? names.values().next().value`, i.e. "first
-    // available", not "first non-empty". The helper preserves that
-    // semantic — callers relying on iteration-for-non-empty should
-    // request a separate API instead.
+  it("falls back to the first NON-empty entry when earlier entries are empty", () => {
+    // Previously the helper returned the first map entry verbatim, so an
+    // empty leading entry masked a perfectly good later name. It now skips
+    // empties and returns the first non-empty value.
     expect(
       resolveLocalizedName(
         entity([
@@ -78,7 +76,20 @@ describe("resolveLocalizedName", () => {
         ]),
         "en"
       )
-    ).toBeUndefined()
+    ).toBe("Имя")
+  })
+
+  it("falls back past several empty entries to the first non-empty one", () => {
+    expect(
+      resolveLocalizedName(
+        entity([
+          ["en", ""],
+          ["ru", ""],
+          ["es", "Nombre"],
+        ]),
+        "en"
+      )
+    ).toBe("Nombre")
   })
 })
 
