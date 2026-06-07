@@ -29,26 +29,39 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
 
       const id = `db:${path}`
       const handles: PluginListenerHandle[] = []
+      let onCompleted!: () => void
+      let onFailed!: (error: Error) => void
+      const completion = new Promise<void>((resolve, reject) => {
+        onCompleted = resolve
+        onFailed = reject
+      })
       onProgress?.(0, 0, true)
 
       try {
-        const completion = new Promise<void>((resolve, reject) => {
-          if (onProgress) {
-            MediaDownloader.addListener("progress", (e) => {
+        // Listeners must be attached BEFORE download(): a fast / cached
+        // completion can fire its event synchronously, and a late listener
+        // would miss it, hanging `completion` forever.
+        if (onProgress) {
+          handles.push(
+            await MediaDownloader.addListener("progress", (e) => {
               if (e.id !== id) return
               onProgress(e.bytesDownloaded, e.contentLength, true)
-            }).then((h) => handles.push(h))
-          }
-          MediaDownloader.addListener("completed", (e) => {
+            })
+          )
+        }
+        handles.push(
+          await MediaDownloader.addListener("completed", (e) => {
             if (e.id !== id) return
             onProgress?.(e.bytesDownloaded, e.bytesDownloaded, false)
-            resolve()
-          }).then((h) => handles.push(h))
-          MediaDownloader.addListener("failed", (e) => {
+            onCompleted()
+          })
+        )
+        handles.push(
+          await MediaDownloader.addListener("failed", (e) => {
             if (e.id !== id) return
-            reject(new Error(e.error || "Database download failed"))
-          }).then((h) => handles.push(h))
-        })
+            onFailed(new Error(e.error || "Database download failed"))
+          })
+        )
 
         await MediaDownloader.download({
           id,
@@ -56,6 +69,22 @@ export function useDatabaseToFsFetcher(): IDatabaseFetcher {
           destination: { directory: "data", subdir, filename },
         })
         await completion
+      } catch (err) {
+        // A failed/partial DB download must not leave a truncated file on
+        // disk: `findLocalDatabase`/`exists()` only check for presence, so a
+        // half-written file would later be opened as a corrupt SQLite DB.
+        // Drop both the final path and the plugin's `.download` temp.
+        try {
+          await Filesystem.deleteFile({ path, directory: Directory.Data })
+        } catch {
+          // Nothing partial on disk — fine.
+        }
+        try {
+          await Filesystem.deleteFile({ path: `${path}.download`, directory: Directory.Data })
+        } catch {
+          // No temp neighbour — fine.
+        }
+        throw err
       } finally {
         for (const h of handles) await h.remove()
         isDownloading = false

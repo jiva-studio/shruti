@@ -11,11 +11,20 @@ import type { IMediaDownloader, ProgressCallback } from "@ports/app/index.js"
  * Capacitor's `registerPlugin` selects the right backend at runtime.
  *
  * Contracts handled here:
- *  - URL → `DownloadDestination` mapping. We mirror the path convention
- *    used by `useCapacitorRemoteFilesStorage` (`Directory.Cache + "<cacheDir>/" + URL.pathname`)
- *    and `useWebRemoteFilesStorage` (`caches.open("<cacheDir>")` keyed by `URL.pathname`).
- *    Without this alignment, `IRemoteFilesStorage.has()/get()` wouldn't
- *    find files written by the plugin.
+ *  - URL → `DownloadDestination` mapping keyed by `URL.pathname`, the same
+ *    layout `useCapacitorRemoteFilesStorage` (transcripts) and
+ *    `useWebRemoteFilesStorage` (`caches.open("<cacheDir>")`) use.
+ *
+ *    Downloaded track audio is the user's explicit "save for offline" set,
+ *    so it MUST live in durable app storage (`directory: "data"` → Android
+ *    `filesDir`, iOS `NSDocumentDirectory`). Writing it to `directory:
+ *    "cache"` (the previous behaviour) put finished lecture audio in
+ *    `Context.cacheDir` / `NSCachesDirectory`, which the OS is free to
+ *    reclaim under storage pressure WITHOUT an uninstall — the user-
+ *    reported "downloaded lectures disappear" bug (#51). Both the native
+ *    files-storage reader and the web fallback resolve `data` to the same
+ *    durable location, so cross-readability with the transcript cache is
+ *    preserved.
  *  - Per-call event subscription with cleanup, so multiple concurrent
  *    downloads don't leak listeners.
  *  - Mapping the plugin's `(bytes, total)` events to the legacy
@@ -27,7 +36,7 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
     const lastSlash = path.lastIndexOf("/")
     const subdir = lastSlash >= 0 ? `${cacheDir}/${path.substring(0, lastSlash)}` : cacheDir
     const filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path
-    return { directory: "cache", subdir, filename }
+    return { directory: "data", subdir, filename }
   }
 
   function idFor(url: string): string {
@@ -40,23 +49,38 @@ export function useMediaDownloaderAdapter({ cacheDir }: { cacheDir: string }): I
       const destination = destinationFor(url)
 
       const handles: PluginListenerHandle[] = []
+      let onCompleted!: (localUrl: string) => void
+      let onFailed!: (error: Error) => void
       const result = new Promise<string>((resolve, reject) => {
-        if (onProgress) {
-          MediaDownloader.addListener("progress", (e) => {
+        onCompleted = resolve
+        onFailed = reject
+      })
+
+      // Attach listeners BEFORE calling download(). A fast / already-cached
+      // completion can fire its `completed`/`failed` event synchronously, so
+      // if we awaited download() before the listener was registered the
+      // promise would hang forever.
+      if (onProgress) {
+        handles.push(
+          await MediaDownloader.addListener("progress", (e) => {
             if (e.id !== id) return
             onProgress(e.bytesDownloaded, e.contentLength, true)
-          }).then((h) => handles.push(h))
-        }
-        MediaDownloader.addListener("completed", (e) => {
+          })
+        )
+      }
+      handles.push(
+        await MediaDownloader.addListener("completed", (e) => {
           if (e.id !== id) return
           if (onProgress) onProgress(e.bytesDownloaded, e.bytesDownloaded, false)
-          resolve(e.localUrl)
-        }).then((h) => handles.push(h))
-        MediaDownloader.addListener("failed", (e) => {
+          onCompleted(e.localUrl)
+        })
+      )
+      handles.push(
+        await MediaDownloader.addListener("failed", (e) => {
           if (e.id !== id) return
-          reject(new Error(e.error || "Download failed"))
-        }).then((h) => handles.push(h))
-      })
+          onFailed(new Error(e.error || "Download failed"))
+        })
+      )
 
       try {
         await MediaDownloader.download({

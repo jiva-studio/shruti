@@ -12,10 +12,11 @@ import Capacitor
  * The host app's AppDelegate is expected to forward that call into this
  * plugin (see DownloadDelegate's `completionHandler`).
  *
- * Path resolution: the JS adapter passes a fully-resolved on-disk path
- * via `destination` so the result lands in the same directory as
- * `useCapacitorRemoteFilesStorage` reads from (NSCachesDirectory +
- * "lectorium/" + URL.pathname). The plugin doesn't second-guess the path.
+ * Path resolution: the JS adapter passes a `destination` whose `directory`
+ * selects the base folder — `"data"` → `NSDocumentDirectory` (durable; the
+ * user's saved-for-offline audio + transcripts) or `"cache"` →
+ * `NSCachesDirectory` (OS-reclaimable; ephemeral share clips). The plugin
+ * doesn't second-guess the subdir/filename derived from the URL pathname.
  */
 @objc(MediaDownloaderPlugin)
 public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
