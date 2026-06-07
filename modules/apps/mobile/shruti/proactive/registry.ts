@@ -86,6 +86,17 @@ const BUNDLED_DEFAULTS: ProactiveRuleConfig[] = [
     ],
   },
   {
+    id: "unfinished_lecture",
+    enabled: true,
+    mode: "pre_baked",
+    prep_window_hours: 24,
+    refresh_if_older_than_hours: 24,
+    session_strategy: "new_session",
+    // No eligibility gate: an actually-abandoned lecture is its own
+    // signal, and the rule's own `onAppPause` cooldown caps frequency.
+    cooldown_hours: 72,
+  },
+  {
     id: "holiday",
     enabled: true,
     mode: "pre_baked",
