@@ -10,6 +10,9 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { bootstrapUserDatabaseFromApp } from "@lectorium/services/bootstrap.js"
 import { PREFERRED_SERVER_KEY } from "@lectorium/services/preferredServer.js"
 import { findRegion, getRegions, setRegions } from "@lectorium/services/regionsRegistry.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
+import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import type { RemoteAppConfig } from "@lib/domain/config.js"
 
 const crossfadeAnimation: AnimationBuilder = (_, opts) => {
@@ -134,9 +137,35 @@ export function useWelcomeController(
     },
   })
 
+  /**
+   * Pre-hydrate everything HomeView reads on mount (playlist, content-DB
+   * dictionaries, and the persisted UI-language setting) so the first paint
+   * of Home is already populated instead of reflowing once these arrive a
+   * tick later. Best-effort: a slow or failed load must never strand the
+   * user on Welcome, so any error is logged and we navigate regardless.
+   */
+  async function prewarmHome(): Promise<void> {
+    const playlist = usePlaylistStore()
+    const dictionaries = useDictionariesStore()
+    // Touch the app-language ref so its async hydration starts, then await
+    // the same preference read it performs internally — settling the ref
+    // before Home's dictionary labels render in the wrong sort order.
+    void useAppLanguage().value
+    try {
+      await Promise.all([
+        playlist.ensureLoaded(),
+        dictionaries.ensureLoaded(),
+        lectorium.preferences.get("settings.appLanguage"),
+      ])
+    } catch (err) {
+      console.warn("[lectorium] home pre-hydration failed:", err)
+    }
+  }
+
   async function initialize(): Promise<void> {
     await controller.start()
     if (controller.isReady.value && autoNavigate) {
+      await prewarmHome()
       ionRouter.replace(navigateToRoute, crossfadeAnimation)
     }
   }
