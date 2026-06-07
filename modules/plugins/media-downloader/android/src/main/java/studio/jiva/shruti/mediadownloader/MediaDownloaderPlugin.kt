@@ -31,11 +31,12 @@ import java.util.UUID
  *    the global tag, so progress for downloads that survived a process
  *    restart keeps flowing into the UI.
  *
- * Path resolution: the JS adapter passes a fully-resolved on-disk path
- * via `destination` (computed from the URL pathname). We don't second-guess
- * it; we just create parent dirs and let the worker write there. This is
- * what makes the result readable by `useCapacitorRemoteFilesStorage`,
- * which uses the same `Directory.Cache + shruti/<pathname>` convention.
+ * Path resolution: the JS adapter passes a `destination` whose `directory`
+ * selects the base folder — `"data"` → `filesDir` (durable; used for the
+ * user's saved-for-offline audio + transcripts) or `"cache"` → `cacheDir`
+ * (OS-reclaimable; used for ephemeral share clips). We don't second-guess
+ * the subdir/filename (computed from the URL pathname); we just create
+ * parent dirs and let the worker write there.
  */
 @CapacitorPlugin(name = "MediaDownloader")
 class MediaDownloaderPlugin : Plugin() {
