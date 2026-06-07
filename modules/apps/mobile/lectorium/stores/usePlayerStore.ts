@@ -60,6 +60,14 @@ export const usePlayerStore = defineStore("player", () => {
   // Single-flight guard for the native-state drain (init / resume /
   // foreground-advance can all trigger it near-simultaneously).
   let syncing = false
+  // Generation token for `openTrack`. Each call captures the value at
+  // entry and bumps it; after every `await` it bails if a newer call
+  // has since started. Without this, two concurrent opens (tap A then
+  // tap B, or auto-advance racing a tap) interleave their awaits and
+  // the loser commits its identity/refs AFTER the winner loaded the
+  // engine — leaving the FloatingPlayer pointing at one track while a
+  // different one plays.
+  let openGeneration = 0
 
   const trackId = ref<TrackId | null>(null)
   const title = ref<string>("")
@@ -306,12 +314,19 @@ export const usePlayerStore = defineStore("player", () => {
   async function openTrack(
     args: OpenArgs
   ): Promise<Result<void, PlayTrackError | "engine-failed">> {
+    // Claim this open as the latest. Any open already in flight is now
+    // stale and will bail at its next await boundary instead of writing
+    // its identity/refs over ours.
+    const gen = ++openGeneration
+    const stale = (): boolean => gen !== openGeneration
+
     const plan = await playTrack({
       track: args.track,
       preferredLanguage: args.preferredLanguage,
       author: args.author,
       itemId: args.itemId,
     })
+    if (stale()) return { ok: true, value: undefined }
     if (!plan.ok) return plan
     const cmd = plan.value
 
@@ -347,14 +362,20 @@ export const usePlayerStore = defineStore("player", () => {
     if (prevItemId) {
       await session.finishCurrent(prevItemId, prevPositionMs)
     }
+    // A newer open started while we journaled the previous session — it
+    // owns the swap now. Bail before resolving resume / touching the
+    // engine so we don't load our (now stale) track over it.
+    if (stale()) return { ok: true, value: undefined }
 
     const duration = cmd.audio.duration ?? 0
     const resumeMs = await resumePosition.resolve(
       { itemId: args.itemId, resumeFromMs: args.resumeFromMs },
       duration
     )
+    if (stale()) return { ok: true, value: undefined }
 
     const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
+    if (stale()) return { ok: true, value: undefined }
     const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
 
     // Continuous playback (Pro): hand the whole playlist tail to the native
@@ -402,6 +423,11 @@ export const usePlayerStore = defineStore("player", () => {
     } catch {
       return { ok: false, error: "engine-failed" }
     }
+
+    // Final guard before committing identity/refs: if a newer open won
+    // the race while we were loading the engine, leave the refs (and the
+    // transcript) for it — our `cmd` no longer reflects what's playing.
+    if (stale()) return { ok: true, value: undefined }
 
     trackId.value = cmd.trackId
     title.value = cmd.title

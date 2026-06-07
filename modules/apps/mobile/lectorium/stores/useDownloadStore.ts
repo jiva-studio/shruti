@@ -300,9 +300,33 @@ export const useDownloadStore = defineStore("downloads", () => {
    * track doesn't visually rewind to "downloading".
    */
   function markStartingDownload(trackId: TrackId): void {
-    if (states.value.get(trackId) === "completed") return
+    const current = states.value.get(trackId)
+    // Preserve a terminal state. "completed" must not visually rewind to
+    // "downloading" on re-add; "failed" must survive so a follow-up
+    // `ensureDownloaded` takes the retry path (which runs the iOS
+    // phantom-cache cleanup gated on `state === "failed"`). Overwriting
+    // "failed" here would suppress that cleanup for re-add-after-failure.
+    if (current === "completed" || current === "failed") return
     setProgress(trackId, 0)
     setState(trackId, "downloading")
+  }
+
+  /**
+   * Roll back an optimistic "downloading" paint that will never resolve.
+   * Used when `add()` claimed "downloading" up front but the track turns
+   * out to have no audio variant to fetch — nothing will ever call
+   * `ensureDownloaded`, so the spinner would otherwise stick forever.
+   * Only clears a state we ourselves set optimistically; a real in-flight
+   * download (or any terminal state) is left untouched.
+   */
+  function clearStartingDownload(trackId: TrackId): void {
+    if (inFlight.has(trackId)) return
+    if (states.value.get(trackId) !== "downloading") return
+    const nextStates = new Map(states.value)
+    nextStates.delete(trackId)
+    states.value = nextStates
+    const nextProgress = new Map(progress.value)
+    if (nextProgress.delete(trackId)) progress.value = nextProgress
   }
 
   async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
@@ -398,6 +422,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     prefetch,
     cancelPrefetch,
     markStartingDownload,
+    clearStartingDownload,
     remove,
     reset,
   }
