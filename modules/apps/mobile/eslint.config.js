@@ -45,6 +45,34 @@ export default defineConfigWithVueTs(
 
   /* ---- Layer boundary rules ---- */
 
+  // Contracts (shared kernel / published language): pure wire types,
+  // zero dependencies — not even the domain. Importable by every layer.
+  {
+    files: ["submodules/contracts/**/*.ts", "../../libs/contracts/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@lib/domain", "@lib/domain/*", "@lib/application/*"],
+              message: "Contracts must not import domain/application — keep them dependency-free",
+            },
+            { group: ["@ports/*"], message: "Contracts must not import technical ports" },
+            { group: ["@infra/*"], message: "Contracts must not import infrastructure" },
+            { group: ["@ui/*"], message: "Contracts must not import UI" },
+            { group: ["@shruti/*"], message: "Contracts must not import composition root" },
+            { group: ["@kit/*"], message: "Contracts must not import the shared toolkit" },
+            {
+              group: ["vue", "vue-router", "@ionic/*"],
+              message: "Contracts must not import framework code",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Domain: pure, imports nothing external
   {
     files: ["submodules/domain/**/*.ts"],
