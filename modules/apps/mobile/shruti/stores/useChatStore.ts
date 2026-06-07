@@ -913,6 +913,7 @@ export const useChatStore = defineStore("chat", () => {
           sanskrit: event.sanskrit,
           transliteration: event.transliteration,
           translation: event.translation,
+          audioUrl: event.audioUrl,
         })
         return
       }

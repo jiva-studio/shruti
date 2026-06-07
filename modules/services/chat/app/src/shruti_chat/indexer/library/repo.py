@@ -40,18 +40,36 @@ class VerseBody(TypedDict):
     # picks one string by the turn's locale — see `_worker_common`.
     transliteration: dict[str, str]
     translation: dict[str, str]  # lang → translation text
+    # Relative S3 key of the Sanskrit recitation, or "" when absent. The
+    # SSE layer expands it into a full public URL. Empty for verses with
+    # no audio (and for any DB published before the column existed — see
+    # the defensive read below).
+    audio_path: str
 
 
 def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> VerseBody | None:
     with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        # `audio_path` was added after the first library.db releases. A DB
+        # published before the column exists would make a hard-coded SELECT
+        # raise OperationalError, silently dropping EVERY verse payload to
+        # the chip fallback. Probe the schema so the chat-service works
+        # against both old and new published artifacts.
+        has_audio = any(
+            r[1] == "audio_path"
+            for r in conn.execute("PRAGMA table_info(library_verses)")
+        )
+        cols = "id, text, transliteration" + (", audio_path" if has_audio else "")
         row = conn.execute(
-            "SELECT id, text, transliteration FROM library_verses "
-            "WHERE source_id = ? AND tokens = ?",
+            f"SELECT {cols} FROM library_verses WHERE source_id = ? AND tokens = ?",
             (source_id, tokens),
         ).fetchone()
         if row is None:
             return None
-        verse_id, sanskrit, transliteration = row
+        if has_audio:
+            verse_id, sanskrit, transliteration, audio_path = row
+        else:
+            verse_id, sanskrit, transliteration = row
+            audio_path = None
         translations_rows = conn.execute(
             "SELECT language, translation FROM library_verse_variants "
             "WHERE verse_id = ?",
@@ -64,6 +82,7 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
         # yields empty strings for both (no spurious card content).
         transliteration={"en": iast, "ru": iast_to_cyrillic(iast)} if iast else {},
         translation={lang: text or "" for lang, text in translations_rows},
+        audio_path=audio_path or "",
     )
 
 
