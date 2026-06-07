@@ -14,6 +14,7 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.session.CommandButton;
+import androidx.media3.session.DefaultMediaNotificationProvider;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 import androidx.media3.session.SessionCommand;
@@ -107,6 +108,16 @@ public final class AudioPlayerService extends MediaSessionService {
                 .setCallback(new SessionCallback())
                 .setCustomLayout(buildCustomLayout())
                 .build();
+
+        // Media3's default notification small icon is a generic media glyph.
+        // The status-bar small icon is a monochrome alpha mask, so the
+        // full-colour launcher icon can't be used here — it would render as a
+        // featureless white blob. Supply a dedicated white-on-transparent
+        // drawable instead.
+        DefaultMediaNotificationProvider notificationProvider =
+                new DefaultMediaNotificationProvider.Builder(this).build();
+        notificationProvider.setSmallIcon(R.drawable.ic_stat_player);
+        setMediaNotificationProvider(notificationProvider);
     }
 
     @Nullable
@@ -210,9 +221,11 @@ public final class AudioPlayerService extends MediaSessionService {
                 String itemId = o.optString("itemId", "");
                 String title = o.optString("title", "");
                 String author = o.optString("author", "");
+                String cover = o.optString("cover", null);
                 long durationMs = o.has("durationMs") ? o.optLong("durationMs", C.TIME_UNSET)
                         : C.TIME_UNSET;
-                out.add(AudioPlayerPlugin.buildMediaItem(itemId, url, title, author, durationMs));
+                out.add(AudioPlayerPlugin.buildMediaItem(
+                        this, itemId, url, title, author, cover, durationMs));
             }
         } catch (org.json.JSONException e) {
             e.printStackTrace();

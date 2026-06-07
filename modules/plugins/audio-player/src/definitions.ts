@@ -17,6 +17,11 @@ export type OpenParams = {
   // The author of the audio track to be displayed
   // in the system player UI
   author: string,
+
+  // Optional http(s)/content artwork URL shown as the system player /
+  // lock-screen large icon. file:// URLs are ignored — native falls back
+  // to a bundled branded image instead.
+  cover?: string,
 }
 
 /**
@@ -114,6 +119,9 @@ export type QueueItem = {
   url: string
   title: string
   author: string
+  // Optional http(s)/content artwork URL for the lock-screen large icon;
+  // file:// is ignored in favour of a bundled branded image.
+  cover?: string
   // Total duration in seconds, if known. Lets native report a completion
   // duration in transition events without probing the media.
   duration?: number

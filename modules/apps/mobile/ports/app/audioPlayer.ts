@@ -9,6 +9,8 @@ export interface AudioOpenParams {
   url: string
   title: string
   author: string
+  /** Optional http(s) artwork URL for the lock-screen large icon. */
+  cover?: string
 }
 
 export interface AudioStatus {
@@ -49,6 +51,8 @@ export interface AudioQueueItem {
   url: string
   title: string
   author: string
+  /** Optional http(s) artwork URL for the lock-screen large icon. */
+  cover?: string
   /** Total duration in milliseconds, if known. */
   durationMs?: number
 }
