@@ -255,6 +255,12 @@ public final class AudioPlayerService extends Service {
         mediaStateNotificationService.addNotifier(new PluginCallMediaStateNotifier(call));
     }
 
+    /** Adjust how often progress is pushed to the WebView while playing.
+     *  Delegated to the notification service, which reschedules its loop. */
+    public void setProgressInterval(long intervalMs) {
+        mediaStateNotificationService.setEmitInterval(intervalMs);
+    }
+
     /** Forward the slider state to the AudioProcessor sitting in the
      *  ExoPlayer audio pipeline. Volatile fields make this safe to call
      *  from the Capacitor bridge thread while the audio render thread

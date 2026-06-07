@@ -84,6 +84,7 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { useKeyboardVisibility } from "@shruti/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@shruti/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@shruti/composables/usePlayerProgressFlush.js"
+import { usePlayerProgressCadence } from "@shruti/composables/usePlayerProgressCadence.js"
 import { usePlayerTutorialPulse } from "@shruti/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
 import { useChatStoreProactiveSync } from "@shruti/composables/useChatStoreProactiveSync.js"
@@ -143,6 +144,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
 usePlayerProgressFlush()
+usePlayerProgressCadence()
 useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
