@@ -5,6 +5,12 @@ Focus on the commentary-header leakage fix: prior shape `[^N] БГ 2.13 —
 header text into their answers' trailing lines. Switched to bare
 `[^N]\\n[s=0] …`, symmetric with the verse case — server-side marker
 expander still renders the full attribution from alias storage.
+
+Index-space contract: the header marker is the note's 1-based POSITION
+(the first arg to `_render_one_note`), NOT the alias `ref`. The synthesis
+planner numbers `supporting_notes` by position and the expander remaps the
+position back to the alias at expansion time — so each note below uses a
+`ref` that DIFFERS from its position to prove the header tracks position.
 """
 
 from __future__ import annotations
@@ -31,14 +37,15 @@ def _commentary_note(*, ref=7, addr_label="БГ 2.13",
     }
 
 
-def test_commentary_header_is_bare_ref_only() -> None:
-    """The commentary header must be `[^7]` alone — no addr_label,
+def test_commentary_header_is_bare_position_only() -> None:
+    """The commentary header must be `[^<position>]` alone — no addr_label,
     no author, no Russian word `комментарий`. Anything else primes
-    weaker synthesizer models to leak it as plain text."""
+    weaker synthesizer models to leak it as plain text. The marker is the
+    POSITION (here 1), not the alias `ref` (7)."""
     note = _commentary_note()
     out = _render_one_note(1, note)
     first_line = out.split("\n", 1)[0]
-    assert first_line == "[^7]"
+    assert first_line == "[^1]"
     # Defensive — ensure none of the prosy bits sneak into the body
     # header line (the actual sentence body comes BELOW, prefixed `[s=N]`).
     assert "БГ 2.13" not in first_line
@@ -58,12 +65,12 @@ def test_commentary_sentences_still_indexed_below_header() -> None:
 
 
 def test_commentary_with_missing_author_still_bare() -> None:
-    """Author absent (no catalog hit) — header still `[^N]`, no
+    """Author absent (no catalog hit) — header still `[^<position>]`, no
     leakage of `комментарий` word or addr_label."""
     note = _commentary_note(author=None)
-    out = _render_one_note(1, note)
+    out = _render_one_note(2, note)
     first_line = out.split("\n", 1)[0]
-    assert first_line == "[^7]"
+    assert first_line == "[^2]"
     assert "комментарий" not in first_line
 
 
@@ -72,10 +79,10 @@ def test_commentary_with_no_sentences_still_renders_bare_header() -> None:
     or fall through to a different rendering path that re-introduces
     the addr_label."""
     note = _commentary_note(sentences=[])
-    out = _render_one_note(1, note)
+    out = _render_one_note(4, note)
     # Falls through past the sentence-indexed branch; verifies the bare
-    # header itself wasn't built with addr_label.
-    assert "[^7]" in out
+    # header itself wasn't built with addr_label. Marker = position (4).
+    assert "[^4]" in out
     assert "БГ 2.13" not in out.split("\n", 1)[0]
 
 
@@ -90,9 +97,10 @@ def test_verse_header_remains_bare() -> None:
         "score": 0.78,
         "meta": {"source_id": "src_BG", "tokens": "9.22"},
     }
-    out = _render_one_note(1, note)
+    out = _render_one_note(2, note)
     first_line = out.split("\n", 1)[0]
-    assert first_line == "[^3]"
+    # Marker = position (2), not the alias ref (3).
+    assert first_line == "[^2]"
     assert "БГ 9.22" not in first_line
 
 
@@ -109,6 +117,7 @@ def test_lecture_header_keeps_natural_language_title() -> None:
         "score": 0.65,
         "meta": {"start_ms": 0, "end_ms": 1000},
     }
-    out = _render_one_note(1, note)
+    out = _render_one_note(3, note)
     first_line = out.split("\n", 1)[0]
-    assert first_line == "[^5] Утренняя прогулка, 1976-04-03"
+    # Marker = position (3), not the alias ref (5); title stays adjacent.
+    assert first_line == "[^3] Утренняя прогулка, 1976-04-03"

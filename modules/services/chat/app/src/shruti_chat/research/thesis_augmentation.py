@@ -22,8 +22,10 @@ import asyncio
 from typing import Any
 
 from shruti_chat.agent.tools._envelope import (
+    _AUTHORED_KINDS,
     lecture_to_envelope,
     library_to_envelope,
+    resolve_commentary_author_names,
 )
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.commentary_expansion import _cosine
@@ -290,6 +292,13 @@ async def augment_thin_theses(
             this_idx = next_pool_idx
             next_pool_idx += 1
             fresh_for_this_thesis.append((this_idx, env))
+        # Batch-resolve human author names for the fresh library chunks so
+        # an augmentation-fetched commentary / prose / letter carries its
+        # attribution — same enrichment chunks_search + commentary_expansion
+        # do. Without it the synthesizer blockquote renders address-only.
+        lib_author_names = await resolve_commentary_author_names(
+            [s.chunk for s in lib_scored], catalog_repo=catalog_repo, lang=lang,
+        )
         for s in lib_scored:
             chunk = s.chunk
             key = (chunk.item_kind, chunk.item_id, chunk.segment_index or 0)
@@ -303,7 +312,14 @@ async def augment_thin_theses(
                     fresh_for_this_thesis.append((existing_idx, additional_envelopes[existing_idx - len(base_notes) - 1]))
                 continue
             dedup_seen.add(key)
-            env = library_to_envelope(chunk, alias_map=alias_map, score=s.score)
+            extra = None
+            if chunk.item_kind in _AUTHORED_KINDS and chunk.author_id:
+                name = lib_author_names.get(chunk.author_id)
+                if name:
+                    extra = {"author_name": name}
+            env = library_to_envelope(
+                chunk, alias_map=alias_map, score=s.score, extra_meta=extra,
+            )
             env["_augment_dedup"] = key
             additional_envelopes.append(env)
             this_idx = next_pool_idx

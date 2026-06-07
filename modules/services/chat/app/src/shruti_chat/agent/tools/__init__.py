@@ -129,7 +129,10 @@ def bind_repositories(
             "catalog_repo": catalog_repo,
             "embedder": embedder,
         },
-        "chunks_get_by_address":  {"chunk_repo": chunk_repo},
+        "chunks_get_by_address":  {
+            "chunk_repo": chunk_repo,
+            "catalog_repo": catalog_repo,
+        },
         "chunks_get_window":      {"chunk_repo": chunk_repo},
         "chunks_find_similar":    {"chunk_repo": chunk_repo, "embedder": embedder},
         "user_history_search":    {"chunk_repo": chunk_repo, "embedder": embedder},

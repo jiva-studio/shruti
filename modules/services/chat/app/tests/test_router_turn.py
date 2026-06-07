@@ -112,6 +112,59 @@ async def test_lang_substituted_into_system_prompt() -> None:
 
 
 @pytest.mark.asyncio
+async def test_prior_refs_flag_adds_context_hint_to_user_message() -> None:
+    """A deictic follow-up ("эту") is ambiguous on the latest message
+    alone. When the prior turn surfaced refs, the router gets a terse
+    context hint appended to the user message so the classifier can
+    disambiguate; with no prior refs the message is untouched."""
+    llm = FakeLLMForRouter(
+        responses=[RoutingDecision(intent="research", confidence=0.9)]
+    )
+    await run_router_turn("эту", lang="ru", llm=llm, prior_turn_had_refs=True)
+    msg = llm.seen_calls[0][1]["content"]
+    assert msg.startswith("эту")
+    assert "previous answer offered" in msg
+
+    llm2 = FakeLLMForRouter(
+        responses=[RoutingDecision(intent="research", confidence=0.9)]
+    )
+    await run_router_turn("эту", lang="ru", llm=llm2, prior_turn_had_refs=False)
+    assert llm2.seen_calls[0][1]["content"] == "эту"
+
+
+@pytest.mark.asyncio
+async def test_prior_refs_flag_separates_cache_entries() -> None:
+    """Same text + lang + model but different prior-refs context must NOT
+    collide in the router cache — each gets its own LLM call + entry."""
+    from shruti_chat.infra.cache.memory_kv_cache import MemoryKVCache
+
+    cache = MemoryKVCache()
+    llm = FakeLLMForRouter(
+        responses=[
+            RoutingDecision(intent="research", confidence=0.9),
+            RoutingDecision(intent="create_action", confidence=0.9),
+        ]
+    )
+    a = await run_router_turn(
+        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=False,
+    )
+    b = await run_router_turn(
+        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=True,
+    )
+    # Two distinct LLM calls (no cross-context cache hit) → the second
+    # decision is the second scripted response, not the first.
+    assert len(llm.seen_calls) == 2
+    assert a.intent == "research"
+    assert b.intent == "create_action"
+    # And a repeat of the FIRST context DOES hit cache (no 3rd call).
+    a2 = await run_router_turn(
+        "а PDF?", lang="ru", llm=llm, kv_cache=cache, prior_turn_had_refs=False,
+    )
+    assert len(llm.seen_calls) == 2
+    assert a2.intent == "research"
+
+
+@pytest.mark.asyncio
 async def test_model_override_passes_through() -> None:
     """When the caller specifies a model (e.g. cheaper-than-default),
     it must reach the LLMPort verbatim."""
