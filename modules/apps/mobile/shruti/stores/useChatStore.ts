@@ -332,6 +332,23 @@ export const useChatStore = defineStore("chat", () => {
   let abort: AbortController | null = null
   let suggestionsAbort: AbortController | null = null
 
+  /** Id of the assistant placeholder for the turn currently streaming.
+   *  Pre-minted by `runChatTurn` and handed over on the
+   *  `assistant-placeholder` event, so every streaming mutation can
+   *  target THIS bubble by id instead of scanning for `m.streaming` —
+   *  a stale placeholder (e.g. a previous turn that never cleared its
+   *  flag) can't misroute deltas. Cleared on `finalised` / `error`. */
+  let streamingMessageId: ChatMessageId | null = null
+
+  /** Locate the current streaming bubble by its known id. Returns -1
+   *  if there's no active stream or the bubble was dropped (session
+   *  switch, retry). Callers bail on -1, same as the old
+   *  `findIndex(m => m.streaming)` contract. */
+  function streamingIndex(): number {
+    if (streamingMessageId === null) return -1
+    return messages.value.findIndex((m) => m.id === streamingMessageId)
+  }
+
   // Chat repositories and HTTP service adapters are built by the
   // composition root (shruti.ts / repositories.ts). The store only
   // consumes them — it never instantiates concrete @infra adapters.
@@ -584,6 +601,7 @@ export const useChatStore = defineStore("chat", () => {
    *  wait for the outage to clear), so leaving an empty failed bubble
    *  with a Retry button would be misleading. */
   function dropStreamingPlaceholder(): void {
+    streamingMessageId = null
     if (messages.value.some((m) => m.streaming)) {
       messages.value = messages.value.filter((m) => !m.streaming)
     }
@@ -745,6 +763,10 @@ export const useChatStore = defineStore("chat", () => {
         if (idx >= 0 && messages.value[idx].streaming) {
           messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
         }
+        // The turn is over (success, error, or abort) — drop the
+        // streaming-id handle so a stray late event can't reattach to a
+        // bubble that's no longer streaming.
+        if (streamingMessageId === assistantMsgId) streamingMessageId = null
       }
     }
   }
@@ -763,11 +785,12 @@ export const useChatStore = defineStore("chat", () => {
           createdAt: Date.now(),
           streaming: true,
         }
+        streamingMessageId = event.messageId
         messages.value = [...messages.value, placeholder]
         return
       }
       case "delta": {
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
         next[idx] = { ...next[idx], content: next[idx].content + event.text }
@@ -775,10 +798,28 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "tool-start": {
-        const idx = messages.value.findIndex((m) => m.streaming)
+        // A tool re-run discards the first pass: clear the prose AND
+        // the per-turn action/outline accumulators + the ephemeral
+        // research lists on the bubble, so the finalised message can't
+        // carry orphaned cards from the abandoned pass. (runChatTurn
+        // resets its own closure-side `actions`/`outlines` maps on the
+        // same event, keeping the persisted message in lockstep.) The
+        // verse/chapter/cite payload caches are append-only, keyed by
+        // their own source ids, and only render when a marker in the
+        // final prose references them — a discarded pass leaves no such
+        // marker, so stale cache entries are inert and don't need a
+        // sweep here.
+        const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
-        next[idx] = { ...next[idx], content: "" }
+        next[idx] = {
+          ...next[idx],
+          content: "",
+          actions: undefined,
+          outlines: undefined,
+          researchQuestions: undefined,
+          researchSources: undefined,
+        }
         messages.value = next
         return
       }
@@ -794,7 +835,7 @@ export const useChatStore = defineStore("chat", () => {
         // keep showing up in the ticker rotation after the server
         // moved on (e.g. when `composing_answer` lands, the user
         // doesn't want to keep seeing "природа buddhi" sub-queries).
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
         next[idx] = {
@@ -812,7 +853,7 @@ export const useChatStore = defineStore("chat", () => {
         // Ephemeral — lives on the streaming bubble only; dropped on
         // `finalised` (which replaces the whole message) or `error`
         // (which removes the placeholder).
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const cur = messages.value[idx]
         const next = [...messages.value]
@@ -827,7 +868,7 @@ export const useChatStore = defineStore("chat", () => {
         // Add (or replace, last-write-wins) one inspected source.
         // Dedup happens here — server emits per-query, multiple
         // sub-queries inspecting the same chunk collapse into one chip.
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const cur = messages.value[idx]
         const nextMap = new Map(cur.researchSources ?? new Map())
@@ -838,7 +879,7 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "action": {
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
         const cur = next[idx]
@@ -850,7 +891,7 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "outline": {
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
         const cur = next[idx]
@@ -897,7 +938,8 @@ export const useChatStore = defineStore("chat", () => {
       }
       case "finalised": {
         // Replace the streaming placeholder with the persisted entity.
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
+        streamingMessageId = null
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
         } else {
@@ -957,7 +999,9 @@ export const useChatStore = defineStore("chat", () => {
         // their mind. Stop paths with prose accumulated are persisted
         // via the `finalised` event with meta.error.kind="stopped".
         if (event.code === "stopped_empty") {
-          messages.value = messages.value.filter((m) => !m.streaming)
+          const stoppedId = streamingMessageId
+          streamingMessageId = null
+          messages.value = messages.value.filter((m) => m.id !== stoppedId)
           return
         }
         // Prefer the absolute resets_at_epoch from the Phase-4 429 body
@@ -1035,7 +1079,8 @@ export const useChatStore = defineStore("chat", () => {
         // in-memory only: they're not useful history and the SQL
         // `parseError` whitelist would discard the `failed` kind on
         // reload anyway.
-        const idx = messages.value.findIndex((m) => m.streaming)
+        const idx = streamingIndex()
+        streamingMessageId = null
         if (idx >= 0) {
           const next = [...messages.value]
           next[idx] = {
@@ -1160,6 +1205,14 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  /** Set of `<messageId>\0<actionId>` keys whose `executeAction` is
+   *  mid-flight. The guard below flips this SYNCHRONOUSLY (before any
+   *  await) so a second confirm tap that arrives before
+   *  `setActionState("executing")` has persisted is still rejected —
+   *  otherwise both taps pass the state check and the side effect
+   *  (playlist.add / reminder / paywall) runs twice. */
+  const inFlightActions = new Set<string>()
+
   async function executeAction(
     messageId: string,
     actionId: string,
@@ -1171,6 +1224,14 @@ export const useChatStore = defineStore("chat", () => {
     if (!action) return
     const currentState = msg.actionStates?.[actionId] ?? "pending"
     if (currentState === "executing" || currentState === "done") return
+
+    // Synchronous double-tap guard: the persisted "executing" flip below
+    // awaits a SQLite write, leaving a window in which a second rapid tap
+    // would also pass `currentState`. Claim the slot here, before any
+    // await, and release it in `finally`.
+    const lockKey = `${messageId}\0${actionId}`
+    if (inFlightActions.has(lockKey)) return
+    inFlightActions.add(lockKey)
 
     await setActionState(messageId, actionId, "executing")
     try {
@@ -1193,6 +1254,8 @@ export const useChatStore = defineStore("chat", () => {
     } catch (err) {
       console.warn("chat: action execution failed", err)
       await setActionState(messageId, actionId, "error")
+    } finally {
+      inFlightActions.delete(lockKey)
     }
   }
 
