@@ -61,6 +61,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
         url: params.url,
         title: params.title,
         author: params.author,
+        cover: params.cover,
       })
     },
     async play(): Promise<void> {
@@ -146,6 +147,7 @@ function toPluginQueueItem(item: AudioQueueItem): {
   url: string
   title: string
   author: string
+  cover?: string
   duration?: number
 } {
   return {
@@ -153,6 +155,7 @@ function toPluginQueueItem(item: AudioQueueItem): {
     url: item.url,
     title: item.title,
     author: item.author,
+    cover: item.cover,
     duration: item.durationMs !== undefined ? item.durationMs / 1000 : undefined,
   }
 }
