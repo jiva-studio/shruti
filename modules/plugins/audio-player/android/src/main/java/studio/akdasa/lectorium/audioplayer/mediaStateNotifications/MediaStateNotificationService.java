@@ -10,19 +10,35 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
  * This class is responsible for notifying the media state to the registered notifiers.
- * It runs in a separate thread and updates the media state every 500ms when playing.
- * For paused/stopped states, notifications are sent once on state change.
+ * It runs in a separate thread and pushes the media state at a configurable
+ * interval while playing. For paused/stopped states, notifications are sent
+ * once on state change and then the stream goes quiet.
+ *
+ * The interval is adaptive (see {@link #setEmitInterval(long)}): the JS layer
+ * speeds it up when a transcript view needs sub-second word highlighting and
+ * slows it to a heartbeat when the app is backgrounded, so a 2 Hz stream
+ * never piles up in the (throttled) WebView and flushes as a janky burst on
+ * resume. The system player / lock screen interpolates position between
+ * updates from the reported playback speed, so it stays smooth regardless.
  */
 public final class MediaStateNotificationService {
+    /** Foreground default; matches the floating-player progress ring needs. */
+    private static final long DEFAULT_INTERVAL_MS = 1000;
+    /** Floor — guards against a pathological caller pinning the CPU. */
+    private static final long MIN_INTERVAL_MS = 250;
+
     private final List<IMediaStateNotifier> notifiers = new ArrayList<>();
     private final ExoPlayer exoPlayer;
     private final MediaState state = new MediaState("", "stopped", "", "", 0, 0);
 
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledFuture<?> scheduledTask;
+    private long intervalMs = DEFAULT_INTERVAL_MS;
 
     // Track previous state to detect changes
     private String previousState = "stopped";
@@ -43,13 +59,35 @@ public final class MediaStateNotificationService {
     }
 
     public void run() {
-        executor.scheduleWithFixedDelay(() -> {
+        schedule();
+    }
+
+    /** (Re)schedule the polling loop at the current {@link #intervalMs}. */
+    private synchronized void schedule() {
+        if (scheduledTask != null) {
+            scheduledTask.cancel(false);
+        }
+        scheduledTask = executor.scheduleWithFixedDelay(() -> {
             try {
                 new Handler(Looper.getMainLooper()).post(this::update);
             } catch (Exception ignored) {
                 // Ignore exceptions during shutdown
             }
-        }, 0, 500, TimeUnit.MILLISECONDS);
+        }, 0, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Change how often progress is pushed while playing. No-op if the
+     * interval is unchanged; otherwise the loop is rescheduled. Safe to
+     * call from the Capacitor bridge thread.
+     */
+    public synchronized void setEmitInterval(long ms) {
+        long clamped = Math.max(MIN_INTERVAL_MS, ms);
+        if (clamped == intervalMs) {
+            return;
+        }
+        intervalMs = clamped;
+        schedule();
     }
 
     public MediaState getState() {
@@ -62,6 +100,7 @@ public final class MediaStateNotificationService {
 
         state.setPosition(currentPosition);
         state.setState(exoPlayer.isPlaying() ? "playing" : "paused");
+        state.setSpeed(exoPlayer.getPlaybackParameters().speed);
         if (duration > 0 && duration != state.getDuration()) {
             state.setDuration(duration);
         }

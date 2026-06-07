@@ -7,6 +7,10 @@ public class MediaState {
     private String title;
     private long position;
     private long duration;
+    /** Current playback speed (1.0 = normal). Passed to the MediaSession so
+     *  the lock screen can interpolate position correctly between updates,
+     *  even when we emit state infrequently. */
+    private float speed = 1.0f;
 
     // Constructor
     public MediaState(
@@ -50,6 +54,10 @@ public class MediaState {
         return duration;
     }
 
+    public float getSpeed() {
+        return speed;
+    }
+
     // Setters
     public void setTrackId(String trackId) {
         this.trackId = trackId;
@@ -73,5 +81,9 @@ public class MediaState {
 
     public void setDuration(long duration) {
         this.duration = duration;
+    }
+
+    public void setSpeed(float speed) {
+        this.speed = speed;
     }
 }

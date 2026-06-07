@@ -163,6 +163,21 @@ public final class AudioPlayerPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod
+    public void setProgressInterval(PluginCall call) {
+        if (!audioPlayerServiceConnection.isConnected()) {
+            call.reject("Audio service is not started");
+            return;
+        }
+        Integer intervalMs = call.getInt("intervalMs");
+        if (intervalMs == null) {
+            call.reject("Argument 'intervalMs' is required");
+            return;
+        }
+        audioPlayerServiceConnection.getService().setProgressInterval(intervalMs.longValue());
+        call.resolve();
+    }
+
     @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
     public void onProgressChanged(PluginCall call) {
         if (!audioPlayerServiceConnection.isConnected()) {

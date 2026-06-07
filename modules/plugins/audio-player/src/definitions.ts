@@ -80,6 +80,23 @@ export type SeekByParams = {
   delta: number
 }
 
+/**
+ * How often the engine should push progress (`onProgressChanged`) to the
+ * WebView while playing. This governs ONLY the JS bridge — the system
+ * player / lock screen updates independently and interpolates position
+ * between updates, so it stays smooth regardless of this value.
+ *
+ * The caller adapts it to context: ~500 ms when a transcript view needs
+ * sub-second word highlighting, ~1000 ms when only the floating-player
+ * progress ring is visible, and a slow heartbeat (e.g. 5000 ms) when the
+ * app is backgrounded — where a 2 Hz stream would otherwise pile up in
+ * the (throttled) WebView and flush as a janky burst on resume.
+ */
+export type SetProgressIntervalParams = {
+  /** Emit interval in milliseconds. Clamped to a sane floor by the engine. */
+  intervalMs: number
+}
+
 export interface AudioPlayerPlugin extends Plugin {
   open(params: OpenParams): Promise<void>
   play(): Promise<void>
@@ -89,6 +106,7 @@ export interface AudioPlayerPlugin extends Plugin {
   stop(): Promise<void>
   setMix(params: SetMixParams): Promise<void>
   setPlaybackRate(params: SetPlaybackRateParams): Promise<void>
+  setProgressInterval(params: SetProgressIntervalParams): Promise<void>
   onProgressChanged(
     callback: (status: Status) => void
   ): Promise<AudioPlayerListenerResult>

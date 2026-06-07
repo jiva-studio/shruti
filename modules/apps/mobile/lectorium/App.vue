@@ -84,6 +84,7 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useKeyboardVisibility } from "@lectorium/composables/useKeyboardVisibility.js"
 import { useLocaleSync } from "@lectorium/composables/useLocaleSync.js"
 import { usePlayerProgressFlush } from "@lectorium/composables/usePlayerProgressFlush.js"
+import { usePlayerProgressCadence } from "@lectorium/composables/usePlayerProgressCadence.js"
 import { usePlayerTutorialPulse } from "@lectorium/composables/usePlayerTutorialPulse.js"
 import { useAutoDownloadLoop } from "@lectorium/composables/useAutoDownloadLoop.js"
 import { useChatStoreProactiveSync } from "@lectorium/composables/useChatStoreProactiveSync.js"
@@ -143,6 +144,7 @@ const playButtonSize = app.platform === "android" ? 48 : 44
 
 useLocaleSync(appLanguage)
 usePlayerProgressFlush()
+usePlayerProgressCadence()
 useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
