@@ -114,7 +114,6 @@ export async function downloadMedia(
 
   let localUrl: string | null = null
   let workingServer: CdnServer | null = null
-  let lastError: unknown = null
 
   // Iterate every candidate once (no within-server retry — the prober
   // already weeded out servers that 404 the config; an in-flight CDN
@@ -129,8 +128,7 @@ export async function downloadMedia(
       })
       workingServer = server
       break
-    } catch (transferErr) {
-      lastError = transferErr
+    } catch {
       // Tell the next attempt to draw 0% — otherwise the radial gauge
       // could display the previous server's last reported chunk while
       // we re-establish from byte 0 elsewhere.
@@ -139,12 +137,10 @@ export async function downloadMedia(
   }
 
   if (localUrl === null || workingServer === null) {
-    if (lastError !== null) {
-      // Preserve the last failure for log inspection without leaking it
-      // up the use case boundary. `err("transfer-failed")` stays the
-      // single failure mode the UI can render.
-      console.warn(`[downloadMedia] all CDNs failed for ${input.trackId}:`, lastError)
-    }
+    // Every CDN failed. `err("transfer-failed")` is the single failure
+    // mode the UI can render; the use case stays IO-free, so logging the
+    // underlying error is the composition root's job (error-handling
+    // policy: the view controller catches and logs at the outer edge).
     // Best-effort mark "failed"; if the upsert itself rejects we don't
     // want a second exception masking the original transfer failure.
     try {
