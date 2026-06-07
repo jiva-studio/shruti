@@ -23,6 +23,9 @@ export interface VerseBody {
   readonly sanskrit: string
   readonly transliteration: string
   readonly translation: { readonly [lang: string]: string }
+  /** Full public URL of the Sanskrit recitation, when the library has
+   *  audio for this verse. Drives the play button on VerseCard. */
+  readonly audioUrl?: string
 }
 
 interface StoredEntry extends VerseBody {
@@ -112,6 +115,7 @@ export const useVerseBodyStore = defineStore("verseBody", () => {
       sanskrit: e.sanskrit,
       transliteration: e.transliteration,
       translation: e.translation,
+      audioUrl: e.audioUrl,
     }
   }
 

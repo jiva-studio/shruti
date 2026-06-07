@@ -88,6 +88,10 @@ export interface ChatVersePayloadWire {
   readonly sanskrit: string
   readonly transliteration: string
   readonly translation: Readonly<Record<string, string>>
+  /** Full public URL of the Sanskrit recitation for this verse, present
+   *  only when the library has audio for it. Server expands the stored
+   *  S3 key into an absolute URL; absent ⇒ no audio button. */
+  readonly audio_url?: string
 }
 
 /** Transcript snippet shipped ahead of the prose deltas containing the

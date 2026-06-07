@@ -202,6 +202,9 @@ export interface VersePayload {
   readonly sanskrit: string
   readonly transliteration: string
   readonly translation: { readonly [lang: string]: string }
+  /** Full public URL of the verse's Sanskrit recitation, or undefined
+   *  when the library has no audio for it. */
+  readonly audio_url?: string
 }
 
 /** Wire shape of a citation transcript snippet — carried by an `action`
@@ -1044,6 +1047,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
       if (typeof text === "string" && text) translation[lang] = text
     }
   }
+  const audioUrl = typeof p.audio_url === "string" && p.audio_url ? p.audio_url : undefined
   return {
     source_id: sourceId,
     tokens,
@@ -1051,6 +1055,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
     sanskrit,
     transliteration,
     translation,
+    ...(audioUrl ? { audio_url: audioUrl } : {}),
   }
 }
 
