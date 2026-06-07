@@ -34,6 +34,9 @@ jobs:
       platform: ${{ inputs.platform }}
       action: ${{ inputs.action }}
       track: ${{ inputs.track }}
+      # In-house Capacitor plugins: built (npm ci && npm run build) before the
+      # app's npm ci so vue-tsc resolves their dist/ type declarations.
+      plugins: '["audio-player","media-downloader"]'
     # Explicit mapping: this app's iOS cert is stored as LECTORIUM_APPLE_CERTIFICATES
     # but kit's reusable workflow expects the generic APPLE_CERTIFICATES.
     secrets:
