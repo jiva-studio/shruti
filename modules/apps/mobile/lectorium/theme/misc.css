@@ -32,3 +32,18 @@ ion-toast {
   --box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   --border-radius: 12px;
 }
+
+/* Flat header utility for modal / sheet headers. Material paints the
+ * header elevation in two places (the box-shadow and a gradient
+ * ::after line); kill both so a sheet header renders flush against its
+ * content. Applied via `<Header class="flat-header">` (the class falls
+ * through to the wrapped IonHeader). Loaded after Ionic core so it wins
+ * on equal specificity. */
+ion-header.flat-header,
+ion-header.flat-header::after {
+  box-shadow: none !important;
+  background-image: none;
+}
+ion-header.flat-header::after {
+  display: none;
+}
