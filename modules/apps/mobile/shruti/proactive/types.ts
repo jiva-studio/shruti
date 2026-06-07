@@ -73,8 +73,12 @@ export interface ProactiveRuleHandler {
    *
    * The scheduler dedupes via the SQL UNIQUE constraint, so detectors
    * can return the same instance every tick without harm.
+   *
+   * `config` is the resolved rule config for this handler so detectors
+   * can read tunables (e.g. `prep_window_hours`) from the published
+   * catalog instead of hardcoding magic constants.
    */
-  detect(ctx: ProactiveContext): Promise<readonly DetectResult[]>
+  detect(ctx: ProactiveContext, config: ProactiveRuleConfig): Promise<readonly DetectResult[]>
 
   /**
    * For a row already in `pending` or `ready`, decide whether the rule

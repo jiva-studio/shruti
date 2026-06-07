@@ -149,6 +149,13 @@ export function useStudioController(): StudioControllerReturn {
 
   async function load(handoff: StudioHandoff): Promise<void> {
     loading.value = true
+    // The page is cached by IonRouterOutlet, so refs survive across
+    // entries. Reset both mode refs before dispatching — otherwise a
+    // citation opened first leaves `citation.value` set, keeping
+    // `isCitationMode` true when a note is opened next, and `onDownload`
+    // would export the stale citation segment instead of the note.
+    note.value = null
+    citation.value = null
     try {
       if (handoff.kind === "citation") {
         await loadCitation({
