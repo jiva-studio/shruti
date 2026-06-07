@@ -155,7 +155,7 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
                 task.cancel()
             }
             if deletePartial, let entry = self.metadataStore.get(id: id) {
-                try? FileManager.default.removeItem(atPath: entry.localPath)
+                try? FileManager.default.removeItem(atPath: self.resolvedPath(entry.localPath))
             }
             self.metadataStore.remove(id: id)
             call.resolve()
@@ -168,7 +168,8 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
             call.resolve(["task": NSNull()])
             return
         }
-        let exists = FileManager.default.fileExists(atPath: entry.localPath)
+        let path = resolvedPath(entry.localPath)
+        let exists = FileManager.default.fileExists(atPath: path)
         let state: String = exists ? "completed" : "running"
         var task: [String: Any] = [
             "id": id,
@@ -176,14 +177,15 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
             "bytesDownloaded": entry.bytesDownloaded,
             "contentLength": entry.contentLength,
         ]
-        if exists { task["localUrl"] = "file://" + entry.localPath }
+        if exists { task["localUrl"] = "file://" + path }
         call.resolve(["task": task])
     }
 
     @objc func listTasks(_ call: CAPPluginCall) {
         var tasks: [[String: Any]] = []
         for entry in metadataStore.all() {
-            let exists = FileManager.default.fileExists(atPath: entry.localPath)
+            let path = resolvedPath(entry.localPath)
+            let exists = FileManager.default.fileExists(atPath: path)
             let state = exists ? "completed" : "running"
             var t: [String: Any] = [
                 "id": entry.id,
@@ -191,7 +193,7 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
                 "bytesDownloaded": entry.bytesDownloaded,
                 "contentLength": entry.contentLength,
             ]
-            if exists { t["localUrl"] = "file://" + entry.localPath }
+            if exists { t["localUrl"] = "file://" + path }
             tasks.append(t)
         }
         call.resolve(["tasks": tasks])
@@ -199,18 +201,20 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func resolveLocalUrl(_ call: CAPPluginCall) {
         guard let url = call.getString("url") else { return call.reject("'url' is required") }
-        if let entry = metadataStore.findByUrl(url),
-           FileManager.default.fileExists(atPath: entry.localPath) {
-            call.resolve(["localUrl": "file://" + entry.localPath])
-        } else {
-            call.resolve(["localUrl": NSNull()])
+        if let entry = metadataStore.findByUrl(url) {
+            let path = resolvedPath(entry.localPath)
+            if FileManager.default.fileExists(atPath: path) {
+                call.resolve(["localUrl": "file://" + path])
+                return
+            }
         }
+        call.resolve(["localUrl": NSNull()])
     }
 
     @objc func deleteFile(_ call: CAPPluginCall) {
         guard let url = call.getString("url") else { return call.reject("'url' is required") }
         if let entry = metadataStore.findByUrl(url) {
-            try? FileManager.default.removeItem(atPath: entry.localPath)
+            try? FileManager.default.removeItem(atPath: resolvedPath(entry.localPath))
             metadataStore.remove(id: entry.id)
         }
         call.resolve()
@@ -236,6 +240,36 @@ public class MediaDownloaderPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         try? FileManager.default.createDirectory(at: dirUrl, withIntermediateDirectories: true)
         return dirUrl.appendingPathComponent(filename).path
+    }
+
+    /// Re-anchor a stored absolute path to the *current* app container.
+    ///
+    /// iOS assigns a new container UUID on every install/update, so an
+    /// absolute path persisted by a previous version
+    /// (`…/<old-UUID>/Library/Caches/shruti/file.mp3`) no longer
+    /// resolves after an update — which is why offline downloads appeared
+    /// to vanish. The trailing components (after the Caches/Documents
+    /// base) are stable, so we keep that tail and re-join it with the live
+    /// base dir. A path already under the current container is returned
+    /// unchanged; an unrecognised path is returned as-is.
+    private func resolvedPath(_ stored: String) -> String {
+        let anchors: [(marker: String, dir: FileManager.SearchPathDirectory)] = [
+            ("/Library/Caches/", .cachesDirectory),
+            ("/Documents/", .documentDirectory),
+        ]
+        for (_, dir) in anchors {
+            if let base = FileManager.default.urls(for: dir, in: .userDomainMask).first,
+               stored.hasPrefix(base.path) {
+                return stored
+            }
+        }
+        for (marker, dir) in anchors {
+            if let range = stored.range(of: marker, options: .backwards),
+               let base = FileManager.default.urls(for: dir, in: .userDomainMask).first {
+                return base.appendingPathComponent(String(stored[range.upperBound...])).path
+            }
+        }
+        return stored
     }
 
     // ── Bridge helpers used by the delegate ───────────────────────────────
