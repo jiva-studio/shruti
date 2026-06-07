@@ -81,12 +81,24 @@ _CATALOG_TOOL_NAMES = frozenset({
     "track_get",
     "user_tracks_list",
     "user_recommendations_get",
+    # Needed so a deictic «перескажи последнюю лекцию» can be summarised
+    # here: catalog resolves the last-played track via user_tracks_list,
+    # then pulls its chapter outline to write the recap. Without this the
+    # catalog worker can find the track but has no summary tool.
+    "track_outline_get",
 })
 _ACTION_TOOL_NAMES = frozenset({
     "track_pdf_generate",
     "reminder_propose",
     "smart_library_propose",
     "pro_upgrade_propose",
+    # Lets the action worker resolve a deictic «PDF последней лекции»
+    # on its own: user_tracks_list(limit=1) → real track_ref →
+    # track_pdf_generate. Needed because the action worker runs its OWN
+    # ReAct loop and does NOT see this-turn candidates from a prior
+    # worker — without a resolver here the deictic-PDF request had no
+    # track to operate on and track_pdf_generate never got a real id.
+    "user_tracks_list",
 })
 _HELP_TOOL_NAMES = frozenset({
     "help_get",
@@ -284,7 +296,16 @@ async def run_chat_turn(
         action_tools = _subset(aliased_tools, _ACTION_TOOL_NAMES)
         help_tools = _subset(aliased_tools, _HELP_TOOL_NAMES)
 
-        expander = MarkerExpander(aliases, request_id=request_id)
+        # Shared by reference between the expander and the TurnContext:
+        # workers' `_yield_event` records every emitted action id here,
+        # and the expander reads it to drop hallucinated (never-emitted)
+        # `[action:...|id=X]` markers before they reach the client.
+        emitted_action_ids: set[str] = set()
+        expander = MarkerExpander(
+            aliases,
+            request_id=request_id,
+            emitted_action_ids=emitted_action_ids,
+        )
 
         # Speculative embed: most non-trivial intents (research,
         # find_track) need the user-query embedding eventually. Start it
@@ -303,10 +324,12 @@ async def run_chat_turn(
 
         ctx = TurnContext(
             request_id=trace_id,
+            lang=lang,
             region=region,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,
             expander=expander,
+            emitted_action_ids=emitted_action_ids,
             llm=deps.llm,
             research_tools=research_tools,
             locate_tools=locate_tools,
