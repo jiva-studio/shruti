@@ -4,6 +4,15 @@
       <p>{{ error }}</p>
     </IonText>
     <template v-else>
+      <!-- At most ONE nag banner at a time. The notifications nag takes
+           precedence over the subscription nag (showSubscriptionNag gates
+           on !showNotificationsNag) so we never stack two asks at the top
+           of the home screen. -->
+      <NotificationsNagBanner
+        v-if="showNotificationsNag"
+        @enable="onEnableNotifications"
+        @dismiss="onDismissNotificationsNag"
+      />
       <SubscriptionNagBanner
         v-if="showSubscriptionNag"
         @open="paywall.requestOpen()"
@@ -60,6 +69,7 @@ import { DurationBadge } from "@ui/components/badges/index.js"
 import { ActivitySection, CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
 import { useI18n } from "vue-i18n"
 import {
+  NotificationsNagBanner,
   PlaylistCountBadge,
   PlaylistSection,
   PlaylistStarterPacks,
@@ -73,10 +83,12 @@ import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
 import { useStarterPacks } from "@shruti/composables/useStarterPacks.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
+import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
 
+const { t } = useI18n()
 const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
 const formatDuration = useDurationFormatter()
 
@@ -141,7 +153,60 @@ const subscriptionNagDismissedAt = useConfig<number | null>(
   "home.subscriptionNag.dismissedAt",
   null
 )
+// Notifications nag. The whole proactive-push subsystem (holidays,
+// weekly digest, inactivity re-engagement, "finish your lecture") is
+// dead in the water on Android 13+ until the OS grants POST_NOTIFICATIONS
+// at runtime — and the only place that ever requested it was the Settings
+// daily-reminder toggle. So a user who never opened Settings got nothing.
+// This banner is the missing entry point: it's shown when permission is
+// not granted, and tapping it requests permission so the proactive pushes
+// can finally surface. Requesting permission is the whole job — we don't
+// silently arm the daily reminder here; that stays its own opt-in in
+// Settings. Native only — web notifications aren't part of the product.
+// It takes precedence over the subscription nag (engagement before
+// monetization) and re-appears 14 days after a dismiss, mirroring the
+// subscription cooldown.
+const app = useShruti()
+const isNativePlatform = app.platform !== "web"
+const notificationsNagDismissedAt = useConfig<number | null>(
+  "home.notificationsNag.dismissedAt",
+  null
+)
+// Optimistic `true` so the banner never flashes before the async
+// permission check resolves; flipped to the real value on mount / resume.
+const notificationsGranted = ref(true)
+const showNotificationsNag = computed(() => {
+  if (!isNativePlatform) return false
+  if (notificationsGranted.value) return false
+  const ts = notificationsNagDismissedAt.value
+  if (!ts) return true
+  return Date.now() - ts >= FOURTEEN_DAYS_MS
+})
+async function refreshNotificationPermission(): Promise<void> {
+  if (!isNativePlatform) return
+  const p = await app.notifications.checkPermission().catch(() => "unknown" as const)
+  notificationsGranted.value = p === "granted"
+}
+async function onEnableNotifications(): Promise<void> {
+  // Stamp `dismissedAt` regardless of the outcome so a denied prompt
+  // doesn't leave the banner stuck on screen forever (it'll come back in
+  // 14 days like any other dismiss). The request is the point: granting
+  // POST_NOTIFICATIONS unblocks every proactive push.
+  notificationsNagDismissedAt.value = Date.now()
+  try {
+    await app.notifications.requestPermission()
+  } catch (err) {
+    console.warn("[home] notification permission request failed", err)
+  }
+  await refreshNotificationPermission()
+}
+function onDismissNotificationsNag(): void {
+  notificationsNagDismissedAt.value = Date.now()
+}
+
 const showSubscriptionNag = computed(() => {
+  // The notifications nag wins the single banner slot — don't stack.
+  if (showNotificationsNag.value) return false
   if (!subscription.ready || subscription.reconciling) return false
   if (!subscription.available || subscription.isSubscribed) return false
   const installedAt = firstSeenAt.value
@@ -156,6 +221,7 @@ function onDismissSubscriptionNag(): void {
 
 onIonViewWillEnter(() => {
   void reloadHeatmap()
+  void refreshNotificationPermission()
 })
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
@@ -167,7 +233,6 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 // Sourced from the catalog DB (packs / pack_tracks); the composable
 // returns [] when the bundled current.db predates the schema, so the
 // empty-state degrades to the pre-feature look on older builds.
-const { t } = useI18n()
 const playlist = usePlaylistStore()
 const appLanguage = useAppLanguage()
 const toast = useToast()

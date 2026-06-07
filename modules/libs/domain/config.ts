@@ -38,6 +38,7 @@ export type ProactiveRuleId =
   | "enable_notifications_hint"
   | "smart_library_hint"
   | "next_shloka"
+  | "unfinished_lecture"
 
 /**
  * Config block for the agent's proactive subsystem. Absent or
