@@ -382,6 +382,12 @@ export const useChatStore = defineStore("chat", () => {
     // Without this guard, that second call would abort the in-flight
     // suggestions request and reload the message list redundantly.
     if (activeSessionId.value === id) return
+    // Switching away from a session mid-stream must abort its turn —
+    // otherwise the in-flight turn keeps yielding and its terminal
+    // finalised/error would land in the session we just opened (the
+    // consume loop's session guard is the second line of defence). The
+    // assistant message is still persisted to its own session in SQLite.
+    cancelStream()
     cancelSuggestions()
     activeSessionId.value = id
     const repos = chatRepos()
@@ -675,6 +681,13 @@ export const useChatStore = defineStore("chat", () => {
           ensureFresh: () => useAuthStore().ensureFresh(),
         }
       )) {
+        // Guard against a session switch mid-stream: if the user opened
+        // a different session while this turn was still streaming, stop
+        // applying its events — they belong to `sessionId`, not the now-
+        // active one, and the message is already persisted to its own
+        // session. Without this the terminal `finalised`/`error` would
+        // leak a foreign bubble into the open conversation.
+        if (activeSessionId.value !== sessionId) continue
         applyTurnEvent(event)
         if (event.kind === "user-message") {
           // session list re-order
@@ -713,7 +726,11 @@ export const useChatStore = defineStore("chat", () => {
         // placeholder.
         const code = "stream"
         const message = err instanceof Error ? err.message : "Stream failed"
-        applyTurnEvent({ kind: "error", code, message })
+        // Same session guard as the consume loop — don't synthesize a
+        // failed bubble in a session the user switched to mid-stream.
+        if (activeSessionId.value === sessionId) {
+          applyTurnEvent({ kind: "error", code, message })
+        }
       }
     } finally {
       abort = null
