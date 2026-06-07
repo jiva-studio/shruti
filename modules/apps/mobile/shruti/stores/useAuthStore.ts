@@ -5,7 +5,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { wipeLocalUserData } from "@shruti/services/dataWipe.js"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
+import { AccountDeleteError } from "@ports/app/auth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
