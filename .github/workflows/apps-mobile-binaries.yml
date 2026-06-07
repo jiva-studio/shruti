@@ -41,6 +41,11 @@ jobs:
     # but kit's reusable workflow expects the generic APPLE_CERTIFICATES.
     secrets:
       KIT_DEPLOY_KEY: ${{ secrets.KIT_DEPLOY_KEY }}
+      # Public RevenueCat SDK keys, baked into the web bundle kit builds for
+      # the native binaries. Without these the shipped app gets empty keys →
+      # purchases `available: false` → no prices, subscription unrecognized.
+      REVENUECAT_IOS_KEY: ${{ secrets.SHRUTI_APPLE_REVENUE_CAT_KEY }}
+      REVENUECAT_ANDROID_KEY: ${{ secrets.SHRUTI_GOOGLE_REVENUE_CAT_KEY }}
       GOOGLE_PLAY_KEYSTORE_BASE64: ${{ secrets.GOOGLE_PLAY_KEYSTORE_BASE64 }}
       GOOGLE_PLAY_KEYSTORE_PASSWORD: ${{ secrets.GOOGLE_PLAY_KEYSTORE_PASSWORD }}
       GOOGLE_PLAY_KEY_ALIAS: ${{ secrets.GOOGLE_PLAY_KEY_ALIAS }}
