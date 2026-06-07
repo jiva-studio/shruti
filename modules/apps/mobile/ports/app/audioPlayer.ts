@@ -39,6 +39,48 @@ export interface AudioMixParams {
   ratio: number
 }
 
+/**
+ * One entry in the native playback queue (milliseconds, like the rest of
+ * this port). See the plugin's `QueueItem` for the background-playback
+ * rationale.
+ */
+export interface AudioQueueItem {
+  itemId: string
+  url: string
+  title: string
+  author: string
+  /** Total duration in milliseconds, if known. */
+  durationMs?: number
+}
+
+/**
+ * One finished-item record from the native durable journal (milliseconds).
+ * Only `reason: "auto"` means the item was completed.
+ */
+export interface AudioQueueTransition {
+  finishedItemId: string
+  fromPositionMs: number
+  finishedAtMs: number
+  durationMs: number
+  startedItemId: string | null
+  reason: "auto" | "skip-next" | "skip-prev" | "error"
+  /** Native wall-clock of the transition (epoch ms). */
+  at: number
+  /** Monotonic sequence; pass back to `ackEvents` to clear. */
+  seq: number
+}
+
+/** Now-playing snapshot + drained transition journal (milliseconds). */
+export interface AudioQueueState {
+  currentItemId: string | null
+  positionMs: number
+  durationMs: number
+  playing: boolean
+  events: AudioQueueTransition[]
+}
+
+export type AudioTransitionListener = (transition: AudioQueueTransition) => void
+
 export interface IAudioPlayer {
   open(params: AudioOpenParams): Promise<void>
   play(): Promise<void>
@@ -60,4 +102,17 @@ export interface IAudioPlayer {
    */
   setProgressInterval(intervalMs: number): Promise<void>
   onProgress(listener: AudioProgressListener): () => void
+
+  /** Replace the queue and start at `startIndex` / `startPositionMs`. */
+  setQueue(items: AudioQueueItem[], startIndex: number, startPositionMs: number): Promise<void>
+  /** Append items to the tail of the current queue. */
+  appendToQueue(items: AudioQueueItem[]): Promise<void>
+  /** Read the now-playing snapshot + buffered transition journal. Does not clear it. */
+  getQueueState(): Promise<AudioQueueState>
+  /** Clear journal entries with `seq <= upToSeq`. */
+  ackEvents(upToSeq: number): Promise<void>
+  skipToNext(): Promise<void>
+  skipToPrevious(): Promise<void>
+  /** Foreground-only push on each transition (UI sugar; journal is source of truth). */
+  onTransition(listener: AudioTransitionListener): () => void
 }

@@ -6,6 +6,7 @@ import {
   type AutoArchiveDelay,
 } from "@lectorium/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useAutoPlayNext } from "@lectorium/composables/useAutoPlayNext.js"
 import { useTrackMetadataFields } from "@lectorium/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
@@ -43,6 +44,7 @@ export interface SettingsControllerReturn {
   autoArchiveDelay: Ref<AutoArchiveDelay>
   highlightCurrentSentence: Ref<boolean>
   autoScroll: Ref<boolean>
+  autoPlayNext: Ref<boolean>
   openTranscriptAutomatically: Ref<boolean>
   notificationsEnabled: Ref<boolean>
   notificationsTime: Ref<[number, number] | undefined>
@@ -85,6 +87,7 @@ export function useSettingsController(): SettingsControllerReturn {
   const { raw: trackMetaConfig } = useTrackMetadataFields()
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScroll = useConfig<boolean>("settings.autoScroll", false)
+  const autoPlayNext = useAutoPlayNext()
   const openTranscriptAutomatically = useConfig<boolean>(
     "settings.openTranscriptAutomatically",
     false
@@ -150,6 +153,7 @@ export function useSettingsController(): SettingsControllerReturn {
     autoArchiveDelay,
     highlightCurrentSentence,
     autoScroll,
+    autoPlayNext,
     openTranscriptAutomatically,
     notificationsEnabled,
     notificationsTime,

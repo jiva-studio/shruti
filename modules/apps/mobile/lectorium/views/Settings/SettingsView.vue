@@ -22,6 +22,7 @@
       v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
       v-model:auto-scroll="autoScroll"
+      v-model:auto-play-next="autoPlayNext"
       v-model:open-transcript-automatically="openTranscriptAutomatically"
       :language-items="languageItems"
       :is-subscribed="subscription.isSubscribed"
@@ -127,6 +128,7 @@ const {
   autoArchiveDelay,
   highlightCurrentSentence,
   autoScroll,
+  autoPlayNext,
   openTranscriptAutomatically,
   notificationsEnabled,
   notificationsTime,

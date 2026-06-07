@@ -1,18 +1,23 @@
 import { defineStore } from "pinia"
 import { computed, onScopeDispose, ref, watch } from "vue"
+import { App, type AppState } from "@capacitor/app"
 import { playTrack, type PlayTrackError } from "@lib/application/playTrack.js"
 import type { Author } from "@lib/domain/author.js"
 import type { LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Result } from "@kit/core"
+import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useDownloadStore } from "@lectorium/stores/useDownloadStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
+import { useAutoPlayNext } from "@lectorium/composables/useAutoPlayNext.js"
 import { registerAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
 import { usePlayerResumePosition } from "./player/usePlayerResumePosition.js"
 import { usePlayerSession } from "./player/usePlayerSession.js"
+import { usePlayerQueueReconcile } from "./player/usePlayerQueueReconcile.js"
 
 interface OpenArgs {
   readonly track: Track
@@ -42,6 +47,19 @@ interface OpenArgs {
 export const usePlayerStore = defineStore("player", () => {
   const app = useLectorium()
   const autoOpenTranscript = useConfig<boolean>("settings.openTranscriptAutomatically", false)
+  const autoPlayNext = useAutoPlayNext()
+  const reconcile = usePlayerQueueReconcile()
+
+  // True while a multi-track native queue (continuous playback) is loaded.
+  // Off for the single-track `open()` path, so the existing single-track
+  // semantics are untouched when the Pro toggle is off.
+  let queueActive = false
+  // The queue items currently handed to the engine, kept so we can resync
+  // the FloatingPlayer's title/author when native auto-advances under us.
+  let currentQueue: AudioQueueItem[] = []
+  // Single-flight guard for the native-state drain (init / resume /
+  // foreground-advance can all trigger it near-simultaneously).
+  let syncing = false
 
   const trackId = ref<TrackId | null>(null)
   const title = ref<string>("")
@@ -96,11 +114,19 @@ export const usePlayerStore = defineStore("player", () => {
   function subscribeOnce(): void {
     if (unsubscribeProgress) return
     unsubscribeProgress = app.audioPlayer.onProgress((status) => {
-      // Ignore events when no track is loaded (mid-swap or pre-open) and
-      // any late events from a previous track. The swap path nulls
-      // `itemId.value` BEFORE awaiting `session.finishCurrent`, so this
-      // guard rejects everything in flight during the handoff.
-      if (itemId.value === null || status.itemId !== itemId.value) return
+      // Ignore events when no track is loaded (mid-swap or pre-open). The
+      // swap path nulls `itemId.value` BEFORE awaiting
+      // `session.finishCurrent`, so this guard rejects in-flight events.
+      if (itemId.value === null) return
+      if (status.itemId !== itemId.value) {
+        // A different item is playing than the one we think is current.
+        // In queue mode this is the native engine auto-advancing under a
+        // suspended/foregrounded JS — reconcile the finished item and move
+        // our identity onto the new one. Outside queue mode it's a late
+        // event from a previous track and is ignored.
+        if (queueActive) void syncFromNative()
+        return
+      }
       playing.value = status.playing
       positionMs.value = status.position
       if (status.duration > 0) durationMs.value = status.duration
@@ -115,7 +141,87 @@ export const usePlayerStore = defineStore("player", () => {
   onScopeDispose(() => {
     unsubscribeProgress?.()
     unsubscribeProgress = null
+    appStateHandle?.remove()
+    appStateHandle = null
   })
+
+  /**
+   * Move the player's reactive identity onto a queue item the native
+   * engine advanced to. Pulls title/author from the queue metadata
+   * (correct lock-screen labels) and the rest from the playlist entry.
+   */
+  async function resyncTo(
+    id: PlaylistItemId,
+    positionMsValue: number,
+    durationMsValue: number,
+    isPlaying: boolean
+  ): Promise<void> {
+    const entry = usePlaylistStore().getEntryByItemId(id)
+    if (!entry) return
+    // Close out the previous item's session before swapping identity, the
+    // same handoff `openTrack` does. In the foreground the live completion
+    // path usually closed it already; this is a safety net.
+    const prevItemId = itemId.value
+    const prevPositionMs = positionMs.value
+    itemId.value = null
+    if (prevItemId && prevItemId !== id) {
+      await session.finishCurrent(prevItemId, prevPositionMs)
+    }
+    const plan = await playTrack({
+      track: entry.track,
+      preferredLanguage: language.value ?? undefined,
+      itemId: id,
+    })
+    if (!plan.ok) return
+    const cmd = plan.value
+    const meta = currentQueue.find((q) => q.itemId === id)
+    trackId.value = cmd.trackId
+    title.value = meta?.title ?? cmd.title
+    authorName.value = meta?.author ?? cmd.authorName
+    language.value = cmd.language
+    durationMs.value = durationMsValue > 0 ? durationMsValue : (cmd.audio.duration ?? 0)
+    positionMs.value = positionMsValue
+    playing.value = isPlaying
+    itemId.value = id
+  }
+
+  /**
+   * Drain the native queue's transition journal into listening history,
+   * then resync the FloatingPlayer to whatever the engine is now playing.
+   * Runs on foreground auto-advance, on app resume, and once at startup —
+   * the startup drain is what recovers progress for a queue that played
+   * out (and possibly got killed) entirely in the background.
+   */
+  async function syncFromNative(): Promise<void> {
+    if (syncing) return
+    syncing = true
+    try {
+      const s = await app.audioPlayer.getQueueState()
+      await reconcile.reconcileAndAck(s.events)
+      if (s.currentItemId && s.currentItemId !== itemId.value) {
+        await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
+      } else if (s.currentItemId === null && queueActive) {
+        // Queue ran dry — nothing playing. Don't show a stale "playing".
+        playing.value = false
+        queueActive = false
+        currentQueue = []
+      }
+    } catch {
+      // Best-effort — a drain failure must not break playback.
+    } finally {
+      syncing = false
+    }
+  }
+
+  // Drain on every foreground resume (the background queue may have
+  // advanced/finished while JS was suspended) and once at startup.
+  let appStateHandle: { remove: () => void } | null = null
+  void App.addListener("appStateChange", (state: AppState) => {
+    if (state.isActive) void syncFromNative()
+  }).then((h) => {
+    appStateHandle = h
+  })
+  void syncFromNative()
 
   /** Push the current slider state to the engine. Called on every
    *  slider change and right after `audioPlayer.open()`, since a fresh
@@ -205,23 +311,48 @@ export const usePlayerStore = defineStore("player", () => {
     const localUrl = await useDownloadStore().ensureDownloaded(cmd.trackId, cmd.audio.path)
     const url = localUrl ?? app.storagePublicUrl.get(cmd.audio.path)
 
+    // Continuous playback (Pro): hand the whole playlist tail to the native
+    // engine so it can auto-advance on its own — including in the
+    // background, where the JS layer is suspended. Off → single-track path.
+    const wantQueue =
+      autoPlayNext.value && usePurchasesStore().isSubscribed && args.itemId !== undefined
+
     subscribeOnce()
     try {
-      await app.audioPlayer.open({
-        itemId: cmd.itemId,
-        url,
-        title: cmd.title,
-        author: cmd.authorName,
-      })
-      // Re-apply the user's mix and speed settings before play() — a
-      // fresh native MediaItem / AVPlayerItem loses both the processor
-      // binding and the playback rate.
+      let started = false
+      if (wantQueue) {
+        const queue = await usePlaylistStore().buildQueueFrom(cmd.itemId, args.preferredLanguage)
+        const startIndex = queue.findIndex((q) => q.itemId === cmd.itemId)
+        if (queue.length > 0 && startIndex >= 0) {
+          // Use the just-ensured (downloaded) URL for the start item.
+          queue[startIndex] = { ...queue[startIndex], url }
+          currentQueue = queue
+          queueActive = true
+          await app.audioPlayer.setQueue(queue, startIndex, resumeMs)
+          started = true
+        }
+      }
+      if (!started) {
+        currentQueue = []
+        queueActive = false
+        await app.audioPlayer.open({
+          itemId: cmd.itemId,
+          url,
+          title: cmd.title,
+          author: cmd.authorName,
+        })
+      }
+      // Re-apply the user's mix and speed settings — a fresh native
+      // MediaItem / AVPlayerItem loses both the processor binding and the
+      // playback rate. (Native re-applies on each queue advance too.)
       applyMix()
       applyPlaybackSpeed()
-      if (resumeMs > 0) {
-        await app.audioPlayer.seek(resumeMs)
+      // The queue path starts playback at `resumeMs` itself; the
+      // single-track path seeks + plays explicitly.
+      if (!queueActive) {
+        if (resumeMs > 0) await app.audioPlayer.seek(resumeMs)
+        await app.audioPlayer.play()
       }
-      await app.audioPlayer.play()
     } catch {
       return { ok: false, error: "engine-failed" }
     }
@@ -294,6 +425,21 @@ export const usePlayerStore = defineStore("player", () => {
     }
   }
 
+  /** Skip to the next queued lecture (continuous-playback mode only). The
+   *  engine advances natively; we then resync identity + journal. */
+  async function playNext(): Promise<void> {
+    if (!queueActive) return
+    await app.audioPlayer.skipToNext()
+    await syncFromNative()
+  }
+
+  /** Skip to the previous queued lecture (continuous-playback mode only). */
+  async function playPrevious(): Promise<void> {
+    if (!queueActive) return
+    await app.audioPlayer.skipToPrevious()
+    await syncFromNative()
+  }
+
   async function stop(): Promise<void> {
     if (!open.value) return
     const id = itemId.value
@@ -310,6 +456,8 @@ export const usePlayerStore = defineStore("player", () => {
     playing.value = false
     positionMs.value = 0
     durationMs.value = 0
+    queueActive = false
+    currentQueue = []
   }
 
   function flushProgressNow(): void {
@@ -334,6 +482,8 @@ export const usePlayerStore = defineStore("player", () => {
     seek,
     skipBack,
     skipForward,
+    playNext,
+    playPrevious,
     stop,
     flushProgressNow,
   }

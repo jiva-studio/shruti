@@ -97,6 +97,80 @@ export type SetProgressIntervalParams = {
   intervalMs: number
 }
 
+/**
+ * One entry in the native playback queue. The whole point of the queue
+ * is **background continuous playback**: native (ExoPlayer playlist /
+ * AVQueuePlayer) advances through these items on its own when the app's
+ * JS is suspended. So every item carries everything native needs to play
+ * it and to label the lock screen without calling back into JS.
+ *
+ * Positions/durations are in **seconds** here, matching the rest of the
+ * plugin surface (the app-side adapter converts to milliseconds).
+ */
+export type QueueItem = {
+  // Playlist item id — the bookkeeping key echoed back in Status / events
+  itemId: string
+  // file:// (preferred) or HTTP url
+  url: string
+  title: string
+  author: string
+  // Total duration in seconds, if known. Lets native report a completion
+  // duration in transition events without probing the media.
+  duration?: number
+}
+
+export type SetQueueParams = {
+  items: QueueItem[]
+  // Index within `items` to start playback from.
+  startIndex: number
+  // Resume position for the start item, in seconds. Auto-advanced items
+  // always start at 0; only the start item honours this.
+  startPosition: number
+}
+
+/**
+ * A record of one item finishing and (maybe) the next starting. Native
+ * appends one of these to a **durable on-disk journal** the instant it
+ * happens — so the log survives the app being killed in the background
+ * before JS ever wakes. JS drains the journal on next launch / resume.
+ *
+ * Only `reason: "auto"` (a natural end) means the item was completed; a
+ * skip or an error finishes the item at `finishedAt` < `duration`.
+ */
+export type QueueTransition = {
+  finishedItemId: string
+  // Where listening on the finished item began (its resume point / 0), s.
+  fromPosition: number
+  // Position the finished item ended at, in seconds (~= duration on auto).
+  finishedAt: number
+  // Total duration of the finished item, in seconds.
+  duration: number
+  // The item that started playing next, or null when the queue ran dry.
+  startedItemId: string | null
+  reason: "auto" | "skip-next" | "skip-prev" | "error"
+  // Native wall-clock when the transition happened (epoch ms). The
+  // completion may be hours old by the time JS drains it.
+  at: number
+  // Monotonic per-install sequence — drives the idempotent ack-based clear.
+  seq: number
+}
+
+/**
+ * Snapshot of the native player + the drained transition journal. JS
+ * reads this on launch/resume to (a) reconcile what played in the
+ * background into `listening_sessions`, and (b) resync the now-playing
+ * UI. Reading does NOT clear the journal — call `ackEvents` after the
+ * events have been persisted so nothing is lost on a crash mid-drain.
+ */
+export type QueueState = {
+  currentItemId: string | null
+  // Current position / duration of the now-playing item, in seconds.
+  position: number
+  duration: number
+  playing: boolean
+  events: QueueTransition[]
+}
+
 export interface AudioPlayerPlugin extends Plugin {
   open(params: OpenParams): Promise<void>
   play(): Promise<void>
@@ -109,5 +183,31 @@ export interface AudioPlayerPlugin extends Plugin {
   setProgressInterval(params: SetProgressIntervalParams): Promise<void>
   onProgressChanged(
     callback: (status: Status) => void
+  ): Promise<AudioPlayerListenerResult>
+
+  /**
+   * Replace the playback queue and start at `startIndex` /
+   * `startPosition`. A single track is just a queue of length 1, so this
+   * is the one play path — `open()` is kept as a thin convenience wrapper
+   * over a 1-item queue on the app side.
+   */
+  setQueue(params: SetQueueParams): Promise<void>
+  /** Append items to the tail of the current queue (e.g. on resume when a
+   *  download finished while backgrounded). */
+  appendToQueue(params: { items: QueueItem[] }): Promise<void>
+  /** Read the now-playing snapshot + the buffered transition journal.
+   *  Does not clear the journal — see `ackEvents`. */
+  getQueueState(): Promise<QueueState>
+  /** Clear journal entries with `seq <= upToSeq` once JS has persisted
+   *  them. Idempotent; survives multiple background→kill cycles. */
+  ackEvents(options: { upToSeq: number }): Promise<void>
+  /** Lock-screen / in-app skip to the next queue item. */
+  skipToNext(): Promise<void>
+  /** Lock-screen / in-app skip to the previous queue item. */
+  skipToPrevious(): Promise<void>
+  /** Best-effort foreground push on each transition — pure UI sugar; the
+   *  durable journal drained via `getQueueState` is the source of truth. */
+  onItemTransition(
+    callback: (transition: QueueTransition) => void
   ): Promise<AudioPlayerListenerResult>
 }
