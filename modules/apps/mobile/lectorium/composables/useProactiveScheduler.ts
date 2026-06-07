@@ -15,6 +15,8 @@ import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { isEligible } from "@lectorium/proactive/eligibility.js"
 import { notificationIdFor } from "@lectorium/proactive/hash.js"
+import { isWithinCooldown } from "@lectorium/proactive/cooldown.js"
+import { resolveProactiveFireTime } from "@lectorium/proactive/notificationTiming.js"
 import { validateAndScrubActions } from "@lectorium/proactive/markerValidator.js"
 import { toNotificationPreview } from "@lectorium/proactive/notificationPreview.js"
 import { resolveRules } from "@lectorium/proactive/registry.js"
@@ -181,20 +183,10 @@ export function useProactiveScheduler(): void {
     nowMs: number,
     repo: IProactiveStateRepository
   ): Promise<boolean> {
-    const cooldownMs = rule.config.cooldown_hours * 3_600_000
-    if (cooldownMs <= 0) return false
+    // Short-circuit before the repo hit when cooldown is disabled.
+    if (rule.config.cooldown_hours * 3_600_000 <= 0) return false
     const recent = await repo.listRecentByRule(rule.config.id, 1)
-    if (recent.length === 0) return false
-    const last = recent[0]
-    if (last.prepState === "pending" || last.prepState === "superseded") return false
-    // `dismiss_resets_after_hours` overrides the default cooldown for
-    // rows the user explicitly dismissed — a soft upsell can come back
-    // sooner than the "user already saw and accepted" path.
-    const effectiveCooldownMs =
-      last.prepState === "dismissed" && rule.config.dismiss_resets_after_hours !== undefined
-        ? rule.config.dismiss_resets_after_hours * 3_600_000
-        : cooldownMs
-    return nowMs - last.createdAt < effectiveCooldownMs
+    return isWithinCooldown(rule.config, recent[0], nowMs)
   }
 
   async function reValidateRow(
@@ -289,23 +281,11 @@ export function useProactiveScheduler(): void {
     // ≥48h in advance. Fire ~5s out so the OS has time to accept the
     // schedule and the user lands on the chat without the notification
     // racing the row's prep_state transition.
-    const visibleAtMs = entry.visibleAt * 1000
-    let fireAtMs = visibleAtMs
-    if (fireAtMs <= Date.now()) {
-      // Only fire-now if the event was for today (local TZ).
-      const today = new Date()
-      const todayMidnight = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate()
-      ).getTime()
-      const tomorrowMidnight = todayMidnight + 86_400_000
-      if (visibleAtMs < todayMidnight || visibleAtMs >= tomorrowMidnight) {
-        // Event isn't for today — let it stay silently expired.
-        return
-      }
-      fireAtMs = Date.now() + 5_000
-    }
+    // Fire at visible_at; if that moment already passed, fire ~5s out
+    // only when the event is still for today (local TZ), else skip. See
+    // resolveProactiveFireTime.
+    const fireAtMs = resolveProactiveFireTime(entry.visibleAt * 1000, Date.now())
+    if (fireAtMs === null) return
 
     // `entry` was read by `listByPrepStates` BEFORE `prepIfStale` ran
     // this same tick, so its `bodyMd` can be stale (empty for a row
