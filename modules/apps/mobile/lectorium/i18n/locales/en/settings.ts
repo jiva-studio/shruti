@@ -8,6 +8,7 @@ export default {
     sadhana: "Sadhana",
     data: "Data",
     help: "Help",
+    debug: "Debug",
     danger: "Danger zone",
     about: "About",
   },
@@ -282,10 +283,27 @@ export default {
     },
   },
 
+  debug: {
+    viewLogs: {
+      title: "View logs",
+      description: "In-app event log · {count} entries",
+    },
+  },
+
+  logs: {
+    title: "Logs",
+    close: "Close",
+    copy: "Copy",
+    copied: "Logs copied",
+    clear: "Clear",
+    count: "{count} entries",
+    empty: "No logs yet",
+  },
+
   danger: {
     clearCache: {
       title: "Clear cache",
-      description: "Removes downloaded transcripts",
+      description: "Removes all downloaded audio and transcripts",
     },
   },
 
