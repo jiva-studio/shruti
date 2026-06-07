@@ -258,8 +258,12 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
             await clearTokens()
             return null
           }
+          // Return the freshly-minted token from the response, not a
+          // re-read of module-level `stored` — a concurrent clearTokens()
+          // could null `stored` between the await and the read, rejecting
+          // every coalesced caller with a TypeError.
           await commitTokenResponse(tr)
-          return stored!.accessToken
+          return tr.accessToken
         } finally {
           refreshInFlight = null
         }
@@ -349,6 +353,10 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       }
     }
 
+    // Capture the identity we're deleting so the 401-retry below can't
+    // accidentally delete a *different* account if the session was swapped
+    // (signout→re-bootstrap, switch-account) between the two calls.
+    const targetUserId = stored.userId
     let res = await doDelete(stored.accessToken)
     if (res.status === 401) {
       // Stale access token — try one refresh + retry. getAccessToken()
@@ -356,6 +364,11 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
       // failure, so a null return means the session is already gone.
       const refreshed = await getAccessToken()
       if (!refreshed) throw new AccountDeleteError("unauthorized", 401)
+      // Bail if the refresh landed on a different identity than the one we
+      // set out to delete — retrying would wipe the wrong account.
+      if (stored?.userId !== targetUserId) {
+        throw new AccountDeleteError("unauthorized", 401)
+      }
       res = await doDelete(refreshed)
       if (res.status === 401) throw new AccountDeleteError("unauthorized", 401)
     }
@@ -394,14 +407,19 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
             await clearTokens()
             return null
           }
+          // See getAccessToken: return the response's token, never a
+          // re-read of `stored`, which a concurrent clearTokens() can null.
           await commitTokenResponse(tr)
-          return stored!.accessToken
+          return tr.accessToken
         } finally {
           refreshInFlight = null
         }
       })()
     }
     const tok = await refreshInFlight
+    // `session` is the just-committed session unless a concurrent
+    // clearTokens() raced in and nulled it — return it as-is (null = the
+    // session was cleared, which the caller handles gracefully).
     if (!tok) return null
     return session
   }

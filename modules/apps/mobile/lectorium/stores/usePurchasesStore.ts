@@ -171,7 +171,12 @@ export const usePurchasesStore = defineStore("purchases", () => {
         // the cached JWT tier and force a refresh on divergence.
         const auth = useAuthStore()
         const rcActive = s.activePackageId !== undefined
-        if (rcActive !== auth.isPro) {
+        // Compare against the RAW server tier, not the (now un-coerced, but
+        // still server-trusted) `isPro` — the goal is "does RC's view
+        // disagree with what the server last told us?". Using the raw tier
+        // keeps this stable and avoids a refresh loop if the two ever
+        // diverge for a clock-skew reason.
+        if (rcActive !== (auth.rawTier === "pro")) {
           void auth.refreshTokens()
         }
       })
