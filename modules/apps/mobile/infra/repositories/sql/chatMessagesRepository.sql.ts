@@ -241,7 +241,13 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       // Visibility gate now lives on the proactive sidecar
       // (`p.visible_at`). Regular messages have no sidecar row, so the
       // LEFT JOIN's `p.*` come back NULL and the OR-branch admits them.
-      // `dismissed` / `superseded` prep_state rows stay hidden as before.
+      // Proactive rows are written in two phases: `create()` inserts the
+      // chat_messages row with content="" and prep_state='pending', and
+      // the real body lands later via prepIfStale. A persisted pending
+      // row (streaming=false, content="") would render a BLANK bubble,
+      // so we only surface proactive rows once prep_state is
+      // ready/degraded — same gate as `listUnseenSessionIds`. `dismissed`
+      // / `superseded` rows stay hidden as before.
       return queryMany<ChatMessageRow, ChatMessage>(
         db,
         `SELECT m.id, m.session_id, m.role, m.content, m.created_at, m.meta
@@ -249,7 +255,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
            LEFT JOIN chat_messages_proactive_state p ON p.chat_message_id = m.id
           WHERE m.session_id = ?
             AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
-            AND (p.prep_state IS NULL OR p.prep_state NOT IN ('dismissed','superseded'))
+            AND (p.prep_state IS NULL OR p.prep_state IN ('ready','degraded'))
           ORDER BY m.created_at ASC`,
         [sessionId],
         rowToMessage
