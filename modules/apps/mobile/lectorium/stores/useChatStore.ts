@@ -134,11 +134,11 @@ function warnOrphanActionMarkers(message: ChatMessage): void {
  * Owns the chat tab's reactive state and dispatches workflow verbs to
  * the use-cases in `@lib/application/chat`.
  *
- * The store does NOT touch SQL or HTTP directly — it constructs the
- * SQL repos + HTTP wrappers lazily from `useLectorium()` and feeds them
- * into use-cases. This keeps the layering rule satisfied (presentation
- * → use-case → repo/service ports) and makes `sendMessage` testable by
- * stubbing `runChatTurn`.
+ * The store does NOT touch SQL or HTTP directly — it pulls the repos +
+ * chat service adapters off `useLectorium()` (built by the composition
+ * root) and feeds them into use-cases. This keeps the layering rule
+ * satisfied (presentation → use-case → repo/service ports) and makes
+ * `sendMessage` testable by stubbing `runChatTurn`.
  */
 export const useChatStore = defineStore("chat", () => {
   const app = useLectorium()
