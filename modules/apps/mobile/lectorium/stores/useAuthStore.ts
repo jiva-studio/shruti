@@ -5,7 +5,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { wipeLocalUserData } from "@lectorium/services/dataWipe.js"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
-import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
+import { AccountDeleteError } from "@ports/app/auth.js"
 import type { AuthSession, AuthStatus } from "@ports/app/auth.js"
 
 /**
