@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { createPinia, setActivePinia } from "pinia"
-import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
+import { AccountDeleteError } from "@ports/app/auth.js"
 
 const wipeLocalUserData = vi.fn().mockResolvedValue(undefined)
 const purchasesLogOut = vi.fn().mockResolvedValue(undefined)
