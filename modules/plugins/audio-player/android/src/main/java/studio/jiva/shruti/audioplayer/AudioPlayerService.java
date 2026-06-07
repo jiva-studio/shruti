@@ -1,54 +1,69 @@
 package studio.jiva.shruti.audioplayer;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.app.Service;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.Build;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.Looper;
+import android.os.Bundle;
 
-import androidx.core.app.NotificationCompat;
+import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
-import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.audio.AudioProcessor;
+import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
-import com.getcapacitor.PluginCall;
+import androidx.media3.session.CommandButton;
+import androidx.media3.session.MediaSession;
+import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionResult;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 
 import studio.jiva.shruti.audioplayer.audioprocessor.StereoMixAudioProcessor;
-import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionActions;
-import studio.jiva.shruti.audioplayer.mediaSession.MediaSessionCallback;
-import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaSessionMediaStateNotifier;
-import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaState;
-import studio.jiva.shruti.audioplayer.mediaStateNotifications.MediaStateNotificationService;
-import studio.jiva.shruti.audioplayer.mediaStateNotifications.PluginCallMediaStateNotifier;
 
+/**
+ * Media3 {@link MediaSessionService} that owns the {@link ExoPlayer} and a
+ * {@link MediaSession}. Media3 builds and keeps the media-style notification in
+ * sync with the current MediaItem's MediaMetadata for us, so the old 500ms
+ * hand-built notification loop is gone.
+ *
+ * <p>Hard constraint preserved across the migration: the player is built with a
+ * custom {@link DefaultRenderersFactory} that injects {@link StereoMixAudioProcessor}
+ * into the audio sink, so the stereo→mono blend keeps working. The same player
+ * instance is handed to the session, so mix + playback rate live on the player
+ * and survive item transitions for free.
+ */
+@OptIn(markerClass = UnstableApi.class)
+public final class AudioPlayerService extends MediaSessionService {
 
-public final class AudioPlayerService extends Service {
-    private static final String CHANNEL_ID = "MediaPlaybackChannel";
-    private static final int NOTIFICATION_ID = 1;
-    /** Fallback text used in the foreground-service notification before any
-     *  track metadata is known (i.e. between onStartCommand and the first
-     *  MediaSession update). Kept user-visible and descriptive so the FGS
-     *  notification still tells the user what the service is doing, which
-     *  Google Play's FGS review requires. */
-    private static final String FALLBACK_NOTIFICATION_TITLE = "Shruti audio";
+    /** ±15s custom lock-screen / notification actions, kept from the legacy
+     *  MediaSessionCompat implementation. */
+    public static final String ACTION_REWIND_15 = "studio.jiva.shruti.audioplayer.REWIND_15";
+    public static final String ACTION_FORWARD_15 = "studio.jiva.shruti.audioplayer.FORWARD_15";
+    /** Controller→service command carrying the stereo-mix slider state, which
+     *  cannot travel over the standard Player interface a MediaController
+     *  exposes. Args: {@code enabled:boolean, ratio:float}. */
+    public static final String ACTION_SET_MIX = "studio.jiva.shruti.audioplayer.SET_MIX";
+    /** Replace the queue. Args: {@code items:String} (JSON array of
+     *  {itemId,url,title,author,duration?}), {@code startIndex:int},
+     *  {@code startPositionMs:long}. */
+    public static final String ACTION_SET_QUEUE = "studio.jiva.shruti.audioplayer.SET_QUEUE";
+    /** Append to the queue tail. Args: {@code items:String} (JSON array). */
+    public static final String ACTION_APPEND_QUEUE = "studio.jiva.shruti.audioplayer.APPEND_QUEUE";
+    /** Skip with journaling intent. Args: {@code next:boolean}. */
+    public static final String ACTION_SKIP = "studio.jiva.shruti.audioplayer.SKIP";
+
+    private static final long SEEK_STEP_MS = 15_000L;
 
     private ExoPlayer exoPlayer;
-    private MediaStateNotificationService mediaStateNotificationService;
-    private MediaSessionMediaStateNotifier mediaSessionNotifier;
-    private NotificationManager notificationManager;
-    private BroadcastReceiver skipActionReceiver;
+    private MediaSession mediaSession;
     private final StereoMixAudioProcessor stereoMixProcessor = new StereoMixAudioProcessor();
+    private studio.jiva.shruti.audioplayer.queue.QueueJournal journal;
+    private studio.jiva.shruti.audioplayer.queue.QueuePlaybackManager queueManager;
 
     @Override
     public void onCreate() {
@@ -76,251 +91,197 @@ public final class AudioPlayerService extends Service {
 
         exoPlayer = new ExoPlayer.Builder(context, renderersFactory)
                 .build();
-        mediaStateNotificationService = new MediaStateNotificationService(exoPlayer);
+        // Battery optimization can force-close even a foreground media service
+        // mid-queue; a local wake lock keeps long offline playback alive. Items
+        // played over HTTP would want WAKE_MODE_NETWORK, but our queue is
+        // local-file first, so local is the right default.
+        exoPlayer.setWakeMode(C.WAKE_MODE_LOCAL);
 
-        // Create notification channel
-        notificationManager = getSystemService(NotificationManager.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.createNotificationChannel(
-                    new NotificationChannel(
-                            CHANNEL_ID, "Media Playback", NotificationManager.IMPORTANCE_LOW)
-            );
-        }
+        // Native auto-advance bookkeeping + durable journal. Must be attached
+        // before any playback so no transition is missed.
+        journal = new studio.jiva.shruti.audioplayer.queue.QueueJournal(context);
+        queueManager = new studio.jiva.shruti.audioplayer.queue.QueuePlaybackManager(
+                exoPlayer, journal);
 
-        // Register BroadcastReceiver for skip actions
-        skipActionReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (MediaSessionActions.ACTION_REWIND.equals(action)) {
-                    seekBy(-15000);
-                } else if (MediaSessionActions.ACTION_FAST_FORWARD.equals(action)) {
-                    seekBy(15000);
-                }
-            }
-        };
-
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(MediaSessionActions.ACTION_REWIND);
-        filter.addAction(MediaSessionActions.ACTION_FAST_FORWARD);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(skipActionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(skipActionReceiver, filter);
-        }
-
-        // Set media state change notification service
-        mediaSessionNotifier = new MediaSessionMediaStateNotifier(
-                context,
-                notificationManager,
-                new MediaSessionCallback(this));
-        mediaStateNotificationService.addNotifier(mediaSessionNotifier);
-        mediaStateNotificationService.run();
+        mediaSession = new MediaSession.Builder(this, exoPlayer)
+                .setCallback(new SessionCallback())
+                .setCustomLayout(buildCustomLayout())
+                .build();
     }
 
+    @Nullable
     @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, createNotification());
-        return START_STICKY;
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return new AudioPlayerServiceBinder(this);
+    public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
+        return mediaSession;
     }
 
     @Override
     public void onDestroy() {
-        mediaStateNotificationService.stop();
-        if (mediaSessionNotifier != null) {
-            mediaSessionNotifier.cleanup();
+        if (queueManager != null) {
+            queueManager.release();
+            queueManager = null;
         }
-        if (skipActionReceiver != null) {
-            unregisterReceiver(skipActionReceiver);
+        if (mediaSession != null) {
+            mediaSession.getPlayer().release();
+            mediaSession.release();
+            mediaSession = null;
         }
-        if (exoPlayer != null) { exoPlayer.release(); }
-        this.stopForeground(true);
-        this.stopSelf();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            notificationManager.deleteNotificationChannel(CHANNEL_ID);
-        }
+        exoPlayer = null;
         super.onDestroy();
     }
 
-    ExoPlayer getExoPlayer() {
-        return exoPlayer;
+    /* -------------------------------------------------------------------------- */
+    /*                          Stereo-mix custom commands                        */
+    /* -------------------------------------------------------------------------- */
+
+    private ImmutableList<CommandButton> buildCustomLayout() {
+        CommandButton rewind = new CommandButton.Builder()
+                .setDisplayName("-15s")
+                .setIconResId(android.R.drawable.ic_media_rew)
+                .setSessionCommand(new SessionCommand(ACTION_REWIND_15, Bundle.EMPTY))
+                .build();
+        CommandButton forward = new CommandButton.Builder()
+                .setDisplayName("+15s")
+                .setIconResId(android.R.drawable.ic_media_ff)
+                .setSessionCommand(new SessionCommand(ACTION_FORWARD_15, Bundle.EMPTY))
+                .build();
+        return ImmutableList.of(rewind, forward);
     }
 
-    public void open(
-            String trackId,
-            String url,
-            String trackTitle,
-            String trackArtist
-    ) {
+    /* -------------------------------------------------------------------------- */
+    /*                              Queue operations                              */
+    /* -------------------------------------------------------------------------- */
+
+    private void setQueue(String itemsJson, int startIndex, long startPositionMs) {
+        if (exoPlayer == null) return;
+        java.util.List<MediaItem> items = parseItems(itemsJson);
+        if (items.isEmpty()) return;
+        int idx = Math.max(0, Math.min(startIndex, items.size() - 1));
+        exoPlayer.stop();
+        exoPlayer.setMediaItems(items, idx, startPositionMs);
+        if (queueManager != null) {
+            queueManager.onQueueStarted(startPositionMs);
+        }
+        exoPlayer.prepare();
+        exoPlayer.play();
+    }
+
+    private void appendQueue(String itemsJson) {
+        if (exoPlayer == null) return;
+        java.util.List<MediaItem> items = parseItems(itemsJson);
+        if (items.isEmpty()) return;
+        exoPlayer.addMediaItems(items);
+        // If the queue had already run dry (IDLE/ENDED) the appended items need
+        // a fresh prepare to start playing.
+        if (exoPlayer.getPlaybackState() == androidx.media3.common.Player.STATE_ENDED
+                || exoPlayer.getPlaybackState() == androidx.media3.common.Player.STATE_IDLE) {
+            exoPlayer.prepare();
+        }
+    }
+
+    private void skip(boolean next) {
+        if (exoPlayer == null) return;
+        // Only mark + seek when there is actually a target item, otherwise a
+        // dangling skip flag would mislabel the next genuine transition.
+        boolean canSkip = next
+                ? exoPlayer.hasNextMediaItem()
+                : exoPlayer.hasPreviousMediaItem();
+        if (!canSkip) return;
+        if (queueManager != null) {
+            // Tag the upcoming discontinuity so it's journaled as a skip, not auto.
+            queueManager.markSkip(next);
+        }
+        if (next) {
+            exoPlayer.seekToNextMediaItem();
+        } else {
+            exoPlayer.seekToPreviousMediaItem();
+        }
+    }
+
+    private java.util.List<MediaItem> parseItems(String itemsJson) {
+        java.util.List<MediaItem> out = new java.util.ArrayList<>();
         try {
-            MediaItem mediaItem = MediaItem.fromUri(url);
-
-            new Handler(Looper.getMainLooper()).post(() -> {
-                exoPlayer.stop();
-                exoPlayer.clearMediaItems();
-                exoPlayer.setMediaItem(mediaItem);
-                exoPlayer.prepare();
-
-                mediaStateNotificationService.getState().setTrackId(trackId);
-                mediaStateNotificationService.getState().setTitle(trackTitle);
-                mediaStateNotificationService.getState().setArtist(trackArtist);
-                mediaStateNotificationService.getState().setPosition(0);
-                mediaStateNotificationService.getState().setDuration(0);
-                mediaStateNotificationService.getState().setState("stopped");
-            });
-        } catch (Exception e) {
+            org.json.JSONArray arr = new org.json.JSONArray(itemsJson);
+            for (int i = 0; i < arr.length(); i++) {
+                org.json.JSONObject o = arr.optJSONObject(i);
+                if (o == null) continue;
+                String url = o.optString("url", null);
+                if (url == null || url.isEmpty()) continue;
+                String itemId = o.optString("itemId", "");
+                String title = o.optString("title", "");
+                String author = o.optString("author", "");
+                long durationMs = o.has("durationMs") ? o.optLong("durationMs", C.TIME_UNSET)
+                        : C.TIME_UNSET;
+                out.add(AudioPlayerPlugin.buildMediaItem(itemId, url, title, author, durationMs));
+            }
+        } catch (org.json.JSONException e) {
             e.printStackTrace();
         }
+        return out;
     }
 
-    public void play() {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (!exoPlayer.isPlaying()) {
-                exoPlayer.setPlayWhenReady(true);
-                mediaStateNotificationService.getState().setState("playing");
-                mediaStateNotificationService.update();
-            }
-        });
+    private void seekBy(long deltaMs) {
+        if (exoPlayer == null) return;
+        long current = exoPlayer.getCurrentPosition();
+        long duration = exoPlayer.getDuration();
+        long target = current + deltaMs;
+        if (target < 0) target = 0;
+        if (duration != C.TIME_UNSET && target > duration) target = duration;
+        exoPlayer.seekTo(target);
     }
 
-    public void pause() {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer.isPlaying()) {
-                exoPlayer.setPlayWhenReady(false);
-                mediaStateNotificationService.getState().setState("paused");
-                mediaStateNotificationService.update();
-            }
-        });
-    }
-
-    public void togglePause() {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer.isPlaying()) {
-                exoPlayer.setPlayWhenReady(false);
-                mediaStateNotificationService.getState().setState("paused");
-            } else {
-                exoPlayer.setPlayWhenReady(true);
-                mediaStateNotificationService.getState().setState("playing");
-            }
-            mediaStateNotificationService.update();
-        });
-    }
-
-    public void seek(long position) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.seekTo(position);
-                mediaStateNotificationService.getState().setState(exoPlayer.isPlaying() ? "playing" : "paused");
-                mediaStateNotificationService.getState().setPosition(position);
-                mediaStateNotificationService.update();
-            }
-        });
-    }
-
-    public void seekBy(long delta) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                long currentPosition = exoPlayer.getCurrentPosition();
-                long duration = exoPlayer.getDuration();
-                long newPosition = Math.max(0, Math.min(currentPosition + delta, duration));
-                exoPlayer.seekTo(newPosition);
-                mediaStateNotificationService.getState().setState(exoPlayer.isPlaying() ? "playing" : "paused");
-                mediaStateNotificationService.getState().setPosition(newPosition);
-                mediaStateNotificationService.update();
-            }
-        });
-    }
-
-    public void stop() {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            exoPlayer.stop();
-            exoPlayer.clearMediaItems();
-            mediaStateNotificationService.getState().setState("stopped");
-            mediaStateNotificationService.getState().setPosition(0);
-            mediaStateNotificationService.getState().setTrackId("");
-            mediaStateNotificationService.getState().setTitle("");
-            mediaStateNotificationService.getState().setArtist("");
-            mediaStateNotificationService.getState().setPosition(0);
-            mediaStateNotificationService.getState().setDuration(0);
-            mediaStateNotificationService.update();
-        });
-    }
-
-    public void setOnProgressChangeCall(PluginCall call) {
-        mediaStateNotificationService.addNotifier(new PluginCallMediaStateNotifier(call));
-    }
-
-    /** Adjust how often progress is pushed to the WebView while playing.
-     *  Delegated to the notification service, which reschedules its loop. */
-    public void setProgressInterval(long intervalMs) {
-        mediaStateNotificationService.setEmitInterval(intervalMs);
-    }
-
-    /** Forward the slider state to the AudioProcessor sitting in the
-     *  ExoPlayer audio pipeline. Volatile fields make this safe to call
-     *  from the Capacitor bridge thread while the audio render thread
-     *  reads them. */
-    public void setMix(boolean enabled, float ratio) {
-        stereoMixProcessor.setMix(enabled, ratio);
-    }
-
-    /** Set playback rate; pitch is preserved (default `pitch=1f` in
-     *  PlaybackParameters), so a 2× lecture still sounds like a human.
-     *  Posted on the main looper to match the rest of the ExoPlayer
-     *  control surface. */
-    public void setPlaybackRate(float rate) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            if (exoPlayer != null) {
-                exoPlayer.setPlaybackParameters(new PlaybackParameters(rate));
-            }
-        });
-    }
-
-    /** Build the foreground-service notification.
-     *
-     *  Once a track is loaded, MediaSessionMediaStateNotifier replaces this
-     *  with a full MediaStyle notification (same NOTIFICATION_ID). But for
-     *  the brief window between onStartCommand and the first state update,
-     *  this notification is what the user sees — so it must describe the
-     *  actual playback state instead of the previous hardcoded
-     *  "Media Playback / Playing media" placeholder, which Google Play's
-     *  FGS review treats as a non-descriptive notification.
+    /**
+     * Session callback: advertises the ±15s custom commands to every connecting
+     * controller and dispatches them onto the player. Play/pause/seek/next/prev
+     * are standard Player commands handled by Media3 directly.
      */
-    private Notification createNotification() {
-        Intent notificationIntent = new Intent(this, getApplicationContext().getClass());
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE);
+    private final class SessionCallback implements MediaSession.Callback {
+        @Override
+        public MediaSession.ConnectionResult onConnect(
+                MediaSession session, MediaSession.ControllerInfo controller) {
+            return new MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                    .setAvailableSessionCommands(
+                            MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                                    .add(new SessionCommand(ACTION_REWIND_15, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_FORWARD_15, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_SET_MIX, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_SET_QUEUE, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_APPEND_QUEUE, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_SKIP, Bundle.EMPTY))
+                                    .build())
+                    .build();
+        }
 
-        String title = FALLBACK_NOTIFICATION_TITLE;
-        String text = null;
-        if (mediaStateNotificationService != null) {
-            MediaState state = mediaStateNotificationService.getState();
-            if (state != null) {
-                String stateTitle = state.getTitle();
-                if (stateTitle != null && !stateTitle.isEmpty()) {
-                    title = stateTitle;
-                }
-                String stateArtist = state.getArtist();
-                if (stateArtist != null && !stateArtist.isEmpty()) {
-                    text = stateArtist;
-                }
+        @Override
+        public ListenableFuture<SessionResult> onCustomCommand(
+                MediaSession session,
+                MediaSession.ControllerInfo controller,
+                SessionCommand customCommand,
+                Bundle args) {
+            if (ACTION_REWIND_15.equals(customCommand.customAction)) {
+                seekBy(-SEEK_STEP_MS);
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_FORWARD_15.equals(customCommand.customAction)) {
+                seekBy(SEEK_STEP_MS);
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_SET_MIX.equals(customCommand.customAction)) {
+                boolean enabled = args.getBoolean("enabled", false);
+                float ratio = args.getFloat("ratio", 0.5f);
+                stereoMixProcessor.setMix(enabled, ratio);
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_SET_QUEUE.equals(customCommand.customAction)) {
+                setQueue(args.getString("items", "[]"),
+                        args.getInt("startIndex", 0),
+                        args.getLong("startPositionMs", 0));
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_APPEND_QUEUE.equals(customCommand.customAction)) {
+                appendQueue(args.getString("items", "[]"));
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_SKIP.equals(customCommand.customAction)) {
+                skip(args.getBoolean("next", true));
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
             }
+            return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED));
         }
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(title)
-                .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentIntent(pendingIntent)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setOngoing(true);
-        if (text != null) {
-            builder.setContentText(text);
-        }
-        return builder.build();
     }
 }
