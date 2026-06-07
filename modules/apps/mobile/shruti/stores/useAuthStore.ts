@@ -38,16 +38,14 @@ export const useAuthStore = defineStore("auth", () => {
   // quota_id yet".
   const quotaId = ref<string>("")
 
-  // Public tier. Coerces a "pro" with a past expiry back to "free" so a
-  // stale auth-cached value (dropped EXPIRATION webhook) can't keep the
-  // UI on Pro past the real boundary. Lifetime Pro (expiry null) is
-  // never coerced.
-  const tier = computed<string>(() => {
-    if (rawTier.value !== "pro") return rawTier.value || "free"
-    if (tierExpiresAt.value === null) return "pro" // lifetime
-    if (tierExpiresAt.value < Date.now()) return "free"
-    return "pro"
-  })
+  // Public tier. The SERVER is the source of truth and already coerces a
+  // lapsed "pro" back to "free" by server time before it ever reaches us
+  // (in the JWT claim and in /auth/me). We deliberately do NOT re-coerce
+  // by the device clock here: a fast device clock would flip a valid Pro
+  // user to "free" (paywall returns, chat clamps) even though the
+  // entitlement is live. The resume / post-signin tier syncs keep the
+  // cached value honest against the server when a webhook flips tiers.
+  const tier = computed<string>(() => rawTier.value || "free")
 
   const signedIn = computed(() => !!userId.value && !anonymous.value)
   const isPro = computed(() => tier.value === "pro")
@@ -228,7 +226,13 @@ export const useAuthStore = defineStore("auth", () => {
       }
       if (!result) return
       lastSyncAt = Date.now()
-      if (result.tier !== tier.value) {
+      // Mirror syncTierOnResume: compare the RAW server tier and the
+      // expiry, not the coerced `tier`. A renewal keeps the same tier but
+      // moves the expiry forward — checking only the tier would miss it
+      // and leave the JWT carrying the old (sooner) expiry.
+      const rawDiverged = result.tier !== rawTier.value
+      const expiryDiverged = (result.tierExpiresAt ?? null) !== tierExpiresAt.value
+      if (rawDiverged || expiryDiverged) {
         await auth.refreshTokens()
       }
     } catch (e) {
