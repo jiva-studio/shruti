@@ -18,6 +18,7 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { escapeHtml } from "@lectorium/utils/escapeHtml.js"
 import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
@@ -491,18 +492,6 @@ export function useNotesController(): NotesControllerReturn {
     onQuery,
     onNoteClicked,
   }
-}
-
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]!)
 }
 
 function escapeRegExp(s: string): string {
