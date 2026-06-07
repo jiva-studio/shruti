@@ -1,4 +1,5 @@
 import { marked } from "marked"
+import { escapeHtml } from "@shruti/utils/escapeHtml.js"
 import type { ChatToken } from "./parse.js"
 
 /* -------------------------------------------------------------------------- */
@@ -11,15 +12,6 @@ import type { ChatToken } from "./parse.js"
  * here is already escaped/rendered. Depends on `marked`, which is why
  * this whole concern lives in the composition-root layer (not @lib).
  */
-
-export function escapeHtml(raw: string): string {
-  return raw
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-}
 
 export function inlineMd(raw: string): string {
   try {
