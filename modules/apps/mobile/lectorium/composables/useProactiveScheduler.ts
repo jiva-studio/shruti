@@ -428,7 +428,7 @@ export function useProactiveScheduler(): void {
 
       let detected: readonly Awaited<ReturnType<typeof rule.handler.detect>>[number][]
       try {
-        detected = [...(await rule.handler.detect(ctx))]
+        detected = [...(await rule.handler.detect(ctx, rule.config))]
       } catch (err) {
         console.warn("[proactive] detect threw", rule.config.id, err)
         continue

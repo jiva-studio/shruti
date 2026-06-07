@@ -181,6 +181,55 @@ describe("proactiveStateRepository — seen_at semantics", () => {
     expect(row[0].seen_at).toBe(1700000100)
   })
 
+  it("create() dedups on (rule_kind, rule_date): second call returns null and leaves no orphan message", async () => {
+    await seedSession(db, "session-first")
+    await seedSession(db, "session-dup")
+
+    const first = await repo.create({
+      chatMessageId: "msg-first" as ChatMessageId,
+      sessionId: "session-first" as ChatSessionId,
+      role: "assistant",
+      content: "",
+      createdAt: 1700000000000,
+      visibleAt: null,
+      notify: false,
+      ruleKind: "weekly_digest",
+      ruleDate: "2026-06-07",
+      prepState: "pending",
+    })
+    expect(first).not.toBeNull()
+
+    // Same (ruleKind, ruleDate) but a different chatMessageId/session —
+    // ON CONFLICT DO NOTHING must keep the original and report the dedup.
+    const dup = await repo.create({
+      chatMessageId: "msg-dup" as ChatMessageId,
+      sessionId: "session-dup" as ChatSessionId,
+      role: "assistant",
+      content: "",
+      createdAt: 1700000005000,
+      visibleAt: null,
+      notify: false,
+      ruleKind: "weekly_digest",
+      ruleDate: "2026-06-07",
+      prepState: "pending",
+    })
+    expect(dup).toBeNull()
+
+    // The losing call must not leave an orphan chat_messages row behind.
+    const orphan = await db.query<{ id: string }>("SELECT id FROM chat_messages WHERE id = ?", [
+      "msg-dup",
+    ])
+    expect(orphan).toHaveLength(0)
+
+    // The original proactive_state row is still the one that owns the slot.
+    const owner = await db.query<{ chat_message_id: string }>(
+      "SELECT chat_message_id FROM chat_messages_proactive_state WHERE rule_kind = ? AND rule_date = ?",
+      ["weekly_digest", "2026-06-07"]
+    )
+    expect(owner).toHaveLength(1)
+    expect(owner[0].chat_message_id).toBe("msg-first")
+  })
+
   it("markSeen scoped to one session leaves others untouched", async () => {
     await seedSession(db, "session-x")
     await seedSession(db, "session-y")
