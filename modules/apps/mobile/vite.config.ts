@@ -86,6 +86,7 @@ export default defineConfig({
       { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
       { find: "@infra", replacement: path.resolve(__dirname, "./infra") },
       { find: "@ui", replacement: path.resolve(__dirname, "./ui") },
+      { find: "@lib/contracts", replacement: path.resolve(__dirname, "./submodules/contracts") },
       { find: "@lib/domain", replacement: path.resolve(__dirname, "./submodules/domain") },
       {
         find: "@lib/application",

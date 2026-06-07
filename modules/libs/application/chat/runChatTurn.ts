@@ -14,12 +14,11 @@ import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageReposi
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
 import type {
   ChatActionPayload as WireChatActionPayload,
-  ChatStreamEvent,
   IChatStreamClient,
   IChatTitleService,
   ChatTurn,
   ResearchSourceKind,
-} from "@ports/app/index.js"
+} from "@lib/contracts"
 import type {
   FocusFragmentPayload,
   UserContextPayload,
