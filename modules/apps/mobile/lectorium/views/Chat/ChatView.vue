@@ -11,7 +11,12 @@
           <IconHistory :size="22" />
         </button>
         <h1 class="chat-title">{{ headerTitle }}</h1>
+        <!-- New-session is only meaningful once a chat exists; on the
+             empty/welcome screen there's nothing to start anew from (a
+             session is born from the first message). Keep a same-width
+             spacer so the title stays centered. -->
         <button
+          v-if="hasMessages"
           type="button"
           class="action-btn"
           :aria-label="$t('chat.newSession')"
@@ -19,6 +24,7 @@
         >
           <IconPlus :size="22" />
         </button>
+        <span v-else class="action-btn" aria-hidden="true" />
       </div>
     </div>
     <IonContent class="chat-content" :fullscreen="true">
@@ -54,6 +60,13 @@
           </template>
         </PageSticker>
       </div>
+      <!-- Loading indicator while a session is read from SQLite + scroll-
+           positioned. The scroller itself is `visibility:hidden` during
+           this window (see `.chat-scroll.is-loading`), so without this the
+           user would stare at a blank screen on a slow read. -->
+      <div v-if="!scrollReady" class="chat-loading" aria-hidden="true">
+        <IonSpinner name="crescent" />
+      </div>
     </IonContent>
     <ChatInputBar
       ref="inputBarRef"
@@ -82,7 +95,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonContent, IonPage, onIonViewWillLeave } from "@ionic/vue"
+import { IonContent, IonPage, IonSpinner, onIonViewWillLeave } from "@ionic/vue"
 import { IconHistory, IconPlus } from "@tabler/icons-vue"
 import { pauseGroup } from "@lectorium/composables/useAudioOrchestrator.js"
 import { PageSticker } from "@ui/primitives/index.js"
@@ -179,6 +192,17 @@ const headerTitle = computed<string>(() => {
  * fade would re-introduce a visible movement. */
 .chat-scroll.is-loading {
   visibility: hidden;
+}
+
+/* Centered spinner shown over the hidden scroller while a session loads.
+ * Non-interactive — purely a "loading" affordance for slow SQLite reads. */
+.chat-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
 }
 
 /* Fixed top: opaque cream over the safe area + button row, then a long
