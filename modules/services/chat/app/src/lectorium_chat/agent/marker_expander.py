@@ -118,6 +118,20 @@ class MarkerExpander:
         self._aliases = aliases
         self._request_id = request_id
 
+        # Optional 1-based-position → alias remap. The synthesizer numbers
+        # its research notes by their POSITION in the final note list
+        # (1..N), the same index-space the synthesis planner uses for
+        # `supporting_notes` and the outline directive — so the LLM is shown
+        # ONE consistent set of `[^N]` numbers. Aliases, by contrast, are
+        # minted at retrieval time in fetch order, which does NOT match note
+        # position. This map lets the LLM keep emitting position tokens while
+        # the expander resolves them back to the real alias. `None` ⇒ the
+        # `[^N]` token already IS the alias (legacy / non-synthesis paths).
+        # Set via `set_ref_remap` immediately before a synthesis stream;
+        # history is folded WITHOUT `[^N]` markers, so no prior-turn token
+        # is mis-mapped.
+        self._ref_remap: dict[int, int] | None = None
+
         # Marker-buffer state.
         self._marker_buffer: list[str] = []
         self._in_marker = False
@@ -383,6 +397,18 @@ class MarkerExpander:
         by `emit_turn_scores`."""
         return self._malformed_count
 
+    def set_ref_remap(self, remap: dict[int, int] | None) -> None:
+        """Install a 1-based-position → alias map for the upcoming stream.
+
+        The synthesizer renders its note headers (and the outline planner
+        numbers its `supporting_notes`) by note POSITION, not by alias.
+        Without a remap those position tokens would resolve to whichever
+        alias happens to share the integer — pointing the citation chip at
+        the wrong lecture / verse / author. Calling this right before the
+        synthesis stream makes `[^position]` resolve to the correct alias.
+        Pass `None` to clear (token == alias)."""
+        self._ref_remap = remap
+
     def _format_ref(self, n: int | None, sentence_indices: list[int] | None = None) -> str:
         """Resolve alias N. If N is None or unknown, drop the marker with
         a diagnostic log — never guess.
@@ -393,6 +419,14 @@ class MarkerExpander:
         this is the server-side enforcement so any model slip-up
         doesn't produce spammy duplicate chips."""
         ref: ChunkRef | VerseRef | None = None
+        if isinstance(n, int) and self._ref_remap is not None:
+            # The LLM emitted a note POSITION (synthesizer note-header /
+            # outline index-space). Translate to the real alias before any
+            # resolve / dedup / caption lookup so every downstream lookup
+            # keys on the alias, not the position. A position the map
+            # doesn't know falls through unchanged → handled as an
+            # alias-miss below (drop, never guess).
+            n = self._ref_remap.get(n, n)
         if isinstance(n, int):
             # Dedup: if this exact alias has already been expanded in
             # this response, drop with log.
@@ -583,4 +617,11 @@ class MarkerExpander:
             stripped = line.strip()
             rendered.append(f"> {stripped}" if stripped else ">")
         body = "\n".join(rendered)
-        return f"\n{body}\n>\n> — {attribution}\n"
+        # Attribution line is wrapped in `*…*` (the WHOLE line, em-dash
+        # included) so the mobile client's `parseQuoteBlock` recognises it
+        # as the styled attribution and peels it off the blockquote body.
+        # That peel fires ONLY when the last quote line is wholly italic
+        # (`^\*…\*$`); a bare `> — author` falls through and renders as
+        # plain body text. Keep both sides in lockstep — see
+        # composables/chatMarkers/parse.ts.
+        return f"\n{body}\n>\n> *— {attribution}*\n"

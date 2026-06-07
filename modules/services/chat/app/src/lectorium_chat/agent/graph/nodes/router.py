@@ -11,6 +11,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
+from lectorium_chat.agent.prior_refs import extract_prior_track_refs
 from lectorium_chat.application.router_turn import run_router_turn
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
@@ -22,11 +23,16 @@ async def router_node(state: ChatState, runtime: Runtime[TurnContext]) -> dict:
     ctx = runtime.context
     get_stream_writer()({"type": "status", "data": {"key": "thinking"}})
     cb = langfuse_node_callback(ctx.langfuse_trace_id, "router") if ctx.langfuse_trace_id else None
+    # Minimal conversation-context signal: did the prior assistant turn
+    # surface track refs the user can point at? Disambiguates deictic
+    # follow-ups and keys the router cache so they don't collide.
+    prior_turn_had_refs = bool(extract_prior_track_refs(state.get("history")))
     decision = await run_router_turn(
         state["user_query"],
         lang=state["lang"],
         llm=ctx.llm,
         request_id=ctx.request_id,
+        prior_turn_had_refs=prior_turn_had_refs,
         kv_cache=ctx.kv_cache,
         callbacks=[cb] if cb is not None else None,
     )

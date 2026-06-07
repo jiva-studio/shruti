@@ -72,6 +72,7 @@ async def run_router_turn(
     llm: _LLMForRouting,
     request_id: str | None = None,
     model: str | None = None,
+    prior_turn_had_refs: bool = False,
     kv_cache: "Any | None" = None,
     # Langfuse handler list. When the router result is served from the
     # KV cache (deterministic hit), no LLM call happens and the
@@ -88,12 +89,20 @@ async def run_router_turn(
     Flash Lite for routing (cheap, deterministic with temperature=0
     inside structured_output).
 
+    `prior_turn_had_refs` is a minimal conversation-context signal: True
+    when the most recent assistant turn surfaced track refs the user can
+    point at (from `extract_prior_track_refs`). Short follow-ups ("эту",
+    "перескажи", "а PDF?") are ambiguous on the latest message ALONE — the
+    same words route differently depending on whether the prior turn
+    offered something to act on. The flag is surfaced to the classifier
+    AND folded into the cache key so two same-text follow-ups in different
+    contexts don't collide.
+
     `kv_cache` (optional) memoises the structured-output call by
-    `(query, lang, model)`. The router runs at temperature=0 so the
-    output is deterministic for a given input + model — a perfect
-    cache fit. On miss we still pay the LLM, but the second time the
-    same question rolls in (router only sees the latest user turn)
-    we skip the ~1s call entirely.
+    `(query, lang, model, prior_refs)`. The router runs at temperature=0
+    so the output is deterministic for a given input + model — a perfect
+    cache fit. On miss we still pay the LLM, but the second time the same
+    question rolls in (in the same context) we skip the ~1s call entirely.
     """
     # Pull the router prompt from Langfuse per-turn so a UI edit
     # propagates within `cache_ttl_seconds=60`. Fallback path reads
@@ -105,9 +114,18 @@ async def run_router_turn(
     )
     system_text = router_prompt.text.replace("{{LANG}}", lang)
     effective_model = router_prompt.config.get("model") or model
+    # Surface the one conversation-context bit the classifier needs to
+    # disambiguate a deictic follow-up. Kept terse + machine-parseable so
+    # it can't be mistaken for part of the user's question.
+    context_hint = (
+        "\n\n[context: the previous answer offered specific lectures/refs "
+        "the user may be referring to]"
+        if prior_turn_had_refs
+        else ""
+    )
     messages: list[Message] = [
         {"role": "system", "content": system_text},
-        {"role": "user", "content": user_query},
+        {"role": "user", "content": f"{user_query}{context_hint}"},
     ]
 
     async def _call() -> RoutingDecision:
@@ -127,7 +145,15 @@ async def run_router_turn(
             # cache automatically. Without this, a model change in
             # Langfuse would still serve stale `RoutingDecision`s
             # baked under the previous model for up to TTL_7D.
-            key_parts={"q": user_query, "lang": lang, "model": effective_model or ""},
+            key_parts={
+                "q": user_query,
+                "lang": lang,
+                "model": effective_model or "",
+                # A short follow-up classified WITH prior refs available
+                # must not serve a decision cached for the same text in a
+                # no-context conversation, and vice-versa.
+                "prior_refs": prior_turn_had_refs,
+            },
             ttl_s=TTL_7D,
             schema=RoutingDecision,
             factory=_call,

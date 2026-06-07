@@ -274,6 +274,27 @@ describe("parseChatMarkers — markdown blockquote", () => {
     }
   })
 
+  it("peels the server's italic em-dash attribution line", () => {
+    // Locks the cross-side contract with the chat server's
+    // MarkerExpander._render_commentary_blockquote, which emits the
+    // attribution as `> *— {author}, {addr}*` (the WHOLE line italic,
+    // em-dash included). A bare `> — author` would fall through to the
+    // body — see the server-side fix.
+    const tokens = parseChatMarkers(
+      "> Душа вечна и неуничтожима.\n> *— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13*"
+    )
+    const quote = tokens.find((t) => t.kind === "quote")
+    expect(quote).toBeTruthy()
+    if (quote?.kind === "quote") {
+      expect(quote.bodyHtml).toContain("Душа вечна")
+      expect(quote.attributionHtml).toBe(
+        "— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13"
+      )
+      // The em-dash + author must NOT leak into the quote body.
+      expect(quote.bodyHtml).not.toContain("Прабхупада")
+    }
+  })
+
   it("treats a single-line blockquote without italic line as body-only", () => {
     const tokens = parseChatMarkers("> short note")
     const quote = tokens.find((t) => t.kind === "quote")

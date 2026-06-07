@@ -229,8 +229,32 @@ async def test_border_zone_llm_fallback_says_no_returns_empty() -> None:
 
 
 @pytest.mark.asyncio
-async def test_border_zone_no_judge_keeps_match() -> None:
-    # Neither reranker nor llm available → lean toward keeping the curated pick.
+async def test_border_zone_llm_error_rejects_match() -> None:
+    # No reranker → LLM judge, but the judge RAISES. Without a positive
+    # confirmation we must REJECT (a border match is sub-threshold cosine;
+    # accepting on judge failure fabricates an authoritative attribution).
+    class BoomLLM:
+        async def structured_output(self, messages, schema, *, model=None, **_extra):
+            raise RuntimeError("judge unavailable")
+
+    conn = FakeConn(
+        {("ru", "pinned"): [_row("a1", 0.78)]},
+        texts_by_attr={"a1": ["каноническая формулировка"]},
+    )
+    matches = await find_attributions(
+        kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
+        embed_model="m", embed_dim=1536, pool=FakePool(conn),
+        user_query="запрос", llm=BoomLLM(),
+    )
+    assert matches == []
+
+
+@pytest.mark.asyncio
+async def test_border_zone_no_judge_rejects_match() -> None:
+    # True border zone (0.78 ∈ [0.70, 0.80)) with NEITHER reranker nor llm
+    # available → no judge can confirm. We must REJECT rather than assert a
+    # curated authoritative attribution on a sub-threshold cosine alone
+    # (fabricated-source guard). Falls through to the empty result.
     conn = FakeConn(
         {("ru", "pinned"): [_row("a1", 0.78)]},
         texts_by_attr={"a1": ["формулировка"]},
@@ -239,8 +263,7 @@ async def test_border_zone_no_judge_keeps_match() -> None:
         kind="pinned", user_q_embedding=[0.0]*1536, lang="ru",
         embed_model="m", embed_dim=1536, pool=FakePool(conn),
     )
-    assert len(matches) == 1
-    assert matches[0].attribution_id == "a1"
+    assert matches == []
 
 
 @pytest.mark.asyncio

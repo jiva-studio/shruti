@@ -140,6 +140,53 @@ async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
 
 
 @pytest.mark.asyncio
+async def test_position_marker_remaps_to_correct_alias() -> None:
+    """Headline attribution bug: aliases are minted in fetch order, which
+    does NOT match note POSITION in the final note list. The synthesizer
+    renders note headers (and the planner numbers `supporting_notes`) by
+    position; the LLM copies the position token; the expander must remap
+    position → alias so the chip points at the RIGHT source.
+
+    Here three aliases are minted out of order vs. the note list: note at
+    position 1 carries alias 3, position 2 carries alias 1, position 3
+    carries alias 2. The LLM cites position 1 — without the remap that
+    would expand to alias 1 (track_B, the WRONG lecture); with the remap
+    it must expand to alias 3 (track_A)."""
+    aliases = TurnAliasMap()
+    ref_a = aliases.alias_chunk("track_A", 1000, 2000)  # = 1
+    ref_b = aliases.alias_chunk("track_B", 3000, 4000)  # = 2
+    ref_c = aliases.alias_chunk("track_C", 5000, 6000)  # = 3
+    # Build a note list whose POSITION order differs from alias order:
+    #   position 1 → ref_c (track_C), position 2 → ref_a (track_A), …
+    tool_results = [
+        {"type": "lecture", "ref": ref_c, "label": "", "text": "C body", "meta": {}},
+        {"type": "lecture", "ref": ref_a, "label": "", "text": "A body", "meta": {}},
+        {"type": "lecture", "ref": ref_b, "label": "", "text": "B body", "meta": {}},
+    ]
+    expander = MarkerExpander(aliases)
+
+    # LLM cites note POSITION 1 → must resolve to ref_c → track_C.
+    llm = StreamingLLM(chunks=["Видно в ", "[^1]", "."])
+    events = await _drain(
+        run_synthesizer_turn(
+            "?",
+            tool_results=tool_results,
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
+    assert "[cite:track_C@5000-6000]" in full
+    # The WRONG lecture (what a naive position==alias read would give).
+    assert "track_A" not in full
+    assert "track_B" not in full
+    # Remap is cleared after the stream so a reused expander is back to
+    # alias-space (token == alias).
+    assert expander._ref_remap is None
+
+
+@pytest.mark.asyncio
 async def test_ref_marker_split_across_chunks_buffers_correctly() -> None:
     """SSE deltas can split a marker mid-buffer. MarkerExpander must
     buffer and emit the expanded form once the `]` closes."""
@@ -383,10 +430,13 @@ def test_format_tool_results_emits_no_trigger_tokens() -> None:
             f"the Gemini tool-use mimicry bug. Output was:\n{out}"
         )
 
-    # Sanity: the model still has enough context to cite — it needs
-    # the integer ref (lecture title kept; verse-ref label dropped to
-    # break the `[^N] БГ X.Y` adjacency) and the text.
-    assert "7882" in out
+    # Sanity: the model still has enough context to cite — it needs the
+    # integer marker (POSITION, not the alias ref; lecture title kept,
+    # verse-ref label dropped to break the `[^N] БГ X.Y` adjacency) and
+    # the text. Lecture is note 1 → `[^1]`; the alias ref 7882 must NOT
+    # appear as a marker.
+    assert "[^1]" in out
+    assert "[^7882]" not in out
     # Verse-ref note has NO addr_label adjacency to the marker — the
     # widget will render the address on the client.
     assert "BG 2.13" not in out
@@ -403,8 +453,10 @@ def test_format_tool_results_renders_footnote_marker_only() -> None:
     out = _format_tool_results(
         [{"type": "lecture", "ref": 42, "label": "x", "text": "…", "meta": {}}]
     )
-    assert "[^42]" in out
-    assert "[cite:42" not in out
+    # Marker is the note POSITION (1), not the alias ref (42).
+    assert "[^1]" in out
+    assert "[^42]" not in out
+    assert "[cite:1" not in out
     assert "[verse:" not in out
     assert "[ref:" not in out
 
@@ -523,7 +575,9 @@ def test_format_tool_results_ref_emitted_as_literal_marker() -> None:
     out = _format_tool_results(
         [{"type": "lecture", "ref": 5, "label": "x", "meta": {}}]
     )
-    assert "[^5]" in out
+    # Marker is the note POSITION (1), not the alias ref (5).
+    assert "[^1]" in out
+    assert "[^5]" not in out
     assert "Note 1" not in out
 
 
@@ -541,7 +595,9 @@ def test_format_tool_results_verse_ref_has_no_addr_label_adjacency() -> None:
         "text": "Душа меняет тела…",
         "meta": {"source_id": "source_BG", "tokens": "2.13"},
     }])
-    assert "[^3]" in out
+    # Marker is the note POSITION (1), not the alias ref (3).
+    assert "[^1]" in out
+    assert "[^3]" not in out
     assert "БГ 2.13" not in out
     assert "Душа меняет тела" in out
 
@@ -564,7 +620,9 @@ def test_format_tool_results_track_uses_title_when_no_label() -> None:
             "duration_ms": 1680000,
         }
     ])
-    assert "[^8]" in out
+    # Marker is the note POSITION (1), not the alias ref (8).
+    assert "[^1]" in out
+    assert "[^8]" not in out
     assert "Вот вам ваше новое тело, сэр" in out
     # Technical fields (author_name=, date=, location_name=) are
     # intentionally NOT in the LLM-facing render — noise that doesn't
