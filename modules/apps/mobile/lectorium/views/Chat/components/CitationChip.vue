@@ -37,6 +37,11 @@
       @ended="onEnded"
       @pause="onPause"
       @play="onPlay"
+      @playing="onPlaying"
+      @canplay="onCanPlay"
+      @waiting="onWaiting"
+      @stalled="onWaiting"
+      @error="onError"
       @timeupdate="onTimeUpdate"
     />
     <IonActionSheet
@@ -94,6 +99,8 @@ const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 function pauseSelf(): void {
   const el = audioEl.value
   if (!el) return
+  clearPlayTimer()
+  isPreparing.value = false
   el.pause()
 }
 
@@ -126,6 +133,19 @@ const metaLoaded = ref(false)
 const LONG_PRESS_MS = 500
 let pressTimer: ReturnType<typeof setTimeout> | null = null
 let suppressClick = false
+
+// After a long pollUntilReady the element can resolve `play()` (and fire
+// `play`) while still buffering/stalled — silent pause icon. We hold the
+// spinner until real playback (`playing`/`canplay`) and arm a watchdog so
+// a wedged buffer resets cleanly instead of stranding the user.
+const PLAY_TIMEOUT_MS = 15000
+let playTimer: ReturnType<typeof setTimeout> | null = null
+function clearPlayTimer(): void {
+  if (playTimer) {
+    clearTimeout(playTimer)
+    playTimer = null
+  }
+}
 
 const lectureTitle = computed(() => {
   if (!track.value) return ""
@@ -301,21 +321,33 @@ async function onPrimary(): Promise<void> {
     el.pause()
     return
   }
+  isPreparing.value = true
   if (!cachedUrl.value) {
-    isPreparing.value = true
-    try {
-      const url = await ensureUrl()
-      if (!url) return
-      el.src = url
-    } finally {
+    const url = await ensureUrl()
+    if (!url) {
       isPreparing.value = false
+      return
     }
+    el.src = url
   } else if (!el.src) {
     el.src = cachedUrl.value
   }
+  // Keep the spinner up across play() — cleared by `playing`/`canplay`,
+  // not the resolved promise — and watchdog a stalled buffer.
+  clearPlayTimer()
+  playTimer = setTimeout(() => {
+    playTimer = null
+    if (!isPlaying.value) {
+      isPreparing.value = false
+      el.pause()
+      console.warn("[citation-chip] playback did not start in time")
+    }
+  }, PLAY_TIMEOUT_MS)
   try {
     await el.play()
   } catch (err) {
+    clearPlayTimer()
+    isPreparing.value = false
     console.warn("[citation-chip] play failed", err)
   }
 }
@@ -341,8 +373,31 @@ function onPointerCancel(): void {
 }
 
 function onPlay(): void {
+  clearPlayTimer()
   isPlaying.value = true
+  isPreparing.value = false
   claim()
+}
+
+function onPlaying(): void {
+  clearPlayTimer()
+  isPlaying.value = true
+  isPreparing.value = false
+}
+
+function onCanPlay(): void {
+  if (isPlaying.value) isPreparing.value = false
+}
+
+function onWaiting(): void {
+  isPreparing.value = true
+}
+
+function onError(): void {
+  clearPlayTimer()
+  isPlaying.value = false
+  isPreparing.value = false
+  console.warn("[citation-chip] audio element error")
 }
 
 function onPause(): void {
@@ -350,7 +405,9 @@ function onPause(): void {
 }
 
 function onEnded(): void {
+  clearPlayTimer()
   isPlaying.value = false
+  isPreparing.value = false
   const el = audioEl.value
   if (el) el.currentTime = 0
   progressPct.value = 0
@@ -377,6 +434,7 @@ watch(
 
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
+  clearPlayTimer()
   audioEl.value?.pause()
 })
 </script>
@@ -439,10 +497,6 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.citation-chip:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-}
-
 .citation-chip.is-loading {
   cursor: progress;
 }
@@ -484,10 +538,5 @@ onBeforeUnmount(() => {
   cursor: pointer;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
-}
-
-.more-btn:active {
-  opacity: 1;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
 }
 </style>

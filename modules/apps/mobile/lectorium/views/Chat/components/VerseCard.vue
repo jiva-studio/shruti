@@ -25,6 +25,11 @@
       @ended="onEnded"
       @pause="onPause"
       @play="onPlay"
+      @playing="onPlaying"
+      @canplay="onCanPlay"
+      @waiting="onWaiting"
+      @stalled="onWaiting"
+      @error="onError"
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onMetadata"
     />
@@ -56,10 +61,11 @@
  * persists across sessions, so a verse cited in a past turn renders as
  * a block immediately on next open.
  */
-import { computed, onMounted } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import { IconBook2, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useI18n } from "vue-i18n"
+import { useLectorium } from "@lectorium/lectorium.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 
@@ -70,6 +76,7 @@ const props = defineProps<{
 }>()
 
 const verseBodyStore = useVerseBodyStore()
+const { excerptCache } = useLectorium()
 const { locale } = useI18n()
 
 // Hydrate Preferences-backed cache on first mount of any verse card.
@@ -109,11 +116,34 @@ const ariaLabel = computed(
 )
 
 // Sanskrit recitation, present only when the library has audio for this
-// verse. We get a whole-file public URL (no excerpt cut), so the shared
-// excerpt player is fed a constant URL via cachedUrl/resolveUrl — it
-// gives us play/pause + the audio-orchestrator claim (tapping a verse
-// pauses the lecture and other inline players) without the waveform.
+// verse. We get a whole-file public URL (no excerpt cut). Rather than
+// streaming the raw CDN URL on every tap, we route it through the durable
+// excerpt cache: first tap downloads the mp3 into the Filesystem and feeds
+// the player the `file://` URI; later taps are an instant local-cache hit.
 const audioUrl = computed(() => body.value?.audioUrl || "")
+
+// Stable per-verse cache key. Slashless (mirrors the excerpt filenames)
+// so it never collides with the tracks adapter's pathname-keyed entries.
+const cacheFilename = computed(() =>
+  `verse-${props.sourceId}-${props.tokens}.mp3`.replace(/[^A-Za-z0-9._-]/g, "_")
+)
+
+// `null` until the first tap resolves the local URI, so the player takes
+// its prepare-then-play branch (and shows the spinner) on first play.
+const localUri = ref<string | null>(null)
+
+async function resolveVerseAudio(): Promise<string> {
+  const filename = cacheFilename.value
+  const cached = await excerptCache.findLocal(filename)
+  if (cached) {
+    localUri.value = cached
+    return cached
+  }
+  const uri = await excerptCache.download({ url: audioUrl.value, filename })
+  localUri.value = uri
+  return uri
+}
+
 const {
   audioEl,
   isPlaying,
@@ -124,10 +154,14 @@ const {
   onEnded,
   onTimeUpdate,
   onMetadata,
+  onWaiting,
+  onPlaying,
+  onCanPlay,
+  onError,
 } = useExcerptAudioPlayer({
   hasSource: () => !!audioUrl.value,
-  cachedUrl: () => audioUrl.value || null,
-  resolveUrl: async () => audioUrl.value,
+  cachedUrl: () => localUri.value,
+  resolveUrl: resolveVerseAudio,
   logLabel: "verse-audio",
 })
 

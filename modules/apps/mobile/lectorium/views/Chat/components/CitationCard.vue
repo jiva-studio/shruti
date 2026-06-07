@@ -281,10 +281,6 @@ watch(
   --excerpt-body-padding: 8px 12px 10px;
 }
 
-.citation-card:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-}
-
 /* Player is the card's header strip — square it off (the card's
  * overflow+radius rounds the top) and let the body padding own the gap
  * to the text. */
