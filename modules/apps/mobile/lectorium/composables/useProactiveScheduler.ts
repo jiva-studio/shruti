@@ -63,6 +63,14 @@ export function useProactiveScheduler(): void {
    *  next tick doesn't double-call an in-flight LLM/template build. */
   const inFlight = new Set<string>()
 
+  /** Last-armed notification signature per Capacitor id. `scheduleNotificationIfNeeded`
+   *  runs on every tick (mount / 30-min interval / each foreground resume) for every
+   *  live row, and `schedule()` is idempotent on id — so without this we re-arm (and
+   *  re-log) an unchanged notification on every tick, which reads as the SAME
+   *  notification being "scheduled 3×" in the debug log. Re-arm only when the fire
+   *  time / title / body actually changed; otherwise skip the redundant native call. */
+  const scheduledSignatures = new Map<number, string>()
+
   /** Fast-retry counter for the "repos not open yet" path. App.vue mounts
    *  this composable before Welcome finishes opening the content DB, so the
    *  first few ticks bail; without this, the next legitimate tick wouldn't
@@ -206,6 +214,9 @@ export function useProactiveScheduler(): void {
         if (entry.notify) {
           try {
             await app.notifications.cancel(notificationIdFor(entry.chatMessageId))
+            // Forget the armed signature so a future re-detection of the same
+            // row schedules (and logs) afresh rather than being deduped away.
+            scheduledSignatures.delete(notificationIdFor(entry.chatMessageId))
           } catch (err) {
             console.warn("[proactive] cancel notification failed", entry.chatMessageId, err)
           }
@@ -315,6 +326,11 @@ export function useProactiveScheduler(): void {
     // every tick with the same id replaces, doesn't duplicate. So we
     // don't need a "notified_at" flag to gate re-scheduling.
     const id = notificationIdFor(entry.chatMessageId)
+    // Skip the re-arm when nothing changed since we last scheduled this id —
+    // the OS already holds an identical alarm. This is what stops the debug
+    // log from showing the same notification "scheduled" on every tick.
+    const signature = `${fireAtMs}|${title}|${body}`
+    if (scheduledSignatures.get(id) === signature) return
     try {
       await app.notifications.schedule({
         id,
@@ -326,8 +342,10 @@ export function useProactiveScheduler(): void {
           chatMessageId: entry.chatMessageId,
         },
       })
+      scheduledSignatures.set(id, signature)
       // Surfaced in the in-app debug log so we can see WHICH notification was
-      // scheduled, WHY (rule kind), WHEN it fires, and the exact copy.
+      // scheduled, WHY (rule kind), WHEN it fires, and the exact copy. Logged
+      // once per actual (re)arm — unchanged re-schedules are deduped above.
       console.info(
         "[notify] scheduled",
         `rule=${entry.ruleKind}`,
