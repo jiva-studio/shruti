@@ -37,14 +37,6 @@ import type {
 } from "@lib/domain"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
-import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
-import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
-import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
-import {
-  createSqlChatSessionRepository,
-  createSqlChatMessageRepository,
-} from "@infra/repositories/sql/index.js"
 import type { ChatTurn, FeedbackCategory } from "@ports/app/index.js"
 
 /* -------------------------------------------------------------------------- */
@@ -340,40 +332,25 @@ export const useChatStore = defineStore("chat", () => {
   let abort: AbortController | null = null
   let suggestionsAbort: AbortController | null = null
 
-  function userDb() {
-    const db = app.databases.user
-    if (!db) throw new Error("chat-store: user DB is not open yet")
-    return db
-  }
-
+  // Chat repositories and HTTP service adapters are built by the
+  // composition root (lectorium.ts / repositories.ts). The store only
+  // consumes them — it never instantiates concrete @infra adapters.
   function chatRepos() {
-    const userDatabase = userDb()
-    return {
-      sessions: createSqlChatSessionRepository(userDatabase),
-      messages: createSqlChatMessageRepository(userDatabase),
-    }
+    const repos = app.repositories()
+    return { sessions: repos.chatSessions, messages: repos.chatMessages }
   }
 
-  // Lazy because `app.auth` is wired by the composition root and the
-  // factories are called from inside reactive setup. `chatHttpRequest`
-  // is the failover-aware HTTP client — a transient 5xx on the
-  // preferred server falls through to the next, and a sustained
-  // outage promotes the working server in Settings.
-  const authDeps = {
-    getAccessToken: () => app.auth.getAccessToken(),
-    request: (path: string, init?: RequestInit) => app.chatHttpRequest(path, init),
-  }
   function streamClient() {
-    return createHttpChatStreamClient(authDeps)
+    return app.chatStreamClient
   }
   function titleService() {
-    return createHttpChatTitleService(authDeps)
+    return app.chatTitleService
   }
   function questionsService() {
-    return createHttpChatQuestionsService(authDeps)
+    return app.chatQuestionsService
   }
   function feedbackService() {
-    return createHttpChatFeedbackService(authDeps)
+    return app.chatFeedbackService
   }
 
   async function refreshSessions(): Promise<void> {
