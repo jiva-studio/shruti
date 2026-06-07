@@ -1,17 +1,29 @@
 import { defineStore } from "pinia"
 import { computed, ref, watch, type WatchStopHandle } from "vue"
 import { App, type AppState } from "@capacitor/app"
+import { Preferences } from "@capacitor/preferences"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { CustomerState, PurchasePackage } from "@ports/app/purchases.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 
+const CACHE_KEY = "purchases.lastState"
+
+interface CachedState {
+  activePackageId: string | undefined
+  managementUrl: string | undefined
+  appUserId: string | undefined
+}
+
 /**
  * Reactive view over RevenueCat. State here is derived live from the
  * SDK — `getCustomerInfo` / `purchasePackage` / `restorePurchases`
- * plus the `addCustomerInfoUpdateListener` push channel. Nothing about
- * subscription state is persisted by the app; the reinstall flow
- * relies on `restore()` rebinding the install to the Apple / Google
+ * plus the `addCustomerInfoUpdateListener` push channel. The reinstall
+ * flow relies on `restore()` rebinding the install to the Apple / Google
  * account's purchase history.
+ *
+ * The last confirmed entitlement is mirrored to Capacitor Preferences so
+ * a returning subscriber sees Pro immediately on cold start — the async
+ * SDK fetch then confirms (or, only on a successful fetch, downgrades).
  */
 export const usePurchasesStore = defineStore("purchases", () => {
   const packages = ref<PurchasePackage[]>([])
@@ -75,6 +87,38 @@ export const usePurchasesStore = defineStore("purchases", () => {
     activePackageId.value = s.activePackageId
     managementUrl.value = s.managementUrl
     appUserId.value = s.appUserId
+    void persistCache(s)
+  }
+
+  async function persistCache(s: CustomerState): Promise<void> {
+    const cached: CachedState = {
+      activePackageId: s.activePackageId,
+      managementUrl: s.managementUrl,
+      appUserId: s.appUserId,
+    }
+    try {
+      await Preferences.set({ key: CACHE_KEY, value: JSON.stringify(cached) })
+    } catch (e) {
+      console.warn("[purchases] cache write failed", e)
+    }
+  }
+
+  async function loadCache(): Promise<CachedState | null> {
+    try {
+      const { value } = await Preferences.get({ key: CACHE_KEY })
+      if (!value) return null
+      return JSON.parse(value) as CachedState
+    } catch {
+      return null
+    }
+  }
+
+  async function clearCache(): Promise<void> {
+    try {
+      await Preferences.remove({ key: CACHE_KEY })
+    } catch (e) {
+      console.warn("[purchases] cache clear failed", e)
+    }
   }
 
   /**
@@ -153,6 +197,18 @@ export const usePurchasesStore = defineStore("purchases", () => {
     }
     loading.value = true
     try {
+      // Optimistically expose the last confirmed entitlement before the
+      // SDK round-trip so a returning subscriber doesn't flicker through
+      // the free state for the second-or-so configure()+fetch takes. The
+      // Promise.all below is now the background confirm/refresh — and it
+      // downgrades only on a SUCCESSFUL getCustomerState() (see applyState
+      // wiring; a thrown/failed fetch leaves the cached value in place).
+      const cached = await loadCache()
+      if (cached) {
+        activePackageId.value = cached.activePackageId
+        managementUrl.value = cached.managementUrl
+        appUserId.value = cached.appUserId
+      }
       await purchases.configure()
       const [pkgs, state] = await Promise.all([
         purchases.listPackages(),
@@ -202,6 +258,15 @@ export const usePurchasesStore = defineStore("purchases", () => {
         () => auth.userId,
         (newId, oldId) => {
           if (newId && newId !== oldId) {
+            // Account switch (a real `oldId` → different `newId`): drop the
+            // optimistic cache so the previous account's Pro can't linger
+            // until logIn lands. The fresh entitlement re-populates it via
+            // applyState below. (The anon → first sign-in transition has no
+            // `oldId` and keeps the cache so an anon purchase stays usable.)
+            if (oldId) {
+              void clearCache()
+              activePackageId.value = undefined
+            }
             // Stash the promise so `purchase()` / `restore()` can await
             // it (with a timeout) before talking to RC. We map success
             // to `applyState` and swallow errors here — `waitForLogin`
@@ -306,6 +371,9 @@ export const usePurchasesStore = defineStore("purchases", () => {
    */
   async function logOut(): Promise<void> {
     if (!available.value) return
+    // Drop the cached entitlement up front so a flaky SDK logOut can't
+    // leave the prior account's Pro persisted for the next cold start.
+    await clearCache()
     try {
       const state = await useLectorium().purchases.logOut()
       applyState(state)
