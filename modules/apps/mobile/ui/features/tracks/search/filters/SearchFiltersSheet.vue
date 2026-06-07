@@ -7,7 +7,7 @@
     handle
     @did-dismiss="onDismiss"
   >
-    <Header>
+    <Header class="flat-header">
       <IonToolbar>
         <IonButtons v-if="activeSection" slot="start">
           <IonButton @click="leaveSection">
@@ -148,23 +148,6 @@ function onDismiss(): void {
 </script>
 
 <style>
-/* Material paints the header elevation in two places: ion-header::after
-   (the iOS-style hairline that lives on every header) and the host
-   `.header-md` selector, which adds a three-layer drop-shadow below
-   the toolbar. The existing `ion-no-border` only kills the host
-   shadow when the platform check hits — but inside the sheet modal
-   that detection isn't reliable, so the shadow leaked back as a faint
-   dark line between the toolbar and the first list row. Suppress both
-   here so the sheet header always renders flat against its content. */
-.filters-sheet ion-header,
-.filters-sheet ion-header::after {
-  box-shadow: none !important;
-  background-image: none;
-}
-.filters-sheet ion-header::after {
-  display: none;
-}
-
 /* Pin both end-of-toolbar buttons to the same font size so RESET and
    OK read as a pair regardless of Ionic's internal `strong` styling. */
 .filters-sheet ion-buttons[slot="end"] ion-button {

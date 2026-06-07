@@ -44,16 +44,36 @@ export function useProactiveDeepLink(): void {
   let removeAfterEach: (() => void) | null = null
   // Target session from a notification tap, held until the DBs are open.
   let pendingSessionId: string | null = null
+  // Guard against firing a second `replace` while the first is still in
+  // flight (afterEach fires on every navigation).
+  let flushing = false
 
   function dbsReady(): boolean {
     return Boolean(app.databases.content && app.databases.user)
   }
 
   function flush(): void {
-    if (pendingSessionId === null || !dbsReady()) return
+    if (pendingSessionId === null || !dbsReady() || flushing) return
     const sessionId = pendingSessionId
-    pendingSessionId = null
-    void router.replace({ name: "chat", query: { session: sessionId } })
+    flushing = true
+    // Clear `pendingSessionId` ONLY once we've actually landed on chat.
+    // `router.replace` resolves even when the guard redirects us back to
+    // /welcome (DBs not open yet at that instant): the promise resolving
+    // does NOT mean the navigation reached chat. Optimistically nulling
+    // here was the bug — `afterEach` then had nothing left to retry, so
+    // the tapped session never opened. Keep it pending until the active
+    // route is `chat`, letting `afterEach` re-attempt after DB init.
+    void router
+      .replace({ name: "chat", query: { session: sessionId } })
+      .then(() => {
+        if (router.currentRoute.value.name === "chat") pendingSessionId = null
+      })
+      .catch(() => {
+        /* bounced/aborted — keep pending so afterEach retries */
+      })
+      .finally(() => {
+        flushing = false
+      })
   }
 
   onMounted(() => {

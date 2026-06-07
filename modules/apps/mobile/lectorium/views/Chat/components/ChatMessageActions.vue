@@ -59,7 +59,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { useChatStore } from "@lectorium/stores/useChatStore.js"
 import type { ChatMessageId } from "@lib/domain/core.js"
-import type { FeedbackCategory } from "@ports/app/index.js"
+import type { FeedbackCategory } from "@lib/contracts"
 import FeedbackSheet from "./FeedbackSheet.vue"
 
 const props = defineProps<{

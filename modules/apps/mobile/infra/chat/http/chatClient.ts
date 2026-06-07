@@ -1145,8 +1145,13 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     return { kind: "share_pdf", id, payload: { items } }
   }
   if (kind === "enable_daily_reminder") {
+    // Bounded HH:MM — reject out-of-range times (e.g. "25:99") at parse so
+    // they fall back to the 07:00 default instead of rendering a card that
+    // throws on Confirm (the executor re-validates with the same bounds).
     const time =
-      typeof body.time === "string" && /^\d{1,2}:\d{2}$/.test(body.time) ? body.time : "07:00"
+      typeof body.time === "string" && /^([01]?\d|2[0-3]):([0-5]\d)$/.test(body.time)
+        ? body.time
+        : "07:00"
     return { kind: "enable_daily_reminder", id, payload: { time } }
   }
   if (kind === "configure_smart_library") {

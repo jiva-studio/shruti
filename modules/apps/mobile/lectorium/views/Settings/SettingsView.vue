@@ -105,7 +105,7 @@ import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { useAnonymousSignInFlow } from "@lectorium/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@lectorium/composables/useDebugUnlockTrigger.js"
 import { useToast } from "@kit/composables"
-import { AccountDeleteError } from "@infra/auth/capacitor/useCapacitorAuth.js"
+import { AccountDeleteError } from "@ports/app/auth.js"
 import { useSettingsController } from "./SettingsView.controller.js"
 
 const player = usePlayerStore()

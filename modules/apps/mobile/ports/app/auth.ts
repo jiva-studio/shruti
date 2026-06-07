@@ -109,6 +109,31 @@ export interface MeView {
   tierExpiresAt: number | null
 }
 
+/** Discriminates the recoverable failures of `AuthPort.deleteAccount`. */
+export type AccountDeleteErrorKind =
+  | "already-deleted"
+  | "rate-limited"
+  | "server"
+  | "network"
+  | "unauthorized"
+  | "unknown"
+
+/**
+ * Thrown by `AuthPort.deleteAccount` on a non-success outcome. Lives on
+ * the port (not the concrete adapter) so views/stores can branch on
+ * `kind` without importing the capacitor implementation. Mirrors the
+ * `PurchaseCancelledError` sentinel on the purchases port.
+ */
+export class AccountDeleteError extends Error {
+  constructor(
+    public readonly kind: AccountDeleteErrorKind,
+    public readonly status?: number
+  ) {
+    super(`account/delete: ${kind}${status ? ` (${status})` : ""}`)
+    this.name = "AccountDeleteError"
+  }
+}
+
 export interface AuthConfig {
   /**
    * HTTP call to the auth service. `path` is relative (e.g. `/me`,

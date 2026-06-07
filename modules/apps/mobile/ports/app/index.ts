@@ -32,35 +32,10 @@ export type {
   CustomerInfoListener,
 } from "./purchases.js"
 export { PurchaseCancelledError } from "./purchases.js"
-export type {
-  IChatStreamClient,
-  ChatRole,
-  ChatActionPayload,
-  ChatOutlinePayload,
-  ChatStreamEvent,
-  ChatTurn,
-  ChatVersePayloadWire,
-  ChatCiteTranscriptPayloadWire,
-  ChatSharePdfItemPayload,
-  ResearchSourceKind,
-  StreamChatOptions,
-} from "./chatStreamClient.js"
-export type { IChatTitleService, FetchSessionTitleOptions } from "./chatTitleService.js"
 export type { AuthPort, AuthSession, AuthStatus, AuthConfig } from "./auth.js"
-export type {
-  IChatQuestionsService,
-  ChatQuestionsFocusInput,
-  FetchSuggestedQuestionsOptions,
-} from "./chatQuestionsService.js"
-export type {
-  IProactiveChatService,
-  ProactiveTurnRequest,
-  ProactiveTurnResult,
-} from "./proactiveChat.js"
-export type {
-  IChatFeedbackService,
-  FeedbackPayload,
-  FeedbackValue,
-  FeedbackCategory,
-  SubmitChatFeedbackOptions,
-} from "./chatFeedbackService.js"
+
+// The chat SSE protocol contracts (IChatStreamClient, IChatTitleService,
+// IChatQuestionsService, IProactiveChatService, IChatFeedbackService and
+// their wire types) now live in @lib/contracts — the dependency-free
+// shared-kernel layer — so the chat use case can import them without
+// breaking the application→domain-only rule. Import them from there.
