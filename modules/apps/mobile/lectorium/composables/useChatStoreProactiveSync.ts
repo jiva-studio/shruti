@@ -15,7 +15,12 @@ export function useChatStoreProactiveSync(): void {
   let unsubs: Array<() => void> = []
 
   function refresh(): void {
-    void chatStore.refreshSessions().catch(() => undefined)
+    // Surface refresh failures instead of swallowing them. A throwing
+    // `sessions.list` (e.g. a schema/query error) would otherwise empty
+    // the session list silently — log so a broken refresh is visible.
+    void chatStore.refreshSessions().catch((err) => {
+      console.error("[proactive] chat session refresh failed", err)
+    })
   }
 
   onMounted(() => {
