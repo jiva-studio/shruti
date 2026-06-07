@@ -66,6 +66,8 @@
 
     <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
 
+    <SettingsDebugGroup v-if="debugUnlocked" :count="logs.count" @view-logs="logsOpen = true" />
+
     <SettingsDangerGroup v-if="debugUnlocked" @clear-cache="onClearCache" />
 
     <BuildInfo
@@ -78,19 +80,30 @@
     />
 
     <HelpDialog v-model:open="helpOpen" />
+
+    <LogsDialog
+      v-model:open="logsOpen"
+      :entries="logs.entries"
+      :count="logs.count"
+      @copy="onCopyLogs"
+      @clear="logs.clear"
+    />
   </AppPage>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { Clipboard } from "@capacitor/clipboard"
 import { useI18n } from "vue-i18n"
 import type { BuildInfoId } from "@kit/ui"
 import { AppPage, BuildInfo } from "@ui/primitives/index.js"
 import {
+  LogsDialog,
   SettingsAccountGroup,
   SettingsAppearanceGroup,
   SettingsDangerGroup,
   SettingsDataGroup,
+  SettingsDebugGroup,
   SettingsHelpGroup,
   SettingsSadhanaGroup,
   SmartLibraryDialog,
@@ -102,6 +115,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAuthStore } from "@shruti/stores/useAuthStore.js"
+import { useLogsStore } from "@shruti/stores/useLogsStore.js"
 import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import { useDebugUnlockTrigger } from "@shruti/composables/useDebugUnlockTrigger.js"
 import { useToast } from "@kit/composables"
@@ -111,6 +125,7 @@ import { useSettingsController } from "./SettingsView.controller.js"
 const player = usePlayerStore()
 const paywall = usePaywallStore()
 const auth = useAuthStore()
+const logs = useLogsStore()
 const shruti = useShruti()
 const i18n = useI18n()
 const { t } = i18n
@@ -158,6 +173,7 @@ const buildInfoDebugIds = computed<BuildInfoId[]>(() => {
 const { triggerSignIn } = useAnonymousSignInFlow()
 
 const helpOpen = ref(false)
+const logsOpen = ref(false)
 const trackInfoOpen = ref(false)
 const smartLibraryDialogOpen = ref(false)
 const smartLibraryFiltersOpen = ref(false)
@@ -208,6 +224,15 @@ function onPreferredServerChange(newServerId: string): void {
 function onSmartLibraryEntry(): void {
   if (subscription.isSubscribed) smartLibraryDialogOpen.value = true
   else paywall.requestOpen("smartLibrary")
+}
+
+async function onCopyLogs(): Promise<void> {
+  try {
+    await Clipboard.write({ string: logs.asText() })
+    await toast.info(t("settings.logs.copied"))
+  } catch (e) {
+    console.warn("[settings] copy logs failed:", e)
+  }
 }
 
 function onOpenPrivacyPolicy(): void {

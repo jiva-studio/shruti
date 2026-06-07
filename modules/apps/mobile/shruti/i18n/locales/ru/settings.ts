@@ -8,6 +8,7 @@ export default {
     sadhana: "Садхана",
     data: "Данные",
     help: "Помощь",
+    debug: "Отладка",
     danger: "Опасная зона",
     about: "О приложении",
   },
@@ -280,10 +281,27 @@ export default {
     },
   },
 
+  debug: {
+    viewLogs: {
+      title: "Посмотреть логи",
+      description: "Журнал событий приложения · {count} записей",
+    },
+  },
+
+  logs: {
+    title: "Логи",
+    close: "Закрыть",
+    copy: "Копировать",
+    copied: "Логи скопированы",
+    clear: "Очистить",
+    count: "{count} записей",
+    empty: "Логов пока нет",
+  },
+
   danger: {
     clearCache: {
       title: "Очистить кеш",
-      description: "Удаляет загруженные транскрипты",
+      description: "Удаляет все скачанные аудио и транскрипты",
     },
   },
 

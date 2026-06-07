@@ -326,6 +326,15 @@ export function useProactiveScheduler(): void {
           chatMessageId: entry.chatMessageId,
         },
       })
+      // Surfaced in the in-app debug log so we can see WHICH notification was
+      // scheduled, WHY (rule kind), WHEN it fires, and the exact copy.
+      console.info(
+        "[notify] scheduled",
+        `rule=${entry.ruleKind}`,
+        `at=${new Date(fireAtMs).toISOString()}`,
+        `title=${JSON.stringify(title)}`,
+        `body=${JSON.stringify(body)}`
+      )
     } catch (err) {
       console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
     }

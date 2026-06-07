@@ -60,6 +60,12 @@ import {
 import { createFailoverClient } from "@kit/servers"
 import { usePurchasesStore } from "./stores/usePurchasesStore.js"
 import { useAuthStore } from "./stores/useAuthStore.js"
+import { installConsoleCapture } from "./services/logger/index.js"
+
+// Capture console.* into the in-memory debug buffer (Settings → Debug →
+// "View logs") before anything else runs, so the subscription / proactive
+// diagnostics emitted during bootstrap are recorded too.
+installConsoleCapture()
 
 // Init the composition root BEFORE the router is installed. router.install()
 // triggers an immediate navigation, which runs `beforeEach` synchronously —
