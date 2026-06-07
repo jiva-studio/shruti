@@ -291,7 +291,13 @@ export async function* runChatTurn(
           yield { kind: "delta", text: event.text }
           break
         case "tool_start":
+          // A re-run of a tool discards the first pass entirely: reset
+          // the prose accumulator AND the per-turn action/outline maps,
+          // otherwise the finalised message would carry orphaned cards
+          // emitted before the tool re-ran.
           acc = ""
+          for (const k of Object.keys(actions)) delete actions[k]
+          for (const k of Object.keys(outlines)) delete outlines[k]
           yield { kind: "tool-start" }
           break
         case "tool_end":
@@ -455,11 +461,19 @@ export async function* runChatTurn(
   // not a connection drop, so we render the neutral "Stopped" copy
   // instead of "connection dropped". `!sawDone && acc.length > 0` is
   // the catch-all truncated path for real network truncations.
-  const errorMeta: ChatMessageError | undefined = input.signal.aborted
-    ? { kind: "stopped" }
-    : !sawDone && acc.length > 0
-      ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
-      : undefined
+  //
+  // Gate "stopped" on `!sawDone`: the server emits `usage` AFTER the
+  // terminal `done`, so the loop keeps reading past `done` to capture
+  // that frame. A user abort that lands in this post-terminal window
+  // would otherwise relabel a fully-completed answer as "stopped" —
+  // once `done` arrived the turn is finished, so an abort after it is
+  // a no-op for the error marker.
+  const errorMeta: ChatMessageError | undefined =
+    input.signal.aborted && !sawDone
+      ? { kind: "stopped" }
+      : !sawDone && acc.length > 0
+        ? { kind: "truncated", reason: sawTurnsLimit ? "turns" : "stream" }
+        : undefined
 
   if (acc.length > 0) {
     const followups = deps.extractFollowups(acc)
@@ -477,12 +491,15 @@ export async function* runChatTurn(
     })
     await deps.sessions.touch(input.sessionId, finalised.createdAt)
     yield { kind: "finalised", message: finalised }
-  } else if (input.signal.aborted) {
-    // User tapped stop before any prose landed. Nothing useful to
-    // preserve, and converting the placeholder to a "no content"
-    // failed-bubble would suggest something went wrong — it didn't,
-    // the user just changed their mind. Emit a dedicated code the
-    // store recognises so it can drop the placeholder silently.
+  } else if (input.signal.aborted && !sawDone) {
+    // User tapped stop before any prose landed (and before `done`).
+    // Nothing useful to preserve, and converting the placeholder to a
+    // "no content" failed-bubble would suggest something went wrong —
+    // it didn't, the user just changed their mind. Emit a dedicated
+    // code the store recognises so it can drop the placeholder
+    // silently. `!sawDone` mirrors the errorMeta gate above: an abort
+    // landing in the post-`done` usage wait is a completed (empty)
+    // turn, not a user stop.
     yield { kind: "error", code: "stopped_empty", message: "stopped" }
   } else if (lastError) {
     yield {
