@@ -62,10 +62,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     
     private func setupAudioSession() {
         do {
+            // No `.mixWithOthers`: it marks our audio as secondary/ambient,
+            // so iOS hands the Now Playing / lock-screen controls to whichever
+            // app owns a non-mixing session instead of us. As the primary
+            // session we own the lock screen and Control Center, and starting
+            // playback pauses other apps — the expected media-player behaviour.
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .default,
-                options: [.mixWithOthers, .allowAirPlay]
+                options: [.allowAirPlay]
             )
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
@@ -208,33 +213,40 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
     
-    private func updateNowPlayingInfo(title: String, artist: String) {
-        // Create a default artwork image
-        let defaultArtwork = MPMediaItemArtwork(boundsSize: CGSize(width: 100, height: 100)) { size in
-            // Create a simple colored square as default artwork
-            let renderer = UIGraphicsImageRenderer(size: size)
-            return renderer.image { ctx in
-                UIColor.systemBlue.setFill()
-                ctx.fill(CGRect(origin: .zero, size: size))
-            }
+    /// App icon, loaded once and reused as the lock-screen / Control Center
+    /// artwork for every track. The icon lives only in the asset catalog,
+    /// which `UIImage(named:)` can't address directly — its real filename is
+    /// listed under CFBundleIcons in Info.plist, so we resolve that first.
+    private lazy var nowPlayingArtwork: MPMediaItemArtwork? = {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String],
+              let lastName = files.last,
+              let icon = UIImage(named: lastName) else {
+            return nil
         }
-        
+        return MPMediaItemArtwork(boundsSize: icon.size) { _ in icon }
+    }()
+
+    private func updateNowPlayingInfo(title: String, artist: String) {
         // Get duration
         var duration: TimeInterval = 0
         if let currentItem = player?.currentItem {
             duration = CMTimeGetSeconds(currentItem.duration)
         }
-        
+
         // Create the now playing info
         var nowPlayingInfo: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: artist,
             MPMediaItemPropertyPlaybackDuration: duration,
-            MPMediaItemPropertyArtwork: defaultArtwork,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: 0,
             MPNowPlayingInfoPropertyPlaybackRate: 0
         ]
-        
+        if let artwork = nowPlayingArtwork {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+
         // Update the now playing info center
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
