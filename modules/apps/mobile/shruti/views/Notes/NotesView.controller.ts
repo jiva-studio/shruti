@@ -18,7 +18,8 @@ import {
 } from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
+import { escapeHtml } from "@shruti/utils/escapeHtml.js"
+import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
@@ -195,26 +196,6 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   /**
-   * Local-cache hit check. Returns the `file://...` URI when the
-   * excerpt is in the platform cache from a prior share; `null`
-   * otherwise. Delegates the stat / URI normalization to the port so
-   * this controller stays platform-API-free.
-   */
-  async function findLocalExcerpt(noteId: NoteId): Promise<string | null> {
-    return excerptCache.findLocal(localExcerptPath(noteId))
-  }
-
-  /**
-   * Tries the public excerpt URL on the active CDN first (no compute
-   * needed if the file is still there from a prior share). Returns the
-   * URL on hit; resolves to `null` on miss / timeout / network error.
-   */
-  async function probeExcerpt(noteId: string): Promise<string | null> {
-    const candidate = buildServerUrl(activeServer.value, `public/shares/audio/${noteId}.mp3`)
-    return (await excerptCache.probeRemote(candidate)) ? candidate : null
-  }
-
-  /**
    * Wraps the share work (cache → probe → cut+poll → download → share-sheet)
    * with a 3-second handoff: keep the user blocked behind a spinner while
    * the work might still finish quickly (audio cache-hit / sync cut), then
@@ -341,33 +322,19 @@ export function useNotesController(): NotesControllerReturn {
       noteId: note.id,
       initialLabel: t("notes.shareAudioPreparing"),
       errorLabel: t("notes.shareAudioErrorGeneric"),
-      workFn: async () => {
-        // 1. Already in app cache? Skip everything (no HTTP at all).
-        const cached = await findLocalExcerpt(note.id)
-        if (cached) return cached
-
-        // 2. Already on the CDN from someone else's prior share? Skip the
-        // cutter, just download.
-        let publicUrl = await probeExcerpt(note.id)
-
-        // 3. Cold path: cut, then download.
-        if (!publicUrl) {
-          const result = await shareAudioService.cut({
-            sourceKey: audioPath,
-            startMs: note.timeStart,
-            endMs: note.timeEnd,
-            excerptId: note.id,
-          })
-          // The cut() returns a sentinel `{ready:false, url:""}` if the
-          // server is still processing past the 8 s client-side cap (rare
-          // for share-audio); fall back to the predicted URL.
-          publicUrl =
-            result.url || buildServerUrl(activeServer.value, `public/shares/audio/${note.id}.mp3`)
-          if (!result.ready) await pollUntilReady(publicUrl)
-        }
-
-        return excerptCache.download({ url: publicUrl, filename: localExcerptPath(note.id) })
-      },
+      workFn: () =>
+        resolveShareArtifact({
+          cache: excerptCache,
+          filename: localExcerptPath(note.id),
+          predictedUrl: buildServerUrl(activeServer.value, `public/shares/audio/${note.id}.mp3`),
+          cut: () =>
+            shareAudioService.cut({
+              sourceKey: audioPath,
+              startMs: note.timeStart,
+              endMs: note.timeEnd,
+              excerptId: note.id,
+            }),
+        }),
       openShareSheet: (uri) =>
         shareService.share({
           url: uri,
@@ -491,18 +458,6 @@ export function useNotesController(): NotesControllerReturn {
     onQuery,
     onNoteClicked,
   }
-}
-
-const HTML_ESCAPES: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]!)
 }
 
 function escapeRegExp(s: string): string {

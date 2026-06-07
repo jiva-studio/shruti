@@ -2,7 +2,7 @@ import type {
   IProactiveChatService,
   ProactiveTurnRequest,
   ProactiveTurnResult,
-} from "@ports/app/index.js"
+} from "@lib/contracts"
 
 import { streamChat, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 

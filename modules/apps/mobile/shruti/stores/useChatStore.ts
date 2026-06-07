@@ -37,15 +37,7 @@ import type {
 } from "@lib/domain"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
-import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
-import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
-import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
-import {
-  createSqlChatSessionRepository,
-  createSqlChatMessageRepository,
-} from "@infra/repositories/sql/index.js"
-import type { ChatTurn, FeedbackCategory } from "@ports/app/index.js"
+import type { ChatTurn, FeedbackCategory } from "@lib/contracts"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -142,11 +134,11 @@ function warnOrphanActionMarkers(message: ChatMessage): void {
  * Owns the chat tab's reactive state and dispatches workflow verbs to
  * the use-cases in `@lib/application/chat`.
  *
- * The store does NOT touch SQL or HTTP directly — it constructs the
- * SQL repos + HTTP wrappers lazily from `useShruti()` and feeds them
- * into use-cases. This keeps the layering rule satisfied (presentation
- * → use-case → repo/service ports) and makes `sendMessage` testable by
- * stubbing `runChatTurn`.
+ * The store does NOT touch SQL or HTTP directly — it pulls the repos +
+ * chat service adapters off `useShruti()` (built by the composition
+ * root) and feeds them into use-cases. This keeps the layering rule
+ * satisfied (presentation → use-case → repo/service ports) and makes
+ * `sendMessage` testable by stubbing `runChatTurn`.
  */
 export const useChatStore = defineStore("chat", () => {
   const app = useShruti()
@@ -340,40 +332,25 @@ export const useChatStore = defineStore("chat", () => {
   let abort: AbortController | null = null
   let suggestionsAbort: AbortController | null = null
 
-  function userDb() {
-    const db = app.databases.user
-    if (!db) throw new Error("chat-store: user DB is not open yet")
-    return db
-  }
-
+  // Chat repositories and HTTP service adapters are built by the
+  // composition root (shruti.ts / repositories.ts). The store only
+  // consumes them — it never instantiates concrete @infra adapters.
   function chatRepos() {
-    const userDatabase = userDb()
-    return {
-      sessions: createSqlChatSessionRepository(userDatabase),
-      messages: createSqlChatMessageRepository(userDatabase),
-    }
+    const repos = app.repositories()
+    return { sessions: repos.chatSessions, messages: repos.chatMessages }
   }
 
-  // Lazy because `app.auth` is wired by the composition root and the
-  // factories are called from inside reactive setup. `chatHttpRequest`
-  // is the failover-aware HTTP client — a transient 5xx on the
-  // preferred server falls through to the next, and a sustained
-  // outage promotes the working server in Settings.
-  const authDeps = {
-    getAccessToken: () => app.auth.getAccessToken(),
-    request: (path: string, init?: RequestInit) => app.chatHttpRequest(path, init),
-  }
   function streamClient() {
-    return createHttpChatStreamClient(authDeps)
+    return app.chatStreamClient
   }
   function titleService() {
-    return createHttpChatTitleService(authDeps)
+    return app.chatTitleService
   }
   function questionsService() {
-    return createHttpChatQuestionsService(authDeps)
+    return app.chatQuestionsService
   }
   function feedbackService() {
-    return createHttpChatFeedbackService(authDeps)
+    return app.chatFeedbackService
   }
 
   async function refreshSessions(): Promise<void> {
@@ -405,6 +382,12 @@ export const useChatStore = defineStore("chat", () => {
     // Without this guard, that second call would abort the in-flight
     // suggestions request and reload the message list redundantly.
     if (activeSessionId.value === id) return
+    // Switching away from a session mid-stream must abort its turn —
+    // otherwise the in-flight turn keeps yielding and its terminal
+    // finalised/error would land in the session we just opened (the
+    // consume loop's session guard is the second line of defence). The
+    // assistant message is still persisted to its own session in SQLite.
+    cancelStream()
     cancelSuggestions()
     activeSessionId.value = id
     const repos = chatRepos()
@@ -698,6 +681,13 @@ export const useChatStore = defineStore("chat", () => {
           ensureFresh: () => useAuthStore().ensureFresh(),
         }
       )) {
+        // Guard against a session switch mid-stream: if the user opened
+        // a different session while this turn was still streaming, stop
+        // applying its events — they belong to `sessionId`, not the now-
+        // active one, and the message is already persisted to its own
+        // session. Without this the terminal `finalised`/`error` would
+        // leak a foreign bubble into the open conversation.
+        if (activeSessionId.value !== sessionId) continue
         applyTurnEvent(event)
         if (event.kind === "user-message") {
           // session list re-order
@@ -736,7 +726,11 @@ export const useChatStore = defineStore("chat", () => {
         // placeholder.
         const code = "stream"
         const message = err instanceof Error ? err.message : "Stream failed"
-        applyTurnEvent({ kind: "error", code, message })
+        // Same session guard as the consume loop — don't synthesize a
+        // failed bubble in a session the user switched to mid-stream.
+        if (activeSessionId.value === sessionId) {
+          applyTurnEvent({ kind: "error", code, message })
+        }
       }
     } finally {
       abort = null
