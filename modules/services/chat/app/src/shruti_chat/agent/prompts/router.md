@@ -33,6 +33,16 @@ Intents:
                  "расскажи о чём была прошлая лекция".
   Examples (en): "recap my last lecture",
                  "what was the previous lecture about".
+  Deictic recap of the lecture the user is PLAYING RIGHT NOW —
+  «перескажи / о чём эта / эту / текущую лекцию», "summarize / recap
+  this / the current lecture" — IS research, but you MUST set
+  `current_ref: true` (see below). This points at the open
+  `current_track_id`, NOT the corpus; without the flag it would blind-
+  search the corpus and refuse.
+  Examples (ru): "перескажи текущую лекцию",
+                 "о чём эта лекция".
+  Examples (en): "summarize the current lecture",
+                 "what is this lecture about".
   Note on "chapter from a book": "из Книги Кришны главу про X" /
   "chapter from KRSNA Book about X" is research+chunks_search with
   type=prose_chapter — the user wants the prose chapter's CONTENT.
@@ -148,7 +158,14 @@ Extract structured args ONLY for fields you can identify from the query:
   («последнюю / прошлую / предыдущую лекцию», "my last / previous
   lecture"). Tells the downstream worker to resolve the track from the
   user's listening history instead of searching the corpus. Do NOT set
-  it when the user names a title, a topic, or "this/current" lecture.
+  it when the user names a title, a topic, or the "this/current"
+  lecture (that's `current_ref`).
+- current_ref (bool) — set `true` ONLY when the user deictically points
+  at the lecture they are PLAYING RIGHT NOW WITHOUT naming it («эта /
+  эту / текущая лекция», "this / the current lecture"). Tells the
+  downstream worker to recap the open `current_track_id` instead of
+  searching the corpus. Do NOT set it when the user names a title, a
+  topic, or their last/previous lecture (that's `recent_ref`).
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";
