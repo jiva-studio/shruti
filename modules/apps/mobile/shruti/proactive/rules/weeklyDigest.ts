@@ -1,7 +1,7 @@
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
-const PREP_WINDOW_HOURS = 12
+const DEFAULT_PREP_WINDOW_HOURS = 12
 const SUNDAY_NOTIFY_HOUR = 9
 
 function pad(n: number): string {
@@ -16,9 +16,23 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
 }
 
-function nextSundayFrom(now: Date): Date {
+/**
+ * The next Sunday at/after `now`'s notify hour. When today IS Sunday
+ * and we haven't yet passed the digest's notify hour, target TODAY —
+ * otherwise a user who only opens the app on Sunday mornings would
+ * always be pushed to next week's Sunday and never receive a digest
+ * (and the detector's "already past" guard would be dead code).
+ */
+export function nextSundayFrom(now: Date): Date {
   const day = now.getDay() // 0=Sunday … 6=Saturday
-  const daysToSunday = day === 0 ? 7 : 7 - day
+  let daysToSunday: number
+  if (day === 0) {
+    // Today is Sunday: keep today if still before the notify hour,
+    // otherwise roll to next week.
+    daysToSunday = now.getHours() < SUNDAY_NOTIFY_HOUR ? 0 : 7
+  } else {
+    daysToSunday = 7 - day
+  }
   const sunday = startOfDay(now)
   sunday.setDate(sunday.getDate() + daysToSunday)
   return sunday
@@ -48,12 +62,13 @@ function weekLabel(weekStart: Date, weekEnd: Date, locale: string): string {
 const handler: ProactiveRuleHandler = {
   id: "weekly_digest",
 
-  async detect(ctx) {
+  async detect(ctx, config) {
     const now = new Date(ctx.nowMs)
     const sunday = nextSundayFrom(now)
     const visibleAtMs = sunday.getTime() + SUNDAY_NOTIFY_HOUR * 3_600_000
     const msUntil = visibleAtMs - ctx.nowMs
-    if (msUntil > PREP_WINDOW_HOURS * 3_600_000) return []
+    const prepWindowHours = config.prep_window_hours || DEFAULT_PREP_WINDOW_HOURS
+    if (msUntil > prepWindowHours * 3_600_000) return []
     if (msUntil < -3_600_000) return [] // already past — don't backfill
 
     return [

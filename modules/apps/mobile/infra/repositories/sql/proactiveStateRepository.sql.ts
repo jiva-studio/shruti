@@ -67,21 +67,21 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       if (input.notify && input.visibleAt === null) {
         throw new Error("proactiveState.create: notify=true requires non-null visibleAt")
       }
-      // Detect dedup up front to avoid a thrown UNIQUE violation inside
-      // a transaction (sqlite drivers vary on whether that rolls back
-      // the in-flight tx). If a row already exists for this (ruleKind,
-      // ruleDate), bail with null and let the caller move on.
-      const existing = await db.query<{ chat_message_id: string }>(
-        "SELECT chat_message_id FROM chat_messages_proactive_state WHERE rule_kind = ? AND rule_date = ?",
-        [input.ruleKind, input.ruleDate]
-      )
-      if (existing.length > 0) return null
-
+      // Dedup atomically via `ON CONFLICT(rule_kind, rule_date) DO
+      // NOTHING` rather than a SELECT-then-INSERT pre-check: two
+      // concurrent creates for the same (ruleKind, ruleDate) could both
+      // pass a pre-check and the loser would hit the UNIQUE constraint
+      // inside the tx (TOCTOU). `execute` doesn't surface rows-changed,
+      // so after the conflict-safe insert we re-read by our own unique
+      // `chat_message_id` to learn whether OUR row landed; if not, we
+      // lost the race — clean up the orphan chat_messages row and bail.
+      let won = false
       await db.transaction(async () => {
         // chat_messages insert mirrors the regular chat_messages writer
         // (empty meta envelope). Body is whatever the caller passed —
         // usually a fallback template; the real body is written on the
-        // next tick via `updateContent`.
+        // next tick via `updateContent`. The id is freshly minted per
+        // call so this insert never conflicts.
         await db.execute(
           `INSERT INTO chat_messages
              (id, session_id, role, content, created_at, meta)
@@ -92,7 +92,8 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
           `INSERT INTO chat_messages_proactive_state
              (chat_message_id, rule_kind, rule_date, prep_state, prepared_at,
               visible_at, notify, seen_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL)`,
+           VALUES (?, ?, ?, ?, NULL, ?, ?, NULL)
+           ON CONFLICT(rule_kind, rule_date) DO NOTHING`,
           [
             input.chatMessageId,
             input.ruleKind,
@@ -102,8 +103,21 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
             input.notify ? 1 : 0,
           ]
         )
+        const mine = await db.query<{ chat_message_id: string }>(
+          "SELECT chat_message_id FROM chat_messages_proactive_state WHERE chat_message_id = ?",
+          [input.chatMessageId]
+        )
+        won = mine.length > 0
+        if (!won) {
+          // Lost the dedup race — the (ruleKind, ruleDate) slot is owned
+          // by another row. Drop the orphan chat_messages row we just
+          // inserted so the history list stays clean.
+          await db.execute("DELETE FROM chat_messages WHERE id = ?", [input.chatMessageId])
+        }
       })
       await db.save()
+
+      if (!won) return null
 
       return {
         chatMessageId: input.chatMessageId,

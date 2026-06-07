@@ -5,6 +5,7 @@ import { registerRule } from "../registry.js"
 
 const HOLIDAY_NOTIFY_HOUR = 8
 const DAY_MS = 86_400_000
+const DEFAULT_PREP_WINDOW_HOURS = 48
 
 function parseLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number)
@@ -33,11 +34,12 @@ function localizedName(entry: HolidayEntry, locale: string): string {
 const handler: ProactiveRuleHandler = {
   id: "holiday",
 
-  async detect(ctx) {
+  async detect(ctx, config) {
     const calendars = await readHolidayCalendar()
     if (calendars.length === 0) return []
 
-    const prepWindowDays = 2 // mirrors config.prep_window_hours = 48
+    const prepWindowHours = config.prep_window_hours || DEFAULT_PREP_WINDOW_HOURS
+    const prepWindowDays = Math.floor(prepWindowHours / 24)
 
     return calendars
       .filter((h) => {

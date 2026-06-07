@@ -94,7 +94,13 @@ const handler: ProactiveRuleHandler = {
       ruleDate,
       prepState: "pending",
     })
-    if (created === null) return
+    if (created === null) {
+      // The (rule, date) row already existed — the session we just
+      // minted is an orphan. Delete it so the history list stays clean
+      // (mirrors the main tick loop's and unfinishedLecture's rollback).
+      await sessions.delete(sessionId).catch(() => undefined)
+      return
+    }
     // **Schedule the LocalNotification right here** instead of waiting
     // for the next scheduler tick. The whole point of `inactivity` is
     // that the user is GONE — the next foreground tick may be days
