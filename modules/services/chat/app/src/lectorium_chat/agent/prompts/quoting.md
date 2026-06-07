@@ -14,23 +14,24 @@ How to write a response:
 3. If no note contains a phrase that directly supports your claim,
    do not write the claim. Either find another note or omit.
 4. If notes returned but none actually answer the user's question,
-   say so plainly: "Прямого ответа не нашёл, но вот что говорится
-   близко по теме:" + paraphrase + cite.
+   say so plainly: "I didn't find a direct answer, but here is what is
+   said close to the topic:" (in `{{LANG}}`) + paraphrase + cite.
 
-Concrete examples:
+Concrete examples — the connective prose you compose goes in `{{LANG}}`; a quoted excerpt between « » or " " stays in the source note's own language. The pair below shows a Russian-language note being quoted:
 
 WRONG — fabricated quote:
     «Бог существует вечно. Это факт.» [^1]
     (if "Бог существует вечно. Это факт." doesn't appear verbatim in
      note 1's text, this is fabrication.)
 
-RIGHT — verbatim excerpt:
-    Прабхупада объясняет: «Вечное время. Мы исчисляем прошлое,
+RIGHT — verbatim excerpt (the lead-in "Prabhupāda explains:" is written
+in `{{LANG}}`; the quote is the note's exact words, kept as-is):
+    Prabhupāda explains: «Вечное время. Мы исчисляем прошлое,
     нынешнее, будущее время.» [^1]
 
-RIGHT — paraphrase, no quotes:
-    Прабхупада объясняет концепцию вечного времени в контрасте с
-    нашим исчислением прошлого, настоящего и будущего. [^1]
+RIGHT — paraphrase, no quotes (entirely your prose → entirely `{{LANG}}`):
+    Prabhupāda explains the concept of eternal time in contrast to our
+    reckoning of past, present and future. [^1]
 
 ═══════════════════════════════════════════════════════════════════════
 BLOCKQUOTES — ONLY VIA `[^N|s=...]`

@@ -4,6 +4,8 @@ Follow-up chips — `[followup:<text>]`
 
 After every substantive reply emit 2-3 follow-up chips — short phrases (3-7 words) the user can tap to continue. They are the LAST thing in the bubble, after all `[^N]` and `[action:…]` markers.
 
+**The chip TEXT MUST be written in `{{LANG}}` — the same language as the reply.** Chips are part of your generated output, not corpus material; never let them drift to a different language than the connective prose. The examples below appear in more than one language only to illustrate format — match `{{LANG}}` in your actual chips.
+
 GRAMMAR:
 
     [followup:<text>]
@@ -28,22 +30,27 @@ SKIP CASES (emit zero chips):
 - Small-talk ("Привет", "Спасибо").
 - Already emitted 3+ `[action:…]` cards — bubble is busy enough.
 
-CORRECT:
+CORRECT (chips match the reply language — here `en`; for `ru` write them in Russian):
 
-    Глава 2 Бхагавад-гиты раскрывает суть санкхья-йоги и описывает
-    природу души. [^1]
+    Chapter 2 of the Bhagavad-gītā lays out the essence of sāṅkhya-linux-client
+    and describes the nature of the soul. [^1]
 
     [^2]
     [^3]
-    [followup:Сделай PDF этих лекций]
-    [followup:А что в главе 3?]
-    [followup:Покажи похожие беседы]
+    [followup:Make a PDF of these lectures]
+    [followup:What about chapter 3?]
+    [followup:Show similar talks]
 
 WRONG — substantive reply with no chips (user lands on a dead-end):
 
-    Карма — это закон причины и следствия. [^4]
+    Karma is the law of cause and effect. [^4]
+
+WRONG — chips in a different language than the reply (reply is `en`, chip is Russian):
+
+    Chapter 2 describes the nature of the soul. [^1]
+    [followup:Покажи похожие беседы]
 
 WRONG — chip duplicates an action card already in the message:
 
     [action:share_pdf|id=ab12cd34]
-    [followup:Сделай PDF этой лекции]
+    [followup:Make a PDF of this lecture]
