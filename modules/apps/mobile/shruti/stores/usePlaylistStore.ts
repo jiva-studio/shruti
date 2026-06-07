@@ -9,11 +9,15 @@ import {
   type ArchivePlaylistItemError,
 } from "@lib/application/archivePlaylistItem.js"
 import { listActivePlaylistTracks } from "@lib/application/listPlaylistTracks.js"
-import type { PlaylistItemId, TrackId } from "@lib/domain/core.js"
+import type { AuthorId, LanguageCode, PlaylistItemId, TrackId } from "@lib/domain/core.js"
+import type { Author } from "@lib/domain/author.js"
 import { isCompleted } from "@lib/domain/listeningSession.js"
 import type { PlaylistItem } from "@lib/domain/playlistItem.js"
 import { maxAudioDurationMs, type Track } from "@lib/domain/track.js"
+import type { TrackVariant } from "@lib/domain/trackVariant.js"
+import { buildServerUrl } from "@lib/domain/servers.js"
 import type { Result } from "@kit/core"
+import type { AudioQueueItem } from "@ports/app/audioPlayer.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useDownloadStore } from "@shruti/stores/useDownloadStore.js"
 import { usePlaylistDerivedData } from "./playlist/usePlaylistDerivedData.js"
@@ -216,6 +220,74 @@ export const usePlaylistStore = defineStore("playlist", () => {
     return entries.value.find((e) => e.item.trackId === trackId)
   }
 
+  /** Entry for a playlist item id, or `undefined`. */
+  function getEntryByItemId(itemId: PlaylistItemId): PlaylistEntry | undefined {
+    return entries.value.find((e) => e.item.id === itemId)
+  }
+
+  function pickVariant(track: Track, preferred?: LanguageCode): TrackVariant | undefined {
+    if (preferred) {
+      const v = track.variants.find((x) => x.language === preferred && x.audio)
+      if (v) return v
+    }
+    return track.variants.find((v) => v.audio)
+  }
+
+  /**
+   * Build the native playback queue starting at `fromItemId` and running
+   * to the end of the loaded playlist — the tapped track plus every
+   * following entry, in order (no skip/reorder; already-listened entries
+   * still play). This is what enables continuous **background** playback:
+   * the whole tail is handed to the native engine up front so it can
+   * auto-advance while the JS layer is suspended.
+   *
+   * Each item's URL prefers the already-downloaded local file (resolved
+   * without forcing a download — `prefetchAll` owns downloading) and
+   * falls back to the public CDN URL for streaming when online. Entries
+   * without audio are skipped.
+   *
+   * Bounded by the currently-loaded `entries` page; on resume the player
+   * can extend the native queue via `appendToQueue`.
+   */
+  async function buildQueueFrom(
+    fromItemId: PlaylistItemId,
+    preferredLanguage?: LanguageCode
+  ): Promise<AudioQueueItem[]> {
+    const startIdx = entries.value.findIndex((e) => e.item.id === fromItemId)
+    if (startIdx < 0) return []
+    const slice = entries.value.slice(startIdx)
+    const authorCache = new Map<AuthorId, Author | null>()
+    const repos = app.repositories()
+    const out: AudioQueueItem[] = []
+    for (const { item, track } of slice) {
+      const variant = pickVariant(track, preferredLanguage)
+      if (!variant?.audio) continue
+      const path = variant.audio.path
+      const probe = buildServerUrl(app.activeServer.value, path)
+      const local = await app.mediaDownloader.resolveLocalUrl(probe).catch(() => null)
+      const url = local ?? app.storagePublicUrl.get(path)
+      let author = ""
+      if (track.authorId) {
+        if (!authorCache.has(track.authorId)) {
+          authorCache.set(
+            track.authorId,
+            await repos.authors.getById(track.authorId).catch(() => null)
+          )
+        }
+        const a = authorCache.get(track.authorId) ?? null
+        author = a?.names.get(variant.language) ?? a?.names.values().next().value ?? ""
+      }
+      out.push({
+        itemId: item.id,
+        url,
+        title: variant.title,
+        author,
+        durationMs: variant.audio.duration != null ? variant.audio.duration * 1000 : undefined,
+      })
+    }
+    return out
+  }
+
   /**
    * Patch the in-memory progress (and completion, if reached) for an
    * item. Called by the player on each session finalize. Pure UI sync —
@@ -285,6 +357,8 @@ export const usePlaylistStore = defineStore("playlist", () => {
     hasTrack,
     hasCompletedTrack,
     getEntryByTrackId,
+    getEntryByItemId,
+    buildQueueFrom,
     getProgressMs,
     getCompletedAt,
     patchProgress,

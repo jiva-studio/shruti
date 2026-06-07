@@ -18,19 +18,77 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setPlaybackRate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setProgressInterval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "onProgressChanged", returnType: CAPPluginReturnCallback),
-
+        // Background continuous-playback queue surface (see src/definitions.ts).
+        CAPPluginMethod(name: "setQueue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "appendToQueue", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getQueueState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "ackEvents", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "skipToNext", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "skipToPrevious", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "onItemTransition", returnType: CAPPluginReturnCallback),
     ]
-    
-    private var player: AVPlayer?
-    private var playerItem: AVPlayerItem?
+
+    /// A single queued track. Holds everything native needs to (re)build
+    /// the AVPlayerItem and to label the now-playing UI without calling
+    /// back into JS — the queue advances natively while JS is suspended.
+    private struct QueueEntry {
+        let itemId: String
+        let url: URL
+        let title: String
+        let author: String
+        /// Known duration in seconds (from JS), used to report a
+        /// completion duration in transitions when the AVPlayerItem's
+        /// own duration is still indefinite.
+        let knownDuration: Double?
+    }
+
+    // The AVQueuePlayer owns auto-advance under the `.playback` session —
+    // a single track is just a queue of length 1 (one play path).
+    private var player: AVQueuePlayer?
     private var progressObserver: Any?
+    private var currentItemObservation: NSKeyValueObservation?
     private var statusCallbacks: [String: CAPPluginCall] = [:]
-    private var currentTrackId: String = ""
+    private var transitionCallbacks: [String: CAPPluginCall] = [:]
+
+    /// The full ordered queue snapshot (current item onward). `queueIndex`
+    /// points at the entry currently playing. We keep the entries (not
+    /// just AVPlayerItems) so we can rebuild for `skipToPrevious` —
+    /// AVQueuePlayer is forward-only — and re-fill on append.
+    private var entries: [QueueEntry] = []
+    private var queueIndex: Int = 0
+
+    /// itemId for the entry that is currently the AVQueuePlayer's
+    /// currentItem. Tracked separately from `queueIndex` because the
+    /// currentItem KVO is what tells us a native advance happened.
+    private var currentItemId: String = ""
+
+    /// Where listening on each item began (resume point / 0), keyed by
+    /// itemId. Kept per-item rather than as a single mutable field because
+    /// the natural-end notification and the currentItem KVO can fire in
+    /// either order — the finished item's `fromPosition` must not be
+    /// clobbered by the next item becoming current first.
+    private var fromPositionByItemId: [String: Double] = [:]
+
+    /// Maps an AVPlayerItem to its itemId so the currentItem-change
+    /// observer knows which entry just became current. AVQueuePlayer
+    /// drops finished items, so we also use `entries` for lookups.
+    private var itemIdByItem: [ObjectIdentifier: String] = [:]
+
+    /// Per-item failure retry budget so a run of bad items can't loop.
+    private var failureRetries: [String: Int] = [:]
+    private let maxFailureRetries = 1
+
+    /// AVPlayerItem.status / failure observations, keyed by item.
+    private var itemStatusObservations: [ObjectIdentifier: NSKeyValueObservation] = [:]
+
+    private let journal = QueueJournal()
+
     /// One tap instance, reused across opens. Owns the heap-allocated
     /// mix-state context that the per-item MTAudioProcessingTap
     /// callbacks dereference, so a setMix() call hits whatever item
     /// is currently in flight.
     private let stereoMixTap = StereoMixTap()
+
     /// AVPlayer.rate has dual meaning: `0` = paused, anything > 0 means
     /// actively playing at that speed. We can't write `player.rate =
     /// newRate` while paused — it'd resume playback. Store the user's
@@ -41,13 +99,19 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// slower for the floating player, and a heartbeat when backgrounded.
     private var progressIntervalSec: Double = 1.0
 
+    /// Coarse safety timer that snapshots the in-flight position to disk
+    /// (~30 s) while playing, so a hard background kill loses at most that
+    /// much resume accuracy (§3.4).
+    private var positionPersistTimer: Timer?
+    private let positionPersistInterval: TimeInterval = 30
+
     override public func load() {
         // Setup audio session for background playback
         setupAudioSession()
-        
+
         // Setup remote control and now playing info
         setupRemoteTransportControls()
-        
+
         // Add notification observers for audio interruptions
         NotificationCenter.default.addObserver(
             self,
@@ -55,7 +119,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             name: AVAudioSession.interruptionNotification,
             object: nil
         )
-        
+
         // Add notification for when audio route changes (e.g., headphones unplugged)
         NotificationCenter.default.addObserver(
             self,
@@ -63,8 +127,27 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             name: AVAudioSession.routeChangeNotification,
             object: nil
         )
+
+        // A natural end on ANY queued item — AVQueuePlayer auto-advances,
+        // but we still get one notification per item. The notification's
+        // object identifies which item ended.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerItemDidReachEnd(notification:)),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: nil
+        )
+
+        // A failed item (couldn't play to end). We journal a partial and
+        // let AVQueuePlayer skip past it.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerItemFailedToReachEnd(notification:)),
+            name: .AVPlayerItemFailedToPlayToEndTime,
+            object: nil
+        )
     }
-    
+
     private func setupAudioSession() {
         do {
             // No `.mixWithOthers`: it marks our audio as secondary/ambient,
@@ -82,22 +165,34 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             print("Failed to set up audio session: \(error.localizedDescription)")
         }
     }
-    
+
     private func setupRemoteTransportControls() {
         // Get the shared command center
         let commandCenter = MPRemoteCommandCenter.shared()
-        
+
         // Add handlers for play, pause, etc.
         commandCenter.playCommand.addTarget { [weak self] _ in
             self?.play()
             return .success
         }
-        
+
         commandCenter.pauseCommand.addTarget { [weak self] _ in
             self?.togglePause()
             return .success
         }
-        
+
+        // Lock-screen next/previous drive the native queue skips so the
+        // background advance + journaling go through one path.
+        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            return self.advanceToNext(reason: "skip-next") ? .success : .noSuchContent
+        }
+
+        commandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            guard let self = self else { return .commandFailed }
+            return self.goToPrevious() ? .success : .noSuchContent
+        }
+
         commandCenter.seekForwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
                 let newTime = CMTime(seconds: player.currentTime().seconds + Double(seekEvent.type.rawValue * 30), preferredTimescale: 1)
@@ -106,7 +201,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             return .commandFailed
         }
-        
+
         commandCenter.seekBackwardCommand.addTarget { [weak self] event in
             if let seekEvent = event as? MPSeekCommandEvent, let player = self?.player {
                 let newTime = CMTime(seconds: max(player.currentTime().seconds - Double(seekEvent.type.rawValue * 30), 0), preferredTimescale: 1)
@@ -115,7 +210,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             return .commandFailed
         }
-        
+
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             if let changeEvent = event as? MPChangePlaybackPositionCommandEvent, let player = self?.player {
                 let newTime = CMTime(seconds: changeEvent.positionTime, preferredTimescale: 1)
@@ -125,14 +220,14 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             return .commandFailed
         }
     }
-    
+
     @objc func handleInterruption(notification: Notification) {
         guard let info = notification.userInfo,
               let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
             return
         }
-        
+
         switch type {
         case .began:
             // Audio session interrupted, pause playback
@@ -151,14 +246,14 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             break
         }
     }
-    
+
     @objc func handleRouteChange(notification: Notification) {
         guard let info = notification.userInfo,
               let reasonValue = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
             return
         }
-        
+
         // Pause playback when headphones are unplugged
         if reason == .oldDeviceUnavailable {
             if player?.rate != 0 {
@@ -166,132 +261,500 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
     }
-    
+
+    // MARK: - Public API: single-track convenience (one play path)
+
     @objc func open(_ call: CAPPluginCall) {
-        guard let urlString = call.getString("url"), let url = URL(string: urlString) else {
+        guard let urlString = call.getString("url"), URL(string: urlString) != nil else {
             call.reject("Invalid URL provided")
             return
         }
-        
-        // Store track metadata
         let title = call.getString("title") ?? "Unknown Title"
         let author = call.getString("author") ?? "Unknown Artist"
-        currentTrackId = call.getString("itemId") ?? ""
-        
-        // Clear any existing player
-        removeProgressObserver()
-        
-        // Create a new player item and player. Attach the stereo-mix
-        // audioMix; AVPlayerItem owns the underlying MTAudioProcessingTap
-        // and releases it when the item itself goes away on the next open().
-        // makeAudioMix() returns nil for HLS / non-PCM sources — in that
-        // case we silently fall back to passthrough playback.
-        let asset = AVURLAsset(url: url)
-        playerItem = AVPlayerItem(asset: asset)
-        if let audioMix = stereoMixTap.makeAudioMix(for: asset) {
-            playerItem?.audioMix = audioMix
-        }
-        // Time-domain pitch algorithm preserves voice quality at non-1×
-        // playback rates. Default `.lowQualityZeroLatency` produces
-        // audible artefacts on speech at 2×. `.timeDomain` is a fine
-        // middle ground; `.spectral` would be even better but heavier.
-        playerItem?.audioTimePitchAlgorithm = .timeDomain
-        player = AVPlayer(playerItem: playerItem)
-        
-        // Add status observation
-        playerItem?.addObserver(self, forKeyPath: #keyPath(AVPlayerItem.status), options: [.new], context: nil)
-        
-        // Add ended playback observation
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerItemDidReachEnd),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem
-        )
-        
-        // Setup progress observation
-        setupProgressObserver()
-        
-        // Set the metadata for the now playing info center
-        updateNowPlayingInfo(title: title, artist: author)
-        
+        let itemId = call.getString("itemId") ?? ""
+
+        // open() is a queue of length 1 — there is ONE native play path.
+        let item = QueueItemSpec(itemId: itemId, url: urlString, title: title, author: author, duration: nil)
+        replaceQueue(with: [item], startIndex: 0, startPosition: 0)
         call.resolve()
     }
-    
-    /// App icon, loaded once and reused as the lock-screen / Control Center
-    /// artwork for every track. The icon lives only in the asset catalog,
-    /// which `UIImage(named:)` can't address directly — its real filename is
-    /// listed under CFBundleIcons in Info.plist, so we resolve that first.
-    private lazy var nowPlayingArtwork: MPMediaItemArtwork? = {
-        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
-              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-              let files = primary["CFBundleIconFiles"] as? [String],
-              let lastName = files.last,
-              let icon = UIImage(named: lastName) else {
-            return nil
-        }
-        return MPMediaItemArtwork(boundsSize: icon.size) { _ in icon }
-    }()
 
-    private func updateNowPlayingInfo(title: String, artist: String) {
-        // Get duration
-        var duration: TimeInterval = 0
-        if let currentItem = player?.currentItem {
-            duration = CMTimeGetSeconds(currentItem.duration)
-        }
+    // MARK: - Public API: queue
 
-        // Create the now playing info
-        var nowPlayingInfo: [String: Any] = [
-            MPMediaItemPropertyTitle: title,
-            MPMediaItemPropertyArtist: artist,
-            MPMediaItemPropertyPlaybackDuration: duration,
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: 0,
-            MPNowPlayingInfoPropertyPlaybackRate: 0
-        ]
-        if let artwork = nowPlayingArtwork {
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-        }
-
-        // Update the now playing info center
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-    }
-    
-    private func updatePlaybackInfo() {
-        guard let player = player, var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo else {
+    @objc func setQueue(_ call: CAPPluginCall) {
+        let rawItems = call.getArray("items") ?? []
+        let items = rawItems.compactMap { parseQueueItem($0) }
+        let startIndex = call.getInt("startIndex") ?? 0
+        let startPosition = call.getDouble("startPosition") ?? 0
+        guard !items.isEmpty else {
+            call.reject("setQueue requires at least one item")
             return
         }
-        
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime().seconds
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player.rate
-        
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+        replaceQueue(with: items, startIndex: max(0, min(startIndex, items.count - 1)), startPosition: startPosition)
+        call.resolve()
     }
-    
-    private func setupProgressObserver() {
-        // Monitor playback progress at the current adaptive cadence.
-        let interval = CMTime(seconds: progressIntervalSec, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        progressObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            self?.updatePlaybackInfo()
-            self?.notifyProgressChanged()
+
+    @objc func appendToQueue(_ call: CAPPluginCall) {
+        let rawItems = call.getArray("items") ?? []
+        let items = rawItems.compactMap { parseQueueItem($0) }
+        guard !items.isEmpty else {
+            call.resolve()
+            return
+        }
+        appendItems(items)
+        call.resolve()
+    }
+
+    @objc func getQueueState(_ call: CAPPluginCall) {
+        let events = journal.allTransitions().map { $0.toDictionary() }
+        let position = player?.currentTime().seconds ?? 0
+        let durationCM = player?.currentItem?.duration
+        var duration: Double = 0
+        if let durationCM = durationCM, !durationCM.isIndefinite {
+            duration = durationCM.seconds
+        } else if let entry = currentEntry(), let known = entry.knownDuration {
+            duration = known
+        }
+        let playing = (player?.rate ?? 0) != 0
+        let currentId: Any = currentItemId.isEmpty ? NSNull() : currentItemId
+
+        call.resolve([
+            "currentItemId": player?.currentItem == nil ? NSNull() : currentId,
+            "position": position.isFinite ? position : 0,
+            "duration": duration.isFinite ? duration : 0,
+            "playing": playing,
+            "events": events
+        ])
+    }
+
+    @objc func ackEvents(_ call: CAPPluginCall) {
+        let upToSeq = call.getInt("upToSeq") ?? 0
+        journal.ack(upToSeq: upToSeq)
+        call.resolve()
+    }
+
+    @objc func skipToNext(_ call: CAPPluginCall) {
+        _ = advanceToNext(reason: "skip-next")
+        call.resolve()
+    }
+
+    @objc func skipToPrevious(_ call: CAPPluginCall) {
+        _ = goToPrevious()
+        call.resolve()
+    }
+
+    @objc func onItemTransition(_ call: CAPPluginCall) {
+        let callbackId = UUID().uuidString
+        transitionCallbacks[callbackId] = call
+        call.keepAlive = true
+        call.resolve([
+            "callbackId": callbackId
+        ])
+    }
+
+    // MARK: - Queue building
+
+    /// Normalised spec parsed off the JS bridge before AVFoundation
+    /// objects are built. Keeps parsing isolated from playback wiring.
+    private struct QueueItemSpec {
+        let itemId: String
+        let url: String
+        let title: String
+        let author: String
+        let duration: Double?
+    }
+
+    private func parseQueueItem(_ raw: Any) -> QueueItemSpec? {
+        guard let dict = raw as? [String: Any] else { return nil }
+        guard let itemId = dict["itemId"] as? String,
+              let url = dict["url"] as? String,
+              !url.isEmpty else { return nil }
+        let title = dict["title"] as? String ?? "Unknown Title"
+        let author = dict["author"] as? String ?? "Unknown Artist"
+        let duration = (dict["duration"] as? NSNumber)?.doubleValue
+        return QueueItemSpec(itemId: itemId, url: url, title: title, author: author, duration: duration)
+    }
+
+    /// Tear down the existing AVQueuePlayer and build a fresh one from
+    /// `items[startIndex...]`. The start item is seeked to `startPosition`
+    /// (seconds); auto-advanced items always start at 0.
+    private func replaceQueue(with items: [QueueItemSpec], startIndex: Int, startPosition: Double) {
+        teardownPlayer()
+
+        // Materialise entries from the start index onward.
+        var newEntries: [QueueEntry] = []
+        for spec in items[startIndex...] {
+            guard let url = URL(string: spec.url) else { continue }
+            newEntries.append(QueueEntry(
+                itemId: spec.itemId,
+                url: url,
+                title: spec.title,
+                author: spec.author,
+                knownDuration: spec.duration
+            ))
+        }
+        guard !newEntries.isEmpty else { return }
+
+        entries = newEntries
+        queueIndex = 0
+        failureRetries.removeAll()
+
+        rebuildPlayer(seekFirstTo: startPosition)
+    }
+
+    /// (Re)create the AVQueuePlayer from `entries[queueIndex...]`. Each
+    /// item is built with its own stereo-mix tap (the tap + audioMix are
+    /// per-AVPlayerItem). The first item is optionally seeked.
+    ///
+    /// Used both for a fresh setQueue and for skipToPrevious (which must
+    /// rebuild because AVQueuePlayer is forward-only).
+    private func rebuildPlayer(seekFirstTo seekPosition: Double) {
+        // Build AVPlayerItems for the remaining entries.
+        var avItems: [AVPlayerItem] = []
+        for entry in entries[queueIndex...] {
+            avItems.append(makePlayerItem(for: entry))
+        }
+        guard let first = avItems.first else { return }
+
+        let newPlayer = AVQueuePlayer(items: avItems)
+        newPlayer.actionAtItemEnd = .advance
+        player = newPlayer
+
+        currentItemId = entries[queueIndex].itemId
+        fromPositionByItemId[currentItemId] = seekPosition > 0 ? seekPosition : 0
+
+        observeCurrentItem()
+        setupProgressObserver()
+
+        // Seek the first item to the resume position before playing.
+        if seekPosition > 0 {
+            let time = CMTime(seconds: seekPosition, preferredTimescale: 1000)
+            first.seek(to: time) { _ in }
+        }
+
+        updateNowPlayingInfo(for: entries[queueIndex])
+        startPlaybackPersistTimer()
+
+        play()
+    }
+
+    /// Build an AVPlayerItem with the per-item stereo-mix audioMix and
+    /// time-domain pitch algorithm, wired with a status observer for
+    /// failure handling. Records the item↔itemId mapping.
+    private func makePlayerItem(for entry: QueueEntry) -> AVPlayerItem {
+        let asset = AVURLAsset(url: entry.url)
+        let item = AVPlayerItem(asset: asset)
+        // The stereo-mix tap + audioMix are PER AVPlayerItem — attach a
+        // fresh tap (pointed at the shared mix context) to every item so
+        // a native advance keeps blending. nil for HLS/non-PCM sources →
+        // passthrough.
+        if let audioMix = stereoMixTap.makeAudioMix(for: asset) {
+            item.audioMix = audioMix
+        }
+        // Time-domain pitch algorithm preserves voice quality at non-1×
+        // playback rates.
+        item.audioTimePitchAlgorithm = .timeDomain
+
+        itemIdByItem[ObjectIdentifier(item)] = entry.itemId
+        observeItemStatus(item)
+        return item
+    }
+
+    /// Append items to the tail of the live queue. Inserts each new
+    /// AVPlayerItem after the current last one so AVQueuePlayer keeps
+    /// auto-advancing into them.
+    private func appendItems(_ items: [QueueItemSpec]) {
+        var newEntries: [QueueEntry] = []
+        for spec in items {
+            guard let url = URL(string: spec.url) else { continue }
+            newEntries.append(QueueEntry(
+                itemId: spec.itemId,
+                url: url,
+                title: spec.title,
+                author: spec.author,
+                knownDuration: spec.duration
+            ))
+        }
+        guard !newEntries.isEmpty else { return }
+
+        // If there's no live player (queue ran dry), this becomes a fresh
+        // queue starting at the appended items.
+        guard let player = player, !entries.isEmpty else {
+            entries.append(contentsOf: newEntries)
+            queueIndex = max(0, entries.count - newEntries.count)
+            rebuildPlayer(seekFirstTo: 0)
+            return
+        }
+
+        entries.append(contentsOf: newEntries)
+        // Insert at the tail. AVQueuePlayer.insert(after: nil) appends at
+        // the end of the queue.
+        for entry in newEntries {
+            let item = makePlayerItem(for: entry)
+            if player.canInsert(item, after: nil) {
+                player.insert(item, after: nil)
+            }
         }
     }
-    
-    private func removeProgressObserver() {
-        if let observer = progressObserver, let player = player {
-            player.removeTimeObserver(observer)
-            progressObserver = nil
+
+    private func currentEntry() -> QueueEntry? {
+        guard queueIndex >= 0, queueIndex < entries.count else { return nil }
+        return entries[queueIndex]
+    }
+
+    // MARK: - currentItem KVO (native advance detection)
+
+    /// Observe AVQueuePlayer.currentItem so every native advance re-applies
+    /// the per-item rate, refreshes now-playing, and updates our index.
+    /// The transition is journaled by the end/skip handlers, not here —
+    /// this observer only re-binds player-side state to the new item.
+    private func observeCurrentItem() {
+        currentItemObservation?.invalidate()
+        currentItemObservation = player?.observe(\.currentItem, options: [.new]) { [weak self] _, _ in
+            self?.handleCurrentItemChange()
         }
     }
-    
+
+    private func handleCurrentItemChange() {
+        guard let player = player else { return }
+        guard let item = player.currentItem else {
+            // Queue ran dry. The end/skip handler already journaled the
+            // final transition (startedItemId == null) before we got here.
+            return
+        }
+        let newId = itemIdByItem[ObjectIdentifier(item)] ?? ""
+
+        // Sync our index to the entry that just became current.
+        if let idx = entries.firstIndex(where: { $0.itemId == newId }) {
+            queueIndex = idx
+        }
+        currentItemId = newId
+        // Auto-advanced items always start at 0. Only set if not already
+        // recorded (a rebuild/seek path may have set a resume position).
+        if fromPositionByItemId[newId] == nil {
+            fromPositionByItemId[newId] = 0
+        }
+
+        // Per-item rate must be re-applied on every advance (rate lives
+        // on the player but is reset to 1 by AVQueuePlayer on advance).
+        if player.rate != 0 {
+            player.rate = targetPlaybackRate
+        }
+
+        if let entry = currentEntry() {
+            updateNowPlayingInfo(for: entry)
+        }
+        // Snapshot the new current item immediately.
+        journal.savePosition(itemId: newId.isEmpty ? nil : newId, positionSec: 0)
+    }
+
+    // MARK: - Item status / failure observation
+
+    private func observeItemStatus(_ item: AVPlayerItem) {
+        let observation = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self = self else { return }
+            switch observedItem.status {
+            case .readyToPlay:
+                // Refresh duration in now-playing once it's known, but
+                // only for the item that is actually current.
+                if observedItem === self.player?.currentItem,
+                   let entry = self.currentEntry() {
+                    self.updateNowPlayingInfo(for: entry)
+                }
+            case .failed:
+                self.handleItemFailure(observedItem)
+            default:
+                break
+            }
+        }
+        itemStatusObservations[ObjectIdentifier(item)] = observation
+    }
+
+    /// A queued item failed to load/play. Journal a partial (reason
+    /// "error") and advance past it so one bad download can't stall the
+    /// whole background queue. Bounded retries guard against a run of
+    /// bad items looping.
+    private func handleItemFailure(_ item: AVPlayerItem) {
+        guard item === player?.currentItem else { return }
+        let failedId = itemIdByItem[ObjectIdentifier(item)] ?? currentItemId
+
+        // Both the .failed KVO and AVPlayerItemFailedToPlayToEndTime can
+        // fire for the same item; only act once per failed item (bounded
+        // by maxFailureRetries) so we don't double-journal / double-skip.
+        let retries = failureRetries[failedId] ?? 0
+        guard retries < maxFailureRetries else { return }
+        failureRetries[failedId] = retries + 1
+
+        // Advance, journaling the failed item as an error partial.
+        advanceWithJournal(reason: "error",
+                           finishedAt: player?.currentTime().seconds ?? 0)
+    }
+
+    // MARK: - Advance / skip
+
+    /// Skip to the next item (lock-screen next or in-app skip). Returns
+    /// false when there's nothing to advance to.
+    @discardableResult
+    private func advanceToNext(reason: String) -> Bool {
+        guard player != nil, currentEntry() != nil else { return false }
+        let pos = player?.currentTime().seconds ?? 0
+        advanceWithJournal(reason: reason, finishedAt: pos)
+        return true
+    }
+
+    /// Common advance path for skip-next / error: journal the finished
+    /// item, then tell AVQueuePlayer to advance. The currentItem KVO does
+    /// the player-side re-bind.
+    private func advanceWithJournal(reason: String, finishedAt: Double) {
+        let finished = currentEntry()
+        let nextEntry = (queueIndex + 1 < entries.count) ? entries[queueIndex + 1] : nil
+        journalTransition(
+            finished: finished,
+            finishedAt: finishedAt,
+            startedItemId: nextEntry?.itemId,
+            reason: reason
+        )
+        // advanceToNextItem() pops the current item; the KVO fires with
+        // the new currentItem (or nil when the queue is exhausted).
+        player?.advanceToNextItem()
+    }
+
+    /// Skip to the previous item. AVQueuePlayer is forward-only, so we
+    /// rebuild the queue from the previous index. Returns false at the
+    /// head of the queue.
+    @discardableResult
+    private func goToPrevious() -> Bool {
+        guard !entries.isEmpty else { return false }
+        let pos = player?.currentTime().seconds ?? 0
+
+        // If we're a few seconds in, "previous" restarts the current item
+        // (matching common player UX). Otherwise step back one entry.
+        if pos > 3 {
+            player?.seek(to: .zero)
+            fromPositionByItemId[currentItemId] = 0
+            return true
+        }
+        guard queueIndex > 0 else {
+            player?.seek(to: .zero)
+            return true
+        }
+
+        let finished = currentEntry()
+        let prevIndex = queueIndex - 1
+        journalTransition(
+            finished: finished,
+            finishedAt: pos,
+            startedItemId: entries[prevIndex].itemId,
+            reason: "skip-prev"
+        )
+
+        // Rebuild from the previous entry onward.
+        queueIndex = prevIndex
+        rebuildPlayer(seekFirstTo: 0)
+        return true
+    }
+
+    // MARK: - Journaling
+
+    private func journalTransition(finished: QueueEntry?, finishedAt: Double, startedItemId: String?, reason: String) {
+        guard let finished = finished else { return }
+        let durationSec = resolvedDuration(for: finished)
+        let transition = QueueTransition(
+            finishedItemId: finished.itemId,
+            fromPosition: fromPositionByItemId[finished.itemId] ?? 0,
+            finishedAt: finishedAt.isFinite ? finishedAt : durationSec,
+            duration: durationSec,
+            startedItemId: startedItemId,
+            reason: reason,
+            at: Date().timeIntervalSince1970 * 1000,
+            seq: journal.nextSeq()
+        )
+        // Durable append happens BEFORE anything else (e.g. teardown).
+        journal.append(transition)
+        // Best-effort foreground push — UI sugar only.
+        pushTransition(transition)
+        // The finished item's resume point is no longer needed.
+        fromPositionByItemId.removeValue(forKey: finished.itemId)
+    }
+
+    /// Best duration we can report for a finished item: the live
+    /// AVPlayerItem duration if known, else the JS-supplied duration.
+    private func resolvedDuration(for entry: QueueEntry) -> Double {
+        if let item = player?.currentItem,
+           itemIdByItem[ObjectIdentifier(item)] == entry.itemId,
+           !item.duration.isIndefinite {
+            return item.duration.seconds
+        }
+        return entry.knownDuration ?? 0
+    }
+
+    private func pushTransition(_ transition: QueueTransition) {
+        let payload = transition.toDictionary()
+        for (_, callback) in transitionCallbacks {
+            callback.resolve(payload)
+        }
+    }
+
+    // MARK: - Natural end / failure notifications
+
+    @objc func playerItemDidReachEnd(notification: Notification) {
+        guard let endedItem = notification.object as? AVPlayerItem else { return }
+        let endedId = itemIdByItem[ObjectIdentifier(endedItem)]
+        // Only journal an "auto" completion for an item we actually own.
+        guard let endedId = endedId,
+              let finished = entries.first(where: { $0.itemId == endedId }) else {
+            updatePlaybackInfo()
+            return
+        }
+
+        // The next entry (if any) is what AVQueuePlayer will advance to.
+        let finishedIndex = entries.firstIndex(where: { $0.itemId == endedId }) ?? queueIndex
+        let nextEntry = (finishedIndex + 1 < entries.count) ? entries[finishedIndex + 1] : nil
+
+        let durationSec = !endedItem.duration.isIndefinite
+            ? endedItem.duration.seconds
+            : (finished.knownDuration ?? 0)
+
+        let transition = QueueTransition(
+            finishedItemId: endedId,
+            fromPosition: fromPositionByItemId[endedId] ?? 0,
+            finishedAt: durationSec,           // natural end ⇒ finishedAt == duration
+            duration: durationSec,
+            startedItemId: nextEntry?.itemId,  // null when queue runs dry
+            reason: "auto",
+            at: Date().timeIntervalSince1970 * 1000,
+            seq: journal.nextSeq()
+        )
+        // Persist BEFORE anything else, including teardown when dry.
+        journal.append(transition)
+        pushTransition(transition)
+        fromPositionByItemId.removeValue(forKey: endedId)
+
+        if nextEntry == nil {
+            // Queue exhausted — persist the final journal entry (done
+            // above) before stopping.
+            stopPlaybackPersistTimer()
+            currentItemId = ""
+            journal.savePosition(itemId: nil, positionSec: durationSec)
+        }
+        updatePlaybackInfo()
+        notifyProgressCompleted(itemId: endedId, duration: durationSec)
+    }
+
+    @objc func playerItemFailedToReachEnd(notification: Notification) {
+        guard let failedItem = notification.object as? AVPlayerItem else { return }
+        handleItemFailure(failedItem)
+    }
+
+    // MARK: - Playback controls
+
     @objc func play(_ call: CAPPluginCall? = nil) {
         player?.play()
-        // `player.play()` sets rate to 1; immediately apply the user's
-        // chosen target rate. Skipped if pitch alg / item not ready —
-        // the rate will be re-applied on the next play() / state change.
         if let p = player, p.rate != 0 {
             p.rate = targetPlaybackRate
         }
         updatePlaybackInfo()
+        startPlaybackPersistTimer()
         call?.resolve()
     }
 
@@ -299,6 +762,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if let player = player {
             if player.rate != 0 {
                 player.pause()
+                // Snapshot position on pause (event-driven persistence).
+                persistCurrentPosition()
             } else {
                 player.play()
                 player.rate = targetPlaybackRate
@@ -307,29 +772,29 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         call?.resolve()
     }
-    
+
     @objc func seek(_ call: CAPPluginCall) {
         guard let position = call.getDouble("position") else {
             call.reject("Position parameter is required")
             return
         }
-        
+
         let time = CMTime(seconds: position, preferredTimescale: 1000)
         player?.seek(to: time) { [weak self] finished in
             if finished {
                 self?.updatePlaybackInfo()
+                self?.persistCurrentPosition()
                 call.resolve()
             } else {
                 call.reject("Seek operation failed")
             }
         }
     }
-    
+
     @objc func stop(_ call: CAPPluginCall) {
         player?.pause()
         player?.seek(to: .zero)
-        currentTrackId = ""
-        updatePlaybackInfo()
+        persistCurrentPosition()
         call.resolve()
     }
 
@@ -350,6 +815,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         player.seek(to: newTime) { [weak self] finished in
             if finished {
                 self?.updatePlaybackInfo()
+                self?.persistCurrentPosition()
                 call.resolve()
             } else {
                 call.reject("Seek operation failed")
@@ -359,8 +825,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     /// Set playback rate. Cached in `targetPlaybackRate` so a
     /// `setPlaybackRate(2)` during pause doesn't accidentally resume
-    /// playback — AVPlayer.rate=0 means paused; anything else means
-    /// playing at that speed.
+    /// playback.
     @objc func setPlaybackRate(_ call: CAPPluginCall) {
         var rate = Float(call.getDouble("rate") ?? 1.0)
         if !rate.isFinite { rate = 1.0 }
@@ -368,11 +833,125 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         if rate > 2.0 { rate = 2.0 }
         targetPlaybackRate = rate
         if let player = player, player.rate != 0 {
-            // Already playing — apply immediately. While paused we just
-            // store the target; play() / togglePause() picks it up.
             player.rate = rate
         }
         call.resolve()
+    }
+
+    /// Forward the slider state to the MTAudioProcessingTap context. One
+    /// context is shared by every tap, so this takes effect on whatever
+    /// AVPlayerItem is in flight without rebuilding the player.
+    @objc func setMix(_ call: CAPPluginCall) {
+        let enabled = call.getBool("enabled") ?? false
+        let ratio = Float(call.getDouble("ratio") ?? 0.5)
+        stereoMixTap.setMix(enabled: enabled, ratio: ratio)
+        call.resolve()
+    }
+
+    // MARK: - Progress callbacks
+
+    @objc func onProgressChanged(_ call: CAPPluginCall) {
+        let callbackId = UUID().uuidString
+        statusCallbacks[callbackId] = call
+        call.keepAlive = true
+        call.resolve([
+            "callbackId": callbackId
+        ])
+    }
+
+    private func notifyProgressChanged() {
+        guard let player = player, let currentItem = player.currentItem else {
+            return
+        }
+        if currentItem.duration.isIndefinite {
+            return
+        }
+        let position = player.currentTime().seconds
+        let duration = currentItem.duration.isIndefinite ? 0 : currentItem.duration.seconds
+        let playing = player.rate != 0
+
+        let status: [String: Any] = [
+            "position": position,
+            "playing": playing,
+            "duration": duration,
+            "itemId": currentItemId
+        ]
+        for (_, callback) in statusCallbacks {
+            callback.resolve(status)
+        }
+    }
+
+    private func notifyProgressCompleted(itemId: String, duration: Double) {
+        let status: [String: Any] = [
+            "position": duration,
+            "playing": false,
+            "duration": duration,
+            "itemId": itemId
+        ]
+        for (_, callback) in statusCallbacks {
+            callback.resolve(status)
+        }
+    }
+
+    // MARK: - Now playing
+
+    /// App icon, loaded once and reused as the lock-screen / Control Center
+    /// artwork for every track. The icon lives only in the asset catalog,
+    /// which `UIImage(named:)` can't address directly — its real filename is
+    /// listed under CFBundleIcons in Info.plist, so we resolve that first.
+    private lazy var nowPlayingArtwork: MPMediaItemArtwork? = {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String],
+              let lastName = files.last,
+              let icon = UIImage(named: lastName) else {
+            return nil
+        }
+        return MPMediaItemArtwork(boundsSize: icon.size) { _ in icon }
+    }()
+
+    private func updateNowPlayingInfo(for entry: QueueEntry) {
+        var duration: TimeInterval = 0
+        if let currentItem = player?.currentItem, !currentItem.duration.isIndefinite {
+            duration = CMTimeGetSeconds(currentItem.duration)
+        } else if let known = entry.knownDuration {
+            duration = known
+        }
+
+        let elapsed = player?.currentTime().seconds ?? 0
+        var nowPlayingInfo: [String: Any] = [
+            MPMediaItemPropertyTitle: entry.title,
+            MPMediaItemPropertyArtist: entry.author,
+            MPMediaItemPropertyPlaybackDuration: duration,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed.isFinite ? elapsed : 0,
+            MPNowPlayingInfoPropertyPlaybackRate: player?.rate ?? 0
+        ]
+        if let artwork = nowPlayingArtwork {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+
+    private func updatePlaybackInfo() {
+        guard let player = player, var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo else {
+            return
+        }
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime().seconds
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player.rate
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+
+    // MARK: - Progress observer
+
+    private func setupProgressObserver() {
+        removeProgressObserver()
+        // Adaptive cadence (#828): fast for transcript highlighting, slower
+        // for the floating player, a heartbeat when backgrounded.
+        let interval = CMTime(seconds: progressIntervalSec, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        progressObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] _ in
+            self?.updatePlaybackInfo()
+            self?.notifyProgressChanged()
+        }
     }
 
     /// Change how often progress is pushed to the WebView. The lock-screen
@@ -387,109 +966,66 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             progressIntervalSec = sec
             // Rebuild the observer at the new cadence if one is active.
             if progressObserver != nil {
-                removeProgressObserver()
                 setupProgressObserver()
             }
         }
         call.resolve()
     }
 
-    /// Forward the slider state to the MTAudioProcessingTap context.
-    /// One context is shared by every tap created via stereoMixTap, so
-    /// this call takes effect on whatever AVPlayerItem is in flight
-    /// without rebuilding the player.
-    @objc func setMix(_ call: CAPPluginCall) {
-        let enabled = call.getBool("enabled") ?? false
-        let ratio = Float(call.getDouble("ratio") ?? 0.5)
-        stereoMixTap.setMix(enabled: enabled, ratio: ratio)
-        call.resolve()
+    private func removeProgressObserver() {
+        if let observer = progressObserver, let player = player {
+            player.removeTimeObserver(observer)
+        }
+        progressObserver = nil
     }
-    
-    @objc func onProgressChanged(_ call: CAPPluginCall) {
-        let callbackId = UUID().uuidString
-        statusCallbacks[callbackId] = call
-        
-        call.keepAlive = true
-        call.resolve([
-            "callbackId": callbackId
-        ])
+
+    // MARK: - Durable position persistence
+
+    private func startPlaybackPersistTimer() {
+        stopPlaybackPersistTimer()
+        // Coarse safety interval — exactness isn't important (§3.4).
+        let timer = Timer(timeInterval: positionPersistInterval, repeats: true) { [weak self] _ in
+            self?.persistCurrentPosition()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        positionPersistTimer = timer
     }
-    
-    private func notifyProgressChanged() {
-        guard let player = player, let currentItem = player.currentItem else {
-            return
-        }
-        
-        if (currentItem.duration.isIndefinite) {
-            return
-        }
-        
-        let position = player.currentTime().seconds
-        let duration = currentItem.duration.isIndefinite ? 0 : currentItem.duration.seconds
-        let playing = player.rate != 0
-        
-        let status: [String: Any] = [
-            "position": position,
-            "playing": playing,
-            "duration": duration,
-            "itemId": currentTrackId
-        ]
-        
-        for (_, callback) in statusCallbacks {
-            callback.resolve(status)
-        }
+
+    private func stopPlaybackPersistTimer() {
+        positionPersistTimer?.invalidate()
+        positionPersistTimer = nil
     }
-    
-    private func notifyPprogressCompleted() {
-        guard let player = player, let currentItem = player.currentItem else {
-            return
-        }
-        
-        if (currentItem.duration.isIndefinite) {
-            return
-        }
-        
-        let status: [String: Any] = [
-            "position": currentItem.duration.seconds,
-            "playing": false,
-            "duration": currentItem.duration.seconds,
-            "itemId": currentTrackId
-        ]
-        
-        for (_, callback) in statusCallbacks {
-            callback.resolve(status)
-        }
+
+    private func persistCurrentPosition() {
+        guard let player = player else { return }
+        let pos = player.currentTime().seconds
+        journal.savePosition(
+            itemId: currentItemId.isEmpty ? nil : currentItemId,
+            positionSec: pos.isFinite ? pos : 0
+        )
     }
-    
-    @objc func playerItemDidReachEnd(notification: Notification) {
-        // Reset to beginning
-        // player?.seek(to: .zero)
-        updatePlaybackInfo()
-        notifyPprogressCompleted()
-    }
-    
-    override public func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == #keyPath(AVPlayerItem.status) {
-            let status: AVPlayerItem.Status
-            
-            if let statusNumber = change?[.newKey] as? NSNumber {
-                status = AVPlayerItem.Status(rawValue: statusNumber.intValue)!
-            } else {
-                status = .unknown
-            }
-            
-            // Update the now playing info with the correct duration once it's available
-            if status == .readyToPlay, let currentItem = player?.currentItem {
-                var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = currentItem.duration.seconds
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-            }
-        }
-    }
-    
-    deinit {
+
+    // MARK: - Teardown
+
+    /// Tear down all observers + the live player without touching the
+    /// durable journal (the journal outlives players, by design).
+    private func teardownPlayer() {
+        stopPlaybackPersistTimer()
         removeProgressObserver()
-        playerItem?.removeObserver(self, forKeyPath: #keyPath(AVPlayerItem.status))
+        currentItemObservation?.invalidate()
+        currentItemObservation = nil
+        for (_, observation) in itemStatusObservations {
+            observation.invalidate()
+        }
+        itemStatusObservations.removeAll()
+        itemIdByItem.removeAll()
+        player?.pause()
+        player?.removeAllItems()
+        player = nil
+    }
+
+    deinit {
+        teardownPlayer()
         NotificationCenter.default.removeObserver(self)
     }
 }

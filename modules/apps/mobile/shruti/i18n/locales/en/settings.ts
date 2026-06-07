@@ -92,6 +92,11 @@ export default {
         description:
           "The transcript follows along as audio plays, so the current paragraph is always in view.",
       },
+      continuousPlayback: {
+        title: "Continuous Playback",
+        description:
+          "Lectures play one after another — when one ends the next begins automatically, even with the screen locked.",
+      },
       notesStudio: {
         title: "Notes Studio",
         description: "Turn your notes from lectures into short videos and share them with friends.",
@@ -202,6 +207,10 @@ export default {
     showProgress: {
       title: "Player progress",
       description: "Show progress around play button",
+    },
+    autoPlayNext: {
+      title: "Play next automatically",
+      description: "When a lecture ends, start the next one in your playlist",
     },
   },
   notes: {

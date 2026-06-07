@@ -1,8 +1,11 @@
-import { AudioPlayer, type Status } from "@shruti/plugin-audio-player"
+import { AudioPlayer, type QueueTransition, type Status } from "@shruti/plugin-audio-player"
 import type {
   AudioMixParams,
   AudioOpenParams,
   AudioProgressListener,
+  AudioQueueItem,
+  AudioQueueState,
+  AudioTransitionListener,
   IAudioPlayer,
 } from "@ports/app/audioPlayer.js"
 
@@ -22,7 +25,9 @@ import type {
  */
 export function useCapacitorAudioPlayer(): IAudioPlayer {
   const listeners = new Set<AudioProgressListener>()
+  const transitionListeners = new Set<AudioTransitionListener>()
   let registered = false
+  let transitionRegistered = false
 
   async function ensureRegistered(): Promise<void> {
     if (registered) return
@@ -36,6 +41,15 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
           duration: Math.round(status.duration * 1000),
         })
       }
+    })
+  }
+
+  async function ensureTransitionRegistered(): Promise<void> {
+    if (transitionRegistered) return
+    transitionRegistered = true
+    await AudioPlayer.onItemTransition((t: QueueTransition) => {
+      const mapped = toMsTransition(t)
+      for (const fn of transitionListeners) fn(mapped)
     })
   }
 
@@ -85,6 +99,74 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
+    async setQueue(
+      items: AudioQueueItem[],
+      startIndex: number,
+      startPositionMs: number
+    ): Promise<void> {
+      await ensureRegistered()
+      await AudioPlayer.setQueue({
+        items: items.map(toPluginQueueItem),
+        startIndex,
+        startPosition: startPositionMs / 1000,
+      })
+    },
+    async appendToQueue(items: AudioQueueItem[]): Promise<void> {
+      await AudioPlayer.appendToQueue({ items: items.map(toPluginQueueItem) })
+    },
+    async getQueueState(): Promise<AudioQueueState> {
+      const s = await AudioPlayer.getQueueState()
+      return {
+        currentItemId: s.currentItemId,
+        positionMs: Math.round(s.position * 1000),
+        durationMs: Math.round(s.duration * 1000),
+        playing: s.playing,
+        events: s.events.map(toMsTransition),
+      }
+    },
+    async ackEvents(upToSeq: number): Promise<void> {
+      await AudioPlayer.ackEvents({ upToSeq })
+    },
+    async skipToNext(): Promise<void> {
+      await AudioPlayer.skipToNext()
+    },
+    async skipToPrevious(): Promise<void> {
+      await AudioPlayer.skipToPrevious()
+    },
+    onTransition(listener): () => void {
+      transitionListeners.add(listener)
+      void ensureTransitionRegistered()
+      return () => transitionListeners.delete(listener)
+    },
+  }
+}
+
+function toPluginQueueItem(item: AudioQueueItem): {
+  itemId: string
+  url: string
+  title: string
+  author: string
+  duration?: number
+} {
+  return {
+    itemId: item.itemId,
+    url: item.url,
+    title: item.title,
+    author: item.author,
+    duration: item.durationMs !== undefined ? item.durationMs / 1000 : undefined,
+  }
+}
+
+function toMsTransition(t: QueueTransition) {
+  return {
+    finishedItemId: t.finishedItemId,
+    fromPositionMs: Math.round(t.fromPosition * 1000),
+    finishedAtMs: Math.round(t.finishedAt * 1000),
+    durationMs: Math.round(t.duration * 1000),
+    startedItemId: t.startedItemId,
+    reason: t.reason,
+    at: t.at,
+    seq: t.seq,
   }
 }
 

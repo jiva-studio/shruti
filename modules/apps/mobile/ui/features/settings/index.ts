@@ -1,4 +1,5 @@
 export { default as AutomaticScrollSettingsItem } from "./AutomaticScrollSettingsItem.vue"
+export { default as AutoPlayNextSettingsItem } from "./AutoPlayNextSettingsItem.vue"
 export { default as TrackInfoSettingsItem } from "./TrackInfoSettingsItem.vue"
 export { default as TrackInfoDialog } from "./TrackInfoDialog.vue"
 export { default as DailyNotificationsTimeSettingsItem } from "./DailyNotificationsTimeSettingsItem.vue"

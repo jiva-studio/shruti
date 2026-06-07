@@ -4,10 +4,14 @@ import type {
   AudioPlayerPlugin,
   OpenParams,
   AudioPlayerListenerResult,
+  QueueItem,
+  QueueState,
+  QueueTransition,
   SeekByParams,
   SetMixParams,
   SetPlaybackRateParams,
   SetProgressIntervalParams,
+  SetQueueParams,
   Status,
 } from "./definitions"
 
@@ -42,6 +46,18 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
    *  unchanging position once playback has stopped (incl. track end). */
   private wasPlaying = false
 
+  // Queue state. On web there is no background-suspension problem (the
+  // tab owns the audio element), so the "native" queue is just a JS list
+  // we advance on the `ended` event, and the transition journal lives in
+  // memory. The surface still matches the plugin contract so the app's
+  // queue path works identically on web.
+  private queue: QueueItem[] = []
+  private queueIndex = 0
+  private currentFromSec = 0
+  private journal: QueueTransition[] = []
+  private seqCounter = 0
+  private transitionCb: ((t: QueueTransition) => void) | null = null
+
   // Web Audio graph for stereo→mono blending. Built lazily on first
   // setMix() — pages that never use the feature don't pay for an
   // AudioContext (and don't trigger Safari's autoplay-suspended state
@@ -71,6 +87,73 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
         this.pendingSeekSec = null
       }
     })
+
+    // Native engines auto-advance the queue; on web we drive it from the
+    // media element's `ended` event. Only fires when a queue is active —
+    // single-track `open()` leaves `queue` empty so nothing advances.
+    this.audio.addEventListener("ended", () => {
+      if (this.queue.length === 0) return
+      void this.advance("auto")
+    })
+  }
+
+  /** Record a transition into the in-memory journal and push it to any
+   *  foreground listener. `finishedAtSec` is where the finished item
+   *  stopped; for a natural end it's the duration. */
+  private recordTransition(
+    reason: QueueTransition["reason"],
+    finishedAtSec: number,
+    startedItemId: string | null
+  ): void {
+    const finished = this.queue[this.queueIndex]
+    if (!finished) return
+    const dur = Number.isFinite(this.audio.duration) ? this.audio.duration : (finished.duration ?? finishedAtSec)
+    const t: QueueTransition = {
+      finishedItemId: finished.itemId,
+      fromPosition: this.currentFromSec,
+      finishedAt: finishedAtSec,
+      duration: dur,
+      startedItemId,
+      reason,
+      at: Date.now(),
+      seq: ++this.seqCounter,
+    }
+    this.journal.push(t)
+    this.transitionCb?.(t)
+  }
+
+  /** Load the item at `index` and (optionally) start playing it. */
+  private async loadIndex(index: number, positionSec: number, autoplay: boolean): Promise<void> {
+    const item = this.queue[index]
+    if (!item) return
+    this.queueIndex = index
+    this.currentFromSec = positionSec
+    this.audio.pause()
+    this.pendingSeekSec = positionSec > 0 ? positionSec : null
+    this.audio.removeAttribute("src")
+    this.audio.load()
+    this.audio.src = item.url
+    this.audio.load()
+    this.currentItemId = item.itemId
+    if (autoplay) await this.play()
+  }
+
+  /** Move to the next/prev item, journaling the finished one. */
+  private async advance(reason: QueueTransition["reason"]): Promise<void> {
+    const dir = reason === "skip-prev" ? -1 : 1
+    const finishedAtSec =
+      reason === "auto"
+        ? (Number.isFinite(this.audio.duration) ? this.audio.duration : this.audio.currentTime)
+        : this.audio.currentTime
+    const nextIndex = this.queueIndex + dir
+    const next = this.queue[nextIndex]
+    this.recordTransition(reason, finishedAtSec, next ? next.itemId : null)
+    if (next) {
+      await this.loadIndex(nextIndex, 0, true)
+    } else {
+      // Queue ran dry — stop cleanly but keep the journal for draining.
+      this.audio.pause()
+    }
   }
 
   /** Idempotent. Started lazily on first `onProgressChanged()` so a
@@ -124,6 +207,51 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.audio.src = params.url
     this.audio.load()
     this.currentItemId = params.itemId
+    // Single-track open: no queue, so `ended` won't auto-advance.
+    this.queue = []
+    this.queueIndex = 0
+    this.currentFromSec = 0
+  }
+
+  async setQueue(params: SetQueueParams): Promise<void> {
+    this.queue = [...params.items]
+    const start = Math.max(0, Math.min(params.startIndex, this.queue.length - 1))
+    await this.loadIndex(start, params.startPosition, true)
+  }
+
+  async appendToQueue(params: { items: QueueItem[] }): Promise<void> {
+    this.queue = [...this.queue, ...params.items]
+  }
+
+  async getQueueState(): Promise<QueueState> {
+    return {
+      currentItemId: this.currentItemId,
+      position: this.audio.currentTime,
+      duration: Number.isFinite(this.audio.duration) ? this.audio.duration : 0,
+      playing: !this.audio.paused,
+      events: [...this.journal],
+    }
+  }
+
+  async ackEvents(options: { upToSeq: number }): Promise<void> {
+    this.journal = this.journal.filter((t) => t.seq > options.upToSeq)
+  }
+
+  async skipToNext(): Promise<void> {
+    if (this.queue.length === 0) return
+    await this.advance("skip-next")
+  }
+
+  async skipToPrevious(): Promise<void> {
+    if (this.queue.length === 0) return
+    await this.advance("skip-prev")
+  }
+
+  onItemTransition(
+    callback: (transition: QueueTransition) => void
+  ): Promise<AudioPlayerListenerResult> {
+    this.transitionCb = callback
+    return Promise.resolve({ callbackId: "transition" })
   }
 
   async play(): Promise<void> {

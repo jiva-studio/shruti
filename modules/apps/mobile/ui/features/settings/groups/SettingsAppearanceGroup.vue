@@ -52,6 +52,11 @@
        These keep bespoke components: AutomaticScroll vetoes flips behind the
        paywall (kit toggle is veto-able but the ProBadge + effective-checked
        remount logic is app domain); TrackInfo opens an app dialog. -->
+  <AutoPlayNextSettingsItem
+    v-model="autoPlayNext"
+    :is-subscribed="isSubscribed"
+    @request-paywall="emit('request-paywall', 'continuousPlayback')"
+  />
   <AutomaticScrollSettingsItem
     v-model="autoScroll"
     :is-subscribed="isSubscribed"
@@ -73,6 +78,7 @@ import { IconChip } from "@ui/primitives/index.js"
 import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
 import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
 import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
+import AutoPlayNextSettingsItem from "../AutoPlayNextSettingsItem.vue"
 
 interface SelectorItem {
   id: string
@@ -88,7 +94,7 @@ defineProps<{
 // don't cross-import the subscription feature into this one. Both are
 // valid SubscriptionFeatureKey values at the SettingsView call site.
 const emit = defineEmits<{
-  "request-paywall": [feature: "autoScroll" | "trackInfo"]
+  "request-paywall": [feature: "autoScroll" | "trackInfo" | "continuousPlayback"]
   "open-track-info": []
 }>()
 
@@ -99,6 +105,7 @@ const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence"
   required: true,
 })
 const autoScroll = defineModel<boolean>("autoScroll", { required: true })
+const autoPlayNext = defineModel<boolean>("autoPlayNext", { required: true })
 const openTranscriptAutomatically = defineModel<boolean>("openTranscriptAutomatically", {
   required: true,
 })
