@@ -25,15 +25,23 @@ export function useReloadOnPlayback(
     }
   }
 
-  watch(playing, (next, prev) => {
-    if (prev && !next) {
-      stopPolling()
-      void reload()
-    } else if (!prev && next) {
-      stopPolling()
-      pollHandle = setInterval(() => void reload(), intervalMs)
-    }
-  })
+  // `immediate` so a mount while playback is already active (the floating
+  // player persists across views) starts polling right away instead of
+  // waiting for the next ↔ transition. On the immediate run `prev` is
+  // undefined, treated as the not-playing baseline.
+  watch(
+    playing,
+    (next, prev) => {
+      if (prev && !next) {
+        stopPolling()
+        void reload()
+      } else if (!prev && next) {
+        stopPolling()
+        pollHandle = setInterval(() => void reload(), intervalMs)
+      }
+    },
+    { immediate: true }
+  )
 
   onBeforeUnmount(stopPolling)
 }

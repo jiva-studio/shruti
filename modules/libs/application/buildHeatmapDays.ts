@@ -86,7 +86,8 @@ export function buildHeatmapDays(
     daysBack = Math.max(0, calendarDaysBetween(earliest, today))
   }
   // Always keep at least a week of future cells visible on the right.
-  daysBack = Math.min(daysBack, totalDays - 7)
+  // Clamp at 0 so a `totalDays` under 7 can't push daysBack negative.
+  daysBack = Math.max(0, Math.min(daysBack, totalDays - 7))
   const daysForward = totalDays - daysBack
 
   const rawStart = new Date(today)

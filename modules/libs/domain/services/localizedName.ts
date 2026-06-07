@@ -3,10 +3,11 @@ import type { Track } from "@lib/domain/track.js"
 
 /**
  * Pick a localized display string from a `names` map keyed by language.
- * Falls back to the first map entry when the preferred language is
- * missing; returns `undefined` if the entity itself is undefined OR if
- * every entry is empty. Centralizes the fallback chain we duplicated in
- * NotesView, TrackView, useTranscriptDialogController, and buildTrackRow.
+ * Falls back to the first NON-empty map entry when the preferred language
+ * is missing or empty; returns `undefined` if the entity itself is
+ * undefined OR if every entry is empty. Centralizes the fallback chain we
+ * duplicated in NotesView, TrackView, useTranscriptDialogController, and
+ * buildTrackRow.
  */
 export function resolveLocalizedName(
   entity: { names: ReadonlyMap<LanguageCode, string> } | undefined | null,
@@ -15,8 +16,10 @@ export function resolveLocalizedName(
   if (!entity) return undefined
   const direct = entity.names.get(lang)
   if (direct && direct.length > 0) return direct
-  const fallback = entity.names.values().next().value
-  return fallback && fallback.length > 0 ? fallback : undefined
+  for (const value of entity.names.values()) {
+    if (value && value.length > 0) return value
+  }
+  return undefined
 }
 
 /**

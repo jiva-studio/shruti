@@ -95,6 +95,18 @@ describe("buildHeatmapDays", () => {
     expect(earliestIdx).toBeLessThan(todayIdx)
   })
 
+  it("does not go negative when totalDays is under 7 (daysBack clamps at 0)", () => {
+    // With totalDays < 7, `totalDays - 7` is negative; daysBack must clamp
+    // to 0 so today still lands in the left-most column and the grid is sane.
+    const totals = [{ date: "2026-04-01", listenedSeconds: 60 }]
+    const { days, columns } = buildHeatmapDays(3, NOW, totals)
+    expect(days.length % 7).toBe(0)
+    expect(columns).toBeGreaterThanOrEqual(1)
+    const todayIdx = days.findIndex((d) => d.isToday)
+    expect(todayIdx).toBeGreaterThanOrEqual(0)
+    expect(Math.floor(todayIdx / 7)).toBe(0)
+  })
+
   it("computes daysBack via calendar units across a DST transition", () => {
     // EU spring-forward in 2026 is 2026-03-29. Earliest entry just before
     // it, today just after — millisecond subtraction would lose an hour
