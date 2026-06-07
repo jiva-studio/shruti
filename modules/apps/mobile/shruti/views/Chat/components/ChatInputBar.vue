@@ -1,28 +1,6 @@
 <template>
   <div class="chat-inputbar">
-    <!-- Per-day chat usage chip. Shows once ≥50 % of the daily allowance
-         is consumed (we used to split the threshold by tier; the lower
-         number for everyone gives Free users an earlier nudge and Pro
-         users earlier awareness — the chip is unobtrusive enough that
-         a longer visible window doesn't read as nagging). Also stays
-         visible once the quota lockout kicks in: the composer placeholder
-         is now a plain static prompt, so the chip is the single place
-         that carries "resets {date} at {time}".
-         Tap → opens the subscription page directly for non-Pro users
-         (RC modal handles "already subscribed" if state goes stale).
-         Pro users see the chip as a static info badge — no tap target,
-         no modal, since there's nothing meaningful to open. -->
-    <component
-      :is="usageChipTappable ? 'button' : 'span'"
-      v-if="usageChipVisible"
-      :type="usageChipTappable ? 'button' : undefined"
-      class="usage-chip"
-      :class="{ 'is-warning': usageWarning, 'is-tappable': usageChipTappable }"
-      :aria-label="usageChipLabel"
-      @click="usageChipTappable ? onUsageChipTap() : null"
-    >
-      {{ usageChipLabel }}
-    </component>
+    <ChatUsageChip :chat-usage="chatUsage" :quota-locked="quotaLocked" />
     <div class="input-capsule" :class="{ 'has-text': hasText }">
       <textarea
         ref="textareaRef"
@@ -56,8 +34,7 @@ import { computed, nextTick, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonSpinner } from "@ionic/vue"
 import { IconArrowUp } from "@tabler/icons-vue"
-import { useAuthStore } from "@shruti/stores/useAuthStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
+import ChatUsageChip from "./ChatUsageChip.vue"
 
 const props = defineProps<{
   sending: boolean
@@ -78,7 +55,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ send: [text: string]; cancel: [] }>()
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const text = ref("")
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -178,81 +155,6 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return
   event.preventDefault()
   if (canSend.value) onSendClick()
-}
-
-// ── Usage chip ─────────────────────────────────────────────────────────
-// One unified threshold for every tier — 50 % of the daily allowance.
-// The earlier Free-vs-Pro split (70 / 50) over-rotated towards Pro:
-// Free users were already burning past half before they saw a nudge.
-// Lower bar for everyone, single percent-based label, single tap action.
-// Hidden once the quota lockdown kicks in (ratio >= 1, or quotaLocked
-// prop set by the parent): the composer placeholder already carries
-// "Limit resets {when}" at that point — a second copy was the duplicate
-// the operator flagged.
-const authStore = useAuthStore()
-const isPro = computed(() => authStore.isPro)
-
-const usageRatio = computed<number | null>(() => {
-  const u = props.chatUsage
-  if (!u || u.limit <= 0) return null
-  return Math.min(1, u.current / u.limit)
-})
-
-const usageChipVisible = computed<boolean>(() => {
-  // Lockout always shows the chip: it's now the only surface carrying the
-  // "resets {date} at {time}" detail (the placeholder went static). This
-  // also covers the locked-but-no-snapshot case — see `usageChipLabel`.
-  if (props.quotaLocked) return true
-  const r = usageRatio.value
-  if (r === null) return false
-  return r >= 0.5
-})
-
-const usageWarning = computed<boolean>(() => (usageRatio.value ?? 0) >= 0.95)
-
-// Tap target only matters when there's an upgrade path. Pro users get
-// the same chip but as a static info badge — opening the paywall for
-// someone already paying it is pointless. RC will handle a stale-tier
-// case ("already subscribed") if a Free-marked client opens the paywall
-// after a webhook race, so we don't need a second guard here.
-const usageChipTappable = computed<boolean>(() => !isPro.value)
-
-/** Local-TZ reset boundary as `{ date, time }`. The server's
- *  `resets_at_epoch` is next UTC midnight, so for users east of UTC it
- *  routinely lands on the local next day — showing the date (not just
- *  HH:MM) is what disambiguates it. Date is localized via Intl using the
- *  active i18n locale ("30 мая" / "30 May"). */
-function localResetParts(epochS: number): { date: string; time: string } {
-  const d = new Date(epochS * 1000)
-  const hh = d.getHours().toString().padStart(2, "0")
-  const mm = d.getMinutes().toString().padStart(2, "0")
-  const date = new Intl.DateTimeFormat(locale.value, {
-    day: "numeric",
-    month: "long",
-  }).format(d)
-  return { date, time: `${hh}:${mm}` }
-}
-
-const usageChipLabel = computed<string>(() => {
-  const u = props.chatUsage
-  if (!u) {
-    // Locked without a usage snapshot (IP-bucket 429, or a 429 body
-    // lacking current/limit). The textarea is disabled but the chip is
-    // the only thing on screen, so fall back to the generic lock copy
-    // rather than rendering an empty pill that explains nothing.
-    return props.quotaLocked ? t("chat.composeLimitedPlaceholderNoTime") : ""
-  }
-  const { date, time } = localResetParts(u.resetsAtEpoch)
-  const p = Math.round((usageRatio.value ?? 0) * 100)
-  return t("chat.usage.chip", { p, date, time })
-})
-
-function onUsageChipTap(): void {
-  // Free / anonymous tap → paywall directly. No intermediate modal —
-  // the subscription page already explains the offer (carousel with
-  // the Pro features), so an intervening "what does this chip mean"
-  // step was friction the operator pushed back on.
-  usePaywallStore().requestOpen()
 }
 
 /** Programmatically fill the input — used by SuggestionChips to seed a
@@ -394,44 +296,6 @@ defineExpose({ setText, focus })
 }
 
 .send:active:not(:disabled) {
-  opacity: 0.75;
-}
-
-/* Per-day usage chip sitting just above the composer capsule. Small,
- * muted, rounded — same pill shape across tiers. Warning tone kicks
- * in at ≥95% so a near-limit user sees the urgency without us shoving
- * a banner in their face. Tappable for non-Pro (opens paywall); a
- * static info badge for Pro (`is-tappable` toggles the cursor + reset
- * default button styling that would have made the static span look
- * like a button). */
-.usage-chip {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  line-height: 1.2;
-  padding: 4px 12px;
-  margin-bottom: 4px;
-  border: 1px solid var(--shruti-input-border);
-  border-radius: 999px;
-  background: var(--shruti-input-surface);
-  color: var(--ion-color-step-650, #5c5c5c);
-  pointer-events: auto;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.usage-chip.is-tappable {
-  cursor: pointer;
-}
-
-.usage-chip.is-warning {
-  color: var(--ion-color-warning-shade, #b76e00);
-  border-color: var(--ion-color-warning-tint, #ffca6b);
-}
-
-.usage-chip.is-tappable:active {
   opacity: 0.75;
 }
 </style>
