@@ -11,7 +11,12 @@
           <IconSearch :size="26" />
         </IonTabButton>
 
-        <IonTabButton tab="chat" href="/tabs/chat" class="chat-tab-button">
+        <IonTabButton
+          tab="chat"
+          href="/tabs/chat"
+          class="chat-tab-button"
+          @click.capture="onChatTabClick"
+        >
           <div class="chat-icon-wrap">
             <IconAppSadhu :size="48" />
             <span v-if="proactiveBadge.count.value > 0" class="proactive-dot" />
@@ -38,10 +43,44 @@
 
 <script setup lang="ts">
 import { IonTabBar, IonTabButton, IonTabs, IonPage, IonRouterOutlet, IonSpinner } from "@ionic/vue"
+import { useRoute, useRouter } from "vue-router"
 import { IconHome, IconBookmark, IconSearch, IconSettings } from "@ui/icons/index.js"
 import { useShareJobStore } from "@shruti/stores/useShareJobStore.js"
+import { useChatStore } from "@shruti/stores/useChatStore.js"
 import { useProactiveInboxBadge } from "@shruti/composables/useProactiveInboxBadge.js"
 import IconAppSadhu from "@shruti/views/Chat/components/IconAppSadhu.vue"
+
+const route = useRoute()
+const router = useRouter()
+const chat = useChatStore()
+
+/**
+ * Tapping the chat tab must ALWAYS reopen the last session; a brand-new chat
+ * is started from the header "+" button only.
+ *
+ * The broken case is a tap on the *already-active* chat tab: Ionic's default
+ * then calls `resetTab("chat")`, which walks history back to the tab root
+ * (`/tabs/chat`, no `?session=`) — i.e. the empty chat home — bouncing the
+ * user off their session onto a blank page. We intercept that one case and
+ * re-assert the last session instead. When the chat tab is NOT active we do
+ * nothing and let Ionic's `changeTab()` restore the tab's last route (which
+ * already lands on the last session).
+ *
+ * `@click.capture` + `stopImmediatePropagation()` runs before — and fully
+ * suppresses — IonTabButton's own bubble-phase click handler (the resetTab
+ * path) for this one element.
+ */
+function onChatTabClick(ev: MouseEvent): void {
+  if (route.name !== "chat") return
+  const lastId = chat.activeSessionId ?? chat.sessions[0]?.id ?? null
+  if (lastId == null) return // no session yet — let Ionic open the empty home
+  ev.stopImmediatePropagation()
+  ev.preventDefault()
+  const current = typeof route.query.session === "string" ? route.query.session : null
+  if (current !== lastId) {
+    void router.replace({ name: "chat", query: { session: lastId } })
+  }
+}
 
 // Tracks the current share job (audio or video). When isRunning flips to
 // true we show a small spinner overlay on the bookmark icon — the share
@@ -54,18 +93,6 @@ const shareJob = useShareJobStore()
 // which clears the underlying SQL `seen_at` and the derived count
 // updates automatically.
 const proactiveBadge = useProactiveInboxBadge()
-
-// Note: tapping the chat tab while on `/tabs/chat/<id>` is intentionally
-// a no-op. Ionic's default behaviour for an active-tab tap is
-// `resetTab("chat")` → `router.go(<delta>)` to walk back to the tab's
-// first entry. The `router.go(0)` patch in `router/index.ts` neutralises
-// the degenerate-zero reload bug, and the chat tab's first entry IS
-// almost always the current session (router.replace pattern in
-// onPickSession, Ask Sadhu's router.push from another tab), so the tap
-// naturally degenerates to "stay on session" — which is what the user
-// wants. An earlier version added a custom click handler to drop the
-// user on the chat home, but that's against the intent: tapping a tab
-// you're already on should not navigate away.
 </script>
 
 <style scoped>
