@@ -206,8 +206,11 @@ export const usePlayerStore = defineStore("player", () => {
     }
     const meta = currentQueue.find((q) => q.itemId === id)
     trackId.value = cmd.trackId
-    title.value = meta?.title ?? cmd.title
-    authorName.value = meta?.author ?? cmd.authorName
+    // `||`, not `??`: the queue meta carries `""` for tracks with no
+    // resolvable author, and an empty string must fall through to the
+    // play-plan label rather than blanking the FloatingPlayer's author.
+    title.value = meta?.title || cmd.title
+    authorName.value = meta?.author || cmd.authorName
     language.value = cmd.language
     durationMs.value = durationMsValue > 0 ? durationMsValue : (cmd.audio.duration ?? 0)
     positionMs.value = positionMsValue
@@ -242,6 +245,13 @@ export const usePlayerStore = defineStore("player", () => {
       const s = await app.audioPlayer.getQueueState()
       await reconcile.reconcileAndAck(s.events)
       if (s.currentItemId) {
+        // A native queue restored from a previous session that is paused and
+        // was never resumed/opened in THIS session is a phantom: hydrating
+        // our identity from it would surface the FloatingPlayer with nothing
+        // playing. Skip adopting it until playback actually starts. A track
+        // the user paused after opening keeps `itemId.value` set, so this
+        // never hides a legitimately-paused player.
+        if (!s.playing && itemId.value === null) return
         // There's a live native queue to mirror. Arm queue mode even on the
         // cold-restore path where `openTrack` never ran — otherwise the dry
         // handling and foreground advance detection stay disabled.
