@@ -120,44 +120,56 @@ async def chat(
                 },
             )
 
-    # Rate-limit gate (per-day per JWT-sub + per-IP).
-    ip = request.client.host if request.client else "unknown"
-    rl = await deps.rate_limiter.check_and_increment(
-        user.id, user.anonymous, ip, scope="chat",
-        tier=user.tier, quota_id=user.quota_id,
-        tier_expires_at=user.tier_expires_at,
-    )
-    if not rl.allowed:
-        raise_429(rl, scope="chat")
+    # Everything from the acquired idempotency key down to the moment the
+    # SSE stream is handed off can still fail (429 rate-limit, region
+    # parsing, UserContext build). The stream's own `finally` only runs
+    # once the generator is iterated, so a failure here would leak the
+    # key for the full TTL and 409-block the user's retries. Release it
+    # on any pre-stream exception and re-raise; the happy path leaves the
+    # key held and lets the stream's finally own its lifecycle.
+    try:
+        # Rate-limit gate (per-day per JWT-sub + per-IP).
+        ip = request.client.host if request.client else "unknown"
+        rl = await deps.rate_limiter.check_and_increment(
+            user.id, user.anonymous, ip, scope="chat",
+            tier=user.tier, quota_id=user.quota_id,
+            tier_expires_at=user.tier_expires_at,
+        )
+        if not rl.allowed:
+            raise_429(rl, scope="chat")
 
-    region = extract_region(request)
+        region = extract_region(request)
 
-    structlog.contextvars.bind_contextvars(
-        request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,
-        region=region,
-    )
-    log.info(
-        "chat_request",
-        message_count=len(body.messages),
-        lang=body.lang,
-        # `Idempotency-Key` is logged for observability only — once
-        # Redis-backed dedup lands (followup PR) the same key will key
-        # the per-request reply cache. For now its presence tells us
-        # whether the mobile client is sending it after a retry, which
-        # is the dataset that decides whether dedup is worth building.
-        idempotency_key=idempotency_key,
-        proactive_rule=body.proactive.rule_kind if body.proactive else None,
-    )
+        structlog.contextvars.bind_contextvars(
+            request_id=request_id, user_id=user.id, anonymous=user.anonymous, ip=ip,
+            region=region,
+        )
+        log.info(
+            "chat_request",
+            message_count=len(body.messages),
+            lang=body.lang,
+            # `Idempotency-Key` is logged for observability only — once
+            # Redis-backed dedup lands (followup PR) the same key will key
+            # the per-request reply cache. For now its presence tells us
+            # whether the mobile client is sending it after a retry, which
+            # is the dataset that decides whether dedup is worth building.
+            idempotency_key=idempotency_key,
+            proactive_rule=body.proactive.rule_kind if body.proactive else None,
+        )
 
-    # Carry the verified UUID into UserContext so the application layer
-    # can bind it to Langfuse `trace.user_id` without re-reading the
-    # JWT or threading an extra parameter through the call chain. The
-    # wire DTO (UserContextDto) intentionally does NOT carry user_id —
-    # the client doesn't know its own UUID, only the JWT does.
-    if body.user_context is not None:
-        user_ctx = dataclasses.replace(body.user_context.to_domain(), user_id=user.id)
-    else:
-        user_ctx = UserContext(user_id=user.id)
+        # Carry the verified UUID into UserContext so the application layer
+        # can bind it to Langfuse `trace.user_id` without re-reading the
+        # JWT or threading an extra parameter through the call chain. The
+        # wire DTO (UserContextDto) intentionally does NOT carry user_id —
+        # the client doesn't know its own UUID, only the JWT does.
+        if body.user_context is not None:
+            user_ctx = dataclasses.replace(body.user_context.to_domain(), user_id=user.id)
+        else:
+            user_ctx = UserContext(user_id=user.id)
+    except BaseException:
+        if idempotency_key:
+            await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
+        raise
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         turn_started = perf_counter()
