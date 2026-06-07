@@ -174,6 +174,12 @@ export interface RunChatTurnDeps {
    *  content. Strict parser — malformed markers leak into prose and
    *  return no chip (fix lives in the prompt, not here). */
   readonly extractFollowups: (content: string) => readonly string[]
+  /** Optional: refresh the auth claim right before the SSE stream opens
+   *  so a tier flip that happened while backgrounded is attached to this
+   *  turn. Called AFTER the user message + placeholder are yielded, so it
+   *  never delays the user's own bubble — only the assistant reply waits
+   *  on it. Best-effort: runChatTurn swallows its errors. */
+  readonly ensureFresh?: () => Promise<void>
 }
 
 /**
@@ -217,6 +223,18 @@ export async function* runChatTurn(
     userContext = await deps.buildUserContext(input.focus)
   } catch {
     // Server tolerates missing user_context — degrade gracefully.
+  }
+
+  // 3b. Refresh the auth claim just before opening the stream. This runs
+  // AFTER the user message + placeholder have been yielded, so the user
+  // sees their bubble instantly and only the assistant reply waits on the
+  // network. Best-effort — a stale claim still attempts the stream.
+  if (deps.ensureFresh) {
+    try {
+      await deps.ensureFresh()
+    } catch {
+      // ensureFresh swallows its own errors; this guards a sync throw.
+    }
   }
 
   // 4. Open stream + fold events.
