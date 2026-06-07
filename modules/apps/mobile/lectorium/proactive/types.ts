@@ -1,7 +1,7 @@
 import type { ProactiveRuleConfig, ProactiveRuleId } from "@lib/domain/config.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
-import type { IProactiveChatService } from "@ports/app/index.js"
+import type { IProactiveChatService } from "@lib/contracts"
 import type { AppRepositories } from "@lectorium/repositories.js"
 
 /**

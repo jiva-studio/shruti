@@ -14,7 +14,6 @@ import type {
   INotificationScheduler,
   IPersistence,
   IPreferences,
-  IProactiveChatService,
   IPurchases,
   IRemoteFilesStorage,
   IServerProber,
@@ -23,6 +22,7 @@ import type {
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
+import type { IProactiveChatService } from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@kit/infra"

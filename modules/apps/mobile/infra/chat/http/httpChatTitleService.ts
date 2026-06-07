@@ -1,4 +1,4 @@
-import type { ChatTurn, FetchSessionTitleOptions, IChatTitleService } from "@ports/app/index.js"
+import type { ChatTurn, FetchSessionTitleOptions, IChatTitleService } from "@lib/contracts"
 import { fetchSessionTitle, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatTitleServiceDeps {

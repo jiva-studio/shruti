@@ -2,7 +2,7 @@ import type {
   ChatQuestionsFocusInput,
   FetchSuggestedQuestionsOptions,
   IChatQuestionsService,
-} from "@ports/app/index.js"
+} from "@lib/contracts"
 import {
   fetchSuggestedQuestions,
   type AccessTokenProvider,

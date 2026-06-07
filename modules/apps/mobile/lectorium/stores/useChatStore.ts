@@ -37,7 +37,7 @@ import type {
 } from "@lib/domain"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import type { ChatTurn, FeedbackCategory } from "@ports/app/index.js"
+import type { ChatTurn, FeedbackCategory } from "@lib/contracts"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
