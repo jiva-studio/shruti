@@ -127,8 +127,9 @@ public final class QueuePlaybackManager {
                 return;
             }
 
-            String finishedItemId = oldPosition.mediaId;
-            String startedItemId = newPosition.mediaId;
+            // Media3's PositionInfo exposes the MediaItem, not its id directly.
+            String finishedItemId = oldPosition.mediaItem != null ? oldPosition.mediaItem.mediaId : "";
+            String startedItemId = newPosition.mediaItem != null ? newPosition.mediaItem.mediaId : null;
             long finishedAtMs = Math.max(0, oldPosition.positionMs);
             long durationMs = durationOf(oldPosition.mediaItemIndex);
 
