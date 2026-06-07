@@ -133,6 +133,7 @@ public final class AudioPlayerPlugin extends Plugin {
         String itemId = call.getString("itemId", "");
         String title = call.getString("title", "");
         String author = call.getString("author", "");
+        String cover = call.getString("cover");
 
         if (url == null) {
             call.reject("Argument 'url' is required");
@@ -152,6 +153,9 @@ public final class AudioPlayerPlugin extends Plugin {
             o.put("url", url);
             o.put("title", title);
             o.put("author", author);
+            if (cover != null && !cover.isEmpty()) {
+                o.put("cover", cover);
+            }
             items.put(o);
             dispatchSetQueue(items.toString(), 0, 0L);
             call.resolve();
@@ -485,6 +489,9 @@ public final class AudioPlayerPlugin extends Plugin {
                 o.put("url", in.optString("url", ""));
                 o.put("title", in.optString("title", ""));
                 o.put("author", in.optString("author", ""));
+                if (in.has("cover") && !in.isNull("cover")) {
+                    o.put("cover", in.optString("cover", ""));
+                }
                 if (in.has("duration") && !in.isNull("duration")) {
                     double durationSec = in.optDouble("duration", 0);
                     o.put("durationMs", (long) (durationSec * 1000.0));
@@ -541,19 +548,61 @@ public final class AudioPlayerPlugin extends Plugin {
      * Build a MediaItem carrying the bookkeeping itemId in {@code mediaId} and
      * title/author in {@link MediaMetadata} so Media3 labels the lock-screen
      * notification per item without calling back into JS.
+     *
+     * <p>Artwork: when the track carries a remote {@code cover} URL it is set as
+     * the artwork URI — Media3's DataSourceBitmapLoader fetches http(s)/content
+     * URIs for the notification large icon. We never pass a local {@code file://}
+     * URI here, as it can silently fail to load in the notification. When no
+     * cover is available we fall back to a bundled branded bitmap via
+     * {@code setArtworkData} (the reliable path for local art) so the
+     * notification still shows app art instead of a blank large icon.
      */
     static MediaItem buildMediaItem(
-            String itemId, String url, String title, String author, long durationMs) {
+            android.content.Context context,
+            String itemId, String url, String title, String author,
+            String cover, long durationMs) {
         MediaMetadata.Builder meta = new MediaMetadata.Builder()
                 .setTitle(title)
                 .setArtist(author);
         if (durationMs != C.TIME_UNSET && durationMs > 0) {
             meta.setDurationMs(durationMs);
         }
+        boolean hasRemoteCover = cover != null && (cover.startsWith("http://")
+                || cover.startsWith("https://") || cover.startsWith("content://"));
+        if (hasRemoteCover) {
+            meta.setArtworkUri(android.net.Uri.parse(cover));
+        } else {
+            byte[] artwork = bundledArtwork(context);
+            if (artwork != null) {
+                meta.setArtworkData(artwork, MediaMetadata.PICTURE_TYPE_FRONT_COVER);
+            }
+        }
         return new MediaItem.Builder()
                 .setUri(url)
                 .setMediaId(itemId == null ? "" : itemId)
                 .setMediaMetadata(meta.build())
                 .build();
+    }
+
+    private static volatile byte[] cachedArtwork;
+
+    /** Lazily decode + cache the bundled notification artwork as PNG bytes. */
+    private static byte[] bundledArtwork(android.content.Context context) {
+        if (cachedArtwork != null || context == null) {
+            return cachedArtwork;
+        }
+        try {
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeResource(
+                    context.getResources(), R.drawable.audio_player_artwork);
+            if (bitmap == null) {
+                return null;
+            }
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+            cachedArtwork = out.toByteArray();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return cachedArtwork;
     }
 }
