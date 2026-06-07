@@ -66,9 +66,12 @@
 
     <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
 
-    <SettingsDebugGroup v-if="debugUnlocked" :count="logs.count" @view-logs="logsOpen = true" />
-
-    <SettingsDangerGroup v-if="debugUnlocked" @clear-cache="onClearCache" />
+    <SettingsDebugGroup
+      v-if="debugUnlocked"
+      :count="logs.count"
+      @view-logs="logsOpen = true"
+      @clear-cache="onClearCache"
+    />
 
     <BuildInfo
       :version="version"
@@ -101,7 +104,6 @@ import {
   LogsDialog,
   SettingsAccountGroup,
   SettingsAppearanceGroup,
-  SettingsDangerGroup,
   SettingsDataGroup,
   SettingsDebugGroup,
   SettingsHelpGroup,
