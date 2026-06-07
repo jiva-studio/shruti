@@ -48,6 +48,11 @@ export function usePlaylistPrefetch(): PlaylistPrefetchReturn {
       const variant = track?.variants.find((v) => v.audio) ?? null
       if (variant?.audio) {
         useDownloadStore().prefetch(trackId, variant.audio.path)
+      } else {
+        // No audio to download. `add()` optimistically set "downloading"
+        // before this resolved; without clearing it the row spins forever
+        // (nothing ever calls `ensureDownloaded` to flip the state).
+        useDownloadStore().clearStartingDownload(trackId)
       }
     } catch (err) {
       console.error("[playlist] prefetch failed", err)
