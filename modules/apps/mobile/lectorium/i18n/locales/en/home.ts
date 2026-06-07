@@ -13,4 +13,10 @@ export default {
       "Shruti is free thanks to your support. Subscribe to help the project grow.",
     dismiss: "Hide",
   },
+  notificationsNag: {
+    title: "Turn on reminders",
+    description:
+      "Allow notifications so I can remind you about festivals and events, suggest lectures, and keep track of your progress.",
+    dismiss: "Hide",
+  },
 }
