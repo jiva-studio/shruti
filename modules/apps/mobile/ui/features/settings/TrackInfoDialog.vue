@@ -1,6 +1,6 @@
 <template>
   <IonModal :is-open="open" class="track-info-dialog" @did-dismiss="onClose">
-    <Header>
+    <Header class="flat-header">
       <IonToolbar>
         <IonTitle>{{ $t("settings.trackInfo.title") }}</IonTitle>
         <IonButtons slot="end">
@@ -150,16 +150,5 @@ function onClose(): void {
 .preview {
   margin: 8px 0 4px;
   pointer-events: none;
-}
-</style>
-
-<style>
-.track-info-dialog ion-header,
-.track-info-dialog ion-header::after {
-  box-shadow: none !important;
-  background-image: none;
-}
-.track-info-dialog ion-header::after {
-  display: none;
 }
 </style>
