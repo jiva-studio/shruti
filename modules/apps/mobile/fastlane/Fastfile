@@ -14,12 +14,7 @@ def mobile_version
   @mobile_version ||= JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("version")
 end
 
-# Store build number = GITHUB_RUN_NUMBER + offset. run_number is per-workflow,
-# so when native deploys moved to the new Mobile / Binaries workflow (#824) the
-# counter reset to 1 — far below the builds the old Mobile / Build workflow had
-# already shipped (run ~949 → build 1949). A bump to 2000 keeps the new counter
-# above that historical high so build numbers stay monotonic and don't collide
-# with already-used ones. Raise again only if Binaries' run_number nears ~950.
+# Offset keeps the per-workflow GITHUB_RUN_NUMBER above already-shipped builds.
 VERSION_CODE_OFFSET = 2000
 
 # Store build number — always $GITHUB_RUN_NUMBER (+ offset) in CI,
