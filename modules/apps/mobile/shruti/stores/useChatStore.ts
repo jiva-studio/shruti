@@ -419,14 +419,17 @@ export const useChatStore = defineStore("chat", () => {
       next.delete(id)
       unseenProactiveSessionIds.value = next
     }
-    try {
-      await app
-        .repositories()
-        .proactiveState.markSeen(id as ChatSessionId, Math.floor(Date.now() / 1000))
-    } catch {
-      // proactiveState repo not ready — fine, refreshSessions will
-      // catch up later. Worst case the dot reappears briefly.
-    }
+    // Persist seen_at off the critical path — the in-memory set above
+    // already cleared the dot instantly, and this write only needs to
+    // survive a reload. NOT awaited so it never extends the session-open
+    // window (the view keeps the scroller hidden until openSession
+    // resolves). refreshSessions reconciles if it fails.
+    void app
+      .repositories()
+      .proactiveState.markSeen(id as ChatSessionId, Math.floor(Date.now() / 1000))
+      .catch(() => {
+        // proactiveState repo not ready — refreshSessions catches up.
+      })
   }
 
   function startNewSession(): void {
@@ -637,20 +640,13 @@ export const useChatStore = defineStore("chat", () => {
     if (!clean || sending.value) return
     sending.value = true
 
-    // Resume race: if the app was backgrounded long enough for a tier
-    // flip to happen server-side (webhook on another device, expiry),
-    // make sure we hit the network with the current claim before
-    // attaching it to the SSE stream. `ensureFresh` is a cheap no-op
-    // when we synced in the last 5 min and never throws on its own.
-    try {
-      await useAuthStore().ensureFresh()
-    } catch (e) {
-      // Defensive — `ensureFresh` swallows its own errors, but a
-      // store-access throw (e.g. Pinia not active in a test) must not
-      // sink the whole send.
-      console.warn("[chat] ensureFresh threw unexpectedly", e)
-    }
-
+    // Session creation + the user-message persist are local SQLite work,
+    // so they run first and the user's bubble appears instantly. The auth
+    // refresh (formerly awaited HERE, which blocked the bubble on a
+    // network round-trip after a resume) now runs inside `runChatTurn`
+    // right before the SSE stream opens — via the `ensureFresh` dep below.
+    // Only the assistant reply waits on the network, never the user's
+    // own message.
     const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
     abort = new AbortController()
     const repos = chatRepos()
@@ -695,6 +691,11 @@ export const useChatStore = defineStore("chat", () => {
           title: titleService(),
           buildUserContext: (focus) => trackUserState.buildUserContext(focus),
           extractFollowups,
+          // Refresh the auth claim inside the turn — after the user bubble
+          // is shown, before the stream opens — so a tier flip that
+          // happened while backgrounded rides this turn without delaying
+          // the user's message. Best-effort; runChatTurn swallows errors.
+          ensureFresh: () => useAuthStore().ensureFresh(),
         }
       )) {
         applyTurnEvent(event)

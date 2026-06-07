@@ -216,14 +216,20 @@ export function useChatController(): ChatControllerReturn {
 
   async function onPickSession(id: string): Promise<void> {
     isHistoryOpen.value = false
-    if (store.activeSessionId !== id) scrollReady.value = false
-    try {
-      await store.openSession(id)
-      await nextTick()
-      await scrollToBottom()
-    } finally {
-      scrollReady.value = true
+    // Picking a session from history used to load + scroll here AND again
+    // via the route watcher that `router.replace` triggers below (double
+    // open + double scroll). Now we only update the URL and let the single
+    // `route.query.session` watcher run `ensureSessionFromRoute`
+    // (open → scroll → reveal) — the same path deep-links and direct URLs
+    // take. Hide the current content first so the old session's bubbles
+    // don't linger for a frame before the swap.
+    if (sessionIdFromRoute() === id) {
+      // URL already points here — the watcher won't fire on an unchanged
+      // query, so drive the (idempotent) open + scroll directly.
+      await ensureSessionFromRoute()
+      return
     }
+    scrollReady.value = false
     void router.replace({ name: "chat", query: { session: id } })
   }
 
