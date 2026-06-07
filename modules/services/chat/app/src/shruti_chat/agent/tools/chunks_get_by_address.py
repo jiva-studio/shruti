@@ -13,10 +13,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from shruti_chat.agent.tools._envelope import library_to_envelope
+from shruti_chat.agent.tools._envelope import (
+    _AUTHORED_KINDS,
+    library_to_envelope,
+    resolve_commentary_author_names,
+)
 from shruti_chat.agent.tools._helpers import BOOK_PREFIX
 from shruti_chat.agent.tools._registry import ToolDef, register_tool
 from shruti_chat.agent.turn_aliases import TurnAliasMap
+from shruti_chat.domain.ports.catalog_repository import CatalogRepository
 from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 
 
@@ -43,6 +48,7 @@ async def chunks_get_by_address(
     lang: str,
     *,
     chunk_repo: ChunkRepository,
+    catalog_repo: CatalogRepository | None = None,
     alias_map: TurnAliasMap,
 ) -> list[dict[str, Any]] | dict[str, Any]:
     if type not in _ALLOWED_TYPES:
@@ -61,7 +67,26 @@ async def chunks_get_by_address(
     chunks = await chunk_repo.get_chunks_by_addr_label(
         addr, kinds=[type], lang=lang,
     )
-    return [library_to_envelope(c, alias_map=alias_map) for c in chunks]
+    # Resolve human author names for commentary rows so a purport fetched
+    # by this (FIRST-choice) named-verse path carries its attribution —
+    # same enrichment `chunks_search` does. Without it `library_to_envelope`
+    # mints the commentary with only `author_id`, and the synthesizer
+    # blockquote renders "ШБ 5.5.3" with no author. Best-effort: missing
+    # catalog → empty map → falls back to address-only attribution.
+    names = await resolve_commentary_author_names(
+        chunks, catalog_repo=catalog_repo, lang=lang,
+    )
+    out: list[dict[str, Any]] = []
+    for c in chunks:
+        extra = None
+        if c.item_kind in _AUTHORED_KINDS and c.author_id:
+            name = names.get(c.author_id)
+            if name:
+                extra = {"author_name": name}
+        out.append(
+            library_to_envelope(c, alias_map=alias_map, extra_meta=extra)
+        )
+    return out
 
 
 register_tool(ToolDef(

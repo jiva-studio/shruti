@@ -43,28 +43,36 @@ def split_into_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+# Authored quotable kinds — all carry an `author_id` and render their
+# blockquote attribution as `author, addr_label` (see `library_to_envelope`
+# + `MarkerExpander._format_commentary`). `verse` is excluded: a shloka's
+# attribution is its address, not a person.
+_AUTHORED_KINDS = frozenset({"commentary", "prose_chapter", "letter"})
+
+
 async def resolve_commentary_author_names(
     chunks: list[LibraryChunk],
     *,
     catalog_repo: CatalogRepository | None,
     lang: str | None,
 ) -> dict[str, str]:
-    """Batch-resolve `author_id` → human full_name for commentary chunks.
+    """Batch-resolve `author_id` → human full_name for authored library
+    chunks (commentary / prose_chapter / letter).
 
     Centralises the lookup that previously lived only in
     `research/commentary_expansion.py`; the same path now runs after
-    `chunks_search`'s library branch so a standalone commentary result
-    arrives at the synthesizer with a real author name rather than a
-    raw `author_id`. Best-effort: if the catalog lookup fails (or no
-    catalog/lang supplied), returns an empty mapping and callers fall
-    back to displaying just the address.
+    `chunks_search`'s library branch so a standalone commentary / prose /
+    letter result arrives at the synthesizer with a real author name
+    rather than a raw `author_id`. Best-effort: if the catalog lookup
+    fails (or no catalog/lang supplied), returns an empty mapping and
+    callers fall back to displaying just the address.
     """
     if catalog_repo is None or not lang:
         return {}
     ids = [
         c.author_id
         for c in chunks
-        if c.author_id and c.item_kind == "commentary"
+        if c.author_id and c.item_kind in _AUTHORED_KINDS
     ]
     if not ids:
         return {}

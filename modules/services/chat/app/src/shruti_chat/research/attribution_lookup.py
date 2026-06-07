@@ -80,7 +80,18 @@ async def find_attributions(
     if accepted_native:
         return _take(accepted_native, mm, stage="native")
 
-    # Border-zone (pinned only) — re-judge top1 with the cross-encoder gate.
+    # NATIVE below `an` but the top NATIVE score already clears the cross
+    # threshold `ac` → accept as native without a second query. Checked
+    # BEFORE the border gate: a score ≥ ac is a confident match, not a
+    # borderline one, and must not be routed through (and possibly rejected
+    # by) the judge. This avoids an unnecessary second SQL too.
+    if native and native[0].score >= ac:
+        accepted = [m for m in native if m.score >= ac]
+        return _take(accepted, mm, stage="native")
+
+    # Border-zone (pinned only) — the TRUE uncertain band `[bs, ac)`. Cosine
+    # alone can't assert a curated attribution here; re-judge top1 with the
+    # cross-encoder gate (LLM fallback inside). No confirmation ⇒ reject.
     if kind == "pinned" and bs is not None and native and native[0].score >= bs:
         top = native[0]
         if await _gate_border(
@@ -94,15 +105,6 @@ async def find_attributions(
         # native-lang attribution was rejected; a worse cross-lang match is
         # not going to be better).
         return []
-
-    # Stage 2 — CROSS-LINGUAL fallback (no language filter).
-    if native and native[0].score >= ac:
-        # NATIVE was below `an` but the top NATIVE score is already at or
-        # above the cross threshold. Accept it without a second query — it's
-        # already a NATIVE match, just slightly weaker than `an`. This avoids
-        # an unnecessary second SQL when the data is in the user's language.
-        accepted = [m for m in native if m.score >= ac]
-        return _take(accepted, mm, stage="native")
 
     cross = await _query(pool, user_q_embedding, kind, embed_model, lang=None, router=router)
     accepted_cross = [m for m in cross if m.score >= ac]
@@ -211,14 +213,24 @@ async def _gate_border(
 ) -> bool:
     """Decide whether a border-zone (0.70..accept) pinned match is real.
 
+    A border match scored BELOW the accept threshold — cosine alone is not
+    enough to assert a hand-curated, authoritative attribution. A judge has
+    to actively confirm it. When no judge can run (no reranker AND no LLM,
+    no usable texts, every judge errored), we REJECT: returning the match
+    anyway would surface a curated "this is THE source" answer on nothing
+    but a sub-threshold cosine — a fabricated authoritative attribution,
+    the worst failure mode for this product. Rejecting just falls through
+    to the cross stage / ordinary fanout, which still surfaces relevant
+    material without the false authority.
+
     Order of judges, strongest first:
       1. Cross-encoder (Voyage): score (user query × each curated phrasing) as a
          pair and accept iff the top candidate's best phrasing ≥ threshold. This
          is the same model the fanout ranks with — it actually reads both texts.
-      2. LLM fallback (only if no reranker): a fixed-prompt yes/no, now fed the
-         REAL query and the REAL canonical phrasings (the old version got neither).
-      3. No judge available → keep the curator's pick (refusal is the wrong
-         default for a hand-curated entry).
+      2. LLM fallback (only if no reranker): a fixed-prompt yes/no, fed the
+         REAL query and the REAL canonical phrasings.
+      3. No judge available / all judges errored → REJECT (do not assert a
+         border match without confirmation).
     """
     if reranker is not None and user_query:
         decided = await _rerank_gate(
@@ -232,7 +244,12 @@ async def _gate_border(
         if texts:
             return await _confirm_llm(llm, user_query, texts, lang, top.score, model=model)
 
-    return True
+    log.info(
+        "attribution_border_no_judge_rejected",
+        attribution_id=top.attribution_id,
+        cosine=round(top.score, 3),
+    )
+    return False
 
 
 async def _rerank_gate(
@@ -317,10 +334,13 @@ async def _confirm_llm(
     *,
     model: str | None = None,
 ) -> bool:
-    """Fixed-prompt LLM yes/no — the reranker-less fallback. Unlike the old
-    `_confirm`, it is fed the REAL user query and the REAL curated phrasings, so
-    the model can actually compare. Returns True on yes / unparseable response
-    (lean toward keeping a curator-validated entry when uncertain)."""
+    """Fixed-prompt LLM yes/no — the reranker-less fallback. It is fed the
+    REAL user query and the REAL curated phrasings, so the model can actually
+    compare. Returns True only on an explicit YES; an error / unparseable
+    response REJECTS — a border match is sub-threshold cosine, so without a
+    positive confirmation we must not assert a curated authoritative
+    attribution (it would be a fabricated source). Rejecting falls through to
+    the ordinary fanout."""
     from pydantic import BaseModel, Field
 
     class Confirm(BaseModel):
@@ -351,7 +371,7 @@ async def _confirm_llm(
         return bool(result.yes)
     except Exception as exc:  # noqa: BLE001 — best-effort
         log.warning("attribution_confirm_failed", error=str(exc))
-        return True  # lean toward keeping the match
+        return False  # no positive confirmation → reject a border match
 
 
 def _take(matches: list[AttributionMatch], n: int, *, stage: Literal["native", "cross"]) -> list[AttributionMatch]:

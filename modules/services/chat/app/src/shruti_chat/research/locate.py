@@ -143,10 +143,19 @@ async def _resolve_attribution_hits(
             title = titles.get(tok, "")
             hits.append(_Hit(sid, tok, title, "title", score))
         elif ref.ref_kind == "verse" and chunk_repo is not None:
+            # User-lang first, fall back to any lang only when the verse has
+            # no rows in the user's language. Forcing lang=None leaked the
+            # EN addr_label ("CC Madhya") into ru ChapterCards even when a
+            # ru row ("ЧЧ Мадхйа") existed — mirror the fallback already in
+            # build_pinned_chapter_notes.
             try:
                 chunks = await chunk_repo.get_chunks_by_target(
-                    ref_kind="verse", target_id=ref.target_id, lang=None,
+                    ref_kind="verse", target_id=ref.target_id, lang=lang,
                 )
+                if not chunks:
+                    chunks = await chunk_repo.get_chunks_by_target(
+                        ref_kind="verse", target_id=ref.target_id, lang=None,
+                    )
             except Exception as exc:  # noqa: BLE001
                 log.warning("locate_verse_ref_failed", target_id=ref.target_id, error=str(exc))
                 continue

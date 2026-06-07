@@ -90,6 +90,31 @@ def _format_tool_results(tool_results: list[Any]) -> str:
     return "\n\n".join(_render_one_note(i, n) for i, n in enumerate(flat, start=1))
 
 
+def _build_position_alias_remap(tool_results: list[Any]) -> dict[int, int]:
+    """Map each citable note's 1-based POSITION → its alias `ref`.
+
+    Mirrors `_format_tool_results`' flatten + `enumerate(start=1)` exactly,
+    so position `i` here is the same number rendered in note `i`'s `[^i]`
+    header. The expander uses this to turn the LLM's emitted position token
+    back into the alias the payload was minted under. Only integer-`ref`
+    notes (verse / lecture / commentary / location — the citable ones) get
+    an entry; non-citable blocks (prose_chapter/letter without a ref) are
+    skipped, matching the synthesizer's own bare-header rendering.
+    """
+    flat: list[dict[str, Any]] = []
+    for r in tool_results:
+        if isinstance(r, list):
+            flat.extend(x for x in r if isinstance(x, dict))
+        elif isinstance(r, dict):
+            flat.append(r)
+    remap: dict[int, int] = {}
+    for i, note in enumerate(flat, start=1):
+        ref = note.get("ref")
+        if isinstance(ref, int):
+            remap[i] = ref
+    return remap
+
+
 def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     """One note → minimal LLM-facing paragraph.
 
@@ -159,19 +184,28 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
     attribution = label or meta.get("addr_label") or ""
 
     if isinstance(ref, int):
+        # Header marker uses `idx` — the note's 1-based POSITION in the
+        # final note list — NOT the alias `ref`. `idx` is the index-space
+        # the synthesis planner numbers `supporting_notes` in and the
+        # outline directive cites, so the LLM sees ONE consistent set of
+        # `[^N]`. The expander's position→alias remap (installed for this
+        # stream) maps `idx` back to `ref` before resolving the payload.
+        # Aliases are minted in fetch order and don't track note position,
+        # so emitting `[^ref]` here would mis-point chips at the wrong
+        # lecture / verse / author whenever the two spaces disagree.
         if note_type == "verse":
             # Drop addr_label adjacency — the strongest priming source
             # for "[^N]" → "[^БГ 2.13]" hallucinations. Verse widget
             # on the client renders the address; the LLM doesn't need
             # to see it in the note header.
-            header = f"[^{ref}]"
+            header = f"[^{idx}]"
         elif note_type == "location":
             # Chapter-location note (locate intent). Bare `[^N]` header;
             # `text` carries the book + canto + chapter-range facts the LLM
             # frames its one-line answer around. The chapter TITLES render
             # client-side in `ChapterCard` from the SSE payload, kept out of
             # the header to avoid the verse-style hallucination priming.
-            header = f"[^{ref}]"
+            header = f"[^{idx}]"
         elif note_type in ("commentary", "prose_chapter", "letter"):
             # All three quotable document kinds render identically: a bare
             # `[^N]` header + the indexed sentence body, so the LLM can pick
@@ -197,7 +231,7 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # header — the LLM picks `[^7|s=0,2]` based on which
             # purport's prose actually backs the thesis, not based on
             # an author-name label.
-            header = f"[^{ref}]"
+            header = f"[^{idx}]"
             sentences = meta.get("sentences") or []
             if isinstance(sentences, list) and sentences:
                 indexed = "\n".join(
@@ -207,7 +241,7 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
         else:
             # Lecture fragment or whole-track card — title is natural
             # language, safe to keep adjacent.
-            header = f"[^{ref}] {attribution}".rstrip()
+            header = f"[^{idx}] {attribution}".rstrip()
     else:
         # prose_chapter / letter — addr_label drives the markdown
         # blockquote attribution downstream.
@@ -370,6 +404,16 @@ async def run_synthesizer_turn(
     """
     notes = _format_tool_results(tool_results) if tool_results else "(no research notes)"
 
+    # Install the position→alias remap for THIS stream. The notes section
+    # and outline directive both number notes by position (`[^idx]`); the
+    # expander resolves those positions back to the real aliases. Cleared
+    # in the `finally` so a shared expander never carries the map into a
+    # later non-synthesis use. History is folded WITHOUT `[^N]`, so no
+    # prior-turn token is mis-mapped.
+    expander.set_ref_remap(
+        _build_position_alias_remap(tool_results) if tool_results else None
+    )
+
     # Build the message list. Order matters:
     #   1. system prompt with grounding rules + research notes inline
     #      + optional outline block (when provided)
@@ -411,35 +455,40 @@ async def run_synthesizer_turn(
     stream_started = perf_counter()
     first_token_logged = False
 
-    async for chunk in llm.stream_completion(
-        messages,
-        model=model,
-        temperature=temperature,
-        callbacks=callbacks,
-        run_name="synthesizer_stream",
-    ):
-        text = chunk.get("text")
-        if not text:
-            continue
-        if not first_token_logged:
-            log.info(
-                "stage_timing",
-                stage="synthesizer_first_token",
-                stage_ms=round((perf_counter() - stream_started) * 1000, 1),
-                status="ok",
-                request_id=request_id,
-            )
-            first_token_logged = True
-        full_prose.append(text)
-        cleaned = await expander.feed(text)
-        if cleaned:
-            prose_chars += len(cleaned)
-            yield SynthesizerEvent(type="delta", data={"text": cleaned})
+    try:
+        async for chunk in llm.stream_completion(
+            messages,
+            model=model,
+            temperature=temperature,
+            callbacks=callbacks,
+            run_name="synthesizer_stream",
+        ):
+            text = chunk.get("text")
+            if not text:
+                continue
+            if not first_token_logged:
+                log.info(
+                    "stage_timing",
+                    stage="synthesizer_first_token",
+                    stage_ms=round((perf_counter() - stream_started) * 1000, 1),
+                    status="ok",
+                    request_id=request_id,
+                )
+                first_token_logged = True
+            full_prose.append(text)
+            cleaned = await expander.feed(text)
+            if cleaned:
+                prose_chars += len(cleaned)
+                yield SynthesizerEvent(type="delta", data={"text": cleaned})
 
-    tail = await expander.flush()
-    if tail:
-        prose_chars += len(tail)
-        yield SynthesizerEvent(type="delta", data={"text": tail})
+        tail = await expander.flush()
+        if tail:
+            prose_chars += len(tail)
+            yield SynthesizerEvent(type="delta", data={"text": tail})
+    finally:
+        # Drop the per-stream remap so a shared expander can't carry a
+        # position→alias map into any later use.
+        expander.set_ref_remap(None)
 
     full_text = "".join(full_prose)
     log.info(
