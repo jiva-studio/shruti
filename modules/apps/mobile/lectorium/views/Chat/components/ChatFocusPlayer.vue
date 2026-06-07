@@ -49,11 +49,11 @@
  * Inputs are deliberately minimal: the parent ChatFocusCard already
  * has the focus payload — we receive just what the player needs.
  */
-import { computed, onBeforeUnmount, ref, useTemplateRef } from "vue"
+import { computed, useTemplateRef } from "vue"
 import { IonSpinner } from "@ionic/vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
+import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
 import { buildPlaceholderPeaks, useResponsiveBarCount } from "@lectorium/composables/useWaveform.js"
 
@@ -70,26 +70,18 @@ const props = defineProps<{
 }>()
 
 const app = useLectorium()
-const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
+// Bars container — measured by useResponsiveBarCount so the placeholder
+// peak count tracks the available width. The audio element + playback
+// state come from useExcerptAudioPlayer below.
 const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
-
-const isPlaying = ref(false)
-const isPreparing = ref(false)
-const positionMs = ref(0)
-const durationMs = ref(0)
 
 const barCount = useResponsiveBarCount(waveformEl)
 const peaks = computed<number[]>(() => buildPlaceholderPeaks(props.messageId, barCount.value))
 
-const progressFraction = computed(() => {
-  if (durationMs.value <= 0) return 0
-  return Math.min(1, Math.max(0, positionMs.value / durationMs.value))
-})
-
-let cachedUrl: string | null = null
+let cachedExcerptUrl: string | null = null
 
 async function resolveExcerptUrl(): Promise<string> {
-  if (cachedUrl) return cachedUrl
+  if (cachedExcerptUrl) return cachedExcerptUrl
   if (!props.sourceKey) {
     throw new Error("focus-player: missing sourceKey")
   }
@@ -99,94 +91,31 @@ async function resolveExcerptUrl(): Promise<string> {
     endMs: props.endMs,
     excerptId: props.messageId,
   })
-  cachedUrl = result.url
+  cachedExcerptUrl = result.url
   // Server now answers 202 ready:false the moment it dispatches the
   // background cut; the file lands on S3 a beat later. Without this
   // poll the <audio> element would hit a 404 on the first play.
-  if (!result.ready) await pollUntilReady(cachedUrl)
-  return cachedUrl
+  if (!result.ready) await pollUntilReady(cachedExcerptUrl)
+  return cachedExcerptUrl
 }
 
-function pauseAndResetSelf(): void {
-  const el = audioEl.value
-  if (!el) return
-  el.pause()
-  el.currentTime = 0
-  positionMs.value = 0
-}
-
-const { claim } = useAudioSource("inline", pauseAndResetSelf)
-
-async function onToggle(): Promise<void> {
-  const el = audioEl.value
-  if (!el) return
-  if (isPlaying.value) {
-    el.pause()
-    return
-  }
-  if (!props.sourceKey) {
-    console.warn("[focus-player] missing source key", props.messageId)
-    return
-  }
-  if (!cachedUrl) {
-    isPreparing.value = true
-    try {
-      el.src = await resolveExcerptUrl()
-    } catch (err) {
-      isPreparing.value = false
-      console.warn("[focus-player] cut failed:", err)
-      return
-    }
-    isPreparing.value = false
-  } else if (!el.src) {
-    el.src = cachedUrl
-  }
-  claim()
-  try {
-    await el.play()
-  } catch (err) {
-    console.warn("[focus-player] play failed:", err)
-  }
-}
-
-function onWaveformClick(event: MouseEvent): void {
-  const el = audioEl.value
-  if (!el || durationMs.value <= 0) return
-  const target = event.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
-  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-  el.currentTime = (durationMs.value / 1000) * ratio
-}
-
-function onPlay(): void {
-  isPlaying.value = true
-}
-
-function onPause(): void {
-  isPlaying.value = false
-}
-
-function onEnded(): void {
-  isPlaying.value = false
-  positionMs.value = 0
-  const el = audioEl.value
-  if (el) el.currentTime = 0
-}
-
-function onTimeUpdate(): void {
-  const el = audioEl.value
-  if (!el) return
-  positionMs.value = el.currentTime * 1000
-}
-
-function onMetadata(): void {
-  const el = audioEl.value
-  if (!el) return
-  durationMs.value = (el.duration || 0) * 1000
-}
-
-onBeforeUnmount(() => {
-  audioEl.value?.pause()
+const {
+  audioEl,
+  isPlaying,
+  isPreparing,
+  progressFraction,
+  onToggle,
+  onWaveformClick,
+  onPlay,
+  onPause,
+  onEnded,
+  onTimeUpdate,
+  onMetadata,
+} = useExcerptAudioPlayer({
+  hasSource: () => !!props.sourceKey,
+  cachedUrl: () => cachedExcerptUrl,
+  resolveUrl: resolveExcerptUrl,
+  logLabel: "focus-player",
 })
 </script>
 
