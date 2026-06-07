@@ -43,8 +43,15 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     __BUILD_ID__: JSON.stringify(process.env.BUILD_ID ?? "dev"),
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
-    __REVENUECAT_IOS_KEY__: JSON.stringify(process.env.LECTORIUM_APPLE_REVENUE_CAT_KEY ?? ""),
-    __REVENUECAT_ANDROID_KEY__: JSON.stringify(process.env.LECTORIUM_GOOGLE_REVENUE_CAT_KEY ?? ""),
+    // Public RevenueCat SDK keys (appl_…/goog_…), baked into the bundle at
+    // build time. Generic env names so BOTH build paths feed them the same
+    // way: the app's own web build (apps-mobile.yml) and kit's reusable
+    // native-binary build (mobile-binaries.yml) each map the
+    // LECTORIUM_*_REVENUE_CAT_KEY repo secrets onto these. An empty key →
+    // `available: false` → the SDK is never touched and the subscription UI
+    // hides itself (the exact symptom when a build path forgets to pass them).
+    __REVENUECAT_IOS_KEY__: JSON.stringify(process.env.REVENUECAT_IOS_KEY ?? ""),
+    __REVENUECAT_ANDROID_KEY__: JSON.stringify(process.env.REVENUECAT_ANDROID_KEY ?? ""),
     // Auth + chat base URLs are no longer baked in at build time — the
     // adapters resolve them at call time via
     // `() => lectorium.activeServer.value.{auth,chat}BaseUrl` getters
