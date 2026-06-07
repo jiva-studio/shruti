@@ -9,10 +9,25 @@
     library.db hadn't indexed this verse at server-cite time.
   -->
   <article v-if="body" class="verse-card">
+    <button v-if="audioUrl" type="button" class="verse-play" @click="onToggle">
+      <IonSpinner v-if="isPreparing" name="crescent" class="verse-play-spin" />
+      <IconPlayerPauseFilled v-else-if="isPlaying" :size="13" />
+      <IconPlayerPlayFilled v-else :size="13" />
+    </button>
     <header class="verse-card-addr">{{ displayAddr }}</header>
     <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
     <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
     <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
+    <audio
+      v-if="audioUrl"
+      ref="audioEl"
+      preload="none"
+      @ended="onEnded"
+      @pause="onPause"
+      @play="onPlay"
+      @timeupdate="onTimeUpdate"
+      @loadedmetadata="onMetadata"
+    />
   </article>
   <span
     v-else
@@ -42,9 +57,11 @@
  * a block immediately on next open.
  */
 import { computed, onMounted } from "vue"
-import { IconBook2 } from "@tabler/icons-vue"
+import { IonSpinner } from "@ionic/vue"
+import { IconBook2, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useI18n } from "vue-i18n"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
+import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 
 const props = defineProps<{
   sourceId: string
@@ -90,6 +107,29 @@ const translation = computed(() => {
 const ariaLabel = computed(
   () => `Verse ${displayCaption.value} (${props.sourceId} ${props.tokens})`
 )
+
+// Sanskrit recitation, present only when the library has audio for this
+// verse. We get a whole-file public URL (no excerpt cut), so the shared
+// excerpt player is fed a constant URL via cachedUrl/resolveUrl — it
+// gives us play/pause + the audio-orchestrator claim (tapping a verse
+// pauses the lecture and other inline players) without the waveform.
+const audioUrl = computed(() => body.value?.audioUrl || "")
+const {
+  audioEl,
+  isPlaying,
+  isPreparing,
+  onToggle,
+  onPlay,
+  onPause,
+  onEnded,
+  onTimeUpdate,
+  onMetadata,
+} = useExcerptAudioPlayer({
+  hasSource: () => !!audioUrl.value,
+  cachedUrl: () => audioUrl.value || null,
+  resolveUrl: async () => audioUrl.value,
+  logLabel: "verse-audio",
+})
 
 function onTap() {
   // Phase 1 chip fallback only. With body present the card already
@@ -150,6 +190,40 @@ function onTap() {
 }
 .verse-card + .verse-card::before {
   display: none;
+}
+/* Small semi-transparent round play button, pinned to the card's
+ * top-right corner. The card is position:relative so it anchors here. */
+.verse-play {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  color: var(--ion-color-primary);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.1s ease,
+    transform 0.1s ease;
+  z-index: 1;
+}
+/* Pressed state (mobile — no hover). */
+.verse-play:active {
+  background: rgba(var(--ion-color-primary-rgb), 0.28);
+  transform: scale(0.92);
+}
+.verse-play-spin {
+  width: 12px;
+  height: 12px;
+  --color: var(--ion-color-primary);
 }
 .verse-card-addr {
   font-weight: 700;

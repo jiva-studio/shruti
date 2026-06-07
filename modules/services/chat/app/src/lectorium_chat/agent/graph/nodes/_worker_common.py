@@ -32,6 +32,7 @@ from lectorium_chat.application.react_loop import (
     run_react_loop,
 )
 from lectorium_chat.agent.graph.turn_context import TurnContext
+from lectorium_chat.config import get_settings
 from lectorium_chat.indexer.library.repo import fetch_verse_body
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
@@ -180,20 +181,28 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         # with only IAST still renders.
         tr = body["transliteration"]
         transliteration = tr.get(ctx.lang) or tr.get("en") or ""
+        payload: dict[str, Any] = {
+            "source_id": vref.source_id,
+            "tokens": vref.tokens,
+            "addr_label": vref.addr_label or "",
+            "sanskrit": body["sanskrit"],
+            "transliteration": transliteration,
+            "translation": body["translation"],
+        }
+        # Expand the stored relative S3 key into a full public URL so the
+        # client gets a ready-to-play link (same pattern as track PDFs).
+        # Omitted entirely when the verse has no recitation.
+        if body["audio_path"]:
+            payload["audio_url"] = (
+                f"{get_settings().s3_public_url}/{body['audio_path']}"
+            )
         writer(
             {
                 "type": "action",
                 "data": {
                     "kind": "verse",
                     "id": f"verse_{vref.source_id}_{vref.tokens}",
-                    "payload": {
-                        "source_id": vref.source_id,
-                        "tokens": vref.tokens,
-                        "addr_label": vref.addr_label or "",
-                        "sanskrit": body["sanskrit"],
-                        "transliteration": transliteration,
-                        "translation": body["translation"],
-                    },
+                    "payload": payload,
                 },
             }
         )

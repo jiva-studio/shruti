@@ -61,6 +61,7 @@ export type RunChatTurnEvent =
       readonly sanskrit: string
       readonly transliteration: string
       readonly translation: { readonly [lang: string]: string }
+      readonly audioUrl?: string
     }
   /** Chapter-location region for one `[chapter:source/region|label]`
    *  marker (locate intent), streamed ahead of its marker. The store
@@ -348,6 +349,7 @@ export async function* runChatTurn(
               sanskrit: event.payload.payload.sanskrit,
               transliteration: event.payload.payload.transliteration,
               translation: event.payload.payload.translation,
+              audioUrl: event.payload.payload.audio_url,
             }
             break
           }
