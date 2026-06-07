@@ -177,3 +177,42 @@ def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:
         "current_track_ref": 4,
     }
     assert route_after_router(state) == "action_worker"
+
+
+# ── deictic "this / current lecture" (current_ref) — #4 ────────────
+
+
+def test_research_current_ref_with_anchor_goes_to_catalog_worker() -> None:
+    """«перескажи текущую лекцию» — research intent + current_ref with the
+    current_track_ref anchor set must go to the catalog worker (it carries
+    the anchor + track_outline_get), NOT research_worker (code-driven
+    run_research never sees the anchor and refuses with empty corpus)."""
+    state = {
+        "intent": "research",
+        "extracted_args": {"current_ref": True},
+        "current_track_ref": 12,
+    }
+    assert route_after_router(state) == "catalog_worker"
+
+
+def test_research_current_ref_without_anchor_stays_research() -> None:
+    """current_ref but NO anchor (e.g. nothing playing) — there's no track
+    to recap, so fall through to research rather than send the catalog
+    worker on an empty hunt."""
+    state = {
+        "intent": "research",
+        "extracted_args": {"current_ref": True},
+    }
+    assert route_after_router(state) == "research_worker"
+
+
+def test_research_anchor_without_current_ref_stays_research() -> None:
+    """A generic research query that merely happens to have a lecture open
+    (current_track_ref set) but is NOT about "this lecture" (no current_ref)
+    must still do a real corpus search."""
+    state = {
+        "intent": "research",
+        "extracted_args": {},
+        "current_track_ref": 12,
+    }
+    assert route_after_router(state) == "research_worker"

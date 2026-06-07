@@ -22,6 +22,11 @@ A deictic «перескажи / PDF последней лекции» (research
 `recent_ref`) is routed to the worker that can read the user's listening
 history (catalog_worker for the recap, action_worker for the PDF) instead
 of research_worker, which would blind-search the corpus and refuse.
+
+A deictic «перескажи текущую лекцию» (research + `current_ref` with the
+`current_track_ref` anchor set) is likewise routed to catalog_worker, which
+carries the anchor + `track_outline_get` and recaps the open lecture —
+research_worker is code-driven and never sees the anchor (#4).
 """
 
 from __future__ import annotations
@@ -89,6 +94,24 @@ def _is_recent_ref(state: ChatState) -> bool:
     return bool(args.get("recent_ref"))
 
 
+def _is_current_ref(state: ChatState) -> bool:
+    """True when the user deictically points at the lecture they are
+    CURRENTLY playing — «перескажи / о чём эта / текущая лекция»,
+    "summarize this / the current lecture". The router sets the
+    `current_ref` flag in `extracted_args` for these.
+
+    Unlike `recent_ref`, the concrete track is already in scope as the
+    `current_track_ref` anchor (minted from `user_context.current_track_id`).
+    The catalog worker carries that anchor (anchor_block) AND
+    `track_outline_get`, so it can pull the open lecture's outline and recap
+    it. Routing this to research_worker is the #4 bug: research_worker is
+    code-driven (run_research) and never sees the anchor, so it blind-
+    searches the corpus and refuses with "no materials found".
+    """
+    args = state.get("extracted_args") or {}
+    return bool(args.get("current_ref"))
+
+
 def route_after_router(state: ChatState) -> str:
     """Pick the first worker node based on `state["intent"]`.
 
@@ -130,6 +153,16 @@ def route_after_router(state: ChatState) -> str:
         # worker can resolve it (user_tracks_list → track_outline_get);
         # research_worker would blind-search the corpus and refuse.
         if _is_recent_ref(state):
+            return "catalog_worker"
+        # «перескажи текущую лекцию» — the user points at the lecture they
+        # are playing right now. The concrete track is already the
+        # `current_track_ref` anchor; the catalog worker carries it (via
+        # anchor_block) and `track_outline_get`, so it recaps the open
+        # lecture. research_worker (code-driven run_research) never sees the
+        # anchor and would refuse with an empty-corpus message (#4). Guard on
+        # the anchor actually being present so a generic research query that
+        # merely happens to mention "this" can't hijack a real corpus search.
+        if _is_current_ref(state) and _has_track_anchor(state):
             return "catalog_worker"
         return "research_worker"
     if intent == "locate":
