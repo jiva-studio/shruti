@@ -11,7 +11,7 @@
       <IconPlayerPauseFilled v-else-if="isPlaying" :size="16" />
       <IconPlayerPlayFilled v-else :size="16" />
     </button>
-    <div class="waveform" aria-hidden="true" @click="onWaveformClick">
+    <div ref="waveformEl" class="waveform" aria-hidden="true" @click="onWaveformClick">
       <span
         v-for="(h, i) in peaks"
         :key="i"
@@ -47,6 +47,7 @@ const props = defineProps<{ note: NoteAudioRef }>()
 
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 const rootEl = useTemplateRef<HTMLDivElement>("rootEl")
+const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
 
 const isPlaying = ref(false)
 const isPreparing = ref(false)
@@ -60,6 +61,7 @@ const { peaks, cachedUrl, resolveExcerptUrl } = useExcerptWaveform({
   // would fail with `400 source_key required`.
   ref: () => props.note,
   rootEl,
+  waveformEl,
 })
 
 const progressFraction = computed(() => {
@@ -206,10 +208,11 @@ onBeforeUnmount(() => {
   height: 24px;
   display: flex;
   align-items: center;
-  /* `space-between` makes the 96 fixed-width (2 px) bars span the
-     full container width: the leftover horizontal space is divided
-     equally between bars instead of collapsing into a single trailing
-     gap on the right. Drops the explicit `gap` for the same reason. */
+  /* `space-between` spreads the bars across the full container width:
+     the bar count is chosen from the measured width (see
+     useResponsiveBarCount) so the leftover space divides into a small,
+     constant gap rather than a single trailing gap on the right. Drops
+     the explicit `gap` for the same reason. */
   justify-content: space-between;
   min-width: 0;
   overflow: hidden;
@@ -228,7 +231,7 @@ onBeforeUnmount(() => {
    * crosses it, trailing the progress edge rather than snapping.
    * `height` transitions so the swap from the random placeholder peaks
    * to the real decoded peaks reads as a wave settling into shape rather
-   * than a hard jump. Bar count is constant (`BAR_COUNT = 96`), so Vue
+   * than a hard jump. At a given width the bar count is stable, so Vue
    * updates inline styles in place and CSS handles the tween. */
   transition:
     background-color 300ms ease,

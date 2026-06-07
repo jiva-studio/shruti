@@ -2,8 +2,12 @@ import { computed, onBeforeUnmount, onMounted, ref, type ComputedRef, type Ref }
 import { buildServerUrl } from "@lib/domain/servers.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
-
-const BAR_COUNT = 96
+import {
+  WAVEFORM_RAW_PEAKS,
+  buildPlaceholderPeaks,
+  resamplePeaks,
+  useResponsiveBarCount,
+} from "@lectorium/composables/useWaveform.js"
 
 /* -------------------------------------------------------------------------- */
 /*           Module-level shared cache (intentional cross-instance)            */
@@ -30,59 +34,18 @@ function getAudioContext(): AudioContext | null {
   return sharedAudioContext
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              Placeholder peaks                              */
-/* -------------------------------------------------------------------------- */
-
-function hashStringTo32(input: string): number {
-  let h = 2166136261
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
-function mulberry32(seed: number): () => number {
-  let s = seed
-  return () => {
-    s = (s + 0x6d2b79f5) | 0
-    let t = s
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
 /**
- * Placeholder peaks used until the real audio buffer has been decoded.
- * Per-note (seeded by id) so every row keeps a recognisable shape even
- * before its excerpt has been generated.
- */
-function buildPlaceholderPeaks(seed: string): number[] {
-  const rand = mulberry32(hashStringTo32(seed) || 1)
-  const out: number[] = []
-  for (let i = 0; i < BAR_COUNT; i++) {
-    const r = rand()
-    let h: number
-    if (r < 0.1) h = 4 + rand() * 12
-    else if (r > 0.875) h = 80 + rand() * 18
-    else h = 25 + rand() * 50
-    out.push(Math.round(h))
-  }
-  return out
-}
-
-/**
- * Downsample Float32 PCM into `BAR_COUNT` peak buckets and normalise
- * to a 5-100% range so the bars span the container's height without
- * any near-zero peaks collapsing into invisible flat lines.
+ * Downsample Float32 PCM into `WAVEFORM_RAW_PEAKS` peak buckets and
+ * normalise to a 5-100% range so the bars span the container's height
+ * without any near-zero peaks collapsing into invisible flat lines.
+ * This is the high-resolution source the visible bars are resampled
+ * from — see `resamplePeaks` — so it doesn't depend on screen width.
  */
 function computePeaks(channel: Float32Array): number[] {
-  const samplesPerBar = Math.max(1, Math.floor(channel.length / BAR_COUNT))
+  const samplesPerBar = Math.max(1, Math.floor(channel.length / WAVEFORM_RAW_PEAKS))
   const peaks: number[] = []
   let maxPeak = 0
-  for (let i = 0; i < BAR_COUNT; i++) {
+  for (let i = 0; i < WAVEFORM_RAW_PEAKS; i++) {
     const start = i * samplesPerBar
     const end = Math.min(start + samplesPerBar, channel.length)
     let peak = 0
@@ -123,6 +86,9 @@ export interface UseExcerptWaveformOptions {
   /** Template ref to the player's outer element — used as the
    *  IntersectionObserver target for lazy peak hydration. */
   readonly rootEl: Ref<HTMLElement | undefined | null>
+  /** Template ref to the bars container — measured so the visible bar
+   *  count tracks the available width instead of being fixed. */
+  readonly waveformEl: Ref<HTMLElement | undefined | null>
 }
 
 export interface UseExcerptWaveformReturn {
@@ -167,8 +133,15 @@ export function useExcerptWaveform(opts: UseExcerptWaveformOptions): UseExcerptW
   const getRef: () => ExcerptRef = typeof refSource === "function" ? refSource : () => refSource
 
   const realPeaks = ref<number[] | null>(peaksByNote.get(getRef().noteId) ?? null)
-  const placeholder = computed(() => buildPlaceholderPeaks(getRef().noteId))
-  const peaks = computed<number[]>(() => realPeaks.value ?? placeholder.value)
+  const barCount = useResponsiveBarCount(opts.waveformEl)
+  // Resample the high-res decoded peaks down to the bars the current
+  // width calls for; before decode, build the placeholder directly at
+  // that count so it fills the container at any screen size.
+  const peaks = computed<number[]>(() =>
+    realPeaks.value
+      ? resamplePeaks(realPeaks.value, barCount.value)
+      : buildPlaceholderPeaks(getRef().noteId, barCount.value)
+  )
   const hasRealPeaks = computed(() => realPeaks.value !== null)
 
   let cachedUrl: string | null = excerptUrlByNote.get(getRef().noteId) ?? null

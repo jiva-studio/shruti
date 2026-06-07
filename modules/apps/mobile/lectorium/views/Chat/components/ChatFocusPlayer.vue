@@ -11,7 +11,7 @@
       <IconPlayerPauseFilled v-else-if="isPlaying" :size="18" />
       <IconPlayerPlayFilled v-else :size="18" />
     </button>
-    <div class="waveform" aria-hidden="true" @click="onWaveformClick">
+    <div ref="waveformEl" class="waveform" aria-hidden="true" @click="onWaveformClick">
       <span
         v-for="(h, i) in peaks"
         :key="i"
@@ -55,8 +55,7 @@ import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
 import { pollUntilReady } from "@lectorium/services/pollUntilReady.js"
-
-const BAR_COUNT = 96
+import { buildPlaceholderPeaks, useResponsiveBarCount } from "@lectorium/composables/useWaveform.js"
 
 const props = defineProps<{
   /** Stable id used as excerptId for the share-audio cut + as a seed
@@ -72,13 +71,15 @@ const props = defineProps<{
 
 const app = useLectorium()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
+const waveformEl = useTemplateRef<HTMLDivElement>("waveformEl")
 
 const isPlaying = ref(false)
 const isPreparing = ref(false)
 const positionMs = ref(0)
 const durationMs = ref(0)
 
-const peaks = computed<number[]>(() => buildPlaceholderPeaks(props.messageId))
+const barCount = useResponsiveBarCount(waveformEl)
+const peaks = computed<number[]>(() => buildPlaceholderPeaks(props.messageId, barCount.value))
 
 const progressFraction = computed(() => {
   if (durationMs.value <= 0) return 0
@@ -187,40 +188,6 @@ function onMetadata(): void {
 onBeforeUnmount(() => {
   audioEl.value?.pause()
 })
-
-function buildPlaceholderPeaks(seed: string): number[] {
-  const rand = mulberry32(hashStringTo32(seed) || 1)
-  const out: number[] = []
-  for (let i = 0; i < BAR_COUNT; i++) {
-    const r = rand()
-    let h: number
-    if (r < 0.1) h = 4 + rand() * 12
-    else if (r > 0.875) h = 80 + rand() * 18
-    else h = 25 + rand() * 50
-    out.push(Math.round(h))
-  }
-  return out
-}
-
-function hashStringTo32(input: string): number {
-  let h = 2166136261
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
-function mulberry32(seed: number): () => number {
-  let s = seed
-  return () => {
-    s = (s + 0x6d2b79f5) | 0
-    let t = s
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 </script>
 
 <style scoped>
