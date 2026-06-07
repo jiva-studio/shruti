@@ -103,12 +103,17 @@ Tools and when to use them
     **Picking which track (never guess):**
     1. «эту/текущую/this/current» OR no track named AND
        `user_context.current_track_ref` set → use that ref.
-    2. Named by TITLE («перескажи лекцию "X"», «найди лекцию X») →
+    2. «последнюю / прошлую / предыдущую / last / previous лекцию»
+       (deictic, no title) → call `user_tracks_list(limit=1)` FIRST.
+       The single returned `track_ref` IS the last-played lecture; pass
+       it to `track_outline_get` for the recap. Do NOT chunks_search —
+       "the last lecture" is a history pointer, not a corpus topic.
+    3. Named by TITLE («перескажи лекцию "X"», «найди лекцию X») →
        call `tracks_list(title_query="<title>")` first. >1 → ask
        briefly; 0 → fall back to chunks_search(type='lecture').
-    3. Named by TOPIC → user_history_search first, then
+    4. Named by TOPIC → user_history_search first, then
        chunks_search(type='lecture').
-    4. No current_track_ref and nothing named → ask one short
+    5. No current_track_ref and nothing named → ask one short
        clarifying question. Never random.
 
     After: 2-4 sentence summary from `items[].title` ONLY (don't

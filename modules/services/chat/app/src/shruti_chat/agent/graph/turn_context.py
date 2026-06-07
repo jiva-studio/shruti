@@ -63,6 +63,10 @@ class TurnContext:
 
     # ── Identity / correlation ─────────────────────────────────────────
     request_id: str = ""
+    # Turn locale ("ru" / "en"), passed straight from the request. Used
+    # to localise the verse-payload `transliteration` (en = clean Latin
+    # IAST, ru = derived Cyrillic) when flushing verse cards.
+    lang: str = "ru"
     # Region of the originating request, derived from the trusted
     # `X-Shruti-Region` header injected by the RU reverse proxy. None
     # means the request came directly from the global origin. Gated PII
@@ -90,6 +94,15 @@ class TurnContext:
     # Dedup tracker for `action.kind=chapter` events (locate worker) —
     # mirrors `emitted_verse_refs`.
     emitted_chapter_refs: set[int] = field(default_factory=set)
+    # Action ids that were actually emitted as a real `action` SSE event
+    # this turn (minted by track_pdf_generate / propose_* tools).
+    # `_worker_common._yield_event` records each one here; the
+    # MarkerExpander validates `[action:kind|id=X]` markers against this
+    # set and DROPS any whose id never fired, so a hallucinated marker
+    # (no tool ran) can't reach the client and render «Карточка
+    # повреждена». Shared by reference with the expander — see
+    # `application/chat_turn.py`.
+    emitted_action_ids: set[str] = field(default_factory=set)
 
     # ── Injected services ──────────────────────────────────────────────
     # Optional fields are typed as `Any | None` at runtime to avoid

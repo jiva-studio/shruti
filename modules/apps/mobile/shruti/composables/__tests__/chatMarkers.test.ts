@@ -287,9 +287,7 @@ describe("parseChatMarkers — markdown blockquote", () => {
     expect(quote).toBeTruthy()
     if (quote?.kind === "quote") {
       expect(quote.bodyHtml).toContain("Душа вечна")
-      expect(quote.attributionHtml).toBe(
-        "— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13"
-      )
+      expect(quote.attributionHtml).toBe("— А.Ч. Бхактиведанта Свами Прабхупада, БГ 2.13")
       // The em-dash + author must NOT leak into the quote body.
       expect(quote.bodyHtml).not.toContain("Прабхупада")
     }

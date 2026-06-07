@@ -14,7 +14,14 @@ The action chain (research/catalog → action) is wired as static edges
 in `builder.py`; this module only decides the FIRST hop out of the
 router. The SHORT path skips the pre-action search entirely when:
 - we already know the track (current_track_ref / focus_ref is set), or
-- the action doesn't need tracks at all (reminder, smart_library, pro).
+- the action doesn't need tracks at all (reminder, smart_library, pro), or
+- the user deictically points at their last-played lecture (recent_ref)
+  — the action worker resolves it itself via user_tracks_list.
+
+A deictic «перескажи / PDF последней лекции» (research / create_action +
+`recent_ref`) is routed to the worker that can read the user's listening
+history (catalog_worker for the recap, action_worker for the PDF) instead
+of research_worker, which would blind-search the corpus and refuse.
 """
 
 from __future__ import annotations
@@ -65,6 +72,23 @@ def _has_track_anchor(state: ChatState) -> bool:
     return bool(state.get("current_track_ref") or state.get("focus_ref"))
 
 
+def _is_recent_ref(state: ChatState) -> bool:
+    """True when the user deictically points at their own listening
+    history WITHOUT naming a track — «последнюю / прошлую / недавнюю
+    лекцию», "my last / previous lecture". The router sets the
+    `recent_ref` flag in `extracted_args` for these.
+
+    Such a request can ONLY be resolved against `user_context.recent_tracks`
+    (via `user_tracks_list`), which lives on the catalog worker — NOT
+    via blind corpus search. Routing it to research_worker is the #44/#46
+    bug: it produces junk semantic-search cards and a corpus-not-found
+    refusal because "the user's last-played lecture" is not a thing the
+    corpus index knows about.
+    """
+    args = state.get("extracted_args") or {}
+    return bool(args.get("recent_ref"))
+
+
 def route_after_router(state: ChatState) -> str:
     """Pick the first worker node based on `state["intent"]`.
 
@@ -88,11 +112,25 @@ def route_after_router(state: ChatState) -> str:
             return "action_worker"
         if _has_track_anchor(state):
             return "action_worker"
+        # «сделай PDF последней лекции» — no current_track / focus, but
+        # the user IS pointing at a concrete track: their last-played one.
+        # The action worker resolves it itself via user_tracks_list (it
+        # now carries that tool), so go straight there — no pre-action
+        # search. Routing this to research_worker is the #46 bug: it
+        # semantic-searches for "the last lecture" and returns junk cards.
+        if _is_recent_ref(state):
+            return "action_worker"
         # PDF without an anchor: we DO need to gather tracks first.
         # Catalog hints (author/source/date/…) → deterministic path;
         # otherwise the query is topic-based → semantic research.
         return "catalog_worker" if _has_catalog_hint(state) else "research_worker"
     if intent == "research":
+        # «перескажи последнюю / прошлую лекцию» — a deictic reference to
+        # the user's own history, not a corpus topic. Only the catalog
+        # worker can resolve it (user_tracks_list → track_outline_get);
+        # research_worker would blind-search the corpus and refuse.
+        if _is_recent_ref(state):
+            return "catalog_worker"
         return "research_worker"
     if intent == "locate":
         return "locate_worker"

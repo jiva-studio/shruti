@@ -19,6 +19,8 @@ import sqlite3
 from pathlib import Path
 from typing import TypedDict
 
+from shruti_chat.sanskrit import iast_to_cyrillic
+
 
 # Imported titles carry stray `\r\n` inside the heading text (gitabase
 # source). Collapse any run of whitespace to a single space so the chapter
@@ -32,7 +34,11 @@ def _clean_title(s: str | None) -> str:
 
 class VerseBody(TypedDict):
     sanskrit: str
-    transliteration: str
+    # lang → transliteration. `en` is the clean Latin IAST stored in
+    # library.db (the source of truth); `ru` is DERIVED from it on read
+    # via `iast_to_cyrillic` (Russian Vaiṣṇava Cyrillic). The SSE layer
+    # picks one string by the turn's locale — see `_worker_common`.
+    transliteration: dict[str, str]
     translation: dict[str, str]  # lang → translation text
 
 
@@ -51,9 +57,12 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
             "WHERE verse_id = ?",
             (verse_id,),
         ).fetchall()
+    iast = transliteration or ""
     return VerseBody(
         sanskrit=sanskrit or "",
-        transliteration=transliteration or "",
+        # `en` = the as-is IAST; `ru` = derived Cyrillic. Empty IAST
+        # yields empty strings for both (no spurious card content).
+        transliteration={"en": iast, "ru": iast_to_cyrillic(iast)} if iast else {},
         translation={lang: text or "" for lang, text in translations_rows},
     )
 
