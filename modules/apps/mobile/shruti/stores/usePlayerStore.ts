@@ -111,20 +111,31 @@ export const usePlayerStore = defineStore("player", () => {
   const resumePosition = usePlayerResumePosition()
 
   let unsubscribeProgress: (() => void) | null = null
+  let unsubscribeTransition: (() => void) | null = null
   function subscribeOnce(): void {
     if (unsubscribeProgress) return
+    // Native pushes a transition the instant the queue advances — react to
+    // it immediately rather than waiting on the next (possibly 1–5s,
+    // adaptive-cadence) progress tick. The durable journal drained via
+    // `getQueueState` is still the source of truth; this is the low-latency
+    // signal that tells JS "go re-derive from native now".
+    unsubscribeTransition = app.audioPlayer.onTransition(() => {
+      void syncFromNative()
+    })
     unsubscribeProgress = app.audioPlayer.onProgress((status) => {
       // Ignore events when no track is loaded (mid-swap or pre-open). The
       // swap path nulls `itemId.value` BEFORE awaiting
       // `session.finishCurrent`, so this guard rejects in-flight events.
       if (itemId.value === null) return
       if (status.itemId !== itemId.value) {
-        // A different item is playing than the one we think is current.
-        // In queue mode this is the native engine auto-advancing under a
-        // suspended/foregrounded JS — reconcile the finished item and move
-        // our identity onto the new one. Outside queue mode it's a late
-        // event from a previous track and is ignored.
-        if (queueActive) void syncFromNative()
+        // A different item is playing than the one we think is current —
+        // the native engine auto-advanced. Reconcile the finished item and
+        // move our identity onto the new one. NOT gated on `queueActive`:
+        // after a cold restart the queue is live but `openTrack` (the only
+        // place that sets `queueActive`) never ran, so the gate would drop
+        // every foreground advance. `syncFromNative` no-ops when there's
+        // nothing to mirror, so this is safe for single-track playback too.
+        void syncFromNative()
         return
       }
       playing.value = status.playing
@@ -141,6 +152,8 @@ export const usePlayerStore = defineStore("player", () => {
   onScopeDispose(() => {
     unsubscribeProgress?.()
     unsubscribeProgress = null
+    unsubscribeTransition?.()
+    unsubscribeTransition = null
     appStateHandle?.remove()
     appStateHandle = null
   })
@@ -158,6 +171,22 @@ export const usePlayerStore = defineStore("player", () => {
   ): Promise<void> {
     const entry = usePlaylistStore().getEntryByItemId(id)
     if (!entry) return
+    // Resolve the play plan BEFORE mutating any state, so a failure can't
+    // leave `itemId` stuck null (which would hide the FloatingPlayer and
+    // wedge the progress guard).
+    const plan = await playTrack({
+      track: entry.track,
+      preferredLanguage: language.value ?? undefined,
+      itemId: id,
+    })
+    if (!plan.ok) return
+    const cmd = plan.value
+    // Was the open transcript mirroring the lecture we're advancing away
+    // from? Capture before we reassign `trackId`.
+    const transcript = useTranscriptStore()
+    const wasMirroringTranscript =
+      transcript.trackId !== null && transcript.trackId === trackId.value
+
     // Close out the previous item's session before swapping identity, the
     // same handoff `openTrack` does. In the foreground the live completion
     // path usually closed it already; this is a safety net.
@@ -167,13 +196,6 @@ export const usePlayerStore = defineStore("player", () => {
     if (prevItemId && prevItemId !== id) {
       await session.finishCurrent(prevItemId, prevPositionMs)
     }
-    const plan = await playTrack({
-      track: entry.track,
-      preferredLanguage: language.value ?? undefined,
-      itemId: id,
-    })
-    if (!plan.ok) return
-    const cmd = plan.value
     const meta = currentQueue.find((q) => q.itemId === id)
     trackId.value = cmd.trackId
     title.value = meta?.title ?? cmd.title
@@ -183,6 +205,19 @@ export const usePlayerStore = defineStore("player", () => {
     positionMs.value = positionMsValue
     playing.value = isPlaying
     itemId.value = id
+
+    // Re-push the user's mix + speed. Native re-applies per item while it
+    // owns the session, but after a cold restore (service killed & rebuilt)
+    // the engine is back at defaults and JS is the only place that still
+    // knows the user's choices — so re-assert them here. Both calls are
+    // idempotent and cheap.
+    applyMix()
+    applyPlaybackSpeed()
+
+    // Continuous playback should carry an open, player-mirroring transcript
+    // to the new lecture — otherwise `mirrorsActivePlayer` flips false and
+    // the player vanishes mid-queue (bug: transcript open + auto-advance).
+    if (wasMirroringTranscript) transcript.show(cmd.trackId)
   }
 
   /**
@@ -198,9 +233,15 @@ export const usePlayerStore = defineStore("player", () => {
     try {
       const s = await app.audioPlayer.getQueueState()
       await reconcile.reconcileAndAck(s.events)
-      if (s.currentItemId && s.currentItemId !== itemId.value) {
-        await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
-      } else if (s.currentItemId === null && queueActive) {
+      if (s.currentItemId) {
+        // There's a live native queue to mirror. Arm queue mode even on the
+        // cold-restore path where `openTrack` never ran — otherwise the dry
+        // handling and foreground advance detection stay disabled.
+        queueActive = true
+        if (s.currentItemId !== itemId.value) {
+          await resyncTo(s.currentItemId, s.positionMs, s.durationMs, s.playing)
+        }
+      } else if (queueActive) {
         // Queue ran dry — nothing playing. Don't show a stale "playing".
         playing.value = false
         queueActive = false
@@ -221,6 +262,11 @@ export const usePlayerStore = defineStore("player", () => {
   }).then((h) => {
     appStateHandle = h
   })
+  // Arm the progress listener up front so a queue restored from a previous
+  // (backgrounded/killed) session is followed in the foreground too — not
+  // only across the next background→foreground cycle. `subscribeOnce` is
+  // idempotent, so `openTrack` calling it again is harmless.
+  subscribeOnce()
   void syncFromNative()
 
   /** Push the current slider state to the engine. Called on every
