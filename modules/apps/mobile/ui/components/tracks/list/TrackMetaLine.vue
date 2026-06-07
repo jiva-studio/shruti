@@ -100,10 +100,12 @@ const segments = computed<Segment[]>(() => {
 }
 
 .text {
+  /* Each metadata chunk (author / location / date / …) stays intact — never
+     shrink or ellipsize an individual block. `flex: 0 0 auto` keeps every
+     segment at its natural width; the line as a whole is clipped by the
+     parent's `overflow: hidden` if it runs past the row edge. */
+  flex: 0 0 auto;
   white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  min-width: 0;
 }
 
 .sep {

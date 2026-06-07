@@ -27,9 +27,11 @@
           class="logs-line"
           :class="`logs-line--${entry.level}`"
         >
-          <span class="logs-line__ts">{{ formatTime(entry.ts) }}</span>
-          <span class="logs-line__lvl">{{ entry.level.charAt(0).toUpperCase() }}</span>
-          <span class="logs-line__text">{{ entry.text }}</span>
+          <div class="logs-line__meta">
+            <span class="logs-line__ts">{{ formatTime(entry.ts) }}</span>
+            <span class="logs-line__lvl">{{ entry.level.toUpperCase() }}</span>
+          </div>
+          <div class="logs-line__text">{{ entry.text }}</div>
         </div>
       </div>
     </IonContent>
@@ -111,26 +113,27 @@ function formatTime(ts: number): string {
 
 .logs-line {
   display: flex;
-  gap: 6px;
-  padding: 1px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
+  flex-direction: column;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.05));
 }
 
-.logs-line__ts {
-  flex: 0 0 auto;
+/* Time + level on their own compact line above the message, so the message
+   gets the full row width instead of sharing it with a fixed time column. */
+.logs-line__meta {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
   color: var(--ion-color-medium);
 }
 
 .logs-line__lvl {
-  flex: 0 0 auto;
-  width: 1ch;
   font-weight: 700;
 }
 
 .logs-line__text {
-  flex: 1 1 auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .logs-line--warn .logs-line__lvl,

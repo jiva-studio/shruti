@@ -210,7 +210,7 @@ export default {
       description: "Show progress around play button",
     },
     autoPlayNext: {
-      title: "Play next automatically",
+      title: "Autoplay",
       description: "When a lecture ends, start the next one in your playlist",
     },
   },

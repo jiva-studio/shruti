@@ -4,7 +4,7 @@
       <IconPlayerTrackNextFilled :size="22" />
     </IconChip>
 
-    <IonLabel>
+    <IonLabel class="ion-text-nowrap">
       <h2>
         {{ $t("settings.player.autoPlayNext.title") }}
         <ProBadge :label="$t('app.proBadge')" />
