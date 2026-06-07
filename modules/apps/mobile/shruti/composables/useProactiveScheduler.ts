@@ -264,6 +264,16 @@ export function useProactiveScheduler(): void {
         scrubbed.degraded ? "degraded" : "ready",
         ctx.nowMs
       )
+      // Bump the session's updated_at to prep time so it sorts by when
+      // the body actually became readable, not by the (earlier) detect
+      // tick that minted the session. The session list orders by
+      // updated_at DESC; without this a just-prepped proactive can sit
+      // below older sessions. Best-effort — a failed touch only affects
+      // ordering, not correctness.
+      await app
+        .repositories()
+        .chatSessions.touch(entry.sessionId, ctx.nowMs)
+        .catch(() => undefined)
       // The row just flipped to ready/degraded — listUnseenSessionIds
       // filters out `pending` rows, so without this emit the badge
       // would stay dark until something else (next 30-min tick, app
