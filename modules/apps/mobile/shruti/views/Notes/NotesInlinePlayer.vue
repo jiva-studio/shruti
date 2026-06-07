@@ -26,6 +26,11 @@
       @ended="onEnded"
       @pause="onPause"
       @play="onPlay"
+      @playing="onPlaying"
+      @canplay="onCanPlay"
+      @waiting="onWaiting"
+      @stalled="onWaiting"
+      @error="onError"
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onMetadata"
     />
@@ -70,6 +75,10 @@ const {
   onEnded,
   onTimeUpdate,
   onMetadata,
+  onWaiting,
+  onPlaying,
+  onCanPlay,
+  onError,
 } = useExcerptAudioPlayer({
   hasSource: () => !!props.note.sourceKey,
   cachedUrl,
