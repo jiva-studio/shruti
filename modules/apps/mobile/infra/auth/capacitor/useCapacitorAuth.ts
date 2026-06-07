@@ -3,25 +3,13 @@ import { Device } from "@capacitor/device"
 import { Preferences } from "@capacitor/preferences"
 import { SocialLogin } from "@capgo/capacitor-social-login"
 
-import type { AuthConfig, AuthPort, AuthSession, MeView } from "@ports/app/auth.js"
-
-export type AccountDeleteErrorKind =
-  | "already-deleted"
-  | "rate-limited"
-  | "server"
-  | "network"
-  | "unauthorized"
-  | "unknown"
-
-export class AccountDeleteError extends Error {
-  constructor(
-    public readonly kind: AccountDeleteErrorKind,
-    public readonly status?: number
-  ) {
-    super(`account/delete: ${kind}${status ? ` (${status})` : ""}`)
-    this.name = "AccountDeleteError"
-  }
-}
+import {
+  AccountDeleteError,
+  type AuthConfig,
+  type AuthPort,
+  type AuthSession,
+  type MeView,
+} from "@ports/app/auth.js"
 
 interface StoredTokens {
   accessToken: string

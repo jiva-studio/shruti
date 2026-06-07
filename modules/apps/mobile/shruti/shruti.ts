@@ -14,7 +14,6 @@ import type {
   INotificationScheduler,
   IPersistence,
   IPreferences,
-  IProactiveChatService,
   IPurchases,
   IRemoteFilesStorage,
   IServerProber,
@@ -23,12 +22,17 @@ import type {
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
+import type { IProactiveChatService } from "@lib/contracts"
 import { createAppRepositories, type AppRepositories } from "./repositories.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@kit/infra"
 import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
 import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
+import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
+import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
+import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
+import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
 
 /**
  * App-wide config passed into `initShruti`. Built from `DEFAULT_APP_CONFIG`
@@ -95,6 +99,13 @@ export interface Shruti {
    *  scheduler's content builders for `holiday`, `weekly_digest` and
    *  `inactivity` rules. */
   readonly proactiveChat: IProactiveChatService
+  /** Chat service adapters (SSE/HTTP). Built in the composition root from
+   *  `auth` + `chatHttpRequest` so the chat store consumes them instead of
+   *  instantiating concrete @infra adapters itself. */
+  readonly chatStreamClient: ReturnType<typeof createHttpChatStreamClient>
+  readonly chatTitleService: ReturnType<typeof createHttpChatTitleService>
+  readonly chatQuestionsService: ReturnType<typeof createHttpChatQuestionsService>
+  readonly chatFeedbackService: ReturnType<typeof createHttpChatFeedbackService>
   /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
    * the user database. Wired with a `() => databases.user` closure so the
    * user DB doesn't have to be open at app-bootstrap time. */
@@ -212,6 +223,19 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     () => seed.auth.getAccessToken()
   )
 
+  // Chat service adapters. Built here (not in the chat store) so the
+  // composition root stays the only place that knows concrete @infra
+  // adapters. `chatAuthDeps` closes over the failover-aware HTTP client
+  // and the auth token getter.
+  const chatAuthDeps = {
+    getAccessToken: () => seed.auth.getAccessToken(),
+    request: seed.chatHttpRequest,
+  }
+  const chatStreamClient = createHttpChatStreamClient(chatAuthDeps)
+  const chatTitleService = createHttpChatTitleService(chatAuthDeps)
+  const chatQuestionsService = createHttpChatQuestionsService(chatAuthDeps)
+  const chatFeedbackService = createHttpChatFeedbackService(chatAuthDeps)
+
   const self: Shruti = {
     appConfig: seed.appConfig,
     persistence: seed.persistence,
@@ -232,6 +256,10 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     auth: seed.auth,
     chatHttpRequest: seed.chatHttpRequest,
     proactiveChat: seed.proactiveChat,
+    chatStreamClient,
+    chatTitleService,
+    chatQuestionsService,
+    chatFeedbackService,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
     activeServer,

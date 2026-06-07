@@ -1,6 +1,6 @@
 <template>
   <IonModal :is-open="open" class="smart-library-dialog" @did-dismiss="onClose">
-    <Header>
+    <Header class="flat-header">
       <IonToolbar>
         <IonTitle>{{ $t("settings.smartLibrary.title") }}</IonTitle>
         <IonButtons slot="end">
@@ -193,16 +193,5 @@ function onClose(): void {
    list items above and below. */
 .hint {
   margin-inline: 16px;
-}
-</style>
-
-<style>
-.smart-library-dialog ion-header,
-.smart-library-dialog ion-header::after {
-  box-shadow: none !important;
-  background-image: none;
-}
-.smart-library-dialog ion-header::after {
-  display: none;
 }
 </style>

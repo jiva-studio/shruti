@@ -1,10 +1,10 @@
 <template>
   <IonItem lines="none">
     <IconChip slot="start">
-      <IconPlayerTrackNext :size="22" />
+      <IconPlayerTrackNextFilled :size="22" />
     </IconChip>
 
-    <IonLabel class="ion-text-nowrap">
+    <IonLabel>
       <h2>
         {{ $t("settings.player.autoPlayNext.title") }}
         <ProBadge :label="$t('app.proBadge')" />
@@ -25,7 +25,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { IonItem, IonLabel, IonToggle } from "@ionic/vue"
-import { IconPlayerTrackNext } from "@tabler/icons-vue"
+import { IconPlayerTrackNextFilled } from "@tabler/icons-vue"
 import { IconChip, ProBadge } from "@ui/primitives/index.js"
 
 const props = defineProps<{ isSubscribed: boolean }>()

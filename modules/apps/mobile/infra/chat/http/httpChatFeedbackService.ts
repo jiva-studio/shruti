@@ -2,7 +2,7 @@ import type {
   FeedbackPayload,
   IChatFeedbackService,
   SubmitChatFeedbackOptions,
-} from "@ports/app/index.js"
+} from "@lib/contracts"
 import { postFeedback, type AccessTokenProvider, type ChatRequest } from "./chatClient.js"
 
 export interface HttpChatFeedbackServiceDeps {

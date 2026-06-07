@@ -10,9 +10,9 @@ import { pickPlayableVariant, type Track } from "@lib/domain/track.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle as resolveTitleForLang } from "@lib/domain/services/localizedName.js"
 import { useShruti } from "@shruti/shruti.js"
-import { pollUntilReady } from "@shruti/services/pollUntilReady.js"
+import { resolveShareArtifact } from "@shruti/services/resolveShareArtifact.js"
 import { useToast } from "@kit/composables"
-import { withProgressLabels, type LabelStep } from "@shruti/services/withProgressLabels.js"
+import { withProgressLabels } from "@shruti/services/withProgressLabels.js"
 import { useNotesStore } from "@shruti/stores/useNotesStore.js"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
@@ -271,48 +271,43 @@ export function useStudioController(): StudioControllerReturn {
         note.value = await persistEditIfChanged(note.value, trimmed, trimmedTitle)
       }
 
-      // 1. Local cache hit — re-share immediately.
-      let localUri = await app.excerptCache.findLocal(filename)
-      if (!localUri) {
-        // 2. CDN warm hit (prior render still on the bucket).
-        const predictedUrl = buildServerUrl(
-          app.activeServer.value,
-          `public/share/video/${videoId}.mp4`
-        )
-        let publicUrl = (await app.excerptCache.probeRemote(predictedUrl)) ? predictedUrl : null
-
-        // 3. Cold path — kick off the render and poll the predicted URL.
-        if (!publicUrl) {
-          const schedule: ReadonlyArray<LabelStep> = [
-            { atMs: 5_000, label: t("studio.rendering") },
-            { atMs: 45_000, label: t("studio.almostReady") },
-            { atMs: 90_000, label: t("studio.stillWorking") },
-          ]
-          await withProgressLabels(
-            (async () => {
-              await app.shareVideoService.cut({
-                sourceKey: variant.audio!.path,
-                startMs,
-                endMs,
-                text: trimmed,
-                lang: variant.language,
-                theme: "prabhupada",
-                videoId,
-                title: trimmedTitle.length > 0 ? trimmedTitle : undefined,
-              })
-              await pollUntilReady(predictedUrl)
-            })(),
-            schedule,
+      // Shared cache → CDN-probe → cut+poll → download pipeline. The
+      // video render is slow, so we drive the timed "rendering…" labels
+      // via wrapCut and flip to "downloading…" right before the fetch.
+      const localUri = await resolveShareArtifact({
+        cache: app.excerptCache,
+        filename,
+        predictedUrl: buildServerUrl(app.activeServer.value, `public/share/video/${videoId}.mp4`),
+        // Returns void on purpose: the video renderer is async and its
+        // response carries no ready file, so we always poll predictedUrl.
+        cut: async () => {
+          await app.shareVideoService.cut({
+            sourceKey: variant.audio!.path,
+            startMs,
+            endMs,
+            text: trimmed,
+            lang: variant.language,
+            theme: "prabhupada",
+            videoId,
+            title: trimmedTitle.length > 0 ? trimmedTitle : undefined,
+          })
+        },
+        wrapCut: (work) =>
+          withProgressLabels(
+            work,
+            [
+              { atMs: 5_000, label: t("studio.rendering") },
+              { atMs: 45_000, label: t("studio.almostReady") },
+              { atMs: 90_000, label: t("studio.stillWorking") },
+            ],
             (label) => {
               status.value = label
             }
-          )
-          publicUrl = predictedUrl
-        }
-
-        status.value = t("studio.downloading")
-        localUri = await app.excerptCache.download({ url: publicUrl, filename })
-      }
+          ),
+        onBeforeDownload: () => {
+          status.value = t("studio.downloading")
+        },
+      })
 
       status.value = ""
       await app.shareService.share({

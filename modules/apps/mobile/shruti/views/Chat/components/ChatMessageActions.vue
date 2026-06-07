@@ -59,7 +59,7 @@ import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@kit/composables"
 import { useChatStore } from "@shruti/stores/useChatStore.js"
 import type { ChatMessageId } from "@lib/domain/core.js"
-import type { FeedbackCategory } from "@ports/app/index.js"
+import type { FeedbackCategory } from "@lib/contracts"
 import FeedbackSheet from "./FeedbackSheet.vue"
 
 const props = defineProps<{
