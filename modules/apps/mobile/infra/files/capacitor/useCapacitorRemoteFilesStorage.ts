@@ -9,15 +9,18 @@ import type { IRemoteFilesStorage } from "@ports/app/index.js"
  * powers transcripts and any other small remote assets the app needs to
  * read with `<img src>` / `fetch()` from the WebView.
  *
- * Two consumers — this and `useMediaDownloaderAdapter` (used for track
- * audio) — share the same `Directory.Cache + <cacheDir>/<URL.pathname>`
- * convention. That's what makes a file written by either side readable
- * by the other (e.g. you save a track for offline → audio is cached;
- * later we plan to also cache the track's transcript through here).
+ * Transcripts cached here are part of the user's "save for offline" set
+ * (prefetched alongside track audio so the Transcript dialog renders with
+ * no network), so they live in durable app storage — `Directory.Data`
+ * (Android `filesDir`, iOS `NSDocumentDirectory`), the same `directory:
+ * "data"` base `useMediaDownloaderAdapter` writes track audio to. Using
+ * `Directory.Cache` here (the previous behaviour) let the OS reclaim
+ * saved transcripts under storage pressure without an uninstall (#51).
  *
- * `clearAll()` keeps using `Filesystem.rmdir` because the plugin's API
- * is intentionally per-file (`deleteFile(url)`); blowing the whole cache
- * is a filesystem operation, not a downloader concern.
+ * `clearAll()` uses `Filesystem.rmdir` against the same Data directory
+ * because the plugin's API is intentionally per-file (`deleteFile(url)`);
+ * blowing the whole offline store is a filesystem operation, not a
+ * downloader concern.
  */
 export function useCapacitorRemoteFilesStorage({
   cacheDir,
@@ -29,28 +32,48 @@ export function useCapacitorRemoteFilesStorage({
     const lastSlash = path.lastIndexOf("/")
     const subdir = lastSlash >= 0 ? `${cacheDir}/${path.substring(0, lastSlash)}` : cacheDir
     const filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path
-    return { directory: "cache", subdir, filename }
+    return { directory: "data", subdir, filename }
   }
 
   function idFor(url: string): string {
     return new URL(url).pathname
   }
 
-  /** Wait for completion of one download identified by `id`. */
-  function awaitCompletion(id: string): Promise<string> {
+  /**
+   * Subscribe to completion of one download identified by `id`, returning
+   * both the promise and a cleanup. Listeners are attached eagerly (the
+   * `addListener` calls are awaited by the caller before `download()` runs)
+   * so a fast / already-cached completion can't fire its event before the
+   * handler is in place and strand the promise forever.
+   */
+  async function awaitCompletion(
+    id: string
+  ): Promise<{ completion: Promise<string>; cleanup: () => void }> {
     const handles: PluginListenerHandle[] = []
-    return new Promise<string>((resolve, reject) => {
-      MediaDownloader.addListener("completed", (e) => {
-        if (e.id !== id) return
-        resolve(e.localUrl)
-      }).then((h) => handles.push(h))
-      MediaDownloader.addListener("failed", (e) => {
-        if (e.id !== id) return
-        reject(new Error(e.error || "Download failed"))
-      }).then((h) => handles.push(h))
-    }).finally(() => {
-      for (const h of handles) void h.remove()
+    let onCompleted!: (localUrl: string) => void
+    let onFailed!: (error: Error) => void
+    const completion = new Promise<string>((resolve, reject) => {
+      onCompleted = resolve
+      onFailed = reject
     })
+    handles.push(
+      await MediaDownloader.addListener("completed", (e) => {
+        if (e.id !== id) return
+        onCompleted(e.localUrl)
+      })
+    )
+    handles.push(
+      await MediaDownloader.addListener("failed", (e) => {
+        if (e.id !== id) return
+        onFailed(new Error(e.error || "Download failed"))
+      })
+    )
+    return {
+      completion,
+      cleanup: () => {
+        for (const h of handles) void h.remove()
+      },
+    }
   }
 
   return {
@@ -59,14 +82,18 @@ export function useCapacitorRemoteFilesStorage({
       if (cached.localUrl) return Capacitor.convertFileSrc(cached.localUrl)
 
       const id = idFor(url)
-      const completion = awaitCompletion(id)
-      await MediaDownloader.download({
-        id,
-        url,
-        destination: destinationFor(url),
-      })
-      const localUrl = await completion
-      return Capacitor.convertFileSrc(localUrl)
+      const { completion, cleanup } = await awaitCompletion(id)
+      try {
+        await MediaDownloader.download({
+          id,
+          url,
+          destination: destinationFor(url),
+        })
+        const localUrl = await completion
+        return Capacitor.convertFileSrc(localUrl)
+      } finally {
+        cleanup()
+      }
     },
 
     async getJson<T = unknown>(url: string): Promise<T> {
@@ -100,15 +127,20 @@ export function useCapacitorRemoteFilesStorage({
         return JSON.parse(text) as T
       }
       // First-ever fetch — we have to block. Route through MediaDownloader
-      // so the file lands at the canonical cache path other readers expect.
+      // so the file lands at the canonical path other readers expect.
       const id = idFor(url)
-      const completion = awaitCompletion(id)
-      await MediaDownloader.download({
-        id,
-        url,
-        destination: destinationFor(url),
-      })
-      const localUrl = await completion
+      const { completion, cleanup } = await awaitCompletion(id)
+      let localUrl: string
+      try {
+        await MediaDownloader.download({
+          id,
+          url,
+          destination: destinationFor(url),
+        })
+        localUrl = await completion
+      } finally {
+        cleanup()
+      }
       const result = await Filesystem.readFile({
         path: localUrl,
         encoding: Encoding.UTF8,
@@ -131,7 +163,7 @@ export function useCapacitorRemoteFilesStorage({
       // we don't expose; rmdir directly is simpler and matches what we did
       // before the migration.
       try {
-        await Filesystem.rmdir({ path: cacheDir, directory: Directory.Cache, recursive: true })
+        await Filesystem.rmdir({ path: cacheDir, directory: Directory.Data, recursive: true })
       } catch {
         // Directory doesn't exist or already cleared.
       }

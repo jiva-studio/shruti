@@ -55,16 +55,29 @@ export function useCapacitorExcerptCache(): IExcerptCache {
       // so they never collide with the tracks adapter's `id = URL.pathname`.
       const id = filename
       const handles: PluginListenerHandle[] = []
+      let onCompleted!: (localUrl: string) => void
+      let onFailed!: (error: Error) => void
       const result = new Promise<string>((resolve, reject) => {
-        MediaDownloader.addListener("completed", (e) => {
-          if (e.id !== id) return
-          resolve(e.localUrl)
-        }).then((h) => handles.push(h))
-        MediaDownloader.addListener("failed", (e) => {
-          if (e.id !== id) return
-          reject(new Error(e.error || "Download failed"))
-        }).then((h) => handles.push(h))
+        onCompleted = resolve
+        onFailed = reject
       })
+
+      // Attach listeners BEFORE calling download(): an already-cached /
+      // fast completion can fire `completed`/`failed` synchronously, and a
+      // listener registered after that would never see it — leaving this
+      // promise pending forever.
+      handles.push(
+        await MediaDownloader.addListener("completed", (e) => {
+          if (e.id !== id) return
+          onCompleted(e.localUrl)
+        })
+      )
+      handles.push(
+        await MediaDownloader.addListener("failed", (e) => {
+          if (e.id !== id) return
+          onFailed(new Error(e.error || "Download failed"))
+        })
+      )
 
       try {
         await MediaDownloader.download({
