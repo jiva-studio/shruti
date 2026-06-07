@@ -132,3 +132,48 @@ def test_create_action_track_anchor_overrides_catalog_hint() -> None:
         "current_track_ref": 7,
     }
     assert route_after_router(state) == "action_worker"
+
+
+# ── deictic "last / previous lecture" (recent_ref) — #44 / #46 ─────
+
+
+def test_research_recent_ref_goes_to_catalog_worker() -> None:
+    """«перескажи последнюю лекцию» — research intent + recent_ref must
+    go to the catalog worker (user_tracks_list → track_outline_get),
+    NOT research_worker (which would blind-search the corpus and refuse)."""
+    state = {
+        "intent": "research",
+        "extracted_args": {"recent_ref": True},
+    }
+    assert route_after_router(state) == "catalog_worker"
+
+
+def test_research_without_recent_ref_stays_research() -> None:
+    """A normal research query without the deictic flag is unchanged."""
+    state = {
+        "intent": "research",
+        "extracted_args": {},
+    }
+    assert route_after_router(state) == "research_worker"
+
+
+def test_create_action_pdf_recent_ref_goes_to_action_worker() -> None:
+    """«сделай PDF последней лекции» — no anchor, but recent_ref means the
+    action worker resolves the last track itself via user_tracks_list, so
+    skip the pre-action search instead of misrouting to research_worker."""
+    state = {
+        "intent": "create_action",
+        "extracted_args": {"action_kind": "pdf", "recent_ref": True},
+    }
+    assert route_after_router(state) == "action_worker"
+
+
+def test_create_action_pdf_recent_ref_anchor_still_short_path() -> None:
+    """A current_track_ref still wins (and also short-paths) — recent_ref
+    doesn't change that the action worker has what it needs."""
+    state = {
+        "intent": "create_action",
+        "extracted_args": {"action_kind": "pdf", "recent_ref": True},
+        "current_track_ref": 4,
+    }
+    assert route_after_router(state) == "action_worker"

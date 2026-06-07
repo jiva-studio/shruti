@@ -88,6 +88,13 @@ _STRICT_PATTERNS = (
     re.compile(r"^\[followup:[^\]|\n]+\]$"),
 )
 
+# Extracts the `id=` slot from a grammar-valid action marker so we can
+# validate it against the set of action ids that actually fired this
+# turn. A marker that's grammar-valid but carries an id no propose_* /
+# pdf tool minted is a hallucination — we DROP it (see `_expand_marker`)
+# so the client never renders the orphan as «Карточка повреждена».
+_ACTION_ID_RE = re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=([A-Za-z0-9_-]+)\]$")
+
 # Runaway buffer cap — if we don't see `]` after this many chars, it
 # wasn't a marker.
 _MAX_BUFFER = 200
@@ -114,9 +121,20 @@ class MarkerExpander:
         aliases: TurnAliasMap,
         *,
         request_id: str | None = None,
+        emitted_action_ids: set[str] | None = None,
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
+        # Action ids that fired as a real `action` SSE event this turn.
+        # Shared by reference with `TurnContext.emitted_action_ids`; the
+        # worker's `_yield_event` keeps adding to it while the graph runs,
+        # and by the time the synthesizer streams through this expander
+        # every action for the turn has already been emitted. A grammar-
+        # valid `[action:...|id=X]` whose X is NOT in here is a model
+        # hallucination → dropped. `None` (tests / non-action turns) means
+        # "no validation set" → grammar-valid action markers pass through
+        # unchanged, preserving legacy behaviour.
+        self._emitted_action_ids = emitted_action_ids
 
         # Optional 1-based-position → alias remap. The synthesizer numbers
         # its research notes by their POSITION in the final note list
@@ -377,6 +395,26 @@ class MarkerExpander:
         if _KEYWORD_BRACKET_RE.match(marker):
             for pattern in _STRICT_PATTERNS:
                 if pattern.match(marker):
+                    # Action markers carry an `id=` that must correspond to
+                    # an `action` SSE event actually emitted this turn.
+                    # A grammar-valid marker whose id never fired is a
+                    # hallucination (the model wrote a marker even though
+                    # no propose_* / pdf tool minted an id) — DROP it so
+                    # the client doesn't render an orphan «Карточка
+                    # повреждена». This is marker VALIDATION, not lenient
+                    # parsing: we stay strict, and additionally require the
+                    # id to be real.
+                    am = _ACTION_ID_RE.match(marker)
+                    if am is not None and self._emitted_action_ids is not None:
+                        if am.group(1) not in self._emitted_action_ids:
+                            self._malformed_count += 1
+                            log.info(
+                                "chat_action_marker_orphan_dropped",
+                                request_id=self._request_id,
+                                action_id=am.group(1),
+                                emitted=sorted(self._emitted_action_ids),
+                            )
+                            return ""
                     return marker
             self._malformed_count += 1
             log.info(

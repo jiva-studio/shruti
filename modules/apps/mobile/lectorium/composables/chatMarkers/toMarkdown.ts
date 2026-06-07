@@ -156,8 +156,8 @@ function renderVerseMarkdown(body: VerseBodyLike, lang: "ru" | "en"): string {
   if (body.addrLabel) parts.push(`**${body.addrLabel.trim()}**`)
   const sanskrit = normalise(body.sanskrit)
   if (sanskrit) parts.push(sanskrit)
-  const iast = normalise(body.transliteration)
-  if (iast) parts.push(iast)
+  const transliteration = normalise(body.transliteration)
+  if (transliteration) parts.push(transliteration)
   const tr = normalise(translation)
   if (tr) parts.push(tr)
   // Leading + trailing blank line so the verse sits as its own block

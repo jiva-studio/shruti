@@ -72,9 +72,9 @@ const displayAddr = computed(() => body.value?.addrLabel || props.caption?.trim(
 // distinct without the gap.
 const sanskrit = computed(() => (body.value?.sanskrit || "").replace(/\n{2,}/g, "\n"))
 
-// IAST (Latin-script Sanskrit with diacritics) is the only
-// transliteration we have — gitabase doesn't ship a kirillic variant.
-// Show it on both locales; same normalisation as sanskrit.
+// The server localises `transliteration` by the turn's lang: Latin IAST
+// for `en`, Cyrillic (derived from that IAST) for `ru`. We just render
+// the single string it shipped; same newline normalisation as sanskrit.
 const transliteration = computed(() => (body.value?.transliteration || "").replace(/\n{2,}/g, "\n"))
 
 const translation = computed(() => {

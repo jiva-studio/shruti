@@ -23,6 +23,16 @@ Intents:
   AND any "find more like this fragment / lecture" request when
   there's a focused track/fragment in context (chunks_find_similar
   is a research tool).
+  Deictic recap of the user's OWN last/previous lecture — «перескажи
+  / расскажи последнюю / прошлую / предыдущую лекцию», "recap / sum up
+  my last / previous lecture" — IS research, but you MUST set
+  `recent_ref: true` (see below). This points at the user's listening
+  history, NOT the corpus; without the flag it would blind-search the
+  corpus and refuse.
+  Examples (ru): "перескажи последнюю лекцию",
+                 "расскажи о чём была прошлая лекция".
+  Examples (en): "recap my last lecture",
+                 "what was the previous lecture about".
   Note on "chapter from a book": "из Книги Кришны главу про X" /
   "chapter from KRSNA Book about X" is research+chunks_search with
   type=prose_chapter — the user wants the prose chapter's CONTENT.
@@ -99,14 +109,16 @@ Intents:
     "поделиться лекцией",
     "отправь мне pdf",
     "сохрани этот фрагмент в PDF",
-    "сгенерируй pdf лекции про карму".
+    "сгенерируй pdf лекции про карму",
+    "сделай pdf последней лекции"   → also set recent_ref: true.
   Examples (en) — PDF:
     "generate a pdf of this lecture",
     "download the lecture as pdf",
     "share the lecture",
     "send me the pdf",
     "save this fragment as PDF",
-    "make a pdf about karma".
+    "make a pdf about karma",
+    "pdf of my last lecture"        → also set recent_ref: true.
   Examples (ru) — reminder / smart_library / pro:
     "напоминай мне каждое утро",
     "настрой ежедневное напоминание",
@@ -131,6 +143,12 @@ Extract structured args ONLY for fields you can identify from the query:
 - content_types (list of "transcript" | "verse" | "commentary" |
   "prose_chapter" | "letter") — hint for which corpora to search first
 - kind (e.g. "morning_walk", "lecture", "conversation") — for transcripts
+- recent_ref (bool) — set `true` ONLY when the user deictically points
+  at their OWN last / previous / most-recent lecture WITHOUT naming it
+  («последнюю / прошлую / предыдущую лекцию», "my last / previous
+  lecture"). Tells the downstream worker to resolve the track from the
+  user's listening history instead of searching the corpus. Do NOT set
+  it when the user names a title, a topic, or "this/current" lecture.
 - action_kind (one of "pdf" | "reminder" | "smart_library" | "pro") —
   REQUIRED when intent=create_action. Pick by the trigger token:
   pdf/скачать/поделиться/download/share/export/print → "pdf";

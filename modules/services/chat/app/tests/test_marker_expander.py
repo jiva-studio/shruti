@@ -172,6 +172,57 @@ async def test_action_marker_passes_through_untouched() -> None:
     assert out == "text [action:share_pdf|id=abc123] tail"
 
 
+async def test_action_marker_kept_when_id_was_emitted() -> None:
+    """With a validation set, a marker whose id actually fired this turn
+    survives verbatim."""
+    aliases = TurnAliasMap()
+    emitted = {"abc123"}
+    e = MarkerExpander(aliases, emitted_action_ids=emitted)
+    out = await _expand(e, "Готовлю PDF. [action:share_pdf|id=abc123]")
+    assert out == "Готовлю PDF. [action:share_pdf|id=abc123]"
+
+
+async def test_orphan_action_marker_dropped_when_id_never_emitted() -> None:
+    """A grammar-valid action marker whose id was NOT emitted as a real
+    action event this turn is a hallucination — dropped so the client
+    never renders «Карточка повреждена»."""
+    aliases = TurnAliasMap()
+    emitted: set[str] = set()  # no propose_*/pdf tool fired
+    e = MarkerExpander(aliases, emitted_action_ids=emitted)
+    out = await _expand(e, "Готово. [action:share_pdf|id=deadbeef] спасибо")
+    # Marker gone; surrounding prose intact (leading ws before the dropped
+    # marker is discarded by the same normalisation as other drops).
+    assert "[action:" not in out
+    assert "deadbeef" not in out
+    assert out.startswith("Готово.")
+    assert out.rstrip().endswith("спасибо")
+    assert e.malformed_count == 1
+
+
+async def test_orphan_action_marker_dropped_with_real_one_kept() -> None:
+    """Mixed turn: one real action id and one hallucinated id. Keep the
+    real, drop the orphan."""
+    aliases = TurnAliasMap()
+    emitted = {"real0001"}
+    e = MarkerExpander(aliases, emitted_action_ids=emitted)
+    out = await _expand(
+        e,
+        "[action:share_pdf|id=real0001] [action:upgrade_to_pro|id=fake9999]",
+    )
+    assert "[action:share_pdf|id=real0001]" in out
+    assert "fake9999" not in out
+    assert "[action:upgrade_to_pro" not in out
+
+
+async def test_action_marker_no_validation_set_passes_through() -> None:
+    """Legacy / test path with no validation set — grammar-valid action
+    markers pass through unchanged regardless of id."""
+    aliases = TurnAliasMap()
+    e = MarkerExpander(aliases, emitted_action_ids=None)
+    out = await _expand(e, "x [action:share_pdf|id=whatever] y")
+    assert out == "x [action:share_pdf|id=whatever] y"
+
+
 async def test_followup_marker_passes_through_untouched() -> None:
     aliases = TurnAliasMap()
     e = MarkerExpander(aliases)

@@ -174,6 +174,12 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
             continue
         if body is None:
             continue
+        # `transliteration` is a per-locale map ({en: IAST, ru: Cyrillic});
+        # the wire field stays a single localised string. Pick the turn's
+        # lang, fall back to en (clean IAST) so a non-ru locale or a row
+        # with only IAST still renders.
+        tr = body["transliteration"]
+        transliteration = tr.get(ctx.lang) or tr.get("en") or ""
         writer(
             {
                 "type": "action",
@@ -185,7 +191,7 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
                         "tokens": vref.tokens,
                         "addr_label": vref.addr_label or "",
                         "sanskrit": body["sanskrit"],
-                        "transliteration": body["transliteration"],
+                        "transliteration": transliteration,
                         "translation": body["translation"],
                     },
                 },
@@ -361,7 +367,20 @@ async def run_worker(
         LLM gets back is never paired with an SSE `action` event, and
         the matching `[action:share_pdf|id=…]` marker in delta
         text renders as a broken card on mobile.
+
+        Also records the action id of every real `action` event (the
+        ones minted by track_pdf_generate / propose_* — they carry a
+        hex `id`) so the MarkerExpander can drop any `[action:...|id=X]`
+        marker whose id never actually fired. The verse / chapter /
+        cite payload events also flow through `writer` but those use a
+        synthetic string id (e.g. `verse_BG_2.13`) and aren't action
+        markers, so we only capture ids from `propose_*`/pdf — keyed on
+        the hex-`id` shape the marker grammar accepts.
         """
+        if event_type == "action":
+            action_id = data.get("id")
+            if isinstance(action_id, str) and action_id:
+                ctx.emitted_action_ids.add(action_id)
         writer({"type": event_type, "data": data})
 
     writer({"type": "status", "data": {"key": status_key}})
