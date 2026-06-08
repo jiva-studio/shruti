@@ -122,6 +122,8 @@ class FakeAliasMap:
         self.chunk_texts: dict[int, str] = {}
         # Records author_name passed to alias_commentary (for assertions).
         self.commentary_authors: dict[str, str | None] = {}
+        # Records the MediaRef payload passed to alias_media (for assertions).
+        self.media_aliases: dict[str, dict[str, Any]] = {}
 
     def alias_chunk(self, track_id, start_ms, end_ms, lang=None) -> int:
         key = (track_id, start_ms, end_ms)
@@ -142,6 +144,14 @@ class FakeAliasMap:
     def alias_commentary(self, item_id, segment_index, *, addr_label, author_name, sentences, kind="commentary") -> int:
         self.verse_counter += 1
         self.commentary_authors[item_id] = author_name
+        return self.verse_counter
+
+    def alias_media(self, item_id, *, label, text="", lang=None) -> int:
+        self.verse_counter += 1
+        # Record what reached the MediaRef so the test can assert the alias
+        # carries the playable id + display label/text (flush_media resolves
+        # the rest from library_media at turn time).
+        self.media_aliases[item_id] = {"label": label, "text": text, "lang": lang}
         return self.verse_counter
 
 
@@ -171,6 +181,70 @@ async def test_fanout_commentary_resolves_author_name():
     assert len(res.chunks) == 1
     # The resolved author name reached alias_commentary (→ blockquote attribution).
     assert alias_map.commentary_authors["doc_purport"] == "А.Ч. Бхактиведанта Свами Прабхупада"
+
+
+@pytest.mark.asyncio
+async def test_fanout_surfaces_media_chunk_as_citable_note():
+    """A media clip (item_kind='media') retrieved by fanout must:
+      1. emit a live `research_source` of kind='media' (not library_doc),
+      2. survive dedup/rerank into the returned notes as type='media',
+      3. mint a MediaRef alias that the marker expander unfolds to
+         `[media:<id>|caption]` — exactly the path verse/library kinds take.
+
+    Uses the REAL TurnAliasMap + MarkerExpander so the assertion proves the
+    end-to-end thread, not just the mock surface. flush_media (tested
+    separately) resolves url/type/speaker from library_media at turn time;
+    here the alias only needs to carry item_id + label + text."""
+    from shruti_chat.agent.marker_expander import MarkerExpander
+    from shruti_chat.agent.turn_aliases import MediaRef, TurnAliasMap
+
+    chunk = _LibChunk(
+        item_id="fsp-1-en-010-spk7", item_kind="media",
+        text="I remember when Srila Prabhupada arrived in Bombay…",
+        lang="en", addr_label="Hari Sauri · 1976",
+        source_id="", tokens="", segment_index=0,
+    )
+    alias_map = TurnAliasMap()
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def on_event(event_type: str, data: dict[str, Any]) -> None:
+        events.append((event_type, data))
+
+    res = await fanout_search_with_boost(
+        queries=[(0, "remembrances of Prabhupada in Bombay")],
+        embedder=FakeEmbedder(),
+        chunk_repo=FakeChunkRepo([], [_Scored(chunk, 0.7)]),
+        catalog_repo=FakeCatalogRepo(),
+        alias_map=alias_map,
+        lang="en",
+        on_event=on_event,
+    )
+
+    # 1. Live research_source — its own `media` kind + `media:<id>` namespace.
+    media_sources = [
+        d for (t, d) in events
+        if t == "research_source" and d.get("kind") == "media"
+    ]
+    assert media_sources, "media chunk must surface a research_source of kind='media'"
+    assert media_sources[0]["id"] == "media:fsp-1-en-010-spk7"
+    assert media_sources[0]["label"] == "Hari Sauri · 1976"
+
+    # 2. Citable note survives into the returned set as type='media'.
+    media_notes = [e for e in res.chunks if e.get("type") == "media"]
+    assert len(media_notes) == 1, "media chunk must survive dedup/rerank as a note"
+    note = media_notes[0]
+    assert "media" in res.by_kind
+
+    # 3. The note's ref is a MediaRef alias that expands to a [media:...] marker.
+    ref = note["ref"]
+    assert isinstance(ref, int)
+    resolved = alias_map.resolve(ref)
+    assert isinstance(resolved, MediaRef)
+    assert resolved.item_id == "fsp-1-en-010-spk7"
+
+    expander = MarkerExpander(alias_map)
+    expanded = await expander.feed(f"clip here [^{ref}]") + await expander.flush()
+    assert expanded == "clip here [media:fsp-1-en-010-spk7|Hari Sauri · 1976]"
 
 
 @pytest.mark.asyncio
