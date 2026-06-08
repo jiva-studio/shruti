@@ -39,7 +39,7 @@ from shruti_chat.research.constants import (
 log = get_logger(__name__)
 
 
-_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter")
+_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter", "media")
 
 
 def _is_thin(scored: list[tuple[float, int]]) -> bool:

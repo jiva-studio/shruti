@@ -135,8 +135,10 @@ def emit_library_research_source(
     prose_chapter / letter chunk, or nothing if its label can't be
     normalized (drop — see `_label_for_library_chunk`).
 
-    Verse → `kind="verse"`, `id="verse:<item_id>"`. Every other library
-    kind → `kind="library_doc"`, `id="library:<item_id>"` (the panel doesn't
+    Verse → `kind="verse"`, `id="verse:<item_id>"`. Media clip →
+    `kind="media"`, `id="media:<item_id>"` (its own panel namespace — the
+    card renders a player, not a doc tile). Every other library kind →
+    `kind="library_doc"`, `id="library:<item_id>"` (the panel doesn't
     distinguish them). The `library:<item_id>` namespace is shared with the
     attribution-refs path in pipeline.py so the client's dedup-by-id collapses
     a doc discovered through both code paths. Shared by the fanout and the
@@ -149,6 +151,8 @@ def emit_library_research_source(
     item_id = getattr(chunk, "item_id", "")
     if item_kind == "verse":
         kind, source_id = "verse", f"verse:{item_id}"
+    elif item_kind == "media":
+        kind, source_id = "media", f"media:{item_id}"
     else:
         kind, source_id = "library_doc", f"library:{item_id}"
     try:
@@ -194,7 +198,7 @@ def _emit_research_source(
 log = get_logger(__name__)
 
 
-_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter")
+_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter", "media")
 _RELEVANCE_FLOOR = 0.45   # match chunks_search behaviour
 
 
@@ -213,7 +217,7 @@ class _RawScored:
 
     chunk: Any
     score: float
-    kind: str           # "lecture" | "verse" | "commentary" | "prose_chapter" | "letter"
+    kind: str           # "lecture" | "verse" | "commentary" | "prose_chapter" | "letter" | "media"
     dedup_key: tuple    # used to dedupe across queries and rounds
     sub_query_id: int | None = None
     # Cross-encoder relevance, set only on the rerank path. Drives ordering
