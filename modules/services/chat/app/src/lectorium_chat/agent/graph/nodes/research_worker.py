@@ -26,6 +26,7 @@ from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
+from lectorium_chat.research.corpus_fanout import dedup_notes_by_key
 from lectorium_chat.research.pipeline import run_research
 
 
@@ -108,7 +109,19 @@ async def research_worker_node(
     # `tool_results` list, preserving order. The synthesizer reads them
     # as numbered Notes; putting authoritative first keeps the curator's
     # picks at the top of the prompt.
-    tool_results = list(research_result.authoritative_refs) + list(research_result.research_chunks)
+    #
+    # Global de-dup by `_dedup_key` ((item_kind, item_id, segment_index) for
+    # media / library, ("lecture", track_id, start/end) for lectures): the
+    # SHORT/LONG paths each dedup within themselves, but a source can arrive
+    # via BOTH authoritative_refs AND research_chunks (e.g. a media clip
+    # pulled by topic refs and again by fanout), each having minted its own
+    # alias. Without this collapse the synthesizer sees the same clip twice
+    # under two `[^N]` markers and renders two identical cards. Keep the
+    # first (authoritative-then-ranked) occurrence; drop later duplicates.
+    tool_results = dedup_notes_by_key(
+        list(research_result.authoritative_refs)
+        + list(research_result.research_chunks)
+    )
 
     # Emit verse_payload SSE events for any verse aliases minted during
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams

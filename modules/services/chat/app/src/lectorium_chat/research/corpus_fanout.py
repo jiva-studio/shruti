@@ -618,6 +618,36 @@ async def fanout_search_with_boost(
     )
 
 
+def dedup_notes_by_key(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse a flat note list so each unique source `_dedup_key`
+    ((item_kind, item_id, segment_index) for library / media, ("lecture",
+    track_id, start_ms, end_ms) for lectures) appears at most ONCE.
+
+    Keeps the FIRST occurrence of each key, preserving the incoming order
+    (which is already meaningful — authoritative-then-ranked). Aliases are
+    minted at envelope-build time, so a later duplicate carries a second,
+    orphaned alias; dropping the duplicate note here means the synthesizer
+    never sees it and so can't cite the same clip twice. This is the single
+    global guard run on the final assembled note set, BEFORE the synthesizer
+    (and the synthesis planner) reads it.
+
+    Notes without a `_dedup_key` (history echoes, ad-hoc tool results) are
+    passed through untouched — we can't key them, and they're never the
+    source of the media double-cite this guards against."""
+    seen: set[tuple] = set()
+    out: list[dict[str, Any]] = []
+    for env in notes:
+        key = env.get("_dedup_key") if isinstance(env, dict) else None
+        if key is None:
+            out.append(env)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(env)
+    return out
+
+
 def _order_key(env: dict[str, Any]) -> float:
     """Ordering score: rerank_score when present (reranked chunks),
     falling back to cosine `score` (reranker off, or refs that never went

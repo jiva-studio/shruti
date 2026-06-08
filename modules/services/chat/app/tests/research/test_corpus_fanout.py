@@ -582,3 +582,61 @@ def test_parse_addresses():
     assert _parse_addresses("ШБ 1.1.1 и BG 2.13") == ["ШБ 1.1.1", "BG 2.13"]
     assert _parse_addresses("БГ 1.2.28,1.2.29") == ["БГ 1.2.28,1.2.29"]
     assert _parse_addresses("что такое душа") == []
+
+
+# ---- dedup_notes_by_key (final-note-set de-duplication) -------------------
+
+
+def _note(dedup_key, *, ref, score=0.5, type_="media"):
+    """Minimal envelope shape: dedup_notes_by_key only reads `_dedup_key`."""
+    return {"type": type_, "ref": ref, "score": score, "_dedup_key": dedup_key}
+
+
+def test_dedup_notes_by_key_collapses_duplicate_media():
+    # Same media clip surfaced through two paths/rounds → two envelopes,
+    # each with its own minted alias (ref 5 and ref 60). The dedup must keep
+    # ONLY the first occurrence so the synthesizer sees one citable note.
+    key = ("media", "fsp-1-en-010-spk7", 0)
+    notes = [
+        _note(key, ref=5),
+        _note(("verse", "BG", 0), ref=7, type_="verse"),
+        _note(key, ref=60),  # duplicate of the media clip — second alias
+    ]
+    from lectorium_chat.research.corpus_fanout import dedup_notes_by_key
+
+    out = dedup_notes_by_key(notes)
+
+    assert len(out) == 2
+    media = [n for n in out if n["type"] == "media"]
+    assert len(media) == 1
+    assert media[0]["ref"] == 5  # first occurrence kept
+
+
+def test_dedup_notes_by_key_keeps_distinct_sources():
+    # Different kinds / ids / segments must all survive untouched.
+    from lectorium_chat.research.corpus_fanout import dedup_notes_by_key
+
+    notes = [
+        _note(("media", "m1", 0), ref=1),
+        _note(("media", "m1", 1), ref=2),          # same item, diff segment
+        _note(("media", "m2", 0), ref=3),
+        _note(("verse", "BG", 0), ref=4, type_="verse"),
+        _note(("commentary", "c1", 2), ref=5, type_="commentary"),
+        _note(("lecture", "track_X", 1000, 2000), ref=6, type_="lecture"),
+    ]
+    out = dedup_notes_by_key(notes)
+    assert len(out) == 6
+
+
+def test_dedup_notes_by_key_passes_through_keyless_notes():
+    # Notes without a _dedup_key (history echoes) are left untouched.
+    from lectorium_chat.research.corpus_fanout import dedup_notes_by_key
+
+    notes = [
+        {"type": "media", "ref": 1},          # no _dedup_key
+        _note(("media", "m1", 0), ref=2),
+        _note(("media", "m1", 0), ref=3),     # duplicate, dropped
+    ]
+    out = dedup_notes_by_key(notes)
+    assert len(out) == 2
+    assert out[0] == {"type": "media", "ref": 1}
