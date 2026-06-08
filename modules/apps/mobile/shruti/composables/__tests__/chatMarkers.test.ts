@@ -259,6 +259,44 @@ describe("parseChatMarkers — chapter-location markers", () => {
   })
 })
 
+describe("parseChatMarkers — media result markers", () => {
+  it("parses [media:id|caption]", () => {
+    const tokens = parseChatMarkers("Вот запись [media:abc123|Прабхупада · 1977]")
+    const media = tokens.find((t) => t.kind === "media")
+    expect(media).toBeTruthy()
+    if (media && media.kind === "media") {
+      expect(media.mediaId).toBe("abc123")
+      expect(media.caption).toBe("Прабхупада · 1977")
+    }
+  })
+
+  it("accepts dotted / dashed media ids", () => {
+    const tokens = parseChatMarkers("[media:media_1977-01.05|x]")
+    const media = tokens.find((t) => t.kind === "media")
+    expect(media?.kind).toBe("media")
+    if (media?.kind === "media") expect(media.mediaId).toBe("media_1977-01.05")
+  })
+
+  it("treats media caption as optional", () => {
+    const tokens = parseChatMarkers("[media:vid42]")
+    const media = tokens.find((t) => t.kind === "media")
+    expect(media?.kind).toBe("media")
+    if (media?.kind === "media") {
+      expect(media.mediaId).toBe("vid42")
+      expect(media.caption).toBe("")
+    }
+  })
+
+  it("strips the media marker from exported markdown", () => {
+    const md = messageToMarkdown("Смотрите видео. [media:abc|Лекция]", {
+      lang: "ru",
+      verseLookup: () => null,
+      citeLookup: () => null,
+    })
+    expect(md).toBe("Смотрите видео.")
+  })
+})
+
 describe("parseChatMarkers — markdown blockquote", () => {
   it("parses a simple blockquote run into a 'quote' token", () => {
     const tokens = parseChatMarkers(

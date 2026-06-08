@@ -34,7 +34,7 @@ from shruti_chat.domain.ports.chunk_repository import ChunkRepository
 from shruti_chat.domain.ports.embedder import EmbedderPort
 
 
-_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter")
+_LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter", "media")
 _ALL_TYPES = ("lecture",) + _LIBRARY_KINDS
 
 

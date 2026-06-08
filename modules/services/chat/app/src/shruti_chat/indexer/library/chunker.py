@@ -12,6 +12,7 @@ appropriate library kind.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -25,8 +26,8 @@ MAX_CHUNK_CHARS = 900
 @dataclass(frozen=True, slots=True)
 class LibraryChunk:
     item_id: str
-    item_kind: str       # 'verse' | 'commentary' | 'prose_chapter' | 'letter'
-    source_id: str
+    item_kind: str       # 'verse' | 'commentary' | 'prose_chapter' | 'letter' | 'media'
+    source_id: str | None
     tokens: str
     author_id: str | None
     doc_date: str | None
@@ -34,6 +35,13 @@ class LibraryChunk:
     segment_index: int
     text: str
     addr_label: str
+    # `embed_text` is a TRANSIENT in-memory field (never persisted to a
+    # chunks column): when set, the indexer embeds it instead of `text`
+    # (media rows precompute facts+context+text); kinds that leave it None
+    # embed their display `text`. Media chunks are reference-only — their
+    # url / type / speaker / provenance are resolved from `library_media`
+    # at serve time via fetch_media(item_id), exactly like verses.
+    embed_text: str | None = None
 
 
 # ---------- catalog short_name lookup ----------
@@ -123,6 +131,22 @@ def _prose_chapter_addr(short_name: str | None, source_id: str,
     if chapter_title:
         return f"{label}, глава {tokens} «{chapter_title}»"
     return f"{label} {tokens}"
+
+
+def _media_addr(title: str | None, meta: dict | None) -> str:
+    """Single server-built label for a media chunk.
+
+    Prefer "speaker · date" when both live in `meta` (the common YouTube /
+    lecture-clip case), else fall back to the display title. Either piece
+    may be absent — emit whatever is present rather than orphan separators.
+    """
+    speaker = (meta or {}).get("speaker")
+    date = (meta or {}).get("date")
+    if speaker and date:
+        return f"{speaker} · {date}"
+    if speaker:
+        return str(speaker)
+    return (title or "").strip()
 
 
 def _letter_addr(short_name: str | None, title: str | None, doc_date: str | None) -> str:
@@ -295,3 +319,63 @@ def walk_documents(
                         text=seg,
                         addr_label=addr_label,
                     )
+
+
+def walk_media(
+    library_db: Path,
+    *,
+    langs: list[str],
+) -> Iterator[LibraryChunk]:
+    """Emit ONE atomic REFERENCE chunk per `library_media` row — the
+    `media` kind.
+
+    The chunk carries only a reference (item_id = library_media id,
+    item_kind='media') plus the display `text` and a server-built
+    `addr_label` ("speaker · date" when present, else the title). Its
+    url / type / speaker / provenance are NOT persisted on the chunk —
+    they are resolved at serve time via fetch_media(item_id), exactly
+    like a verse chunk resolves its body via fetch_verse_body().
+
+    `embed_text` (facts + context + display text, already in the row's
+    language) is a transient in-memory hint for the embedder; it is never
+    written to a chunks column. `source_id` is None — media is not
+    addressed by a canonical book/token reference.
+
+    No-op if the table is absent (older library.db releases predate it),
+    so the indexer degrades gracefully rather than crashing the pass.
+    """
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        has_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library_media'"
+        ).fetchone()
+        if not has_table:
+            return
+        # Reference-only: read just the fields the chunk needs (id, lang,
+        # display text, the label inputs, and the transient embed_text).
+        # url / type / context live in library_media and are resolved at
+        # serve time via fetch_media — never copied onto the chunk.
+        cur = conn.execute(
+            "SELECT id, lang, title, text, embed_text, meta "
+            "FROM library_media ORDER BY id"
+        )
+        for mid, lang, title, text, embed_text, meta in cur:
+            if lang not in langs:
+                continue
+            try:
+                meta_obj = json.loads(meta) if meta else None
+            except (TypeError, ValueError):
+                meta_obj = None
+            addr_label = _media_addr(title, meta_obj)
+            yield LibraryChunk(
+                item_id=mid,
+                item_kind="media",
+                source_id=None,
+                tokens="",
+                author_id=None,
+                doc_date=(meta_obj or {}).get("date"),
+                lang=lang,
+                segment_index=0,
+                text=text or "",
+                addr_label=addr_label,
+                embed_text=embed_text or "",
+            )

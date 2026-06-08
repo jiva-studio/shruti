@@ -146,3 +146,20 @@ type ListAttributionsOpts struct {
 	Limit    int
 	Cursor   string // last-seen attribution_id, exclusive
 }
+
+// Media is one atomic media item (e.g. a short remembrance video clip) in one
+// language — a row in library_media. Each language is an independent entity
+// (like verse/document variants). The file lives in S3 at URL (a relative
+// storage path, e.g. public/media/<id>.mp4); Meta is an opaque JSON string of
+// optional type-specific fields (speaker, date, location, source, ...).
+type Media struct {
+	ID        string
+	Lang      string
+	Title     string
+	Text      string // displayed transcript
+	Context   string // retrieval context prefix (never displayed)
+	EmbedText string // exactly what gets embedded
+	URL       string // relative storage path, e.g. public/media/<id>.mp4
+	Type      string // "video" | "audio"
+	Meta      string // serialized JSON of optional fields
+}

@@ -105,6 +105,31 @@ class CommentaryRef:
 
 
 @dataclass(frozen=True, slots=True)
+class MediaRef:
+    """The real-library REFERENCE behind one integer alias for a media clip
+    — a short video/audio fragment (e.g. a devotee's remembrance about
+    Srila Prabhupada) surfaced by semantic search as `kind='media'`.
+
+    Reference-only, exactly like VerseRef: the alias carries just the
+    `library_media` id (`item_id`) plus the display label/text. The LLM
+    cites it via `[^N]` and the marker expander unfolds N into
+    `[media:<id>|<caption>]`; `flush_media_payloads` resolves the playable
+    handle (url / type / speaker) by reading `library_media` at turn time
+    via fetch_media(item_id) and ships it in the `media` SSE payload BEFORE
+    the marker reaches the client, so the media card renders the player.
+
+    `label` is the server-built addr_label ("speaker · date" or the title);
+    `text` is the DISPLAY string. No url / type / provenance is stored here
+    — that is resolved from library_media at flush.
+    """
+
+    item_id: str
+    label: str
+    text: str = ""
+    lang: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ChapterRef:
     """The real-library metadata behind one integer alias for a chapter-
     location widget — the answer to "where in scripture is this?".
@@ -128,7 +153,7 @@ class ChapterRef:
 
 
 # Any kind of reference an integer alias may resolve to.
-AliasRef = ChunkRef | VerseRef | CommentaryRef | ChapterRef
+AliasRef = ChunkRef | VerseRef | CommentaryRef | ChapterRef | MediaRef
 
 
 class TurnAliasMap:
@@ -252,6 +277,28 @@ class TurnAliasMap:
         )
         return n
 
+    def alias_media(
+        self,
+        item_id: str,
+        *,
+        label: str,
+        text: str = "",
+        lang: str | None = None,
+    ) -> int:
+        """Mint a reference-only alias for a media clip widget target. The
+        LLM cites it via `[^N]`; the marker expander unfolds N into
+        `[media:<id>|<caption>]`, and `flush_media_payloads` resolves the
+        playable handle via fetch_media(item_id) and ships it in the `media`
+        SSE payload before the marker reaches the client."""
+        n = self._alloc_ref()
+        self._chunks[n] = MediaRef(
+            item_id=item_id,
+            label=label,
+            text=text,
+            lang=lang,
+        )
+        return n
+
     def resolve(self, n: int) -> AliasRef | None:
         return self._chunks.get(n)
 
@@ -271,6 +318,15 @@ class TurnAliasMap:
         return [
             (n, ref) for n, ref in self._chunks.items()
             if isinstance(ref, ChapterRef)
+        ]
+
+    def media_refs(self) -> list[tuple[int, MediaRef]]:
+        """All currently-minted media aliases, in mint order. Used by
+        `flush_media_payloads` to emit a `media` payload per fresh clip
+        before the `[media:<id>|...]` marker reaches the client."""
+        return [
+            (n, ref) for n, ref in self._chunks.items()
+            if isinstance(ref, MediaRef)
         ]
 
     def cite_refs(self) -> list[tuple[int, ChunkRef]]:
@@ -334,6 +390,17 @@ class TurnAliasMap:
                         for tok, title in ref.chapters
                     ],
                 }
+            elif isinstance(ref, MediaRef):
+                # Media alias is reference-only: round-trip just the
+                # library_media id + label so a multi-turn client echoing
+                # this map back keeps the integer valid. The playback handle
+                # is resolved on demand via fetch_media(item_id). `text` is
+                # display-only and omitted to keep the persisted map small.
+                entry = {
+                    "kind": "media",
+                    "item_id": ref.item_id,
+                    "label": ref.label,
+                }
             elif isinstance(ref, CommentaryRef):
                 # Commentary alias is server-side only: the LLM picks
                 # sentences via `[^N|s=...]` and the expander inlines them
@@ -371,6 +438,14 @@ class TurnAliasMap:
                 if not isinstance(sid, str) or not isinstance(tok, str):
                     continue
                 self._chunks[n] = VerseRef(source_id=sid, tokens=tok)
+            elif kind == "media":
+                item_id = entry.get("item_id")
+                if not isinstance(item_id, str):
+                    continue
+                self._chunks[n] = MediaRef(
+                    item_id=item_id,
+                    label=entry.get("label", "") or "",
+                )
             elif kind == "chapter":
                 sid = entry.get("source_id")
                 region_token = entry.get("region_token")

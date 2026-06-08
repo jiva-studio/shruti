@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  MediaPayload,
 } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
 
@@ -18,6 +19,9 @@ export interface CreateChatMessageInput {
   readonly createdAt: number
   readonly actions?: Record<string, ChatActionPayload>
   readonly outlines?: Record<string, ChatOutlinePayload>
+  /** Media result payloads keyed by `[media:<id>]` id — see
+   *  `ChatMessage.media`. */
+  readonly media?: Record<string, MediaPayload>
   readonly actionStates?: Record<string, ChatActionState>
   readonly error?: ChatMessageError
   /** Ordered list of follow-up chip texts emitted by the LLM via

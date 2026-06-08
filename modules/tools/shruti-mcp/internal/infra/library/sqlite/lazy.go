@@ -191,3 +191,14 @@ func (l *Lazy) AttributionDelete(ctx context.Context, id string) error {
 	defer r.Close()
 	return r.AttributionDelete(ctx, id)
 }
+
+// ---------- MEDIA (write-side via openRW) ----------
+
+func (l *Lazy) MediaUpsert(ctx context.Context, m library.Media) error {
+	r, err := l.openRW(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return r.MediaUpsert(ctx, m)
+}

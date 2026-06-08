@@ -817,6 +817,7 @@ export const useChatStore = defineStore("chat", () => {
           content: "",
           actions: undefined,
           outlines: undefined,
+          media: undefined,
           researchQuestions: undefined,
           researchSources: undefined,
         }
@@ -935,6 +936,25 @@ export const useChatStore = defineStore("chat", () => {
         // `[cite:...]` marker, and a late arrival upgrades the chip
         // reactively. Does NOT touch the message list.
         citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text)
+        return
+      }
+      case "media-payload": {
+        // Server-streamed media result (video/audio + transcript) for one
+        // `[media:<id>]` marker. Unlike verse/chapter/cite (which live in
+        // their own persisted caches), media is stashed directly on the
+        // message's `media` map — mirroring the `action` event — so it
+        // round-trips through `messages.create` → SQLite `meta`. Arrives
+        // BEFORE the prose delta with the marker; the marker triggers
+        // MediaCard render.
+        const idx = streamingIndex()
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          media: { ...(cur.media ?? {}), [event.payload.id]: event.payload },
+        }
+        messages.value = next
         return
       }
       case "finalised": {
