@@ -82,6 +82,27 @@ async def test_footnote_to_verse_no_addr_label() -> None:
     assert out == "[verse:source_BG/2.13]"
 
 
+# ── [^N] — media clip ────────────────────────────────────────────────
+
+
+async def test_footnote_to_media_expands_to_media_marker() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_media(
+        "media_abc", label="Хари Шаури · 1976", text="Я помню...",
+    )
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"see [^{ref}] now")
+    assert out == "see [media:media_abc|Хари Шаури · 1976] now"
+
+
+async def test_footnote_to_media_no_label() -> None:
+    aliases = TurnAliasMap()
+    ref = aliases.alias_media("media_x", label="")
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"[^{ref}]")
+    assert out == "[media:media_x]"
+
+
 # ── [^N] — whole-track card ──────────────────────────────────────────
 
 

@@ -333,6 +333,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterDictFinds(s, deps.Find)
 	RegisterLibrary(s, deps.Library)
 	RegisterLibraryAttribution(s, deps.LibraryAttribution)
+	RegisterLibraryImport(s, deps)
 	RegisterLibraryPublish(s, deps)
 	RegisterAdminConfigGet(s, deps)
 	RegisterAdminConfigSet(s, deps)

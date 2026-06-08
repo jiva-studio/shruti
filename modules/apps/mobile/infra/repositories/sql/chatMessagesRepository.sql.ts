@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  MediaPayload,
 } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
 import type {
@@ -43,6 +44,7 @@ interface ChatMessageRow {
 interface ParsedMeta {
   readonly actions: Record<string, ChatActionPayload>
   readonly outlines: Record<string, ChatOutlinePayload>
+  readonly media: Record<string, MediaPayload>
   readonly actionStates: Record<string, ChatActionState>
   readonly followups: readonly string[]
   readonly error: ChatMessageError | undefined
@@ -54,6 +56,7 @@ interface ParsedMeta {
 const EMPTY_META: ParsedMeta = Object.freeze({
   actions: {},
   outlines: {},
+  media: {},
   actionStates: {},
   followups: [],
   error: undefined,
@@ -84,6 +87,7 @@ function parseMeta(raw: unknown): ParsedMeta {
   return {
     actions: extractRecord<ChatActionPayload>(data.actions),
     outlines: extractRecord<ChatOutlinePayload>(data.outlines),
+    media: extractRecord<MediaPayload>(data.media),
     actionStates: extractRecord<ChatActionState>(data.actionStates),
     followups: extractFollowups(data.followups),
     error: parseError(data.error),
@@ -189,6 +193,7 @@ function parseError(raw: unknown): ChatMessageError | undefined {
 function wrapMeta(payload: {
   actions?: Record<string, ChatActionPayload>
   outlines?: Record<string, ChatOutlinePayload>
+  media?: Record<string, MediaPayload>
   actionStates?: Record<string, ChatActionState>
   followups?: readonly string[]
   error?: ChatMessageError | undefined
@@ -199,6 +204,7 @@ function wrapMeta(payload: {
   const data: Record<string, unknown> = {}
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
   if (payload.outlines && Object.keys(payload.outlines).length > 0) data.outlines = payload.outlines
+  if (payload.media && Object.keys(payload.media).length > 0) data.media = payload.media
   if (payload.actionStates && Object.keys(payload.actionStates).length > 0)
     data.actionStates = payload.actionStates
   if (payload.followups && payload.followups.length > 0) data.followups = payload.followups
@@ -221,6 +227,7 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     createdAt: Number(r.created_at),
     actions: meta.actions,
     outlines: meta.outlines,
+    media: meta.media,
     actionStates: meta.actionStates,
     error: meta.error,
     followups: meta.followups.length > 0 ? meta.followups : undefined,
@@ -266,6 +273,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       const meta = wrapMeta({
         actions: input.actions,
         outlines: input.outlines,
+        media: input.media,
         actionStates: input.actionStates,
         followups: input.followups,
         error: input.error,
@@ -287,6 +295,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         createdAt: input.createdAt,
         actions: input.actions ?? {},
         outlines: input.outlines ?? {},
+        media: input.media ?? {},
         actionStates: input.actionStates ?? {},
         error: input.error,
         followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
@@ -309,6 +318,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       const next = wrapMeta({
         actions: current.actions,
         outlines: current.outlines,
+        media: current.media,
         actionStates: current.actionStates,
         followups,
         error: current.error,
@@ -332,6 +342,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       const next = wrapMeta({
         actions: current.actions,
         outlines: current.outlines,
+        media: current.media,
         actionStates,
         followups: current.followups,
         error: current.error,
@@ -352,6 +363,7 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
       const next = wrapMeta({
         actions: current.actions,
         outlines: current.outlines,
+        media: current.media,
         actionStates: current.actionStates,
         followups: current.followups,
         error: current.error,

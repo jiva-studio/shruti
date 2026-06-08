@@ -48,6 +48,7 @@ type Deps struct {
 	Catalog            CatalogDeps
 	Library            LibraryDeps
 	LibraryAttribution LibraryAttributionDeps
+	LibraryImport      LibraryImportDeps
 	LibraryPublish     LibraryPublishDeps
 	Proactive          ProactiveDeps
 	Regions            RegionsDeps

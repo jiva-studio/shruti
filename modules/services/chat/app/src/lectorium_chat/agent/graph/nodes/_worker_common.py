@@ -25,7 +25,7 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import build_prompt
-from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, VerseRef
+from lectorium_chat.agent.turn_aliases import ChapterRef, ChunkRef, MediaRef, VerseRef
 from lectorium_chat.application.react_loop import (
     DEFAULT_MAX_TURNS,
     ResearchResult,
@@ -33,7 +33,7 @@ from lectorium_chat.application.react_loop import (
 )
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.config import get_settings
-from lectorium_chat.indexer.library.repo import fetch_verse_body
+from lectorium_chat.indexer.library.repo import fetch_media, fetch_verse_body
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 
@@ -245,6 +245,65 @@ async def flush_chapter_payloads(ctx: TurnContext) -> None:
         )
 
 
+async def flush_media_payloads(ctx: TurnContext) -> None:
+    """Emit `action.kind=media` events for every media-clip alias minted
+    this turn that hasn't been emitted yet. Mirrors `flush_verse_payloads`:
+    the payload MUST arrive BEFORE the `[media:<id>|caption]` marker in the
+    delta so the client renders the playable clip card (player + text)
+    rather than a bare chip.
+
+    Media chunks are reference-only — the alias carries just the
+    `library_media` id, so the playable handle (url / type / speaker) is
+    resolved HERE at turn time via fetch_media(item_id), exactly like a
+    verse resolves its body via fetch_verse_body.
+
+    Payload shape (relative `url` path — the client resolves it against the
+    media CDN base, same contract as track/verse audio):
+      {id, url, type, title, speaker?, text}
+    """
+    if ctx.aliases is None or ctx.library_db_path is None:
+        return
+    writer = get_stream_writer()
+    for ref_num, mref in ctx.aliases.media_refs():
+        if ref_num in ctx.emitted_media_refs:
+            continue
+        ctx.emitted_media_refs.add(ref_num)
+        if not isinstance(mref, MediaRef):
+            continue
+        try:
+            row = await fetch_media(ctx.library_db_path, mref.item_id)
+        except Exception as exc:
+            log.warning(
+                "media_payload_fetch_failed",
+                request_id=ctx.request_id,
+                item_id=mref.item_id,
+                error=str(exc),
+            )
+            continue
+        if row is None:
+            continue
+        payload: dict[str, Any] = {
+            "id": mref.item_id,
+            "url": row["url"],
+            "type": row["type"],
+            "title": mref.label,
+            "text": mref.text,
+        }
+        speaker = (row["meta"] or {}).get("speaker")
+        if speaker:
+            payload["speaker"] = speaker
+        writer(
+            {
+                "type": "action",
+                "data": {
+                    "kind": "media",
+                    "id": f"media_{mref.item_id}",
+                    "payload": payload,
+                },
+            }
+        )
+
+
 async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
     """Re-fetch a cited fragment's transcript text from the chunk repo
     when it wasn't stashed in `chunk_texts` at mint time. Reached only for
@@ -419,5 +478,6 @@ async def run_worker(
     )
 
     await flush_verse_payloads(ctx)
+    await flush_media_payloads(ctx)
     await flush_cite_payloads(ctx)
     return result

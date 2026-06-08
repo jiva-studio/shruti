@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  MediaPayload,
 } from "@lib/domain/chatMessage.js"
 import {
   BackendUnavailableError,
@@ -84,6 +85,15 @@ export type RunChatTurnEvent =
       readonly startMs: number
       readonly endMs: number
       readonly text: string
+    }
+  /** Media result (video/audio file + transcript) for one
+   *  `[media:<id>|<caption>]` marker, streamed ahead of its marker. The
+   *  store stashes it on `ChatMessage.media[id]` so `MediaCard.vue`
+   *  renders the player + transcript; absent ⇒ the marker renders nothing
+   *  (guarded like the other cards). */
+  | {
+      readonly kind: "media-payload"
+      readonly payload: MediaPayload
     }
   /** Sub-query the research pipeline just generated — append to the
    *  live "investigating" list under the streaming bubble. The store
@@ -253,6 +263,7 @@ export async function* runChatTurn(
   } | null = null
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
+  const media: Record<string, MediaPayload> = {}
   let aliases: Record<string, ChatAliasEntry> | undefined
 
   // The history passed by the caller is the conversation BEFORE this
@@ -299,6 +310,7 @@ export async function* runChatTurn(
           acc = ""
           for (const k of Object.keys(actions)) delete actions[k]
           for (const k of Object.keys(outlines)) delete outlines[k]
+          for (const k of Object.keys(media)) delete media[k]
           yield { kind: "tool-start" }
           break
         case "tool_end":
@@ -371,6 +383,16 @@ export async function* runChatTurn(
               regionLabel: event.payload.payload.region_label,
               chapters: event.payload.payload.chapters,
             }
+            break
+          }
+          if (event.payload.kind === "media") {
+            // Stash on the closure `media` map so the finalised message
+            // persists it (mirrors `actions`/`outlines`), and yield so the
+            // store reflects it on the streaming bubble before the
+            // `[media:<id>]` marker triggers MediaCard render.
+            const mp = event.payload.payload
+            media[mp.id] = mp
+            yield { kind: "media-payload", payload: mp }
             break
           }
           // Interactive widgets: unwrap wire `{kind, id, payload: {…}}`
@@ -487,6 +509,7 @@ export async function* runChatTurn(
       createdAt: Date.now(),
       actions,
       outlines,
+      media,
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
       aliases,

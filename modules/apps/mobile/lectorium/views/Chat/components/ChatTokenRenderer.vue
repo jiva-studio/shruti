@@ -70,6 +70,7 @@
       :region-token="token.regionToken"
       :caption="token.caption"
     />
+    <MediaCard v-else-if="token.kind === 'media'" :payload="message.media?.[token.mediaId]" />
     <!--
       Markdown blockquote (library document citation). bodyHtml and
       attributionHtml are output of marked.parseInline on a vetted text
@@ -97,6 +98,7 @@ import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
 import VerseCard from "./VerseCard.vue"
 import ChapterCard from "./ChapterCard.vue"
+import MediaCard from "./MediaCard.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"

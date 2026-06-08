@@ -111,6 +111,11 @@ export type ActionPayload =
       readonly id: string
       readonly payload: ChapterPayload
     }
+  | {
+      readonly kind: "media"
+      readonly id: string
+      readonly payload: MediaPayload
+    }
 
 /** Discriminator for `research_source` events — what kind of corpus
  *  item the research pipeline is inspecting right now. */
@@ -229,6 +234,21 @@ export interface ChapterPayload {
   readonly region_token: string
   readonly region_label: string
   readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+}
+
+/** Wire shape of a media result — carried by an `action` event with
+ *  `kind: "media"`, arriving ahead of the prose delta with the
+ *  `[media:<id>|<caption>]` marker it backs. The store stashes it on
+ *  `ChatMessage.media[id]` so `MediaCard.vue` renders the player + the
+ *  transcript. `url` is a RELATIVE storage path (from the bucket root,
+ *  e.g. `public/media/<id>.mp4`). */
+export interface MediaPayload {
+  readonly id: string
+  readonly url: string
+  readonly type: "video" | "audio"
+  readonly title: string
+  readonly speaker?: string
+  readonly text: string
 }
 
 /** Wire shape of the alias map emitted by the agent. Keys are integer
@@ -1096,6 +1116,20 @@ function parseChapterPayload(p: Record<string, unknown>): ChapterPayload | null 
   return { source_id: sourceId, region_token: regionToken, region_label: regionLabel, chapters }
 }
 
+function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
+  const id = typeof p.id === "string" ? p.id : ""
+  const url = typeof p.url === "string" ? p.url : ""
+  const typeRaw = typeof p.type === "string" ? p.type : ""
+  const type = typeRaw === "video" || typeRaw === "audio" ? typeRaw : null
+  // A media card with no file or an unknown type is useless — drop the
+  // event rather than render an empty/broken player.
+  if (!id || !url || type === null) return null
+  const title = typeof p.title === "string" ? p.title : ""
+  const text = typeof p.text === "string" ? p.text : ""
+  const speaker = typeof p.speaker === "string" && p.speaker ? p.speaker : undefined
+  return { id, url, type, title, text, ...(speaker ? { speaker } : {}) }
+}
+
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {
   const trackId = typeof p.track_id === "string" ? p.track_id : null
   const itemsRaw = Array.isArray(p.items) ? p.items : null
@@ -1203,6 +1237,10 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
   if (kind === "chapter") {
     const chp = parseChapterPayload(body)
     return chp ? { kind: "chapter", id, payload: chp } : null
+  }
+  if (kind === "media") {
+    const mp = parseMediaPayload({ ...body, id })
+    return mp ? { kind: "media", id, payload: mp } : null
   }
   return null
 }

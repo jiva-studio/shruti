@@ -18,6 +18,7 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
     flush_cite_payloads,
+    flush_media_payloads,
     flush_verse_payloads,
     run_worker,
 )
@@ -113,6 +114,9 @@ async def research_worker_node(
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams
     # `[^N]` markers — the mobile client expects the payload first.
     await flush_verse_payloads(ctx)
+    # Same ordering contract for media-clip payloads (kind='media'): push
+    # the playable handle + display text before the `[media:...]` marker.
+    await flush_media_payloads(ctx)
     # Same ordering contract for cite_transcript payloads: push the
     # fragment transcript text before the `[cite:...]` marker so the
     # client renders the full card rather than the chip.

@@ -59,6 +59,11 @@ export type ChatActionPayload =
       readonly id: string
       readonly payload: ChatChapterPayloadWire
     }
+  | {
+      readonly kind: "media"
+      readonly id: string
+      readonly payload: ChatMediaPayloadWire
+    }
 
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
@@ -116,6 +121,23 @@ export interface ChatChapterPayloadWire {
   readonly region_token: string
   readonly region_label: string
   readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+}
+
+/** Media result (video / audio file + transcript) shipped ahead of the
+ *  prose deltas containing the `[media:<id>|<caption>]` marker that
+ *  references it. The store subscriber stashes it on
+ *  `ChatMessage.media[id]` so `MediaCard.vue` renders the player + the
+ *  transcript. `url` is a RELATIVE storage path (from the bucket root);
+ *  the renderer resolves it to a CDN URL. `title` is the server-built
+ *  label and `text` the transcript — both rendered verbatim. Wire fields
+ *  are flat (no snake_case translation needed; ids/strings only). */
+export interface ChatMediaPayloadWire {
+  readonly id: string
+  readonly url: string
+  readonly type: "video" | "audio"
+  readonly title: string
+  readonly speaker?: string
+  readonly text: string
 }
 
 export type ChatRole = "user" | "assistant"

@@ -6,7 +6,12 @@ from lectorium_chat.agent.tools._envelope import (
     lecture_to_envelope,
     library_to_envelope,
 )
-from lectorium_chat.agent.turn_aliases import TurnAliasMap, ChunkRef, VerseRef
+from lectorium_chat.agent.turn_aliases import (
+    MediaRef,
+    TurnAliasMap,
+    ChunkRef,
+    VerseRef,
+)
 from lectorium_chat.domain.entities import Chunk, LibraryChunk
 
 
@@ -143,6 +148,49 @@ def test_commentary_envelope_mints_ref_with_sentences() -> None:
         "Второе предложение.",
         "Третье предложение.",
     )
+
+
+def test_media_envelope_is_reference_only() -> None:
+    # A media chunk is reference-only, like a verse: the envelope carries
+    # the DISPLAY text + server-built label and mints a MediaRef holding
+    # only the library_media id. url / type / speaker are NOT on the chunk —
+    # they are resolved from library_media at flush via fetch_media(item_id).
+    chunk = LibraryChunk(
+        item_id="media_abc",
+        item_kind="media",
+        source_id=None,
+        tokens="",
+        author_id=None,
+        doc_date=None,
+        lang="ru",
+        segment_index=0,
+        text="Я помню, как Шрила Прабхупада...",
+        addr_label="Хари Шаури · 1976",
+        embed_text="facts + context + display (the embedded string)",
+    )
+    aliases = TurnAliasMap()
+    env = library_to_envelope(chunk, alias_map=aliases, score=0.71)
+
+    assert env["type"] == "media"
+    assert isinstance(env["ref"], int)
+    # DISPLAY text, not the embed_text that was vectorised.
+    assert env["text"] == "Я помню, как Шрила Прабхупада..."
+    assert env["label"] == "Хари Шаури · 1976"
+    assert env["lang"] == "ru"
+    assert env["score"] == 0.71
+    # No media-specific keys in meta — resolved at serve time, not here.
+    assert "media_url" not in env["meta"]
+    assert "media_type" not in env["meta"]
+    assert "speaker" not in env["meta"]
+    assert "provenance" not in env["meta"]
+
+    # Ref resolves to a reference-only MediaRef (id + display label/text).
+    resolved = aliases.resolve(env["ref"])
+    assert isinstance(resolved, MediaRef)
+    assert resolved.item_id == "media_abc"
+    assert resolved.label == "Хари Шаури · 1976"
+    assert resolved.text == "Я помню, как Шрила Прабхупада..."
+    assert resolved.lang == "ru"
 
 
 def test_letter_envelope_carries_author_and_date() -> None:

@@ -20,6 +20,7 @@ Server-side expansion (alias type → client widget):
   ChunkRef + start_ms/end_ms → [cite:track_X@start-end|caption?]   audio
   ChunkRef without start/end → [card:track_X]                       card
   VerseRef                   → [verse:src/tokens|addr_label]        verse
+  MediaRef                   → [media:item_id|caption]              media clip
 
 Captions for audio fragments come from `TurnAliasMap.captions`,
 populated by a background Flash-Lite call in `research.pipeline`. If
@@ -45,6 +46,7 @@ from lectorium_chat.agent.turn_aliases import (
     ChapterRef,
     ChunkRef,
     CommentaryRef,
+    MediaRef,
     TurnAliasMap,
     VerseRef,
 )
@@ -76,7 +78,7 @@ _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
 # Any bracket whose first token is NOT one of the six marker keywords
 # doesn't match this and passes through verbatim.
 _KEYWORD_BRACKET_RE = re.compile(
-    r"^\[(?:cite|card|outline|verse|chapter|action|followup)[:|]"
+    r"^\[(?:cite|card|outline|verse|chapter|media|action|followup)[:|]"
 )
 _STRICT_PATTERNS = (
     re.compile(r"^\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|[^\]\n]*)?\]$"),
@@ -84,6 +86,7 @@ _STRICT_PATTERNS = (
     re.compile(r"^\[outline:[A-Za-z0-9_.-]+\]$"),
     re.compile(r"^\[verse:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[chapter:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
+    re.compile(r"^\[media:[A-Za-z0-9_.-]+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]$"),
     re.compile(r"^\[followup:[^\]|\n]+\]$"),
 )
@@ -506,6 +509,14 @@ class MarkerExpander:
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
             return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
+
+        if isinstance(ref, MediaRef):
+            # Caption defaults to the server-built label ("speaker · date" /
+            # title). The full playable payload (url + type + text) rides
+            # ahead of this marker via the `media` SSE event; the marker
+            # itself only carries the id the client keys on + a caption.
+            caption = ref.label or ""
+            return f"[media:{ref.item_id}|{caption}]" if caption else f"[media:{ref.item_id}]"
 
         if isinstance(ref, ChapterRef):
             body = f"{ref.source_id}/{ref.region_token}"

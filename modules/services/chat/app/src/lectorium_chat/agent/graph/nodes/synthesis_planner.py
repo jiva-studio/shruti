@@ -24,6 +24,7 @@ from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
     flush_cite_payloads,
+    flush_media_payloads,
     flush_verse_payloads,
 )
 from lectorium_chat.agent.graph.state import ChatState
@@ -191,6 +192,7 @@ async def synthesis_planner_node(
     # client renders a bare chip with no transcript. The per-turn
     # `emitted_*_refs` dedup means research_worker's refs aren't re-sent.
     await flush_verse_payloads(ctx)
+    await flush_media_payloads(ctx)
     await flush_cite_payloads(ctx)
 
     update: dict = {"outline": augmented}

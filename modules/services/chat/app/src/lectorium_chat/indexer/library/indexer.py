@@ -29,6 +29,7 @@ from lectorium_chat.indexer.library.chunker import (
     hash_body,
     load_source_short_names,
     walk_documents,
+    walk_media,
     walk_titles,
     walk_verses,
 )
@@ -47,8 +48,10 @@ log = get_logger(__name__)
 # (embed_documents batches internally to 96 per HTTP call).
 ITEM_BATCH = 64
 
-# item_kind values produced by the library chunker.
-LIBRARY_KINDS = ("verse", "commentary", "prose_chapter", "letter")
+# item_kind values produced by the library chunker. `title` and `media`
+# are emitted by walk_titles / walk_media respectively; both must be in
+# the diff/GC set so their indexed_items rows are loaded and reclaimed.
+LIBRARY_KINDS = ("verse", "title", "commentary", "prose_chapter", "letter", "media")
 
 
 def _stream_items(
@@ -68,6 +71,9 @@ def _stream_items(
         walk_verses(library_db_path, short_names, langs=langs),
         walk_titles(library_db_path, short_names, langs=langs),
         walk_documents(library_db_path, short_names, langs=langs),
+        # Media rows are pre-chunked (one atomic chunk per row) and carry
+        # their own embed_text, so walk_media needs no short_names.
+        walk_media(library_db_path, langs=langs),
     )
     for key, group in itertools.groupby(
         chunk_stream, key=lambda c: (c.item_id, c.lang)
@@ -121,7 +127,12 @@ async def run_once_library(settings: Settings | None = None) -> dict:
             item_offsets.append((key, start, len(flat), h))
 
         cycle_t0 = time.monotonic()
-        vectors = await embedder.embed_documents([c.text for c in flat])
+        # Media chunks carry a precomputed `embed_text` (facts+context+text)
+        # that is what we embed; verses/documents have none and embed their
+        # display `text` as before. COALESCE keeps both paths in one call.
+        vectors = await embedder.embed_documents(
+            [c.embed_text or c.text for c in flat]
+        )
         if len(vectors) != len(flat):
             raise RuntimeError(
                 f"embedder returned {len(vectors)} vectors for {len(flat)} texts"
@@ -216,7 +227,17 @@ async def run_once_library(settings: Settings | None = None) -> dict:
         # without changing text) triggers a reindex of just the affected
         # items. Without this the documents' addr_label column stays stale
         # until library.db itself republishes.
-        body = "\n\n---\n\n".join(f"{c.addr_label}\t{c.text}" for c in chunks)
+        # For media, fold embed_text into the hash so a change to the
+        # embedded string (which doesn't touch display `text`) triggers a
+        # re-embed. The per-chunk form is only widened when embed_text is
+        # actually set, so verse/document hashes are byte-for-byte
+        # unchanged from before this column existed — NO corpus reindex.
+        body = "\n\n---\n\n".join(
+            f"{c.addr_label}\t{c.embed_text}\t{c.text}"
+            if c.embed_text
+            else f"{c.addr_label}\t{c.text}"
+            for c in chunks
+        )
         h = hash_body(body)
         if indexed_hash.get((item_id, lang)) == h:
             # Unchanged — drop the chunks; they go out of scope and the
