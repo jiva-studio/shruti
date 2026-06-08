@@ -213,7 +213,20 @@ async def augment_thin_theses(
     # Fresh-fetched chunks accumulate here. Same chunk fetched by two
     # different thin theses gets dedup'd by track_id+window or item_id+seg.
     additional_envelopes: list[dict[str, Any]] = []
-    dedup_seen: set[tuple] = set()
+    # Seed with every source ALREADY in base_notes so a fresh fetch can't
+    # re-mint an alias for a clip the research worker already surfaced. The
+    # `_augment_dedup` keys built below share the `_dedup_key` shape
+    # ((item_kind, item_id, segment_index) for library/media, ("lecture",
+    # track_id, start_ms, end_ms) for lectures), so seeding with base_notes'
+    # `_dedup_key` makes a duplicate fetch fall into the existing-index reuse
+    # branch instead of minting a second alias. This is the mint-time guard
+    # against the media double-cite (one clip → two `[^N]`); the
+    # dedup_notes_by_key pass downstream is the belt-and-braces net.
+    dedup_seen: set[tuple] = {
+        n.get("_dedup_key")
+        for n in base_notes
+        if isinstance(n, dict) and n.get("_dedup_key") is not None
+    }
 
     # Track per-thesis the new supporting_notes (computed below); we
     # collect into a list[Thesis] and build the final Outline at the end.

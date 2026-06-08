@@ -315,3 +315,50 @@ async def test_empty_outline_returns_unchanged():
     )
     assert out.theses == []
     assert fresh == []
+
+
+@pytest.mark.asyncio
+async def test_media_already_in_base_notes_not_reminted():
+    """Regression: a media clip already present in base_notes (with its
+    `_dedup_key`) must NOT get a second alias when a thin thesis re-fetches
+    it. Seeding `dedup_seen` with base_notes keys makes the fresh fetch fall
+    into the existing-source branch instead of minting alias #2 — the root
+    cause of the same clip rendering twice under two `[^N]` markers."""
+    media_key = ("media", "fsp-1-en-010-spk7", 0)
+    # base_notes[0] is the media clip (already aliased as ref 5 upstream),
+    # supporting the thin thesis but with a weak cosine so the thesis is thin
+    # and triggers a fresh fetch that re-surfaces the SAME clip.
+    base_notes = [{
+        "type": "media", "ref": 5, "label": "Speaker · 1977",
+        "text": "remembrance about Prabhupada", "lang": "en", "score": 0.4,
+        "meta": {}, "_dedup_key": media_key,
+    }]
+    outline = Outline(theses=[
+        Thesis(thesis="disciples on Prabhupada", supporting_notes=[1]),
+    ])
+    # Fresh ANN re-returns the SAME media chunk (same id+segment).
+    dup_media = _LibChunk(
+        item_id="fsp-1-en-010-spk7", item_kind="media",
+        text="remembrance about Prabhupada", lang="en",
+        addr_label="Speaker · 1977", segment_index=0,
+    )
+    repo = FakeChunkRepo(library_search=[_Scored(dup_media, 0.85)])
+    embedder = FakeEmbedder(mapping={
+        "disciples on Prabhupada": [1.0, 0.0, 0.0, 0.0],
+        "remembrance about Prabhupada": [0.30, 0.0, 0.0, 0.0],
+    })
+    alias_map = FakeAliasMap()
+
+    def _no_media(*_a, **_k):  # fail loudly if a second media alias is minted
+        raise AssertionError("media clip re-aliased despite being in base_notes")
+
+    alias_map.alias_media = _no_media  # type: ignore[attr-defined]
+
+    out, fresh = await augment_thin_theses(
+        outline, base_notes,
+        chunk_repo=repo, embedder=embedder, alias_map=alias_map,
+        catalog_repo=FakeCatalogRepo(), lang="en", router_args={},
+    )
+    # No duplicate media envelope appended for the already-present clip.
+    media_fresh = [e for e in fresh if e.get("type") == "media"]
+    assert media_fresh == []
