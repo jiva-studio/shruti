@@ -30,6 +30,49 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := migrateAttributionKindToPinnedBoost(ctx, db); err != nil {
 		return fmt.Errorf("migrate attribution kind to pinned/boost: %w", err)
 	}
+	if err := ensureMediaTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure media table: %w", err)
+	}
+	return nil
+}
+
+// ensureMediaTable creates library_media — atomic media items (e.g. short
+// remembrance video clips) that the chat indexer emits as kind='media' chunks.
+// One row = one clip in one language (each language is an independent entity,
+// like verse/document variants are per-language). Idempotent.
+//
+// Columns kept lean on purpose:
+//   - text       : displayed transcript (shown in the app; NOT prefixed).
+//   - context    : retrieval context prefix (Anthropic contextual retrieval),
+//                  never displayed; folded into embed_text at extraction time.
+//   - embed_text : exactly what gets embedded (= facts + context + text, all in
+//                  this row's language). Stored so the embedding source is
+//                  explicit and re-derivable.
+//   - url / type : media link (relative storage path, e.g. public/media/<id>.mp4)
+//                  and 'video' | 'audio'.
+//   - meta       : JSON for optional, type-specific fields (speaker, date,
+//                  location, source, ...). Absent keys are simply absent.
+// No author_id: narrators are not catalog authors. No source_id: not needed.
+func ensureMediaTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS library_media (
+			id         TEXT PRIMARY KEY,
+			lang       TEXT NOT NULL,
+			title      TEXT NOT NULL,
+			text       TEXT NOT NULL,
+			context    TEXT,
+			embed_text TEXT,
+			url        TEXT NOT NULL,
+			type       TEXT NOT NULL,
+			meta       TEXT
+		)`,
+		`CREATE INDEX IF NOT EXISTS library_media_by_lang ON library_media(lang)`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", firstLine(s), err)
+		}
+	}
 	return nil
 }
 

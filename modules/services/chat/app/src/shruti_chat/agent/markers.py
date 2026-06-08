@@ -36,6 +36,10 @@ CITE_RE = re.compile(r"\[cite:([A-Za-z0-9_.-]+)@(\d+)-(\d+)(?:\|([^\]\n]*))?\]")
 CARD_RE = re.compile(r"\[card:([A-Za-z0-9_.-]+)\]")
 OUTLINE_RE = re.compile(r"\[outline:([A-Za-z0-9_.-]+)\]")
 VERSE_RE = re.compile(r"\[verse:([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|([^\]\n]*))?\]")
+# MEDIA_RE → (media_id, caption?). `[media:<id>|<caption>]` — a short
+# video/audio clip card. id is the library media item_id (opaque
+# alphanumeric / underscore / dot / dash); caption is free display text.
+MEDIA_RE = re.compile(r"\[media:([A-Za-z0-9_.-]+)(?:\|([^\]\n]*))?\]")
 
 # Standalone `[s=…]` sentence-suffix tokens. The `|s=N,…` payload is only
 # legal as a SUFFIX inside `[^N|s=…]`; a bare `[s=0,1]` in finalised text

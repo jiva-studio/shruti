@@ -4,6 +4,7 @@ import {
   CHAPTER_RE,
   CITE_RE,
   FOLLOWUP_RE,
+  MEDIA_RE,
   OUTLINE_RE,
   VERSE_RE,
 } from "./parse.js"
@@ -92,6 +93,11 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   // the message text, so there's nothing portable to expand — strip the
   // marker (same as card / outline).
   out = out.replace(CHAPTER_RE, "")
+  // Media result widget: the video/audio file + transcript live in the
+  // `media` SSE payload, not the message text — nothing portable to
+  // expand into clipboard markdown, so strip the marker (same as
+  // card / outline / chapter).
+  out = out.replace(MEDIA_RE, "")
   // Audio citations: expand into a transcript blockquote + source line,
   // the cite analog of the verse expansion below. A cache miss (no
   // transcript yet) returns "" — the legacy strip behavior. Fresh

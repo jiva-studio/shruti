@@ -18,6 +18,10 @@ If the user is asking about a shloka (or about a topic and a commentary note IS 
 - Multiple authors' purports on the same verse → emit one
   `[^N|s=…]` per author, each on its own line.
 
+MEDIA CLIPS — CITE WHEN RELEVANT.
+
+Research notes may include short MEDIA clips (video or audio fragments — e.g. devotees' remembrances about Srila Prabhupada). When a media note directly supports the point you are making, cite it with its `[^N]`; the server renders a playable media card. Don't force a media clip in where it doesn't fit, and don't paraphrase it as if it were scripture — it's a personal recollection or illustrative fragment, not a canonical source.
+
 ═══════════════════════════════════════════════════════════════════════
 Empty-result discipline (very strict)
 ═══════════════════════════════════════════════════════════════════════

@@ -38,10 +38,10 @@ class ScoredChunk:
 
 @dataclass(frozen=True, slots=True)
 class LibraryChunk:
-    """A chunk of canonical library content (verse / commentary / prose chapter / letter)."""
+    """A chunk of canonical library content (verse / commentary / prose chapter / letter / media)."""
     item_id: str
-    item_kind: str           # 'verse' | 'commentary' | 'prose_chapter' | 'letter'
-    source_id: str
+    item_kind: str           # 'verse' | 'commentary' | 'prose_chapter' | 'letter' | 'media'
+    source_id: str | None
     tokens: str
     author_id: str | None
     doc_date: str | None
@@ -49,6 +49,12 @@ class LibraryChunk:
     segment_index: int
     text: str
     addr_label: str
+    # `embed_text` is a TRANSIENT in-memory hint (never a chunks column):
+    # when set, the indexer embeds it instead of `text` (media rows
+    # precompute facts+context+text). Media chunks are reference-only —
+    # url / type / speaker / provenance are resolved from `library_media`
+    # at serve time via fetch_media(item_id), exactly like verses.
+    embed_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -55,6 +55,18 @@ export type ChatToken =
       readonly caption: string
     }
   | {
+      /** Media result widget — a video/audio file with a transcript.
+       *  Rendered by `MediaCard.vue`. The `mediaId` is the join key into
+       *  `message.media[mediaId]`, where the `media` SSE action stashed
+       *  the payload (url / type / title / text). `caption` is the
+       *  marker-inline label (currently unused by the card, which renders
+       *  the server-built `title` instead — kept for parity with the
+       *  other widget markers and markdown export). */
+      readonly kind: "media"
+      readonly mediaId: string
+      readonly caption: string
+    }
+  | {
       /** Library document citation — commentary, prose chapter, or
        *  letter — rendered as a styled blockquote with an optional
        *  italic attribution line. */
@@ -85,6 +97,12 @@ export const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]
 // anything a future book layout needs. Match any run up to `|`/`]` (incl.
 // empty) so new source shapes never require a client regex change.
 export const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([^|\]\n]*)(?:\|([^\]\n]*))?\]/g
+// Media result widget marker. The id is the join key into the `media` SSE
+// action payload (mirrors `[verse:.../...]`, but the address is a single
+// opaque id rather than source/tokens). Permissive id class so future id
+// shapes (uuid, base62, dotted) never need a regex change; optional
+// `|caption` tail captures everything up to the closing `]`.
+export const MEDIA_RE = /\[media:([A-Za-z0-9_.-]+)(?:\|([^\]\n]*))?\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture
 // group keeps the raw lines (each still prefixed by `>`) so the parser can
@@ -191,6 +209,14 @@ export function parseChatMarkers(input: string): ChatToken[] {
       start,
       end: start + full.length,
       token: { kind: "chapter", sourceId, regionToken, caption: (captionRaw ?? "").trim() },
+    }
+  })
+  collect(MEDIA_RE, (m, start) => {
+    const [full, mediaId, captionRaw] = m
+    return {
+      start,
+      end: start + full.length,
+      token: { kind: "media", mediaId, caption: (captionRaw ?? "").trim() },
     }
   })
   // Markdown blockquotes — group consecutive `> ...` lines into one
@@ -338,6 +364,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
     k === "quote" ||
     k === "verse" ||
     k === "chapter" ||
+    k === "media" ||
     // `cite` now renders as a block quote-card (CitationCard) when its
     // transcript text is present; collapse surrounding <br>/whitespace
     // like the other block tokens. (In chip-fallback mode it's inline —

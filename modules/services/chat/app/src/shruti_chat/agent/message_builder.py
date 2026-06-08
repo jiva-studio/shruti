@@ -32,6 +32,9 @@ _OUTLINE_FULL_RE = re.compile(r"\[outline:([^\]\s]+)\]")
 _VERSE_FULL_RE = re.compile(
     r"\[verse:([^/|\]\s]+)/([^|\]\s]+)(?:\|([^\]]*))?\]"
 )
+# Media clip marker expanded form: `[media:<item_id>|caption]`. item_id is
+# the opaque library media id; caption is free display text.
+_MEDIA_FULL_RE = re.compile(r"\[media:([^|\]\s]+)(?:\|([^\]]*))?\]")
 
 # Hallucinated tool-protocol leaks. The agent never emits `[tool_use]`
 # / `[tool_result]` envelopes legitimately — they only appear when a
@@ -87,6 +90,7 @@ def _fold_prior_assistant_content(
 
       `[cite:track_X@s-e|caption]`           expanded audio chip
       `[verse:source_id/tokens|caption]`     expanded verse card
+      `[media:item_id|caption]`              expanded media clip card
       `[card:track_X]` / `[outline:track_X]` whole-track widgets
       `[action:kind|id=X]`                   action confirmation card
       `[followup:text]`                      followup chips outside bubble
@@ -97,6 +101,7 @@ def _fold_prior_assistant_content(
     """
     content = _CITE_FULL_RE.sub("", content)
     content = _VERSE_FULL_RE.sub("", content)
+    content = _MEDIA_FULL_RE.sub("", content)
     content = _CARD_FULL_RE.sub("", content)
     content = _OUTLINE_FULL_RE.sub("", content)
     content = _ACTION_RE.sub("", content)

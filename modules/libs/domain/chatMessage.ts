@@ -68,6 +68,25 @@ export interface ChatOutlinePayload {
 }
 
 /**
+ * Media result payload for a `[media:<id>|<caption>]` marker. Streamed
+ * ahead of the marker on a `media` SSE action and stashed in
+ * `ChatMessage.media[id]`; `MediaCard.vue` renders the file (video/audio
+ * player) plus the transcript. `url` is a RELATIVE storage path (from the
+ * bucket root, e.g. `public/media/<id>.mp4`) resolved to a CDN URL at
+ * render time via `storagePublicUrl`. `title` is the server-built label
+ * (e.g. "speaker · date") and `text` the transcript — both rendered
+ * verbatim; the client never reassembles them from parts.
+ */
+export interface MediaPayload {
+  readonly id: string
+  readonly url: string
+  readonly type: "video" | "audio"
+  readonly title: string
+  readonly speaker?: string
+  readonly text: string
+}
+
+/**
  * User-side state of an action card (after the LLM proposed it, the
  * UI tracks whether the user confirmed / it's executing / it landed /
  * it failed). Persisted alongside the action payload so card state
@@ -171,6 +190,10 @@ export interface ChatMessage {
   actions?: Record<string, ChatActionPayload>
   /** Outline payloads keyed by `track_id`. */
   outlines?: Record<string, ChatOutlinePayload>
+  /** Media result payloads keyed by the marker's `[media:<id>]` id.
+   *  Streamed ahead of the marker on a `media` SSE action; `MediaCard.vue`
+   *  reads `media[token.mediaId]`. */
+  media?: Record<string, MediaPayload>
   /** User-confirmation state per action id. Defaults to "pending" for
    *  any id present in `actions` but not here. */
   actionStates?: Record<string, ChatActionState>

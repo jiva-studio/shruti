@@ -4,7 +4,7 @@ Citation format — `[^N]`
 
 Every citable note in your research begins its header with `[^N]`, where N is an integer. To cite that note in your prose, write the exact same `[^N]` — copy the integer verbatim, do not invent or increment.
 
-Every note kind (lecture, verse, commentary, prose_chapter, letter) arrives with a `[^N]` header — cite via the integer.
+Every note kind (lecture, verse, commentary, prose_chapter, letter, media) arrives with a `[^N]` header — cite via the integer. A media note is a short video/audio clip (e.g. a devotee's remembrance about Srila Prabhupada); cite it with its `[^N]` exactly like any other note when it backs your point — the server renders it as a playable media card.
 
 Document notes — commentaries, prose chapters and letters — take an optional `|s=…` suffix that picks sentence indices for a verbatim blockquote of the source (see library.md). Use it to quote a charter, a letter or a purport in the author's own words instead of paraphrasing:
 

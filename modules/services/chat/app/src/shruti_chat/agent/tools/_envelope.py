@@ -150,7 +150,22 @@ def library_to_envelope(
     meta: dict[str, Any] = {}
     item_kind = chunk.item_kind
     ref: int | None
-    if item_kind == "verse":
+    if item_kind == "media":
+        # Media clip: short video/audio fragment surfaced by ANN. Like a
+        # verse, the LLM cites via `[^N]`; the expander unfolds it into
+        # `[media:<item_id>|<caption>]`. The chunk is reference-only — it
+        # carries only the display `text` (chunk.text, NOT the embed_text
+        # that was vectorised) and the server-built `label` (addr_label).
+        # The playable handle + speaker are resolved from `library_media`
+        # at turn time by `flush_media_payloads` via fetch_media(item_id),
+        # so nothing media-specific is read off the chunk here.
+        ref = alias_map.alias_media(
+            chunk.item_id,
+            label=chunk.addr_label,
+            text=chunk.text,
+            lang=chunk.lang,
+        )
+    elif item_kind == "verse":
         ref = alias_map.alias_verse(chunk.source_id, chunk.tokens, addr_label=chunk.addr_label)
         meta["source_id"] = chunk.source_id
         meta["tokens"] = chunk.tokens

@@ -28,6 +28,7 @@ const (
 	KindTranscriptCreate   Kind = "transcript_create"
 	KindAudioNormalize     Kind = "audio_normalize"
 	KindTranscriptAlignPDF Kind = "transcript_align_pdf"
+	KindLibraryImport      Kind = "library_import"
 )
 
 // Long-running per-track tools (transcript_review, transcript_create,

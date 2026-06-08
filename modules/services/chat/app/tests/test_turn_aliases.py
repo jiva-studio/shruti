@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from shruti_chat.agent.turn_aliases import (
     ChunkRef,
+    MediaRef,
     TurnAliasMap,
     VerseRef,
 )
@@ -83,6 +84,30 @@ def test_serialize_load_round_trip() -> None:
     # Loaded refs reserved → next allocation does NOT collide.
     fresh = m2.alias_track("track_c")
     assert fresh not in {int(k) for k in blob}
+
+
+def test_media_serialize_load_round_trip() -> None:
+    # Media aliases are reference-only: the round-tripped blob carries just
+    # the library_media id + label. url / type are resolved on demand.
+    m = TurnAliasMap()
+    n = m.alias_media(
+        "media_abc", label="Хари Шаури · 1976", text="display",
+    )
+    blob = m.serialize()
+    assert blob[str(n)] == {
+        "kind": "media",
+        "item_id": "media_abc",
+        "label": "Хари Шаури · 1976",
+    }
+
+    m2 = TurnAliasMap()
+    m2.load_external(blob)
+    restored = m2.resolve(n)
+    assert isinstance(restored, MediaRef)
+    assert restored.item_id == "media_abc"
+    assert restored.label == "Хари Шаури · 1976"
+    # Loaded ref reserved → next allocation does not collide.
+    assert m2.alias_track("t") != n
 
 
 def test_load_external_reserves_refs() -> None:

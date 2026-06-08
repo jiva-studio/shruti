@@ -14,10 +14,11 @@ behaviour when `library_db_path` is swapped.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import sqlite3
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from shruti_chat.sanskrit import iast_to_cyrillic
 
@@ -156,6 +157,63 @@ def _fetch_document_body_sync(
     if not body.strip():
         return None
     return body.strip()
+
+
+class MediaRow(TypedDict):
+    id: str
+    lang: str
+    title: str
+    text: str
+    context: str
+    embed_text: str
+    url: str
+    type: str
+    meta: dict[str, Any]
+
+
+def _fetch_media_sync(library_db: Path, media_id: str) -> MediaRow | None:
+    """One `library_media` row by id, with `meta` parsed to a dict.
+
+    None when the table doesn't exist (older library.db) or the id is
+    absent — callers degrade gracefully rather than failing the turn.
+    """
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        has_table = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library_media'"
+        ).fetchone()
+        if not has_table:
+            return None
+        row = conn.execute(
+            "SELECT id, lang, title, text, context, embed_text, url, type, meta "
+            "FROM library_media WHERE id = ?",
+            (media_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    mid, lang, title, text, context, embed_text, url, mtype, meta = row
+    try:
+        meta_obj = json.loads(meta) if meta else {}
+    except (TypeError, ValueError):
+        meta_obj = {}
+    return MediaRow(
+        id=mid,
+        lang=lang or "",
+        title=title or "",
+        text=text or "",
+        context=context or "",
+        embed_text=embed_text or "",
+        url=url or "",
+        type=mtype or "",
+        meta=meta_obj,
+    )
+
+
+async def fetch_media(library_db: Path, media_id: str) -> MediaRow | None:
+    """Async wrapper around the single-`library_media`-row read. Returns
+    None if the DB / table / id is absent."""
+    if not library_db.exists():
+        return None
+    return await asyncio.to_thread(_fetch_media_sync, library_db, media_id)
 
 
 async def fetch_document_body(

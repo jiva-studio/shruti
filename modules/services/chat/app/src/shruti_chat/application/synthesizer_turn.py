@@ -199,6 +199,13 @@ def _render_one_note(idx: int, note: dict[str, Any]) -> str:
             # on the client renders the address; the LLM doesn't need
             # to see it in the note header.
             header = f"[^{idx}]"
+        elif note_type == "media":
+            # Media clip note. Bare `[^N]` header — the addr_label
+            # ("speaker · date" / title) renders on the client media card
+            # from the SSE payload, so keeping it out of the header avoids
+            # priming the model to echo it. The DISPLAY `text` below gives
+            # the model enough to decide whether the clip backs the point.
+            header = f"[^{idx}]"
         elif note_type == "location":
             # Chapter-location note (locate intent). Bare `[^N]` header;
             # `text` carries the book + canto + chapter-range facts the LLM

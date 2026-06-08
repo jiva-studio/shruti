@@ -25,6 +25,28 @@ from shruti_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, Scored
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 
 
+def _library_chunk_from_row(r: Any) -> LibraryChunk:
+    """Build a reference-only `LibraryChunk` from a chunks row.
+
+    Media chunks are reference-only just like verses: their url / type /
+    speaker / provenance are NOT stored on the chunk — they are resolved
+    at serve time via fetch_media(item_id). So this builder reads only the
+    shared chunk columns, same for every kind.
+    """
+    return LibraryChunk(
+        item_id=r["item_id"],
+        item_kind=r["kind"],
+        source_id=r["source_id"],
+        tokens=r["tokens"],
+        author_id=r["author_id"],
+        doc_date=r["doc_date"],
+        lang=r["lang"],
+        segment_index=r["segment_index"],
+        text=r["text"],
+        addr_label=r["addr_label"],
+    )
+
+
 def _embedding_digest(embedding: list[float]) -> str:
     """blake2b-12 over the float bytes (rounded to 7 sig figs to absorb
     trivial float jitter from re-quantised embeddings). Two embeddings
@@ -429,18 +451,7 @@ class PgChunkRepository:
                 rows = await conn.fetch(sql, *params)
         return [
             ScoredLibraryChunk(
-                chunk=LibraryChunk(
-                    item_id=r["item_id"],
-                    item_kind=r["kind"],
-                    source_id=r["source_id"],
-                    tokens=r["tokens"],
-                    author_id=r["author_id"],
-                    doc_date=r["doc_date"],
-                    lang=r["lang"],
-                    segment_index=r["segment_index"],
-                    text=r["text"],
-                    addr_label=r["addr_label"],
-                ),
+                chunk=_library_chunk_from_row(r),
                 score=float(r["score"]),
             )
             for r in rows
@@ -543,18 +554,7 @@ class PgChunkRepository:
                 rows = await conn.fetch(sql, *params)
         return [
             ScoredLibraryChunk(
-                chunk=LibraryChunk(
-                    item_id=r["item_id"],
-                    item_kind=r["kind"],
-                    source_id=r["source_id"],
-                    tokens=r["tokens"],
-                    author_id=r["author_id"],
-                    doc_date=r["doc_date"],
-                    lang=r["lang"],
-                    segment_index=r["segment_index"],
-                    text=r["text"],
-                    addr_label=r["addr_label"],
-                ),
+                chunk=_library_chunk_from_row(r),
                 score=float(r["score"]),
             )
             for r in rows

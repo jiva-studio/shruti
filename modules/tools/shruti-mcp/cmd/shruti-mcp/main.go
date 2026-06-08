@@ -29,6 +29,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/extractmeta"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/ingest"
 	attributionapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/attribution"
+	librarymedia "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/media"
 	librarypublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/library/publish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/normalize"
 	reviewuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/review"
@@ -591,6 +592,13 @@ func main() {
 			Langs:      []string{"ru", "en"},
 		},
 		Library: libraryLazy,
+	}
+	deps.LibraryImport = tools.LibraryImportDeps{
+		UseCase: librarymedia.UseCase{
+			Repo:    libraryLazy,
+			Targets: publishTargets, // reuse the publish path's S3 uploaders (AWS primary)
+			Minter:  minter,
+		},
 	}
 	deps.LibraryPublish = tools.LibraryPublishDeps{
 		UseCase: librarypublish.UseCase{
