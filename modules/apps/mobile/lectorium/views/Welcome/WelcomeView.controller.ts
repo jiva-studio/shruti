@@ -1,4 +1,4 @@
-import { computed, onMounted, type ComputedRef, type Ref } from "vue"
+import { computed, onMounted, ref, type ComputedRef, type Ref } from "vue"
 import { createAnimation, useIonRouter, type AnimationBuilder } from "@ionic/vue"
 import {
   createBootstrapController,
@@ -162,21 +162,27 @@ export function useWelcomeController(
     }
   }
 
+  // Flips true the instant we hand off to Home. Until then the welcome
+  // splash stays up — including the cache-hit fast path and the prewarm
+  // wait — so the user never sees a blank page while content loads.
+  const navigated = ref(false)
+
   async function initialize(): Promise<void> {
+    navigated.value = false
     await controller.start()
     if (controller.isReady.value && autoNavigate) {
       await prewarmHome()
+      navigated.value = true
       ionRouter.replace(navigateToRoute, crossfadeAnimation)
     }
   }
 
-  // Show the welcome screen only during a first-launch (no usable local DB)
-  // foreground download / migration, or on error. The cache-hit fast path
-  // enters silently — no welcome screen at all.
-  const showWelcomeScreen = computed(
-    () =>
-      !controller.startedFromCache.value && (controller.isWelcome.value || controller.isError.value)
-  )
+  // Keep the welcome splash visible for the whole startup — DB resolve /
+  // download / migration, AND the prewarm of Home's data — until we actually
+  // navigate. The blank `<IonPage>` then shows only during the crossfade out.
+  // (Previously the cache-hit path entered silently, exposing a blank page for
+  // the seconds prewarmHome now takes.)
+  const showWelcomeScreen = computed(() => !navigated.value)
 
   onMounted(() => {
     void initialize()
