@@ -1239,7 +1239,7 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
     return chp ? { kind: "chapter", id, payload: chp } : null
   }
   if (kind === "media") {
-    const mp = parseMediaPayload({ ...body, id })
+    const mp = parseMediaPayload(body)
     return mp ? { kind: "media", id, payload: mp } : null
   }
   return null
