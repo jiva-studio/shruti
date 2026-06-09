@@ -82,6 +82,10 @@ func resetSchema(t *testing.T, dsn string) *pgxpool.Pool {
 	// `rc_webhook` slug instead of `auth_` so the glob above misses it.
 	moreWebhook, _ := filepath.Glob(filepath.Join(migrationsDir, "002[0-9]_rc_webhook_*.up.sql"))
 	authFiles = append(authFiles, moreWebhook...)
+	// 0034_auth_refresh_replaced_by and any later auth-owned migration in
+	// the 003N range (e.g. the idempotent-rotation pointer column).
+	moreAuth30, _ := filepath.Glob(filepath.Join(migrationsDir, "003[0-9]_auth_*.up.sql"))
+	authFiles = append(authFiles, moreAuth30...)
 	// Outbox + the usage table the chat service owns in prod. We just need
 	// the shape — chat's full set isn't required for these tests. 0026 layers
 	// the dedup column onto app.outbox and must run after 0023.
@@ -368,13 +372,26 @@ func TestRefreshRotationAndReplay(t *testing.T) {
 		t.Error("refresh token should rotate")
 	}
 
-	// Replay original — should fail, and as a genuine rejection (the jti is
-	// now revoked) so the handler maps it to 401, not a transient 5xx.
+	// Lost-response replay: the client never received `rot` (network drop /
+	// app killed before persisting it) and retries the original token. Its
+	// successor is alive and UNUSED, so the service recovers a fresh
+	// session instead of forcing a re-login.
+	replay, err := svc.Refresh(ctx, first.RefreshToken)
+	if err != nil {
+		t.Fatalf("lost-response replay should recover the session, got: %v", err)
+	}
+	if replay.RefreshToken == first.RefreshToken || replay.RefreshToken == rot.RefreshToken {
+		t.Error("replay must mint a fresh successor token, not echo an old one")
+	}
+
+	// Replaying the original AGAIN now finds its successor (`rot`) consumed
+	// by the replay above — that's reuse of a superseded token, a genuine
+	// rejection (handler maps to 401), not a transient 5xx.
 	_, err = svc.Refresh(ctx, first.RefreshToken)
 	if err == nil {
-		t.Error("replay of old refresh must be rejected")
+		t.Error("reuse of a superseded token must be rejected")
 	} else if !errors.Is(err, ErrRefreshRejected) {
-		t.Errorf("replay must be ErrRefreshRejected, got %v", err)
+		t.Errorf("reuse must be ErrRefreshRejected, got %v", err)
 	}
 }
 

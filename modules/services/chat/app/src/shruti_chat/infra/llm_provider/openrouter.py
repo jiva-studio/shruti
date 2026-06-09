@@ -65,6 +65,50 @@ def _is_retryable(exc: BaseException) -> bool:
     return isinstance(status, int) and (status == 429 or 500 <= status < 600)
 
 
+# Provider-availability failures: by the time one of these escapes
+# `stream_completion` the retries AND the fallback model are already
+# exhausted, so the backend genuinely can't get a completion from anyone
+# right now. Causes: out of credits (402), the OpenRouter key being
+# rejected (401/403), the provider rate-limiting us (429), a request
+# timeout (408), or a 5xx / dropped connection. None of these are the
+# user's fault or a bug in our graph, so the turn should surface a calm
+# "chat temporarily unavailable" instead of a generic agent error.
+_UNAVAILABLE_EXC = (
+    openai.APIConnectionError,
+    openai.APITimeoutError,
+    openai.RateLimitError,
+    openai.InternalServerError,
+    openai.AuthenticationError,
+    openai.PermissionDeniedError,
+)
+_UNAVAILABLE_STATUS = frozenset({401, 402, 403, 408, 429})
+
+
+def is_provider_unavailable(exc: BaseException) -> bool:
+    """True if `exc` — or anything in its `__cause__` / `__context__`
+    chain — is an LLM-provider-availability failure.
+
+    Walks the chain because LangGraph re-raises node exceptions wrapped in
+    its own frames, so the original `openai.APIStatusError` is rarely the
+    outermost object the caller catches. A 400 (BadRequest, our bug) and a
+    404 (unknown model) are deliberately NOT here — they fail identically
+    on retry and mean something is wrong on our side, so they stay
+    `agent_error`."""
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, _UNAVAILABLE_EXC):
+            return True
+        status = getattr(cur, "status_code", None)
+        if isinstance(status, int) and (
+            status in _UNAVAILABLE_STATUS or 500 <= status < 600
+        ):
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
+
+
 # OpenRouter speaks OpenAI's chat-completions wire format verbatim.
 _OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 

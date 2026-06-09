@@ -29,6 +29,7 @@ from shruti_chat.agent.tool_executor import (
     execute_tool_call,
 )
 from shruti_chat.agent.tools._registry import ToolFn
+from shruti_chat.infra.llm_provider.openrouter import is_provider_unavailable
 from shruti_chat.observability.logging import get_logger
 
 
@@ -233,7 +234,10 @@ async def run_llm_loop(
         )
     except Exception as exc:
         log.exception("agent_loop_failed", request_id=rid, error=str(exc))
+        # Out-of-credits / provider-down → calm "chat unavailable", not a
+        # generic agent error (see is_provider_unavailable).
+        code = "chat_unavailable" if is_provider_unavailable(exc) else "agent_error"
         yield AgentEvent(
             type="error",
-            data={"code": "agent_error", "message": str(exc)},
+            data={"code": code, "message": str(exc)},
         )

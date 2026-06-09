@@ -44,3 +44,13 @@ class RateLimitStore(Protocol):
         new count along with the bucket's limit. Implementations make
         the increment atomic."""
         ...
+
+    async def decrement(self, *, scoped_key: str, day: date) -> int:
+        """Atomically give one unit back to `(scoped_key, day)` and return
+        the new count, floored at 0. Used to refund a quota unit when a
+        turn the client was charged for fails before delivering an answer
+        (e.g. the LLM provider was out of credits). A no-op returning 0
+        when the key has already expired. Raises
+        `RateLimitStoreUnavailable` on a backend error so the caller can
+        treat the refund as best-effort."""
+        ...
