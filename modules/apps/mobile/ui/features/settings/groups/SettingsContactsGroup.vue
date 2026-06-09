@@ -1,0 +1,57 @@
+<template>
+  <IonListHeader>
+    <IonLabel>{{ $t("settings.groups.contacts") }}</IonLabel>
+  </IonListHeader>
+
+  <SettingsActionItem
+    :title="$t('settings.contacts.email.title')"
+    :subtitle="$t('settings.contacts.email.description')"
+    @activate="emit('openEmail')"
+  >
+    <template #icon>
+      <IconChip><MailIcon /></IconChip>
+    </template>
+  </SettingsActionItem>
+
+  <!-- VK and Telegram groups are Russian-audience communities; only surface
+       them when the app is in Russian. -->
+  <template v-if="isRussian">
+    <SettingsActionItem
+      :title="$t('settings.contacts.vk.title')"
+      :subtitle="$t('settings.contacts.vk.description')"
+      @activate="emit('openVk')"
+    >
+      <template #icon>
+        <IconChip><VkIcon /></IconChip>
+      </template>
+    </SettingsActionItem>
+
+    <SettingsActionItem
+      :title="$t('settings.contacts.telegram.title')"
+      :subtitle="$t('settings.contacts.telegram.description')"
+      @activate="emit('openTelegram')"
+    >
+      <template #icon>
+        <IconChip><TelegramIcon /></IconChip>
+      </template>
+    </SettingsActionItem>
+  </template>
+</template>
+
+<script setup lang="ts">
+import { computed } from "vue"
+import { IonLabel, IonListHeader } from "@ionic/vue"
+import { useI18n } from "vue-i18n"
+import { SettingsActionItem } from "@kit/ui"
+import { MailIcon, TelegramIcon, VkIcon } from "@ui/icons/index.js"
+import { IconChip } from "@ui/primitives/index.js"
+
+const { locale } = useI18n()
+const isRussian = computed(() => (locale.value as string) === "ru")
+
+const emit = defineEmits<{
+  openEmail: []
+  openVk: []
+  openTelegram: []
+}>()
+</script>
