@@ -225,6 +225,18 @@ def _build_client(
     }
     if temperature_key is not None:
         kwargs["temperature"] = temperature_key
+    if not streaming:
+        # Structured-output calls only (streaming=False). Without an explicit
+        # cap the provider's default completion budget can be shorter than a
+        # full Outline (intro + up to 5 theses + conclusion), which truncates
+        # the JSON mid-object and surfaces as `ValidationError: Invalid JSON:
+        # EOF` — the planner then degrades to free-form synthesis with no
+        # intro/conclusion/headers. 4096 comfortably fits the largest outline
+        # and sits at-or-below every structured model's own cap (gemini-flash,
+        # deepseek-chat, claude-3-haiku), so it never trips a 400. The
+        # streaming synthesizer is deliberately left uncapped so long answers
+        # are never clipped.
+        kwargs["max_tokens"] = 4096
     return ChatOpenAI(**kwargs)
 
 
