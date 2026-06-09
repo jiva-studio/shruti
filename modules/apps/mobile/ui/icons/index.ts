@@ -23,4 +23,7 @@ export {
   IconShieldFilled as ShieldIcon,
   IconMessageFilled as MessageIcon,
   IconArticleFilled as TranscriptIcon,
+  IconMailFilled as MailIcon,
+  IconBrandVk as VkIcon,
+  IconBrandTelegram as TelegramIcon,
 } from "@tabler/icons-vue"

@@ -240,13 +240,17 @@ export default {
   },
 
   contacts: {
-    socialNetworks: {
-      title: "Социальные сети",
-      description: "Будем на связи",
-    },
     email: {
       title: "Напишите нам",
       description: "Есть вопросы или предложения?",
+    },
+    vk: {
+      title: "Группа ВКонтакте",
+      description: "Присоединяйтесь к нашему сообществу",
+    },
+    telegram: {
+      title: "Группа в Телеграм",
+      description: "Новости и анонсы",
     },
   },
 
