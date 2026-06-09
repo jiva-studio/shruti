@@ -229,34 +229,18 @@ async def augment_thin_theses(
         if isinstance(n, dict) and n.get("_dedup_key") is not None
     }
 
-    # Track per-thesis the new supporting_notes (computed below); we
-    # collect into a list[Thesis] and build the final Outline at the end.
-    new_theses: list[Thesis] = []
     next_pool_idx = len(base_notes) + 1  # 1-based; new chunks get this index
 
-    # Per-thesis observability for the summary log emitted below.
-    # Captures the augmentation outcome so traces show whether augment
-    # actually helped or just paid latency for nothing.
-    per_thesis_summary: list[dict] = []
-
-    for i, t in enumerate(outline.theses):
-        old_top = (
-            per_thesis_scored[i][0][0] if per_thesis_scored[i] else 0.0
-        )
-
-        if i not in thin_indices:
-            # Strong thesis — passthrough Stage 1's supporting_notes.
-            new_theses.append(t)
-            per_thesis_summary.append({
-                "idx": i,
-                "was_thin": False,
-                "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
-                "fresh_fetched": 0,
-                "fresh_above_threshold": 0,
-            })
-            continue
-
+    # ── 4a. Fresh ANN for ALL thin theses CONCURRENTLY ──────────────────
+    # Previously a serial per-thesis loop (fetch → embed → rerank, each
+    # awaited in turn); on turns with 2-3 thin theses that stacked 3× the
+    # network round-trips end to end — the dominant post-planner latency.
+    # Now: fan the fresh fetches out at once, assign indices in a
+    # deterministic serial pass (cross-thesis dedup + next_pool_idx order
+    # MUST stay reproducible), batch the embed into ONE call, and fan the
+    # per-thesis re-ranks out concurrently. Selection logic below is
+    # unchanged — only the I/O scheduling differs.
+    async def _fetch_for(i: int):
         try:
             lec_scored, lib_scored = await _fresh_fanout_for_thesis(
                 thesis_embeds[i],
@@ -267,63 +251,62 @@ async def augment_thin_theses(
                 top_k=fresh_top_k,
             )
         except Exception as exc:  # noqa: BLE001
-            log.warning(
-                "augment_fresh_fetch_failed",
-                thesis_idx=i, error=str(exc),
-            )
-            new_theses.append(t)
-            per_thesis_summary.append({
-                "idx": i,
-                "was_thin": True,
-                "old_top_cosine": round(old_top, 3),
-                "new_top_cosine": round(old_top, 3),
-                "fresh_fetched": 0,
-                "fresh_above_threshold": 0,
-                "outcome": "fetch_failed",
-            })
-            continue
+            log.warning("augment_fresh_fetch_failed", thesis_idx=i, error=str(exc))
+            return None
+        # Resolve human author names for fresh library chunks so an
+        # augmentation-fetched commentary / prose / letter carries its
+        # attribution (else the synthesizer blockquote renders address-only).
+        lib_author_names = await resolve_commentary_author_names(
+            [s.chunk for s in lib_scored], catalog_repo=catalog_repo, lang=lang,
+        )
+        return lec_scored, lib_scored, lib_author_names
 
-        # Convert raw ScoredChunk → envelopes; dedup against already-added.
+    fetched = await asyncio.gather(*(_fetch_for(i) for i in thin_indices))
+    fetch_by_thesis: dict[int, Any] = dict(zip(thin_indices, fetched))
+    fetch_failed: set[int] = {i for i in thin_indices if fetch_by_thesis.get(i) is None}
+
+    # ── 4b. Deterministic serial pass: dedup + 1-based index assignment ─
+    # Order = thin_indices order, lectures before library per thesis —
+    # identical append order to the old serial loop, so a given corpus
+    # produces the same indices either way. CPU-only; no awaits.
+    fresh_by_thesis: dict[int, list[tuple[int, dict[str, Any]]]] = {}
+
+    def _existing_idx(key: tuple) -> int | None:
+        return next(
+            (n + len(base_notes) + 1 for n, env in enumerate(additional_envelopes)
+             if env.get("_augment_dedup") == key),
+            None,
+        )
+
+    for i in thin_indices:
+        res = fetch_by_thesis.get(i)
+        if res is None:
+            fresh_by_thesis[i] = []
+            continue
+        lec_scored, lib_scored, lib_author_names = res
         fresh_for_this_thesis: list[tuple[int, dict[str, Any]]] = []
         for s in lec_scored:
             chunk = s.chunk
             key = ("lecture", chunk.track_id, chunk.start_ms, chunk.end_ms)
             if key in dedup_seen:
-                # Already fetched by previous thin thesis — reuse its index.
-                # Find the existing index in additional_envelopes.
-                existing_idx = next(
-                    (n + len(base_notes) + 1 for n, env in enumerate(additional_envelopes)
-                     if env.get("_augment_dedup") == key),
-                    None,
-                )
-                if existing_idx is not None:
-                    fresh_for_this_thesis.append((existing_idx, additional_envelopes[existing_idx - len(base_notes) - 1]))
+                # Already in base_notes or fetched by an earlier thin thesis.
+                existing = _existing_idx(key)
+                if existing is not None:
+                    fresh_for_this_thesis.append((existing, additional_envelopes[existing - len(base_notes) - 1]))
                 continue
             dedup_seen.add(key)
             env = lecture_to_envelope(chunk, alias_map=alias_map, score=s.score)
             env["_augment_dedup"] = key  # for cross-thesis dedup
             additional_envelopes.append(env)
-            this_idx = next_pool_idx
+            fresh_for_this_thesis.append((next_pool_idx, env))
             next_pool_idx += 1
-            fresh_for_this_thesis.append((this_idx, env))
-        # Batch-resolve human author names for the fresh library chunks so
-        # an augmentation-fetched commentary / prose / letter carries its
-        # attribution — same enrichment chunks_search + commentary_expansion
-        # do. Without it the synthesizer blockquote renders address-only.
-        lib_author_names = await resolve_commentary_author_names(
-            [s.chunk for s in lib_scored], catalog_repo=catalog_repo, lang=lang,
-        )
         for s in lib_scored:
             chunk = s.chunk
             key = (chunk.item_kind, chunk.item_id, chunk.segment_index or 0)
             if key in dedup_seen:
-                existing_idx = next(
-                    (n + len(base_notes) + 1 for n, env in enumerate(additional_envelopes)
-                     if env.get("_augment_dedup") == key),
-                    None,
-                )
-                if existing_idx is not None:
-                    fresh_for_this_thesis.append((existing_idx, additional_envelopes[existing_idx - len(base_notes) - 1]))
+                existing = _existing_idx(key)
+                if existing is not None:
+                    fresh_for_this_thesis.append((existing, additional_envelopes[existing - len(base_notes) - 1]))
                 continue
             dedup_seen.add(key)
             extra = None
@@ -336,51 +319,60 @@ async def augment_thin_theses(
             )
             env["_augment_dedup"] = key
             additional_envelopes.append(env)
-            this_idx = next_pool_idx
+            fresh_for_this_thesis.append((next_pool_idx, env))
             next_pool_idx += 1
-            fresh_for_this_thesis.append((this_idx, env))
+        fresh_by_thesis[i] = fresh_for_this_thesis
 
-        # Re-rank: pool = current supporting_notes (already scored) +
-        # fresh chunks (need scoring).
+    # ── 4c. Embed every fresh envelope ONCE (batched) ───────────────────
+    # One embed call for the whole fresh pool instead of one per thesis; a
+    # chunk shared by two theses is embedded a single time.
+    fresh_emb_by_idx: dict[int, list[float]] = {}
+    fresh_pairs = [
+        (n + len(base_notes) + 1, (env.get("text") or "").strip())
+        for n, env in enumerate(additional_envelopes)
+    ]
+    fresh_pairs = [(idx, txt) for idx, txt in fresh_pairs if txt]
+    if fresh_pairs:
+        try:
+            fresh_embeds = await embedder.embed_documents([txt for _, txt in fresh_pairs])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("augment_fresh_embed_failed", error=str(exc))
+            fresh_embeds = []
+        if len(fresh_embeds) == len(fresh_pairs):
+            for (idx, _), f_emb in zip(fresh_pairs, fresh_embeds):
+                fresh_emb_by_idx[idx] = f_emb
+
+    # `additional_envelopes` now holds every fresh chunk, so base_notes +
+    # additional_envelopes covers all pool indices for the balanced cut.
+    pool_for_pick = list(base_notes) + list(additional_envelopes)
+
+    # ── 4d. Re-rank each thin thesis CONCURRENTLY ───────────────────────
+    async def _rerank_for(i: int) -> tuple[list[tuple[float, int]], list[int]]:
+        t = outline.theses[i]
+        fresh = fresh_by_thesis.get(i, [])
+        # Re-cosine: pool = current supporting_notes (already scored) +
+        # fresh chunks (scored from the batched embeddings above).
         rescored: list[tuple[float, int]] = list(per_thesis_scored[i])
-        if fresh_for_this_thesis:
-            fresh_texts = [(env.get("text") or "").strip() for _, env in fresh_for_this_thesis]
-            keep_pairs = [
-                (idx, txt) for (idx, _), txt in zip(fresh_for_this_thesis, fresh_texts) if txt
-            ]
-            if keep_pairs:
-                try:
-                    fresh_embeds = await embedder.embed_documents([txt for _, txt in keep_pairs])
-                except Exception as exc:  # noqa: BLE001
-                    log.warning(
-                        "augment_fresh_embed_failed",
-                        thesis_idx=i, error=str(exc),
-                    )
-                    fresh_embeds = []
-                if len(fresh_embeds) == len(keep_pairs):
-                    for (idx, _), f_emb in zip(keep_pairs, fresh_embeds):
-                        rescored.append((_cosine(thesis_embeds[i], f_emb), idx))
-
+        for idx, _env in fresh:
+            f_emb = fresh_emb_by_idx.get(idx)
+            if f_emb is not None:
+                rescored.append((_cosine(thesis_embeds[i], f_emb), idx))
         rescored.sort(reverse=True)
         cosine_order = [idx for _, idx in rescored]
 
-        # Cross-encoder ORDERS the same pool (current supporting_notes +
-        # fresh chunks) against the CLAIM (user query + thesis) — query-
-        # aware, not the bare thesis sentence. `_is_thin` detection above
-        # stays on cosine. Any failure ⇒ keep the cosine order. The
-        # reranker only re-orders the pool; the type-balanced cut below
-        # makes the final selection.
+        # Cross-encoder ORDERS the same pool against the CLAIM (user query +
+        # thesis) — query-aware. Any failure ⇒ keep the cosine order. The
+        # reranker only re-orders; the balanced cut makes the selection.
         ordered = cosine_order
         if reranker is not None:
+            fresh_map = {j: e for j, e in fresh}
             pool_idx = list(cosine_order)
             pool_texts: list[str] = []
             for idx in pool_idx:
                 if 1 <= idx <= len(base_notes):
                     txt = (base_notes[idx - 1].get("text") or "").strip()
                 else:
-                    env = next(
-                        (e for j, e in fresh_for_this_thesis if j == idx), None
-                    )
+                    env = fresh_map.get(idx)
                     txt = (env.get("text") or "").strip() if env else ""
                 pool_texts.append(txt)
             rerankable = [(idx, txt) for idx, txt in zip(pool_idx, pool_texts) if txt]
@@ -399,56 +391,74 @@ async def augment_thin_theses(
                         rerankable[j][0] for j, _ in scored_rr
                         if 0 <= j < len(rerankable)
                     ]
-                    # Keep membership stable — append anything the reranker
-                    # dropped (empty-text notes weren't sent to it).
+                    # Keep membership stable — append reranker-dropped notes
+                    # (empty-text notes weren't sent to it).
                     for idx in pool_idx:
                         if idx not in rr_order:
                             rr_order.append(idx)
                     ordered = rr_order
 
-        # Type-balanced cut: top-K, de-monopolised away from all-lecture
-        # when a relevant verse/purport exists. `additional_envelopes`
-        # already holds every fresh chunk (this thesis's included), so
-        # base_notes + additional_envelopes covers all pool indices.
-        pool_for_pick = list(base_notes) + list(additional_envelopes)
         cos_map = {idx: s for s, idx in rescored}
         new_top = _balanced_topk(
             ordered, pool_for_pick, k=top_k_per_thesis,
             score_of=lambda i: cos_map.get(i, 0.0),
         )
-
-        # Defensive: never let augment empty out a thesis. If something
-        # weird happened (no fresh, no original), keep the original picks.
+        # Defensive: never let augment empty out a thesis.
         if not new_top:
             new_top = list(t.supporting_notes)
+        return rescored, new_top
 
+    rerank_targets = [i for i in thin_indices if i not in fetch_failed]
+    rerank_results = await asyncio.gather(*(_rerank_for(i) for i in rerank_targets))
+    rerank_by_thesis = dict(zip(rerank_targets, rerank_results))
+
+    # ── 4e. Assemble theses (in order) + per-thesis summary ─────────────
+    new_theses: list[Thesis] = []
+    per_thesis_summary: list[dict] = []
+    for i, t in enumerate(outline.theses):
+        old_top = per_thesis_scored[i][0][0] if per_thesis_scored[i] else 0.0
+        if i not in thin_indices:
+            # Strong thesis — passthrough Stage 1's supporting_notes.
+            new_theses.append(t)
+            per_thesis_summary.append({
+                "idx": i, "was_thin": False,
+                "old_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(old_top, 3),
+                "fresh_fetched": 0, "fresh_above_threshold": 0,
+            })
+            continue
+        if i in fetch_failed:
+            new_theses.append(t)
+            per_thesis_summary.append({
+                "idx": i, "was_thin": True,
+                "old_top_cosine": round(old_top, 3),
+                "new_top_cosine": round(old_top, 3),
+                "fresh_fetched": 0, "fresh_above_threshold": 0,
+                "outcome": "fetch_failed",
+            })
+            continue
+        rescored, new_top = rerank_by_thesis[i]
         new_theses.append(Thesis(
             thesis=t.thesis,
             header=t.header,
             supporting_notes=new_top,
             sub_query_types=list(t.sub_query_types),
         ))
-
-        # Augment outcome metrics. Distinguish three cases:
-        #   - "improved": new_top_cosine ≥ threshold AND > old_top
-        #   - "no_help":   fresh fetched but couldn't beat existing
-        #   - "empty":     fresh fetch returned nothing
+        # Outcome metrics: improved / no_help / empty.
         new_top_cosine = rescored[0][0] if rescored else 0.0
-        fresh_above_threshold = sum(
-            1 for s, _ in rescored if s >= 0.55
-        )
-        if not fresh_for_this_thesis:
+        fresh_above_threshold = sum(1 for s, _ in rescored if s >= 0.55)
+        fresh_count = len(fresh_by_thesis.get(i, []))
+        if not fresh_count:
             outcome = "empty"
         elif new_top_cosine >= 0.55 and new_top_cosine > old_top:
             outcome = "improved"
         else:
             outcome = "no_help"
         per_thesis_summary.append({
-            "idx": i,
-            "was_thin": True,
+            "idx": i, "was_thin": True,
             "old_top_cosine": round(old_top, 3),
             "new_top_cosine": round(new_top_cosine, 3),
-            "fresh_fetched": len(fresh_for_this_thesis),
+            "fresh_fetched": fresh_count,
             "fresh_above_threshold": fresh_above_threshold,
             "outcome": outcome,
         })

@@ -38,6 +38,7 @@ from lectorium_chat.research.constants import (
     FINAL_CUT_MIN_LIBRARY,
     FINAL_CUT_MIN_VERSES,
     MAX_FANOUT_ROUNDS,
+    REGEN_MAX_SUBQUERIES,
     RERANK_RESERVE_FLOOR,
     TIMEOUT_FANOUT_S,
     TIMEOUT_FETCH_REFS_S,
@@ -355,9 +356,15 @@ async def _regenerate_queries(
     plan: QueryPlan = await plan_queries(
         question, lang, args, llm=llm, model=model, callbacks=callbacks,
     )
-    for sq in plan.sub_queries:
+    # Bound the second round: take the first N regenerated sub_queries by
+    # PRIMARY text only (no alt_phrasings). Round 0 already fanned out the
+    # full breadth; the regenerate pass just needs a handful of fresh angles,
+    # and replaying every alt_phrasing is what makes round-1 the tail-latency
+    # spike. See REGEN_MAX_SUBQUERIES.
+    capped = plan.sub_queries[:REGEN_MAX_SUBQUERIES]
+    for sq in capped:
         _emit_question(on_event, sq.text, question)
-    return _plan_to_fanout_queries(plan)
+    return [(sq.id, sq.text) for sq in capped]
 
 
 async def run_research(

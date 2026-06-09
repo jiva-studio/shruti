@@ -120,6 +120,33 @@ async def synthesis_planner_node(
         has_intro=outline.intro is not None,
     )
 
+    # Early-intro paint. The intro is planner-written literal text ("rendered
+    # verbatim, no citation") — it needs neither the research notes nor the
+    # Stage 1/2 enrichment that follows. Stream it NOW so the user sees the
+    # answer begin ~8s earlier instead of staring at the loader through the
+    # whole Stage 1/2 window; the synthesizer then skips the intro (state
+    # flag `intro_streamed`) so it isn't shown twice. Marker-free by contract,
+    # so it bypasses the expander safely. Per-turn kill-switch via config.
+    intro_streamed = False
+    intro_text = (outline.intro or "").strip()
+    if (
+        intro_text
+        and outline.theses
+        and state.get("config", {}).get("enable_early_intro", True)
+    ):
+        try:
+            get_stream_writer()(
+                {"type": "delta", "data": {"text": intro_text + "\n\n"}}
+            )
+            intro_streamed = True
+            log.info(
+                "synthesis_planner_intro_streamed",
+                request_id=ctx.request_id,
+                chars=len(intro_text),
+            )
+        except Exception as exc:  # noqa: BLE001 — never break the turn on paint
+            log.warning("synthesis_planner_intro_stream_failed", error=str(exc))
+
     # Per-turn cross-encoder kill-switch (Stage B). Off ⇒ pass None so the
     # per-thesis grounding selection runs the cosine path verbatim.
     enable_reranker = state.get("config", {}).get("enable_reranker", True)
@@ -198,7 +225,18 @@ async def synthesis_planner_node(
     await flush_media_payloads(ctx)
     await flush_cite_payloads(ctx)
 
-    update: dict = {"outline": augmented}
+    # When we already streamed the intro early, hand the synthesizer an
+    # intro-less plan so it begins at the first thesis and never reproduces
+    # the intro. This is pure code — the synthesizer just sees `intro=None`,
+    # an already-supported shape (short answers legitimately have no intro),
+    # so there's no fragile "you already wrote the intro" prompt directive.
+    final_outline = (
+        augmented.model_copy(update={"intro": None})
+        if intro_streamed
+        else augmented
+    )
+
+    update: dict = {"outline": final_outline}
     combined_appends = list(new_commentaries) + list(fresh_chunks)
     if combined_appends:
         # `tool_results` state field uses an append-reducer so returning
