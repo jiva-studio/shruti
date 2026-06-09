@@ -31,4 +31,14 @@ export interface IExcerptCache {
    * return the canonical `file://` URI of the cached copy.
    */
   download(args: { url: string; filename: string }): Promise<string>
+
+  /**
+   * Turn a cached `file://` URI (from {@link findLocal} / {@link download})
+   * into a local URL the WebView can actually load in `<audio src>` /
+   * `<img src>`. The native WebView rejects a raw `file://` ("Not allowed
+   * to load local resource"); the adapter rewrites it to the local
+   * app-server URL. Identity on web. The `file://` form stays the one used
+   * by the native share sheet — this is only for in-WebView reads.
+   */
+  toLocalUrl(fileUri: string): string
 }
