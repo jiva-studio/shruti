@@ -162,6 +162,12 @@ class ChatTurnConfigDto(BaseModel):
     # kill-switch for eval A/B against the cosine baseline.
     enable_reranker: bool = True
 
+    # When False, the synthesis_planner does NOT stream the planner-written
+    # intro early (right after build_outline, before Stage 1/2); the
+    # synthesizer renders the intro itself at the front of the stream as
+    # before. Default True — early paint cuts perceived time-to-first-token.
+    enable_early_intro: bool = True
+
 
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)

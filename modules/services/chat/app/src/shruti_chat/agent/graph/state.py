@@ -79,4 +79,8 @@ class ChatState(TypedDict, total=False):
     #   - Outline(theses=[])  → planner rejected all notes → refusal path
     #   - Outline(theses=[…]) → synthesizer writes one paragraph per
     #                           thesis, citing only its supporting_notes
+    #
+    # When synthesis_planner streams the intro early (early-intro paint),
+    # it strips `intro` from the Outline it writes here, so the synthesizer
+    # renders an intro-less plan and never reproduces the intro.
     outline: Outline | None

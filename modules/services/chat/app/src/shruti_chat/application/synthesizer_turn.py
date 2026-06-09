@@ -299,6 +299,11 @@ def _format_outline_block(outline: Any) -> str:
     synthesizer to a structured plan. Empty theses → an explicit refusal
     directive so the synthesizer doesn't try to paper over.
 
+    When `outline.intro` is None the intro step is simply omitted — the
+    model then begins with the first thesis. (The synthesis_planner uses
+    exactly this to stream the intro early and hand us an intro-less plan,
+    so the intro isn't generated twice — no prompt hint needed.)
+
     The rendered shape (intro paragraph + per-thesis [optional markdown
     H2 header + paragraph + citation] + optional conclusion paragraph)
     matches the rendering rules in `response_shape.md`. Keeping the
