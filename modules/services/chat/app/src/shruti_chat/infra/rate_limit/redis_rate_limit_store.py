@@ -45,6 +45,22 @@ end
 return count
 """
 
+# KEYS[1]=key. Decrement only if the key still exists — an expired bucket
+# must NOT be re-created at -1 (it would survive with no TTL and corrupt
+# the next day's count). Floor at 0; leave the TTL untouched (the
+# increment already set it). Returns the resulting count.
+_DECR_FLOOR_ZERO = """
+if redis.call('EXISTS', KEYS[1]) == 0 then
+  return 0
+end
+local count = redis.call('DECR', KEYS[1])
+if count < 0 then
+  redis.call('SET', KEYS[1], 0, 'KEEPTTL')
+  return 0
+end
+return count
+"""
+
 
 def _seconds_until_next_midnight_utc() -> int:
     now = datetime.now(timezone.utc)
@@ -62,6 +78,7 @@ class RedisRateLimitStore:
             health_check_interval=30,
         )
         self._lua = self._client.register_script(_INCR_WITH_TTL)
+        self._lua_decr = self._client.register_script(_DECR_FLOOR_ZERO)
 
     async def increment(
         self,
@@ -81,6 +98,15 @@ class RedisRateLimitStore:
             return CounterRecord(key_type=key_type, count=int(raw), limit=limit)
         except (RedisError, TimeoutError, OSError) as exc:
             log.warning("rate_limit_redis_error", err=str(exc), key=full_key)
+            raise RateLimitStoreUnavailable(str(exc)) from exc
+
+    async def decrement(self, *, scoped_key: str, day: date) -> int:
+        full_key = f"rl:{scoped_key}:{day.strftime('%Y%m%d')}"
+        try:
+            raw = await self._lua_decr(keys=[full_key])
+            return int(raw)
+        except (RedisError, TimeoutError, OSError) as exc:
+            log.warning("rate_limit_redis_decr_error", err=str(exc), key=full_key)
             raise RateLimitStoreUnavailable(str(exc)) from exc
 
     async def ping(self) -> bool:

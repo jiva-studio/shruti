@@ -50,6 +50,13 @@ export default {
     title: "Couldn't reach server",
     body: "Try again in a moment.",
   },
+  /** SSE `chat_unavailable` — the chat backend can't reach any LLM right
+   *  now (out of credits, provider key rejected, provider down). Not the
+   *  user's fault and transient, so calm copy + a Retry. */
+  errUnavailable: {
+    title: "Chat is temporarily unavailable",
+    body: "We couldn't send your message right now. Please try again a little later.",
+  },
   /** Unknown-tier fallback. Shown when the server returns a 429 with a
    *  tier value the client doesn't recognise (schema drift, typo,
    *  enterprise tier added server-side before the mobile bump). Keeps

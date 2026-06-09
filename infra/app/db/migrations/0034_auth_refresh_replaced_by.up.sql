@@ -1,0 +1,16 @@
+-- Idempotent refresh-token rotation.
+--
+-- Rotation is single-use: /auth/refresh revokes the presented token and
+-- issues a successor. If the rotation RESPONSE is lost (network drop, or
+-- the app is killed before it persists the new token), the client is left
+-- holding the old, now-revoked token. Presenting it again was a hard 401
+-- -> forced re-login: the single most common "logged out for no reason"
+-- report.
+--
+-- `replaced_by` records the successor jti so the service can tell a
+-- lost-response retry (successor still alive and UNUSED -> rotate from it
+-- and recover the session) from genuine reuse/theft (successor already
+-- consumed -> reject). Plain uuid, no FK: it's an internal pointer that
+-- the service null-checks; a self-referential FK would only complicate the
+-- ON DELETE CASCADE the users FK already provides.
+ALTER TABLE auth.refresh_tokens ADD COLUMN replaced_by uuid;
