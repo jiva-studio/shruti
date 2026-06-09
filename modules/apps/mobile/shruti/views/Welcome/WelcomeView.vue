@@ -8,7 +8,7 @@
   -->
   <AppLoading
     v-if="welcome.showWelcomeScreen.value"
-    :app-name="$t('app.title')"
+    :app-name="$t('app.name')"
     icon-src="/app-icon.png"
     :status="statusMessage"
     :progress="welcome.phase.value === 'welcome:downloading' ? welcome.progress.value : undefined"

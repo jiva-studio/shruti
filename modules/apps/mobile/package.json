@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.1.2",
   "type": "module",
+  "versionCodeOffset": 2000,
   "scripts": {
     "dev": "vite",
     "dev:screenshots": "VITE_DEBUG_API=true vite --port 11001",
