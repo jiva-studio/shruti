@@ -72,6 +72,7 @@ import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { Author } from "@lib/domain/author.js"
+import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
 import { useCitationSnippet } from "../composables/useCitationSnippet.js"
 
 const props = defineProps<{
@@ -92,6 +93,7 @@ const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const studioHandoff = useStudioHandoffStore()
 const { resolveUrl } = useCitationSnippet()
+const { resolve: resolveCachedUrl } = useCachedExcerptUrl()
 const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
@@ -284,21 +286,14 @@ async function loadMetadata(): Promise<void> {
 
 async function ensureUrl(): Promise<string | null> {
   if (cachedUrl.value) return cachedUrl.value
+  const snippetRef = { trackId: props.trackId, startMs: props.startMs, endMs: props.endMs }
   try {
-    const url = await resolveUrl({
-      trackId: props.trackId,
-      startMs: props.startMs,
-      endMs: props.endMs,
-    })
+    const url = await resolveCachedUrl(() => resolveUrl(snippetRef))
     cachedUrl.value = url
     return url
   } catch (err) {
     const code = (err as Error)?.message
-    const ctx = {
-      trackId: props.trackId,
-      startMs: props.startMs,
-      endMs: props.endMs,
-    }
+    const ctx = snippetRef
     if (code === "no-audio" || code === "track-not-found") {
       console.warn(`[citation-chip] ${code}`, ctx)
       await toast.error(t("chat.citationNoAudio"))
