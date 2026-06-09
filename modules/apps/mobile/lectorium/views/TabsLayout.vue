@@ -71,7 +71,13 @@ const chat = useChatStore()
  * path) for this one element.
  */
 function onChatTabClick(ev: MouseEvent): void {
-  if (route.name !== "chat") return
+  // `route` (injected current-route) is transiently undefined while Ionic
+  // tears down / transitions the persistently-mounted TabsLayout, so guard
+  // the read — same precaution as the proactive-badge watchers (d027cbe4).
+  // Without it, tapping the chat tab to reopen a session throws
+  // `Cannot read properties of undefined (reading 'name')`, the reopen
+  // (router.replace below) never runs, and the session hangs on a spinner.
+  if (route?.name !== "chat") return
   const lastId = chat.activeSessionId ?? chat.sessions[0]?.id ?? null
   if (lastId == null) return // no session yet — let Ionic open the empty home
   ev.stopImmediatePropagation()
