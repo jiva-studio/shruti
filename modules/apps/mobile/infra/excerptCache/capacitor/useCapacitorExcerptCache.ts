@@ -1,4 +1,4 @@
-import type { PluginListenerHandle } from "@capacitor/core"
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core"
 import { Directory, Filesystem } from "@capacitor/filesystem"
 import { MediaDownloader } from "@lectorium/plugin-media-downloader"
 import type { IExcerptCache } from "@ports/app/excerptCache.js"
@@ -89,6 +89,13 @@ export function useCapacitorExcerptCache(): IExcerptCache {
       } finally {
         for (const h of handles) await h.remove()
       }
+    },
+
+    toLocalUrl(fileUri: string): string {
+      // `convertFileSrc` maps `file:///…` to the local app-server URL the
+      // WebView can fetch (`http(s)://localhost/_capacitor_file_/…`).
+      // No-op for non-file inputs and on web.
+      return Capacitor.convertFileSrc(fileUri)
     },
   }
 }
