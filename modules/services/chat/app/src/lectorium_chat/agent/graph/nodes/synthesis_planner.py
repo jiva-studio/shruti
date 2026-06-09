@@ -19,6 +19,8 @@ fallback wiring elsewhere.
 
 from __future__ import annotations
 
+import asyncio
+
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
@@ -34,7 +36,11 @@ from lectorium_chat.observability.logging import bind_node_role, get_logger
 from lectorium_chat.research.commentary_expansion import (
     rerank_and_attach_commentaries,
 )
-from lectorium_chat.research.outline_builder import build_outline
+from lectorium_chat.research.outline_builder import (
+    _MIN_THESES_FOR_INTRO,
+    build_outline,
+    synthesize_intro,
+)
 from lectorium_chat.research.thesis_augmentation import augment_thin_theses
 
 
@@ -120,15 +126,61 @@ async def synthesis_planner_node(
         has_intro=outline.intro is not None,
     )
 
-    # Early-intro paint. The intro is planner-written literal text ("rendered
-    # verbatim, no citation") — it needs neither the research notes nor the
-    # Stage 1/2 enrichment that follows. Stream it NOW so the user sees the
-    # answer begin ~8s earlier instead of staring at the loader through the
-    # whole Stage 1/2 window; the synthesizer then skips the intro (state
-    # flag `intro_streamed`) so it isn't shown twice. Marker-free by contract,
-    # so it bypasses the expander safely. Per-turn kill-switch via config.
+    # Per-turn cross-encoder kill-switch (Stage B). Off ⇒ pass None so the
+    # per-thesis grounding selection runs the cosine path verbatim.
+    enable_reranker = state.get("config", {}).get("enable_reranker", True)
+    reranker = ctx.reranker if enable_reranker else None
+    user_query = state.get("user_query", "")
+
+    # Stage 1: lazy commentary attach + per-thesis rerank.
+    # Pulls purports ONLY for verses the planner picked, then re-ranks
+    # the pool against each thesis text — replaces planner's tentative
+    # LLM-attribution with per-thesis ranking (cross-encoder when a
+    # reranker is present, else cosine). Graceful degrade: on missing
+    # embedder / fetch failure, returns the original outline + no new
+    # notes (synthesizer keeps the planner's picks).
+    #
+    # Kicked off as a TASK so the intro-writer call below overlaps it instead
+    # of adding to the critical path. Stage 1 reads outline.theses +
+    # tool_results; synthesize_intro reads only outline.theses and mutates
+    # nothing — independent, safe to run concurrently.
+    stage1_task = asyncio.create_task(rerank_and_attach_commentaries(
+        outline,
+        tool_results,
+        chunk_repo=ctx.chunk_repo,
+        embedder=ctx.embedder,
+        alias_map=ctx.aliases,
+        lang=state.get("lang"),
+        catalog_repo=ctx.catalog_repo,
+        on_event=None,  # planner runs after the live SSE progress panel
+        reranker=reranker,
+        user_query=user_query,
+    ))
+
+    # Intro rewrite, CONCURRENT with Stage 1. The planner's inline intro is a
+    # topic table-of-contents (it's generated before the theses exist), so we
+    # rewrite it from the finished thesis claims. Because it runs while Stage 1
+    # is in flight, the extra LLM call costs ~no wall-clock. Falls back to the
+    # planner's intro on failure / empty. Single-thesis answers carry no intro.
+    resolved_intro = outline.intro or ""
+    if len(outline.theses) >= _MIN_THESES_FOR_INTRO:
+        rewritten = await synthesize_intro(
+            outline,
+            state.get("lang", "ru"),
+            llm=ctx.llm,
+            model=None,
+            callbacks=[cb] if cb is not None else None,
+        )
+        if rewritten:
+            resolved_intro = rewritten
+
+    # Early-intro paint: stream the (now claim-bearing) intro the moment it's
+    # ready — before the Stage 1/2 grounding finishes — so the answer begins
+    # on screen seconds early. The synthesizer is then handed an intro-less
+    # plan (intro=None) so it never reproduces it. Marker-free, bypasses the
+    # expander safely. Per-turn kill-switch via config.
     intro_streamed = False
-    intro_text = (outline.intro or "").strip()
+    intro_text = resolved_intro.strip()
     if (
         intro_text
         and outline.theses
@@ -147,31 +199,8 @@ async def synthesis_planner_node(
         except Exception as exc:  # noqa: BLE001 — never break the turn on paint
             log.warning("synthesis_planner_intro_stream_failed", error=str(exc))
 
-    # Per-turn cross-encoder kill-switch (Stage B). Off ⇒ pass None so the
-    # per-thesis grounding selection runs the cosine path verbatim.
-    enable_reranker = state.get("config", {}).get("enable_reranker", True)
-    reranker = ctx.reranker if enable_reranker else None
-
-    # Stage 1: lazy commentary attach + per-thesis rerank.
-    # Pulls purports ONLY for verses the planner picked, then re-ranks
-    # the pool against each thesis text — replaces planner's tentative
-    # LLM-attribution with per-thesis ranking (cross-encoder when a
-    # reranker is present, else cosine). Graceful degrade: on missing
-    # embedder / fetch failure, returns the original outline + no new
-    # notes (synthesizer keeps the planner's picks).
-    user_query = state.get("user_query", "")
-    enriched, new_commentaries = await rerank_and_attach_commentaries(
-        outline,
-        tool_results,
-        chunk_repo=ctx.chunk_repo,
-        embedder=ctx.embedder,
-        alias_map=ctx.aliases,
-        lang=state.get("lang"),
-        catalog_repo=ctx.catalog_repo,
-        on_event=None,  # planner runs after the live SSE progress panel
-        reranker=reranker,
-        user_query=user_query,
-    )
+    # Stage 1 has been running while the intro was written — collect it now.
+    enriched, new_commentaries = await stage1_task
 
     # Stage 2: per-thesis thin-support augmentation.
     # For theses still weak after Stage 1 (max cosine < threshold or
@@ -204,7 +233,7 @@ async def synthesis_planner_node(
             "type": "outline_summary",
             "data": {
                 "n_theses": len(augmented.theses),
-                "has_intro": bool(augmented.intro and augmented.intro.strip()),
+                "has_intro": bool(resolved_intro and resolved_intro.strip()),
                 "has_conclusion": bool(
                     augmented.conclusion and augmented.conclusion.strip(),
                 ),
@@ -225,16 +254,15 @@ async def synthesis_planner_node(
     await flush_media_payloads(ctx)
     await flush_cite_payloads(ctx)
 
-    # When we already streamed the intro early, hand the synthesizer an
-    # intro-less plan so it begins at the first thesis and never reproduces
-    # the intro. This is pure code — the synthesizer just sees `intro=None`,
-    # an already-supported shape (short answers legitimately have no intro),
-    # so there's no fragile "you already wrote the intro" prompt directive.
-    final_outline = (
-        augmented.model_copy(update={"intro": None})
-        if intro_streamed
-        else augmented
-    )
+    # Stage 1/2 carried the planner's raw intro through untouched; settle the
+    # final intro now. If we painted it early, hand the synthesizer an
+    # intro-less plan (intro=None) so it begins at the first thesis and never
+    # reproduces it (pure code — `intro=None` is an already-supported shape,
+    # no fragile "you already wrote the intro" prompt directive). If we did
+    # NOT paint (kill-switch off / empty), give the synthesizer the resolved
+    # claim-bearing intro to render itself.
+    final_intro = None if intro_streamed else (resolved_intro or None)
+    final_outline = augmented.model_copy(update={"intro": final_intro})
 
     update: dict = {"outline": final_outline}
     combined_appends = list(new_commentaries) + list(fresh_chunks)
