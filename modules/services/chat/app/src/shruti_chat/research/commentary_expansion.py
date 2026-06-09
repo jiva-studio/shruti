@@ -26,6 +26,8 @@ from shruti_chat.domain.entities import LibraryChunk
 from shruti_chat.observability.logging import get_logger
 from shruti_chat.research.constants import (
     MAX_COMMENTARIES_PER_VERSE,
+    STAGE1_ATTACH_FLOOR,
+    STAGE1_COMMENTARIES_PER_VERSE,
     THIN_THESIS_MIN_SCORE,
 )
 
@@ -230,6 +232,48 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+def _balanced_topk(
+    ordered: list[int],
+    pool: list[dict[str, Any]],
+    *,
+    k: int,
+    score_of: Callable[[int], float],
+    floor: float = THIN_THESIS_MIN_SCORE,
+) -> list[int]:
+    """Take the top-`k` of a relevance-ordered index list, then — if every
+    pick is a `lecture` but a sufficiently-relevant verse/commentary exists
+    further down — swap the weakest lecture for it, so a thesis isn't
+    lecture-monopolised (prod showed ~4:1). Relevance stays primary: the
+    swap only fires when the cut is all-lecture AND the best available
+    non-lecture clears `floor`, so a junk shloka can't displace a strong
+    spoken source. Mirrors the legacy non-lecture swap, generalised to run
+    on any ordered candidate list."""
+    if k <= 0 or not ordered:
+        return []
+
+    def _typ(one_based: int) -> str | None:
+        if not (1 <= one_based <= len(pool)):
+            return None
+        e = pool[one_based - 1]
+        return e.get("type") if isinstance(e, dict) else None
+
+    base = list(ordered[:k])
+    if base and all(_typ(i) == "lecture" for i in base):
+        picked = set(base)
+        best_nl = next(
+            (
+                i for i in ordered
+                if i not in picked
+                and _typ(i) in ("verse", "commentary")
+                and score_of(i) >= floor
+            ),
+            None,
+        )
+        if best_nl is not None:
+            base[-1] = best_nl  # swap weakest lecture for the scriptural anchor
+    return base
+
+
 async def rerank_and_attach_commentaries(
     outline: Any,                       # Outline (avoid circular import)
     base_notes: list[dict[str, Any]],
@@ -240,32 +284,38 @@ async def rerank_and_attach_commentaries(
     lang: str | None,
     catalog_repo: Any | None = None,
     top_k_per_thesis: int = 5,
-    max_commentaries_per_verse: int = MAX_COMMENTARIES_PER_VERSE,
+    max_commentaries_per_verse: int = STAGE1_COMMENTARIES_PER_VERSE,
     on_event: OnEvent | None = None,
     reranker: Any = None,
     rerank_concurrency: int = 2,
+    user_query: str | None = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
-    """Stage 1 of the per-thesis rerank pipeline.
+    """Stage 1 of the per-thesis grounding pipeline.
 
-    For each thesis in `outline.theses`:
-      1. For each verse referenced in the planner's tentative
-         `supporting_notes`, fetch its commentaries (address-based DB
-         lookup). Skipped when no verse is referenced.
-      2. Build a pool = base_notes + fetched_commentaries.
-      3. Batched-embed thesis_text + every pool note text in ONE call.
-      4. Rank by cosine(thesis, note). Keep top-K (default 5).
-      5. Rewrite thesis.supporting_notes to point to those top-K via
-         their indices into the FINAL tool_results that the synthesizer
-         will see (= base_notes + the new_commentaries returned here).
+    ENRICHES (never replaces wholesale) each thesis's `supporting_notes`.
+    The planner already read the full note text and reasoned about what
+    backs each claim, so we trust its selection and only:
+
+      1. Fetch purports for the VERSES the planner attached to a thesis.
+      2. Build a per-thesis candidate pool = {the planner's own picks for
+         this thesis} ∪ {purports of those picked verses}. This is NOT the
+         whole corpus — the reranker can only ORDER within what the
+         reasoner chose, it can't pull in an unrelated shloka that merely
+         embeds near the thesis sentence (the old whole-pool override was
+         the root cause of citations disconnected from the narrative).
+      3. Rank that small pool against the claim (`user_query` + thesis):
+         cross-encoder when present (query-aware), else cosine.
+      4. Keep the planner's own picks unconditionally; gate auto-attached
+         purports by a cosine floor; seat a type-balanced top-K (≥1 verse,
+         ≥1 purport when available) and stop — no padding to K with noise.
 
     Returns `(enriched_outline, new_commentary_envelopes)`. The caller
     appends `new_commentary_envelopes` to the LangGraph state's
-    `tool_results` (which uses an append-reducer), and writes
-    `enriched_outline` back as `state["outline"]`.
+    `tool_results` (append-reducer) and writes `enriched_outline` back as
+    `state["outline"]`.
 
-    Graceful degrade: any exception during embedding or DB lookup
-    returns the original outline + [] so the synthesizer keeps the
-    planner's tentative attributions.
+    Graceful degrade: any exception / missing collaborator returns the
+    original outline + [] so the synthesizer keeps the planner's picks.
     """
     # Local import to avoid models <-> commentary_expansion circular dep.
     from shruti_chat.research.models import Outline, Thesis
@@ -278,11 +328,13 @@ async def rerank_and_attach_commentaries(
     ):
         return outline, []
 
-    # ── 1. Collect verses referenced across all theses, dedup ──────────
-    # Address-keyed lookup means same (source_id, tokens) fetched once
-    # even if multiple theses reference it.
-    verse_pairs: dict[tuple[str, str], float] = {}
+    # ── 1. Per-thesis: which verses did the planner pick? ──────────────
+    # `thesis_verses[ti]` = the (source_id, tokens) the planner attached to
+    # thesis ti. `verse_score` dedups the fetch across theses.
+    verse_score: dict[tuple[str, str], float] = {}
+    thesis_verses: list[set[tuple[str, str]]] = []
     for t in outline.theses:
+        vs: set[tuple[str, str]] = set()
         for note_idx in t.supporting_notes:
             if not (1 <= note_idx <= len(base_notes)):
                 continue
@@ -294,17 +346,21 @@ async def rerank_and_attach_commentaries(
             tok = meta.get("tokens")
             if not sid or not tok:
                 continue
+            key = (sid, tok)
+            vs.add(key)
             score = env.get("score") if isinstance(env.get("score"), (int, float)) else None
             parent = float(score) if score is not None else 0.5
-            key = (sid, tok)
-            prev = verse_pairs.get(key)
-            if prev is None or prev < parent:
-                verse_pairs[key] = parent
+            if verse_score.get(key, -1.0) < parent:
+                verse_score[key] = parent
+        thesis_verses.append(vs)
 
-    # ── 2. Fetch commentaries for each referenced verse ────────────────
+    # ── 2. Fetch purports for the picked verses; build envelopes and
+    # record each verse's purport indices (1-based, FINAL index space =
+    # base_notes + new_envelopes, appended in order). ──────────────────
     new_envelopes: list[dict[str, Any]] = []
-    if verse_pairs:
-        pairs = list(verse_pairs.items())
+    commentary_idx_by_verse: dict[tuple[str, str], list[int]] = {}
+    if verse_score:
+        pairs = list(verse_score.items())
         try:
             chunk_lists = await asyncio.gather(
                 *(
@@ -316,8 +372,7 @@ async def rerank_and_attach_commentaries(
             log.warning("rerank_attach_fetch_failed", error=str(exc))
             chunk_lists = [[] for _ in pairs]
 
-        # Dedup commentaries already in base_notes (might have been
-        # surfaced by standalone ANN on commentary kind).
+        # Dedup purports already in base_notes (surfaced by standalone ANN).
         seen: set[tuple[str, int]] = set()
         for env in base_notes:
             if isinstance(env, dict) and env.get("type") == "commentary":
@@ -327,8 +382,9 @@ async def rerank_and_attach_commentaries(
                     seen.add((str(item_id), int(meta.get("segment_index", 0) or 0)))
 
         pending: list[LibraryChunk] = []
+        pending_key: list[tuple[str, str]] = []
         pending_score: list[float] = []
-        for ((_sid, _tok), parent_score), chunks in zip(pairs, chunk_lists):
+        for (key, parent_score), chunks in zip(pairs, chunk_lists):
             if not chunks:
                 continue
             capped = _select_capped(chunks, cap=max_commentaries_per_verse)
@@ -339,6 +395,7 @@ async def rerank_and_attach_commentaries(
                     continue
                 seen.add(dedup_key)
                 pending.append(c)
+                pending_key.append(key)
                 pending_score.append(child_score)
 
         if pending:
@@ -348,163 +405,156 @@ async def rerank_and_attach_commentaries(
                 )
             except Exception:  # noqa: BLE001
                 author_names = {}
-            for c, child_score in zip(pending, pending_score):
+            for c, key, child_score in zip(pending, pending_key, pending_score):
                 author_name = author_names.get(c.author_id) if c.author_id else None
                 extra = {"author_name": author_name} if author_name else None
                 env = library_to_envelope(
                     c, alias_map=alias_map, score=child_score, extra_meta=extra,
                 )
                 new_envelopes.append(env)
+                # Just appended → its FINAL 1-based pool index.
+                final_idx = len(base_notes) + len(new_envelopes)
+                commentary_idx_by_verse.setdefault(key, []).append(final_idx)
                 _emit_commentary_source(on_event, c)
 
-    # ── 3. Build the pool with FINAL indices (1-based, matching what
-    # the synthesizer's _format_tool_results will assign post-append). ──
+    # FINAL index space the synthesizer will see after the append-reducer.
     pool_envelopes = list(base_notes) + new_envelopes
-    pool_texts = [(env.get("text") or "").strip() for env in pool_envelopes]
 
-    # Drop empty-text envelopes from rerank consideration — their
-    # embedding would be ~zero and the score meaningless. They stay in
-    # tool_results (synthesizer might still show their addr_label), just
-    # can't be picked as supporting_notes by the reranker.
-    rerank_indices = [i for i, t in enumerate(pool_texts) if t]
-    if not rerank_indices:
-        return outline, new_envelopes
+    # ── 3. Per-thesis candidate pools = planner picks ∪ their purports ──
+    per_thesis_candidates: list[list[int]] = []
+    per_thesis_planner: list[set[int]] = []
+    all_candidate_idx: set[int] = set()
+    for ti, t in enumerate(outline.theses):
+        seen_c: set[int] = set()
+        cand: list[int] = []
+        planner_set: set[int] = set()
+        for note_idx in t.supporting_notes:
+            if 1 <= note_idx <= len(pool_envelopes) and note_idx not in seen_c:
+                cand.append(note_idx)
+                seen_c.add(note_idx)
+                planner_set.add(note_idx)
+        for key in thesis_verses[ti]:
+            for ci in commentary_idx_by_verse.get(key, []):
+                if ci not in seen_c:
+                    cand.append(ci)
+                    seen_c.add(ci)
+        per_thesis_candidates.append(cand)
+        per_thesis_planner.append(planner_set)
+        all_candidate_idx.update(cand)
 
-    # ── 4. Batched embed: theses + all pool note texts in ONE call ─────
-    thesis_texts = [t.thesis for t in outline.theses]
-    try:
-        all_embeds = await embedder.embed_documents(
-            thesis_texts + [pool_texts[i] for i in rerank_indices]
-        )
-    except Exception as exc:  # noqa: BLE001
-        log.warning("rerank_embed_failed", error=str(exc))
-        return outline, new_envelopes
+    # Claim text per thesis (Task C): query-aware (user question) + claim-
+    # aware (header + thesis). Empty user_query degrades to thesis only.
+    def _claim(t: Any) -> str:
+        parts = [p for p in (t.header, t.thesis) if p]
+        claim = " — ".join(parts) if parts else (t.thesis or "")
+        return f"{user_query}\n{claim}" if user_query else claim
 
-    if len(all_embeds) != len(thesis_texts) + len(rerank_indices):
-        log.warning(
-            "rerank_embed_count_mismatch",
-            expected=len(thesis_texts) + len(rerank_indices),
-            got=len(all_embeds),
-        )
-        return outline, new_envelopes
+    thesis_claims = [_claim(t) for t in outline.theses]
 
-    thesis_embeds = all_embeds[: len(thesis_texts)]
-    note_embeds_by_idx: dict[int, list[float]] = {
-        rerank_indices[k]: all_embeds[len(thesis_texts) + k]
-        for k in range(len(rerank_indices))
-    }
+    # Batch the cosine gate: embed every claim + every candidate text once.
+    # The pool is small (picks + a few purports), not the whole corpus.
+    cand_list = sorted(all_candidate_idx)
+    cand_text = {i: (pool_envelopes[i - 1].get("text") or "").strip() for i in cand_list}
+    embed_idx = [i for i in cand_list if cand_text[i]]
 
-    # ── 5a. Cross-encoder: per-thesis rerank over the SAME pool, anchored
-    # on the thesis statement alone. Owns the grounding selection; cosine
-    # stays as the fallback (+ feeds Stage 2 thin-detection). Runs per
-    # thesis in parallel, bounded by rerank_concurrency. Any failure ⇒
-    # fall back to cosine for that thesis. ─────────────────────────────
-    rerank_pool_idx = list(note_embeds_by_idx.keys())  # pool indices, rerankable
-    rerank_by_thesis: dict[int, list[int]] = {}
-    if reranker is not None and rerank_pool_idx:
-        rerank_texts = [pool_texts[i] for i in rerank_pool_idx]
-        sem = asyncio.Semaphore(max(1, rerank_concurrency))
-
-        async def _rerank_one(claim: str) -> list[int] | None:
-            if not claim.strip():
-                return None
-            async with sem:
-                try:
-                    scored = await reranker.rerank(
-                        claim, rerank_texts, top_k=top_k_per_thesis,
-                    )
-                except Exception as exc:  # noqa: BLE001 — never fail a turn
-                    log.warning("stage1_rerank_failed", error=str(exc))
-                    return None
-            # Voyage `index` points into rerank_texts → map to pool index.
-            return [rerank_pool_idx[i] for i, _ in scored[:top_k_per_thesis]
-                    if 0 <= i < len(rerank_pool_idx)]
-
-        results = await asyncio.gather(
-            *(_rerank_one(t.thesis) for t in outline.theses)
-        )
-        for ti, picks in enumerate(results):
-            if picks:
-                rerank_by_thesis[ti] = picks
-
-    # ── 5b. Per-thesis: cosine over pool → top-K (fallback / observability);
-    # reranker picks override the supporting_notes when present. ────────
-    new_theses: list[Thesis] = []
-    # Per-thesis observability: top cosine + supporting-note type mix.
-    # Skipped-note diagnostics: how strong was the BEST note we DIDN'T
-    # pick? When a thesis's top-K caps short, the skipped-max tells us
-    # if there's real material being dropped (high) vs noise (low).
-    per_thesis_obs: list[dict] = []
-
-    for ti, (t, t_emb) in enumerate(zip(outline.theses, thesis_embeds)):
-        scored: list[tuple[float, int]] = []
-        for pool_idx, n_emb in note_embeds_by_idx.items():
-            score = _cosine(t_emb, n_emb)
-            scored.append((score, pool_idx))
-        scored.sort(reverse=True)
-        top = scored[:top_k_per_thesis]
-        # Cross-encoder picks own the grounding selection when present;
-        # else fall back to the cosine top-K. Convert pool index (0-based)
-        # to 1-based supporting_notes index matching the synthesizer's
-        # enumerate(start=1) numbering.
-        rerank_picks = rerank_by_thesis.get(ti)
-        if rerank_picks:
-            new_supporting = [pool_idx + 1 for pool_idx in rerank_picks]
-        else:
-            new_supporting = [pool_idx + 1 for _, pool_idx in top]
-        if not new_supporting:
-            # Nothing picked — keep planner's original picks so the
-            # synthesizer still has SOMETHING to cite.
-            new_supporting = list(t.supporting_notes)
-
-        # Non-lecture slot: if every pick is a lecture but a strong (≥
-        # THIN_THESIS_MIN_SCORE) verse/commentary exists in the pool, swap the
-        # weakest (last) lecture for it. Keeps theses from being lecture-
-        # monopolised (prod showed ~4:1) without changing the slot count or
-        # 1-based indexing. Swap, never append.
-        def _ptype(one_based: int) -> str | None:
-            env = pool_envelopes[one_based - 1]
-            return env.get("type") if isinstance(env, dict) else None
-
-        if new_supporting and all(_ptype(i) == "lecture" for i in new_supporting):
-            picked = set(new_supporting)
-            best_nl = next(
-                (
-                    pool_idx for s, pool_idx in scored
-                    if s >= THIN_THESIS_MIN_SCORE
-                    and (pool_idx + 1) not in picked
-                    and isinstance(pool_envelopes[pool_idx], dict)
-                    and pool_envelopes[pool_idx].get("type") in ("verse", "commentary")
-                ),
-                None,
+    cos_by_thesis_idx: dict[tuple[int, int], float] = {}
+    if embed_idx:
+        try:
+            all_embeds = await embedder.embed_documents(
+                thesis_claims + [cand_text[i] for i in embed_idx]
             )
-            if best_nl is not None:
-                new_supporting[-1] = best_nl + 1
+        except Exception as exc:  # noqa: BLE001
+            log.warning("rerank_embed_failed", error=str(exc))
+            all_embeds = []
+        if len(all_embeds) == len(thesis_claims) + len(embed_idx):
+            claim_embeds = all_embeds[: len(thesis_claims)]
+            cand_embeds = {
+                embed_idx[k]: all_embeds[len(thesis_claims) + k]
+                for k in range(len(embed_idx))
+            }
+            for ti, c_emb in enumerate(claim_embeds):
+                for i in per_thesis_candidates[ti]:
+                    emb = cand_embeds.get(i)
+                    if emb is not None:
+                        cos_by_thesis_idx[(ti, i)] = _cosine(c_emb, emb)
 
+    # ── 4. Per-thesis selection. Keep the planner's own picks; gate
+    # auto-attached purports by the floor; order by reranker (claim+query)
+    # else cosine; type-balance into the top-K. The reranker ORDERS the
+    # candidate set, it never changes its membership. ──────────────────
+    sem = asyncio.Semaphore(max(1, rerank_concurrency))
+
+    def _cos_order(ti: int, kept: list[int]) -> list[int]:
+        return sorted(
+            kept, key=lambda i: cos_by_thesis_idx.get((ti, i), 0.0), reverse=True,
+        )
+
+    async def _order(ti: int, kept: list[int]) -> list[int]:
+        if len(kept) <= 1 or reranker is None:
+            return _cos_order(ti, kept)
+        pairs = [(i, cand_text.get(i, "")) for i in kept if cand_text.get(i, "")]
+        if len(pairs) < 2:
+            return _cos_order(ti, kept)
+        async with sem:
+            try:
+                scored = await reranker.rerank(
+                    thesis_claims[ti], [txt for _, txt in pairs], top_k=len(pairs),
+                )
+            except Exception as exc:  # noqa: BLE001 — never fail a turn
+                log.warning("stage1_rerank_failed", error=str(exc))
+                scored = None
+        if not scored:
+            return _cos_order(ti, kept)
+        ordered = [pairs[j][0] for j, _ in scored if 0 <= j < len(pairs)]
+        # Keep membership stable: append anything the reranker dropped.
+        for i in kept:
+            if i not in ordered:
+                ordered.append(i)
+        return ordered
+
+    order_results = await asyncio.gather(
+        *(_order(ti, per_thesis_candidates[ti]) for ti in range(len(outline.theses)))
+    )
+
+    new_theses: list[Thesis] = []
+    per_thesis_obs: list[dict] = []
+    for ti, (t, ordered) in enumerate(zip(outline.theses, order_results)):
+        planner_set = per_thesis_planner[ti]
+        # Planner picks are never gated (the reasoner vetted them); only the
+        # purports we attached on top must clear the floor.
+        kept = [
+            i for i in ordered
+            if i in planner_set
+            or cos_by_thesis_idx.get((ti, i), 0.0) >= STAGE1_ATTACH_FLOOR
+        ]
+        if not kept:
+            kept = list(ordered) or list(t.supporting_notes)
+        new_supporting = _balanced_topk(
+            kept, pool_envelopes, k=top_k_per_thesis,
+            score_of=lambda i, _ti=ti: cos_by_thesis_idx.get((_ti, i), 0.0),
+        )
+        if not new_supporting:
+            # Outline.supporting_notes is min_length=1 — never emit empty.
+            new_supporting = list(t.supporting_notes)
         new_theses.append(Thesis(
             thesis=t.thesis,
             header=t.header,
             supporting_notes=new_supporting,
             sub_query_types=list(t.sub_query_types),
         ))
-        # Type mix of the FINAL picks (post non-lecture swap) — tells us if a
-        # thesis ended up commentary-heavy / verse-heavy / lecture-heavy.
         type_counts: dict[str, int] = {}
-        for one_based in new_supporting:
-            kind = _ptype(one_based) or "?"
+        for i in new_supporting:
+            e = pool_envelopes[i - 1] if 1 <= i <= len(pool_envelopes) else {}
+            kind = (e.get("type") if isinstance(e, dict) else None) or "?"
             type_counts[kind] = type_counts.get(kind, 0) + 1
-        skipped_after_cap = scored[top_k_per_thesis:]
         per_thesis_obs.append({
+            "n_candidates": len(per_thesis_candidates[ti]),
+            "n_planner_picks": len(planner_set),
             "n_supporting": len(new_supporting),
-            "top_cosine": round(top[0][0], 3) if top else 0.0,
-            "median_cosine": round(
-                top[len(top) // 2][0], 3) if top else 0.0,
+            "top_cosine": round(
+                max((cos_by_thesis_idx.get((ti, i), 0.0) for i in new_supporting),
+                    default=0.0), 3),
             "type_mix": type_counts,
-            "n_above_threshold": sum(1 for s, _ in top if s >= 0.55),
-            # The strongest note we did NOT keep — flags potential
-            # under-coverage when this is also above threshold.
-            "skipped_max_cosine": round(
-                skipped_after_cap[0][0], 3) if skipped_after_cap else 0.0,
         })
 
     enriched = Outline(
@@ -520,7 +570,7 @@ async def rerank_and_attach_commentaries(
         n_theses=len(outline.theses),
         n_base_notes=len(base_notes),
         n_new_commentaries=len(new_envelopes),
-        n_verses_expanded=len(verse_pairs),
+        n_verses_expanded=len(verse_score),
         per_thesis=per_thesis_obs,
     )
 
