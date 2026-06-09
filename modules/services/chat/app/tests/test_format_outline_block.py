@@ -116,3 +116,63 @@ def test_format_outline_block_no_intro_no_conclusion_no_directives() -> None:
     ))
     assert "INTRO" not in block
     assert "CONCLUSION" not in block
+
+
+# ── _compact_for_outline ────────────────────────────────────────────
+
+
+def test_compact_trims_pool_to_cited_notes_and_remaps_indices() -> None:
+    """Task B: the synthesizer should only see the notes the outline cites,
+    with supporting_notes renumbered into the compacted position space so
+    `[^N]` stays aligned with _format_tool_results / the alias remap."""
+    from lectorium_chat.application.synthesizer_turn import _compact_for_outline
+
+    tool_results = [
+        {"type": "lecture", "ref": 1, "text": "note 1"},
+        {"type": "verse", "ref": 2, "text": "note 2"},
+        {"type": "lecture", "ref": 3, "text": "note 3"},
+        {"type": "commentary", "ref": 4, "text": "note 4"},
+        {"type": "lecture", "ref": 5, "text": "note 5"},
+    ]
+    # Theses cite original positions 2 and 4 only.
+    outline = Outline(theses=[
+        Thesis(thesis="a", supporting_notes=[2]),
+        Thesis(thesis="b", supporting_notes=[4]),
+    ])
+
+    compacted, new_outline = _compact_for_outline(tool_results, outline)
+
+    assert [n["text"] for n in compacted] == ["note 2", "note 4"]
+    # 2 → 1, 4 → 2 in the compacted space.
+    assert new_outline.theses[0].supporting_notes == [1]
+    assert new_outline.theses[1].supporting_notes == [2]
+
+
+def test_compact_keeps_action_and_error_notes() -> None:
+    from lectorium_chat.application.synthesizer_turn import _compact_for_outline
+
+    tool_results = [
+        {"type": "lecture", "ref": 1, "text": "cited"},
+        {"type": "lecture", "ref": 2, "text": "uncited"},
+        {"ok": True, "kind": "share_pdf", "action_id": "ab12"},
+        {"error": "boom"},
+    ]
+    outline = Outline(theses=[Thesis(thesis="a", supporting_notes=[1])])
+
+    compacted, new_outline = _compact_for_outline(tool_results, outline)
+
+    kinds = [n.get("type") or n.get("kind") or ("error" if "error" in n else "?") for n in compacted]
+    # cited note 1 + the action card + the error note survive; uncited dropped.
+    assert "share_pdf" in kinds
+    assert "error" in kinds
+    assert "uncited" not in [n.get("text") for n in compacted]
+    assert new_outline.theses[0].supporting_notes == [1]
+
+
+def test_compact_noop_without_outline() -> None:
+    from lectorium_chat.application.synthesizer_turn import _compact_for_outline
+
+    tool_results = [{"type": "lecture", "ref": 1, "text": "x"}]
+    out_results, out_outline = _compact_for_outline(tool_results, None)
+    assert out_results is tool_results  # free-form path untouched
+    assert out_outline is None

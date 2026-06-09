@@ -367,6 +367,98 @@ def _format_outline_block(outline: Any) -> str:
     return "OUTLINE (follow strictly):\n" + "\n".join(parts)
 
 
+# Action-card kinds whose note must always reach the synthesizer even
+# though no thesis "cites" it — the model has to copy its marker.
+# (Mirrors the set inside `_render_one_note`.)
+_ACTION_KINDS = {
+    "share_pdf",
+    "enable_daily_reminder",
+    "configure_smart_library",
+    "upgrade_to_pro",
+}
+
+
+def _compact_for_outline(
+    tool_results: list[Any], outline: Any
+) -> tuple[list[Any], Any]:
+    """Trim the note pool the synthesizer sees to ONLY the notes the
+    outline actually cites (the union of every thesis's supporting_notes),
+    plus always-keep action / error notes. Returns `(compacted_notes,
+    remapped_outline)` with supporting_notes renumbered into the compacted
+    position space so the `[^N]` indices stay aligned with the OUTLINE
+    block AND `_build_position_alias_remap` (both re-derive from the same
+    flattened list).
+
+    Why: the post-planner stages inflate `tool_results` to 30-90 notes,
+    but the synthesizer is instructed to cite only supporting_notes — so
+    handing it the whole pool only invites lost-in-the-middle drift and
+    off-plan citations. With `outline=None` (free-form) or empty theses
+    (refusal) nothing is trimmed; the legacy whole-pool behaviour stands.
+    """
+    theses = list(getattr(outline, "theses", []) or [])
+    if not theses:
+        return tool_results, outline  # free-form / refusal — leave as-is
+
+    flat: list[dict[str, Any]] = []
+    for r in tool_results:
+        if isinstance(r, list):
+            flat.extend(x for x in r if isinstance(x, dict))
+        elif isinstance(r, dict):
+            flat.append(r)
+    n = len(flat)
+
+    keep: set[int] = set()
+    for t in theses:
+        for i in t.supporting_notes:
+            if 1 <= i <= n:
+                keep.add(i)
+    for i, note in enumerate(flat, start=1):
+        if "error" in note or (
+            isinstance(note.get("kind"), str)
+            and isinstance(note.get("action_id"), str)
+            and note["kind"] in _ACTION_KINDS
+        ):
+            keep.add(i)
+
+    if not keep or len(keep) == n:
+        return tool_results, outline  # nothing to trim
+
+    # Local import avoids an application→research import at module load.
+    from lectorium_chat.research.models import Outline, Thesis
+
+    kept_sorted = sorted(keep)
+    remap = {old: new for new, old in enumerate(kept_sorted, start=1)}
+    compacted: list[Any] = [flat[old - 1] for old in kept_sorted]
+
+    new_theses: list[Any] = []
+    for t in theses:
+        new_refs = [remap[i] for i in t.supporting_notes if i in remap]
+        if not new_refs:
+            # Defensive: a thesis's notes are always in `keep`, but never
+            # emit empty supporting_notes (schema min_length=1).
+            new_refs = [1]
+        new_theses.append(Thesis(
+            thesis=t.thesis,
+            header=t.header,
+            supporting_notes=new_refs,
+            sub_query_types=list(getattr(t, "sub_query_types", []) or []),
+        ))
+    new_outline = Outline(
+        intro=getattr(outline, "intro", None),
+        theses=new_theses,
+        conclusion=getattr(outline, "conclusion", None),
+        skipped_notes=list(getattr(outline, "skipped_notes", []) or []),
+        skipped_reason=getattr(outline, "skipped_reason", None),
+    )
+    log.info(
+        "synth_pool_compacted",
+        before=n,
+        after=len(compacted),
+        n_theses=len(new_theses),
+    )
+    return compacted, new_outline
+
+
 async def run_synthesizer_turn(
     user_query: str,
     *,
@@ -409,6 +501,12 @@ async def run_synthesizer_turn(
       - `Outline(theses=[…])`  → model writes one paragraph per thesis,
                                  citing only that thesis's supporting_notes.
     """
+    # Trim the pool to only what the outline cites (keeps `[^N]` indices
+    # aligned across notes, outline block and the alias remap — all three
+    # re-derive from `tool_results`). No-op for free-form / refusal turns.
+    if outline is not None and tool_results:
+        tool_results, outline = _compact_for_outline(tool_results, outline)
+
     notes = _format_tool_results(tool_results) if tool_results else "(no research notes)"
 
     # Install the position→alias remap for THIS stream. The notes section

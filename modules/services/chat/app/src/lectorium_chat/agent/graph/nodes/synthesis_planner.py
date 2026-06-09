@@ -132,6 +132,7 @@ async def synthesis_planner_node(
     # reranker is present, else cosine). Graceful degrade: on missing
     # embedder / fetch failure, returns the original outline + no new
     # notes (synthesizer keeps the planner's picks).
+    user_query = state.get("user_query", "")
     enriched, new_commentaries = await rerank_and_attach_commentaries(
         outline,
         tool_results,
@@ -142,6 +143,7 @@ async def synthesis_planner_node(
         catalog_repo=ctx.catalog_repo,
         on_event=None,  # planner runs after the live SSE progress panel
         reranker=reranker,
+        user_query=user_query,
     )
 
     # Stage 2: per-thesis thin-support augmentation.
@@ -159,6 +161,7 @@ async def synthesis_planner_node(
         lang=state.get("lang"),
         router_args=state.get("extracted_args") or {},
         reranker=reranker,
+        user_query=user_query,
     )
 
     # Emit a one-shot summary event so chat_turn can pull outline-shape

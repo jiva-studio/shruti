@@ -28,7 +28,7 @@ from lectorium_chat.agent.tools._envelope import (
     resolve_commentary_author_names,
 )
 from lectorium_chat.observability.logging import get_logger
-from lectorium_chat.research.commentary_expansion import _cosine
+from lectorium_chat.research.commentary_expansion import _balanced_topk, _cosine
 from lectorium_chat.research.constants import (
     AUGMENT_FRESH_TOP_K,
     THIN_THESIS_MIN_SCORE,
@@ -124,6 +124,7 @@ async def augment_thin_theses(
     top_k_per_thesis: int = 5,
     fresh_top_k: int = AUGMENT_FRESH_TOP_K,
     reranker: Any = None,
+    user_query: str | None = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Stage 2 — for each thin thesis, do a fresh thesis-targeted ANN
     fetch + re-rank.
@@ -361,14 +362,17 @@ async def augment_thin_theses(
                         rescored.append((_cosine(thesis_embeds[i], f_emb), idx))
 
         rescored.sort(reverse=True)
-        new_top = [idx for _, idx in rescored[:top_k_per_thesis]]
+        cosine_order = [idx for _, idx in rescored]
 
-        # Cross-encoder owns the final selection when present: rerank the
-        # SAME pool (current supporting_notes + fresh chunks) against the
-        # thesis statement alone. `_is_thin` detection above stays on
-        # cosine. Any failure ⇒ keep the cosine `new_top` for this thesis.
+        # Cross-encoder ORDERS the same pool (current supporting_notes +
+        # fresh chunks) against the CLAIM (user query + thesis) — query-
+        # aware, not the bare thesis sentence. `_is_thin` detection above
+        # stays on cosine. Any failure ⇒ keep the cosine order. The
+        # reranker only re-orders the pool; the type-balanced cut below
+        # makes the final selection.
+        ordered = cosine_order
         if reranker is not None:
-            pool_idx = [idx for _, idx in rescored]
+            pool_idx = list(cosine_order)
             pool_texts: list[str] = []
             for idx in pool_idx:
                 if 1 <= idx <= len(base_notes):
@@ -380,20 +384,38 @@ async def augment_thin_theses(
                     txt = (env.get("text") or "").strip() if env else ""
                 pool_texts.append(txt)
             rerankable = [(idx, txt) for idx, txt in zip(pool_idx, pool_texts) if txt]
-            if rerankable and t.thesis.strip():
+            claim = f"{user_query}\n{t.thesis}" if user_query else t.thesis
+            if len(rerankable) >= 2 and claim.strip():
                 try:
                     scored_rr = await reranker.rerank(
-                        t.thesis, [txt for _, txt in rerankable],
-                        top_k=top_k_per_thesis,
+                        claim, [txt for _, txt in rerankable],
+                        top_k=len(rerankable),
                     )
                 except Exception as exc:  # noqa: BLE001 — never fail a turn
                     log.warning("augment_rerank_failed", thesis_idx=i, error=str(exc))
                     scored_rr = None
                 if scored_rr:
-                    new_top = [
-                        rerankable[j][0] for j, _ in scored_rr[:top_k_per_thesis]
+                    rr_order = [
+                        rerankable[j][0] for j, _ in scored_rr
                         if 0 <= j < len(rerankable)
                     ]
+                    # Keep membership stable — append anything the reranker
+                    # dropped (empty-text notes weren't sent to it).
+                    for idx in pool_idx:
+                        if idx not in rr_order:
+                            rr_order.append(idx)
+                    ordered = rr_order
+
+        # Type-balanced cut: top-K, de-monopolised away from all-lecture
+        # when a relevant verse/purport exists. `additional_envelopes`
+        # already holds every fresh chunk (this thesis's included), so
+        # base_notes + additional_envelopes covers all pool indices.
+        pool_for_pick = list(base_notes) + list(additional_envelopes)
+        cos_map = {idx: s for s, idx in rescored}
+        new_top = _balanced_topk(
+            ordered, pool_for_pick, k=top_k_per_thesis,
+            score_of=lambda i: cos_map.get(i, 0.0),
+        )
 
         # Defensive: never let augment empty out a thesis. If something
         # weird happened (no fresh, no original), keep the original picks.
