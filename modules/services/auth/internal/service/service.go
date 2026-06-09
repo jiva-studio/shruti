@@ -292,6 +292,15 @@ func (s *Service) maybeUpdateIdentityEmail(ctx context.Context, tx pgx.Tx, exist
 
 // ─── Refresh ────────────────────────────────────────────────────────────────
 
+// ErrRefreshRejected marks a refresh failure caused by the token itself —
+// malformed/expired signature, unknown jti, revoked, or past expiry. The
+// handler maps it to 401 so the client drops the session. Every OTHER Refresh
+// error (DB unreachable mid-deploy, signer failure) is infrastructural and
+// must NOT be wrapped with this: those map to 5xx so a brief backend blip
+// doesn't log the user out — the single most common "logged out after an
+// update" cause.
+var ErrRefreshRejected = errors.New("refresh token rejected")
+
 // Refresh rotates a single-use refresh token.
 //
 // Invariants:
@@ -302,11 +311,11 @@ func (s *Service) maybeUpdateIdentityEmail(ctx context.Context, tx pgx.Tx, exist
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, error) {
 	claims, err := s.Verifier.Verify(refreshToken)
 	if err != nil {
-		return nil, fmt.Errorf("refresh: invalid token: %w", err)
+		return nil, fmt.Errorf("refresh: %w: %v", ErrRefreshRejected, err)
 	}
 	jti, err := claims.JTI()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("refresh: %w: %v", ErrRefreshRejected, err)
 	}
 
 	var session *Session
@@ -316,13 +325,13 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 			return err
 		}
 		if row == nil {
-			return errors.New("unknown refresh token")
+			return fmt.Errorf("%w: unknown refresh token", ErrRefreshRejected)
 		}
 		if row.RevokedAt != nil {
-			return errors.New("refresh token revoked")
+			return fmt.Errorf("%w: refresh token revoked", ErrRefreshRejected)
 		}
 		if time.Now().After(row.ExpiresAt) {
-			return errors.New("refresh token expired")
+			return fmt.Errorf("%w: refresh token expired", ErrRefreshRejected)
 		}
 
 		// Mark the old row revoked and issue a fresh one.

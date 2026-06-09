@@ -201,14 +201,30 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     return (await res.json()) as TokenResponseBody
   }
 
-  async function callRefresh(refreshToken: string): Promise<TokenResponseBody | null> {
-    const res = await cfg.request("/refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    })
-    if (!res.ok) return null
-    return (await res.json()) as TokenResponseBody
+  // A refresh attempt has three outcomes, not two: success, a genuine
+  // rejection (the token is bad/expired/revoked → drop the session), and a
+  // transient failure (backend mid-deploy, rate-limit, offline → keep the
+  // session and retry later). Collapsing the last two into "logout" is what
+  // makes users get signed out after an app/backend update.
+  type RefreshOutcome = { ok: true; body: TokenResponseBody } | { ok: false; rejected: boolean }
+
+  async function callRefresh(refreshToken: string): Promise<RefreshOutcome> {
+    let res: Response
+    try {
+      res = await cfg.request("/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      })
+    } catch {
+      // Network error / offline — transient, never drop the session.
+      return { ok: false, rejected: false }
+    }
+    if (res.ok) return { ok: true, body: (await res.json()) as TokenResponseBody }
+    // 401/403 = the server rejected the refresh token itself → clear.
+    // 5xx (auth/DB down during a deploy), 429, 408, etc. are transient →
+    // keep the session so a later attempt can recover.
+    return { ok: false, rejected: res.status === 401 || res.status === 403 }
   }
 
   async function callSignin(
@@ -253,17 +269,19 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     if (!refreshInFlight) {
       refreshInFlight = (async () => {
         try {
-          const tr = await callRefresh(stored!.refreshToken)
-          if (!tr) {
-            await clearTokens()
+          const r = await callRefresh(stored!.refreshToken)
+          if (!r.ok) {
+            // Only a genuine rejection drops the session; a transient
+            // failure leaves `stored` intact so the next call retries.
+            if (r.rejected) await clearTokens()
             return null
           }
           // Return the freshly-minted token from the response, not a
           // re-read of module-level `stored` — a concurrent clearTokens()
           // could null `stored` between the await and the read, rejecting
           // every coalesced caller with a TypeError.
-          await commitTokenResponse(tr)
-          return tr.accessToken
+          await commitTokenResponse(r.body)
+          return r.body.accessToken
         } finally {
           refreshInFlight = null
         }
@@ -402,15 +420,16 @@ export function useCapacitorAuth(cfg: AuthConfig): AuthPort {
     if (!refreshInFlight) {
       refreshInFlight = (async () => {
         try {
-          const tr = await callRefresh(stored!.refreshToken)
-          if (!tr) {
-            await clearTokens()
+          const r = await callRefresh(stored!.refreshToken)
+          if (!r.ok) {
+            // Transient failure keeps the session; only a rejection clears.
+            if (r.rejected) await clearTokens()
             return null
           }
           // See getAccessToken: return the response's token, never a
           // re-read of `stored`, which a concurrent clearTokens() can null.
-          await commitTokenResponse(tr)
-          return tr.accessToken
+          await commitTokenResponse(r.body)
+          return r.body.accessToken
         } finally {
           refreshInFlight = null
         }
