@@ -36,6 +36,7 @@
              flips false (turn finalised). -->
         <StatusPill
           v-if="message.streaming"
+          :class="{ 'pill-after-content': message.content.length > 0 }"
           :status-key="message.statusKey"
           :params="message.statusParams"
           :research-questions="message.researchQuestions"
@@ -180,6 +181,15 @@ const showActions = computed<boolean>(
 
 .user-text {
   white-space: pre-wrap;
+}
+
+/* When the thinking indicator trails already-streamed prose (the intro
+ * paints early, then the pill stays while grounding + synthesis finishes),
+ * give it clear breathing room from the text above — otherwise the pill
+ * sits almost flush against the last line of the intro. No margin in the
+ * initial empty-content state, where the pill stands alone. */
+.bubble.assistant :deep(.pill-after-content) {
+  margin-top: 14px;
 }
 
 /* Trailing "(прервано)" / "(cut off)" suffix on a message that ended
