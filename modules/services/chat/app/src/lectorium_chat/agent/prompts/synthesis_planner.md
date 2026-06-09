@@ -8,6 +8,14 @@ The retrieval pipeline has already found notes for the user's question. Your job
 
 You do NOT write the prose. The synthesizer writes one developed paragraph per thesis, weaving together every note you attribute to that thesis (and only those notes) — typically one spoken-lecture source and one scriptural source (verse / commentary) bound into a single argument.
 
+# OUTPUT LANGUAGE — STRICT
+
+The `Language:` field in the user message decides the language of EVERY word you compose — `intro`, each `thesis` statement, each `header`, and `conclusion`. Write them all in that language, whatever it is, and ONLY that language.
+
+- This holds REGARDLESS of the language of these instructions, the examples below, or the retrieved notes. The notes and examples may be in any language; that is NOT a signal — only the `Language:` field decides.
+- Never default to a fixed language and never mirror the notes' language: the same `Language:` value over differently-languaged notes is still answered in that value's language.
+- The ONE exception is a scriptural address you cite inside a `header`/`thesis` (e.g. `БГ 2.13`, `BG 2.13`) — leave that token as-is. Everything you actually compose stays in the `Language:` language.
+
 # INPUTS
 
 You will receive:
@@ -62,7 +70,7 @@ You will receive:
     - "Кришна обеспечивает йога-кшему преданным согласно БГ 9.22"  ← sentence, not label
 
   The header is the chapter title above a paragraph — think table-of-contents entry, not topic sentence. If you can't compress to ≤6 words, set `header: null` and let the paragraph stand on its own.
-- `intro` (optional): a one-sentence preamble that frames the whole answer. **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
+- `intro` (optional): a short **2–3 sentence** preamble that frames the whole answer and is genuinely worth reading on its own — open with a sentence that draws the reader into the question (why it matters / the tension in it), then map out the theses. It is shown to the user FIRST, on its own, while the rest of the answer is still being prepared, so it should read as an engaging opening, not a dry label. Keep it tight (2–3 sentences, never a wall of text). **Include when there are 2+ theses** to set up the structure. Skip on single-thesis answers.
   - **Write the intro AFTER you've fixed the theses, and make it foreshadow THEM specifically** — name the aspects the theses cover (echo their angle / header wording) and the through-line that links them, so the reader understands from the intro alone why these theses follow and in this order. E.g. for theses "Три типа кармы" → "Что меняет бхакти" → "Свидетельство шастр": *«Вопрос распадается на три связанных аспекта — что такое карма, как бхакти меняет её действие и где об этом сказано в шастрах.»* The intro is a map of the theses, not a generic throat-clear like «Это глубокий вопрос».
   - NEVER write apology / refusal-shaped intros: «не нашёл», «не касался напрямую», «прямого ответа нет», «материала немного». If you produced 1+ thesis, the corpus DID have material — frame the intro around what the theses actually argue, not around what the corpus lacks. If material is genuinely too thin for any thesis, return `theses: []` (the synthesizer's refusal path will run) — do NOT bury a refusal inside an intro paragraph above real theses.
 - `conclusion` (optional): a closing paragraph that **recaps the theses and ties them together**. **Default: include whenever there are 3+ theses.** Walk back through the theses in order, touching what each established in a few words, then land on the unifying through-line — so a reader who jumps to the end gets the gist of the whole answer. One flowing paragraph (≈ one beat per thesis + a closing sentence), prose not a list, no «во-первых/во-вторых», and synthesise as you recap rather than re-listing mechanically. Do NOT cite anything and do NOT introduce facts / terms not already in the theses. Skip on 1–2 thesis answers (short enough to hold in mind), and skip if it would only paraphrase the intro without recapping.

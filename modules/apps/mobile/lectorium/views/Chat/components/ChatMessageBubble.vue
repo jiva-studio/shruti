@@ -22,19 +22,28 @@
         />
       </template>
       <template v-else>
+        <!-- Render whatever prose has streamed so far. -->
+        <ChatTokenRenderer
+          v-if="message.content.length > 0"
+          :message="message"
+          @pick-chapter="$emit('pick-chapter', $event)"
+        />
+        <!-- Keep the thinking indicator up for the WHOLE streaming turn, not
+             just until the first token. The server now paints the intro early
+             (before the slower grounding + synthesis finishes), so hiding the
+             pill on first content left a long gap where the answer looked
+             done but more text was still coming. Stays until `streaming`
+             flips false (turn finalised). -->
         <StatusPill
-          v-if="message.streaming && message.content.length === 0"
+          v-if="message.streaming"
           :status-key="message.statusKey"
           :params="message.statusParams"
           :research-questions="message.researchQuestions"
           :research-sources="message.researchSources"
         />
-        <template v-else>
-          <ChatTokenRenderer :message="message" @pick-chapter="$emit('pick-chapter', $event)" />
-          <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
-            errorSuffix
-          }}</span>
-        </template>
+        <span v-if="errorSuffix && !message.streaming" class="truncated-suffix">{{
+          errorSuffix
+        }}</span>
       </template>
     </div>
     <ChatMessageActions
