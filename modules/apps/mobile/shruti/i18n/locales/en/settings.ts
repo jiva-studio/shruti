@@ -54,6 +54,9 @@ export default {
     error: "An error occurred during the operation. Please try again.",
     noSubscriptionFound:
       "No active subscription found. Please subscribe to access premium features.",
+    cantPay: "Can't pay",
+    cantPayEmailSubject: "Can't pay",
+    cantPayEmailIntro: "Can't pay.",
     thanks:
       "Thank you for your subscription and support 🙏 May your heart be filled with happiness, and each day bring you closer to Truth. We are glad that you are with us on this path.",
     benefits: {
