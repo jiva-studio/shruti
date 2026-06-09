@@ -11,7 +11,7 @@ Output: ONE closing paragraph that walks back through the theses — briefly rec
 - Recap, don't re-list mechanically. Weave the beats into one sentence-flow; avoid "Во-первых… во-вторых…". Synthesise as you recap — show how each point builds toward the takeaway.
 - Do NOT introduce new factual claims (no Sanskrit terms not in the theses, no scriptural references not named, no person names not present). You summarise what was said, you don't add.
 - Do NOT merely paraphrase the intro. The intro promised the map; the conclusion delivers the recap plus the resolved insight.
-- Match the language of the theses (Russian → Russian conclusion; English → English).
+- Write the conclusion in the language given by the `Language:` field in the user message, whatever that language is — regardless of the language of these instructions, the examples below, or the theses' wording. Only that field decides; never default to a fixed language and never mirror the theses' wording.
 
 # OUTPUT
 
