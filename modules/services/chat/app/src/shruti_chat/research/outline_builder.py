@@ -46,9 +46,10 @@ _INTRO_PROMPT_PATH = (
 )
 
 # Conclusion fallback fires only when the answer has at least this many
-# theses. Single + double-thesis answers don't need a closing paragraph;
-# the reader can hold the through-line in mind.
-_MIN_THESES_FOR_CONCLUSION = 3
+# theses — kept in lockstep with `_MIN_THESES_FOR_INTRO` so a multi-thesis
+# answer always carries BOTH bookends or neither. A two-thesis answer with
+# an intro but no conclusion reads lopsided; the symmetry is the point.
+_MIN_THESES_FOR_CONCLUSION = 2
 
 # The intro is rewritten by a dedicated post-outline pass for answers with
 # at least this many theses. Single-thesis answers carry no intro (the lone

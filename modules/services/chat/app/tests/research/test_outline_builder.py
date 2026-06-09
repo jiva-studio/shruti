@@ -195,21 +195,37 @@ async def test_planner_returns_conclusion_no_fallback_call() -> None:
 
 
 @pytest.mark.asyncio
-async def test_planner_skips_conclusion_under_3_theses_no_fallback() -> None:
-    """Single/double-thesis outlines don't get a conclusion — they're
-    held in the reader's mind without one."""
+async def test_planner_skips_conclusion_single_thesis_no_fallback() -> None:
+    """A single-thesis outline gets no conclusion — the lone paragraph
+    speaks for itself, so the fallback must NOT fire (threshold is 2)."""
     llm = FakeLLM(by_schema={
         "Outline": Outline(theses=[
             Thesis(thesis="only one", supporting_notes=[1]),
-            Thesis(thesis="only two", supporting_notes=[1]),
         ], conclusion=None),
     })
     out = await build_outline("q", "ru", [_note(0)], llm=llm)
-    # 2 theses: conclusion fallback must NOT fire (needs 3+). Intro is not
+    # 1 thesis: conclusion fallback must NOT fire (needs 2+). Intro is not
     # written here either → exactly one structured_output call.
     schemas_called = [c[1].__name__ for c in llm.calls]
     assert schemas_called == ["Outline"]
     assert out.conclusion is None
+
+
+@pytest.mark.asyncio
+async def test_planner_skips_conclusion_two_theses_fallback_fires() -> None:
+    """A two-thesis outline with no conclusion now triggers the fallback —
+    multi-thesis answers carry both bookends, so the threshold is 2, not 3."""
+    llm = FakeLLM(by_schema={
+        "Outline": Outline(theses=[
+            Thesis(thesis="first", supporting_notes=[1]),
+            Thesis(thesis="second", supporting_notes=[1]),
+        ], conclusion=None),
+        "ConclusionResponse": ConclusionResponse(conclusion="two-thesis conclusion"),
+    })
+    out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    schemas_called = [c[1].__name__ for c in llm.calls]
+    assert schemas_called == ["Outline", "ConclusionResponse"]
+    assert out.conclusion == "two-thesis conclusion"
 
 
 @pytest.mark.asyncio
