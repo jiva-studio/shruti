@@ -25,7 +25,12 @@ from pydantic import ValidationError
 from shruti_chat.domain.entities import Message
 from shruti_chat.observability.langfuse_client import prompt_with_fallback
 from shruti_chat.observability.logging import get_logger
-from shruti_chat.research.models import ConclusionResponse, Outline, Thesis
+from shruti_chat.research.models import (
+    ConclusionResponse,
+    IntroResponse,
+    Outline,
+    Thesis,
+)
 
 
 log = get_logger(__name__)
@@ -36,11 +41,19 @@ _PROMPT_PATH = (
 _CONCLUSION_PROMPT_PATH = (
     Path(__file__).parent.parent / "agent" / "prompts" / "conclusion_writer.md"
 )
+_INTRO_PROMPT_PATH = (
+    Path(__file__).parent.parent / "agent" / "prompts" / "intro_writer.md"
+)
 
 # Conclusion fallback fires only when the answer has at least this many
 # theses. Single + double-thesis answers don't need a closing paragraph;
 # the reader can hold the through-line in mind.
 _MIN_THESES_FOR_CONCLUSION = 3
+
+# The intro is rewritten by a dedicated post-outline pass for answers with
+# at least this many theses. Single-thesis answers carry no intro (the lone
+# paragraph speaks for itself) — matches the planner prompt's own rule.
+_MIN_THESES_FOR_INTRO = 2
 
 
 def _load_prompt() -> str:
@@ -49,6 +62,10 @@ def _load_prompt() -> str:
 
 def _load_conclusion_prompt() -> str:
     return _CONCLUSION_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _load_intro_prompt() -> str:
+    return _INTRO_PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def _render_note(idx: int, note: dict[str, Any]) -> str:
@@ -205,6 +222,75 @@ async def _synthesize_conclusion(
     )
 
 
+async def synthesize_intro(
+    outline: Outline,
+    lang: str,
+    *,
+    llm: Any,
+    model: str | None = None,
+    callbacks: list[Any] | None = None,
+) -> str | None:
+    """Write the intro from the FINISHED theses, in a dedicated pass.
+
+    The planner emits `intro` inline, before it has written the theses, so
+    that intro can only echo the topics/headers — a "we'll look at A, B, C"
+    table of contents. This pass runs AFTER the theses are fixed and feeds
+    only their claim text to a focused prompt, so the result states what the
+    answer actually concludes.
+
+    Returns the new intro string, or `None` on failure / empty return /
+    unexpected shape — the caller then keeps whatever intro the planner
+    produced. Pure (reads `outline.theses`, mutates nothing), so the caller
+    can run it concurrently with the Stage 1/2 grounding work.
+    """
+    theses_block = "\n".join(
+        f"  {i+1}. {t.thesis}" for i, t in enumerate(outline.theses)
+    )
+    user_msg = (
+        f"Language: {lang}\n\n"
+        f"Theses:\n{theses_block}"
+    )
+
+    try:
+        prompt = prompt_with_fallback(
+            "intro-writer", fallback=_load_intro_prompt,
+        )
+        effective_model = prompt.config.get("model") or model
+        messages: list[Message] = [
+            {"role": "system", "content": prompt.text},
+            {"role": "user", "content": user_msg},
+        ]
+        response: IntroResponse = await llm.structured_output(
+            messages, IntroResponse,
+            model=effective_model, callbacks=callbacks,
+            run_name="intro_writer",
+        )
+    except (ValidationError, Exception) as exc:  # noqa: BLE001 — best-effort
+        log.warning(
+            "intro_writer_failed",
+            error=str(exc),
+            n_theses=len(outline.theses),
+        )
+        return None
+
+    if not isinstance(response, IntroResponse):
+        # Adapter returned an unexpected shape (or None) — keep planner's.
+        return None
+
+    cleaned = (response.intro or "").strip()
+    if not cleaned:
+        # Writer signalled "no intro adds value" — keep the planner's.
+        log.info("intro_writer_returned_empty", n_theses=len(outline.theses))
+        return None
+
+    log.info(
+        "intro_writer_filled",
+        n_theses=len(outline.theses),
+        chars=len(cleaned),
+    )
+    return cleaned
+
+
 async def build_outline(
     question: str,
     lang: str,
@@ -299,4 +385,8 @@ async def build_outline(
         fallback_outcome=fallback_outcome,
     )
 
+    # NOTE: the intro is NOT rewritten here. The planner's inline intro
+    # (generated before the theses → a topic table-of-contents) is replaced
+    # by `synthesize_intro`, which the synthesis_planner node runs CONCURRENTLY
+    # with the Stage 1/2 grounding so the extra LLM call costs ~no wall-clock.
     return outline

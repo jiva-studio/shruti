@@ -92,6 +92,12 @@ _PROMPTS: list[tuple[str, str, dict, list[str]]] = [
         ["chat", "synth"],
     ),
     (
+        "intro-writer", "intro_writer",
+        {"model": _FLASH_LITE, "temperature": 0, "schema": "IntroResponse",
+         "note": "structured_output → temperature forced to 0; rewrites the intro from finished theses (2+ theses) so it states the claims, not a topic table-of-contents"},
+        ["chat", "synth"],
+    ),
+    (
         "topic-extractor", "topic_extractor",
         {"model": _FLASH_LITE, "temperature": 0, "note": "structured_output → temperature forced to 0"},
         ["chat", "research"],
