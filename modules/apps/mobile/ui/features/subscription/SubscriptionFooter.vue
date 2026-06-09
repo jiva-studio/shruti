@@ -40,6 +40,17 @@
       </IonButton>
     </template>
 
+    <IonButton
+      v-if="showCantPay"
+      expand="block"
+      fill="clear"
+      color="medium"
+      class="cant-pay"
+      @click="emit('cantPay')"
+    >
+      {{ $t("settings.subscription.cantPay") }}
+    </IonButton>
+
     <IonNote class="legal">
       <a v-for="doc in legalDocuments" :key="doc.title" :href="doc.link" target="_blank">
         {{ doc.title }}
@@ -71,12 +82,14 @@ const props = defineProps<{
   purchasing: boolean
   restoring: boolean
   legalDocuments: LegalDocumentView[]
+  showCantPay?: boolean
 }>()
 
 const emit = defineEmits<{
   subscribe: [packageId: string]
   restore: []
   manage: []
+  cantPay: []
 }>()
 
 const { t, te } = useI18n()
@@ -125,6 +138,12 @@ function onSubscribeClick(): void {
 .cta {
   margin: 12px 16px 4px;
   --box-shadow: none;
+}
+
+.cant-pay {
+  margin: 0 16px;
+  --box-shadow: none;
+  font-size: 0.9rem;
 }
 
 .legal {
