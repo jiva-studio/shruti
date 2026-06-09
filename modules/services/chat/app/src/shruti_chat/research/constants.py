@@ -42,6 +42,13 @@ COVERAGE_MIN_LECTURES = 2
 MAX_FANOUT_ROUNDS = 2
 TOPK_PER_QUERY = 8
 
+# Round-1 (regenerate) fanout is bounded much tighter than round 0. Round 0
+# fans out every sub_query × every alt_phrasing; replaying that breadth on the
+# second pass is what blows the tail turn out (~11s round-1 vs ~5s round-0 in
+# prod traces). The regenerate round only needs a few FRESH angles, so we take
+# the primary text of the first N regenerated sub_queries and drop alt_phrasings.
+REGEN_MAX_SUBQUERIES = 4
+
 # ---- Cross-encoder rerank (Stage A) ----------------------------------------
 # Primary cutoff is TOP-K everywhere. Cross-encoder scores are NOT calibrated
 # across queries (Voyage/Cohere: relative-rank-within-a-query only), so an
