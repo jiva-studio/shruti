@@ -7,8 +7,13 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from shruti_chat.research.models import ConclusionResponse, Outline, Thesis
-from shruti_chat.research.outline_builder import build_outline
+from shruti_chat.research.models import (
+    ConclusionResponse,
+    IntroResponse,
+    Outline,
+    Thesis,
+)
+from shruti_chat.research.outline_builder import build_outline, synthesize_intro
 
 
 class FakeLLM:
@@ -181,7 +186,9 @@ async def test_planner_returns_conclusion_no_fallback_call() -> None:
         "Outline": _outline_3_theses(conclusion="planner-provided conclusion."),
     })
     out = await build_outline("q", "ru", [_note(0)], llm=llm)
-    # Only ONE structured_output call (Outline). No ConclusionResponse call.
+    # Planner gave a conclusion → no ConclusionResponse fallback call. The
+    # intro rewrite is NOT done here (it's a separate pass the node runs
+    # concurrently with Stage 1), so build_outline makes ONE call.
     schemas_called = [c[1].__name__ for c in llm.calls]
     assert schemas_called == ["Outline"]
     assert out.conclusion == "planner-provided conclusion."
@@ -198,9 +205,52 @@ async def test_planner_skips_conclusion_under_3_theses_no_fallback() -> None:
         ], conclusion=None),
     })
     out = await build_outline("q", "ru", [_note(0)], llm=llm)
+    # 2 theses: conclusion fallback must NOT fire (needs 3+). Intro is not
+    # written here either → exactly one structured_output call.
     schemas_called = [c[1].__name__ for c in llm.calls]
     assert schemas_called == ["Outline"]
     assert out.conclusion is None
+
+
+@pytest.mark.asyncio
+async def test_synthesize_intro_returns_claim_string() -> None:
+    """The dedicated pass returns the rewritten intro built from the theses.
+
+    (The synthesis_planner node runs this CONCURRENTLY with Stage 1 and
+    applies the result to the outline — build_outline no longer does it.)"""
+    outline = Outline(intro="мы рассмотрим A, B", theses=[
+        Thesis(thesis="claim one", supporting_notes=[1]),
+        Thesis(thesis="claim two", supporting_notes=[1]),
+    ])
+    llm = FakeLLM(by_schema={"IntroResponse": IntroResponse(intro="claim-bearing intro")})
+    result = await synthesize_intro(outline, "ru", llm=llm)
+    assert result == "claim-bearing intro"
+    assert [c[1].__name__ for c in llm.calls] == ["IntroResponse"]
+
+
+@pytest.mark.asyncio
+async def test_synthesize_intro_empty_returns_none() -> None:
+    """Empty/blank intro → None, so the caller keeps the planner's intro."""
+    outline = Outline(theses=[
+        Thesis(thesis="a", supporting_notes=[1]),
+        Thesis(thesis="b", supporting_notes=[1]),
+    ])
+    llm = FakeLLM(by_schema={"IntroResponse": IntroResponse(intro="   ")})
+    result = await synthesize_intro(outline, "ru", llm=llm)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_synthesize_intro_failure_returns_none() -> None:
+    """LLM failure → None (best-effort), never raises into the turn."""
+    def boom(*a, **kw):
+        raise RuntimeError("openrouter 503")
+    outline = Outline(theses=[
+        Thesis(thesis="a", supporting_notes=[1]),
+        Thesis(thesis="b", supporting_notes=[1]),
+    ])
+    result = await synthesize_intro(outline, "ru", llm=FakeLLM(boom))
+    assert result is None
 
 
 @pytest.mark.asyncio
