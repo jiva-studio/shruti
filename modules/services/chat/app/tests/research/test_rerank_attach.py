@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 import pytest
 
@@ -196,9 +195,11 @@ async def test_thesis_with_verse_fetches_and_attaches_commentaries():
         ],
     })
     embedder = FakeEmbedder(mapping={
+        # Non-collinear vectors so cosine genuinely separates them — the
+        # purport sits nearer the claim than the bare verse text does.
         "krishna protects devotee":         [1.0, 0.0, 0.0, 0.0],
-        "krishna verse":                    [0.7, 0.0, 0.0, 0.0],
-        "commentary on krishna protecting": [0.95, 0.0, 0.0, 0.0],  # closer
+        "krishna verse":                    [0.7, 0.7, 0.0, 0.0],   # cos ~0.71
+        "commentary on krishna protecting": [0.98, 0.2, 0.0, 0.0],  # cos ~0.98, closer
     })
     out, new = await rerank_and_attach_commentaries(
         outline, base_notes,
@@ -206,11 +207,13 @@ async def test_thesis_with_verse_fetches_and_attaches_commentaries():
         alias_map=FakeAliasMap(), lang="ru",
         catalog_repo=FakeCatalog(),
     )
-    # One commentary fetched + reranked, picked as top.
+    # One purport fetched for the picked verse and attached to the thesis.
     assert len(new) == 1
     assert new[0]["type"] == "commentary"
-    # Reranker should rank commentary index (2 in 1-based, since base has 1) above verse (1).
+    # The attached purport (1-based index 2, after the single base verse)
+    # is nearer the claim, so it leads the thesis's supporting_notes.
     assert out.theses[0].supporting_notes[0] == 2  # commentary is 2nd in pool
+    assert set(out.theses[0].supporting_notes) == {1, 2}  # picked verse kept too
 
 
 @pytest.mark.asyncio
@@ -261,15 +264,18 @@ async def test_top_k_per_thesis_respected():
 @pytest.mark.asyncio
 async def test_supporting_notes_indices_are_1_based():
     """Synthesizer's _format_tool_results enumerates with start=1, so
-    indices in supporting_notes must be 1-based to match."""
+    indices in supporting_notes must be 1-based to match. The planner
+    picked BOTH lectures; the more relevant one (B) must lead, by its
+    1-based pool index. (Stage 1 only re-orders within the planner's
+    own picks — it never pulls in a note the planner didn't choose.)"""
     outline = Outline(theses=[
-        Thesis(thesis="topic", supporting_notes=[1]),
+        Thesis(thesis="topic", supporting_notes=[1, 2]),
     ])
     notes = [_lecture_env(text="lec A"), _lecture_env(text="lec B")]
     embedder = FakeEmbedder(mapping={
         "topic": [1.0, 0.0, 0.0, 0.0],
-        "lec A": [0.5, 0.0, 0.0, 0.0],
-        "lec B": [0.95, 0.0, 0.0, 0.0],  # B wins
+        "lec A": [0.5, 0.5, 0.0, 0.0],   # cos ~0.71
+        "lec B": [0.98, 0.05, 0.0, 0.0],  # cos ~0.998 — B wins
     })
     out, _ = await rerank_and_attach_commentaries(
         outline, notes,
@@ -394,3 +400,32 @@ async def test_non_lecture_slot_no_swap_when_no_strong_non_lecture():
         catalog_repo=FakeCatalog(), top_k_per_thesis=2,
     )
     assert out.theses[0].supporting_notes == [1, 2]  # untouched lectures
+
+
+@pytest.mark.asyncio
+async def test_planner_picks_not_overridden_by_unpicked_pool_note():
+    """The core grounding fix: Stage 1 enriches WITHIN the planner's own
+    picks (+ purports of the verses it picked) and never re-selects from
+    the whole pool. A note the planner did NOT pick stays out of the
+    thesis even when it embeds closer to the claim — the old whole-pool
+    override pulling such notes in is what left answers' shlokas
+    disconnected from the narrative."""
+    outline = Outline(theses=[
+        Thesis(thesis="claim", supporting_notes=[1]),
+    ])
+    base_notes = [
+        _lecture_env(text="picked lecture"),       # 1 — planner pick
+        _lecture_env(text="unpicked but closer"),  # 2 — NOT picked
+    ]
+    embedder = FakeEmbedder(mapping={
+        "claim":               [1.0, 0.0, 0.0, 0.0],
+        "picked lecture":      [0.6, 0.8, 0.0, 0.0],  # cos ~0.6
+        "unpicked but closer": [1.0, 0.0, 0.0, 0.0],  # cos 1.0 — would win a pool rerank
+    })
+    out, new = await rerank_and_attach_commentaries(
+        outline, base_notes,
+        chunk_repo=FakeChunkRepo(), embedder=embedder,
+        alias_map=FakeAliasMap(), lang="ru",
+    )
+    assert new == []                              # no verse picked → no purport fetch
+    assert out.theses[0].supporting_notes == [1]  # unpicked note 2 stays OUT

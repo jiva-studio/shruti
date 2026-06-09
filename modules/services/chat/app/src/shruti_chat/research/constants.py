@@ -114,6 +114,23 @@ TIMEOUT_COMMENTARY_EXPAND_S = 5.0
 # appear before any second segment from one author.
 MAX_COMMENTARIES_PER_VERSE = 12
 
+# Stage 1 (synthesis_planner) attach is now PER-THESIS and scoped to the
+# verses the planner actually picked, so it doesn't need the wide author
+# sweep the legacy whole-corpus expansion did — a handful of purports per
+# picked verse is plenty for the reranker to pick the one that backs the
+# thesis. Smaller cap keeps the appended pool (and the embed/rerank cost)
+# bounded instead of flooding tool_results with ~12×verses segments.
+STAGE1_COMMENTARIES_PER_VERSE = 4
+
+# Cosine floor for an AUTO-ATTACHED purport to be eligible as a thesis's
+# supporting note. The planner's OWN picks are never gated by this (they
+# were vetted by the reasoner that read the full text); only the
+# commentaries we attach on top of a picked verse must clear it, so an
+# off-topic purport on an otherwise-relevant verse can't pad the citation.
+# Below RERANK_RESERVE_FLOOR (0.40) because thesis↔short-purport cosine
+# runs lower than query↔chunk cosine; calibrate from per_thesis logs.
+STAGE1_ATTACH_FLOOR = 0.30
+
 
 # ---- Stage 2: per-thesis thin-support augmentation ------------------------
 
