@@ -66,6 +66,12 @@
 
     <SettingsHelpGroup @open-help="helpOpen = true" @open-privacy-policy="onOpenPrivacyPolicy" />
 
+    <SettingsContactsGroup
+      @open-email="onOpenEmail"
+      @open-vk="onOpenVk"
+      @open-telegram="onOpenTelegram"
+    />
+
     <SettingsDebugGroup
       v-if="debugUnlocked"
       :count="logs.count"
@@ -104,6 +110,7 @@ import {
   LogsDialog,
   SettingsAccountGroup,
   SettingsAppearanceGroup,
+  SettingsContactsGroup,
   SettingsDataGroup,
   SettingsDebugGroup,
   SettingsHelpGroup,
@@ -244,5 +251,20 @@ function onOpenPrivacyPolicy(): void {
   const url = (i18n.locale.value as string) === "ru" ? `${base}/ru.html` : `${base}/`
   // Capacitor's webview opens external schemes in the system browser.
   window.open(url, "_blank")
+}
+
+// Contact links. Capacitor's webview hands `mailto:` and external https
+// schemes to the system (mail client / browser); `_system` keeps the
+// in-app webview from trying to navigate to them itself.
+function onOpenEmail(): void {
+  window.open("mailto:support@akdasa.studio", "_system")
+}
+
+function onOpenVk(): void {
+  window.open("https://vk.com/shruti", "_system")
+}
+
+function onOpenTelegram(): void {
+  window.open("https://t.me/shrutiapp", "_system")
 }
 </script>

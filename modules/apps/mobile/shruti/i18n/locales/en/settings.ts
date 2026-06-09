@@ -242,14 +242,12 @@ export default {
   },
 
   contacts: {
-    socialNetworks: {
-      title: "Social networks",
-      description: "Let's stay connected",
-    },
     email: {
       title: "Send us an email",
       description: "Have questions or suggestions?",
     },
+    // VK / Telegram rows render only in the ru locale (Russian-audience
+    // communities), so their strings live solely in ru/settings.ts.
   },
 
   notifications: {

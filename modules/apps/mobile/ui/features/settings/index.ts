@@ -12,5 +12,6 @@ export { default as SettingsAppearanceGroup } from "./groups/SettingsAppearanceG
 export { default as SettingsDebugGroup } from "./groups/SettingsDebugGroup.vue"
 export { default as SettingsDataGroup } from "./groups/SettingsDataGroup.vue"
 export { default as SettingsHelpGroup } from "./groups/SettingsHelpGroup.vue"
+export { default as SettingsContactsGroup } from "./groups/SettingsContactsGroup.vue"
 export { default as SettingsSadhanaGroup } from "./groups/SettingsSadhanaGroup.vue"
 export { default as SettingsAccountGroup } from "./groups/SettingsAccountGroup.vue"
