@@ -127,7 +127,16 @@ func (h *authHandler) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	session, err := h.svc.Refresh(r.Context(), body.RefreshToken)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "refresh_failed", err.Error())
+		// Only a genuinely rejected token (bad/expired/unknown/revoked)
+		// is the client's cue to drop the session. A transient internal
+		// failure (DB unreachable during a deploy, signer error) must be
+		// 5xx so the client keeps the session and retries — otherwise a
+		// brief backend blip silently logs everyone out.
+		if errors.Is(err, service.ErrRefreshRejected) {
+			writeErr(w, http.StatusUnauthorized, "refresh_failed", err.Error())
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "refresh_error", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, sessionToResp(session))

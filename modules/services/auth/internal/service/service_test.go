@@ -368,9 +368,28 @@ func TestRefreshRotationAndReplay(t *testing.T) {
 		t.Error("refresh token should rotate")
 	}
 
-	// Replay original — should fail.
-	if _, err := svc.Refresh(ctx, first.RefreshToken); err == nil {
+	// Replay original — should fail, and as a genuine rejection (the jti is
+	// now revoked) so the handler maps it to 401, not a transient 5xx.
+	_, err = svc.Refresh(ctx, first.RefreshToken)
+	if err == nil {
 		t.Error("replay of old refresh must be rejected")
+	} else if !errors.Is(err, ErrRefreshRejected) {
+		t.Errorf("replay must be ErrRefreshRejected, got %v", err)
+	}
+}
+
+func TestRefreshGarbageTokenRejected(t *testing.T) {
+	svc, _ := boot(t)
+	ctx := context.Background()
+
+	// A token that doesn't verify is a definitive rejection, not a transient
+	// failure — the client should drop the session on this.
+	_, err := svc.Refresh(ctx, "not-a-real-jwt")
+	if err == nil {
+		t.Fatal("garbage refresh token must be rejected")
+	}
+	if !errors.Is(err, ErrRefreshRejected) {
+		t.Errorf("garbage token must be ErrRefreshRejected, got %v", err)
 	}
 }
 
@@ -382,8 +401,11 @@ func TestRefreshAfterSignoutFails(t *testing.T) {
 	if err := svc.Signout(ctx, first.RefreshToken); err != nil {
 		t.Fatalf("signout: %v", err)
 	}
-	if _, err := svc.Refresh(ctx, first.RefreshToken); err == nil {
+	_, err := svc.Refresh(ctx, first.RefreshToken)
+	if err == nil {
 		t.Error("refresh after signout must be rejected")
+	} else if !errors.Is(err, ErrRefreshRejected) {
+		t.Errorf("post-signout refresh must be ErrRefreshRejected, got %v", err)
 	}
 }
 
