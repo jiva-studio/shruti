@@ -177,6 +177,7 @@ export function useChatMessageStatus(opts: {
       return t("chat.errRate")
     }
     if (e.code === "max_turns_exceeded") return t("chat.errMaxTurns")
+    if (e.code === "chat_unavailable") return t("chat.errUnavailable.body")
     if (e.code === "agent_error") return t("chat.errAgent")
     if (e.code === "http_401" || e.code === "http_403") return t("chat.errAuth")
     if (e.code === "protocol_version_required") return t("chat.errProtocol")
@@ -262,6 +263,9 @@ export function useChatMessageStatus(opts: {
     const e = failedError.value
     if (!e) return "error"
     if (isOfflineFailure.value) return "info"
+    // Backend out of credits / provider down — not the user's fault and
+    // transient, so render it calm (info) with a Retry, not an alarm.
+    if (e.code === "chat_unavailable") return "info"
     if (e.code !== "rate_limited") return "error"
     if (isUnknownQuotaTier.value) return "warning"
     if (effectiveQuotaTier.value === "pro") return "warning"
@@ -272,6 +276,7 @@ export function useChatMessageStatus(opts: {
     const e = failedError.value
     if (!e) return ""
     if (isOfflineFailure.value) return t("chat.errOffline.title")
+    if (e.code === "chat_unavailable") return t("chat.errUnavailable.title")
     if (e.code.startsWith("http_5")) return t("chat.errServer.title")
     if (e.code !== "rate_limited") return ""
     if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownTitle")
@@ -286,6 +291,7 @@ export function useChatMessageStatus(opts: {
     const e = failedError.value
     if (!e) return ""
     if (isOfflineFailure.value) return t("chat.errOffline.body")
+    if (e.code === "chat_unavailable") return t("chat.errUnavailable.body")
     if (e.code.startsWith("http_5")) return t("chat.errServer.body")
     if (e.code === "rate_limited") {
       if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownBody")

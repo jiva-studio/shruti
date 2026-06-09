@@ -327,73 +327,126 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*Session, e
 		if row == nil {
 			return fmt.Errorf("%w: unknown refresh token", ErrRefreshRejected)
 		}
+
+		// The token to rotate FROM. Normally the presented row; on a
+		// revoked row it may be the live successor (lost-response replay).
+		src := row
 		if row.RevokedAt != nil {
-			return fmt.Errorf("%w: refresh token revoked", ErrRefreshRejected)
-		}
-		if time.Now().After(row.ExpiresAt) {
+			src, err = s.resolveReplay(ctx, tx, row)
+			if err != nil {
+				return err
+			}
+		} else if time.Now().After(row.ExpiresAt) {
 			return fmt.Errorf("%w: refresh token expired", ErrRefreshRejected)
 		}
 
-		// Mark the old row revoked and issue a fresh one.
-		if err := s.RefreshTokens.MarkRevoked(ctx, tx, row.JTI); err != nil {
-			return err
-		}
-
-		anonymous, err := s.userIsAnonymous(ctx, tx, row.UserID)
+		sess, err := s.rotateFrom(ctx, tx, src)
 		if err != nil {
 			return err
 		}
-		tier, tierExp, err := s.loadTierAndExpiry(ctx, row.UserID, time.Now().UTC())
-		if err != nil {
-			return fmt.Errorf("load tier: %w", err)
-		}
-		quotaID, err := s.loadQuotaID(ctx, row.UserID)
-		if err != nil {
-			return fmt.Errorf("load quota_id: %w", err)
-		}
-		idents, err := s.loadIdentities(ctx, row.UserID)
-		if err != nil {
-			return fmt.Errorf("load identities: %w", err)
-		}
-		rcAppUserID, err := s.loadRCAppUserID(ctx, row.UserID)
-		if err != nil {
-			return fmt.Errorf("load rc_app_user_id: %w", err)
-		}
-		base := s.ProfilePolicy.BuildClaims(row.UserID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
-
-		accessIn := base
-		accessIn.Audience = jwt.AudienceChat
-		accessIn.TTL = AccessTTL
-		access, _, err := s.Signer.Issue(accessIn)
-		if err != nil {
-			return err
-		}
-		newJTI := uuid.New()
-		refreshIn := base
-		refreshIn.Audience = jwt.AudienceAuth
-		refreshIn.TTL = RefreshTTL
-		refreshIn.JTI = newJTI
-		refresh, _, err := s.Signer.Issue(refreshIn)
-		if err != nil {
-			return err
-		}
-		if err := s.RefreshTokens.Create(ctx, tx, store.RefreshToken{
-			JTI:       newJTI,
-			UserID:    row.UserID,
-			DeviceID:  row.DeviceID,
-			ExpiresAt: time.Now().Add(RefreshTTL),
-		}); err != nil {
-			return err
-		}
-		session = &Session{
-			AccessToken:  access,
-			RefreshToken: refresh,
-			UserID:       row.UserID,
-			Anonymous:    anonymous,
-		}
+		session = sess
 		return nil
 	})
 	return session, err
+}
+
+// resolveReplay decides whether a *revoked* presented token can recover a
+// session. A rotation revokes the old token AND records its successor in
+// replaced_by; a lost rotation response leaves the client retrying the old
+// token. If that successor is still alive and UNUSED, the original response
+// simply never arrived — we rotate from the successor and recover. If the
+// successor was already consumed (or the revocation was a signout, with no
+// successor at all), this is genuine reuse/theft and stays a rejection.
+//
+// Security trade-off: an attacker who has stolen a refresh token AND races
+// the legitimate client before it spends the successor could hijack the
+// chain here. Possession of a refresh token is already an account
+// compromise; reuse of a *superseded* token is still caught below and
+// rejected. Tightening this to revoke the whole token family on detected
+// reuse is a sensible follow-up.
+func (s *Service) resolveReplay(ctx context.Context, tx pgx.Tx, row *store.RefreshToken) (*store.RefreshToken, error) {
+	if row.ReplacedBy == nil {
+		return nil, fmt.Errorf("%w: refresh token revoked", ErrRefreshRejected)
+	}
+	succ, err := s.RefreshTokens.LockAndRotate(ctx, tx, *row.ReplacedBy)
+	if err != nil {
+		return nil, err
+	}
+	if succ == nil {
+		return nil, fmt.Errorf("%w: refresh token revoked", ErrRefreshRejected)
+	}
+	if succ.RevokedAt != nil {
+		// Successor already consumed → the presented token is being reused
+		// after its replacement was itself spent. Genuine replay/theft.
+		return nil, fmt.Errorf("%w: refresh token reused", ErrRefreshRejected)
+	}
+	if time.Now().After(succ.ExpiresAt) {
+		return nil, fmt.Errorf("%w: refresh token expired", ErrRefreshRejected)
+	}
+	return succ, nil
+}
+
+// rotateFrom revokes `src`, links it to a freshly-issued successor, and
+// returns the new session. Shared by the normal rotation and the
+// lost-response replay path.
+func (s *Service) rotateFrom(ctx context.Context, tx pgx.Tx, src *store.RefreshToken) (*Session, error) {
+	anonymous, err := s.userIsAnonymous(ctx, tx, src.UserID)
+	if err != nil {
+		return nil, err
+	}
+	tier, tierExp, err := s.loadTierAndExpiry(ctx, src.UserID, time.Now().UTC())
+	if err != nil {
+		return nil, fmt.Errorf("load tier: %w", err)
+	}
+	quotaID, err := s.loadQuotaID(ctx, src.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load quota_id: %w", err)
+	}
+	idents, err := s.loadIdentities(ctx, src.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load identities: %w", err)
+	}
+	rcAppUserID, err := s.loadRCAppUserID(ctx, src.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("load rc_app_user_id: %w", err)
+	}
+	base := s.ProfilePolicy.BuildClaims(src.UserID, anonymous, tier, tierExp, quotaID, rcAppUserID, idents)
+
+	accessIn := base
+	accessIn.Audience = jwt.AudienceChat
+	accessIn.TTL = AccessTTL
+	access, _, err := s.Signer.Issue(accessIn)
+	if err != nil {
+		return nil, err
+	}
+	newJTI := uuid.New()
+	refreshIn := base
+	refreshIn.Audience = jwt.AudienceAuth
+	refreshIn.TTL = RefreshTTL
+	refreshIn.JTI = newJTI
+	refresh, _, err := s.Signer.Issue(refreshIn)
+	if err != nil {
+		return nil, err
+	}
+	// Create the successor first, then revoke `src` and point it at the
+	// successor — so a future replay of `src` can follow replaced_by.
+	if err := s.RefreshTokens.Create(ctx, tx, store.RefreshToken{
+		JTI:       newJTI,
+		UserID:    src.UserID,
+		DeviceID:  src.DeviceID,
+		ExpiresAt: time.Now().Add(RefreshTTL),
+	}); err != nil {
+		return nil, err
+	}
+	if err := s.RefreshTokens.MarkRevokedWithSuccessor(ctx, tx, src.JTI, newJTI); err != nil {
+		return nil, err
+	}
+	return &Session{
+		AccessToken:  access,
+		RefreshToken: refresh,
+		UserID:       src.UserID,
+		Anonymous:    anonymous,
+	}, nil
 }
 
 // ─── Signout ────────────────────────────────────────────────────────────────

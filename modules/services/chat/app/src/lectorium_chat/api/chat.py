@@ -224,6 +224,20 @@ async def chat(
             # and when no key was supplied. Best-effort by contract.
             if idempotency_key and (had_error or not completed):
                 await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
+            # Refund the quota unit charged at the gate when the turn ended
+            # in an error frame (LLM out of credits, graph crash) — the
+            # user paid but got no answer. Deliberately NOT on a bare
+            # client disconnect (`not completed` without `had_error`): a
+            # partial answer may already have streamed, and refunding there
+            # would let a user farm free quota by disconnecting mid-turn.
+            usage_current = rl.current_after
+            if had_error:
+                refunded = await deps.rate_limiter.refund(
+                    user.id, user.anonymous, ip,
+                    scope="chat", quota_id=user.quota_id,
+                )
+                if refunded is not None:
+                    usage_current = refunded
             log.info(
                 "stage_timing",
                 stage="turn_total",
@@ -234,16 +248,17 @@ async def chat(
             )
             # Emit the usage chip frame regardless of how the turn ended:
             # success (stream completed cleanly), in-loop LLM error, or
-            # client disconnect (sse-starlette raises into here). The
-            # `rl` capture from the rate-limit gate above is the
-            # authoritative post-increment counter — re-reading the
-            # store here would race with sibling requests.
+            # client disconnect (sse-starlette raises into here). On the
+            # happy path `usage_current` is the `rl` gate's post-increment
+            # snapshot (re-reading the store would race sibling requests);
+            # on an error it's the post-refund count so the chip shows the
+            # unit handed back.
             yield {
                 "event": "usage",
                 "data": json.dumps(
                     {
                         "scope": "chat",
-                        "current": rl.current_after,
+                        "current": usage_current,
                         "limit": rl.limit_for_scope,
                         "resets_at_epoch": int(_next_midnight_utc().timestamp()),
                     },

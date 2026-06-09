@@ -133,9 +133,15 @@ func (h *authHandler) refresh(w http.ResponseWriter, r *http.Request) {
 		// 5xx so the client keeps the session and retries — otherwise a
 		// brief backend blip silently logs everyone out.
 		if errors.Is(err, service.ErrRefreshRejected) {
+			// Log the concrete reason (revoked / expired / unknown / bad
+			// signature) so aggregate logs can tell a genuine 90-day
+			// expiry from a rotation-race logout — the access log only
+			// records status 401, not why.
+			slog.WarnContext(r.Context(), "refresh_rejected", slog.String("reason", err.Error()))
 			writeErr(w, http.StatusUnauthorized, "refresh_failed", err.Error())
 			return
 		}
+		slog.ErrorContext(r.Context(), "refresh_error", slog.String("error", err.Error()))
 		writeErr(w, http.StatusInternalServerError, "refresh_error", err.Error())
 		return
 	}

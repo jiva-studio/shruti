@@ -323,6 +323,49 @@ class RateLimiter:
             limit_for_scope=user_limit,
         )
 
+    async def refund(
+        self,
+        user_id: str,
+        anonymous: bool,
+        ip: str,
+        *,
+        scope: str = "chat",
+        quota_id: str = "",
+    ) -> int | None:
+        """Give back the unit(s) `check_and_increment` charged for a turn
+        that then failed before delivering an answer (LLM out of credits,
+        graph crash). Mirrors the keys the admit path incremented: always
+        the per-user bucket, plus the per-IP bucket for anonymous callers
+        (signed-in users are never IP-counted — see `check_and_increment`).
+
+        Best-effort: a Redis outage during the refund is swallowed (the
+        turn already failed; we won't also fail the response over a
+        bookkeeping decrement). Returns the per-user bucket's count after
+        the refund so the caller can render an accurate usage chip, or
+        `None` if the user-bucket decrement couldn't be applied.
+
+        Note: a brownout-counted Pro increment (Redis was down at admit
+        time) is not refunded — the same outage makes this decrement fail
+        too. Acceptable: it's a double-degraded edge (outage + turn
+        failure) and the brownout counter resets at the daily window."""
+        today = datetime.now(timezone.utc).date()
+        user_key = quota_id or user_id
+        user_count: int | None = None
+        try:
+            user_count = await self._store.decrement(
+                scoped_key=f"{scope}:user:{user_key}", day=today,
+            )
+        except RateLimitStoreUnavailable:
+            log.warning("rate_limit_refund_failed", scope=scope, key_type="user")
+        if anonymous:
+            try:
+                await self._store.decrement(
+                    scoped_key=f"{scope}:ip:{ip}", day=today,
+                )
+            except RateLimitStoreUnavailable:
+                log.warning("rate_limit_refund_failed", scope=scope, key_type="ip")
+        return user_count
+
     def _on_backend_unavailable(
         self,
         *,
