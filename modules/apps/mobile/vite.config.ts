@@ -7,6 +7,20 @@ import { kitVitePlugin } from "../../kit/vite.aliases"
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"))
 const dbScheme = JSON.parse(readFileSync(new URL("../../db-scheme.json", import.meta.url), "utf-8"))
 
+// CI passes the raw GITHUB_RUN_NUMBER as BUILD_ID. The store versionCode is
+// that number + `versionCodeOffset` (applied by fastlane). Apply the same
+// offset here so the build id shown in Settings matches the shipped build
+// (otherwise Settings showed e.g. "15" for a "2015" build). Unset locally →
+// "dev", which usePurchasesStore relies on to detect dev builds — preserve it.
+const rawBuildId = process.env.BUILD_ID
+const buildId =
+  rawBuildId && /^\d+$/.test(rawBuildId)
+    ? String(Number(rawBuildId) + (pkg.versionCodeOffset ?? 0))
+    : (rawBuildId ?? "dev")
+// Short git commit hash (CI passes github.sha), so the version line reveals
+// exactly which commit a build came from. Empty locally / when not provided.
+const commitSha = (process.env.COMMIT_SHA ?? "").slice(0, 7)
+
 // `@shruti` is also the npm scope for our in-house Capacitor plugins
 // (`@shruti/plugin-*`, e.g. `@shruti/plugin-audio-player`). Vite 8
 // uses Rolldown, which doesn't expand `$1` back-references in regex alias
@@ -41,7 +55,8 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-    __BUILD_ID__: JSON.stringify(process.env.BUILD_ID ?? "dev"),
+    __BUILD_ID__: JSON.stringify(buildId),
+    __COMMIT_SHA__: JSON.stringify(commitSha),
     __DB_SCHEME__: JSON.stringify(dbScheme.scheme),
     // Public RevenueCat SDK keys (appl_…/goog_…), baked into the bundle at
     // build time. Generic env names so BOTH build paths feed them the same

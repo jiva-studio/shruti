@@ -68,7 +68,9 @@ export function useSettingsController(): SettingsControllerReturn {
   const { t } = useI18n()
 
   const version = __APP_VERSION__
-  const buildId = __BUILD_ID__
+  // Append the short commit hash so the version line reveals which commit a
+  // build came from, e.g. "v1.1.2 (2015 · a1b2c3d)". Empty in local/dev builds.
+  const buildId = __COMMIT_SHA__ ? `${__BUILD_ID__} · ${__COMMIT_SHA__}` : __BUILD_ID__
   const dbScheme = __DB_SCHEME__
   const activeServer = computed(() => app.activeServer.value)
   const contentDbFile = computed(() => app.contentDbFile.value)
@@ -175,4 +177,5 @@ function pad(n: number): string {
 
 declare const __APP_VERSION__: string
 declare const __BUILD_ID__: string
+declare const __COMMIT_SHA__: string
 declare const __DB_SCHEME__: number

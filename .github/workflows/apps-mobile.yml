@@ -65,6 +65,9 @@ jobs:
         # bundle as compile-time defines; absent keys → IAP UI hides itself.
         env:
           BUILD_ID: ${{ github.run_number }}
+          # Short hash shown next to the build id in Settings → About so we know
+          # which commit a build came from. Vite truncates to 7 chars.
+          COMMIT_SHA: ${{ github.sha }}
           # Vite reads these generic names (same as kit's native-binary build).
           REVENUECAT_IOS_KEY: ${{ secrets.SHRUTI_APPLE_REVENUE_CAT_KEY }}
           REVENUECAT_ANDROID_KEY: ${{ secrets.SHRUTI_GOOGLE_REVENUE_CAT_KEY }}

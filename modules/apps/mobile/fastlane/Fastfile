@@ -15,7 +15,13 @@ def mobile_version
 end
 
 # Offset keeps the per-workflow GITHUB_RUN_NUMBER above already-shipped builds.
-VERSION_CODE_OFFSET = 2000
+# Single source of truth lives in package.json (`versionCodeOffset`) so the web
+# build (vite.config.ts) applies the same offset to the build id shown in
+# Settings — keeping the displayed build id equal to the store versionCode.
+def version_code_offset
+  @version_code_offset ||=
+    JSON.parse(File.read(File.join(MOBILE_ROOT, "package.json"))).fetch("versionCodeOffset", 0)
+end
 
 # Store build number — always $GITHUB_RUN_NUMBER (+ offset) in CI,
 # empty locally. Store-upload lanes enforce presence via
@@ -23,7 +29,7 @@ VERSION_CODE_OFFSET = 2000
 def ci_build_id
   raw = ENV["GITHUB_RUN_NUMBER"].to_s.strip
   return "" if raw.empty?
-  (raw.to_i + VERSION_CODE_OFFSET).to_s
+  (raw.to_i + version_code_offset).to_s
 end
 
 # ---------------------------------------------------------------------------- #
