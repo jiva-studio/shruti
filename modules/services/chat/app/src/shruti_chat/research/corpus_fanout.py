@@ -398,23 +398,38 @@ async def fanout_search_with_boost(
     # 2. Lecture lane is disabled when the catalog filter matched zero tracks.
     lectures_disabled = eligible_track_ids is not None and not eligible_track_ids
 
+    # Per-lane ANN timing. The 4 lanes run concurrently inside `_run` across
+    # all sub-queries, so the round's `ann_ms` is bounded by the slowest single
+    # lane call — recording each call's duration (incl. the `lang=None` fallback
+    # re-run, and lexical even when it errors) lets one trace point at the
+    # culprit lane. Suspect: the lexical trigram/FTS lane on a large table.
+    # Single-threaded asyncio ⇒ list.append needs no lock.
+    lane_ms: dict[str, list[float]] = {}
+
+    def _record(lane: str, started: float) -> None:
+        lane_ms.setdefault(lane, []).append((time.perf_counter() - started) * 1000.0)
+
     async def _one_query(q_vec: list[float], q_text: str, sq_id: int) -> list[_RawScored]:
         async def _lecture(use_lang: str | None) -> list[_RawScored]:
             if lectures_disabled:
                 return []
+            _t = time.perf_counter()
             scored = await chunk_repo.search_by_embedding(
                 q_vec, eligible_track_ids=eligible_track_ids, lang=use_lang, top_k=fetch_k,
             )
+            _record("lecture", _t)
             return [
                 _RawScored(s.chunk, s.score, "lecture", _lecture_dedup_key(s.chunk), sq_id)
                 for s in scored
             ]
 
         async def _library(use_lang: str | None, kinds: list[str]) -> list[_RawScored]:
+            _t = time.perf_counter()
             scored = await chunk_repo.search_library_by_embedding(
                 q_vec, kinds=kinds, source_id=book_id, author_id=author_id,
                 lang=use_lang, date_from=date_from, date_to=date_to, top_k=fetch_k,
             )
+            _record("library_verse" if kinds == ["verse"] else "library_rest", _t)
             return [
                 _RawScored(s.chunk, s.score, s.chunk.item_kind, _library_dedup_key(s.chunk), sq_id)
                 for s in scored
@@ -427,6 +442,7 @@ async def fanout_search_with_boost(
             # re-scores these on text). Never fails the turn — errors → [].
             if not rerank_active:
                 return []
+            _t = time.perf_counter()
             try:
                 scored = await chunk_repo.search_chunks_lexical(
                     q_text, q_vec, kinds=list(_LIBRARY_KINDS),
@@ -437,6 +453,10 @@ async def fanout_search_with_boost(
             except Exception as exc:  # noqa: BLE001 — lexical must never fail a turn
                 log.warning("fanout_lexical_failed", error=str(exc))
                 return []
+            finally:
+                # Record even on failure — a slow-then-timeout lexical lane is
+                # exactly the spike we're hunting.
+                _record("lexical", _t)
             return [
                 _RawScored(
                     s.chunk, s.score, s.chunk.item_kind,
@@ -570,6 +590,12 @@ async def fanout_search_with_boost(
     # Sub-stage breakdown of this fanout round (embed ∥ track-filter, then
     # ANN fanout, address fast-path, cross-encoder rerank). Pairs with the
     # `fanout_round_N` stage_timing total to attribute the 11-30s round cost.
+    # `lane` splits the concurrent ANN fanout per lane — n / max / sum (ms) —
+    # so the slowest lane (bounding the round) is visible in one trace.
+    lane_breakdown = {
+        lane: {"n": len(v), "max_ms": round(max(v), 1), "sum_ms": round(sum(v), 1)}
+        for lane, v in sorted(lane_ms.items())
+    }
     log.info(
         "fanout_round_breakdown",
         n_subqueries=len(query_texts),
@@ -578,6 +604,7 @@ async def fanout_search_with_boost(
         ann_ms=round(ann_ms, 1),
         addr_ms=round(addr_ms, 1),
         rerank_ms=round(rerank_ms, 1),
+        lane=lane_breakdown,
     )
 
     # Telemetry: per-kind distribution in the dedup pool (before slicing) vs
