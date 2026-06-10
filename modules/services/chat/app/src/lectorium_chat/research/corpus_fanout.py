@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -376,6 +377,11 @@ async def fanout_search_with_boost(
     # the per-query fanout.
     query_texts = [q[1] for q in queries]
     sub_query_ids = [q[0] for q in queries]
+    # Sub-stage timings — the whole round is one opaque `fanout_round_N`
+    # stage upstream; this breaks it into embed / ANN / address / rerank so
+    # a single trace shows whether the cost is pgvector ANN or the remote
+    # cross-encoder. Logged once as `fanout_round_breakdown` at the end.
+    _t_embed = time.perf_counter()
     q_vecs, eligible_track_ids = await asyncio.gather(
         embedder.embed_documents(query_texts),
         catalog_repo.filter_track_ids(
@@ -383,6 +389,7 @@ async def fanout_search_with_boost(
             tag_ids=tag_ids, date_from=date_from, date_to=date_to,
         ),
     )
+    embed_ms = (time.perf_counter() - _t_embed) * 1000.0
     if len(q_vecs) != len(query_texts):
         log.warning("fanout_embed_mismatch", queries=len(query_texts), vectors=len(q_vecs))
         q_vecs = q_vecs[: len(query_texts)]
@@ -481,21 +488,25 @@ async def fanout_search_with_boost(
         return rows
 
     # 3. Run the parallel fanout queries.
+    _t_ann = time.perf_counter()
     per_query = list(await asyncio.gather(
         *(
             _one_query(v, txt, sq_id)
             for v, txt, sq_id in zip(q_vecs, query_texts, sub_query_ids)
         )
     ))
+    ann_ms = (time.perf_counter() - _t_ann) * 1000.0
 
     # 3b. Address fast-path. An explicit "БГ 2.13" in the question → exact
     # verse + commentary fetched deterministically. The lexical lane's trgm
     # address match dilutes on a verbose query (it compares the WHOLE query
     # string), so this exact-equality lookup is the robust path. Forced +
     # authoritative score. Rerank-path only (cosine path stays unchanged).
+    addr_ms = 0.0
     if rerank_active and rerank_query:
         addr_labels = _parse_addresses(rerank_query)
         if addr_labels:
+            _t_addr = time.perf_counter()
             async def _address(addr: str) -> list[_RawScored]:
                 try:
                     chunks = await chunk_repo.get_chunks_by_addr_label(
@@ -520,6 +531,7 @@ async def fanout_search_with_boost(
                 for r in batch:
                     _emit_research_source(on_event, r)
                 per_query.append(batch)
+            addr_ms = (time.perf_counter() - _t_addr) * 1000.0
 
     # 4. Dedup + relevance floor. The rerank path uses a permissive cosine
     # junk-floor instead of 0.45 so the cross-encoder can see the low-cosine
@@ -545,12 +557,28 @@ async def fanout_search_with_boost(
     # 5. Rank. Cosine path: sort by cosine, take top-K (unchanged).
     # Rerank path: pre-cap the pool by cosine, cross-encode it, sort by
     # rerank_score, cut by fixed top-k with a lecture reserve.
+    rerank_ms = 0.0
     if rerank_active:
+        _t_rerank = time.perf_counter()
         ranked = await _rerank_pool(
             deduped, reranker=reranker, rerank_query=rerank_query,
         )
+        rerank_ms = (time.perf_counter() - _t_rerank) * 1000.0
     else:
         ranked = sorted(deduped.values(), key=lambda r: r.score, reverse=True)[:k]
+
+    # Sub-stage breakdown of this fanout round (embed ∥ track-filter, then
+    # ANN fanout, address fast-path, cross-encoder rerank). Pairs with the
+    # `fanout_round_N` stage_timing total to attribute the 11-30s round cost.
+    log.info(
+        "fanout_round_breakdown",
+        n_subqueries=len(query_texts),
+        candidates_total=len(deduped),
+        embed_ms=round(embed_ms, 1),
+        ann_ms=round(ann_ms, 1),
+        addr_ms=round(addr_ms, 1),
+        rerank_ms=round(rerank_ms, 1),
+    )
 
     # Telemetry: per-kind distribution in the dedup pool (before slicing) vs
     # the top-K. Lets us see when verse-chunks exist in the candidate pool but

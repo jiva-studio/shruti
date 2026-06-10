@@ -39,9 +39,12 @@ def is_coverage_sufficient(
 # Stage 2.8.c — round-aware gate. The strict gate above requires BOTH a
 # score floor AND `min_lectures` lectures, which forces a second fanout
 # round on thin-corpus topics that already have a strong single hit.
-# After round 1 we accept a confident high-score hit even with sparse
-# lectures; we also bail early when round 1 returned nothing usable —
-# regenerate_queries rarely recovers from `max_score < 0.40`.
+# We accept a confident high-score hit (>= 0.65) even with sparse lectures
+# from round 0 onward: prod traces show the second round costs
+# regenerate_queries (~7s) + another fanout (~2s) ≈ +9s wall-clock and
+# rarely improves an answer that already has a confident hit. We still bail
+# early when round 0 returned nothing usable — regenerate_queries rarely
+# recovers from `max_score < 0.40`.
 
 _EARLY_EXIT_MAX_SCORE = 0.65
 _BAILOUT_MAX_SCORE = 0.40
@@ -56,15 +59,21 @@ def is_coverage_good_enough(
 ) -> bool:
     """Round-aware variant of `is_coverage_sufficient`.
 
-    - Round 0: same as strict.
-    - Round 1+: also accept when `max_score >= 0.65` even if
-      `min_lectures` isn't met (a confident hit beats a quantity bar).
+    Stops iterating when EITHER:
+      - the strict gate holds (`max_score >= min_max_score` AND at least
+        `min_lectures` lectures), OR
+      - we already have a confident hit (`max_score >= 0.65`) — a single
+        strong result beats a lecture-quantity bar, and chasing the bar
+        with a second fanout round is rarely worth its ~9s cost.
+
+    `round_idx` is retained for callsite symmetry and future round-specific
+    tuning; the confident-hit shortcut now applies from round 0.
     """
     if is_coverage_sufficient(
         result, min_max_score=min_max_score, min_lectures=min_lectures
     ):
         return True
-    if round_idx >= 1 and result.max_score >= _EARLY_EXIT_MAX_SCORE:
+    if result.max_score >= _EARLY_EXIT_MAX_SCORE:
         return True
     return False
 
