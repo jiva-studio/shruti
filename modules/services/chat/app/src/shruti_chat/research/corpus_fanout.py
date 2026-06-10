@@ -479,9 +479,13 @@ async def fanout_search_with_boost(
             )
             return lec + verse_lib + rest_lib + lex
 
+        # Search ONLY the requested language. Retrieved chunks are surfaced to
+        # the user verbatim (cited, never LLM-rewritten/translated), so a
+        # cross-language fallback would hand e.g. an English transcript to a
+        # Russian user — useless. Honouring lang strictly also lets the lecture
+        # lane use the per-(kind,lang) composite HNSW index (migration 0036)
+        # exclusively, so the redundant kind-only `_hnsw_lec` can be dropped.
         rows = await _run(lang)
-        if not rows and lang is not None:
-            rows = await _run(None)
         # Surface what THIS query touched live, before the global dedup
         # and ranking — the user wants "I'm looking at this now", not
         # "I picked these after thinking". Floor matches the post-dedup

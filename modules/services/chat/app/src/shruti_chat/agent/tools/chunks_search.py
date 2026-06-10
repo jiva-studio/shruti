@@ -153,11 +153,11 @@ async def chunks_search(
         merged.sort(key=lambda e: e.get("score") or 0.0, reverse=True)
         return merged[:k]
 
+    # Single-language only — no cross-language fallback: chunks are cited to
+    # the user verbatim (never LLM-translated), so a foreign-language result
+    # is useless. Honouring lang also keeps the lecture ANN on the
+    # per-(kind,lang) composite index, not the dropped kind-only `_hnsw_lec`.
     rows = await _run(lang)
-    if not rows and lang is not None:
-        # Strict lang produced nothing; relax both branches together to
-        # avoid mixing strict-ru with relaxed-en in one merged result.
-        rows = await _run(None)
 
     # Relevance floor. HNSW returns top-K regardless of similarity, so
     # an off-topic query (quantum computers / aliens / modern science)

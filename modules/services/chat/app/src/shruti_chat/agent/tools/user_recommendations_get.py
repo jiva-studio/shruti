@@ -56,9 +56,11 @@ async def user_recommendations_get(
             for s in scored
         ]
 
+    # Single-language only — no cross-language fallback. Recommendations are
+    # surfaced verbatim, so an English clip is useless to a Russian user; and
+    # honouring lang keeps the lecture ANN on the per-(kind,lang) composite
+    # index (migration 0036) instead of the dropped kind-only `_hnsw_lec`.
     rows = await _run(lang)
-    if not rows and lang is not None:
-        rows = await _run(None)
     return rows
 
 
