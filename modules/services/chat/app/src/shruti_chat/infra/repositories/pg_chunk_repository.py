@@ -25,7 +25,7 @@ from shruti_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, Scored
 from shruti_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 
 # Chunk kinds may be inlined as SQL literals (to match the per-kind partial
-# HNSW indexes from migration 0032, whose predicates the planner can only
+# HNSW indexes from migration 0035, whose predicates the planner can only
 # match against a constant — not a bound array param). Validate against this
 # fixed internal vocabulary before string-building as defence-in-depth.
 _ALLOWED_KINDS = frozenset(
@@ -169,7 +169,7 @@ class PgChunkRepository:
         # `kind='track_transcript'` keeps library rows out of lecture search.
         # Embedding column lives in `chunk_embeddings_d{dim}` (migration
         # 0030); join through chunk_id. The kind/lang filters target the
-        # EMBEDDING table (migration 0032 denormalized them there) so the
+        # EMBEDDING table (migration 0035 denormalized them there) so the
         # `WHERE kind='track_transcript'` partial HNSW index is used — a
         # filter on `c` would only post-filter after a full-index deep scan.
         emb_table = self._router.chunk_table
@@ -416,10 +416,10 @@ class PgChunkRepository:
         if bad:
             raise ValueError(f"unknown chunk kind(s): {bad}")
         # Inline kinds as constant literals on the EMBEDDING table so the
-        # matching per-kind partial HNSW index (migration 0032) is used.
+        # matching per-kind partial HNSW index (migration 0035) is used.
         # A bound `kind = ANY($2)` array can't be matched to a partial
         # index predicate at plan time, leaving a full-index deep scan +
-        # post-filter (the multi-second spike 0032 fixes). lang stays a
+        # post-filter (the multi-second spike 0035 fixes). lang stays a
         # post-filter column (also on `e`) — out of the index predicate so
         # the same index serves the lang-less fallback.
         kind_literals = ", ".join(f"'{k}'" for k in kinds)

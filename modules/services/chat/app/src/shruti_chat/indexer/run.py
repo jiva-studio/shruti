@@ -312,7 +312,7 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
                 [embedder.name] * len(chunks),
             )
             chunk_ids = [int(r["id"]) for r in id_rows]
-            # kind/lang denormalized onto the embedding row (migration 0032)
+            # kind/lang denormalized onto the embedding row (migration 0035)
             # so the per-kind partial HNSW index can be used at query time.
             # Lecture chunks are always 'track_transcript'.
             await conn.executemany(
