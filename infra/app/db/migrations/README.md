@@ -20,16 +20,22 @@ incremental migrations get slot `<existing>+1` in the relevant range.
 
 ## Adding a migration
 
-1. Pick the next free number in the appropriate range.
+1. Pick the next free number in the appropriate range. `ls` this directory
+   and take `max + 1` — golang-migrate refuses to load a source with a
+   duplicate version number (`duplicate migration file: …`), which fails
+   the migrator and blocks every service that waits on it.
 2. Create `<NNNN>_<descriptive_name>.up.sql` (forward) and optionally
    `<NNNN>_<descriptive_name>.down.sql` (reversal).
 3. Test locally: `docker compose up migrator`, then verify schema with
    `\d <table>` in a psql session.
-4. Push. CI builds the migrator image (well, no — migrator uses the
-   public `migrate/migrate` image and reads the SQL from a bind-mount),
-   so this just lands on the host after the next `deploy.sh` rsync.
-5. On the next `docker compose up -d`, migrator runs your new file and
-   exits 0; services start.
+4. Push. The migrations are **baked into the `lectorium-migrator` image**
+   (`infra/app/db/Dockerfile`) — there is no bind-mount and no rsync. CI
+   (`services-ghcr.yml`) rebuilds and pushes that image on any change under
+   `infra/app/db/migrations/**` or the Dockerfile.
+5. On prod, Watchtower (`--include-stopped --revive-stopped`) pulls the new
+   migrator image and re-runs the one-shot `migrator` container, which
+   applies your new file and exits 0; the service containers
+   (`depends_on: service_completed_successfully`) then start.
 
 ## Dirty state recovery
 
