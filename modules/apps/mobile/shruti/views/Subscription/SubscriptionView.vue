@@ -69,14 +69,28 @@ const defaultBackHref = "/tabs/settings"
 .layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Fill the viewport on tall screens (carousel grows, footer sits at the
+     bottom) but allow the column to overflow and IonContent to scroll on
+     short ones, instead of squeezing everything into a single screen. */
   min-height: 100%;
 }
 
 .carousel-host {
   flex: 1 1 auto;
-  min-height: 0;
+  /* Floor the hero height so the illustration always has room and the slide
+     can centre comfortably. */
+  min-height: clamp(340px, 52vh, 480px);
   position: relative;
+}
+
+/* Fill the host with the carousel via absolute positioning. This gives the
+   carousel a definite pixel height (so the slide's own vertical centring works
+   reliably, unlike a percentage-height chain), the slide art + text land in the
+   middle of the hero, and the dots — pinned to the carousel's bottom — drop to
+   just above the footer button instead of floating mid-screen. */
+.layout .carousel-host > * {
+  position: absolute;
+  inset: 0;
 }
 </style>
 
