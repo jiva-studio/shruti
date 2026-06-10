@@ -24,6 +24,14 @@ import asyncpg
 from lectorium_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, ScoredLibraryChunk
 from lectorium_chat.infra.repositories.embedding_router import EmbeddingTableRouter
 
+# Chunk kinds may be inlined as SQL literals (to match the per-kind partial
+# HNSW indexes from migration 0032, whose predicates the planner can only
+# match against a constant — not a bound array param). Validate against this
+# fixed internal vocabulary before string-building as defence-in-depth.
+_ALLOWED_KINDS = frozenset(
+    {"track_transcript", "verse", "commentary", "prose_chapter", "letter", "media", "title"}
+)
+
 
 def _library_chunk_from_row(r: Any) -> LibraryChunk:
     """Build a reference-only `LibraryChunk` from a chunks row.
@@ -159,13 +167,16 @@ class PgChunkRepository:
         top_k: int,
     ) -> list[ScoredChunk]:
         # `kind='track_transcript'` keeps library rows out of lecture search.
-        # Embedding column now lives in `chunk_embeddings_d{dim}` (migration
-        # 0030); join through chunk_id.
+        # Embedding column lives in `chunk_embeddings_d{dim}` (migration
+        # 0030); join through chunk_id. The kind/lang filters target the
+        # EMBEDDING table (migration 0032 denormalized them there) so the
+        # `WHERE kind='track_transcript'` partial HNSW index is used — a
+        # filter on `c` would only post-filter after a full-index deep scan.
         emb_table = self._router.chunk_table
-        where = ["c.embed_model = $1", "c.kind = 'track_transcript'"]
+        where = ["c.embed_model = $1", "e.kind = 'track_transcript'"]
         params: list[Any] = [self._embed_model]
         if lang:
-            where.append(f"c.lang = ${len(params) + 1}")
+            where.append(f"e.lang = ${len(params) + 1}")
             params.append(lang)
         if eligible_track_ids is not None:
             where.append(f"c.track_id = ANY(${len(params) + 1}::text[])")
@@ -401,13 +412,24 @@ class PgChunkRepository:
         if not kinds:
             return []
         emb_table = self._router.chunk_table
+        bad = [k for k in kinds if k not in _ALLOWED_KINDS]
+        if bad:
+            raise ValueError(f"unknown chunk kind(s): {bad}")
+        # Inline kinds as constant literals on the EMBEDDING table so the
+        # matching per-kind partial HNSW index (migration 0032) is used.
+        # A bound `kind = ANY($2)` array can't be matched to a partial
+        # index predicate at plan time, leaving a full-index deep scan +
+        # post-filter (the multi-second spike 0032 fixes). lang stays a
+        # post-filter column (also on `e`) — out of the index predicate so
+        # the same index serves the lang-less fallback.
+        kind_literals = ", ".join(f"'{k}'" for k in kinds)
         where: list[str] = [
             "c.embed_model = $1",
-            f"c.kind = ANY($2::text[])",
+            f"e.kind IN ({kind_literals})",
         ]
-        params: list[Any] = [self._embed_model, kinds]
+        params: list[Any] = [self._embed_model]
         if lang:
-            where.append(f"c.lang = ${len(params) + 1}")
+            where.append(f"e.lang = ${len(params) + 1}")
             params.append(lang)
         if source_id:
             where.append(f"c.source_id = ${len(params) + 1}")

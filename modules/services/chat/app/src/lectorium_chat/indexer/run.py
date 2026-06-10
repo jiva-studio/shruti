@@ -312,12 +312,15 @@ async def _process_one(obj: s3.TranscriptObject, embedder: Embedder, settings: S
                 [embedder.name] * len(chunks),
             )
             chunk_ids = [int(r["id"]) for r in id_rows]
+            # kind/lang denormalized onto the embedding row (migration 0032)
+            # so the per-kind partial HNSW index can be used at query time.
+            # Lecture chunks are always 'track_transcript'.
             await conn.executemany(
                 f"""
-                INSERT INTO {router.chunk_table} (chunk_id, embedding)
-                VALUES ($1, $2)
+                INSERT INTO {router.chunk_table} (chunk_id, embedding, kind, lang)
+                VALUES ($1, $2, 'track_transcript', $3)
                 """,
-                list(zip(chunk_ids, vectors, strict=True)),
+                list(zip(chunk_ids, vectors, langs, strict=True)),
             )
             await conn.execute(
                 """

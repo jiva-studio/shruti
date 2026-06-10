@@ -182,12 +182,19 @@ async def run_once_library(settings: Settings | None = None) -> dict:
                         [embedder.name] * n,
                     )
                     chunk_ids = [int(r["id"]) for r in id_rows]
+                    # kind/lang denormalized onto the embedding row
+                    # (migration 0032) for the per-kind partial HNSW index.
                     await conn.executemany(
                         f"""
-                        INSERT INTO {router.chunk_table} (chunk_id, embedding)
-                        VALUES ($1, $2)
+                        INSERT INTO {router.chunk_table} (chunk_id, embedding, kind, lang)
+                        VALUES ($1, $2, $3, $4)
                         """,
-                        list(zip(chunk_ids, item_vectors, strict=True)),
+                        list(zip(
+                            chunk_ids, item_vectors,
+                            [c.item_kind for c in item_chunks_list],
+                            [c.lang for c in item_chunks_list],
+                            strict=True,
+                        )),
                     )
                     cycle_chunks += n
                     await conn.execute(
