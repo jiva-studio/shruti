@@ -141,7 +141,9 @@ class Settings(BaseSettings):
 
     # ── Indexer ─────────────────────────────────────────────────────────
     catalog_dir: Path = Path("/var/lib/chat")
-    indexer_interval_hours: int = 6
+    # Fractional values are allowed (e.g. 0.25 = every 15 min). The loop
+    # floors the effective interval at 60s regardless (see indexer/run.py).
+    indexer_interval_hours: float = 6
     indexer_langs: str = "ru,en"
     indexer_bootstrap_on_start: bool = True
 
