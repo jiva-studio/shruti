@@ -32,6 +32,13 @@ _ALLOWED_KINDS = frozenset(
     {"track_transcript", "verse", "commentary", "prose_chapter", "letter", "media", "title"}
 )
 
+# Languages with a per-(kind,lang) composite partial HNSW index on the
+# lecture lane (migration 0036). A lecture query in one of these langs
+# inlines `e.lang = '<lang>'` as a constant so the planner matches the
+# composite index; any other lang (or lang-less) uses the kind-only
+# `_hnsw_lec` partial. Keep in sync with the `langs` array in 0036.
+_LECTURE_PARTIAL_LANGS = frozenset({"en", "ru"})
+
 
 def _library_chunk_from_row(r: Any) -> LibraryChunk:
     """Build a reference-only `LibraryChunk` from a chunks row.
@@ -176,8 +183,16 @@ class PgChunkRepository:
         where = ["c.embed_model = $1", "e.kind = 'track_transcript'"]
         params: list[Any] = [self._embed_model]
         if lang:
-            where.append(f"e.lang = ${len(params) + 1}")
-            params.append(lang)
+            if lang in _LECTURE_PARTIAL_LANGS:
+                # Inline lang as a constant so the per-(kind,lang) composite
+                # partial HNSW index (migration 0036) is matched — a bound
+                # `lang = $param` can't be. Safe: only the fixed-set values
+                # in _LECTURE_PARTIAL_LANGS ever reach this branch. Other
+                # langs fall through to the param + kind-only `_hnsw_lec`.
+                where.append(f"e.lang = '{lang}'")
+            else:
+                where.append(f"e.lang = ${len(params) + 1}")
+                params.append(lang)
         if eligible_track_ids is not None:
             where.append(f"c.track_id = ANY(${len(params) + 1}::text[])")
             params.append(eligible_track_ids)
