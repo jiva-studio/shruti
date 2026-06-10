@@ -1,4 +1,4 @@
--- Revert 0032: drop the per-kind partial HNSW indexes and the
+-- Revert 0035: drop the per-kind partial HNSW indexes and the
 -- denormalized kind/lang columns, restoring the single full HNSW index
 -- per dim table (the 0030 shape).
 

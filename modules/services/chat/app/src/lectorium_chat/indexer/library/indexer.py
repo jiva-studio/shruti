@@ -183,7 +183,7 @@ async def run_once_library(settings: Settings | None = None) -> dict:
                     )
                     chunk_ids = [int(r["id"]) for r in id_rows]
                     # kind/lang denormalized onto the embedding row
-                    # (migration 0032) for the per-kind partial HNSW index.
+                    # (migration 0035) for the per-kind partial HNSW index.
                     await conn.executemany(
                         f"""
                         INSERT INTO {router.chunk_table} (chunk_id, embedding, kind, lang)

@@ -10,7 +10,7 @@ hitting.
 Adding a new dim is a two-step process:
   1. Write a new migration that creates `chunk_embeddings_d{N}` (with
      `kind`/`lang` columns + per-kind PARTIAL HNSW indexes, see migration
-     0032) and `attribution_emb_d{N}` (with its full HNSW index).
+     0035) and `attribution_emb_d{N}` (with its full HNSW index).
   2. Extend `_SUPPORTED_DIMS` here so the router accepts it.
 """
 
