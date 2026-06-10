@@ -43,9 +43,13 @@ defineProps<{
 }
 
 .slide-icon {
-  width: clamp(120px, 36vw, 200px);
-  max-height: 100%;
+  width: clamp(160px, 50vw, 240px);
+  aspect-ratio: 1 / 1;
   height: auto;
+  max-height: 100%;
+  /* Source art is a 512×512 square. Locking the aspect ratio and letting
+     object-fit letterbox means a height clamp can never stretch or squash it. */
+  object-fit: contain;
   display: block;
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.08));
 }
@@ -68,6 +72,10 @@ defineProps<{
 .slide-body {
   flex: 0 0 auto;
   width: 100%;
+  /* Keep the title + description in a readable centred column instead of
+     stretching edge-to-edge on a wide window. */
+  max-width: 440px;
+  margin: 0 auto;
   text-align: center;
 }
 
