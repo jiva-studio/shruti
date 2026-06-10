@@ -140,13 +140,15 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_query_planner,
         settings.llm_synthesis_planner,
         settings.llm_conclusion_writer,
-        # Known-good aliases — extend here when adding a new model to
-        # Langfuse prompt-config. Keep curated; the whole point is
-        # rejecting typos before they hit the provider.
+        # Curated known-good ids. This is now a HINT, not a gate: a model
+        # outside this set is still used (with a loud warning) so changing a
+        # model in Langfuse prompt-config doesn't need a code deploy. Listing
+        # a vetted model here just silences the warning. See `_validate_model`.
         "openrouter/anthropic/claude-3-haiku",
         "openrouter/google/gemini-2.0-flash-001",
         "openrouter/google/gemini-2.5-flash",
         "openrouter/google/gemini-3.1-flash-lite",
+        "openrouter/google/gemini-3.5-flash",
         "openrouter/deepseek/deepseek-chat",
     }
     # Store both the LiteLLM-prefixed and the normalised forms so the
@@ -327,19 +329,21 @@ class OpenRouterLLMProvider:
         return random.uniform(0, ceiling)
 
     def _validate_model(self, model: str | None) -> str:
-        """Whitelist gate. Unknown models fall back to `llm_default` with
-        a warning so a typo in Langfuse prompt-config doesn't 400 the
-        provider call."""
+        """Resolve the model to use. The curated allowlist is a HINT, not a
+        gate: an unrecognized model is used anyway with a loud warning, so a
+        model change in Langfuse prompt-config takes effect WITHOUT a code
+        deploy. The warning still flags a likely typo (which then fails fast
+        at the provider with a clear 404 rather than silently degrading to a
+        different model)."""
         if model is None:
             return self._default_model
         if model in self._allowlist or _normalise_model(model) in self._allowlist:
             return model
         log.warning(
-            "llm_model_not_in_allowlist_fallback",
+            "llm_model_not_in_allowlist_using_anyway",
             requested_model=model,
-            fallback_model=self._default_model,
         )
-        return self._default_model
+        return model
 
     def _client_for(
         self,
