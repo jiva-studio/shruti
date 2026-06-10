@@ -11,6 +11,7 @@ detects mismatch through `chunks.embed_model` and re-embeds.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 
 from openai import AsyncOpenAI
@@ -19,6 +20,12 @@ from lectorium_chat.config import Settings, get_settings
 from lectorium_chat.observability.logging import get_logger
 
 log = get_logger(__name__)
+
+# OpenRouter intermittently answers /embeddings with HTTP 200 + an empty `data`
+# array under sustained load (a soft throttle, NOT a 429 the SDK retries). Retry
+# those — and any transient API error — with exponential backoff (2,4,8,16s).
+_EMBED_MAX_ATTEMPTS = 5
+_EMBED_BACKOFF_S = 2.0
 
 _EMBEDDER: Embedder | None = None  # forward ref via __future__ annotations
 
@@ -68,9 +75,34 @@ class OpenAICompatEmbedder(Embedder):
             timeout_s=timeout_s,
         )
 
+    async def _create(self, inp: str | list[str]):
+        """Call /embeddings, retrying transient failures with backoff.
+
+        An empty `data` array surfaces as ValueError("No embedding data
+        received") from the SDK parser; the SDK's own max_retries only covers
+        HTTP errors (429/5xx), not that. Without this, a single soft-throttled
+        response aborts a whole index run — so retry it, and any transient
+        error, with exponential backoff and let the run ride through.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(_EMBED_MAX_ATTEMPTS):
+            try:
+                resp = await self._client.embeddings.create(model=self._model, input=inp)
+                if not resp.data:
+                    raise ValueError("No embedding data received")
+                return resp
+            except Exception as exc:  # noqa: BLE001 — transient embed failures are retryable
+                last_exc = exc
+                if attempt == _EMBED_MAX_ATTEMPTS - 1:
+                    break
+                log.warning("embed_retry", attempt=attempt + 1, error=str(exc)[:120])
+                await asyncio.sleep(_EMBED_BACKOFF_S * (2 ** attempt))
+        assert last_exc is not None
+        raise last_exc
+
     async def embed_query(self, text: str) -> list[float]:
         inp = f"{self._query_prefix}{text}" if self._query_prefix else text
-        resp = await self._client.embeddings.create(model=self._model, input=inp)
+        resp = await self._create(inp)
         return resp.data[0].embedding
 
     async def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -84,9 +116,7 @@ class OpenAICompatEmbedder(Embedder):
             chunk = texts[i:i + BATCH]
             if self._doc_prefix:
                 chunk = [f"{self._doc_prefix}{t}" for t in chunk]
-            resp = await self._client.embeddings.create(
-                model=self._model, input=chunk,
-            )
+            resp = await self._create(chunk)
             out.extend(d.embedding for d in resp.data)
         return out
 
