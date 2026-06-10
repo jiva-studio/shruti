@@ -8,8 +8,9 @@ indexer, attribution lookup) don't have to know which table they're
 hitting.
 
 Adding a new dim is a two-step process:
-  1. Write a new migration that creates `chunk_embeddings_d{N}` +
-     `attribution_emb_d{N}` with their HNSW indices.
+  1. Write a new migration that creates `chunk_embeddings_d{N}` (with
+     `kind`/`lang` columns + per-kind PARTIAL HNSW indexes, see migration
+     0032) and `attribution_emb_d{N}` (with its full HNSW index).
   2. Extend `_SUPPORTED_DIMS` here so the router accepts it.
 """
 
@@ -30,7 +31,6 @@ class EmbeddingTableRouter:
     __slots__ = (
         "dim",
         "chunk_table",
-        "chunk_hnsw_index",
         "attribution_table",
         "attribution_hnsw_index",
     )
@@ -45,7 +45,6 @@ class EmbeddingTableRouter:
             )
         self.dim: int = dim
         self.chunk_table: str = f"chunk_embeddings_d{dim}"
-        self.chunk_hnsw_index: str = f"{self.chunk_table}_hnsw"
         self.attribution_table: str = f"attribution_emb_d{dim}"
         self.attribution_hnsw_index: str = f"{self.attribution_table}_hnsw"
 

@@ -30,7 +30,9 @@ def test_router_resolves_supported_dims(
     assert router.dim == dim
     assert router.chunk_table == chunk_table
     assert router.attribution_table == attribution_table
-    assert router.chunk_hnsw_index == f"{chunk_table}_hnsw"
+    # chunk embeddings use per-kind PARTIAL HNSW indexes (migration 0032),
+    # not a single named full index — the router no longer exposes one.
+    assert not hasattr(router, "chunk_hnsw_index")
     assert router.attribution_hnsw_index == f"{attribution_table}_hnsw"
 
 
