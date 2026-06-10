@@ -124,9 +124,8 @@ function onSubscribeClick(): void {
 
 <style scoped>
 .footer {
-  padding: 12px 0 8px;
+  padding: 4px 0 8px;
   background: var(--ion-background-color);
-  border-top: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
 }
 
 .plan {
@@ -150,8 +149,8 @@ function onSubscribeClick(): void {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-evenly;
-  gap: 0.5rem;
-  padding: 12px 16px 8px;
+  gap: 0.5rem 1.25rem;
+  padding: 20px 16px 12px;
 }
 
 .legal a {
