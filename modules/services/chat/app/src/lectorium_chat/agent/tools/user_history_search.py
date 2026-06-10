@@ -51,9 +51,10 @@ async def user_history_search(
             for s in scored
         ]
 
+    # Single-language only — no cross-language fallback (chunks are cited
+    # verbatim; honouring lang also keeps the lecture ANN on the composite
+    # index, not the dropped kind-only `_hnsw_lec`).
     rows = await _run(lang)
-    if not rows and lang is not None:
-        rows = await _run(None)
     return rows
 
 

@@ -3,7 +3,7 @@
 Covers:
 - type=null cross-corpus merge by score
 - type filter routing to lecture branch only or library branch only
-- lang fallback (strict-then-relaxed across both branches)
+- single-language search (no cross-language fallback)
 - top_k bounds
 """
 
@@ -135,8 +135,10 @@ async def test_type_verse_only_skips_lecture_branch() -> None:
     assert repo.search_calls == []  # lecture branch not called
 
 
-async def test_lang_fallback_strict_then_relaxed() -> None:
-    # Strict lang=ru → nothing. Relaxed lang=None → returns en row.
+async def test_no_cross_language_fallback() -> None:
+    # lang='ru' with only an 'en' lecture available → returns NOTHING.
+    # Chunks are cited to the user verbatim (never LLM-translated), so we
+    # never surface a foreign-language result; there is no lang=None relax.
     repo = _StubChunkRepo(
         lectures=[_lecture("t_en", 0.9, lang="en")],
         library=[],
@@ -146,11 +148,10 @@ async def test_lang_fallback_strict_then_relaxed() -> None:
         chunk_repo=repo, catalog_repo=_StubCatalog(),
         embedder=_StubEmbedder(), alias_map=TurnAliasMap(),
     )
-    assert len(rows) == 1
-    assert rows[0]["lang"] == "en"
-    # Two attempts: lang='ru' then lang=None.
+    assert rows == []
+    # Exactly one attempt, in the requested language — never lang=None.
     langs_seen = [c["lang"] for c in repo.search_calls]
-    assert langs_seen == ["ru", None]
+    assert langs_seen == ["ru"]
 
 
 async def test_top_k_respected_after_merge() -> None:

@@ -171,7 +171,9 @@ class ChatTurnConfigDto(BaseModel):
 
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)
-    lang: Literal["ru", "en"] = "ru"
+    # Default to the product's primary language. A request that omits `lang`
+    # gets English retrieval + answer; clients send the UI locale explicitly.
+    lang: Literal["ru", "en"] = "en"
     user_context: UserContextDto | None = None
     proactive: ProactiveRequestDto | None = None
     # Client-managed chat session — groups turns of the same conversation

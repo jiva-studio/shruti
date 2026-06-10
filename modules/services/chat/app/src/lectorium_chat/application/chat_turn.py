@@ -182,7 +182,7 @@ def _extract_latest_user_query(history: list[dict[str, Any]]) -> str:
 async def run_chat_turn(
     history: list[dict[str, Any]],
     *,
-    lang: str = "ru",
+    lang: str = "en",
     request_id: str | None = None,
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
