@@ -1,0 +1,19 @@
+export default {
+  title: "Studio",
+  hint: "Modifica la citazione prima di generare il video.",
+  placeholder: "Testo della citazione",
+  titleLabel: "Titolo",
+  titlePlaceholder: "Titolo facoltativo",
+  download: "Scarica",
+  preparing: "Preparazione…",
+  rendering: "Creazione del reel…",
+  almostReady: "Quasi pronto…",
+  stillWorking: "Un attimo, ci sto ancora lavorando…",
+  downloading: "Download in corso…",
+  shareDialog: "Condividi il video reel",
+  errorEmpty: "La citazione non può essere vuota",
+  errorNoAudio: "L'audio non è disponibile per questa traccia",
+  errorGeneric: "Impossibile preparare il video. Riprova.",
+  // Share-menu entry; reused by NotesView.
+  openInStudio: "Apri nello Studio",
+}

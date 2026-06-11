@@ -19,6 +19,15 @@ const FALLBACK_ITEMS: SelectorItem[] = [
   { id: "uk", title: "Українська" },
   { id: "sr-Latn", title: "Srpski" },
   { id: "sr-Cyrl", title: "Српски" },
+  { id: "es", title: "Español" },
+  { id: "pt", title: "Português" },
+  { id: "it", title: "Italiano" },
+  { id: "de", title: "Deutsch" },
+  { id: "fr", title: "Français" },
+  { id: "pl", title: "Polski" },
+  { id: "hu", title: "Magyar" },
+  { id: "hi", title: "हिन्दी" },
+  { id: "bn", title: "বাংলা" },
 ]
 
 /**

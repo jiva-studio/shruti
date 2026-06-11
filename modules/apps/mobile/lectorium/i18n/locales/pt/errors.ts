@@ -1,0 +1,7 @@
+export default {
+  downloadFailed: "Falha no download. Verifique sua conexão com a internet e tente de novo.",
+  filtersNotSaved: "Não foi possível salvar o filtro. Ele será redefinido na próxima abertura.",
+  downloadsCacheUnavailable: "Não foi possível ler o índice de downloads. Os arquivos em cache continuam no disco.",
+  trackNotFound: "Faixa não encontrada.",
+  languageListUnavailable: "Não foi possível carregar os idiomas — exibindo uma lista reduzida.",
+}

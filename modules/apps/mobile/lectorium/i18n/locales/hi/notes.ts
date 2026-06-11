@@ -1,0 +1,13 @@
+export default {
+  noteAction: "नोट",
+  notesAreEmpty: "कोई नोट नहीं",
+  addMoreNotes: "प्रवचनों से नोट जोड़ें और वे यहाँ दिखाई देंगे",
+  shareText: "टेक्स्ट साझा करें",
+  shareAudio: "ऑडियो साझा करें",
+  shareAudioDialog: "ऑडियो अंश साझा करें",
+  shareAudioPreparing: "ऑडियो तैयार हो रहा है…",
+  shareAudioErrorNoAudio: "इस ट्रैक के लिए ऑडियो उपलब्ध नहीं है",
+  shareAudioErrorGeneric: "ऑडियो तैयार नहीं हो सका। फिर कोशिश करें।",
+  shareInBackground: "साझा करना पृष्ठभूमि में जारी है…",
+  shareAlreadyInProgress: "एक और साझाकरण पहले से चल रहा है",
+}
