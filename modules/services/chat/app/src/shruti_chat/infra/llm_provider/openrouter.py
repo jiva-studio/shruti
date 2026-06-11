@@ -31,7 +31,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from shruti_chat.config import Settings
 from shruti_chat.domain.entities import CompletionChunk, Message, ToolCallDelta
@@ -63,6 +63,48 @@ def _is_retryable(exc: BaseException) -> bool:
     # Some providers surface 429/5xx as a generic APIStatusError.
     status = getattr(exc, "status_code", None)
     return isinstance(status, int) and (status == 429 or 500 <= status < 600)
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Pull the first balanced JSON object/array out of a model response.
+
+    Models routinely emit valid JSON wrapped in a ```json fence and/or
+    surrounded by prose ("Вот сгенерированный JSON:" … / "Hope this helps!").
+    A strict JSON parser chokes on the first non-JSON character. Scan to the
+    first `{`/`[`, walk to its matching close (string- and escape-aware so
+    braces inside string values don't fool it), and return just that slice.
+    Returns None when there's no JSON-looking object at all (genuine prose /
+    refusal), so the caller can fail cleanly into retry/fallback.
+    """
+    if not text:
+        return None
+    start = next((i for i, c in enumerate(text) if c in "{["), None)
+    if start is None:
+        return None
+    open_ch = text[start]
+    close_ch = "}" if open_ch == "{" else "]"
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == open_ch:
+            depth += 1
+        elif c == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 # Provider-availability failures: by the time one of these escapes
@@ -665,23 +707,56 @@ class OpenRouterLLMProvider:
             model_parameters={"temperature": 0},
         )
         with gen_ctx as gen:
-            raw_and_parsed: Any = await structured.ainvoke(lc_msgs)
-            parsed = raw_and_parsed.get("parsed") if isinstance(raw_and_parsed, dict) else raw_and_parsed
+            raw_msg: Any = None
+            parsed: Any = None
+            try:
+                raw_and_parsed: Any = await structured.ainvoke(lc_msgs)
+                if isinstance(raw_and_parsed, dict):
+                    raw_msg = raw_and_parsed.get("raw")
+                    parsed = raw_and_parsed.get("parsed")
+                else:
+                    parsed = raw_and_parsed
+            except ValidationError:
+                # Some langchain builds raise on a parse failure instead of
+                # returning {"parsed": None}. We don't read the exception —
+                # we re-fetch the raw text cleanly below and salvage from it.
+                parsed = None
+
             if not isinstance(parsed, schema):
-                raise RuntimeError(
-                    f"structured_output: provider returned {type(parsed).__name__}, "
-                    f"expected {schema.__name__}"
+                # The structured parser couldn't read the response — almost
+                # always because the model wrapped valid JSON in a ```json
+                # fence or prose ("Вот JSON:" …). Salvage from the RAW model
+                # message (not by mining the parse error). If we don't have
+                # the raw message (parser raised), do one clean plain
+                # completion to get the text.
+                if raw_msg is None:
+                    raw_msg = await client.ainvoke(lc_msgs)
+                raw_text = getattr(raw_msg, "content", "") or ""
+                if not isinstance(raw_text, str):
+                    raw_text = str(raw_text)
+                candidate = _extract_json_object(raw_text)
+                salvaged = None
+                if candidate is not None:
+                    try:
+                        salvaged = schema.model_validate_json(candidate)
+                    except ValidationError:
+                        salvaged = None
+                if not isinstance(salvaged, schema):
+                    raise RuntimeError(
+                        f"structured_output: no parseable {schema.__name__} "
+                        f"JSON in model output"
+                    )
+                log.info(
+                    "structured_output_salvaged",
+                    model=validated_model, schema=schema.__name__,
                 )
+                parsed = salvaged
+
             if gen is not None:
                 try:
                     usage_in = 0
                     usage_out = 0
                     usage_cached = 0
-                    raw_msg = (
-                        raw_and_parsed.get("raw")
-                        if isinstance(raw_and_parsed, dict)
-                        else None
-                    )
                     if raw_msg is not None:
                         usage_meta = getattr(raw_msg, "usage_metadata", None) or {}
                         usage_in = usage_meta.get("input_tokens") or 0
