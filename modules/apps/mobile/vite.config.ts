@@ -103,7 +103,13 @@ export default defineConfig({
   plugins: [shrutiAlias, kitVitePlugin(path.resolve(__dirname, "../../kit/src")), vue()],
   resolve: {
     preserveSymlinks: true,
-    dedupe: ["vue", "@ionic/vue", "@ionic/core", "@ionic/vue-router"],
+    // `vue-router` MUST be deduped alongside the Ionic packages: components
+    // import `useRoute`/`useRouter` from `vue-router`, and without a single
+    // instance Vite's dev pre-bundling can mint a second copy whose inject
+    // symbols don't match the one `app.use(router)` provided — surfacing as
+    // `injection "Symbol(router)" not found` and a route that reads
+    // `undefined` (which silently breaks the chat session-load watcher).
+    dedupe: ["vue", "vue-router", "@ionic/vue", "@ionic/core", "@ionic/vue-router"],
     alias: [
       { find: "@ports", replacement: path.resolve(__dirname, "./ports") },
       { find: "@infra", replacement: path.resolve(__dirname, "./infra") },
