@@ -12,7 +12,7 @@
   <div v-if="!snippetText" class="citation-chip-line">
     <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
   </div>
-  <div
+  <AccentFrame
     v-else
     class="citation-card"
     role="button"
@@ -43,7 +43,7 @@
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
-  </div>
+  </AccentFrame>
 
   <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
 </template>
@@ -75,6 +75,7 @@ import { citationExcerptId } from "../composables/useCitationSnippet.js"
 import CitationChip from "./CitationChip.vue"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
+import AccentFrame from "./AccentFrame.vue"
 
 const props = defineProps<{
   trackId: string
@@ -281,17 +282,8 @@ watch(
   margin: 6px 0;
 }
 
-/* Quote-style frame, matching the chat blockquote: left accent bar +
- * soft primary tint. Block-level so it sits between prose tokens like
- * the verse card. */
 .citation-card {
-  display: block;
   margin: 10px 0;
-  padding: 0;
-  overflow: hidden;
-  border-left: 3px solid var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
-  border-radius: 4px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   --excerpt-body-padding: 8px 12px 10px;
