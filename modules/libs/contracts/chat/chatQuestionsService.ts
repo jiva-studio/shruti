@@ -24,7 +24,7 @@ export interface FetchSuggestedQuestionsOptions {
 export interface IChatQuestionsService {
   fetchSuggestedQuestions(
     focus: ChatQuestionsFocusInput,
-    lang: "ru" | "en",
+    lang: string,
     opts?: FetchSuggestedQuestionsOptions
   ): Promise<readonly string[]>
 }

@@ -22,8 +22,18 @@ import { useShruti } from "@shruti/shruti.js"
 const STORAGE_KEY = "shruti.cite_transcript_cache.v1"
 const MAX_ENTRIES = 200
 
-interface StoredEntry {
+/** Decoded citation snippet exposed to the card. `text` is the shown
+ *  text (native, machine-translated, or en-preferred). When `mt` is true
+ *  `textOriginal` carries the verbatim source so the card can toggle. */
+export interface CiteTranscriptEntry {
   readonly text: string
+  /** True when `text` is a machine translation into the answer language. */
+  readonly mt?: boolean
+  /** Verbatim source-language transcript, present only when `mt` is true. */
+  readonly textOriginal?: string
+}
+
+interface StoredEntry extends CiteTranscriptEntry {
   readonly touchedAt: number
 }
 
@@ -84,10 +94,21 @@ export const useCiteTranscriptStore = defineStore("citeTranscript", () => {
     }
   }
 
-  function set(trackId: string, startMs: number, endMs: number, text: string): void {
+  function set(
+    trackId: string,
+    startMs: number,
+    endMs: number,
+    text: string,
+    extra?: { mt?: boolean; textOriginal?: string }
+  ): void {
     const key = makeKey(trackId, startMs, endMs)
     const next = new Map(entries.value)
-    next.set(key, { text, touchedAt: Date.now() })
+    next.set(key, {
+      text,
+      touchedAt: Date.now(),
+      ...(extra?.mt ? { mt: true } : {}),
+      ...(extra?.textOriginal ? { textOriginal: extra.textOriginal } : {}),
+    })
     // LRU-style eviction: drop the oldest-touched entries past the cap
     // so the on-device blob stays bounded and hydrate stays fast.
     if (next.size > MAX_ENTRIES) {
@@ -106,5 +127,17 @@ export const useCiteTranscriptStore = defineStore("citeTranscript", () => {
     return e ? e.text : null
   }
 
-  return { hydrate, set, get }
+  /** Full entry (text + mt + original) for the card's original/translated
+   *  toggle. Null on a cache miss, same as `get`. */
+  function getEntry(trackId: string, startMs: number, endMs: number): CiteTranscriptEntry | null {
+    const e = entries.value.get(makeKey(trackId, startMs, endMs))
+    if (!e) return null
+    return {
+      text: e.text,
+      ...(e.mt ? { mt: true } : {}),
+      ...(e.textOriginal ? { textOriginal: e.textOriginal } : {}),
+    }
+  }
+
+  return { hydrate, set, get, getEntry }
 })

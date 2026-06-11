@@ -27,7 +27,7 @@ export function createHttpChatQuestionsService(
   return {
     fetchSuggestedQuestions(
       focus: ChatQuestionsFocusInput,
-      lang: "ru" | "en",
+      lang: string,
       opts?: FetchSuggestedQuestionsOptions
     ): Promise<readonly string[]> {
       return fetchSuggestedQuestions(focus, lang, {

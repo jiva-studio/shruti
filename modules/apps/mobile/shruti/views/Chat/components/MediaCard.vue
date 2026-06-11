@@ -80,7 +80,19 @@
         </button>
       </div>
 
-      <div v-if="expanded && payload.text" class="media-card-transcript">{{ payload.text }}</div>
+      <div v-if="expanded && payload.text" class="media-card-transcript">
+        <span class="media-card-transcript-text">{{ transcriptText }}</span>
+        <p v-if="isMt" class="media-card-mt-note">
+          <span class="media-card-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
+          <button
+            type="button"
+            class="media-card-mt-toggle"
+            @click.stop="showOriginal = !showOriginal"
+          >
+            {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
+          </button>
+        </p>
+      </div>
     </div>
   </article>
 </template>
@@ -104,6 +116,18 @@ const playing = ref(false)
 const expanded = ref(false)
 const progress = ref(0)
 const buffered = ref(0)
+// Toggle the transcript between the shown text and the original when the
+// transcript is a machine translation.
+const showOriginal = ref(false)
+
+// True when the transcript is a machine translation with an original to
+// flip to.
+const isMt = computed<boolean>(() => !!props.payload?.mt && !!props.payload?.textOriginal)
+const transcriptText = computed<string>(() => {
+  const p = props.payload
+  if (!p) return ""
+  return showOriginal.value && p.textOriginal ? p.textOriginal : p.text
+})
 
 // `payload.url` is a RELATIVE storage path (e.g. `public/media/<id>.mp4`);
 // resolve to the active server's CDN URL. Poster = same path, `.jpg`.
@@ -334,5 +358,27 @@ async function toggle(): Promise<void> {
   padding: 10px 12px 12px;
   line-height: 1.45;
   white-space: pre-wrap;
+}
+
+/* Muted machine-translation footnote under the transcript. */
+.media-card-mt-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--ion-color-medium);
+}
+.media-card-mt-badge {
+  font-style: italic;
+}
+.media-card-mt-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ion-color-primary);
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 </style>

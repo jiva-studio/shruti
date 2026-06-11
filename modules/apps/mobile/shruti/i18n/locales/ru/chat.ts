@@ -27,6 +27,9 @@ export default {
   citationLoadFailed: "Не удалось загрузить отрезок",
   citationAddedToPlaylist: "Добавлено в плейлист",
   citationAddFailed: "Не удалось добавить в плейлист",
+  citationMtBadge: "Переведено автоматически",
+  citationViewOriginal: "посмотреть оригинал",
+  citationViewTranslated: "назад",
   lectureCardMissing: "Лекция отсутствует в локальном каталоге.",
   errRate: "Слишком много запросов. Повторите через минуту.",
   /** Сообщение про rate-limit с дедлайном. `{when}` собирает бабл —

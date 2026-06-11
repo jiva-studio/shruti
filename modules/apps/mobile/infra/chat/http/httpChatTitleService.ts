@@ -16,7 +16,7 @@ export function createHttpChatTitleService(deps: HttpChatTitleServiceDeps): ICha
   return {
     fetchSessionTitle(
       messages: readonly ChatTurn[],
-      lang: "ru" | "en",
+      lang: string,
       opts?: FetchSessionTitleOptions
     ): Promise<string | null> {
       return fetchSessionTitle(messages, lang, {

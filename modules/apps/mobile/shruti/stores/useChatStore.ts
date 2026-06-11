@@ -8,6 +8,10 @@ import { useToast } from "@kit/composables"
 import { openStorePage } from "@shruti/utils/openStorePage.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import {
+  useChatLanguage,
+  useChatTranslateCitations,
+} from "@shruti/composables/useChatLanguage.js"
+import {
   useTrackUserState,
   type FocusFragmentPayload,
 } from "@shruti/composables/useTrackUserState.js"
@@ -143,6 +147,8 @@ function warnOrphanActionMarkers(message: ChatMessage): void {
 export const useChatStore = defineStore("chat", () => {
   const app = useShruti()
   const appLanguage = useAppLanguage()
+  const chatLanguage = useChatLanguage()
+  const chatTranslateCitations = useChatTranslateCitations()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
   const verseBodyStore = useVerseBodyStore()
@@ -514,7 +520,9 @@ export const useChatStore = defineStore("chat", () => {
     focus: ChatFocusPayload
   ): Promise<void> {
     cancelSuggestions()
-    const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+    // Send the chosen chat locale verbatim (empty ⇒ follow the interface
+    // language). The backend treats `lang` as an opaque prompt code.
+    const lang = chatLanguage.value || appLanguage.value
     const ctl = new AbortController()
     suggestionsAbort = ctl
     const forSessionId = activeSessionId.value
@@ -657,7 +665,10 @@ export const useChatStore = defineStore("chat", () => {
     // also ship the per-turn `aliases` map (server-minted integer→chunk
     // map) so the agent can fold this message's chip markers back into
     // numbered-ref form before the LLM sees them.
-    const lang: "ru" | "en" = appLanguage.value.startsWith("en") ? "en" : "ru"
+    // Send the chosen chat locale verbatim (empty ⇒ follow the interface
+    // language). The backend treats `lang` as an opaque prompt code, so a
+    // non-en/ru locale (uk/sr) is no longer collapsed to "ru".
+    const lang = chatLanguage.value || appLanguage.value
     const history: ChatTurn[] = messages.value
       .filter((m) => !m.streaming)
       .map((m) => {
@@ -679,6 +690,7 @@ export const useChatStore = defineStore("chat", () => {
           sessionTitle: activeSession.value?.title ?? undefined,
           text: clean,
           lang,
+          translateCitations: chatTranslateCitations.value,
           history,
           focus: options?.focus,
           isFirstAssistantTurn: isFirst,
@@ -915,6 +927,7 @@ export const useChatStore = defineStore("chat", () => {
           transliteration: event.transliteration,
           translation: event.translation,
           audioUrl: event.audioUrl,
+          mt: event.mt,
         })
         return
       }
@@ -935,7 +948,10 @@ export const useChatStore = defineStore("chat", () => {
         // full quote card; arrives BEFORE the prose delta with the
         // `[cite:...]` marker, and a late arrival upgrades the chip
         // reactively. Does NOT touch the message list.
-        citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text)
+        citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text, {
+          mt: event.mt,
+          textOriginal: event.textOriginal,
+        })
         return
       }
       case "media-payload": {

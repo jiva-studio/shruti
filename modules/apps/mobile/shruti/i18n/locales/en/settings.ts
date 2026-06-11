@@ -145,6 +145,16 @@ export default {
     description: "Language of an interface",
   },
 
+  chatLanguage: {
+    title: "Chat language",
+    description: "Language Sadhu answers in.",
+  },
+
+  chatTranslateCitations: {
+    title: "Translate quotes",
+    description: "Translate quotes into the chat language.",
+  },
+
   smartLibrary: {
     title: "Smart library",
     description: "Keep fresh lectures ready and clean up after listening",

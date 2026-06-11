@@ -57,6 +57,10 @@ vi.mock("@shruti/stores/useAuthStore.js", () => ({
 vi.mock("@shruti/composables/useAppLanguage.js", () => ({
   useAppLanguage: () => ({ value: "en" }),
 }))
+vi.mock("@shruti/composables/useChatLanguage.js", () => ({
+  useChatLanguage: () => ({ value: "" }),
+  useChatTranslateCitations: () => ({ value: false }),
+}))
 vi.mock("@shruti/composables/useTrackUserState.js", () => ({
   useTrackUserState: () => ({ buildUserContext: vi.fn() }),
 }))
