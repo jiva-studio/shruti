@@ -3,7 +3,7 @@ export default {
     subscription: "Subscription",
     account: "Account",
     appearance: "Appearance",
-    chat: "Chat",
+    chat: "Ask Sadhu",
     contacts: "Contact Us",
     status: "Status",
     sadhana: "Sadhana",
