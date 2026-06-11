@@ -1,0 +1,13 @@
+export default {
+  noteAction: "Nota",
+  notesAreEmpty: "Sin notas",
+  addMoreNotes: "Añade notas desde las clases y aparecerán aquí",
+  shareText: "Compartir texto",
+  shareAudio: "Compartir audio",
+  shareAudioDialog: "Compartir fragmento de audio",
+  shareAudioPreparing: "Preparando audio…",
+  shareAudioErrorNoAudio: "El audio no está disponible para esta pista",
+  shareAudioErrorGeneric: "No se pudo preparar el audio. Inténtalo de nuevo.",
+  shareInBackground: "El envío continúa en segundo plano…",
+  shareAlreadyInProgress: "Ya hay otro envío en curso",
+}

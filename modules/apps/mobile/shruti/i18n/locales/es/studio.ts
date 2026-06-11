@@ -1,0 +1,19 @@
+export default {
+  title: "Estudio",
+  hint: "Ajusta la cita antes de generar el vídeo.",
+  placeholder: "Texto de la cita",
+  titleLabel: "Título",
+  titlePlaceholder: "Título opcional",
+  download: "Descargar",
+  preparing: "Preparando…",
+  rendering: "Generando el clip…",
+  almostReady: "Casi listo…",
+  stillWorking: "Un momento, aún trabajando…",
+  downloading: "Descargando…",
+  shareDialog: "Compartir clip de vídeo",
+  errorEmpty: "La cita no puede estar vacía",
+  errorNoAudio: "El audio no está disponible para esta pista",
+  errorGeneric: "No se pudo preparar el vídeo. Inténtalo de nuevo.",
+  // Share-menu entry; reused by NotesView.
+  openInStudio: "Abrir en el Estudio",
+}
