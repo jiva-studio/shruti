@@ -523,32 +523,46 @@ async def translate_commentaries(ctx: TurnContext) -> None:
     ):
         return
 
+    async def _tr_one(s: str) -> str:
+        """Translate a single sentence; on any failure keep the source so
+        index alignment with `sentences` is never broken."""
+        if not s.strip():
+            return s
+        try:
+            out = await ctx.translator.translate(s, src_lang="en", tgt_lang=ctx.lang)
+        except Exception:  # noqa: BLE001 — citation never fails the turn
+            return s
+        return out or s
+
     async def _one(n: int, sentences: tuple[str, ...]) -> None:
         if not sentences:
             return
-        # Translate the joined block once (preserves sentence boundaries far
-        # better than per-sentence calls) then re-split on the same count.
+        # Prefer ONE joined call (best sentence-boundary context) and
+        # re-split. The model often reflows the newlines, though, so when
+        # the split count no longer matches we CANNOT trust the alignment —
+        # fall back to per-sentence translation (each independently cached)
+        # instead of dropping the translation and leaving the purport in its
+        # source language (the bug this replaces).
         joined = "\n".join(sentences)
+        whole: str | None
         try:
-            translated = await ctx.translator.translate(
-                joined, src_lang="en", tgt_lang=ctx.lang,
-            )
+            whole = await ctx.translator.translate(joined, src_lang="en", tgt_lang=ctx.lang)
         except Exception as exc:  # noqa: BLE001 — citation never fails the turn
+            whole = None
             log.warning(
                 "commentary_translate_failed",
                 request_id=ctx.request_id, ref=n, error=str(exc),
             )
-            return
-        if not translated or translated == joined:
-            return
-        parts = translated.split("\n")
-        # Keep index alignment with `sentences` so `[^N|s=…]` picks resolve.
-        # If the model collapsed/added newlines, fall back to the source
-        # rather than mis-aligning sentence indices.
-        if len(parts) != len(sentences):
+        if whole and whole != joined and len(whole.split("\n")) == len(sentences):
+            parts: tuple[str, ...] = tuple(whole.split("\n"))
+        else:
+            parts = tuple(await asyncio.gather(*(_tr_one(s) for s in sentences)))
+        # Nothing actually changed (same-language no-op / all calls failed)
+        # → don't flag MT, render the verbatim source.
+        if all(a == b for a, b in zip(parts, sentences)):
             return
         ctx.aliases.set_commentary_translation(
-            n, sentences_translated=tuple(parts), mt=True,
+            n, sentences_translated=parts, mt=True,
         )
 
     targets = ctx.aliases.commentary_refs()
