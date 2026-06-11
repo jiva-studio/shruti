@@ -3,6 +3,7 @@ export default {
     subscription: "Pretplata",
     account: "Nalog",
     appearance: "Izgled",
+    chat: "Ćaskanje",
     contacts: "Kontaktirajte nas",
     status: "Status",
     sadhana: "Sadhana",
@@ -11,6 +12,16 @@ export default {
     debug: "Otklanjanje grešaka",
     danger: "Opasna zona",
     about: "O aplikaciji",
+  },
+
+  chatLanguage: {
+    title: "Jezik ćaskanja",
+    description: "Jezik na kojem Sadhu odgovara.",
+  },
+
+  chatTranslateCitations: {
+    title: "Prevedi citate",
+    description: "Prevedi citate na jezik ćaskanja.",
   },
 
   account: {

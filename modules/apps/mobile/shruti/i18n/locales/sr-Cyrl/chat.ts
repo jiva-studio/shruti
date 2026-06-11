@@ -29,6 +29,9 @@ export default {
   citationLoadFailed: "Није могуће учитати исечак",
   citationAddedToPlaylist: "Додато на листу нумера",
   citationAddFailed: "Није могуће додати на листу нумера",
+  citationMtBadge: "Аутоматски преведено",
+  citationViewOriginal: "прикажи оригинал",
+  citationViewTranslated: "назад",
   lectureCardMissing: "Предавање није доступно у локалном каталогу.",
   errRate: "Превише захтева. Покушајте за минут.",
   /** Rate-limit copy with a deadline placeholder. `{when}` is composed by
