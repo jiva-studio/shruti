@@ -92,6 +92,10 @@ export interface ChatVersePayloadWire {
   readonly addr_label: string
   readonly sanskrit: string
   readonly transliteration: string
+  /** Original IAST (Latin) transliteration, present only when the shown
+   *  `transliteration` is a different script. Lets the card flip the
+   *  transliteration with the translation on "view original". Additive. */
+  readonly transliteration_original?: string
   readonly translation: Readonly<Record<string, string>>
   /** Full public URL of the Sanskrit recitation for this verse, present
    *  only when the library has audio for it. Server expands the stored

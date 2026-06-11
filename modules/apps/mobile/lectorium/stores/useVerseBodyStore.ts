@@ -22,6 +22,9 @@ export interface VerseBody {
   readonly addrLabel: string
   readonly sanskrit: string
   readonly transliteration: string
+  /** Original IAST (Latin) transliteration; present only when the shown
+   *  one is a different script. VerseCard flips to it on "view original". */
+  readonly transliterationOriginal?: string
   readonly translation: { readonly [lang: string]: string }
   /** Full public URL of the Sanskrit recitation, when the library has
    *  audio for this verse. Drives the play button on VerseCard. */
@@ -118,6 +121,7 @@ export const useVerseBodyStore = defineStore("verseBody", () => {
       addrLabel: e.addrLabel,
       sanskrit: e.sanskrit,
       transliteration: e.transliteration,
+      transliterationOriginal: e.transliterationOriginal,
       translation: e.translation,
       audioUrl: e.audioUrl,
       mt: e.mt,

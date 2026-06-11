@@ -925,6 +925,7 @@ export const useChatStore = defineStore("chat", () => {
           addrLabel: event.addrLabel,
           sanskrit: event.sanskrit,
           transliteration: event.transliteration,
+          transliterationOriginal: event.transliterationOriginal,
           translation: event.translation,
           audioUrl: event.audioUrl,
           mt: event.mt,
