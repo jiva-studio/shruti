@@ -1,0 +1,19 @@
+export default {
+  title: "Студія",
+  hint: "Можна підправити цитату перед збиранням відео.",
+  placeholder: "Текст цитати",
+  titleLabel: "Заголовок",
+  titlePlaceholder: "Необов'язковий заголовок",
+  download: "Завантажити",
+  preparing: "Готую…",
+  rendering: "Створюю ролик…",
+  almostReady: "Майже готово…",
+  stillWorking: "Ще трохи…",
+  downloading: "Завантажую…",
+  shareDialog: "Поділитися відеороликом",
+  errorEmpty: "Цитата не може бути порожньою",
+  errorNoAudio: "Аудіо для цього треку недоступне",
+  errorGeneric: "Не вдалося підготувати відео. Спробуйте ще раз.",
+  // Share-menu entry; reused by NotesView.
+  openInStudio: "Відкрити в Студії",
+}

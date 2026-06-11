@@ -34,7 +34,58 @@ import ruStudio from "./locales/ru/studio.js"
 import ruTranscript from "./locales/ru/transcript.js"
 import ruWelcome from "./locales/ru/welcome.js"
 
-export const SUPPORTED_LOCALES = ["en", "ru"] as const
+import ukActivity from "./locales/uk/activity.js"
+import ukApp from "./locales/uk/app.js"
+import ukChat from "./locales/uk/chat.js"
+import ukErrors from "./locales/uk/errors.js"
+import ukHelp from "./locales/uk/help.js"
+import ukHome from "./locales/uk/home.js"
+import ukLibrary from "./locales/uk/library.js"
+import ukNotes from "./locales/uk/notes.js"
+import ukNotifications from "./locales/uk/notifications.js"
+import ukPlayer from "./locales/uk/player.js"
+import ukSearch from "./locales/uk/search.js"
+import ukSettings from "./locales/uk/settings.js"
+import ukShare from "./locales/uk/share.js"
+import ukStudio from "./locales/uk/studio.js"
+import ukTranscript from "./locales/uk/transcript.js"
+import ukWelcome from "./locales/uk/welcome.js"
+
+import srLatnActivity from "./locales/sr-Latn/activity.js"
+import srLatnApp from "./locales/sr-Latn/app.js"
+import srLatnChat from "./locales/sr-Latn/chat.js"
+import srLatnErrors from "./locales/sr-Latn/errors.js"
+import srLatnHelp from "./locales/sr-Latn/help.js"
+import srLatnHome from "./locales/sr-Latn/home.js"
+import srLatnLibrary from "./locales/sr-Latn/library.js"
+import srLatnNotes from "./locales/sr-Latn/notes.js"
+import srLatnNotifications from "./locales/sr-Latn/notifications.js"
+import srLatnPlayer from "./locales/sr-Latn/player.js"
+import srLatnSearch from "./locales/sr-Latn/search.js"
+import srLatnSettings from "./locales/sr-Latn/settings.js"
+import srLatnShare from "./locales/sr-Latn/share.js"
+import srLatnStudio from "./locales/sr-Latn/studio.js"
+import srLatnTranscript from "./locales/sr-Latn/transcript.js"
+import srLatnWelcome from "./locales/sr-Latn/welcome.js"
+
+import srCyrlActivity from "./locales/sr-Cyrl/activity.js"
+import srCyrlApp from "./locales/sr-Cyrl/app.js"
+import srCyrlChat from "./locales/sr-Cyrl/chat.js"
+import srCyrlErrors from "./locales/sr-Cyrl/errors.js"
+import srCyrlHelp from "./locales/sr-Cyrl/help.js"
+import srCyrlHome from "./locales/sr-Cyrl/home.js"
+import srCyrlLibrary from "./locales/sr-Cyrl/library.js"
+import srCyrlNotes from "./locales/sr-Cyrl/notes.js"
+import srCyrlNotifications from "./locales/sr-Cyrl/notifications.js"
+import srCyrlPlayer from "./locales/sr-Cyrl/player.js"
+import srCyrlSearch from "./locales/sr-Cyrl/search.js"
+import srCyrlSettings from "./locales/sr-Cyrl/settings.js"
+import srCyrlShare from "./locales/sr-Cyrl/share.js"
+import srCyrlStudio from "./locales/sr-Cyrl/studio.js"
+import srCyrlTranscript from "./locales/sr-Cyrl/transcript.js"
+import srCyrlWelcome from "./locales/sr-Cyrl/welcome.js"
+
+export const SUPPORTED_LOCALES = ["en", "ru", "uk", "sr-Latn", "sr-Cyrl"] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 const en = {
@@ -75,6 +126,63 @@ const ru = {
   welcome: ruWelcome,
 }
 
+const uk = {
+  activity: ukActivity,
+  app: ukApp,
+  chat: ukChat,
+  errors: ukErrors,
+  help: ukHelp,
+  home: ukHome,
+  library: ukLibrary,
+  notes: ukNotes,
+  notifications: ukNotifications,
+  player: ukPlayer,
+  search: ukSearch,
+  settings: ukSettings,
+  share: ukShare,
+  studio: ukStudio,
+  transcript: ukTranscript,
+  welcome: ukWelcome,
+}
+
+const srLatn = {
+  activity: srLatnActivity,
+  app: srLatnApp,
+  chat: srLatnChat,
+  errors: srLatnErrors,
+  help: srLatnHelp,
+  home: srLatnHome,
+  library: srLatnLibrary,
+  notes: srLatnNotes,
+  notifications: srLatnNotifications,
+  player: srLatnPlayer,
+  search: srLatnSearch,
+  settings: srLatnSettings,
+  share: srLatnShare,
+  studio: srLatnStudio,
+  transcript: srLatnTranscript,
+  welcome: srLatnWelcome,
+}
+
+const srCyrl = {
+  activity: srCyrlActivity,
+  app: srCyrlApp,
+  chat: srCyrlChat,
+  errors: srCyrlErrors,
+  help: srCyrlHelp,
+  home: srCyrlHome,
+  library: srCyrlLibrary,
+  notes: srCyrlNotes,
+  notifications: srCyrlNotifications,
+  player: srCyrlPlayer,
+  search: srCyrlSearch,
+  settings: srCyrlSettings,
+  share: srCyrlShare,
+  studio: srCyrlStudio,
+  transcript: srCyrlTranscript,
+  welcome: srCyrlWelcome,
+}
+
 /**
  * Pick a UI locale based on `navigator.language`. Sync — safe to call
  * at module load. On Capacitor's WebView `navigator.language` already
@@ -113,7 +221,15 @@ export async function detectDeviceLocaleAsync(): Promise<SupportedLocale> {
 }
 
 function toSupportedLocale(raw: string | null | undefined): SupportedLocale {
-  const short = (raw ?? "en").split("-")[0] as SupportedLocale
+  const code = raw ?? "en"
+  // Match the full code first — `sr-Latn` / `sr-Cyrl` carry a meaningful
+  // script subtag, so stripping it would collapse both to `sr` and miss.
+  if ((SUPPORTED_LOCALES as readonly string[]).includes(code)) {
+    return code as SupportedLocale
+  }
+  // Fall back to the primary subtag so region variants like `uk-UA` →
+  // `uk` or `en-US` → `en` still resolve.
+  const short = code.split("-")[0] as SupportedLocale
   return (SUPPORTED_LOCALES as readonly string[]).includes(short) ? short : "en"
 }
 
@@ -121,7 +237,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: detectLocale(),
   fallbackLocale: "en",
-  messages: { en, ru },
+  messages: { en, ru, uk, "sr-Latn": srLatn, "sr-Cyrl": srCyrl },
 })
 
 export function setLocale(locale: SupportedLocale): void {
