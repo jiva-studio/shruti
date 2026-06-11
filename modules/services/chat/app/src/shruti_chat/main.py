@@ -163,6 +163,19 @@ async def lifespan(app: FastAPI):
     llm_provider = build_llm_provider(s)
     chat_graph = build_chat_graph()
 
+    # Citation translator (opt-in `translate_citations`). Persistent PG
+    # cache + Redis hot tier in front of the LLM. Built unconditionally;
+    # the per-turn flag gates whether it actually runs.
+    from shruti_chat.infra.translation.llm_translator import LlmTranslationService
+    from shruti_chat.infra.translation.pg_translation_cache import PgTranslationCache
+
+    translation_service = LlmTranslationService(
+        llm=llm_provider,
+        model=s.llm_translate,
+        pg_cache=PgTranslationCache(pool=pool),
+        kv_cache=(kv_cache if s.cache_enabled else None),
+    )
+
     app.state.deps = AppDeps(
         settings=s,
         pool=pool,
@@ -179,6 +192,7 @@ async def lifespan(app: FastAPI):
         llm=llm_provider,
         chat_graph=chat_graph,
         reranker=get_reranker(s),
+        translation_service=translation_service,
     )
 
     # Wire the registered tool callables with their concrete adapters.

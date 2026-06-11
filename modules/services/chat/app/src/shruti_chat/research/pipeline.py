@@ -77,6 +77,27 @@ log = get_logger(__name__)
 OnEvent = Callable[[str, dict[str, Any]], None]
 
 
+# Fallback retrieval language when the answer language has no corpus AND
+# the corpus-language probe failed (empty set). English is the product's
+# guaranteed-present corpus language and always has a partial HNSW index.
+_DEFAULT_RETRIEVAL_LANG = "en"
+
+
+def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
+    """Pick the language to RETRIEVE in for a turn whose ANSWER is in
+    `answer_lang`.
+
+    Retrieval is strictly single-language and index-bound, so it must run
+    in a real corpus language. If the corpus has `answer_lang`, retrieve in
+    it (ru→ru, en→en — regression-safe); otherwise clamp to English so the
+    user gets the English source rather than empty results / a seq scan.
+    The answer prose stays in `answer_lang` regardless.
+    """
+    if answer_lang and answer_lang in corpus_langs:
+        return answer_lang
+    return _DEFAULT_RETRIEVAL_LANG
+
+
 def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
     """Emit one `research_question` event. Skips echoes of the original
     user question so the panel never shows the user their own words back
@@ -372,6 +393,7 @@ async def run_research(
     lang: str,
     router_args: dict[str, Any],
     *,
+    retrieval_lang: str | None = None,   # corpus-constrained retrieval lang
     chunk_repo: Any,                     # ChunkRepository
     catalog_repo: Any,                   # CatalogRepository
     embedder: Any,                       # EmbedderPort
@@ -402,7 +424,17 @@ async def run_research(
     pipeline uses to surface sub-queries and inspected sources to the
     client in real-time, BEFORE ranking/dedup. The node bridges it onto
     LangGraph's stream writer. Pure observability — never blocks or
-    raises into the research loop."""
+    raises into the research loop.
+
+    `retrieval_lang` is the corpus-constrained language EVERY retrieval lane
+    (fanout, ref-fetch, attribution lookup, address fast-path) runs in. It
+    is always a real corpus language (the worker derives it via
+    `clamp_retrieval_lang`); `lang` (the answer language) drives the planner
+    / topic-extraction / caption prose only. Defaulting to `lang` keeps
+    legacy callers (tests) on the old single-lang behaviour."""
+
+    if retrieval_lang is None:
+        retrieval_lang = lang
 
     # 0. Embed user question once — reused for question-attribution lookup
     # and (implicitly via topic_embeddings) for the topic stage.
@@ -434,7 +466,7 @@ async def run_research(
         # plain fanout with the raw question.
         log.warning("pipeline_embed_failed_fanout_only", request_id=request_id)
         return await _research_path(
-            question=question, lang=lang,
+            question=question, lang=lang, retrieval_lang=retrieval_lang,
             plan=QueryPlan(sub_queries=[
                 SubQuery(id=0, type="general", text=question, alt_phrasings=[]),
             ]),
@@ -467,7 +499,7 @@ async def run_research(
     ))
     q_lookup_task = asyncio.create_task(_safe(
         lambda: find_attributions(
-            kind="pinned", user_q_embedding=user_q_embedding, lang=lang,
+            kind="pinned", user_q_embedding=user_q_embedding, lang=retrieval_lang,
             embed_model=embed_model, embed_dim=embed_dim,
             pool=pool, reranker=reranker, user_query=question,
             llm=llm, confirm_model=confirm_model,
@@ -529,7 +561,7 @@ async def run_research(
             _safe(
                 lambda: _fetch_refs(
                     all_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                    lang=lang, canonical_score=top_score, on_event=on_event,
+                    lang=retrieval_lang, canonical_score=top_score, on_event=on_event,
                     library_db=library_db, catalog_repo=catalog_repo,
                 ),
                 default=[], timeout=TIMEOUT_FETCH_REFS_S,
@@ -539,7 +571,7 @@ async def run_research(
                 lambda: fanout_search_with_boost(
                     queries=supplementary_queries,
                     embedder=embedder, chunk_repo=chunk_repo,
-                    catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
+                    catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
                     author_id=router_args.get("author_id"),
                     location_id=router_args.get("location_id"),
                     tag_ids=router_args.get("tag_ids"),
@@ -609,7 +641,7 @@ async def run_research(
         except (asyncio.CancelledError, Exception):
             speculative_topics = []
     long_result = await _research_path(
-        question=question, lang=lang, plan=plan,
+        question=question, lang=lang, retrieval_lang=retrieval_lang, plan=plan,
         chunk_repo=chunk_repo, catalog_repo=catalog_repo, embedder=embedder,
         alias_map=alias_map, llm=llm, router_args=router_args,
         expand_model=expand_model,
@@ -693,6 +725,7 @@ async def _research_path(
     *,
     question: str,
     lang: str,
+    retrieval_lang: str | None = None,
     plan: QueryPlan,
     chunk_repo: Any,
     catalog_repo: Any,
@@ -714,7 +747,13 @@ async def _research_path(
     callbacks: list[Any] | None = None,
 ) -> ResearchResult:
     """LONG path: topic-extract → topic-lookup → fanout with coverage gate
-    and up to MAX_FANOUT_ROUNDS rounds."""
+    and up to MAX_FANOUT_ROUNDS rounds.
+
+    `retrieval_lang` (corpus-constrained) drives every retrieval call;
+    `lang` (answer language) drives the topic-extraction prose only.
+    Defaults to `lang` for legacy callers."""
+    if retrieval_lang is None:
+        retrieval_lang = lang
     topic_matches: list[AttributionMatch] = []
 
     if (
@@ -754,7 +793,7 @@ async def _research_path(
                 lookup_tasks = [
                     _safe(
                         lambda emb=emb: find_attributions(
-                            kind="boost", user_q_embedding=emb, lang=lang,
+                            kind="boost", user_q_embedding=emb, lang=retrieval_lang,
                             embed_model=embed_model_for_lookup,
                             embed_dim=embed_dim_for_lookup,
                             pool=pool,
@@ -792,7 +831,7 @@ async def _research_path(
         topic_refs_fetched = await _safe(
             lambda: _fetch_refs(
                 topic_refs, chunk_repo=chunk_repo, alias_map=alias_map,
-                lang=lang, canonical_score=0.75, on_event=on_event,
+                lang=retrieval_lang, canonical_score=0.75, on_event=on_event,
                 library_db=library_db, catalog_repo=catalog_repo,
             ),
             default=[], timeout=TIMEOUT_FETCH_REFS_S,
@@ -816,7 +855,7 @@ async def _research_path(
             lambda queries=queries: fanout_search_with_boost(
                 queries=queries,
                 embedder=embedder, chunk_repo=chunk_repo,
-                catalog_repo=catalog_repo, alias_map=alias_map, lang=lang,
+                catalog_repo=catalog_repo, alias_map=alias_map, lang=retrieval_lang,
                 author_id=router_args.get("author_id"),
                 location_id=router_args.get("location_id"),
                 tag_ids=router_args.get("tag_ids"),

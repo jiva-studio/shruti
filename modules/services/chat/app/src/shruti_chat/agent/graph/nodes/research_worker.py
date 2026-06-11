@@ -13,6 +13,8 @@ so this node remains a drop-in replacement.
 
 from __future__ import annotations
 
+import asyncio
+
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
@@ -21,16 +23,36 @@ from shruti_chat.agent.graph.nodes._worker_common import (
     flush_media_payloads,
     flush_verse_payloads,
     run_worker,
+    translate_commentaries,
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.research.corpus_fanout import dedup_notes_by_key
-from shruti_chat.research.pipeline import run_research
+from shruti_chat.research.pipeline import clamp_retrieval_lang, run_research
 
 
 log = get_logger(__name__)
+
+
+async def _derive_retrieval_lang(ctx: TurnContext, answer_lang: str) -> str:
+    """Resolve the corpus-constrained retrieval language for `answer_lang`.
+
+    Reads the corpus language set from `distinct_langs()` (cached). On any
+    failure (no repo / DB error) falls back to a conservative clamp against
+    the empty set → English, so retrieval never runs with a non-corpus lang.
+    """
+    corpus_langs: list[str] = []
+    repo = ctx.chunk_repo
+    if repo is not None and hasattr(repo, "distinct_langs"):
+        try:
+            corpus_langs = await repo.distinct_langs()
+        except Exception as exc:  # noqa: BLE001 — never fail a turn
+            log.warning(
+                "distinct_langs_failed", request_id=ctx.request_id, error=str(exc)
+            )
+    return clamp_retrieval_lang(answer_lang, corpus_langs)
 
 
 async def research_worker_node(
@@ -73,6 +95,15 @@ async def research_worker_node(
     lang = state.get("lang", "ru")
     router_args = state.get("extracted_args", {}) or {}
 
+    # Retrieval language ≠ answer language. The corpus exists only in a
+    # fixed set of languages (data-driven from `distinct_langs()`), and the
+    # retrieval lane is strictly single-language (no cross-lang fallback) and
+    # depends on per-(kind,lang) partial HNSW indexes. Passing a non-corpus
+    # answer lang (uk / sr) — or None — would return empty results / trigger
+    # a seq scan. So retrieval clamps to the answer lang IFF the corpus has
+    # it, else English; the answer prose (ctx.lang) still goes out in `lang`.
+    retrieval_lang = await _derive_retrieval_lang(ctx, lang)
+
     # Per-turn cross-encoder kill-switch (Stage A). Off ⇒ pass None so the
     # fanout runs the cosine path verbatim.
     enable_reranker = state.get("config", {}).get("enable_reranker", True)
@@ -87,6 +118,7 @@ async def research_worker_node(
     research_result = await run_research(
         question=user_query,
         lang=lang,
+        retrieval_lang=retrieval_lang,
         router_args=router_args,
         chunk_repo=ctx.chunk_repo,
         catalog_repo=ctx.catalog_repo,
@@ -126,14 +158,17 @@ async def research_worker_node(
     # Emit verse_payload SSE events for any verse aliases minted during
     # fetch_refs / fanout. MUST happen BEFORE the synthesizer streams
     # `[^N]` markers — the mobile client expects the payload first.
-    await flush_verse_payloads(ctx)
-    # Same ordering contract for media-clip payloads (kind='media'): push
-    # the playable handle + display text before the `[media:...]` marker.
-    await flush_media_payloads(ctx)
-    # Same ordering contract for cite_transcript payloads: push the
-    # fragment transcript text before the `[cite:...]` marker so the
-    # client renders the full card rather than the chip.
-    await flush_cite_payloads(ctx)
+    # Run the payload flushes concurrently with inline-commentary
+    # pre-translation. All complete before the synthesizer streams, so the
+    # ordering invariant (every `action` payload emitted BEFORE its marker)
+    # holds. When MT is off, translate_commentaries / the in-flush translate
+    # branches are no-ops, so this is the prior behaviour plus parallelism.
+    await asyncio.gather(
+        flush_verse_payloads(ctx),
+        flush_media_payloads(ctx),
+        flush_cite_payloads(ctx),
+        translate_commentaries(ctx),
+    )
 
     log.info(
         "research_worker_pipeline_complete",

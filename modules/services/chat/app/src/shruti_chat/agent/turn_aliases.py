@@ -102,6 +102,14 @@ class CommentaryRef:
     author_name: str | None
     sentences: tuple[str, ...]
     kind: str = "commentary"
+    # Per-sentence MT translation into the turn's answer language, filled in
+    # the worker (before the synthesizer streams) when `translate_citations`
+    # is on and the commentary has no native variant. `_format_commentary`
+    # renders `sentences_translated or sentences`, so an unset (None) field
+    # leaves the original behaviour untouched. Index-aligned with `sentences`.
+    sentences_translated: tuple[str, ...] | None = None
+    # True when `sentences_translated` is machine-translated (vs native).
+    mt: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -298,6 +306,32 @@ class TurnAliasMap:
             lang=lang,
         )
         return n
+
+    def commentary_refs(self) -> list[tuple[int, CommentaryRef]]:
+        """All currently-minted commentary aliases, in mint order. Used by
+        the worker to pre-translate purport sentences before the synthesizer
+        streams `[^N|s=…]` markers (inline blockquotes can't fetch a
+        translation mid-stream)."""
+        return [
+            (n, ref) for n, ref in self._chunks.items()
+            if isinstance(ref, CommentaryRef)
+        ]
+
+    def set_commentary_translation(
+        self, n: int, *, sentences_translated: tuple[str, ...], mt: bool,
+    ) -> None:
+        """Attach a per-sentence translation to a minted commentary alias.
+
+        CommentaryRef is frozen, so we rebuild it in place. No-op if `n`
+        isn't a commentary ref."""
+        ref = self._chunks.get(n)
+        if not isinstance(ref, CommentaryRef):
+            return
+        from dataclasses import replace
+
+        self._chunks[n] = replace(
+            ref, sentences_translated=sentences_translated, mt=mt,
+        )
 
     def resolve(self, n: int) -> AliasRef | None:
         return self._chunks.get(n)
