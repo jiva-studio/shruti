@@ -3,6 +3,7 @@ export default {
     subscription: "Подписка",
     account: "Аккаунт",
     appearance: "Внешний вид",
+    chat: "Чат",
     contacts: "Связаться с нами",
     status: "Статус",
     sadhana: "Садхана",

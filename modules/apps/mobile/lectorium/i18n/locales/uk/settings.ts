@@ -3,6 +3,7 @@ export default {
     subscription: "Підписка",
     account: "Обліковий запис",
     appearance: "Зовнішній вигляд",
+    chat: "Чат",
     contacts: "Зв'язатися з нами",
     status: "Статус",
     sadhana: "Садгана",
@@ -11,6 +12,16 @@ export default {
     debug: "Налагодження",
     danger: "Небезпечна зона",
     about: "Про застосунок",
+  },
+
+  chatLanguage: {
+    title: "Мова чату",
+    description: "Мова відповідей Садху.",
+  },
+
+  chatTranslateCitations: {
+    title: "Перекладати цитати",
+    description: "Перекладати цитати мовою чату.",
   },
 
   account: {

@@ -5,6 +5,7 @@ export default {
     subscription: "Претплата",
     account: "Налог",
     appearance: "Изглед",
+    chat: "Ћаскање",
     contacts: "Контактирајте нас",
     status: "Статус",
     sadhana: "Садхана",
@@ -13,6 +14,16 @@ export default {
     debug: "Отклањање грешака",
     danger: "Опасна зона",
     about: "О апликацији",
+  },
+
+  chatLanguage: {
+    title: "Језик ћаскања",
+    description: "Језик на којем Садху одговара.",
+  },
+
+  chatTranslateCitations: {
+    title: "Преведи цитате",
+    description: "Преведи цитате на језик ћаскања.",
   },
 
   account: {
