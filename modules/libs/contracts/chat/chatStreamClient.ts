@@ -64,6 +64,11 @@ export type ChatActionPayload =
       readonly id: string
       readonly payload: ChatMediaPayloadWire
     }
+  | {
+      readonly kind: "commentary"
+      readonly id: string
+      readonly payload: ChatCommentaryPayloadWire
+    }
 
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
@@ -124,6 +129,31 @@ export interface ChatCiteTranscriptPayloadWire {
   readonly mt?: boolean
   /** The verbatim source-language transcript, present only when `mt` is
    *  true so the user can flip back to the original. */
+  readonly text_original?: string
+}
+
+/** A purport / prose-chapter / letter citation shipped ahead of the prose
+ *  delta carrying its `[commentary:<ref>]` marker (the audio-citation
+ *  shape, for clients that declared the `commentary_card` capability). The
+ *  store caches it under `ref` so `CommentaryCard.vue` renders the quote as
+ *  a card (text + author + reference) like the audio card, instead of an
+ *  inline blockquote. `ref` matches the integer in the marker. */
+export interface ChatCommentaryPayloadWire {
+  /** Integer citation ref — equals N in the `[commentary:N]` marker. */
+  readonly ref: number
+  /** Joined cited sentences in the answer language (shown text). */
+  readonly text: string
+  readonly author_name: string
+  /** Human address / reference, e.g. "БГ 2.13". */
+  readonly addr_label: string
+  /** Source kind: "commentary" | "prose_chapter" | "letter". */
+  readonly kind: string
+  /** True when `text` is a machine translation into the answer language.
+   *  The card shows a "translated automatically" footnote with a toggle to
+   *  `text_original`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** The verbatim source-language quote, present only when `mt` is true so
+   *  the user can flip back to the original. */
   readonly text_original?: string
 }
 
@@ -290,6 +320,13 @@ export interface StreamChatOptions {
    *  English-preferred source language. Wire field is `translate_citations`
    *  (snake_case); the adapter maps it. */
   readonly translateCitations?: boolean
+  /** Client-declared render capabilities, forwarded to the server as the
+   *  `capabilities` map. The server adapts its output to what the client
+   *  can render (e.g. `{ commentary_card: true }` → purports shipped as
+   *  card payloads + `[commentary:N]` markers instead of inline
+   *  blockquotes). Additive + backward-compatible — omitted ⇒ legacy
+   *  inline rendering. */
+  readonly capabilities?: Readonly<Record<string, boolean>>
 }
 
 /**

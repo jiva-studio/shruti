@@ -3,6 +3,7 @@ import {
   CARD_RE,
   CHAPTER_RE,
   CITE_RE,
+  COMMENTARY_RE,
   FOLLOWUP_RE,
   MEDIA_RE,
   OUTLINE_RE,
@@ -43,6 +44,19 @@ export interface CiteBodyLike {
 }
 export type CiteLookup = (trackId: string, startMs: number, endMs: number) => CiteBodyLike | null
 
+/**
+ * Commentary body lookup — the commentary analog of `CiteBodyLike`,
+ * matching `useCommentaryBodyStore().get`. `text` is the cited quote;
+ * `authorName` + `addrLabel` form the attribution. A null return (no
+ * payload cached) strips the marker, same as a cite cache miss.
+ */
+export interface CommentaryBodyLike {
+  readonly text: string
+  readonly authorName: string
+  readonly addrLabel: string
+}
+export type CommentaryLookup = (ref: number) => CommentaryBodyLike | null
+
 export interface MessageToMarkdownOptions {
   /** UI language — picks `translation[lang]` for inline verses; falls
    *  back to English when the requested language is missing. */
@@ -54,6 +68,10 @@ export interface MessageToMarkdownOptions {
    *  Pass `() => null` to reproduce the legacy behavior where audio
    *  citations are stripped entirely. */
   readonly citeLookup: CiteLookup
+  /** Lookup against the commentary-body cache. Pass `() => null` to strip
+   *  `[commentary:N]` markers (legacy clients embed the quote as a `>`
+   *  blockquote in the prose, so they need no lookup). */
+  readonly commentaryLookup?: CommentaryLookup
 }
 
 /**
@@ -111,6 +129,17 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
       return renderCiteMarkdown(body, (captionRaw ?? "").trim())
     }
   )
+  // Commentary citations: expand into a transcript-style blockquote +
+  // attribution, the commentary analog of the cite expansion above. The
+  // quote text lives in the body store (card-capable turns); a cache miss
+  // returns "" (strip). Legacy turns embed the quote as a `>` blockquote in
+  // the prose directly, so they never hit this path.
+  const commentaryRe = new RegExp(COMMENTARY_RE.source, "g")
+  out = out.replace(commentaryRe, (_full, refStr: string) => {
+    const body = opts.commentaryLookup?.(Number(refStr) | 0)
+    if (!body) return ""
+    return renderCommentaryMarkdown(body)
+  })
   // Verses: expand using the cache. We rebuild a fresh RegExp instead
   // of reusing VERSE_RE so the iterator state isn't shared with any
   // other consumer of the global pattern.
@@ -200,5 +229,27 @@ function renderCiteMarkdown(body: CiteBodyLike, caption: string): string {
   const attrLine = attribution || caption
 
   const block = attrLine ? `${quoted}\n>\n> _${attrLine}_` : quoted
+  return `\n\n${block}\n\n`
+}
+
+/**
+ * Plain-Markdown rendering of one commentary citation: the cited quote as
+ * a `>` blockquote, then a `> _author · reference_` attribution line —
+ * the same shape `renderCiteMarkdown` uses for audio, so a copied/shared
+ * answer reads consistently whether the citation was audio or a purport.
+ * Blank attribution parts are dropped; an empty quote strips out.
+ */
+function renderCommentaryMarkdown(body: CommentaryBodyLike): string {
+  const text = body.text.replace(/\n{2,}/g, "\n").trim()
+  if (!text) return ""
+  const quoted = text
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n")
+  const attribution = [body.authorName, body.addrLabel]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => v.length > 0)
+    .join(" · ")
+  const block = attribution ? `${quoted}\n>\n> _${attribution}_` : quoted
   return `\n\n${block}\n\n`
 }

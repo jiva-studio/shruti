@@ -587,11 +587,20 @@ async def run_synthesizer_turn(
                 first_token_logged = True
             full_prose.append(text)
             cleaned = await expander.feed(text)
+            # Commentary cards (card-capable clients): the expander queued an
+            # `action` payload for each `[commentary:N]` it just produced.
+            # Emit them BEFORE the delta that carries the marker so the client
+            # has the payload when it renders the card (payload-before-marker,
+            # same invariant the worker flushes uphold for verse/cite).
+            for action in expander.take_commentary_actions():
+                yield SynthesizerEvent(type=action["type"], data=action["data"])
             if cleaned:
                 prose_chars += len(cleaned)
                 yield SynthesizerEvent(type="delta", data={"text": cleaned})
 
         tail = await expander.flush()
+        for action in expander.take_commentary_actions():
+            yield SynthesizerEvent(type=action["type"], data=action["data"])
         if tail:
             prose_chars += len(tail)
             yield SynthesizerEvent(type="delta", data={"text": tail})

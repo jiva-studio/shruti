@@ -25,6 +25,13 @@ import type {
   UserContextPayload,
 } from "./buildChatUserContext.js"
 
+/** Render capabilities this app build advertises to the chat server.
+ *  The server adapts its output to what we can render — currently:
+ *  `commentary_card` → purports arrive as `commentary` action payloads +
+ *  `[commentary:N]` markers (rendered as cards) instead of inline
+ *  blockquotes. Additive; a server that doesn't know a key ignores it. */
+const CLIENT_CAPABILITIES = { commentary_card: true } as const
+
 /** Snapshot of what the store needs to mutate on every step of the
  *  turn. The use-case yields these as plain events; the store
  *  translates each into reactive mutations. */
@@ -95,6 +102,24 @@ export type RunChatTurnEvent =
        *  footnote + toggle to `textOriginal`. */
       readonly mt?: boolean
       /** Verbatim source-language transcript, present only when `mt`. */
+      readonly textOriginal?: string
+    }
+  /** Purport / prose-chapter / letter citation for one `[commentary:<ref>]`
+   *  marker, streamed ahead of it (audio-citation shape). The store caches
+   *  it by `ref` so `CommentaryCard.vue` renders the quote as a card
+   *  (text + author + reference); absent ⇒ nothing renders for the marker. */
+  | {
+      readonly kind: "commentary-payload"
+      readonly ref: number
+      readonly text: string
+      readonly authorName: string
+      readonly addrLabel: string
+      /** Source kind: "commentary" | "prose_chapter" | "letter". */
+      readonly commentaryKind: string
+      /** True when `text` is a machine translation — the card surfaces a
+       *  footnote + toggle to `textOriginal`. */
+      readonly mt?: boolean
+      /** Verbatim source-language quote, present only when `mt`. */
       readonly textOriginal?: string
     }
   /** Media result (video/audio file + transcript) for one
@@ -308,6 +333,7 @@ export async function* runChatTurn(
         // right trace.
         assistantMessageId: assistantId,
         translateCitations: input.translateCitations,
+        capabilities: CLIENT_CAPABILITIES,
       }
     )) {
       if (input.signal.aborted) break
@@ -391,6 +417,19 @@ export async function* runChatTurn(
               startMs: event.payload.payload.start_ms,
               endMs: event.payload.payload.end_ms,
               text: event.payload.payload.text,
+              mt: event.payload.payload.mt,
+              textOriginal: event.payload.payload.text_original,
+            }
+            break
+          }
+          if (event.payload.kind === "commentary") {
+            yield {
+              kind: "commentary-payload",
+              ref: event.payload.payload.ref,
+              text: event.payload.payload.text,
+              authorName: event.payload.payload.author_name,
+              addrLabel: event.payload.payload.addr_label,
+              commentaryKind: event.payload.payload.kind,
               mt: event.payload.payload.mt,
               textOriginal: event.payload.payload.text_original,
             }

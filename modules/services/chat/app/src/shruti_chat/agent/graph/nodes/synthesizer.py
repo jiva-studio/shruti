@@ -89,6 +89,10 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         # `graph.astream(stream_mode=["custom", ...])`.
         if event.type == "delta":
             writer({"type": "delta", "data": event.data})
+        elif event.type == "action":
+            # Commentary-card payload emitted mid-stream by the expander,
+            # just before the delta carrying its `[commentary:N]` marker.
+            writer({"type": "action", "data": event.data})
         elif event.type == "done":
             # The use-case's `done` is internal: the wrapper in
             # `application/chat_turn.py` writes the terminal SSE `done`

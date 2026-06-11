@@ -576,4 +576,38 @@ describe("messageToMarkdown", () => {
   it("returns an empty string for empty input", () => {
     expect(messageToMarkdown("", ru)).toBe("")
   })
+
+  it("expands a commentary marker into a blockquote + attribution", () => {
+    const out = messageToMarkdown("Purport: [commentary:7] then prose.", {
+      ...en,
+      commentaryLookup: (ref: number) =>
+        ref === 7
+          ? { text: "The soul is eternal.", authorName: "A.C. Bhaktivedanta", addrLabel: "BG 2.13" }
+          : null,
+    })
+    expect(out).toContain("> The soul is eternal.")
+    expect(out).toContain("_A.C. Bhaktivedanta · BG 2.13_")
+    expect(out).not.toContain("[commentary:")
+  })
+
+  it("strips a commentary marker when no body is cached (cache miss)", () => {
+    const out = messageToMarkdown("Before [commentary:9] after.", en)
+    expect(out).not.toContain("[commentary:")
+    expect(out).toContain("Before")
+    expect(out).toContain("after.")
+  })
+})
+
+describe("parseChatMarkers — commentary card markers", () => {
+  it("parses a numeric commentary marker into a commentary token", () => {
+    const tokens = parseChatMarkers("Text [commentary:42] tail.")
+    const c = tokens.find((t) => t.kind === "commentary")
+    expect(c).toBeDefined()
+    if (c?.kind === "commentary") expect(c.ref).toBe(42)
+  })
+
+  it("leaves a non-numeric commentary-looking marker as plain text", () => {
+    const tokens = parseChatMarkers("Text [commentary:abc] tail.")
+    expect(tokens.find((t) => t.kind === "commentary")).toBeUndefined()
+  })
 })
