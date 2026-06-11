@@ -63,6 +63,9 @@ export type RunChatTurnEvent =
       readonly transliteration: string
       readonly translation: { readonly [lang: string]: string }
       readonly audioUrl?: string
+      /** True when `translation[lang]` is a machine translation — the card
+       *  surfaces a footnote + toggle to the original `translation.en`. */
+      readonly mt?: boolean
     }
   /** Chapter-location region for one `[chapter:source/region|label]`
    *  marker (locate intent), streamed ahead of its marker. The store
@@ -85,6 +88,11 @@ export type RunChatTurnEvent =
       readonly startMs: number
       readonly endMs: number
       readonly text: string
+      /** True when `text` is a machine translation — the card surfaces a
+       *  footnote + toggle to `textOriginal`. */
+      readonly mt?: boolean
+      /** Verbatim source-language transcript, present only when `mt`. */
+      readonly textOriginal?: string
     }
   /** Media result (video/audio file + transcript) for one
    *  `[media:<id>|<caption>]` marker, streamed ahead of its marker. The
@@ -157,7 +165,12 @@ export interface RunChatTurnInput {
   readonly sessionTitle?: string
   /** Trimmed, non-empty user prompt. */
   readonly text: string
-  readonly lang: "ru" | "en"
+  /** Opaque locale code for the answer (`ru`, `en`, `uk`, `sr-Latn`, …)
+   *  — threaded to the server's prompts verbatim, never enumerated. */
+  readonly lang: string
+  /** When true, ask the server to machine-translate verbatim citations
+   *  into `lang` when no native version exists. Default off. */
+  readonly translateCitations?: boolean
   /** Prior conversation as sent to the LLM. */
   readonly history: readonly ChatTurn[]
   readonly focus?: FocusFragmentPayload
@@ -291,6 +304,7 @@ export async function* runChatTurn(
         // exact id (hyphenless on the wire) to land scores on the
         // right trace.
         assistantMessageId: assistantId,
+        translateCitations: input.translateCitations,
       }
     )) {
       if (input.signal.aborted) break
@@ -362,6 +376,7 @@ export async function* runChatTurn(
               transliteration: event.payload.payload.transliteration,
               translation: event.payload.payload.translation,
               audioUrl: event.payload.payload.audio_url,
+              mt: event.payload.payload.mt,
             }
             break
           }
@@ -372,6 +387,8 @@ export async function* runChatTurn(
               startMs: event.payload.payload.start_ms,
               endMs: event.payload.payload.end_ms,
               text: event.payload.payload.text,
+              mt: event.payload.payload.mt,
+              textOriginal: event.payload.payload.text_original,
             }
             break
           }

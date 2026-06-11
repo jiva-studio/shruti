@@ -22,7 +22,7 @@
     @keydown.enter.space.prevent="onOpenActions"
   >
     <ExcerptCard
-      :text="snippetText"
+      :text="displayText"
       :author-name="authorName"
       :track-title="trackTitle"
       :reference="referenceLabel"
@@ -34,6 +34,16 @@
         <NotesInlinePlayer :note="playerRef" @click.stop />
       </template>
     </ExcerptCard>
+
+    <!-- Machine-translation footnote: shown only when the snippet text is
+         a machine translation. `@click.stop` so the toggle doesn't open
+         the action sheet. -->
+    <p v-if="isMt" class="citation-mt-note">
+      <span class="citation-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
+      <button type="button" class="citation-mt-toggle" @click.stop="showOriginal = !showOriginal">
+        {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
+      </button>
+    </p>
 
     <IonActionSheet
       :is-open="actionSheetOpen"
@@ -95,12 +105,26 @@ const track = ref<Track | null>(null)
 const author = ref<Author | null>(null)
 const actionSheetOpen = ref(false)
 const savingNote = ref(false)
+/** Toggles the card text between the (shown) translation and the
+ *  original; only meaningful when the snippet is a machine translation. */
+const showOriginal = ref(false)
 
 /** Transcript snippet pushed by the server ahead of the marker. Null
  *  until it lands (or forever for pre-feature history) → chip fallback. */
-const snippetText = computed<string | null>(() =>
-  citeTranscriptStore.get(props.trackId, props.startMs, props.endMs)
+const snippet = computed(() =>
+  citeTranscriptStore.getEntry(props.trackId, props.startMs, props.endMs)
 )
+const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
+/** True when the shown text is a machine translation with an original to
+ *  flip to. */
+const isMt = computed<boolean>(() => !!snippet.value?.mt && !!snippet.value?.textOriginal)
+/** What the card renders: the original when toggled (and available),
+ *  otherwise the shown (possibly translated) text. */
+const displayText = computed<string>(() => {
+  const s = snippet.value
+  if (!s) return ""
+  return showOriginal.value && s.textOriginal ? s.textOriginal : s.text
+})
 
 const audioPath = computed<string>(() => {
   if (!track.value) return ""
@@ -288,5 +312,29 @@ watch(
   margin-bottom: 0;
   border-radius: 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+/* Muted machine-translation footnote under the quote body — the same
+ * subdued styling used elsewhere for secondary metadata. */
+.citation-mt-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: 11px;
+  color: var(--ion-color-medium);
+}
+.citation-mt-badge {
+  font-style: italic;
+}
+.citation-mt-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ion-color-primary);
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 </style>

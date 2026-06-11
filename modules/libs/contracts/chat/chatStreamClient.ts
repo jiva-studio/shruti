@@ -97,6 +97,11 @@ export interface ChatVersePayloadWire {
    *  only when the library has audio for it. Server expands the stored
    *  S3 key into an absolute URL; absent ⇒ no audio button. */
   readonly audio_url?: string
+  /** True when `translation[lang]` is a machine translation (no native
+   *  text existed). The card surfaces a "translated automatically"
+   *  footnote and lets the user toggle to the original `translation.en`.
+   *  Additive — old servers omit it; absence ⇒ no badge. */
+  readonly mt?: boolean
 }
 
 /** Transcript snippet shipped ahead of the prose deltas containing the
@@ -109,6 +114,13 @@ export interface ChatCiteTranscriptPayloadWire {
   readonly start_ms: number
   readonly end_ms: number
   readonly text: string
+  /** True when `text` is a machine translation into the answer language.
+   *  The card shows a "translated automatically" footnote with a toggle
+   *  to `text_original`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** The verbatim source-language transcript, present only when `mt` is
+   *  true so the user can flip back to the original. */
+  readonly text_original?: string
 }
 
 /** Chapter-location region shipped ahead of the prose deltas containing
@@ -138,6 +150,13 @@ export interface ChatMediaPayloadWire {
   readonly title: string
   readonly speaker?: string
   readonly text: string
+  /** True when `text` is a machine translation into the answer language.
+   *  The card shows a "translated automatically" footnote with a toggle
+   *  to `text_original`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** The verbatim source-language transcript, present only when `mt` is
+   *  true so the user can flip back to the original. */
+  readonly text_original?: string
 }
 
 export type ChatRole = "user" | "assistant"
@@ -261,6 +280,12 @@ export interface StreamChatOptions {
    *  uses it as the Langfuse trace_id. This makes message identity ==
    *  trace identity, which is what the feedback endpoint relies on. */
   readonly assistantMessageId?: string
+  /** When true the server may machine-translate verbatim citations into
+   *  `lang` when no native version exists, shipping the translated text
+   *  with `mt: true` + the original. Off ⇒ citations stay in their
+   *  English-preferred source language. Wire field is `translate_citations`
+   *  (snake_case); the adapter maps it. */
+  readonly translateCitations?: boolean
 }
 
 /**
@@ -268,11 +293,14 @@ export interface StreamChatOptions {
  * underlying SSE transport. Adapters can wrap fetch+EventSource (Capacitor
  * web), Capacitor HttpPlugin (native), or any other transport — the
  * use-case doesn't care.
+ *
+ * `lang` is an opaque locale code (`ru`, `en`, `uk`, `sr-Latn`, …) the
+ * server threads into its prompts; the client never enumerates it.
  */
 export interface IChatStreamClient {
   streamChat(
     turns: readonly ChatTurn[],
-    lang: "ru" | "en",
+    lang: string,
     opts?: StreamChatOptions
   ): AsyncIterable<ChatStreamEvent>
 }

@@ -18,6 +18,15 @@
     <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
     <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
     <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
+
+    <!-- Machine-translation footnote: the active-locale translation is a
+         machine translation; let the user flip to the original English. -->
+    <p v-if="isMt" class="verse-card-mt-note">
+      <span class="verse-card-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
+      <button type="button" class="verse-card-mt-toggle" @click.stop="showOriginal = !showOriginal">
+        {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
+      </button>
+    </p>
     <audio
       v-if="audioUrl"
       ref="audioEl"
@@ -62,6 +71,8 @@
  * a block immediately on next open.
  */
 import { computed, onMounted, ref } from "vue"
+// `showOriginal` toggles the verse translation between the active-locale
+// machine translation and the original English.
 import { IonSpinner } from "@ionic/vue"
 import { IconBook2, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useI18n } from "vue-i18n"
@@ -100,9 +111,21 @@ const sanskrit = computed(() => (body.value?.sanskrit || "").replace(/\n{2,}/g, 
 // the single string it shipped; same newline normalisation as sanskrit.
 const transliteration = computed(() => (body.value?.transliteration || "").replace(/\n{2,}/g, "\n"))
 
+// True when the active-locale translation is a machine translation AND an
+// original English entry exists to flip to.
+const isMt = computed<boolean>(() => {
+  const map = body.value?.translation
+  return !!body.value?.mt && !!map && !!map.en && map[locale.value] !== map.en
+})
+// Toggle between the (shown) machine translation and the original English.
+const showOriginal = ref(false)
+
 const translation = computed(() => {
   const map = body.value?.translation
   if (!map) return ""
+  // When toggled to the original on a machine-translated verse, render the
+  // English entry verbatim.
+  if (isMt.value && showOriginal.value && map.en) return map.en
   const wanted = locale.value
   if (map[wanted]) return map[wanted]
   // Fallback chain: any English text, then the first available.
@@ -273,6 +296,29 @@ function onTap() {
 .verse-card-translation {
   margin: 0;
   white-space: pre-wrap;
+}
+
+/* Muted machine-translation footnote — same subdued styling as the IAST
+ * line, left-aligned under the translation. */
+.verse-card-mt-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ion-color-medium);
+}
+.verse-card-mt-badge {
+  font-style: italic;
+}
+.verse-card-mt-toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ion-color-primary);
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .verse-chip {

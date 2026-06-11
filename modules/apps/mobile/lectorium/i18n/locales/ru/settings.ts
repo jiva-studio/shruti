@@ -143,6 +143,16 @@ export default {
     description: "Язык интерфейса",
   },
 
+  chatLanguage: {
+    title: "Язык чата",
+    description: "Язык ответов Садху.",
+  },
+
+  chatTranslateCitations: {
+    title: "Переводить цитаты",
+    description: "Переводить цитаты на язык чата.",
+  },
+
   smartLibrary: {
     title: "Умная библиотека",
     description: "Свежие лекции под рукой и автоочистка прослушанного",

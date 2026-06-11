@@ -57,6 +57,10 @@ vi.mock("@lectorium/stores/useAuthStore.js", () => ({
 vi.mock("@lectorium/composables/useAppLanguage.js", () => ({
   useAppLanguage: () => ({ value: "en" }),
 }))
+vi.mock("@lectorium/composables/useChatLanguage.js", () => ({
+  useChatLanguage: () => ({ value: "" }),
+  useChatTranslateCitations: () => ({ value: false }),
+}))
 vi.mock("@lectorium/composables/useTrackUserState.js", () => ({
   useTrackUserState: () => ({ buildUserContext: vi.fn() }),
 }))
