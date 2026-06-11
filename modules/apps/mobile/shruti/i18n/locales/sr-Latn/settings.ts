@@ -3,7 +3,7 @@ export default {
     subscription: "Pretplata",
     account: "Nalog",
     appearance: "Izgled",
-    chat: "Ćaskanje",
+    chat: "Pitaj Sadhua",
     contacts: "Kontaktirajte nas",
     status: "Status",
     sadhana: "Sadhana",

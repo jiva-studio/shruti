@@ -188,7 +188,9 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
   padding: 6px 12px;
   border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
-  border-radius: 4px;
+  /* Square the LEFT edge so the accent bar is a straight vertical line
+   * (no rounded top); only the right corners are rounded. */
+  border-radius: 0 4px 4px 0;
   color: inherit;
   line-height: 1.4;
 }
