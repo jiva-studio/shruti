@@ -35,22 +35,22 @@
       </template>
     </ExcerptCard>
 
-    <!-- Machine-translation footnote: shown only when the snippet text is
-         a machine translation. `@click.stop` so the toggle doesn't open
-         the action sheet. -->
-    <p v-if="isMt" class="citation-mt-note">
-      <span class="citation-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
-      <button type="button" class="citation-mt-toggle" @click.stop="showOriginal = !showOriginal">
-        {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
-      </button>
-    </p>
-
     <IonActionSheet
       :is-open="actionSheetOpen"
       :header="actionSheetHeader"
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
+  </div>
+
+  <!-- Machine-translation footnote: lives BELOW and OUTSIDE the quote
+       frame, right-aligned, so it reads as a caption on the card rather
+       than part of the quoted text. Shown only when the snippet is MT. -->
+  <div v-if="isMt" class="cite-mt-line">
+    <span class="cite-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
+    <button type="button" class="cite-mt-toggle" @click="showOriginal = !showOriginal">
+      {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
+    </button>
   </div>
 </template>
 
@@ -299,7 +299,9 @@ watch(
   overflow: hidden;
   border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
-  border-radius: 4px;
+  /* Square the LEFT edge so the accent bar reads as a straight vertical
+   * line (no rounded top); only the right corners are rounded. */
+  border-radius: 0 4px 4px 0;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   --excerpt-body-padding: 8px 12px 10px;
@@ -314,21 +316,21 @@ watch(
   background: rgba(var(--ion-color-primary-rgb), 0.08);
 }
 
-/* Muted machine-translation footnote under the quote body — the same
- * subdued styling used elsewhere for secondary metadata. */
-.citation-mt-note {
+/* Muted machine-translation caption, BELOW and OUTSIDE the quote frame,
+ * right-aligned — reads as a note about the card, not quoted text. */
+.cite-mt-line {
   display: flex;
+  justify-content: flex-end;
   align-items: baseline;
   gap: 6px;
-  margin: 0;
-  padding: 0 12px 8px;
+  margin: 4px 2px 10px;
   font-size: 11px;
   color: var(--ion-color-medium);
 }
-.citation-mt-badge {
+.cite-mt-badge {
   font-style: italic;
 }
-.citation-mt-toggle {
+.cite-mt-toggle {
   padding: 0;
   border: none;
   background: transparent;

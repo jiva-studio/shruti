@@ -5,7 +5,7 @@ export default {
     subscription: "Претплата",
     account: "Налог",
     appearance: "Изглед",
-    chat: "Ћаскање",
+    chat: "Питај Садхуа",
     contacts: "Контактирајте нас",
     status: "Статус",
     sadhana: "Садхана",

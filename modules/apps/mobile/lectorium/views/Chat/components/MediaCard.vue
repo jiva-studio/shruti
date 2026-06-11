@@ -82,19 +82,18 @@
 
       <div v-if="expanded && payload.text" class="media-card-transcript">
         <span class="media-card-transcript-text">{{ transcriptText }}</span>
-        <p v-if="isMt" class="media-card-mt-note">
-          <span class="media-card-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
-          <button
-            type="button"
-            class="media-card-mt-toggle"
-            @click.stop="showOriginal = !showOriginal"
-          >
-            {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
-          </button>
-        </p>
       </div>
     </div>
   </article>
+
+  <!-- Machine-translation footnote: BELOW and OUTSIDE the card frame,
+       right-aligned. Only while the transcript is expanded and MT. -->
+  <div v-if="expanded && isMt" class="media-mt-line">
+    <span class="media-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
+    <button type="button" class="media-mt-toggle" @click="showOriginal = !showOriginal">
+      {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
+    </button>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -360,19 +359,21 @@ async function toggle(): Promise<void> {
   white-space: pre-wrap;
 }
 
-/* Muted machine-translation footnote under the transcript. */
-.media-card-mt-note {
+/* Muted machine-translation caption — BELOW and OUTSIDE the card frame,
+   right-aligned. */
+.media-mt-line {
   display: flex;
+  justify-content: flex-end;
   align-items: baseline;
   gap: 6px;
-  margin: 6px 0 0;
+  margin: 4px 2px 10px;
   font-size: 11px;
   color: var(--ion-color-medium);
 }
-.media-card-mt-badge {
+.media-mt-badge {
   font-style: italic;
 }
-.media-card-mt-toggle {
+.media-mt-toggle {
   padding: 0;
   border: none;
   background: transparent;
