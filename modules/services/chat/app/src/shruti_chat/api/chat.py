@@ -200,6 +200,7 @@ async def chat(
                     [m.model_dump() for m in body.messages],
                     lang=body.lang,
                     translate_citations=body.translate_citations,
+                    capabilities=body.capabilities,
                     request_id=request_id,
                     user_context=user_ctx,
                     is_disconnected=request.is_disconnected,

@@ -67,9 +67,19 @@ export type ChatToken =
       readonly caption: string
     }
   | {
+      /** Commentary / prose-chapter / letter citation rendered as a CARD
+       *  (text + author + reference), the audio-citation shape. `ref` is the
+       *  integer join key into `useCommentaryBodyStore`, where the
+       *  `commentary` SSE action stashed the quote. Emitted only for
+       *  card-capable clients; legacy turns inline a `quote` token instead. */
+      readonly kind: "commentary"
+      readonly ref: number
+    }
+  | {
       /** Library document citation — commentary, prose chapter, or
        *  letter — rendered as a styled blockquote with an optional
-       *  italic attribution line. */
+       *  italic attribution line. Legacy (non-card) form; still produced
+       *  for already-persisted history and non-card clients. */
       readonly kind: "quote"
       readonly bodyHtml: string
       readonly attributionHtml?: string
@@ -103,6 +113,10 @@ export const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([^|\]\n]*)(?:\|([^\]\n]*)
 // shapes (uuid, base62, dotted) never need a regex change; optional
 // `|caption` tail captures everything up to the closing `]`.
 export const MEDIA_RE = /\[media:([A-Za-z0-9_.-]+)(?:\|([^\]\n]*))?\]/g
+// Commentary citation marker. Just the integer ref — the quote text,
+// author, and reference ride the `commentary` SSE action payload (the
+// audio-citation pattern), keyed by this ref in `useCommentaryBodyStore`.
+export const COMMENTARY_RE = /\[commentary:(\d+)\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture
 // group keeps the raw lines (each still prefixed by `>`) so the parser can
@@ -217,6 +231,14 @@ export function parseChatMarkers(input: string): ChatToken[] {
       start,
       end: start + full.length,
       token: { kind: "media", mediaId, caption: (captionRaw ?? "").trim() },
+    }
+  })
+  collect(COMMENTARY_RE, (m, start) => {
+    const [full, refStr] = m
+    return {
+      start,
+      end: start + full.length,
+      token: { kind: "commentary", ref: Number(refStr) | 0 },
     }
   })
   // Markdown blockquotes — group consecutive `> ...` lines into one
@@ -362,6 +384,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
     k === "outline" ||
     k === "action" ||
     k === "quote" ||
+    k === "commentary" ||
     k === "verse" ||
     k === "chapter" ||
     k === "media" ||

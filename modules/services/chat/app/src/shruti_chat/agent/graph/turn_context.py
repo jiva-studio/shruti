@@ -71,6 +71,11 @@ class TurnContext:
     # that have no native variant in `lang`. Off → such citations fall back
     # to English (en-preferred), never MT. Set from the request DTO.
     translate_citations: bool = False
+    # Client-declared render capabilities (e.g. {"commentary_card": True}).
+    # Read by the worker flushes to decide whether to ship a structured
+    # card payload vs. let the synthesizer inline the content. Empty for
+    # legacy clients → legacy inline rendering.
+    capabilities: dict[str, bool] = field(default_factory=dict)
     # Citation translator (TranslationService), injected by the composition
     # root. Only consulted when `translate_citations` is on AND a citation
     # has no native variant. None in tests / when translation is disabled.

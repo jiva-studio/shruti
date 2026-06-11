@@ -116,6 +116,48 @@ async def test_ref_marker_to_lecture_expands_into_cite_form() -> None:
 
 
 @pytest.mark.asyncio
+async def test_commentary_card_mode_emits_action_before_marker() -> None:
+    """In card mode the synthesizer drains the expander's queued commentary
+    `action` and yields it BEFORE the delta carrying the `[commentary:N]`
+    marker — the payload-before-marker invariant the client relies on."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_commentary(
+        "comm_xyz", 0,
+        addr_label="БГ 2.13",
+        author_name="Прабхупада",
+        sentences=["S0.", "S1.", "S2."],
+    )
+    expander = MarkerExpander(aliases, commentary_as_card=True)
+    llm = StreamingLLM(chunks=["Текст ", f"[^{n}|s=0,2]", "."])
+
+    events = await _drain(
+        run_synthesizer_turn(
+            "?",
+            tool_results=[{"placeholder": True}],
+            llm=llm,
+            expander=expander,
+            system_prompt="sys",
+        )
+    )
+    full = "".join(ev.data["text"] for ev in events if ev.type == "delta")
+    assert f"[commentary:{n}]" in full
+    # No blockquote text leaked into the prose.
+    assert "S0." not in full and ">" not in full
+
+    action_idxs = [i for i, ev in enumerate(events) if ev.type == "action"]
+    assert len(action_idxs) == 1
+    action = events[action_idxs[0]]
+    assert action.data["kind"] == "commentary"
+    assert action.data["payload"]["text"] == "S0. … S2."
+    # Ordering: the action precedes the delta that carries the marker.
+    marker_delta_idx = next(
+        i for i, ev in enumerate(events)
+        if ev.type == "delta" and f"[commentary:{n}]" in ev.data["text"]
+    )
+    assert action_idxs[0] < marker_delta_idx
+
+
+@pytest.mark.asyncio
 async def test_ref_marker_to_verse_expands_into_verse_form() -> None:
     """`[^N]` resolving to a VerseRef → `[verse:source_id/tokens|addr_label]`.
     The verse caption is the alias's `addr_label`, not LLM-supplied."""

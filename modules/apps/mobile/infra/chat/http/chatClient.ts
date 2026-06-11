@@ -116,6 +116,11 @@ export type ActionPayload =
       readonly id: string
       readonly payload: MediaPayload
     }
+  | {
+      readonly kind: "commentary"
+      readonly id: string
+      readonly payload: CommentaryPayload
+    }
 
 /** Discriminator for `research_source` events — what kind of corpus
  *  item the research pipeline is inspecting right now. */
@@ -235,6 +240,25 @@ export interface CiteTranscriptPayload {
    *  Additive — absent ⇒ no badge. */
   readonly mt?: boolean
   /** Verbatim source-language transcript, present only when `mt` is true. */
+  readonly text_original?: string
+}
+
+/** Wire shape of a purport / prose-chapter / letter citation — carried by
+ *  an `action` event with `kind: "commentary"`, arriving ahead of the prose
+ *  delta with the `[commentary:<ref>]` marker it backs (audio-citation
+ *  shape, card-capable clients only). The store caches it under `ref` so
+ *  `CommentaryCard.vue` renders the quote as a card (text + author +
+ *  reference), like the audio card. */
+export interface CommentaryPayload {
+  readonly ref: number
+  readonly text: string
+  readonly author_name: string
+  readonly addr_label: string
+  readonly kind: string
+  /** True when `text` is a machine translation; the card surfaces a
+   *  footnote + a toggle to `text_original`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** Verbatim source-language quote, present only when `mt` is true. */
   readonly text_original?: string
 }
 
@@ -519,6 +543,11 @@ export interface StreamChatRequestInit {
   /** Forwarded as the wire `translate_citations` flag. When true the
    *  server may machine-translate verbatim citations into `lang`. */
   readonly translateCitations?: boolean
+  /** Forwarded as the wire `capabilities` map — what this client can
+   *  render. The server adapts its output accordingly (e.g.
+   *  `{ commentary_card: true }` ships purports as card payloads instead
+   *  of inline blockquotes). Additive; omitted ⇒ legacy rendering. */
+  readonly capabilities?: Readonly<Record<string, boolean>>
 }
 
 /* -------------------------------------------------------------------------- */
@@ -803,6 +832,11 @@ function buildRequestBody(
   // Only emit the flag when the caller opted in — keeps the body identical
   // to the pre-feature shape (and the server default) when it's off.
   if (opts.translateCitations) body.translate_citations = true
+  // Client render capabilities — only emit when non-empty so the body stays
+  // byte-identical to the pre-feature shape for callers that pass none.
+  if (opts.capabilities && Object.keys(opts.capabilities).length > 0) {
+    body.capabilities = opts.capabilities
+  }
   if (opts.sessionId !== undefined) body.session_id = opts.sessionId
   if (opts.sessionTitle !== undefined) body.session_title = opts.sessionTitle
   if (opts.userContext !== undefined) body.user_context = opts.userContext
@@ -1136,6 +1170,27 @@ function parseCiteTranscriptPayload(p: Record<string, unknown>): CiteTranscriptP
   }
 }
 
+function parseCommentaryPayload(p: Record<string, unknown>): CommentaryPayload | null {
+  const ref = typeof p.ref === "number" ? p.ref : null
+  const text = typeof p.text === "string" ? p.text.trim() : ""
+  // No ref or empty text ⇒ the card has nothing to render; drop the event.
+  if (ref === null || !text) return null
+  const mt = p.mt === true
+  const textOriginal =
+    mt && typeof p.text_original === "string" && p.text_original.trim()
+      ? p.text_original.trim()
+      : undefined
+  return {
+    ref,
+    text,
+    author_name: typeof p.author_name === "string" ? p.author_name : "",
+    addr_label: typeof p.addr_label === "string" ? p.addr_label : "",
+    kind: typeof p.kind === "string" ? p.kind : "commentary",
+    ...(mt ? { mt: true } : {}),
+    ...(textOriginal ? { text_original: textOriginal } : {}),
+  }
+}
+
 function parseChapterPayload(p: Record<string, unknown>): ChapterPayload | null {
   const sourceId = typeof p.source_id === "string" ? p.source_id : ""
   // region_token may be "" for book-level regions (e.g. BG) — that's valid.
@@ -1301,6 +1356,10 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
   if (kind === "media") {
     const mp = parseMediaPayload(body)
     return mp ? { kind: "media", id, payload: mp } : null
+  }
+  if (kind === "commentary") {
+    const cmp = parseCommentaryPayload(body)
+    return cmp ? { kind: "commentary", id, payload: cmp } : null
   }
   return null
 }
