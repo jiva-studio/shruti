@@ -28,8 +28,8 @@ export default {
   citationAddedToPlaylist: "Added to playlist",
   citationAddFailed: "Couldn't add to playlist",
   citationMtBadge: "Translated automatically",
-  citationViewOriginal: "view original",
-  citationViewTranslated: "back",
+  citationViewOriginal: "Show original",
+  citationViewTranslated: "Show translation",
   lectureCardMissing: "Lecture not available in the local catalog.",
   errRate: "Too many requests. Try again in a minute.",
   /** Rate-limit copy with a deadline placeholder. `{when}` is composed by

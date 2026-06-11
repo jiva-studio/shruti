@@ -16,8 +16,10 @@
     </button>
     <header class="verse-card-addr">{{ displayAddr }}</header>
     <p v-if="sanskrit" class="verse-card-sanskrit">{{ sanskrit }}</p>
-    <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
-    <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
+    <AutoHeight>
+      <p v-if="transliteration" class="verse-card-iast">{{ transliteration }}</p>
+      <p v-if="translation" class="verse-card-translation">{{ translation }}</p>
+    </AutoHeight>
     <audio
       v-if="audioUrl"
       ref="audioEl"
@@ -47,15 +49,7 @@
     <span class="verse-caption">{{ displayCaption }}</span>
   </span>
 
-  <!-- Machine-translation footnote: BELOW and OUTSIDE the verse frame,
-       right-aligned. The active-locale translation is machine-made; let
-       the user flip to the original English. -->
-  <div v-if="isMt" class="verse-mt-line">
-    <span class="verse-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
-    <button type="button" class="verse-mt-toggle" @click="showOriginal = !showOriginal">
-      {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
-    </button>
-  </div>
+  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
 </template>
 
 <script setup lang="ts">
@@ -80,6 +74,8 @@ import { useI18n } from "vue-i18n"
 import { useVerseBodyStore } from "@shruti/stores/useVerseBodyStore.js"
 import { useExcerptAudioPlayer } from "@shruti/composables/useExcerptAudioPlayer.js"
 import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
+import TranslationNotice from "./TranslationNotice.vue"
+import AutoHeight from "./AutoHeight.vue"
 
 const props = defineProps<{
   sourceId: string
@@ -303,30 +299,6 @@ function onTap() {
 .verse-card-translation {
   margin: 0;
   white-space: pre-wrap;
-}
-
-/* Muted machine-translation caption — BELOW and OUTSIDE the verse frame,
- * right-aligned, reads as a note about the card not part of the verse. */
-.verse-mt-line {
-  display: flex;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 6px;
-  margin: 4px 2px 10px;
-  font-size: 11px;
-  color: var(--ion-color-medium);
-}
-.verse-mt-badge {
-  font-style: italic;
-}
-.verse-mt-toggle {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--ion-color-primary);
-  font-size: 11px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 
 .verse-chip {

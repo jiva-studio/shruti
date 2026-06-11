@@ -28,8 +28,8 @@ export default {
   citationAddedToPlaylist: "Dodato na listu numera",
   citationAddFailed: "Nije moguće dodati na listu numera",
   citationMtBadge: "Automatski prevedeno",
-  citationViewOriginal: "prikaži original",
-  citationViewTranslated: "nazad",
+  citationViewOriginal: "Prikaži original",
+  citationViewTranslated: "Prikaži prevod",
   lectureCardMissing: "Predavanje nije dostupno u lokalnom katalogu.",
   errRate: "Previše zahteva. Pokušajte za minut.",
   /** Rate-limit copy with a deadline placeholder. `{when}` is composed by
