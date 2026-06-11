@@ -28,8 +28,8 @@ export default {
   citationAddedToPlaylist: "Додано до плейлиста",
   citationAddFailed: "Не вдалося додати до плейлиста",
   citationMtBadge: "Перекладено автоматично",
-  citationViewOriginal: "показати оригінал",
-  citationViewTranslated: "назад",
+  citationViewOriginal: "Покажи оригінал",
+  citationViewTranslated: "Покажи переклад",
   lectureCardMissing: "Лекції немає в локальному каталозі.",
   errRate: "Забагато запитів. Спробуйте за хвилину.",
   /** Rate-limit copy with a deadline placeholder. `{when}` is composed by

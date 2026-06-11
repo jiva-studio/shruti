@@ -21,19 +21,21 @@
     @click="onOpenActions"
     @keydown.enter.space.prevent="onOpenActions"
   >
-    <ExcerptCard
-      :text="displayText"
-      :author-name="authorName"
-      :track-title="trackTitle"
-      :reference="referenceLabel"
-      :track-date="trackDate"
-    >
-      <template #player>
-        <!-- The player owns its own taps (play / seek); stop the bubble
-             so tapping it doesn't also open the action sheet. -->
-        <NotesInlinePlayer :note="playerRef" @click.stop />
-      </template>
-    </ExcerptCard>
+    <AutoHeight>
+      <ExcerptCard
+        :text="displayText"
+        :author-name="authorName"
+        :track-title="trackTitle"
+        :reference="referenceLabel"
+        :track-date="trackDate"
+      >
+        <template #player>
+          <!-- The player owns its own taps (play / seek); stop the bubble
+               so tapping it doesn't also open the action sheet. -->
+          <NotesInlinePlayer :note="playerRef" @click.stop />
+        </template>
+      </ExcerptCard>
+    </AutoHeight>
 
     <IonActionSheet
       :is-open="actionSheetOpen"
@@ -43,15 +45,7 @@
     />
   </div>
 
-  <!-- Machine-translation footnote: lives BELOW and OUTSIDE the quote
-       frame, right-aligned, so it reads as a caption on the card rather
-       than part of the quoted text. Shown only when the snippet is MT. -->
-  <div v-if="isMt" class="cite-mt-line">
-    <span class="cite-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
-    <button type="button" class="cite-mt-toggle" @click="showOriginal = !showOriginal">
-      {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
-    </button>
-  </div>
+  <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
 </template>
 
 <script setup lang="ts">
@@ -79,6 +73,8 @@ import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import NotesInlinePlayer from "@lectorium/views/Notes/NotesInlinePlayer.vue"
 import { citationExcerptId } from "../composables/useCitationSnippet.js"
 import CitationChip from "./CitationChip.vue"
+import TranslationNotice from "./TranslationNotice.vue"
+import AutoHeight from "./AutoHeight.vue"
 
 const props = defineProps<{
   trackId: string
@@ -305,29 +301,5 @@ watch(
   margin-bottom: 0;
   border-radius: 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
-}
-
-/* Muted machine-translation caption, BELOW and OUTSIDE the quote frame,
- * right-aligned — reads as a note about the card, not quoted text. */
-.cite-mt-line {
-  display: flex;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 6px;
-  margin: 4px 2px 10px;
-  font-size: 11px;
-  color: var(--ion-color-medium);
-}
-.cite-mt-badge {
-  font-style: italic;
-}
-.cite-mt-toggle {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--ion-color-primary);
-  font-size: 11px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 </style>

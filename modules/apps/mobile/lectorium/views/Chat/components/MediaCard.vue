@@ -80,20 +80,15 @@
         </button>
       </div>
 
-      <div v-if="expanded && payload.text" class="media-card-transcript">
-        <span class="media-card-transcript-text">{{ transcriptText }}</span>
-      </div>
+      <AutoHeight v-if="expanded && payload.text">
+        <div class="media-card-transcript">
+          <span class="media-card-transcript-text">{{ transcriptText }}</span>
+        </div>
+      </AutoHeight>
     </div>
   </article>
 
-  <!-- Machine-translation footnote: BELOW and OUTSIDE the card frame,
-       right-aligned. Only while the transcript is expanded and MT. -->
-  <div v-if="expanded && isMt" class="media-mt-line">
-    <span class="media-mt-badge">{{ $t("chat.citationMtBadge") }}</span>
-    <button type="button" class="media-mt-toggle" @click="showOriginal = !showOriginal">
-      {{ showOriginal ? $t("chat.citationViewTranslated") : $t("chat.citationViewOriginal") }}
-    </button>
-  </div>
+  <TranslationNotice v-if="expanded && isMt" v-model:show-original="showOriginal" />
 </template>
 
 <script setup lang="ts">
@@ -102,6 +97,8 @@ import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconChevronDown } from "@t
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useAudioSource } from "@lectorium/composables/useAudioOrchestrator.js"
 import type { MediaPayload } from "@lib/domain/chatMessage.js"
+import TranslationNotice from "./TranslationNotice.vue"
+import AutoHeight from "./AutoHeight.vue"
 
 const props = defineProps<{
   /** Server-streamed media payload, read off `message.media[token.mediaId]`.
@@ -359,27 +356,4 @@ async function toggle(): Promise<void> {
   white-space: pre-wrap;
 }
 
-/* Muted machine-translation caption — BELOW and OUTSIDE the card frame,
-   right-aligned. */
-.media-mt-line {
-  display: flex;
-  justify-content: flex-end;
-  align-items: baseline;
-  gap: 6px;
-  margin: 4px 2px 10px;
-  font-size: 11px;
-  color: var(--ion-color-medium);
-}
-.media-mt-badge {
-  font-style: italic;
-}
-.media-mt-toggle {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--ion-color-primary);
-  font-size: 11px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
 </style>
