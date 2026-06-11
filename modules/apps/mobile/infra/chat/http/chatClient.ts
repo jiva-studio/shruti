@@ -206,6 +206,10 @@ export interface VersePayload {
   readonly addr_label: string
   readonly sanskrit: string
   readonly transliteration: string
+  /** Original IAST (Latin) transliteration, present only when the shown
+   *  `transliteration` is in a different script — lets the card flip the
+   *  transliteration alongside the translation on "view original". */
+  readonly transliteration_original?: string
   readonly translation: { readonly [lang: string]: string }
   /** Full public URL of the verse's Sanskrit recitation, or undefined
    *  when the library has no audio for it. */
@@ -1084,6 +1088,10 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
   const addrLabel = typeof p.addr_label === "string" ? p.addr_label : ""
   const sanskrit = typeof p.sanskrit === "string" ? p.sanskrit : ""
   const transliteration = typeof p.transliteration === "string" ? p.transliteration : ""
+  const transliterationOriginal =
+    typeof p.transliteration_original === "string" && p.transliteration_original
+      ? p.transliteration_original
+      : undefined
   const translation: Record<string, string> = {}
   if (p.translation && typeof p.translation === "object" && !Array.isArray(p.translation)) {
     for (const [lang, text] of Object.entries(p.translation as Record<string, unknown>)) {
@@ -1098,6 +1106,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
     addr_label: addrLabel,
     sanskrit,
     transliteration,
+    ...(transliterationOriginal ? { transliteration_original: transliterationOriginal } : {}),
     translation,
     ...(audioUrl ? { audio_url: audioUrl } : {}),
     ...(mt ? { mt: true } : {}),

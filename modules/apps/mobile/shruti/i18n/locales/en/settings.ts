@@ -88,7 +88,7 @@ export default {
           "Create collections for lectures that will automatically update based on specified criteria.",
       },
       sakha: {
-        title: "Sakhā — AI Companion",
+        title: "Ask Sadhu",
         description:
           "Searches lectures, audio and books, finds shlokas, generates PDFs, and helps you make sense of the teachings. A bigger daily allowance comes with a subscription.",
       },
