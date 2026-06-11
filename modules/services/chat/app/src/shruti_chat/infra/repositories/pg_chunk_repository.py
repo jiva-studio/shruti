@@ -85,6 +85,28 @@ class PgChunkRepository:
         self._router = router
         self._cache = kv_cache
 
+    async def distinct_langs(self) -> list[str]:
+        async def _raw() -> list[str]:
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT DISTINCT lang FROM chunks WHERE lang IS NOT NULL"
+                )
+            return sorted(r["lang"] for r in rows if r["lang"])
+
+        if self._cache is None:
+            return await _raw()
+        from shruti_chat.application.cache_helpers import TTL_24H, cached_json
+
+        result = await cached_json(
+            self._cache,
+            ns="corpus_langs",
+            key_parts={"v": 1},
+            ttl_s=TTL_24H,
+            factory=_raw,
+        )
+        # cached_json round-trips through JSON; the value is a list of str.
+        return list(result) if isinstance(result, list) else await _raw()
+
     async def search_by_embedding(
         self,
         embedding: list[float],

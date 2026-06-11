@@ -67,6 +67,14 @@ class TurnContext:
     # to localise the verse-payload `transliteration` (en = clean Latin
     # IAST, ru = derived Cyrillic) when flushing verse cards.
     lang: str = "ru"
+    # Whether the user opted into machine-translating verbatim citations
+    # that have no native variant in `lang`. Off → such citations fall back
+    # to English (en-preferred), never MT. Set from the request DTO.
+    translate_citations: bool = False
+    # Citation translator (TranslationService), injected by the composition
+    # root. Only consulted when `translate_citations` is on AND a citation
+    # has no native variant. None in tests / when translation is disabled.
+    translator: Any | None = None
     # Region of the originating request, derived from the trusted
     # `X-Shruti-Region` header injected by the RU reverse proxy. None
     # means the request came directly from the global origin. Gated PII

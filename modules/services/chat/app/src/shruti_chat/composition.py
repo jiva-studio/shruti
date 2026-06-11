@@ -27,6 +27,7 @@ from shruti_chat.domain.ports.outline_cache import OutlineCache
 from shruti_chat.domain.ports.pdf_storage import PdfStorage
 from shruti_chat.domain.ports.reranker import RerankerPort
 from shruti_chat.domain.ports.transcript_storage import TranscriptStorage
+from shruti_chat.domain.ports.translation import TranslationService
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,9 @@ class AppDeps:
     # Cross-encoder reranker. None when no provider is configured / the
     # API key is missing → the research pipeline degrades to cosine.
     reranker: RerankerPort | None = None
+    # Citation translator (opt-in `translate_citations`). Always built —
+    # the per-turn flag, not its presence, gates whether it runs.
+    translation_service: TranslationService | None = None
 
 
 def get_deps(request: Request) -> AppDeps:

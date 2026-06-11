@@ -41,11 +41,12 @@ def build_system_prompt(rule_kind: str, lang: str) -> str:
 
     full_prompt = build_prompt()
     rule_section = _read(rule_kind)
-    lang_name = "Russian" if lang == "ru" else "English"
+    # Pass the raw locale code through — no ru/en hardcode, so a new
+    # locale (uk / sr-Latn / sr-Cyrl) is honoured without a code change.
     lang_directive = (
         "\n\n"
-        f"RESPONSE LANGUAGE: write the entire reply in {lang_name} ({lang}). "
-        "Tool queries can be in any language that improves recall."
+        f"RESPONSE LANGUAGE: write the entire reply in the language with "
+        f"code `{lang}`. Tool queries can be in any language that improves recall."
     )
     return full_prompt + "\n\n" + rule_section + lang_directive
 

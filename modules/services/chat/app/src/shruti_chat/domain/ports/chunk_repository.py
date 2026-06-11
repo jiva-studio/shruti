@@ -24,6 +24,15 @@ from shruti_chat.domain.entities import Chunk, LibraryChunk, ScoredChunk, Scored
 
 
 class ChunkRepository(Protocol):
+    async def distinct_langs(self) -> list[str]:
+        """Distinct `lang` values present in the `chunks` table — i.e. the
+        languages the corpus actually has content in. Drives the
+        answer-lang-vs-retrieval-lang split: a request `lang` outside this
+        set has no corpus, so retrieval clamps to English while the answer
+        prose is still written in the requested language. Data-driven —
+        the corpus language set is never hardcoded. Cached (24h)."""
+        ...
+
     async def search_by_embedding(
         self,
         embedding: list[float],
