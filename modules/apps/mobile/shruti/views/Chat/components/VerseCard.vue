@@ -108,9 +108,15 @@ const displayAddr = computed(() => body.value?.addrLabel || props.caption?.trim(
 const sanskrit = computed(() => (body.value?.sanskrit || "").replace(/\n{2,}/g, "\n"))
 
 // The server localises `transliteration` by the turn's lang: Latin IAST
-// for `en`, Cyrillic (derived from that IAST) for `ru`. We just render
-// the single string it shipped; same newline normalisation as sanskrit.
-const transliteration = computed(() => (body.value?.transliteration || "").replace(/\n{2,}/g, "\n"))
+// for `en`, Cyrillic (derived from that IAST) for `ru`/`sr`. When the user
+// flips to the original (machine-translated verse) we show the IAST source
+// transliteration too, so the whole verse returns to its original form.
+const transliteration = computed(() => {
+  const b = body.value
+  if (!b) return ""
+  const s = showOriginal.value && b.transliterationOriginal ? b.transliterationOriginal : b.transliteration
+  return (s || "").replace(/\n{2,}/g, "\n")
+})
 
 // True when the active-locale translation is a machine translation AND an
 // original English entry exists to flip to.

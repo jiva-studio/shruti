@@ -97,7 +97,7 @@ export default {
           "Kreirajte kolekcije predavanja koje će se automatski ažurirati prema zadatim kriterijumima.",
       },
       sakha: {
-        title: "Sakha — AI pratilac",
+        title: "Pitaj Sadhua",
         description:
           "Pretražuje predavanja, audio i knjige, pronalazi šloke, generiše PDF-ove i pomaže vam da razumete učenja. Veći dnevni limit dolazi uz pretplatu.",
       },
