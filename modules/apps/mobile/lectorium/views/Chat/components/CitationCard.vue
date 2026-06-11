@@ -289,30 +289,31 @@ watch(
  * soft primary tint. Block-level so it sits between prose tokens like
  * the verse card. */
 .citation-card {
+  position: relative;
   display: block;
   margin: 10px 0;
-  /* No padding on the card itself: the player is a full-bleed header
-   * strip at the top, and the text/attribution body carries its own
-   * inset via `--excerpt-body-padding`. `overflow: hidden` clips the
-   * player to the card's rounded top — no negative margins needed. */
   padding: 0;
-  overflow: hidden;
-  border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
-  /* Square the LEFT edge so the accent bar reads as a straight vertical
-   * line (no rounded top); only the right corners are rounded. */
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   --excerpt-body-padding: 8px 12px 10px;
 }
 
-/* Player is the card's header strip — square it off (the card's
- * overflow+radius rounds the top) and let the body padding own the gap
- * to the text. */
+.citation-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--ion-color-primary);
+  z-index: 2;
+}
+
 .citation-card :deep(.notes-inline-player) {
   margin-bottom: 0;
-  border-radius: 0;
+  border-radius: 4px 4px 0 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
 }
 
