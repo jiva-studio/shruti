@@ -18,11 +18,11 @@ export function useChatLanguage(): Ref<string> {
 /**
  * Whether to machine-translate verbatim citations into the chat answer
  * language when no native version exists (`settings.chatTranslateCitations`).
- * Default off — citations stay in their English-preferred source language
- * and no "translated automatically" badge appears. When on, the server may
- * ship a translated citation with `mt: true` plus the original text so the
- * card can offer an original/translated toggle.
+ * Default ON — a non-corpus answer language (uk/sr) reads consistently when
+ * the quotes are translated too; the server ships `mt: true` plus the
+ * original text so the card offers an original/translated toggle. Users who
+ * prefer source-language quotes can turn it off.
  */
 export function useChatTranslateCitations(): Ref<boolean> {
-  return useConfig<boolean>("settings.chatTranslateCitations", false)
+  return useConfig<boolean>("settings.chatTranslateCitations", true)
 }
