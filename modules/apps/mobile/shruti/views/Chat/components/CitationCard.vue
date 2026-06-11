@@ -289,10 +289,11 @@ watch(
  * soft primary tint. Block-level so it sits between prose tokens like
  * the verse card. */
 .citation-card {
-  position: relative;
   display: block;
   margin: 10px 0;
   padding: 0;
+  overflow: hidden;
+  border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
   border-radius: 4px;
   cursor: pointer;
@@ -300,20 +301,9 @@ watch(
   --excerpt-body-padding: 8px 12px 10px;
 }
 
-.citation-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 5px;
-  bottom: 5px;
-  width: 3px;
-  background: var(--ion-color-primary);
-  z-index: 2;
-}
-
 .citation-card :deep(.notes-inline-player) {
   margin-bottom: 0;
-  border-radius: 4px 4px 0 0;
+  border-radius: 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
 }
 
