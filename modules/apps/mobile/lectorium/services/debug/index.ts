@@ -15,7 +15,7 @@ import { currentLocale, setLocale, type SupportedLocale } from "@lectorium/i18n/
 import router from "@lectorium/router/index.js"
 import type { TrackId, LanguageCode } from "@lib/domain/core.js"
 
-const DEMO_TRACKS: Record<SupportedLocale, string> = {
+const DEMO_TRACKS: Record<"en", string> & Partial<Record<SupportedLocale, string>> = {
   en: "track_0M6TgFqYKo01",
   ru: "track_95Z39JrFM1MQ",
 }
@@ -27,7 +27,7 @@ const DEMO_TRACKS: Record<SupportedLocale, string> = {
  * picked so the `.current` highlight sits on a *different* sentence than
  * any seeded note — the screenshot shows both states simultaneously.
  */
-const DEMO_POSITIONS_MS: Record<SupportedLocale, number> = {
+const DEMO_POSITIONS_MS: Record<"en", number> & Partial<Record<SupportedLocale, number>> = {
   // Inside the FIRST visible block of each demo transcript so the
   // dialog opens with paragraph #1 already lit as `.current`. Tracked
   // back to `resources/lake-out/public/tracks/<id>/transcripts/<lc>.json`

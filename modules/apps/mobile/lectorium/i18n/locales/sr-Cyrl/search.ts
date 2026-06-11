@@ -1,0 +1,37 @@
+// AUTO-GENERATED from ../sr-Latn by modules/tools/sr-transliterate/generate-sr-cyrl.mjs
+// Do not edit by hand — re-run the generator instead.
+export default {
+  search: "Претрага | Претражи међу {count} нумером | Претражи међу {count} нумера",
+  specifySearchCriteria: "Унесите упит за претрагу или изаберите филтере да бисте пронашли више.",
+  filtersButton: "Филтери",
+  filtersSheetTitle: "Филтери",
+  filtersReset: "Поништи",
+  actions: {
+    addToPlaylist: "Додај на листу нумера",
+    openTranscript: "Отвори транскрипт",
+  },
+  filters: {
+    any: "Било који",
+    sort: "Редослед",
+    authors: "Аутори",
+    sources: "Извори",
+    tags: "Теме",
+    locations: "Локације",
+    languages: "Језици",
+    duration: "Трајање",
+    dates: "Датуми",
+    dateFromLabel: "Од",
+    dateToLabel: "До",
+    dateYear: "Година",
+    dateMonth: "Месец",
+    dateAnyYear: "Било која година",
+    dateAnyMonth: "Било који месец",
+    durationShort: "До 15 минута",
+    durationMedium: "15–30 минута",
+    durationLong: "30–60 минута",
+    durationExtraLong: "Више од 60 минута",
+    sortByDateDesc: "По датуму (најновије прво)",
+    sortByDateAsc: "По датуму (најстарије прво)",
+    sortByReference: "По шлоки",
+  },
+}

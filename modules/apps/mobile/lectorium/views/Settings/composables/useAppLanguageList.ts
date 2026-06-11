@@ -16,6 +16,9 @@ export interface UseAppLanguageListReturn {
 const FALLBACK_ITEMS: SelectorItem[] = [
   { id: "en", title: "English" },
   { id: "ru", title: "Русский" },
+  { id: "uk", title: "Українська" },
+  { id: "sr-Latn", title: "Srpski" },
+  { id: "sr-Cyrl", title: "Српски" },
 ]
 
 /**
