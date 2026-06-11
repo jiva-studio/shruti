@@ -6,6 +6,10 @@ import {
   type AutoArchiveDelay,
 } from "@shruti/composables/useAutoArchiveSweep.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
+import {
+  useChatLanguage,
+  useChatTranslateCitations,
+} from "@shruti/composables/useChatLanguage.js"
 import { useAutoPlayNext } from "@shruti/composables/useAutoPlayNext.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import type { TrackMetaConfig } from "@ui/components/tracks/list/index.js"
@@ -37,6 +41,9 @@ export interface SettingsControllerReturn {
   dbNumber: ComputedRef<string | null>
   /* Config v-models (backed by IPreferences via useConfig) */
   appLanguage: Ref<string>
+  /** Chat answer language; empty ⇒ follow appLanguage at the read site. */
+  chatLanguage: Ref<string>
+  chatTranslateCitations: Ref<boolean>
   trackMetaConfig: Ref<TrackMetaConfig>
   showPlayerProgress: Ref<boolean>
   showPlayerOnNotes: Ref<boolean>
@@ -86,6 +93,8 @@ export function useSettingsController(): SettingsControllerReturn {
 
   /* Config v-models */
   const appLanguage = useConfig<string>("settings.appLanguage", "en")
+  const chatLanguage = useChatLanguage()
+  const chatTranslateCitations = useChatTranslateCitations()
   const { raw: trackMetaConfig } = useTrackMetadataFields()
   const highlightCurrentSentence = useConfig<boolean>("settings.highlightCurrentSentence", true)
   const autoScroll = useConfig<boolean>("settings.autoScroll", false)
@@ -148,6 +157,8 @@ export function useSettingsController(): SettingsControllerReturn {
     contentDbFile,
     dbNumber,
     appLanguage,
+    chatLanguage,
+    chatTranslateCitations,
     trackMetaConfig,
     showPlayerProgress,
     showPlayerOnNotes,

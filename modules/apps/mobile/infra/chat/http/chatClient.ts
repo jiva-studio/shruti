@@ -210,6 +210,10 @@ export interface VersePayload {
   /** Full public URL of the verse's Sanskrit recitation, or undefined
    *  when the library has no audio for it. */
   readonly audio_url?: string
+  /** True when `translation[lang]` is a machine translation (no native
+   *  text existed). VerseCard surfaces a footnote + a toggle to the
+   *  original `translation.en`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
 }
 
 /** Wire shape of a citation transcript snippet — carried by an `action`
@@ -222,6 +226,12 @@ export interface CiteTranscriptPayload {
   readonly start_ms: number
   readonly end_ms: number
   readonly text: string
+  /** True when `text` is a machine translation into the answer language.
+   *  CitationCard surfaces a footnote + a toggle to `text_original`.
+   *  Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** Verbatim source-language transcript, present only when `mt` is true. */
+  readonly text_original?: string
 }
 
 /** Wire shape of a chapter-location region — carried by an `action`
@@ -249,6 +259,13 @@ export interface MediaPayload {
   readonly title: string
   readonly speaker?: string
   readonly text: string
+  /** True when `text` is a machine translation into the answer language.
+   *  MediaCard surfaces a footnote + a toggle to `textOriginal`.
+   *  Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** Verbatim source-language transcript, present only when `mt` is true.
+   *  Decoded from the wire's `text_original`. */
+  readonly textOriginal?: string
 }
 
 /** Wire shape of the alias map emitted by the agent. Keys are integer
@@ -277,7 +294,7 @@ export interface AliasMapPayload {
  */
 export async function fetchSessionTitle(
   messages: readonly ChatTurn[],
-  lang: "ru" | "en",
+  lang: string,
   opts: {
     request: ChatRequest
     getAccessToken: AccessTokenProvider
@@ -344,7 +361,7 @@ export interface QuestionsFocusInput {
  */
 export async function fetchSuggestedQuestions(
   focus: QuestionsFocusInput,
-  lang: "ru" | "en",
+  lang: string,
   opts: {
     request: ChatRequest
     getAccessToken: AccessTokenProvider
@@ -495,6 +512,9 @@ export interface StreamChatRequestInit {
    *  and trace identity one and the same — a later /chat/feedback
    *  POST referencing this id lands the score on the right trace. */
   readonly assistantMessageId?: string
+  /** Forwarded as the wire `translate_citations` flag. When true the
+   *  server may machine-translate verbatim citations into `lang`. */
+  readonly translateCitations?: boolean
 }
 
 /* -------------------------------------------------------------------------- */
@@ -512,7 +532,7 @@ export interface StreamChatRequestInit {
  */
 export async function* streamChat(
   messages: readonly ChatTurn[],
-  lang: "ru" | "en",
+  lang: string,
   opts: StreamChatRequestInit
 ): AsyncGenerator<ChatStreamEvent, void, void> {
   const token = await resolveAccessToken(opts.getAccessToken)
@@ -752,7 +772,7 @@ export async function* streamChat(
 
 function buildRequestBody(
   messages: readonly ChatTurn[],
-  lang: "ru" | "en",
+  lang: string,
   opts: StreamChatRequestInit
 ): Record<string, unknown> {
   // Wire-format messages: server's ChatMessageDto expects `aliases`
@@ -776,6 +796,9 @@ function buildRequestBody(
     return out
   })
   const body: Record<string, unknown> = { messages: wireMessages, lang }
+  // Only emit the flag when the caller opted in — keeps the body identical
+  // to the pre-feature shape (and the server default) when it's off.
+  if (opts.translateCitations) body.translate_citations = true
   if (opts.sessionId !== undefined) body.session_id = opts.sessionId
   if (opts.sessionTitle !== undefined) body.session_title = opts.sessionTitle
   if (opts.userContext !== undefined) body.user_context = opts.userContext
@@ -1068,6 +1091,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
     }
   }
   const audioUrl = typeof p.audio_url === "string" && p.audio_url ? p.audio_url : undefined
+  const mt = p.mt === true
   return {
     source_id: sourceId,
     tokens,
@@ -1076,6 +1100,7 @@ function parseVersePayload(p: Record<string, unknown>): VersePayload | null {
     transliteration,
     translation,
     ...(audioUrl ? { audio_url: audioUrl } : {}),
+    ...(mt ? { mt: true } : {}),
   }
 }
 
@@ -1087,7 +1112,19 @@ function parseCiteTranscriptPayload(p: Record<string, unknown>): CiteTranscriptP
   // Empty text is useless — the card would fall back to the chip anyway,
   // so drop the event rather than caching a blank snippet.
   if (!trackId || startMs === null || endMs === null || !text) return null
-  return { track_id: trackId, start_ms: startMs, end_ms: endMs, text }
+  const mt = p.mt === true
+  const textOriginal =
+    mt && typeof p.text_original === "string" && p.text_original.trim()
+      ? p.text_original.trim()
+      : undefined
+  return {
+    track_id: trackId,
+    start_ms: startMs,
+    end_ms: endMs,
+    text,
+    ...(mt ? { mt: true } : {}),
+    ...(textOriginal ? { text_original: textOriginal } : {}),
+  }
 }
 
 function parseChapterPayload(p: Record<string, unknown>): ChapterPayload | null {
@@ -1127,7 +1164,21 @@ function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
   const title = typeof p.title === "string" ? p.title : ""
   const text = typeof p.text === "string" ? p.text : ""
   const speaker = typeof p.speaker === "string" && p.speaker ? p.speaker : undefined
-  return { id, url, type, title, text, ...(speaker ? { speaker } : {}) }
+  const mt = p.mt === true
+  const textOriginal =
+    mt && typeof p.text_original === "string" && p.text_original.trim()
+      ? p.text_original.trim()
+      : undefined
+  return {
+    id,
+    url,
+    type,
+    title,
+    text,
+    ...(speaker ? { speaker } : {}),
+    ...(mt ? { mt: true } : {}),
+    ...(textOriginal ? { textOriginal } : {}),
+  }
 }
 
 function parseOutlinePayload(p: Record<string, unknown>): OutlinePayload | null {

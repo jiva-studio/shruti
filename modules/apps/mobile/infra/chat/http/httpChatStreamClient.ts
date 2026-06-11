@@ -28,7 +28,7 @@ export function createHttpChatStreamClient(deps: HttpChatStreamClientDeps): ICha
   return {
     streamChat(
       turns: readonly ChatTurn[],
-      lang: "ru" | "en",
+      lang: string,
       opts?: StreamChatOptions
     ): AsyncIterable<PortChatStreamEvent> {
       // The chatClient generator's event types are structurally compatible

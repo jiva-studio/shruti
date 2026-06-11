@@ -84,6 +84,13 @@ export interface MediaPayload {
   readonly title: string
   readonly speaker?: string
   readonly text: string
+  /** True when `text` is a machine translation into the answer language.
+   *  `MediaCard.vue` shows a "translated automatically" footnote and lets
+   *  the user toggle to `textOriginal`. Additive — absent ⇒ no badge. */
+  readonly mt?: boolean
+  /** The verbatim source-language transcript, present only when `mt` is
+   *  true so the user can flip back to the original. */
+  readonly textOriginal?: string
 }
 
 /**

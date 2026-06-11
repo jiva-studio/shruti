@@ -26,6 +26,10 @@ export interface VerseBody {
   /** Full public URL of the Sanskrit recitation, when the library has
    *  audio for this verse. Drives the play button on VerseCard. */
   readonly audioUrl?: string
+  /** True when the active-locale `translation` entry is a machine
+   *  translation. VerseCard surfaces a footnote + a toggle to the
+   *  original `translation.en`. Absent on native / en-preferred verses. */
+  readonly mt?: boolean
 }
 
 interface StoredEntry extends VerseBody {
@@ -116,6 +120,7 @@ export const useVerseBodyStore = defineStore("verseBody", () => {
       transliteration: e.transliteration,
       translation: e.translation,
       audioUrl: e.audioUrl,
+      mt: e.mt,
     }
   }
 

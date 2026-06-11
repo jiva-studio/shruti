@@ -13,7 +13,7 @@ export interface FetchSessionTitleOptions {
 export interface IChatTitleService {
   fetchSessionTitle(
     messages: readonly ChatTurn[],
-    lang: "ru" | "en",
+    lang: string,
     opts?: FetchSessionTitleOptions
   ): Promise<string | null>
 }

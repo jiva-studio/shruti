@@ -4,6 +4,22 @@
   </IonListHeader>
   <AppLanguageSettingsItem v-model="appLanguage" :items="languageItems" />
 
+  <!-- Chat answer language + machine-translated-citations toggle. Sit
+       directly under the interface-language picker since they're the
+       chat-specific language controls. The picker's empty value means
+       "follow the interface language". -->
+  <ChatLanguageSettingsItem v-model="chatLanguage" :items="languageItems" />
+
+  <SettingsToggleItem
+    v-model:checked="chatTranslateCitations"
+    :title="$t('settings.chatTranslateCitations.title')"
+    :subtitle="$t('settings.chatTranslateCitations.description')"
+  >
+    <template #icon>
+      <IconChip><LanguageIcon /></IconChip>
+    </template>
+  </SettingsToggleItem>
+
   <!-- Plain appearance toggles use kit's generic SettingsToggleItem shell
        (IonItem + IonLabel + IonToggle). App owns the icon, i18n text and the
        bound store value; kit owns the row markup. -->
@@ -73,9 +89,10 @@
 import { IonLabel, IonListHeader } from "@ionic/vue"
 import { SettingsToggleItem } from "@kit/ui"
 import { IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { ClockIcon, HighlightTextIcon, AnnotationIcon } from "@ui/icons/index.js"
+import { ClockIcon, HighlightTextIcon, AnnotationIcon, LanguageIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 import AppLanguageSettingsItem from "../AppLanguageSettingsItem.vue"
+import ChatLanguageSettingsItem from "../ChatLanguageSettingsItem.vue"
 import TrackInfoSettingsItem from "../TrackInfoSettingsItem.vue"
 import AutomaticScrollSettingsItem from "../AutomaticScrollSettingsItem.vue"
 import AutoPlayNextSettingsItem from "../AutoPlayNextSettingsItem.vue"
@@ -99,6 +116,8 @@ const emit = defineEmits<{
 }>()
 
 const appLanguage = defineModel<string>("appLanguage", { required: true })
+const chatLanguage = defineModel<string>("chatLanguage", { required: true })
+const chatTranslateCitations = defineModel<boolean>("chatTranslateCitations", { required: true })
 const showPlayerProgress = defineModel<boolean>("showPlayerProgress", { required: true })
 const showPlayerOnNotes = defineModel<boolean>("showPlayerOnNotes", { required: true })
 const highlightCurrentSentence = defineModel<boolean>("highlightCurrentSentence", {

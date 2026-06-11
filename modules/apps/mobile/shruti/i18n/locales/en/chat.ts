@@ -27,6 +27,9 @@ export default {
   citationLoadFailed: "Couldn't load the snippet",
   citationAddedToPlaylist: "Added to playlist",
   citationAddFailed: "Couldn't add to playlist",
+  citationMtBadge: "Translated automatically",
+  citationViewOriginal: "view original",
+  citationViewTranslated: "back",
   lectureCardMissing: "Lecture not available in the local catalog.",
   errRate: "Too many requests. Try again in a minute.",
   /** Rate-limit copy with a deadline placeholder. `{when}` is composed by
