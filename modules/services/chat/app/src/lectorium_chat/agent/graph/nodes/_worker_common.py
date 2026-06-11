@@ -229,6 +229,7 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         # with only IAST still renders.
         tr = body["transliteration"]
         transliteration = tr.get(ctx.lang) or tr.get("en") or ""
+        transliteration_iast = tr.get("en") or ""
         translation = dict(body["translation"])
         payload: dict[str, Any] = {
             "source_id": vref.source_id,
@@ -238,6 +239,12 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
             "transliteration": transliteration,
             "translation": translation,
         }
+        # Original IAST (Latin) transliteration, shipped only when the
+        # localised script differs from it — lets the client's "view
+        # original" toggle flip the transliteration together with the
+        # translation back to the source verse form.
+        if transliteration_iast and transliteration_iast != transliteration:
+            payload["transliteration_original"] = transliteration_iast
         # Verse PROSE translation localisation. The transliteration above is
         # a deterministic script conversion (never MT); the `translation` map
         # is natural-language prose. When the turn's lang has no native
