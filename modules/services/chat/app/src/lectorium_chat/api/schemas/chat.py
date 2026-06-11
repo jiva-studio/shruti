@@ -194,6 +194,17 @@ class ChatRequestDto(BaseModel):
     session_id: str | None = None
     session_title: str | None = None
     config: ChatTurnConfigDto | None = None
+    # Client-declared render capabilities (Microsoft-Graph-style: the
+    # client advertises what it can render, the server conditionally
+    # adapts the response). Additive + backward-compatible: an omitted /
+    # empty map means "legacy client" → the server keeps inlining content
+    # it would otherwise ship as a structured card. Current keys:
+    #   "commentary_card" — client renders purport/commentary citations as
+    #   a collapsible card (an `action.kind=commentary` payload + a
+    #   `[commentary:…]` marker) instead of an inline markdown blockquote.
+    # Unknown keys are ignored; do NOT bump X-Chat-Protocol-Version for new
+    # capabilities (that would 426 every deployed client).
+    capabilities: dict[str, bool] = Field(default_factory=dict)
 
 
 def _parse_iso(s: str | None) -> datetime | None:

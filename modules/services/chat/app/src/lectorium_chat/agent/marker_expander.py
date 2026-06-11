@@ -78,7 +78,7 @@ _FOOTNOTE_CATCH_RE = re.compile(r"^\[\^[^\]]*\]$")
 # Any bracket whose first token is NOT one of the six marker keywords
 # doesn't match this and passes through verbatim.
 _KEYWORD_BRACKET_RE = re.compile(
-    r"^\[(?:cite|card|outline|verse|chapter|media|action|followup)[:|]"
+    r"^\[(?:cite|card|outline|verse|chapter|media|commentary|action|followup)[:|]"
 )
 _STRICT_PATTERNS = (
     re.compile(r"^\[cite:[A-Za-z0-9_.-]+@\d+-\d+(?:\|[^\]\n]*)?\]$"),
@@ -87,6 +87,9 @@ _STRICT_PATTERNS = (
     re.compile(r"^\[verse:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[chapter:[A-Za-z0-9_]+/[0-9.,-]+(?:\|[^\]\n]*)?\]$"),
     re.compile(r"^\[media:[A-Za-z0-9_.-]+(?:\|[^\]\n]*)?\]$"),
+    # commentary: just the numeric citation ref — text + meta ride in the
+    # `action` payload (audio-citation shape), nothing else in the marker.
+    re.compile(r"^\[commentary:\d+\]$"),
     re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=[A-Za-z0-9_-]+\]$"),
     re.compile(r"^\[followup:[^\]|\n]+\]$"),
 )
@@ -125,9 +128,23 @@ class MarkerExpander:
         *,
         request_id: str | None = None,
         emitted_action_ids: set[str] | None = None,
+        commentary_as_card: bool = False,
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
+        # When True (client declared the `commentary_card` capability),
+        # `_format_commentary` emits a `[commentary:item/seg|s=…|addr]`
+        # marker — handled exactly like `[verse:…]` (its structured payload
+        # rides ahead via `flush_commentary_payloads`). When False (legacy
+        # clients), it keeps inlining a markdown blockquote. Card mode also
+        # bypasses the same-source blockquote MERGE — each marker is its own
+        # card, and cards stack cleanly without the glued-blockquote problem.
+        self._commentary_as_card = commentary_as_card
+        # Commentary `action` envelopes queued during marker expansion (card
+        # mode), drained by the synthesizer via `take_commentary_actions()`
+        # and written to the SSE stream just before the delta carrying the
+        # `[commentary:N]` marker. Empty in legacy (blockquote) mode.
+        self._pending_commentary_actions: list[dict] = []
         # Action ids that fired as a real `action` SSE event this turn.
         # Shared by reference with `TurnContext.emitted_action_ids`; the
         # worker's `_yield_event` keeps adding to it while the graph runs,
@@ -503,6 +520,13 @@ class MarkerExpander:
         self._emitted.add(n)
 
         if isinstance(ref, CommentaryRef):
+            # Card mode (client declared `commentary_card`): emit a numeric
+            # marker `[commentary:N]` and queue an `action` payload carrying
+            # ONLY the cited sentences + author + reference — exactly the
+            # audio-citation shape (text rides in the SSE action, not the
+            # marker). Legacy clients keep the inline blockquote.
+            if self._commentary_as_card:
+                return self._format_commentary_card(n, ref, sentence_indices)
             return self._format_commentary(ref, sentence_indices)
 
         if isinstance(ref, VerseRef):
@@ -607,6 +631,95 @@ class MarkerExpander:
         self._pending_comm_attribution = attribution
         return self._render_commentary_blockquote(picks, attribution)
 
+    def _format_commentary_card(
+        self,
+        n: int,
+        ref: CommentaryRef,
+        sentence_indices: list[int] | None,
+    ) -> str:
+        """Card-mode counterpart of the blockquote path, modelled on the
+        audio citation: emit a numeric marker `[commentary:N]` and queue an
+        `action` payload carrying ONLY the cited sentences (joined the same
+        way the blockquote joins them) plus author + reference. The
+        synthesizer drains `take_commentary_actions()` and writes the SSE
+        `action` BEFORE the delta that carries this marker, so the client
+        has the payload when it renders the card.
+
+        Selection rules mirror `_format_commentary`: no `|s=…` → first 2
+        sentences; out-of-range indices dropped; none valid → empty (marker
+        disappears, no payload queued)."""
+        shown = ref.sentences_translated or ref.sentences
+        if not sentence_indices:
+            idxs = list(range(min(2, len(shown))))
+        else:
+            idxs = [i for i in sentence_indices if 0 <= i < len(shown)]
+        if not idxs:
+            log.info(
+                "chat_marker_commentary_no_valid_sentences",
+                request_id=self._request_id,
+                requested=sentence_indices,
+                available=len(shown),
+            )
+            return ""
+
+        text = self._join_commentary_picks([(i, shown[i]) for i in idxs])
+        if not text:
+            return ""
+        payload: dict[str, object] = {
+            "ref": n,
+            "author_name": ref.author_name or "",
+            "addr_label": ref.addr_label or "",
+            "kind": ref.kind,
+            "text": text,
+        }
+        # When machine-translated, ship the original (English) of the SAME
+        # picked sentences so the card's original/translation toggle works.
+        if ref.mt and ref.sentences_translated is not None:
+            originals = [(i, ref.sentences[i]) for i in idxs if i < len(ref.sentences)]
+            text_original = self._join_commentary_picks(originals)
+            if text_original and text_original != text:
+                payload["text_original"] = text_original
+                payload["mt"] = True
+        self._pending_commentary_actions.append(
+            {"type": "action", "data": {"kind": "commentary", "id": f"commentary_{n}", "payload": payload}}
+        )
+        return f"[commentary:{n}]"
+
+    def take_commentary_actions(self) -> list[dict]:
+        """Return + clear the commentary `action` envelopes queued since the
+        last call. The synthesizer drains this after each `feed()` / `flush()`
+        and writes them to the SSE stream BEFORE the delta carrying their
+        `[commentary:N]` markers (payload-before-marker invariant)."""
+        if not self._pending_commentary_actions:
+            return []
+        out = self._pending_commentary_actions
+        self._pending_commentary_actions = []
+        return out
+
+    def _join_commentary_picks(self, picks: list[tuple[int, str]]) -> str:
+        """Join selected sentences into one body string. Picks are sorted by
+        index, then grouped into consecutive runs: within a run sentences are
+        adjacent in the source purport so they join with a single space; a
+        gap between runs becomes ` … ` (Unicode ellipsis) to signal the skip.
+        Shared by the inline blockquote and the card payload so both render
+        the same quote text. Returns "" when nothing survives stripping."""
+        cleaned: list[tuple[int, str]] = [
+            (idx, sent.strip())
+            for idx, sent in sorted(picks, key=lambda p: p[0])
+            if sent and sent.strip()
+        ]
+        if not cleaned:
+            return ""
+        runs: list[list[str]] = []
+        prev_idx: int | None = None
+        for idx, sent in cleaned:
+            if prev_idx is None or idx != prev_idx + 1:
+                runs.append([sent])
+            else:
+                runs[-1].append(sent)
+            prev_idx = idx
+        return " … ".join(" ".join(r) for r in runs)
+
     def _render_commentary_blockquote(
         self,
         picks: list[tuple[int, str]],
@@ -638,27 +751,9 @@ class MarkerExpander:
           one leading on the next = `\\n\\n`, which markdown reads as
           end-of-blockquote, start-of-new-blockquote).
         """
-        cleaned: list[tuple[int, str]] = [
-            (idx, sent.strip())
-            for idx, sent in sorted(picks, key=lambda p: p[0])
-            if sent and sent.strip()
-        ]
-        if not cleaned:
+        body_text = self._join_commentary_picks(picks)
+        if not body_text:
             return ""
-
-        # Group consecutive indices into runs. Each run becomes one
-        # joined string; runs themselves get separated by ` … `.
-        runs: list[list[str]] = []
-        prev_idx: int | None = None
-        for idx, sent in cleaned:
-            if prev_idx is None or idx != prev_idx + 1:
-                runs.append([sent])
-            else:
-                runs[-1].append(sent)
-            prev_idx = idx
-
-        run_strings = [" ".join(r) for r in runs]
-        body_text = " … ".join(run_strings)
 
         # Now wrap the joined body in blockquote prefixes. Internal
         # newlines (sanskrit shlokas) get `> ` per line; empty internal

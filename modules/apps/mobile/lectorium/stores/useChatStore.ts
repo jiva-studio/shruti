@@ -20,6 +20,7 @@ import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { useChapterBodyStore } from "@lectorium/stores/useChapterBodyStore.js"
 import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
+import { useCommentaryBodyStore } from "@lectorium/stores/useCommentaryBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import {
@@ -154,6 +155,7 @@ export const useChatStore = defineStore("chat", () => {
   const verseBodyStore = useVerseBodyStore()
   const chapterBodyStore = useChapterBodyStore()
   const citeTranscriptStore = useCiteTranscriptStore()
+  const commentaryBodyStore = useCommentaryBodyStore()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -950,6 +952,21 @@ export const useChatStore = defineStore("chat", () => {
         // `[cite:...]` marker, and a late arrival upgrades the chip
         // reactively. Does NOT touch the message list.
         citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text, {
+          mt: event.mt,
+          textOriginal: event.textOriginal,
+        })
+        return
+      }
+      case "commentary-payload": {
+        // Server-streamed purport / prose-chapter / letter quote for one
+        // `[commentary:N]` marker. Cached (with persistence) so
+        // `CommentaryCard.vue` renders the quote card; arrives BEFORE the
+        // prose delta with the marker. Does NOT touch the message list.
+        commentaryBodyStore.set(event.ref, {
+          text: event.text,
+          authorName: event.authorName,
+          addrLabel: event.addrLabel,
+          commentaryKind: event.commentaryKind,
           mt: event.mt,
           textOriginal: event.textOriginal,
         })

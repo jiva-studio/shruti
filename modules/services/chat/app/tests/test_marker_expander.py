@@ -506,6 +506,73 @@ async def test_s_suffix_on_lecture_alias_is_silently_ignored() -> None:
     assert out == "see [cite:track_X@0-1000] here"
 
 
+# ── Commentary CARD mode (client declared `commentary_card`) ─────────
+
+
+async def test_commentary_card_mode_emits_numeric_marker_and_action() -> None:
+    """With `commentary_as_card`, the expander emits `[commentary:N]` (just
+    the number) and queues an `action` payload carrying ONLY the cited
+    sentences + author + reference — the audio-citation shape. No blockquote
+    text leaks into the delta."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "comm_xyz", 3,
+        addr_label="БГ 2.13",
+        author_name="Прабхупада",
+        sentences=["S0.", "S1.", "S2.", "S3."],
+    )
+    e = MarkerExpander(aliases, commentary_as_card=True)
+    out = await _expand(e, f"prose [^{ref}|s=0,2] tail.")
+    # Marker is the bare number; no quote text in the delta.
+    assert f"[commentary:{ref}]" in out
+    assert "S0." not in out and "S2." not in out and ">" not in out
+    # The quote rides the queued action payload (the SSE body).
+    actions = e.take_commentary_actions()
+    assert len(actions) == 1
+    payload = actions[0]["data"]["payload"]
+    assert actions[0]["data"]["kind"] == "commentary"
+    assert payload["ref"] == ref
+    assert payload["text"] == "S0. … S2."  # only the cited sentences
+    assert payload["author_name"] == "Прабхупада"
+    assert payload["addr_label"] == "БГ 2.13"
+    assert "mt" not in payload  # not translated
+
+
+async def test_commentary_card_mode_ships_original_when_translated() -> None:
+    """When the purport is machine-translated, the action carries the shown
+    (translated) quote as `text` and the verbatim original as
+    `text_original` + `mt: True` — index-aligned to the same picks."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="BG 2.13", author_name="Author",
+        sentences=["Orig zero.", "Orig one.", "Orig two."],
+    )
+    aliases.set_commentary_translation(
+        ref, sentences_translated=("Пер ноль.", "Пер один.", "Пер два."), mt=True
+    )
+    e = MarkerExpander(aliases, commentary_as_card=True)
+    await _expand(e, f"[^{ref}|s=0,2]")
+    payload = e.take_commentary_actions()[0]["data"]["payload"]
+    assert payload["text"] == "Пер ноль. … Пер два."
+    assert payload["text_original"] == "Orig zero. … Orig two."
+    assert payload["mt"] is True
+
+
+async def test_commentary_card_mode_off_keeps_blockquote_no_action() -> None:
+    """Default (no capability) is byte-identical to before: inline
+    blockquote, no queued action."""
+    aliases = TurnAliasMap()
+    ref = aliases.alias_commentary(
+        "c", 0, addr_label="BG 2.13", author_name="Author",
+        sentences=["S0.", "S1."],
+    )
+    e = MarkerExpander(aliases)  # card mode off
+    out = await _expand(e, f"[^{ref}|s=0,1]")
+    assert "> S0. S1." in out
+    assert "[commentary:" not in out
+    assert e.take_commentary_actions() == []
+
+
 # ── Adjacent commentary blockquotes — merge or separate ──────────────
 
 

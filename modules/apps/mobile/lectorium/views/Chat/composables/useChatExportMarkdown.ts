@@ -2,6 +2,7 @@ import { computed, onMounted, type ComputedRef } from "vue"
 import { messageToMarkdown, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
 import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
+import { useCommentaryBodyStore } from "@lectorium/stores/useCommentaryBodyStore.js"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import { useCitationMetadata } from "../composables/useCitationMetadata.js"
 
@@ -17,6 +18,7 @@ export function useChatExportMarkdown(
 ): { exportMarkdown: ComputedRef<string>; citeTrackIds: ComputedRef<string[]> } {
   const verseBody = useVerseBodyStore()
   const citeTranscript = useCiteTranscriptStore()
+  const commentaryBody = useCommentaryBodyStore()
 
   /** Unique track ids of the cites in this message — drives the async
    *  metadata resolution feeding the copy/share export. */
@@ -46,13 +48,19 @@ export function useChatExportMarkdown(
         if (!text) return null
         return { text, ...(citeMeta.value.get(trackId) ?? {}) }
       },
+      commentaryLookup: (ref) => {
+        const entry = commentaryBody.get(ref)
+        if (!entry) return null
+        return { text: entry.text, authorName: entry.authorName, addrLabel: entry.addrLabel }
+      },
     })
   })
 
   onMounted(() => {
-    // Hydrate the transcript cache so the copy/share export can expand
-    // cites in reopened history (the snippet text source for citeLookup).
+    // Hydrate the transcript + commentary caches so the copy/share export
+    // can expand cites and purports in reopened history.
     void citeTranscript.hydrate()
+    void commentaryBody.hydrate()
   })
 
   return { exportMarkdown, citeTrackIds }

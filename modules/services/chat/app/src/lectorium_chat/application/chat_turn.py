@@ -184,6 +184,7 @@ async def run_chat_turn(
     *,
     lang: str = "en",
     translate_citations: bool = False,
+    capabilities: dict[str, bool] | None = None,
     request_id: str | None = None,
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
@@ -303,10 +304,15 @@ async def run_chat_turn(
         # and the expander reads it to drop hallucinated (never-emitted)
         # `[action:...|id=X]` markers before they reach the client.
         emitted_action_ids: set[str] = set()
+        caps = capabilities or {}
         expander = MarkerExpander(
             aliases,
             request_id=request_id,
             emitted_action_ids=emitted_action_ids,
+            # When the client can render commentary cards, the expander
+            # emits a `[commentary:…]` marker (paired with an action
+            # payload) instead of inlining a markdown blockquote.
+            commentary_as_card=bool(caps.get("commentary_card")),
         )
 
         # Speculative embed: most non-trivial intents (research,
@@ -328,6 +334,7 @@ async def run_chat_turn(
             request_id=trace_id,
             lang=lang,
             translate_citations=translate_citations,
+            capabilities=caps,
             # `getattr` tolerates test doubles that predate this field.
             translator=getattr(deps, "translation_service", None),
             region=region,
