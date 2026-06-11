@@ -183,14 +183,23 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 /* Library document citation — styled blockquote rendered between text
  * tokens. */
 .chat-quote {
+  position: relative;
   display: block;
   margin: 8px 0;
   padding: 6px 12px;
-  border-left: 3px solid var(--ion-color-primary);
   background: rgba(var(--ion-color-primary-rgb), 0.06);
   border-radius: 4px;
   color: inherit;
   line-height: 1.4;
+}
+.chat-quote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  background: var(--ion-color-primary);
 }
 .chat-quote-attribution {
   display: block;
