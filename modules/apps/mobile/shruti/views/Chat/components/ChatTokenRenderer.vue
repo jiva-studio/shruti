@@ -76,14 +76,16 @@
       attributionHtml are output of marked.parseInline on a vetted text
       snippet, same v-html note as for token.kind === 'text'.
     -->
-    <blockquote v-else-if="token.kind === 'quote'" class="chat-quote">
-      <span v-html="token.bodyHtml" />
-      <span
-        v-if="token.attributionHtml"
-        class="chat-quote-attribution"
-        v-html="token.attributionHtml"
-      />
-    </blockquote>
+    <AccentFrame v-else-if="token.kind === 'quote'" class="chat-quote">
+      <div class="chat-quote-body">
+        <span v-html="token.bodyHtml" />
+        <span
+          v-if="token.attributionHtml"
+          class="chat-quote-attribution"
+          v-html="token.attributionHtml"
+        />
+      </div>
+    </AccentFrame>
   </template>
 </template>
 
@@ -93,6 +95,7 @@ import router from "@shruti/router/index.js"
 import { parseChatMarkers } from "@shruti/composables/chatMarkers.js"
 import { useChatStore, type ActionState, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
+import AccentFrame from "./AccentFrame.vue"
 import CitationCard from "./CitationCard.vue"
 import TrackList from "./TrackList.vue"
 import OutlineCard from "./OutlineCard.vue"
@@ -183,14 +186,12 @@ async function onConfirmAction(actionId: string, override?: { time?: string }): 
 /* Library document citation — styled blockquote rendered between text
  * tokens. */
 .chat-quote {
-  display: block;
   margin: 8px 0;
-  padding: 6px 12px;
-  border-left: 3px solid var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
-  border-radius: 4px;
   color: inherit;
   line-height: 1.4;
+}
+.chat-quote-body {
+  padding: 6px 12px;
 }
 .chat-quote-attribution {
   display: block;
