@@ -9,6 +9,7 @@ export { default as AppLanguageSettingsItem } from "./AppLanguageSettingsItem.vu
 export { default as ServerSettingsItem } from "./ServerSettingsItem.vue"
 export { default as LogsDialog } from "./LogsDialog.vue"
 export { default as SettingsAppearanceGroup } from "./groups/SettingsAppearanceGroup.vue"
+export { default as SettingsChatGroup } from "./groups/SettingsChatGroup.vue"
 export { default as SettingsDebugGroup } from "./groups/SettingsDebugGroup.vue"
 export { default as SettingsDataGroup } from "./groups/SettingsDataGroup.vue"
 export { default as SettingsHelpGroup } from "./groups/SettingsHelpGroup.vue"

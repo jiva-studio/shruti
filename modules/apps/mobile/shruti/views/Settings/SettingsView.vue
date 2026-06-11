@@ -18,8 +18,6 @@
 
     <SettingsAppearanceGroup
       v-model:app-language="appLanguage"
-      v-model:chat-language="chatLanguage"
-      v-model:chat-translate-citations="chatTranslateCitations"
       v-model:show-player-progress="showPlayerProgress"
       v-model:show-player-on-notes="showPlayerOnNotes"
       v-model:highlight-current-sentence="highlightCurrentSentence"
@@ -30,6 +28,12 @@
       :is-subscribed="subscription.isSubscribed"
       @request-paywall="paywall.requestOpen($event)"
       @open-track-info="trackInfoOpen = true"
+    />
+
+    <SettingsChatGroup
+      v-model:chat-language="chatLanguage"
+      v-model:chat-translate-citations="chatTranslateCitations"
+      :language-items="languageItems"
     />
 
     <TrackInfoDialog
@@ -112,6 +116,7 @@ import {
   LogsDialog,
   SettingsAccountGroup,
   SettingsAppearanceGroup,
+  SettingsChatGroup,
   SettingsContactsGroup,
   SettingsDataGroup,
   SettingsDebugGroup,

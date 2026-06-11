@@ -6,7 +6,7 @@
     @activate="open = true"
   >
     <template #icon>
-      <IconChip><LanguageIcon /></IconChip>
+      <IconChip><MessageIcon /></IconChip>
     </template>
   </SettingsSelectItem>
 
@@ -27,7 +27,7 @@
 import { ref } from "vue"
 import { SettingsSelectItem } from "@kit/ui"
 import { ListItemSelectorDialog } from "@ui/components/selectors/index.js"
-import { LanguageIcon } from "@ui/icons/index.js"
+import { MessageIcon } from "@ui/icons/index.js"
 import { IconChip } from "@ui/primitives/index.js"
 
 /* -------------------------------------------------------------------------- */
