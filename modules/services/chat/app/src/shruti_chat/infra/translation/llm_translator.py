@@ -17,6 +17,7 @@ conversion in `sanskrit/`, not a translation.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from shruti_chat.application.cache_helpers import TTL_30D, cached_str
@@ -63,11 +64,22 @@ class LlmTranslationService:
         model: str,                     # settings.llm_translate
         pg_cache: PgTranslationCache,
         kv_cache: Any | None = None,    # KVCache (Redis hot tier)
+        max_concurrency: int = 6,
+        max_retries: int = 2,
     ) -> None:
         self._llm = llm
         self._model = model
         self._pg = pg_cache
         self._kv = kv_cache
+        self._max_concurrency = max_concurrency
+        self._max_retries = max_retries
+        self._sem: asyncio.Semaphore | None = None
+
+    def _semaphore(self) -> asyncio.Semaphore:
+        # Lazy so the Semaphore binds to the running loop, not import time.
+        if self._sem is None:
+            self._sem = asyncio.Semaphore(self._max_concurrency)
+        return self._sem
 
     async def translate(self, text: str, *, src_lang: str, tgt_lang: str) -> str:
         src = (text or "").strip()
@@ -117,7 +129,11 @@ class LlmTranslationService:
         if hit is not None:
             return hit
 
-        out = await self._llm_translate(src, cache_lang)
+        # Cap how many live translations hit OpenRouter at once — a research
+        # turn can mint 30+ citations, and firing them all in parallel trips
+        # provider rate limits, which surfaced as untranslated citations.
+        async with self._semaphore():
+            out = await self._llm_translate(src, cache_lang)
         try:
             await self._pg.put(
                 source_text=src, language=cache_lang,
@@ -139,17 +155,26 @@ class LlmTranslationService:
                 ),
             },
         ]
-        try:
-            parts: list[str] = []
-            async for chunk in self._llm.stream_completion(
-                messages, model=self._model, temperature=0.0,
-                run_name="citation_translate",
-            ):
-                t = chunk.get("text")
-                if t:
-                    parts.append(t)
-            out = "".join(parts).strip()
-            return out or src
-        except Exception as exc:  # noqa: BLE001 — never fail a turn on translation
-            log.warning("translation_llm_failed", error=str(exc), lang=cache_lang)
-            return src
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                parts: list[str] = []
+                async for chunk in self._llm.stream_completion(
+                    messages, model=self._model, temperature=0.0,
+                    run_name="citation_translate",
+                ):
+                    t = chunk.get("text")
+                    if t:
+                        parts.append(t)
+                out = "".join(parts).strip()
+                if out:
+                    return out
+            except Exception as exc:  # noqa: BLE001 — never fail a turn on translation
+                last_exc = exc
+            if attempt < self._max_retries:
+                await asyncio.sleep(0.5 * (2 ** attempt))
+        log.warning(
+            "translation_llm_failed",
+            error=str(last_exc) if last_exc else "empty_output", lang=cache_lang,
+        )
+        return src
