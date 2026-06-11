@@ -182,6 +182,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         settings.llm_query_planner,
         settings.llm_synthesis_planner,
         settings.llm_conclusion_writer,
+        settings.llm_translate,
         # Curated known-good ids. This is now a HINT, not a gate: a model
         # outside this set is still used (with a loud warning) so changing a
         # model in Langfuse prompt-config doesn't need a code deploy. Listing

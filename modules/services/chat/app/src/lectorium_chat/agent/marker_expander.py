@@ -549,7 +549,10 @@ class MarkerExpander:
         requested indices resolve to a real sentence, return empty
         (marker effectively disappears — preferable to a fake quote).
         """
-        sents = ref.sentences
+        # Prefer the per-sentence MT translation when the worker filled it
+        # (translate_citations on, no native variant); otherwise the verbatim
+        # source sentences. Index-aligned, so `[^N|s=…]` picks still resolve.
+        sents = ref.sentences_translated or ref.sentences
         if not sents:
             return ""
 

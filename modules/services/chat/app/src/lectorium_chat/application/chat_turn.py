@@ -183,6 +183,7 @@ async def run_chat_turn(
     history: list[dict[str, Any]],
     *,
     lang: str = "en",
+    translate_citations: bool = False,
     request_id: str | None = None,
     user_context: UserContext | None = None,
     is_disconnected: Callable[[], Awaitable[bool]] | None = None,
@@ -326,6 +327,9 @@ async def run_chat_turn(
         ctx = TurnContext(
             request_id=trace_id,
             lang=lang,
+            translate_citations=translate_citations,
+            # `getattr` tolerates test doubles that predate this field.
+            translator=getattr(deps, "translation_service", None),
             region=region,
             langfuse_trace_id=langfuse_trace_id,
             aliases=aliases,

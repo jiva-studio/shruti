@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     # 2-3 sentence closing paragraph from a list of theses. Fires only
     # when synthesis_planner skipped conclusion on a 3+ thesis answer.
     llm_conclusion_writer: str = "openrouter/google/gemini-3.1-flash-lite"
+    # Citation translator (opt-in `translate_citations`). Translates verbatim
+    # corpus prose (transcript / verse translation / commentary / media) into
+    # the answer language when no native variant exists. Gemini Flash is
+    # multilingual, cheap, and already vetted; the model is part of the
+    # persistent-cache key, so swapping it via env (e.g. to Claude for
+    # Serbian) mints fresh rows without touching old ones. NOT deepseek.
+    llm_translate: str = "openrouter/google/gemini-2.5-flash"
 
     # ── Embedder ────────────────────────────────────────────────────────
     # Provider routes to the right credential block / base_url.

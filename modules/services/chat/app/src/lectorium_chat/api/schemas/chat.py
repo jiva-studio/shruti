@@ -171,9 +171,18 @@ class ChatTurnConfigDto(BaseModel):
 
 class ChatRequestDto(BaseModel):
     messages: list[ChatMessageDto] = Field(min_length=1, max_length=20)
-    # Default to the product's primary language. A request that omits `lang`
-    # gets English retrieval + answer; clients send the UI locale explicitly.
-    lang: Literal["ru", "en"] = "en"
+    # Opaque locale code (e.g. "ru", "en", "uk", "sr-Latn", "sr-Cyrl"). The
+    # backend does NOT hardcode the language set: `lang` drives the answer
+    # prose / planner directly, and whether a corpus language exists for it
+    # is decided from `distinct_langs()` at retrieval time (see
+    # research.pipeline). A request that omits `lang` gets English.
+    lang: str = "en"
+    # When true, verbatim citations (transcripts, verse translations,
+    # commentary, media, chapter titles) with no native variant in `lang`
+    # are LLM-translated into `lang` and shipped as a (shown, original, mt)
+    # pair. Default off → such citations fall back to English (en-preferred),
+    # never machine-translated.
+    translate_citations: bool = False
     user_context: UserContextDto | None = None
     proactive: ProactiveRequestDto | None = None
     # Client-managed chat session — groups turns of the same conversation

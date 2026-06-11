@@ -47,6 +47,15 @@ NAMESPACE_DEPS: dict[str, tuple[str, ...]] = {
     "pg_window":       ("library",),
     "track_meta":      ("catalog",),
     "author_names":    ("catalog",),
+    # Distinct corpus languages (SELECT DISTINCT lang FROM chunks). Bumped
+    # whenever library rows reload — a reindex that adds a new language must
+    # invalidate the cached set.
+    "corpus_langs":    ("library",),
+    # Persistent-cache-fronting Redis hot cache for MT-translated citation
+    # text. Depends on both the translator model (`llm`) and the corpus
+    # snapshot (`library`) — a reindex or model swap must not serve stale
+    # translations.
+    "translated_chunk": ("llm", "library"),
 }
 
 

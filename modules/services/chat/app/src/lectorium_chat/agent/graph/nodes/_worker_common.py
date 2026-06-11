@@ -18,6 +18,7 @@ runs; toolset is parameterised.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Awaitable, Callable, Iterable
 
 from langgraph.config import get_stream_writer
@@ -140,6 +141,53 @@ def anchor_block(state: ChatState) -> str:
     return "\n".join(lines) + "\n"
 
 
+async def localize_citation(
+    ctx: TurnContext,
+    *,
+    variants: dict[str, str],
+    source_text: str,
+    src_lang: str | None,
+) -> tuple[str, str | None, bool]:
+    """Resolve the citation text to SHOW in the turn's answer language.
+
+    Three branches (additive, backward-compatible defaults):
+      1. NATIVE — `variants` already has `ctx.lang`: show it, no MT.
+         → (native_text, None, mt=False)
+      2. TRANSLATE — opted in (`ctx.translate_citations`) and a translator
+         is present: machine-translate `source_text` into `ctx.lang`.
+         → (translated, source_text, mt=True)
+      3. EN-PREFERRED — otherwise: English variant, else the source.
+         → (variants["en"] or source_text, None, mt=False)
+
+    `variants` maps lang→text (e.g. verse `translation`); `source_text` is
+    the best available original (a non-empty string). Never raises — on a
+    translator failure the service itself falls back to the source text.
+    """
+    native = variants.get(ctx.lang)
+    if native:
+        return native, None, False
+    if ctx.translate_citations and ctx.translator is not None and source_text:
+        try:
+            translated = await ctx.translator.translate(
+                source_text,
+                src_lang=src_lang or "en",
+                tgt_lang=ctx.lang,
+            )
+        except Exception as exc:  # noqa: BLE001 — citation never fails the turn
+            log.warning(
+                "citation_translate_failed",
+                request_id=ctx.request_id,
+                error=str(exc),
+            )
+            translated = source_text
+        # Only mark as MT when the text actually changed — a same-language
+        # no-op (translator returns the source) shouldn't show the badge.
+        if translated and translated != source_text:
+            return translated, source_text, True
+        return source_text, None, False
+    return variants.get("en") or source_text, None, False
+
+
 async def flush_verse_payloads(ctx: TurnContext) -> None:
     """Emit `action.kind=verse` events for every verse alias minted
     on this turn that hasn't been emitted yet — ordering invariant
@@ -181,14 +229,35 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         # with only IAST still renders.
         tr = body["transliteration"]
         transliteration = tr.get(ctx.lang) or tr.get("en") or ""
+        translation = dict(body["translation"])
         payload: dict[str, Any] = {
             "source_id": vref.source_id,
             "tokens": vref.tokens,
             "addr_label": vref.addr_label or "",
             "sanskrit": body["sanskrit"],
             "transliteration": transliteration,
-            "translation": body["translation"],
+            "translation": translation,
         }
+        # Verse PROSE translation localisation. The transliteration above is
+        # a deterministic script conversion (never MT); the `translation` map
+        # is natural-language prose. When the turn's lang has no native
+        # variant and MT is on, add a translated entry under `ctx.lang` and
+        # record the original lang. `translation` stays a multilingual map
+        # (the client reads `translation.en` as the original), so no separate
+        # `text_original` is needed — only the `mt` flag.
+        if ctx.lang not in translation:
+            # Pick a non-empty source variant (en-preferred) to translate.
+            orig_lang = "en" if translation.get("en") else next(
+                (lng for lng, t in translation.items() if t), None
+            )
+            source = translation.get(orig_lang or "", "")
+            shown, _orig, mt = await localize_citation(
+                ctx, variants=translation, source_text=source, src_lang=orig_lang,
+            )
+            if mt:
+                translation[ctx.lang] = shown
+                payload["mt"] = True
+                payload["translation_original_lang"] = orig_lang
         # Expand the stored relative S3 key into a full public URL so the
         # client gets a ready-to-play link (same pattern as track PDFs).
         # Omitted entirely when the verse has no recitation.
@@ -225,21 +294,40 @@ async def flush_chapter_payloads(ctx: TurnContext) -> None:
         ctx.emitted_chapter_refs.add(ref_num)
         if not isinstance(cref, ChapterRef):
             continue
+        # Chapter titles are already resolved en-preferred (fetch_titles does
+        # a lang→en→any fallback), so the default behaviour needs no change.
+        # When MT is opted in, translate each title into the answer language
+        # and carry the original on `title_original` per chapter. The
+        # translator's same-language guard + cache make a no-op (title already
+        # in ctx.lang) cheap and mt-free.
+        chapters_out: list[dict[str, Any]] = []
+        chapter_mt = False
+        for tok, title in cref.chapters:
+            entry: dict[str, Any] = {"tokens": tok, "title": title}
+            if title and ctx.translate_citations and ctx.translator is not None:
+                shown, original, mt = await localize_citation(
+                    ctx, variants={}, source_text=title, src_lang=None,
+                )
+                if mt:
+                    entry["title"] = shown
+                    entry["title_original"] = original
+                    chapter_mt = True
+            chapters_out.append(entry)
+        payload: dict[str, Any] = {
+            "source_id": cref.source_id,
+            "region_token": cref.region_token,
+            "region_label": cref.region_label,
+            "chapters": chapters_out,
+        }
+        if chapter_mt:
+            payload["mt"] = True
         writer(
             {
                 "type": "action",
                 "data": {
                     "kind": "chapter",
                     "id": f"chapter_{cref.source_id}_{cref.region_token}",
-                    "payload": {
-                        "source_id": cref.source_id,
-                        "region_token": cref.region_token,
-                        "region_label": cref.region_label,
-                        "chapters": [
-                            {"tokens": tok, "title": title}
-                            for tok, title in cref.chapters
-                        ],
-                    },
+                    "payload": payload,
                 },
             }
         )
@@ -289,6 +377,19 @@ async def flush_media_payloads(ctx: TurnContext) -> None:
             "title": mref.label,
             "text": mref.text,
         }
+        # Media-clip text localisation. Native when the clip's language is
+        # the answer language; otherwise translate-if-opted-in (with the
+        # original on `text_original`), else show the source verbatim.
+        media_lang = mref.lang or row.get("lang") or None
+        if mref.text and media_lang and media_lang != ctx.lang:
+            shown, original, mt = await localize_citation(
+                ctx, variants={media_lang: mref.text},
+                source_text=mref.text, src_lang=media_lang,
+            )
+            if mt:
+                payload["text"] = shown
+                payload["text_original"] = original
+                payload["mt"] = True
         speaker = (row["meta"] or {}).get("speaker")
         if speaker:
             payload["speaker"] = speaker
@@ -374,21 +475,86 @@ async def flush_cite_payloads(ctx: TurnContext) -> None:
         if not text:
             continue
         ctx.emitted_cite_refs.add(ref_num)
+        payload: dict[str, Any] = {
+            "track_id": cref.track_id,
+            "start_ms": cref.start_ms,
+            "end_ms": cref.end_ms,
+            "text": text,
+        }
+        # Transcript localisation. A fragment is "native" when its language
+        # matches the answer language; otherwise translate-if-opted-in,
+        # else show the (English / source) transcript verbatim. There is no
+        # per-lang transcript map — the only original is `text` in `cref.lang`.
+        if cref.lang and cref.lang != ctx.lang:
+            shown, original, mt = await localize_citation(
+                ctx, variants={cref.lang: text}, source_text=text, src_lang=cref.lang,
+            )
+            if mt:
+                payload["text"] = shown
+                payload["text_original"] = original
+                payload["mt"] = True
         writer(
             {
                 "type": "action",
                 "data": {
                     "kind": "cite_transcript",
                     "id": f"cite_{cref.track_id}_{cref.start_ms}_{cref.end_ms}",
-                    "payload": {
-                        "track_id": cref.track_id,
-                        "start_ms": cref.start_ms,
-                        "end_ms": cref.end_ms,
-                        "text": text,
-                    },
+                    "payload": payload,
                 },
             }
         )
+
+
+async def translate_commentaries(ctx: TurnContext) -> None:
+    """Pre-translate inline-commentary purport sentences before the
+    synthesizer streams `[^N|s=…]` markers.
+
+    `marker_expander._format_commentary` runs synchronously inside the
+    delta stream and has no ctx / translator handle, so the translation
+    must be ready on the alias BEFORE streaming. We translate each
+    commentary's sentences concurrently in the worker and stash the result
+    on the ref via `set_commentary_translation`; the expander then renders
+    `sentences_translated or sentences`. No-op unless MT is opted in.
+    """
+    if (
+        ctx.aliases is None
+        or not ctx.translate_citations
+        or ctx.translator is None
+    ):
+        return
+
+    async def _one(n: int, sentences: tuple[str, ...]) -> None:
+        if not sentences:
+            return
+        # Translate the joined block once (preserves sentence boundaries far
+        # better than per-sentence calls) then re-split on the same count.
+        joined = "\n".join(sentences)
+        try:
+            translated = await ctx.translator.translate(
+                joined, src_lang="en", tgt_lang=ctx.lang,
+            )
+        except Exception as exc:  # noqa: BLE001 — citation never fails the turn
+            log.warning(
+                "commentary_translate_failed",
+                request_id=ctx.request_id, ref=n, error=str(exc),
+            )
+            return
+        if not translated or translated == joined:
+            return
+        parts = translated.split("\n")
+        # Keep index alignment with `sentences` so `[^N|s=…]` picks resolve.
+        # If the model collapsed/added newlines, fall back to the source
+        # rather than mis-aligning sentence indices.
+        if len(parts) != len(sentences):
+            return
+        ctx.aliases.set_commentary_translation(
+            n, sentences_translated=tuple(parts), mt=True,
+        )
+
+    targets = ctx.aliases.commentary_refs()
+    if not targets:
+        return
+    await asyncio.gather(*(_one(n, ref.sentences) for n, ref in targets))
 
 
 async def run_worker(
@@ -477,7 +643,16 @@ async def run_worker(
         run_name=role,
     )
 
-    await flush_verse_payloads(ctx)
-    await flush_media_payloads(ctx)
-    await flush_cite_payloads(ctx)
+    # Pre-translate inline-commentary purports (if opted in) concurrently
+    # with the citation-payload flushes — the translation latency overlaps,
+    # and the flush ordering invariant (action emitted BEFORE its marker) is
+    # preserved because every flush completes before run_worker returns and
+    # the synthesizer streams. Each flush itself may translate verse / cite /
+    # media text; running them concurrently overlaps those calls too.
+    await asyncio.gather(
+        flush_verse_payloads(ctx),
+        flush_media_payloads(ctx),
+        flush_cite_payloads(ctx),
+        translate_commentaries(ctx),
+    )
     return result

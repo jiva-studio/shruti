@@ -20,7 +20,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, TypedDict
 
-from lectorium_chat.sanskrit import iast_to_cyrillic
+from lectorium_chat.sanskrit import iast_to_ru, iast_to_sr, iast_to_uk
 
 
 # Imported titles carry stray `\r\n` inside the heading text (gitabase
@@ -35,9 +35,9 @@ def _clean_title(s: str | None) -> str:
 
 class VerseBody(TypedDict):
     sanskrit: str
-    # lang → transliteration. `en` is the clean Latin IAST stored in
-    # library.db (the source of truth); `ru` is DERIVED from it on read
-    # via `iast_to_cyrillic` (Russian Vaiṣṇava Cyrillic). The SSE layer
+    # lang → transliteration. `en`/`sr-Latn` are the clean Latin IAST stored
+    # in library.db (the source of truth); `ru`/`uk`/`sr-Cyrl` are DERIVED
+    # from it on read via the per-language transliterators. The SSE layer
     # picks one string by the turn's locale — see `_worker_common`.
     transliteration: dict[str, str]
     translation: dict[str, str]  # lang → translation text
@@ -79,9 +79,17 @@ def _fetch_verse_body_sync(library_db: Path, source_id: str, tokens: str) -> Ver
     iast = transliteration or ""
     return VerseBody(
         sanskrit=sanskrit or "",
-        # `en` = the as-is IAST; `ru` = derived Cyrillic. Empty IAST
-        # yields empty strings for both (no spurious card content).
-        transliteration={"en": iast, "ru": iast_to_cyrillic(iast)} if iast else {},
+        # `en`/`sr-Latn` = the as-is Latin IAST; `ru`/`uk`/`sr-Cyrl` =
+        # derived per-language Cyrillic. Empty IAST yields an empty map
+        # (no spurious card content). Sanskrit is transliterated, never
+        # LLM-translated — these are deterministic script conversions.
+        transliteration={
+            "en": iast,
+            "ru": iast_to_ru(iast),
+            "uk": iast_to_uk(iast),
+            "sr-Latn": iast,
+            "sr-Cyrl": iast_to_sr(iast),
+        } if iast else {},
         translation={lang: text or "" for lang, text in translations_rows},
         audio_path=audio_path or "",
     )
