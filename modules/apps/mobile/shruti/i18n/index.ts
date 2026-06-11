@@ -85,7 +85,160 @@ import srCyrlStudio from "./locales/sr-Cyrl/studio.js"
 import srCyrlTranscript from "./locales/sr-Cyrl/transcript.js"
 import srCyrlWelcome from "./locales/sr-Cyrl/welcome.js"
 
-export const SUPPORTED_LOCALES = ["en", "ru", "uk", "sr-Latn", "sr-Cyrl"] as const
+import esActivity from "./locales/es/activity.js"
+import esApp from "./locales/es/app.js"
+import esChat from "./locales/es/chat.js"
+import esErrors from "./locales/es/errors.js"
+import esHelp from "./locales/es/help.js"
+import esHome from "./locales/es/home.js"
+import esLibrary from "./locales/es/library.js"
+import esNotes from "./locales/es/notes.js"
+import esNotifications from "./locales/es/notifications.js"
+import esPlayer from "./locales/es/player.js"
+import esSearch from "./locales/es/search.js"
+import esSettings from "./locales/es/settings.js"
+import esShare from "./locales/es/share.js"
+import esStudio from "./locales/es/studio.js"
+import esTranscript from "./locales/es/transcript.js"
+import esWelcome from "./locales/es/welcome.js"
+
+import ptActivity from "./locales/pt/activity.js"
+import ptApp from "./locales/pt/app.js"
+import ptChat from "./locales/pt/chat.js"
+import ptErrors from "./locales/pt/errors.js"
+import ptHelp from "./locales/pt/help.js"
+import ptHome from "./locales/pt/home.js"
+import ptLibrary from "./locales/pt/library.js"
+import ptNotes from "./locales/pt/notes.js"
+import ptNotifications from "./locales/pt/notifications.js"
+import ptPlayer from "./locales/pt/player.js"
+import ptSearch from "./locales/pt/search.js"
+import ptSettings from "./locales/pt/settings.js"
+import ptShare from "./locales/pt/share.js"
+import ptStudio from "./locales/pt/studio.js"
+import ptTranscript from "./locales/pt/transcript.js"
+import ptWelcome from "./locales/pt/welcome.js"
+
+import itActivity from "./locales/it/activity.js"
+import itApp from "./locales/it/app.js"
+import itChat from "./locales/it/chat.js"
+import itErrors from "./locales/it/errors.js"
+import itHelp from "./locales/it/help.js"
+import itHome from "./locales/it/home.js"
+import itLibrary from "./locales/it/library.js"
+import itNotes from "./locales/it/notes.js"
+import itNotifications from "./locales/it/notifications.js"
+import itPlayer from "./locales/it/player.js"
+import itSearch from "./locales/it/search.js"
+import itSettings from "./locales/it/settings.js"
+import itShare from "./locales/it/share.js"
+import itStudio from "./locales/it/studio.js"
+import itTranscript from "./locales/it/transcript.js"
+import itWelcome from "./locales/it/welcome.js"
+
+import deActivity from "./locales/de/activity.js"
+import deApp from "./locales/de/app.js"
+import deChat from "./locales/de/chat.js"
+import deErrors from "./locales/de/errors.js"
+import deHelp from "./locales/de/help.js"
+import deHome from "./locales/de/home.js"
+import deLibrary from "./locales/de/library.js"
+import deNotes from "./locales/de/notes.js"
+import deNotifications from "./locales/de/notifications.js"
+import dePlayer from "./locales/de/player.js"
+import deSearch from "./locales/de/search.js"
+import deSettings from "./locales/de/settings.js"
+import deShare from "./locales/de/share.js"
+import deStudio from "./locales/de/studio.js"
+import deTranscript from "./locales/de/transcript.js"
+import deWelcome from "./locales/de/welcome.js"
+
+import frActivity from "./locales/fr/activity.js"
+import frApp from "./locales/fr/app.js"
+import frChat from "./locales/fr/chat.js"
+import frErrors from "./locales/fr/errors.js"
+import frHelp from "./locales/fr/help.js"
+import frHome from "./locales/fr/home.js"
+import frLibrary from "./locales/fr/library.js"
+import frNotes from "./locales/fr/notes.js"
+import frNotifications from "./locales/fr/notifications.js"
+import frPlayer from "./locales/fr/player.js"
+import frSearch from "./locales/fr/search.js"
+import frSettings from "./locales/fr/settings.js"
+import frShare from "./locales/fr/share.js"
+import frStudio from "./locales/fr/studio.js"
+import frTranscript from "./locales/fr/transcript.js"
+import frWelcome from "./locales/fr/welcome.js"
+
+import plActivity from "./locales/pl/activity.js"
+import plApp from "./locales/pl/app.js"
+import plChat from "./locales/pl/chat.js"
+import plErrors from "./locales/pl/errors.js"
+import plHelp from "./locales/pl/help.js"
+import plHome from "./locales/pl/home.js"
+import plLibrary from "./locales/pl/library.js"
+import plNotes from "./locales/pl/notes.js"
+import plNotifications from "./locales/pl/notifications.js"
+import plPlayer from "./locales/pl/player.js"
+import plSearch from "./locales/pl/search.js"
+import plSettings from "./locales/pl/settings.js"
+import plShare from "./locales/pl/share.js"
+import plStudio from "./locales/pl/studio.js"
+import plTranscript from "./locales/pl/transcript.js"
+import plWelcome from "./locales/pl/welcome.js"
+
+import huActivity from "./locales/hu/activity.js"
+import huApp from "./locales/hu/app.js"
+import huChat from "./locales/hu/chat.js"
+import huErrors from "./locales/hu/errors.js"
+import huHelp from "./locales/hu/help.js"
+import huHome from "./locales/hu/home.js"
+import huLibrary from "./locales/hu/library.js"
+import huNotes from "./locales/hu/notes.js"
+import huNotifications from "./locales/hu/notifications.js"
+import huPlayer from "./locales/hu/player.js"
+import huSearch from "./locales/hu/search.js"
+import huSettings from "./locales/hu/settings.js"
+import huShare from "./locales/hu/share.js"
+import huStudio from "./locales/hu/studio.js"
+import huTranscript from "./locales/hu/transcript.js"
+import huWelcome from "./locales/hu/welcome.js"
+
+import hiActivity from "./locales/hi/activity.js"
+import hiApp from "./locales/hi/app.js"
+import hiChat from "./locales/hi/chat.js"
+import hiErrors from "./locales/hi/errors.js"
+import hiHelp from "./locales/hi/help.js"
+import hiHome from "./locales/hi/home.js"
+import hiLibrary from "./locales/hi/library.js"
+import hiNotes from "./locales/hi/notes.js"
+import hiNotifications from "./locales/hi/notifications.js"
+import hiPlayer from "./locales/hi/player.js"
+import hiSearch from "./locales/hi/search.js"
+import hiSettings from "./locales/hi/settings.js"
+import hiShare from "./locales/hi/share.js"
+import hiStudio from "./locales/hi/studio.js"
+import hiTranscript from "./locales/hi/transcript.js"
+import hiWelcome from "./locales/hi/welcome.js"
+
+import bnActivity from "./locales/bn/activity.js"
+import bnApp from "./locales/bn/app.js"
+import bnChat from "./locales/bn/chat.js"
+import bnErrors from "./locales/bn/errors.js"
+import bnHelp from "./locales/bn/help.js"
+import bnHome from "./locales/bn/home.js"
+import bnLibrary from "./locales/bn/library.js"
+import bnNotes from "./locales/bn/notes.js"
+import bnNotifications from "./locales/bn/notifications.js"
+import bnPlayer from "./locales/bn/player.js"
+import bnSearch from "./locales/bn/search.js"
+import bnSettings from "./locales/bn/settings.js"
+import bnShare from "./locales/bn/share.js"
+import bnStudio from "./locales/bn/studio.js"
+import bnTranscript from "./locales/bn/transcript.js"
+import bnWelcome from "./locales/bn/welcome.js"
+
+export const SUPPORTED_LOCALES = ["en", "ru", "uk", "sr-Latn", "sr-Cyrl", "es", "pt", "it", "de", "fr", "pl", "hu", "hi", "bn"] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 const en = {
@@ -183,6 +336,177 @@ const srCyrl = {
   welcome: srCyrlWelcome,
 }
 
+const es = {
+  activity: esActivity,
+  app: esApp,
+  chat: esChat,
+  errors: esErrors,
+  help: esHelp,
+  home: esHome,
+  library: esLibrary,
+  notes: esNotes,
+  notifications: esNotifications,
+  player: esPlayer,
+  search: esSearch,
+  settings: esSettings,
+  share: esShare,
+  studio: esStudio,
+  transcript: esTranscript,
+  welcome: esWelcome,
+}
+
+const pt = {
+  activity: ptActivity,
+  app: ptApp,
+  chat: ptChat,
+  errors: ptErrors,
+  help: ptHelp,
+  home: ptHome,
+  library: ptLibrary,
+  notes: ptNotes,
+  notifications: ptNotifications,
+  player: ptPlayer,
+  search: ptSearch,
+  settings: ptSettings,
+  share: ptShare,
+  studio: ptStudio,
+  transcript: ptTranscript,
+  welcome: ptWelcome,
+}
+
+const it = {
+  activity: itActivity,
+  app: itApp,
+  chat: itChat,
+  errors: itErrors,
+  help: itHelp,
+  home: itHome,
+  library: itLibrary,
+  notes: itNotes,
+  notifications: itNotifications,
+  player: itPlayer,
+  search: itSearch,
+  settings: itSettings,
+  share: itShare,
+  studio: itStudio,
+  transcript: itTranscript,
+  welcome: itWelcome,
+}
+
+const de = {
+  activity: deActivity,
+  app: deApp,
+  chat: deChat,
+  errors: deErrors,
+  help: deHelp,
+  home: deHome,
+  library: deLibrary,
+  notes: deNotes,
+  notifications: deNotifications,
+  player: dePlayer,
+  search: deSearch,
+  settings: deSettings,
+  share: deShare,
+  studio: deStudio,
+  transcript: deTranscript,
+  welcome: deWelcome,
+}
+
+const fr = {
+  activity: frActivity,
+  app: frApp,
+  chat: frChat,
+  errors: frErrors,
+  help: frHelp,
+  home: frHome,
+  library: frLibrary,
+  notes: frNotes,
+  notifications: frNotifications,
+  player: frPlayer,
+  search: frSearch,
+  settings: frSettings,
+  share: frShare,
+  studio: frStudio,
+  transcript: frTranscript,
+  welcome: frWelcome,
+}
+
+const pl = {
+  activity: plActivity,
+  app: plApp,
+  chat: plChat,
+  errors: plErrors,
+  help: plHelp,
+  home: plHome,
+  library: plLibrary,
+  notes: plNotes,
+  notifications: plNotifications,
+  player: plPlayer,
+  search: plSearch,
+  settings: plSettings,
+  share: plShare,
+  studio: plStudio,
+  transcript: plTranscript,
+  welcome: plWelcome,
+}
+
+const hu = {
+  activity: huActivity,
+  app: huApp,
+  chat: huChat,
+  errors: huErrors,
+  help: huHelp,
+  home: huHome,
+  library: huLibrary,
+  notes: huNotes,
+  notifications: huNotifications,
+  player: huPlayer,
+  search: huSearch,
+  settings: huSettings,
+  share: huShare,
+  studio: huStudio,
+  transcript: huTranscript,
+  welcome: huWelcome,
+}
+
+const hi = {
+  activity: hiActivity,
+  app: hiApp,
+  chat: hiChat,
+  errors: hiErrors,
+  help: hiHelp,
+  home: hiHome,
+  library: hiLibrary,
+  notes: hiNotes,
+  notifications: hiNotifications,
+  player: hiPlayer,
+  search: hiSearch,
+  settings: hiSettings,
+  share: hiShare,
+  studio: hiStudio,
+  transcript: hiTranscript,
+  welcome: hiWelcome,
+}
+
+const bn = {
+  activity: bnActivity,
+  app: bnApp,
+  chat: bnChat,
+  errors: bnErrors,
+  help: bnHelp,
+  home: bnHome,
+  library: bnLibrary,
+  notes: bnNotes,
+  notifications: bnNotifications,
+  player: bnPlayer,
+  search: bnSearch,
+  settings: bnSettings,
+  share: bnShare,
+  studio: bnStudio,
+  transcript: bnTranscript,
+  welcome: bnWelcome,
+}
+
 /**
  * Pick a UI locale based on `navigator.language`. Sync — safe to call
  * at module load. On Capacitor's WebView `navigator.language` already
@@ -237,7 +561,7 @@ export const i18n = createI18n({
   legacy: false,
   locale: detectLocale(),
   fallbackLocale: "en",
-  messages: { en, ru, uk, "sr-Latn": srLatn, "sr-Cyrl": srCyrl },
+  messages: { en, ru, uk, "sr-Latn": srLatn, "sr-Cyrl": srCyrl, es, pt, it, de, fr, pl, hu, hi, bn },
 })
 
 export function setLocale(locale: SupportedLocale): void {
