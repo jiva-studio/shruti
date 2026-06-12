@@ -150,13 +150,34 @@ async def augment_thin_theses(
 
     router_args = router_args or {}
 
-    # ── 1. Embed all theses in one batched call ─────────────────────────
+    # ── 1. Embed the theses AND their current supporting-note texts ─────
+    # Both feed the cosine-scoring below and are independent, so embed them
+    # CONCURRENTLY — previously the two `embed_documents` calls ran serially,
+    # stacking ~one extra embed round-trip onto the post-planner critical
+    # path. Only notes that some thesis actually references are embedded
+    # (skips the cost on notes no thesis cares about).
     thesis_texts = [t.thesis for t in outline.theses]
+    referenced_indices: set[int] = set()
+    for t in outline.theses:
+        for idx in t.supporting_notes:
+            if 1 <= idx <= len(base_notes):
+                referenced_indices.add(idx)
+    ref_idx_list = sorted(referenced_indices)
+    ref_texts = [(base_notes[i - 1].get("text") or "").strip() for i in ref_idx_list]
+    nonempty_refs = [(idx, txt) for idx, txt in zip(ref_idx_list, ref_texts) if txt]
+
+    async def _embed(texts: list[str]) -> list[list[float]]:
+        return await embedder.embed_documents(texts) if texts else []
+
     try:
-        thesis_embeds = await embedder.embed_documents(thesis_texts)
+        thesis_embeds, ref_embeds = await asyncio.gather(
+            _embed(thesis_texts),
+            _embed([t for _, t in nonempty_refs]),
+        )
     except Exception as exc:  # noqa: BLE001
-        log.warning("augment_thesis_embed_failed", error=str(exc))
+        log.warning("augment_embed_failed", error=str(exc))
         return outline, []
+
     if len(thesis_embeds) != len(thesis_texts):
         log.warning(
             "augment_thesis_embed_count_mismatch",
@@ -165,29 +186,10 @@ async def augment_thin_theses(
         )
         return outline, []
 
-    # ── 2. For each thesis, cosine-score its CURRENT supporting_notes ───
-    # Need note embeddings to score. Batch-embed only the note texts we
-    # actually need (those that appear in any supporting_notes). Saves
-    # the embed cost on notes that no thesis cares about.
-    referenced_indices: set[int] = set()
-    for t in outline.theses:
-        for idx in t.supporting_notes:
-            if 1 <= idx <= len(base_notes):
-                referenced_indices.add(idx)
-
-    ref_idx_list = sorted(referenced_indices)
-    ref_texts = [(base_notes[i - 1].get("text") or "").strip() for i in ref_idx_list]
-    nonempty_refs = [(idx, txt) for idx, txt in zip(ref_idx_list, ref_texts) if txt]
-
+    # ── 2. Score each thesis's CURRENT supporting_notes by cosine ───────
     note_embed_by_idx: dict[int, list[float]] = {}
-    if nonempty_refs:
-        try:
-            ref_embeds = await embedder.embed_documents([t for _, t in nonempty_refs])
-        except Exception as exc:  # noqa: BLE001
-            log.warning("augment_ref_note_embed_failed", error=str(exc))
-            return outline, []
-        for (idx, _), emb in zip(nonempty_refs, ref_embeds):
-            note_embed_by_idx[idx] = emb
+    for (idx, _), emb in zip(nonempty_refs, ref_embeds):
+        note_embed_by_idx[idx] = emb
 
     # Score current support per thesis.
     per_thesis_scored: list[list[tuple[float, int]]] = []
