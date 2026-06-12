@@ -66,11 +66,10 @@ export function useTrackActionSheet(): UseTrackActionSheetReturn {
         },
         {
           text: t("search.actions.share"),
-          // Pro feature. Non-subscribers get the upsell pill + the paywall
-          // on tap; subscribers see a clean row. The "PRO" pill is a CSS
-          // ::after (Ionic buttons can't host a Vue component) — see
-          // theme/misc.css `.action-sheet-pro`.
-          cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
+          // Pro feature. The "PRO" pill always shows as a CSS ::after
+          // (Ionic buttons can't host a Vue component) — see theme/misc.css
+          // `.action-sheet-pro`. Non-subscribers get the paywall on tap.
+          cssClass: "action-sheet-pro",
           handler: () => {
             if (!purchases.isSubscribed) {
               paywall.requestOpen("shareTranscript")
