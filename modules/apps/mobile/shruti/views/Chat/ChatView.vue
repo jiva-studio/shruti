@@ -47,9 +47,10 @@
         />
         <PageSticker v-else image="/chat-empty.png">
           <template #footer>
-            <SuggestionChips
-              :has-current-track="hasCurrentTrack"
-              :has-recent-listening="hasRecentListening"
+            <ChatChips
+              class="suggestions"
+              :items="suggestionChips"
+              align="center"
               @pick="onPickSuggestion"
             />
             <RecentSessions
@@ -103,9 +104,10 @@ import ChatMessageList from "./components/ChatMessageList.vue"
 import ChatInputBar from "./components/ChatInputBar.vue"
 import ChatSessionList from "./components/ChatSessionList.vue"
 import RecentSessions from "./components/RecentSessions.vue"
-import SuggestionChips from "./components/SuggestionChips.vue"
+import ChatChips from "./components/ChatChips.vue"
 import ChatSessionHeader from "./components/ChatSessionHeader.vue"
 import { useChatController } from "./ChatView.controller.js"
+import { useChatSuggestions } from "./composables/useChatSuggestions.js"
 
 const inputBarRef = ref<InstanceType<typeof ChatInputBar> | null>(null)
 
@@ -144,6 +146,13 @@ const {
   onRetry,
 } = useChatController()
 
+// Empty-state suggestion chips (recap + shuffled i18n pool); rendered by the
+// shared ChatChips component.
+const { chips: suggestionChips } = useChatSuggestions({
+  hasCurrentTrack: () => hasCurrentTrack.value,
+  hasRecentListening: () => hasRecentListening.value,
+})
+
 watch(inputFocusToken, () => {
   // Ping from `chatStore.requestInputFocus()` — bring the textarea up
   // so the user can type immediately after the Ask-Sadhu navigation.
@@ -167,6 +176,15 @@ const headerTitle = computed<string>(() => {
 </script>
 
 <style scoped>
+/* Empty-state suggestion row: a centered, width-capped block under the
+ * sticker. Flex/justify come from ChatChips; this adds the outer spacing. */
+.suggestions {
+  margin-top: 14px;
+  padding: 0 12px;
+  width: 100%;
+  max-width: 720px;
+}
+
 .chat-content {
   --padding-top: calc(var(--ion-safe-area-top, 0px) + 44px);
   /* Room for the absolutely-positioned input bar so the last message
