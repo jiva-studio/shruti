@@ -130,6 +130,7 @@ class MarkerExpander:
         emitted_action_ids: set[str] | None = None,
         commentary_as_card: bool = False,
         lazy_verse: bool = False,
+        lazy_cite: bool = False,
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
@@ -140,6 +141,11 @@ class MarkerExpander:
         # `flush_verse_payloads` emits every aliased verse up front.
         self._lazy_verse = lazy_verse
         self._pending_verse_requests: list[VerseRef] = []
+        # Same for lecture-transcript cites: expanding `[cite:track@s-e]`
+        # queues `(alias_num, ChunkRef)` so the synthesizer builds + translates
+        # + emits only the CITED fragments. Off → eager `flush_cite_payloads`.
+        self._lazy_cite = lazy_cite
+        self._pending_cite_requests: list[tuple[int, ChunkRef]] = []
         # When True (client declared the `commentary_card` capability),
         # `_format_commentary` emits a `[commentary:item/seg|s=…|addr]`
         # marker — handled exactly like `[verse:…]` (its structured payload
@@ -562,6 +568,10 @@ class MarkerExpander:
 
         if isinstance(ref, ChunkRef):
             if ref.start_ms is not None and ref.end_ms is not None:
+                # Card clients: queue this cited fragment for lazy synth-time
+                # build+translate+emit (legacy got it from the eager flush).
+                if self._lazy_cite:
+                    self._pending_cite_requests.append((n, ref))
                 body = f"{ref.track_id}@{ref.start_ms}-{ref.end_ms}"
                 caption = self._aliases.captions.get(n, "")
                 return f"[cite:{body}|{caption}]" if caption else f"[cite:{body}]"
@@ -718,6 +728,17 @@ class MarkerExpander:
             return []
         out = self._pending_verse_requests
         self._pending_verse_requests = []
+        return out
+
+    def take_cite_requests(self) -> list[tuple[int, ChunkRef]]:
+        """Return + clear the `(alias_num, ChunkRef)` of `[cite:…]` markers
+        expanded since the last call (card clients only). The synthesizer
+        builds + translates + emits each cited fragment's payload — only the
+        fragments actually cited, instead of the whole research pool."""
+        if not self._pending_cite_requests:
+            return []
+        out = self._pending_cite_requests
+        self._pending_cite_requests = []
         return out
 
     def _join_commentary_picks(self, picks: list[tuple[int, str]]) -> str:

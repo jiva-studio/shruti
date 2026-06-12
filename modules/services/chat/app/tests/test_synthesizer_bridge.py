@@ -126,3 +126,41 @@ async def test_bridge_native_answer_no_translation():
     await _bridge_synth_events(events, ctx, out.append)
     assert tr.calls == 0  # native: nothing translated
     assert "mt" not in out[0]["data"]["payload"]
+
+
+async def test_bridge_builds_cite_card():
+    tr = _Tr()
+    am = TurnAliasMap()
+    n = am.alias_chunk("track_X", 1000, 2000, lang="en")
+    am.chunk_texts[n] = "The soul is eternal."
+    _, cref = am.cite_refs()[0]
+    ctx = TurnContext(lang="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
+    out: list[dict] = []
+    events = _events(
+        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
+        SynthesizerEvent(type="delta", data={"text": "[cite:track_X@1000-2000]"}),
+    )
+    await _bridge_synth_events(events, ctx, out.append)
+    assert out[0]["data"]["kind"] == "cite_transcript"  # cite action before its delta
+    assert out[1]["type"] == "delta"
+    p = out[0]["data"]["payload"]
+    assert p["mt"] is True
+    assert p["text"] == "[sr-Cyrl] The soul is eternal."
+    assert p["text_original"] == "The soul is eternal."
+    assert tr.calls == 1
+
+
+async def test_bridge_dedups_repeated_cite():
+    am = TurnAliasMap()
+    n = am.alias_chunk("track_X", 1000, 2000, lang="en")
+    am.chunk_texts[n] = "verbatim"
+    _, cref = am.cite_refs()[0]
+    ctx = TurnContext(lang="en", translate_citations=True, translator=_Tr(), aliases=am)
+    out: list[dict] = []
+    events = _events(
+        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
+        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
+    )
+    await _bridge_synth_events(events, ctx, out.append)
+    cites = [e for e in out if e["data"].get("kind") == "cite_transcript"]
+    assert len(cites) == 1  # deduped

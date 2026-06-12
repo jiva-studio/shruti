@@ -19,7 +19,7 @@ runs; toolset is parameterised.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable, Iterable
+from typing import Any
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
@@ -485,36 +485,21 @@ async def flush_cite_payloads(ctx: TurnContext) -> None:
     Only a genuine miss (no repo / DB error / fragment gone) degrades to
     the chip.
     """
-    if ctx.aliases is None:
+    # Card clients emit cite cards LAZILY at synth time (cited-only) — see
+    # `synthesizer._bridge_synth_events`. Skip the eager whole-pool path: on
+    # a lecture-heavy turn it translated dozens of aliased fragments the
+    # answer never cites, one after another (the ~60s `cite_transcript`
+    # stall). Legacy (non-card) clients keep the eager flush.
+    if ctx.aliases is None or ctx.capabilities.get("commentary_card"):
         return
     writer = get_stream_writer()
     for ref_num, cref in ctx.aliases.cite_refs():
         if ref_num in ctx.emitted_cite_refs:
             continue
-        text = ctx.aliases.chunk_texts.get(ref_num)
-        if not text:
-            text = await _fetch_cite_text(ctx, cref)
-        if not text:
+        payload = await build_cite_payload(ctx, ref_num, cref)
+        if payload is None:
             continue
         ctx.emitted_cite_refs.add(ref_num)
-        payload: dict[str, Any] = {
-            "track_id": cref.track_id,
-            "start_ms": cref.start_ms,
-            "end_ms": cref.end_ms,
-            "text": text,
-        }
-        # Transcript localisation. A fragment is "native" when its language
-        # matches the answer language; otherwise translate-if-opted-in,
-        # else show the (English / source) transcript verbatim. There is no
-        # per-lang transcript map — the only original is `text` in `cref.lang`.
-        if cref.lang and cref.lang != ctx.lang:
-            shown, original, mt = await localize_citation(
-                ctx, variants={cref.lang: text}, source_text=text, src_lang=cref.lang,
-            )
-            if mt:
-                payload["text"] = shown
-                payload["text_original"] = original
-                payload["mt"] = True
         writer(
             {
                 "type": "action",
@@ -525,6 +510,44 @@ async def flush_cite_payloads(ctx: TurnContext) -> None:
                 },
             }
         )
+
+
+async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[str, Any] | None:
+    """Build ONE lecture-transcript cite payload: resolve the snippet text
+    (stashed by the research caption pass, else re-fetched) and, for a
+    non-corpus answer with translation opted in, translate it. Returns None
+    when no text is available (the marker degrades to the chip).
+
+    Shared by the eager `flush_cite_payloads` (legacy clients) and the lazy
+    synth-time emit (card clients) — the latter calls this only for the
+    fragments actually CITED, so the translation runs on a handful instead
+    of the whole research pool, and overlaps generation via the bridge."""
+    if ctx.aliases is None:
+        return None
+    text = ctx.aliases.chunk_texts.get(ref_num)
+    if not text:
+        text = await _fetch_cite_text(ctx, cref)
+    if not text:
+        return None
+    payload: dict[str, Any] = {
+        "track_id": cref.track_id,
+        "start_ms": cref.start_ms,
+        "end_ms": cref.end_ms,
+        "text": text,
+    }
+    # Transcript localisation. A fragment is "native" when its language
+    # matches the answer language; otherwise translate-if-opted-in, else show
+    # the (English / source) transcript verbatim. There is no per-lang
+    # transcript map — the only original is `text` in `cref.lang`.
+    if cref.lang and cref.lang != ctx.lang:
+        shown, original, mt = await localize_citation(
+            ctx, variants={cref.lang: text}, source_text=text, src_lang=cref.lang,
+        )
+        if mt:
+            payload["text"] = shown
+            payload["text_original"] = original
+            payload["mt"] = True
+    return payload
 
 
 async def translate_commentaries(ctx: TurnContext) -> None:

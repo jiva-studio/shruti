@@ -599,6 +599,8 @@ async def run_synthesizer_turn(
             # builds + translates + emits the payload, only for cited verses.
             for vref in expander.take_verse_requests():
                 yield SynthesizerEvent(type="verse_request", data={"vref": vref})
+            for ref_num, cref in expander.take_cite_requests():
+                yield SynthesizerEvent(type="cite_request", data={"ref_num": ref_num, "cref": cref})
             if cleaned:
                 prose_chars += len(cleaned)
                 yield SynthesizerEvent(type="delta", data={"text": cleaned})
@@ -608,6 +610,8 @@ async def run_synthesizer_turn(
             yield SynthesizerEvent(type=action["type"], data=action["data"])
         for vref in expander.take_verse_requests():
             yield SynthesizerEvent(type="verse_request", data={"vref": vref})
+        for ref_num, cref in expander.take_cite_requests():
+            yield SynthesizerEvent(type="cite_request", data={"ref_num": ref_num, "cref": cref})
         if tail:
             prose_chars += len(tail)
             yield SynthesizerEvent(type="delta", data={"text": tail})

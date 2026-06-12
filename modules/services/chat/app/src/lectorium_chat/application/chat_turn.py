@@ -317,6 +317,9 @@ async def run_chat_turn(
             # synth time (cited-only), so verse-prose translation never runs
             # on the uncited candidate pool.
             lazy_verse=bool(caps.get("commentary_card")),
+            # …and the same for lecture-transcript cites — translate only the
+            # cited fragments, not the whole (often dozens-strong) pool.
+            lazy_cite=bool(caps.get("commentary_card")),
         )
 
         # Speculative embed: most non-trivial intents (research,
