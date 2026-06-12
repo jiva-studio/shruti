@@ -1,13 +1,17 @@
 <template>
-  <ChatFocusCard
-    v-if="message.focus"
-    :data-message-id="message.id"
-    :message-id="message.id"
-    :focus="message.focus"
-    :suggestions="focusSuggestions"
-    :suggestions-loading="focusLoading"
-    @send-suggestion="$emit('send-suggestion', $event)"
-  />
+  <!-- Ask-Sadhu focus message: the tapped fragment IS a citation, so render
+       CitationCard directly, with the same fire-and-send chips used for
+       answer follow-ups below it. -->
+  <div v-if="message.focus" class="focus-row" :data-message-id="message.id">
+    <CitationCard
+      :track-id="message.focus.trackId"
+      :start-ms="message.focus.startMs"
+      :end-ms="message.focus.endMs"
+      :body="{ text: message.focus.text }"
+    />
+    <StatusPill v-if="focusLoading" status-key="picking_questions" />
+    <ChatChips v-else :items="focusChips" align="end" @pick="$emit('send-suggestion', $event)" />
+  </div>
   <div v-else :class="['bubble-row', message.role]" :data-message-id="message.id">
     <div :class="['bubble', message.role, { streaming: message.streaming }]">
       <template v-if="message.role === 'user'">
@@ -61,13 +65,15 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
+import { useI18n } from "vue-i18n"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import type { ChatMessage } from "@shruti/stores/useChatStore.js"
 import ChatMessageActions from "./ChatMessageActions.vue"
 import ChatTokenRenderer from "./ChatTokenRenderer.vue"
 import StatusPill from "./StatusPill.vue"
 import InlineNotice from "@ui/shared/InlineNotice.vue"
-import ChatFocusCard from "./ChatFocusCard.vue"
+import CitationCard from "./CitationCard.vue"
+import ChatChips from "./ChatChips.vue"
 import { useChatExportMarkdown } from "../composables/useChatExportMarkdown.js"
 import { useChatMessageStatus } from "../composables/useChatMessageStatus.js"
 
@@ -99,11 +105,25 @@ const emit = defineEmits<{
   ]
   /** User tapped Retry on a failed/truncated assistant bubble. */
   retry: [messageId: string]
-  /** Forwarded up from ChatFocusCard's suggestion chip taps. */
+  /** A focus-message discussion chip was tapped — send it as a turn. */
   "send-suggestion": [text: string]
 }>()
 
+const { tm } = useI18n()
 const appLanguage = useAppLanguage()
+
+// Focus-message discussion chips: server-generated when available, else the
+// static i18n fallback. Empty array hides the row (loading pill shows first).
+const fallbackChips = computed<readonly string[]>(() => {
+  const raw = tm("chat.focusFallbackSuggestions") as unknown
+  if (!Array.isArray(raw)) return []
+  return raw.filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+})
+const focusChips = computed<readonly string[]>(() => {
+  const server = props.focusSuggestions
+  if (server && server.length > 0) return server
+  return fallbackChips.value
+})
 
 const { exportMarkdown } = useChatExportMarkdown(
   () => props.message,
@@ -135,6 +155,17 @@ const showActions = computed<boolean>(
 </script>
 
 <style scoped>
+/* Ask-Sadhu focus message: CitationCard + reused ChatChips stacked. Only the
+ * horizontal inset (like .bubble-row) and scroll anchor live here. */
+.focus-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 0 12px;
+  scroll-margin-top: calc(var(--ion-safe-area-top, 0px) + 56px);
+}
+
 .bubble-row {
   display: flex;
   margin: 6px 0;
