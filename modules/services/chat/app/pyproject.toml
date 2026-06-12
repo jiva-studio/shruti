@@ -52,6 +52,11 @@ dependencies = [
   # default REGISTRY and are picked up by a future PR-5 scraper. Adding
   # the dep now avoids a second dependency bump when /metrics goes in.
   "prometheus-client>=0.20",
+  # Language identification for the `language_match` auto-score. Covers all
+  # UI locales (ru en uk sr es pt it de fr pl hu hi bn); the previous
+  # Cyrillic-vs-Latin heuristic could only tell ru from en. Seed is pinned
+  # at import time (auto_scores.py) for reproducible scores.
+  "langdetect>=1.0.9",
 ]
 
 [project.optional-dependencies]

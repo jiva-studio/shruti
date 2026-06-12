@@ -29,7 +29,6 @@ adding a new score.
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -183,25 +182,53 @@ def _count_missing_verses(
 # ── Language match ─────────────────────────────────────────────────────
 
 
-_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
-_LATIN_RE = re.compile(r"[A-Za-z]")
+# Deterministic language identification for the `language_match` score.
+# `langdetect` covers every UI locale (ru en uk sr es pt it de fr pl hu hi bn),
+# replacing the old Cyrillic-vs-Latin heuristic that could only ever return
+# 'ru'/'en' — and so scored every correct non-ru/en answer (e.g. a Serbian
+# reply, in Latin script) as a language MISMATCH. Guarded so a missing/broken
+# import degrades the score to "not emitted" rather than breaking this module's
+# import (chat_turn.py imports it on the hot path).
+try:
+    from langdetect import DetectorFactory, LangDetectException, detect
+
+    DetectorFactory.seed = 0  # langdetect is randomized by default; pin for stable scores
+except Exception:  # pragma: no cover - langdetect is a declared dep; guard anyway
+    detect = None  # type: ignore[assignment]
+
+    class LangDetectException(Exception):  # type: ignore[no-redef]
+        pass
+
+
+# langdetect routinely confuses the former Serbo-Croatian dialect continuum
+# (sr/hr/bs); fold them so a correct Serbian answer tagged "hr" still matches.
+_LANG_EQUIV = {"hr": "sr", "bs": "sr"}
+
+# Below this many characters langdetect is unreliable — abstain (emit nothing)
+# rather than record a noisy match/mismatch.
+_LANG_MIN_CHARS = 40
+
+
+def _base_lang(code: str | None) -> str | None:
+    """Normalize a BCP-47 / locale tag to a bucketed ISO-639-1 base:
+    'sr-Latn' → 'sr', 'en-US' → 'en', then fold the sr/hr/bs continuum."""
+    if not code:
+        return None
+    base = code.split("-")[0].lower()
+    return _LANG_EQUIV.get(base, base)
 
 
 def _detect_language(text: str) -> str | None:
-    """Cyrillic-ratio heuristic — same approach used elsewhere in the
-    transcript pipeline. Returns 'ru' / 'en' / None for the empty case.
-
-    No external dep (`langdetect`) — we only need to tell RU from EN,
-    and the ratio is reliable when each language uses its native
-    alphabet (which is our corpus shape)."""
-    if not text:
+    """Identify the answer's language as a bucketed ISO-639-1 code, or
+    None when the text is too short, detection fails, or langdetect is
+    unavailable. Compared against the normalized `request_lang` to score
+    `language_match`."""
+    if detect is None or not text or len(text.strip()) < _LANG_MIN_CHARS:
         return None
-    sample = text[:400]
-    cyr = sum(1 for _ in _CYRILLIC_RE.finditer(sample))
-    lat = sum(1 for _ in _LATIN_RE.finditer(sample))
-    if cyr + lat < 5:
+    try:
+        return _base_lang(detect(text))
+    except LangDetectException:
         return None
-    return "ru" if cyr >= lat else "en"
 
 
 # ── emit_turn_scores ───────────────────────────────────────────────────
@@ -209,7 +236,7 @@ def _detect_language(text: str) -> str | None:
 
 @dataclass
 class TurnSummary:
-    request_lang: str  # "ru" / "en" — what the client asked for
+    request_lang: str  # the client's locale tag (e.g. "ru", "en", "sr-Latn")
     latency_total_ms: int
     first_token_ms: int | None  # None if no delta was emitted
     tool_calls_count: int
@@ -286,7 +313,7 @@ def emit_turn_scores(
     if detected is not None:
         _emit(
             "language_match",
-            1 if detected == summary.request_lang else 0,
+            1 if detected == _base_lang(summary.request_lang) else 0,
             "BOOLEAN",
         )
 

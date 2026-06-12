@@ -151,3 +151,72 @@ def test_marker_validity_true_when_all_clean() -> None:
 
     assert captured["marker_validity"] == 1
     assert captured["sentence_marker_leak_count"] == 0
+
+
+# ── language_match ───────────────────────────────────────────────────
+
+
+def _run_scores(*, request_lang: str, final_text: str) -> dict[str, object]:
+    """Drive `emit_turn_scores` once and return the captured score map."""
+    captured: dict[str, object] = {}
+
+    class _StubLangfuse:
+        def create_score(self, *, name, value, data_type, trace_id, score_id):
+            captured[name] = value
+
+    audit = MarkerAudit(malformed=0, broken=0, bypass=0, cite_count=0, sentence_marker_leak=0)
+    summary = TurnSummary(
+        request_lang=request_lang,
+        latency_total_ms=100,
+        first_token_ms=10,
+        tool_calls_count=0,
+        response_length_chars=len(final_text),
+        had_error=False,
+        intent=None,
+        final_text=final_text,
+    )
+    emit_turn_scores(_StubLangfuse(), "trace_xyz", summary, audit)
+    return captured
+
+
+# A correct Serbian (Latin-script) answer for a `sr-Latn` user. The old
+# Cyrillic-vs-Latin detector saw Latin → "en" → mismatch, so this case
+# (the whole point of the fix) used to score 0.
+def test_language_match_serbian_latin_answer_matches_sr_locale() -> None:
+    text = "Danas ćemo razgovarati o tome kako su učenici u Londonu predano širili duhovno znanje."
+    captured = _run_scores(request_lang="sr-Latn", final_text=text)
+    assert captured["language_match"] == 1
+
+
+# The actual production bug: the `find_track` path answered a Serbian
+# user in English. That genuinely IS a mismatch and must score 0.
+def test_language_match_english_answer_to_serbian_user_is_mismatch() -> None:
+    text = "I didn't find any lectures or transcripts on this topic in the current research results."
+    captured = _run_scores(request_lang="sr-Latn", final_text=text)
+    assert captured["language_match"] == 0
+
+
+def test_language_match_spanish_answer_matches_es_locale() -> None:
+    text = "Hoy hablaremos de cómo los discípulos en Londres difundieron el conocimiento espiritual."
+    captured = _run_scores(request_lang="es", final_text=text)
+    assert captured["language_match"] == 1
+
+
+# Non-Latin script still works (the old heuristic returned "ru" for any
+# Cyrillic and None/garbage for Devanagari).
+def test_language_match_hindi_answer_matches_hi_locale() -> None:
+    text = "आज हम चर्चा करेंगे कि लंदन में शिष्यों ने किस प्रकार आध्यात्मिक ज्ञान का प्रचार किया।"
+    captured = _run_scores(request_lang="hi", final_text=text)
+    assert captured["language_match"] == 1
+
+
+def test_language_match_russian_answer_matches_ru_locale() -> None:
+    text = "Сегодня мы поговорим о том, как ученики в Лондоне преданно распространяли духовное знание."
+    captured = _run_scores(request_lang="ru", final_text=text)
+    assert captured["language_match"] == 1
+
+
+# Too short to identify reliably → abstain, don't emit a noisy score.
+def test_language_match_not_emitted_for_short_text() -> None:
+    captured = _run_scores(request_lang="sr-Latn", final_text="Hvala!")
+    assert "language_match" not in captured
