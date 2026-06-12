@@ -2,11 +2,15 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatChapterBody,
+  ChatCiteSnippet,
+  ChatCommentaryBody,
   ChatFeedbackCategory,
   ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatVerseBody,
   MediaPayload,
 } from "../chatMessage.js"
 import type { ChatMessageId, ChatSessionId } from "../core.js"
@@ -22,6 +26,13 @@ export interface CreateChatMessageInput {
   /** Media result payloads keyed by `[media:<id>]` id — see
    *  `ChatMessage.media`. */
   readonly media?: Record<string, MediaPayload>
+  /** Verse / cite / chapter / commentary card bodies keyed as in the
+   *  matching `ChatMessage` fields — persisted so the cards survive a
+   *  reopen instead of degrading to chips once a global cache churns. */
+  readonly verses?: Record<string, ChatVerseBody>
+  readonly cites?: Record<string, ChatCiteSnippet>
+  readonly chapters?: Record<string, ChatChapterBody>
+  readonly commentaries?: Record<string, ChatCommentaryBody>
   readonly actionStates?: Record<string, ChatActionState>
   readonly error?: ChatMessageError
   /** Ordered list of follow-up chip texts emitted by the LLM via

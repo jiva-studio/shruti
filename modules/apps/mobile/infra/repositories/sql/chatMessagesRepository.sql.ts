@@ -3,11 +3,15 @@ import type {
   ChatActionPayload,
   ChatActionState,
   ChatAliasEntry,
+  ChatChapterBody,
+  ChatCiteSnippet,
+  ChatCommentaryBody,
   ChatFeedbackCategory,
   ChatFocusPayload,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatVerseBody,
   MediaPayload,
 } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
@@ -45,6 +49,10 @@ interface ParsedMeta {
   readonly actions: Record<string, ChatActionPayload>
   readonly outlines: Record<string, ChatOutlinePayload>
   readonly media: Record<string, MediaPayload>
+  readonly verses: Record<string, ChatVerseBody>
+  readonly cites: Record<string, ChatCiteSnippet>
+  readonly chapters: Record<string, ChatChapterBody>
+  readonly commentaries: Record<string, ChatCommentaryBody>
   readonly actionStates: Record<string, ChatActionState>
   readonly followups: readonly string[]
   readonly error: ChatMessageError | undefined
@@ -57,6 +65,10 @@ const EMPTY_META: ParsedMeta = Object.freeze({
   actions: {},
   outlines: {},
   media: {},
+  verses: {},
+  cites: {},
+  chapters: {},
+  commentaries: {},
   actionStates: {},
   followups: [],
   error: undefined,
@@ -88,6 +100,10 @@ function parseMeta(raw: unknown): ParsedMeta {
     actions: extractRecord<ChatActionPayload>(data.actions),
     outlines: extractRecord<ChatOutlinePayload>(data.outlines),
     media: extractRecord<MediaPayload>(data.media),
+    verses: extractRecord<ChatVerseBody>(data.verses),
+    cites: extractRecord<ChatCiteSnippet>(data.cites),
+    chapters: extractRecord<ChatChapterBody>(data.chapters),
+    commentaries: extractRecord<ChatCommentaryBody>(data.commentaries),
     actionStates: extractRecord<ChatActionState>(data.actionStates),
     followups: extractFollowups(data.followups),
     error: parseError(data.error),
@@ -194,6 +210,10 @@ function wrapMeta(payload: {
   actions?: Record<string, ChatActionPayload>
   outlines?: Record<string, ChatOutlinePayload>
   media?: Record<string, MediaPayload>
+  verses?: Record<string, ChatVerseBody>
+  cites?: Record<string, ChatCiteSnippet>
+  chapters?: Record<string, ChatChapterBody>
+  commentaries?: Record<string, ChatCommentaryBody>
   actionStates?: Record<string, ChatActionState>
   followups?: readonly string[]
   error?: ChatMessageError | undefined
@@ -205,6 +225,11 @@ function wrapMeta(payload: {
   if (payload.actions && Object.keys(payload.actions).length > 0) data.actions = payload.actions
   if (payload.outlines && Object.keys(payload.outlines).length > 0) data.outlines = payload.outlines
   if (payload.media && Object.keys(payload.media).length > 0) data.media = payload.media
+  if (payload.verses && Object.keys(payload.verses).length > 0) data.verses = payload.verses
+  if (payload.cites && Object.keys(payload.cites).length > 0) data.cites = payload.cites
+  if (payload.chapters && Object.keys(payload.chapters).length > 0) data.chapters = payload.chapters
+  if (payload.commentaries && Object.keys(payload.commentaries).length > 0)
+    data.commentaries = payload.commentaries
   if (payload.actionStates && Object.keys(payload.actionStates).length > 0)
     data.actionStates = payload.actionStates
   if (payload.followups && payload.followups.length > 0) data.followups = payload.followups
@@ -228,6 +253,10 @@ function rowToMessage(r: ChatMessageRow): ChatMessage {
     actions: meta.actions,
     outlines: meta.outlines,
     media: meta.media,
+    verses: meta.verses,
+    cites: meta.cites,
+    chapters: meta.chapters,
+    commentaries: meta.commentaries,
     actionStates: meta.actionStates,
     error: meta.error,
     followups: meta.followups.length > 0 ? meta.followups : undefined,
@@ -274,6 +303,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actions: input.actions,
         outlines: input.outlines,
         media: input.media,
+        verses: input.verses,
+        cites: input.cites,
+        chapters: input.chapters,
+        commentaries: input.commentaries,
         actionStates: input.actionStates,
         followups: input.followups,
         error: input.error,
@@ -296,6 +329,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actions: input.actions ?? {},
         outlines: input.outlines ?? {},
         media: input.media ?? {},
+        verses: input.verses ?? {},
+        cites: input.cites ?? {},
+        chapters: input.chapters ?? {},
+        commentaries: input.commentaries ?? {},
         actionStates: input.actionStates ?? {},
         error: input.error,
         followups: input.followups && input.followups.length > 0 ? input.followups : undefined,
@@ -319,6 +356,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actions: current.actions,
         outlines: current.outlines,
         media: current.media,
+        verses: current.verses,
+        cites: current.cites,
+        chapters: current.chapters,
+        commentaries: current.commentaries,
         actionStates: current.actionStates,
         followups,
         error: current.error,
@@ -343,6 +384,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actions: current.actions,
         outlines: current.outlines,
         media: current.media,
+        verses: current.verses,
+        cites: current.cites,
+        chapters: current.chapters,
+        commentaries: current.commentaries,
         actionStates,
         followups: current.followups,
         error: current.error,
@@ -364,6 +409,10 @@ export function createSqlChatMessageRepository(db: IDatabase): IChatMessageRepos
         actions: current.actions,
         outlines: current.outlines,
         media: current.media,
+        verses: current.verses,
+        cites: current.cites,
+        chapters: current.chapters,
+        commentaries: current.commentaries,
         actionStates: current.actionStates,
         followups: current.followups,
         error: current.error,
