@@ -101,8 +101,8 @@ export const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
 export const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
 // Chapter-location widget marker: a source_id and a region token, optional
 // `|label` carrying the canto heading / book name. The region token is an
-// OPAQUE join key (marker ↔ `chapter` payload / body store) — the client must
-// NOT assume its shape. The server owns source structure: it's a canto ("12"),
+// OPAQUE join key (marker ↔ the `chapter` payload on the message's `chapters`
+// map) — the client must NOT assume its shape. The server owns source structure: it's a canto ("12"),
 // a chapter ("9"), EMPTY for book-level regions (2-level books like BG/CC), or
 // anything a future book layout needs. Match any run up to `|`/`]` (incl.
 // empty) so new source shapes never require a client regex change.

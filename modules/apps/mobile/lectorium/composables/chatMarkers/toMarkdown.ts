@@ -107,9 +107,9 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   out = out.replace(OUTLINE_RE, "")
   out = out.replace(ACTION_RE, "")
   out = out.replace(FOLLOWUP_RE, "")
-  // Chapter-location widget: chapter titles live in the body store, not
-  // the message text, so there's nothing portable to expand — strip the
-  // marker (same as card / outline).
+  // Chapter-location widget: chapter titles live on the message's `chapters`
+  // map, not the message text, so there's nothing portable to expand — strip
+  // the marker (same as card / outline).
   out = out.replace(CHAPTER_RE, "")
   // Media result widget: the video/audio file + transcript live in the
   // `media` SSE payload, not the message text — nothing portable to
@@ -131,9 +131,9 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   )
   // Commentary citations: expand into a transcript-style blockquote +
   // attribution, the commentary analog of the cite expansion above. The
-  // quote text lives in the body store (card-capable turns); a cache miss
-  // returns "" (strip). Legacy turns embed the quote as a `>` blockquote in
-  // the prose directly, so they never hit this path.
+  // quote text lives on the message's `commentaries` map (card-capable
+  // turns); a lookup miss returns "" (strip). Legacy turns embed the quote as
+  // a `>` blockquote in the prose directly, so they never hit this path.
   const commentaryRe = new RegExp(COMMENTARY_RE.source, "g")
   out = out.replace(commentaryRe, (_full, refStr: string) => {
     const body = opts.commentaryLookup?.(Number(refStr) | 0)
