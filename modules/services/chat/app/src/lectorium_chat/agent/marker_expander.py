@@ -129,9 +129,17 @@ class MarkerExpander:
         request_id: str | None = None,
         emitted_action_ids: set[str] | None = None,
         commentary_as_card: bool = False,
+        lazy_verse: bool = False,
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
+        # When True (card-capable client), verse cards are emitted LAZILY at
+        # synth time: expanding a `[verse:…]` marker queues the VerseRef here,
+        # the synthesizer builds + (cited-only) translates + emits the payload
+        # just before the marker's delta. When False (legacy), the eager
+        # `flush_verse_payloads` emits every aliased verse up front.
+        self._lazy_verse = lazy_verse
+        self._pending_verse_requests: list[VerseRef] = []
         # When True (client declared the `commentary_card` capability),
         # `_format_commentary` emits a `[commentary:item/seg|s=…|addr]`
         # marker — handled exactly like `[verse:…]` (its structured payload
@@ -530,6 +538,11 @@ class MarkerExpander:
             return self._format_commentary(ref, sentence_indices)
 
         if isinstance(ref, VerseRef):
+            # Card clients: queue the verse for lazy synth-time emission
+            # (build + translate only this cited verse). Legacy clients got
+            # the payload from the eager flush already.
+            if self._lazy_verse:
+                self._pending_verse_requests.append(ref)
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
             return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
@@ -694,6 +707,17 @@ class MarkerExpander:
             return []
         out = self._pending_commentary_actions
         self._pending_commentary_actions = []
+        return out
+
+    def take_verse_requests(self) -> list[VerseRef]:
+        """Return + clear the VerseRefs of `[verse:…]` markers expanded since
+        the last call (card clients only). The synthesizer builds + translates
+        + emits each one's payload BEFORE the delta carrying its marker —
+        only for verses actually cited, so uncited verses cost no translation."""
+        if not self._pending_verse_requests:
+            return []
+        out = self._pending_verse_requests
+        self._pending_verse_requests = []
         return out
 
     def _join_commentary_picks(self, picks: list[tuple[int, str]]) -> str:

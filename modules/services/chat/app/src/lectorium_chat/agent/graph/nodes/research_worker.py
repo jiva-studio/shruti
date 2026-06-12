@@ -93,6 +93,10 @@ async def research_worker_node(
     # a seq scan. So retrieval clamps to the answer lang IFF the corpus has
     # it, else English; the answer prose (ctx.lang) still goes out in `lang`.
     retrieval_lang = await _derive_retrieval_lang(ctx, lang)
+    # Stash on ctx so the synthesizer knows the citation source language for
+    # lazy commentary-card translation (translate only when it differs from
+    # the answer language).
+    ctx.retrieval_lang = retrieval_lang
 
     # Per-turn cross-encoder kill-switch (Stage A). Off ⇒ pass None so the
     # fanout runs the cosine path verbatim.

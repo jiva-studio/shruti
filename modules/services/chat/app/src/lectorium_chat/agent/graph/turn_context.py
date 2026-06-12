@@ -80,6 +80,13 @@ class TurnContext:
     # root. Only consulted when `translate_citations` is on AND a citation
     # has no native variant. None in tests / when translation is disabled.
     translator: Any | None = None
+    # Corpus-constrained retrieval language for this turn (the language the
+    # citations were fetched in — answer lang if the corpus has it, else
+    # English). Set by research_worker / synthesis_planner. Used as the
+    # `src_lang` for the lazy commentary-card translation in
+    # `synthesizer.py`: a card is translated only when `retrieval_lang !=
+    # lang` (a non-corpus answer), so native ru/en answers cost no calls.
+    retrieval_lang: str = ""
     # Region of the originating request, derived from the trusted
     # `X-Lectorium-Region` header injected by the RU reverse proxy. None
     # means the request came directly from the global origin. Gated PII

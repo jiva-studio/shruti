@@ -142,6 +142,7 @@ async def synthesis_planner_node(
     retrieval_lang = await resolve_retrieval_lang(
         ctx.chunk_repo, state.get("lang") or "ru", request_id=ctx.request_id
     )
+    ctx.retrieval_lang = retrieval_lang
 
     # Stage 1: lazy commentary attach + per-thesis rerank.
     # Pulls purports ONLY for verses the planner picked, then re-ranks

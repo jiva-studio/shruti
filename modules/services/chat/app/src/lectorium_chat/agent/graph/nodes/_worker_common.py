@@ -188,18 +188,94 @@ async def localize_citation(
     return variants.get("en") or source_text, None, False
 
 
-async def flush_verse_payloads(ctx: TurnContext) -> None:
-    """Emit `action.kind=verse` events for every verse alias minted
-    on this turn that hasn't been emitted yet — ordering invariant
-    from plan section 11.5.1 (payload arrives BEFORE the inline
-    `[^N]` marker in delta text).
+async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any] | None:
+    """Fetch + build ONE verse card payload (sanskrit / transliteration /
+    translation / audio). For a non-corpus answer with translation opted in,
+    the prose `translation` map gains a translated `ctx.lang` entry (+ mt);
+    native (ru/en) answers translate nothing. Returns None on fetch failure
+    or missing body.
 
-    Called at the end of any worker that may have minted verse refs
-    (research_worker calls chunks_search / chunks_get_by_address →
-    minting). Catalog / action / help workers don't, but it's cheap
-    to call anyway — the loop short-circuits on empty alias map.
+    Shared by the eager `flush_verse_payloads` (legacy inline clients) and
+    the lazy synth-time emit (`synthesizer._emit_verse_card`): the DB fetch
+    is cheap and identical, but card clients call this only for the verses
+    actually CITED, so the (expensive) translation never runs on the rest of
+    the pool.
     """
-    if ctx.aliases is None or ctx.library_db_path is None:
+    if ctx.library_db_path is None:
+        return None
+    try:
+        body = await fetch_verse_body(ctx.library_db_path, vref.source_id, vref.tokens)
+    except Exception as exc:
+        log.warning(
+            "verse_payload_fetch_failed",
+            request_id=ctx.request_id,
+            source_id=vref.source_id,
+            tokens=vref.tokens,
+            error=str(exc),
+        )
+        return None
+    if body is None:
+        return None
+    # `transliteration` is a per-locale map ({en: IAST, ru: Cyrillic}); the
+    # wire field stays a single localised string. Pick the turn's lang, fall
+    # back to en (clean IAST) so a non-ru locale / IAST-only row still renders.
+    tr = body["transliteration"]
+    transliteration = tr.get(ctx.lang) or tr.get("en") or ""
+    transliteration_iast = tr.get("en") or ""
+    translation = dict(body["translation"])
+    payload: dict[str, Any] = {
+        "source_id": vref.source_id,
+        "tokens": vref.tokens,
+        "addr_label": vref.addr_label or "",
+        "sanskrit": body["sanskrit"],
+        "transliteration": transliteration,
+        "translation": translation,
+    }
+    # Original IAST (Latin) transliteration, shipped only when the localised
+    # script differs from it — lets the client's "view original" toggle flip
+    # the transliteration together with the translation.
+    if transliteration_iast and transliteration_iast != transliteration:
+        payload["transliteration_original"] = transliteration_iast
+    # Verse PROSE translation. The transliteration above is deterministic
+    # (never MT); the `translation` map is natural-language prose. When the
+    # turn's lang has no native variant and MT is on, add a translated entry
+    # under `ctx.lang` + record the original lang. `translation` stays a
+    # multilingual map (client reads `translation.en` as the original), so no
+    # separate `text_original` is needed — only the `mt` flag.
+    if ctx.lang not in translation:
+        orig_lang = "en" if translation.get("en") else next(
+            (lng for lng, t in translation.items() if t), None
+        )
+        source = translation.get(orig_lang or "", "")
+        shown, _orig, mt = await localize_citation(
+            ctx, variants=translation, source_text=source, src_lang=orig_lang,
+        )
+        if mt:
+            translation[ctx.lang] = shown
+            payload["mt"] = True
+            payload["translation_original_lang"] = orig_lang
+    # Expand the stored relative S3 key into a full public URL (same pattern
+    # as track PDFs). Omitted entirely when the verse has no recitation.
+    if body["audio_path"]:
+        payload["audio_url"] = f"{get_settings().s3_public_url}/{body['audio_path']}"
+    return payload
+
+
+async def flush_verse_payloads(ctx: TurnContext) -> None:
+    """Emit `action.kind=verse` events for every verse alias minted on this
+    turn that hasn't been emitted yet — ordering invariant: the payload
+    arrives BEFORE the inline `[verse:…]` marker in delta text.
+
+    LEGACY / inline clients only. Card-capable clients emit verse cards
+    LAZILY at synth time (`synthesizer._emit_verse_card`) — only the verses
+    actually cited — so the prose translation never runs on the uncited rest
+    of the candidate pool. Skipped entirely for them here.
+    """
+    if (
+        ctx.aliases is None
+        or ctx.library_db_path is None
+        or ctx.capabilities.get("commentary_card")
+    ):
         return
     writer = get_stream_writer()
     for ref_num, vref in ctx.aliases.verse_refs():
@@ -208,70 +284,9 @@ async def flush_verse_payloads(ctx: TurnContext) -> None:
         ctx.emitted_verse_refs.add(ref_num)
         if not isinstance(vref, VerseRef):
             continue
-        try:
-            body = await fetch_verse_body(
-                ctx.library_db_path, vref.source_id, vref.tokens
-            )
-        except Exception as exc:
-            log.warning(
-                "verse_payload_fetch_failed",
-                request_id=ctx.request_id,
-                source_id=vref.source_id,
-                tokens=vref.tokens,
-                error=str(exc),
-            )
+        payload = await build_verse_payload(ctx, vref)
+        if payload is None:
             continue
-        if body is None:
-            continue
-        # `transliteration` is a per-locale map ({en: IAST, ru: Cyrillic});
-        # the wire field stays a single localised string. Pick the turn's
-        # lang, fall back to en (clean IAST) so a non-ru locale or a row
-        # with only IAST still renders.
-        tr = body["transliteration"]
-        transliteration = tr.get(ctx.lang) or tr.get("en") or ""
-        transliteration_iast = tr.get("en") or ""
-        translation = dict(body["translation"])
-        payload: dict[str, Any] = {
-            "source_id": vref.source_id,
-            "tokens": vref.tokens,
-            "addr_label": vref.addr_label or "",
-            "sanskrit": body["sanskrit"],
-            "transliteration": transliteration,
-            "translation": translation,
-        }
-        # Original IAST (Latin) transliteration, shipped only when the
-        # localised script differs from it — lets the client's "view
-        # original" toggle flip the transliteration together with the
-        # translation back to the source verse form.
-        if transliteration_iast and transliteration_iast != transliteration:
-            payload["transliteration_original"] = transliteration_iast
-        # Verse PROSE translation localisation. The transliteration above is
-        # a deterministic script conversion (never MT); the `translation` map
-        # is natural-language prose. When the turn's lang has no native
-        # variant and MT is on, add a translated entry under `ctx.lang` and
-        # record the original lang. `translation` stays a multilingual map
-        # (the client reads `translation.en` as the original), so no separate
-        # `text_original` is needed — only the `mt` flag.
-        if ctx.lang not in translation:
-            # Pick a non-empty source variant (en-preferred) to translate.
-            orig_lang = "en" if translation.get("en") else next(
-                (lng for lng, t in translation.items() if t), None
-            )
-            source = translation.get(orig_lang or "", "")
-            shown, _orig, mt = await localize_citation(
-                ctx, variants=translation, source_text=source, src_lang=orig_lang,
-            )
-            if mt:
-                translation[ctx.lang] = shown
-                payload["mt"] = True
-                payload["translation_original_lang"] = orig_lang
-        # Expand the stored relative S3 key into a full public URL so the
-        # client gets a ready-to-play link (same pattern as track PDFs).
-        # Omitted entirely when the verse has no recitation.
-        if body["audio_path"]:
-            payload["audio_url"] = (
-                f"{get_settings().s3_public_url}/{body['audio_path']}"
-            )
         writer(
             {
                 "type": "action",
@@ -522,11 +537,18 @@ async def translate_commentaries(ctx: TurnContext) -> None:
     commentary's sentences concurrently in the worker and stash the result
     on the ref via `set_commentary_translation`; the expander then renders
     `sentences_translated or sentences`. No-op unless MT is opted in.
+
+    LEGACY (inline-blockquote) clients only. Card-capable clients translate
+    LAZILY in `synthesizer.py` — only the purports actually cited, not the
+    whole candidate pool. Pre-translating every attached purport here meant
+    translating ~10x more text than the answer ends up showing, so it's
+    skipped entirely when the client renders commentary cards.
     """
     if (
         ctx.aliases is None
         or not ctx.translate_citations
         or ctx.translator is None
+        or ctx.capabilities.get("commentary_card")
     ):
         return
 
