@@ -34,8 +34,6 @@ export const NOTIFICATION_PRIORITY = {
   daily: 10,
 } as const
 
-const DAY_MS = 86_400_000
-
 /** Local-calendar-day bucket key for a fire moment — collapses any two
  *  candidates that fall on the same day in the device's timezone. */
 function localDayKey(fireAtMs: number): string {
