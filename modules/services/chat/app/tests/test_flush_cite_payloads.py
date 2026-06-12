@@ -1,4 +1,4 @@
-"""Tests for `flush_cite_payloads` — the on-demand transcript re-fetch.
+"""Tests for `flush_card_payloads` — the on-demand transcript re-fetch.
 
 A cited fragment renders as a full quote card on the client only if a
 `cite_transcript` SSE payload precedes its `[cite:...]` marker. The text
@@ -16,7 +16,7 @@ import pytest
 import shruti_chat.agent.graph.nodes._worker_common as wc
 from shruti_chat.agent.graph.nodes._worker_common import (
     _fetch_cite_text,
-    flush_cite_payloads,
+    flush_card_payloads,
 )
 from shruti_chat.agent.graph.turn_context import TurnContext
 
@@ -39,7 +39,7 @@ class FakeChunkRepo:
 
 @pytest.fixture
 def capture_writer(monkeypatch):
-    """Patch get_stream_writer so flush_cite_payloads' emits land in a list."""
+    """Patch get_stream_writer so flush_card_payloads' emits land in a list."""
     events: list[dict] = []
     monkeypatch.setattr(wc, "get_stream_writer", lambda: events.append)
     return events
@@ -87,7 +87,7 @@ async def test_flush_prefers_stashed_chunk_text(capture_writer) -> None:
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "stashed snippet"
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     assert repo.calls == []  # stashed text wins; no re-fetch
     assert len(capture_writer) == 1
@@ -96,7 +96,7 @@ async def test_flush_prefers_stashed_chunk_text(capture_writer) -> None:
     assert payload["track_id"] == "t1"
     assert payload["start_ms"] == 1000
     assert payload["end_ms"] == 2000
-    assert n in ctx.emitted_cite_refs
+    assert ("cite", ("t1", 1000, 2000)) in ctx.emitted_card_keys
 
 
 async def test_flush_refetches_when_text_missing(capture_writer) -> None:
@@ -104,10 +104,10 @@ async def test_flush_refetches_when_text_missing(capture_writer) -> None:
     re-fetched by exact bounds so the card still renders the right text."""
     repo = FakeChunkRepo("re-fetched snippet")
     ctx = TurnContext(chunk_repo=repo)
-    n = ctx.aliases.alias_chunk("t9", 5000, 6000, lang="ru")
+    ctx.aliases.alias_chunk("t9", 5000, 6000, lang="ru")
     # no chunk_texts entry
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     assert repo.calls == [{"track_id": "t9", "start_ms": 5000, "end_ms": 6000, "lang": "ru"}]
     assert len(capture_writer) == 1
@@ -120,6 +120,6 @@ async def test_flush_skips_when_fetch_empty(capture_writer) -> None:
     ctx = TurnContext(chunk_repo=repo)
     ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     assert capture_writer == []
