@@ -1,5 +1,8 @@
 import { useShruti } from "@shruti/shruti.js"
 import type { HolidayEntry, RemoteAppConfig } from "@lib/domain/config.js"
+import { notificationIdFor } from "../hash.js"
+import { toNotificationPreview } from "../notificationPreview.js"
+import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -73,6 +76,23 @@ const handler: ProactiveRuleHandler = {
     // (catalog.publish without that holiday).
     const calendars = await readHolidayCalendar()
     return calendars.some((h) => h.date === entry.ruleDate)
+  },
+
+  collectNotifications(entry) {
+    if (!entry.notify || entry.visibleAt === null) return []
+    const body = toNotificationPreview(entry.bodyMd)
+    if (body === "") return []
+    return [
+      {
+        id: notificationIdFor(entry.chatMessageId),
+        fireAtMs: entry.visibleAt * 1000,
+        priority: NOTIFICATION_PRIORITY.holiday,
+        kind: "holiday",
+        title: "",
+        body,
+        extra: { chatSessionId: entry.sessionId, chatMessageId: entry.chatMessageId },
+      },
+    ]
   },
 
   async buildContent(entry, ctx) {

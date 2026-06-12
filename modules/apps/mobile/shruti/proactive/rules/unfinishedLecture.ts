@@ -1,8 +1,9 @@
 import type { TrackId } from "@lib/domain/core.js"
 import { maxAudioDurationMs } from "@lib/domain/track.js"
 import type { Track } from "@lib/domain/track.js"
-import { useShruti } from "@shruti/shruti.js"
 import { notificationIdFor } from "../hash.js"
+import { toNotificationPreview } from "../notificationPreview.js"
+import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
 import { resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
@@ -76,7 +77,6 @@ const handler: ProactiveRuleHandler = {
   },
 
   async onAppPause(ctx) {
-    const app = useShruti()
     const repo = ctx.repos.proactiveState
     const recent = await repo.listRecentByRule("unfinished_lecture", 1)
     if (recent.length > 0 && ctx.nowMs - recent[0].createdAt < COOLDOWN_MS) return
@@ -143,22 +143,30 @@ const handler: ProactiveRuleHandler = {
       await ctx.repos.chatSessions.delete(sessionId).catch(() => undefined)
       return
     }
+    // The notification planner owns OS scheduling now. The row carries
+    // `notify=true` + `visible_at`; the next planner pass (foreground or
+    // background) surfaces this rule's candidate via `collectNotifications`
+    // and arbitrates it against the day's other pushes.
+  },
 
-    // Static-with-title copy: the app is backgrounded and `buildContent`
-    // hasn't run, so the body is composed here from the catalog title. A
-    // later foreground tick re-arms the same id with the prepped card
-    // preview (idempotent on id at the Capacitor layer).
-    try {
-      await app.notifications.schedule({
-        id: notificationIdFor(chatMessageId),
-        title: sessionTitle,
-        body: ctx.t("notifications.unfinishedLectureBody", { title }),
-        at: fireAt.getTime(),
-        extra: { chatSessionId: sessionId, chatMessageId },
-      })
-    } catch (err) {
-      console.warn("[proactive/unfinished_lecture] schedule notification failed", err)
-    }
+  collectNotifications(entry) {
+    if (!entry.notify || entry.visibleAt === null) return []
+    // The planner only gathers `ready`/`degraded` rows, so by the time we
+    // get here `buildContent` has produced the catalog-title preview into
+    // `body_md`. Empty body → nothing to push yet; skip.
+    const body = toNotificationPreview(entry.bodyMd)
+    if (body === "") return []
+    return [
+      {
+        id: notificationIdFor(entry.chatMessageId),
+        fireAtMs: entry.visibleAt * 1000,
+        priority: NOTIFICATION_PRIORITY.unfinished_lecture,
+        kind: "unfinished_lecture",
+        title: "",
+        body,
+        extra: { chatSessionId: entry.sessionId, chatMessageId: entry.chatMessageId },
+      },
+    ]
   },
 
   async validate(entry, ctx) {

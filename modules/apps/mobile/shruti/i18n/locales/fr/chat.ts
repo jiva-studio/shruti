@@ -268,8 +268,24 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Rappel quotidien",
   proactiveSessionTitleSmartLibrary: "Bibliothèque intelligente",
-  proactiveSessionTitleNextShloka: "Verset suivant",
+  proactiveSessionTitleNextShloka: "Conférence sur le verset suivant",
   proactiveSessionTitleUnfinishedLecture: "Conférence inachevée",
+  proactiveSessionTitleInactivity: "Reprenez votre pratique",
+
+  // Welcome body shown when re-engaging the user after a period of
+  // inactivity (the `inactivity` proactive rule).
+  proactiveInactivityWelcomeBody:
+    "Cela fait un moment. De nouvelles conférences vous attendent — ouvrez votre bibliothèque et reprenez là où vous vous êtes arrêté.",
+
+  // Weekly digest of the user's listening activity.
+  weeklyDigestTitle: "Votre semaine",
+  weeklyDigestTotalTime: "Temps d'écoute total",
+  weeklyDigestLectures: "Conférences cette semaine",
+  weeklyDigestStreak: "Jours d'affilée",
+  weeklyDigestCompleted: "Terminées",
+  weeklyDigestEmpty:
+    "Vous n'avez rien écouté cette semaine — choisissez une nouveauté pour reprendre le rythme.",
+  weeklyDigestMore: "+{count} de plus",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The

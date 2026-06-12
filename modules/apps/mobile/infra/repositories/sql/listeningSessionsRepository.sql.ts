@@ -11,6 +11,7 @@ import type {
   IListeningSessionRepository,
   ProgressEntry,
   RecentTrackProgress,
+  TrackListeningTotal,
 } from "@lib/domain/ports/listeningSessionRepository.js"
 import type { ListeningSessionRow } from "@lib/persistence/user"
 import { mutate, queryOne } from "@kit/persistence"
@@ -196,6 +197,26 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         trackId: r.track_id as TrackId,
         endedAtMs: Number(r.ended_at) * 1000,
         positionSec: Number(r.position),
+      }))
+    },
+
+    async getTracksListenedInRange(fromMs, toMs): Promise<readonly TrackListeningTotal[]> {
+      const fromSec = Math.floor(fromMs / 1000)
+      const toSec = Math.floor(toMs / 1000)
+      const rows = await db.query<{ track_id: string; listened_seconds: number }>(
+        `SELECT pi.track_id AS track_id,
+                SUM(MAX(0, ls.to_position - ls.from_position)) AS listened_seconds
+           FROM listening_sessions ls
+           JOIN playlist_items pi ON pi.id = ls.item_id
+          WHERE ls.ended_at >= ? AND ls.ended_at < ?
+          GROUP BY pi.track_id
+         HAVING listened_seconds > 0
+          ORDER BY listened_seconds DESC`,
+        [fromSec, toSec]
+      )
+      return rows.map((r) => ({
+        trackId: r.track_id as TrackId,
+        listenedSeconds: Number(r.listened_seconds),
       }))
     },
 

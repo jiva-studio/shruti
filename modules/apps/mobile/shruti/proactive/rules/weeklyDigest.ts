@@ -1,3 +1,6 @@
+import { notificationIdFor } from "../hash.js"
+import { toNotificationPreview } from "../notificationPreview.js"
+import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -56,8 +59,9 @@ function weekLabel(weekStart: Date, weekEnd: Date, locale: string): string {
  * collect is fresh; cooldown of 144 h keeps us to one digest per week.
  *
  * The detector itself doesn't compose the body — it just inserts the
- * row. `buildContent` runs the proactive `/chat` turn and returns the
- * markdown when the next tick picks the row up.
+ * row. `buildContent` emits a single deterministic `[digest:from-to]`
+ * marker (no LLM); `WeeklyDigestCard.vue` fetches the recap data for the
+ * window and renders the chart + lecture list + summary badges.
  */
 const handler: ProactiveRuleHandler = {
   id: "weekly_digest",
@@ -89,44 +93,33 @@ const handler: ProactiveRuleHandler = {
     return true
   },
 
-  async buildContent(entry, ctx) {
-    const repos = ctx.repos
+  collectNotifications(entry) {
+    if (!entry.notify || entry.visibleAt === null) return []
+    const body = toNotificationPreview(entry.bodyMd)
+    if (body === "") return []
+    return [
+      {
+        id: notificationIdFor(entry.chatMessageId),
+        fireAtMs: entry.visibleAt * 1000,
+        priority: NOTIFICATION_PRIORITY.weekly_digest,
+        kind: "weekly_digest",
+        title: "",
+        body,
+        extra: { chatSessionId: entry.sessionId, chatMessageId: entry.chatMessageId },
+      },
+    ]
+  },
 
-    // 7-day window ending at the proactive message's rule_date.
+  async buildContent(entry) {
+    // 7-day window ending at the proactive message's rule_date. The card
+    // (`WeeklyDigestCard.vue`) loads the recap itself from this window —
+    // the rule just emits the marker, no LLM and no client-side
+    // aggregation here.
     const sundayUtc = new Date(`${entry.ruleDate}T00:00:00`).getTime()
     const fromMs = sundayUtc - 6 * 86_400_000
     const toMs = sundayUtc + 86_400_000
 
-    const [dailyTotals, recent] = await Promise.all([
-      repos.listeningSessions.getDailyTotals(fromMs, toMs),
-      repos.listeningSessions.listRecentTracksWithProgress(20),
-    ])
-    const totalListenedSeconds = dailyTotals.reduce((acc, d) => acc + d.listenedSeconds, 0)
-    const completedTrackIds = recent
-      .filter((r) => r.endedAtMs >= fromMs && r.endedAtMs < toMs)
-      .map((r) => r.trackId)
-
-    const ruleContext = {
-      week_start: formatYmd(new Date(fromMs)),
-      week_end: entry.ruleDate,
-      total_listened_seconds: totalListenedSeconds,
-      completed_track_ids: completedTrackIds,
-      current_streak: ctx.currentStreak,
-      // top_tags / top_authors aren't aggregated client-side yet;
-      // the LLM prompt copes with missing fields. Future work.
-      top_tags: [],
-      top_authors: [],
-    }
-
-    const result = await ctx.proactiveChat.run(
-      {
-        ruleKind: "weekly_digest",
-        ruleDate: entry.ruleDate,
-        ruleContext,
-      },
-      ctx.locale
-    )
-    return result
+    return { bodyMd: `[digest:${fromMs}-${toMs}]` }
   },
 }
 

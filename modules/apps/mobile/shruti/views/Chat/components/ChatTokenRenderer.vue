@@ -78,6 +78,11 @@
       v-else-if="token.kind === 'commentary'"
       :body="message.commentaries?.[String(token.ref)]"
     />
+    <WeeklyDigestCard
+      v-else-if="token.kind === 'digest'"
+      :from-ms="token.fromMs"
+      :to-ms="token.toMs"
+    />
     <!--
       Markdown blockquote (library document citation). bodyHtml and
       attributionHtml are output of marked.parseInline on a vetted text
@@ -110,6 +115,7 @@ import VerseCard from "./VerseCard.vue"
 import ChapterCard from "./ChapterCard.vue"
 import MediaCard from "./MediaCard.vue"
 import CommentaryCard from "./CommentaryCard.vue"
+import WeeklyDigestCard from "./WeeklyDigestCard.vue"
 import ActionCardSharePdf from "./ActionCardSharePdf.vue"
 import ActionCardEnableReminder from "./ActionCardEnableReminder.vue"
 import ActionCardConfigureSmartLibrary from "./ActionCardConfigureSmartLibrary.vue"
