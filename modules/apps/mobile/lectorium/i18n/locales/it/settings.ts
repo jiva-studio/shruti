@@ -104,7 +104,8 @@ export default {
       },
       notesStudio: {
         title: "Studio delle note",
-        description: "Trasforma le tue note dalle lezioni in brevi video e condividili con gli amici.",
+        description:
+          "Trasforma le tue note dalle lezioni in brevi video e condividili con gli amici.",
       },
       trackInfo: {
         title: "Layout informazioni traccia",

@@ -9,5 +9,6 @@ export default {
   // Re-engagement push fired by the `unfinished_lecture` rule, scheduled
   // in the background a day after the user left a lecture unfinished.
   // `{title}` is the lecture's localised catalog title.
-  unfinishedLectureBody: "Du hast „{title}“ noch nicht zu Ende gehört. Tippe, um zurückzukehren und ihn abzuschließen.",
+  unfinishedLectureBody:
+    "Du hast „{title}“ noch nicht zu Ende gehört. Tippe, um zurückzukehren und ihn abzuschließen.",
 }

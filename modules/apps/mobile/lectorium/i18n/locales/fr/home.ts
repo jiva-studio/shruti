@@ -1,9 +1,9 @@
 export default {
   upNext: "À suivre",
   playlistIsEmpty: "La playlist est vide",
-  tapToAddTracks: 'Ajoutez des conférences dans la section « Recherche »',
+  tapToAddTracks: "Ajoutez des conférences dans la section « Recherche »",
   tapToAddTracksWithPacks:
-    'Ajoutez des conférences dans la section « Recherche » ou choisissez parmi les suggestions ci-dessous',
+    "Ajoutez des conférences dans la section « Recherche » ou choisissez parmi les suggestions ci-dessous",
   starterPacks: {
     error: "Impossible d'ajouter les conférences",
   },

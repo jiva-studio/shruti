@@ -28,7 +28,8 @@ export default {
     },
     notes: {
       title: "Notizen",
-      summary: "Passagen aus Vorträgen speichern, den Ausschnitt erneut abspielen, teilen oder exportieren",
+      summary:
+        "Passagen aus Vorträgen speichern, den Ausschnitt erneut abspielen, teilen oder exportieren",
     },
     "activity-tracker": {
       title: "Aktivitätstracker",
@@ -67,7 +68,8 @@ export default {
     screens: {
       home: {
         title: "Start — deine Playlist",
-        description: "Jeder Track hier ist in deiner Playlist. Das Symbol zeigt deinen Fortschritt.",
+        description:
+          "Jeder Track hier ist in deiner Playlist. Das Symbol zeigt deinen Fortschritt.",
       },
       search: {
         title: "Suche und Bibliothek",
@@ -79,11 +81,13 @@ export default {
     common: {
       downloading: {
         title: "Wird heruntergeladen",
-        description: "Der Track wird heruntergeladen. Der Ring füllt sich mit dem Fortschritt des Downloads.",
+        description:
+          "Der Track wird heruntergeladen. Der Ring füllt sich mit dem Fortschritt des Downloads.",
       },
       failed: {
         title: "Download fehlgeschlagen",
-        description: "Der Download wurde unterbrochen. Tippe auf den Track, um es erneut zu versuchen.",
+        description:
+          "Der Download wurde unterbrochen. Tippe auf den Track, um es erneut zu versuchen.",
       },
       completed: {
         title: "Abgeschlossen",

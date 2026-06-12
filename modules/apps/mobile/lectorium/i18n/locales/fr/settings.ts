@@ -37,7 +37,8 @@ export default {
       alreadyDeletedToast: "Votre compte est déjà supprimé.",
       rateLimitedToast: "Veuillez patienter un peu avant de réessayer.",
       networkErrorToast: "Pas de connexion. Vérifiez votre internet et réessayez.",
-      serverErrorToast: "Un problème est survenu de notre côté. Veuillez réessayer dans un instant.",
+      serverErrorToast:
+        "Un problème est survenu de notre côté. Veuillez réessayer dans un instant.",
     },
   },
 
@@ -46,7 +47,7 @@ export default {
     description: "Gestion de l'abonnement",
     subscriptionIsActive: "L'abonnement est actif",
     tapToManage: "Appuyez pour voir ou gérer",
-    choose: 'Soutenir « Shruti »',
+    choose: "Soutenir « Shruti »",
     subscribe: "S'abonner",
     subscribed: "Abonnement effectué",
     manage: "Gérer l'abonnement",
@@ -104,7 +105,8 @@ export default {
       },
       notesStudio: {
         title: "Studio de notes",
-        description: "Transformez vos notes de conférences en courtes vidéos et partagez-les avec vos amis.",
+        description:
+          "Transformez vos notes de conférences en courtes vidéos et partagez-les avec vos amis.",
       },
       trackInfo: {
         title: "Disposition des informations",

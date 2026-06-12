@@ -104,7 +104,8 @@ export default {
       },
       notesStudio: {
         title: "Studio notatek",
-        description: "Zamień swoje notatki z wykładów w krótkie filmy i podziel się nimi z przyjaciółmi.",
+        description:
+          "Zamień swoje notatki z wykładów w krótkie filmy i podziel się nimi z przyjaciółmi.",
       },
       trackInfo: {
         title: "Układ informacji o wykładzie",

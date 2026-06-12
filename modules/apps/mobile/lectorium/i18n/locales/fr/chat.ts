@@ -74,7 +74,8 @@ export default {
   /** HTTP 401/403. App token rejected; user can't fix this in-place. */
   errAuth: "Échec de l'autorisation. Redémarrez l'application pour réessayer.",
   /** HTTP 426 — server is on a newer protocol and refuses our request. */
-  errProtocol: "Cette version de l'application n'est plus prise en charge. Veuillez la mettre à jour.",
+  errProtocol:
+    "Cette version de l'application n'est plus prise en charge. Veuillez la mettre à jour.",
   /** Toast surfaced on HTTP 426 — server demands a newer protocol
    *  version than we sent. CTA opens the matching app store. */
   error: {
@@ -126,9 +127,11 @@ export default {
   // strings every time we tune. The "{when}" placeholder shows the
   // actual reset boundary so users still know how long the wait is.
   errQuotaAnonTitle: "Limite quotidienne de messages atteinte",
-  errQuotaAnonBody: "Connectez-vous pour obtenir plus de messages par jour. Réinitialisation {when}.",
+  errQuotaAnonBody:
+    "Connectez-vous pour obtenir plus de messages par jour. Réinitialisation {when}.",
   errQuotaFreeTitle: "Limite quotidienne de messages atteinte",
-  errQuotaFreeBody: "Avec Shruti Pro, la limite quotidienne disparaît. Réinitialisation {when}.",
+  errQuotaFreeBody:
+    "Avec Shruti Pro, la limite quotidienne disparaît. Réinitialisation {when}.",
   errQuotaProTitle: "Limite quotidienne atteinte",
   errQuotaProBody: "Vous avez épuisé vos messages du jour. Réinitialisation {when}.",
   /** CTAs under quota InlineNotices. Anon → opens Settings (where the

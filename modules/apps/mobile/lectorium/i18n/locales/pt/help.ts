@@ -87,8 +87,7 @@ export default {
       },
       completed: {
         title: "Concluída",
-        description:
-          "Você concluiu a faixa. Ela permanece marcada para você ver o que já ouviu.",
+        description: "Você concluiu a faixa. Ela permanece marcada para você ver o que já ouviu.",
       },
     },
 

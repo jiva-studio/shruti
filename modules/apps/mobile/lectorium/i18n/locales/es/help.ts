@@ -67,7 +67,8 @@ export default {
     screens: {
       home: {
         title: "Inicio — tu lista de reproducción",
-        description: "Todas las pistas de aquí están en tu lista. El distintivo muestra tu progreso.",
+        description:
+          "Todas las pistas de aquí están en tu lista. El distintivo muestra tu progreso.",
       },
       search: {
         title: "Buscar y Biblioteca",
@@ -79,7 +80,8 @@ export default {
     common: {
       downloading: {
         title: "Descargando",
-        description: "La pista se está descargando. El anillo se llena a medida que avanza la descarga.",
+        description:
+          "La pista se está descargando. El anillo se llena a medida que avanza la descarga.",
       },
       failed: {
         title: "Error en la descarga",

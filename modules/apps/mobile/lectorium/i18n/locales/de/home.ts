@@ -1,9 +1,9 @@
 export default {
   upNext: "Als Nächstes",
   playlistIsEmpty: "Playlist ist leer",
-  tapToAddTracks: 'Füge Vorträge im Bereich „Suche“ hinzu',
+  tapToAddTracks: "Füge Vorträge im Bereich „Suche“ hinzu",
   tapToAddTracksWithPacks:
-    'Füge Vorträge im Bereich „Suche“ hinzu oder wähle aus den Vorschlägen unten',
+    "Füge Vorträge im Bereich „Suche“ hinzu oder wähle aus den Vorschlägen unten",
   starterPacks: {
     error: "Vorträge konnten nicht hinzugefügt werden",
   },
