@@ -11,14 +11,11 @@ export { BackendUnavailableError, ProtocolVersionMismatchError }
 /* -------------------------------------------------------------------------- */
 
 // The SSE wire protocol is owned by `@lib/contracts` (the shared kernel) so a
-// server protocol change is edited in ONE place. Re-exported here under the
-// historical local names so the parsers + the rest of this module read
-// unchanged. Decoded payloads stay snake_case (verbatim from the wire); the
-// `runChatTurn` use-case is the single boundary that maps them to the
-// camelCase domain shapes — `media` included, so there's no longer a special
-// case that decodes straight to camelCase.
+// server protocol change is edited in ONE place. Imported here under shorter
+// local names for the parsers below; decoded payloads stay snake_case
+// (verbatim from the wire), and the `runChatTurn` use-case is the single
+// boundary that maps them to the camelCase domain shapes — `media` included.
 import type {
-  ChatRole,
   ChatTurn,
   ResearchSourceKind,
   ChatStreamEvent,
@@ -32,27 +29,10 @@ import type {
   ChatChapterPayloadWire as ChapterPayload,
   ChatMediaPayloadWire as MediaPayload,
 } from "@lib/contracts"
-// Preserve the historical export surface (the local names) for any
-// call-site / test that imported these off the adapter rather than contracts.
-export type {
-  ChatRole,
-  ChatTurn,
-  ResearchSourceKind,
-  ChatStreamEvent,
-  ActionPayload,
-  OutlinePayload,
-  SharePdfRefPayload,
-  SharePdfItemPayload,
-  VersePayload,
-  CiteTranscriptPayload,
-  CommentaryPayload,
-  ChapterPayload,
-  MediaPayload,
-}
 
 /** One outline list-item. `@lib/contracts` inlines this inside
  *  `ChatOutlinePayload.items`; named here for the parser's local use. */
-export interface OutlineItemPayload {
+interface OutlineItemPayload {
   readonly startMs: number
   readonly title: string
 }
@@ -60,7 +40,7 @@ export interface OutlineItemPayload {
 /** Decoded alias map — same shape as the wire `done.aliases`. Keys are
  *  integer aliases serialised as strings; start/end ms only on cite-level
  *  chunk aliases. The use-case maps it to camelCase `ChatAliasEntry`. */
-export interface AliasMapPayload {
+interface AliasMapPayload {
   readonly [refStr: string]: {
     readonly track_id: string
     readonly start_ms?: number
