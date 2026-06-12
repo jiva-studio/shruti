@@ -114,6 +114,21 @@ async def test_flush_cite_translates_non_native(capture_writer):
     assert payload["text_original"] == "english transcript"
 
 
+async def test_flush_cite_skipped_for_card_client(capture_writer):
+    """Card-capable clients emit cite cards lazily at synth time, so the eager
+    flush must NOT translate or emit the aliased lecture-fragment pool."""
+    tr = FakeTranslator()
+    ctx = TurnContext(
+        lang="uk", translate_citations=True, translator=tr,
+        capabilities={"commentary_card": True},
+    )
+    n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
+    ctx.aliases.chunk_texts[n] = "english transcript"
+    await flush_cite_payloads(ctx)
+    assert capture_writer == []  # nothing emitted
+    assert tr.calls == []        # nothing translated
+
+
 async def test_flush_cite_native_no_mt_field(capture_writer):
     ctx = TurnContext(lang="en", translate_citations=True, translator=FakeTranslator())
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
