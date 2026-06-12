@@ -33,6 +33,7 @@ import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClien
 import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
 import { createHttpChatQuestionsService } from "@infra/chat/http/httpChatQuestionsService.js"
 import { createHttpChatFeedbackService } from "@infra/chat/http/httpChatFeedbackService.js"
+import { createHttpChatResumeService } from "@infra/chat/http/httpChatResumeService.js"
 
 /**
  * App-wide config passed into `initLectorium`. Built from `DEFAULT_APP_CONFIG`
@@ -106,6 +107,7 @@ export interface Lectorium {
   readonly chatTitleService: ReturnType<typeof createHttpChatTitleService>
   readonly chatQuestionsService: ReturnType<typeof createHttpChatQuestionsService>
   readonly chatFeedbackService: ReturnType<typeof createHttpChatFeedbackService>
+  readonly chatResumeService: ReturnType<typeof createHttpChatResumeService>
   /** Native Filesystem+Share / web Blob+IDB adapter for exporting / importing
    * the user database. Wired with a `() => databases.user` closure so the
    * user DB doesn't have to be open at app-bootstrap time. */
@@ -235,6 +237,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
   const chatTitleService = createHttpChatTitleService(chatAuthDeps)
   const chatQuestionsService = createHttpChatQuestionsService(chatAuthDeps)
   const chatFeedbackService = createHttpChatFeedbackService(chatAuthDeps)
+  const chatResumeService = createHttpChatResumeService(chatAuthDeps)
 
   const self: Lectorium = {
     appConfig: seed.appConfig,
@@ -260,6 +263,7 @@ export function initLectorium(seed: InitLectoriumSeed): Lectorium {
     chatTitleService,
     chatQuestionsService,
     chatFeedbackService,
+    chatResumeService,
     databaseTransfer: seed.databaseTransferFactory(() => databases.user),
     platform: seed.platform,
     activeServer,

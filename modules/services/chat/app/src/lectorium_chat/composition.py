@@ -15,6 +15,7 @@ import asyncpg
 from fastapi import Request
 
 from lectorium_chat.application.rate_limiter import RateLimiter
+from lectorium_chat.application.turn_runner import TurnRunner
 from lectorium_chat.config import Settings
 from lectorium_chat.infra.auth.jwt_verifier import JwtVerifier
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
@@ -23,6 +24,7 @@ from lectorium_chat.domain.ports.embedder import EmbedderPort
 from lectorium_chat.domain.ports.kv_cache import KVCache
 from lectorium_chat.domain.ports.llm_provider import LLMPort
 from lectorium_chat.domain.ports.idempotency_store import IdempotencyStore
+from lectorium_chat.domain.ports.turn_store import TurnStore
 from lectorium_chat.domain.ports.outline_cache import OutlineCache
 from lectorium_chat.domain.ports.pdf_storage import PdfStorage
 from lectorium_chat.domain.ports.reranker import RerankerPort
@@ -46,6 +48,13 @@ class AppDeps:
     # Atomic duplicate-request gate keyed on Idempotency-Key. Implemented
     # over Redis when configured, no-op otherwise.
     idempotency_store: IdempotencyStore
+    # Buffers a turn's SSE events so a client that dropped the connection
+    # (backgrounded / navigated away) can fetch the finished answer on
+    # return. Redis when configured, no-op (resume off) otherwise.
+    turn_store: TurnStore
+    # Hosts a chat turn as a detached background task (spawn / buffer /
+    # heartbeat / cancel registry) so that lifecycle stays out of the API route.
+    turn_runner: TurnRunner
     # LangGraph wiring. `llm` is the injected LLMPort (OpenRouter adapter
     # in production, FakeLLM in tests). `chat_graph` is the compiled
     # Pregel — built once at startup, reused for every chat turn.

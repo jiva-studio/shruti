@@ -155,6 +155,19 @@ async def lifespan(app: FastAPI):
         from lectorium_chat.infra.idempotency.noop import NoopIdempotencyStore
         idempotency_store = NoopIdempotencyStore()
 
+    # Turn buffer for the resume / reconnect flow. Redis-backed when
+    # configured; no-op otherwise (resume simply off).
+    if s.redis_url:
+        from lectorium_chat.infra.turn_store.redis_turn_store import RedisTurnStore
+        turn_store = RedisTurnStore(s.redis_url)
+    else:
+        from lectorium_chat.infra.turn_store.noop import NoopTurnStore
+        turn_store = NoopTurnStore()
+
+    # Hosts chat turns as detached background tasks (buffer + resume + cancel).
+    from lectorium_chat.application.turn_runner import TurnRunner
+    turn_runner = TurnRunner(turn_store)
+
     # LangGraph wiring. Compile the chat graph once and stash on deps —
     # node fns are async and stateless, the compiled graph is reused
     # for every chat turn.
@@ -189,6 +202,8 @@ async def lifespan(app: FastAPI):
         jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,
         idempotency_store=idempotency_store,
+        turn_store=turn_store,
+        turn_runner=turn_runner,
         llm=llm_provider,
         chat_graph=chat_graph,
         reranker=get_reranker(s),
@@ -233,6 +248,9 @@ async def lifespan(app: FastAPI):
             await scheduler_task
         except (asyncio.CancelledError, Exception):
             pass
+        # Cancel any in-flight detached chat-turn producers so the redeploy
+        # terminates cleanly instead of abandoning tasks mid-run.
+        await turn_runner.shutdown()
         if l2 is not None:
             await l2.close()
         await rate_limit_store.close()

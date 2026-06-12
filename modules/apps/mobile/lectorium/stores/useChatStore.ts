@@ -4,6 +4,7 @@ import { useNow } from "@vueuse/core"
 import { toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
+import { emitTurnSettled, emitTurnStarted } from "@lectorium/chat/turnNotificationEvents.js"
 import { useToast } from "@kit/composables"
 import { openStorePage } from "@lectorium/utils/openStorePage.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -25,6 +26,7 @@ import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
+  replayChatTurn,
   runChatTurn,
   submitChatFeedback,
   type RunChatTurnEvent,
@@ -42,7 +44,7 @@ import type {
 } from "@lib/domain"
 import { BackendUnavailableError, ProtocolVersionMismatchError } from "@lib/domain/chatMessage.js"
 import type { ChatMessageId, ChatSessionId, TrackId } from "@lib/domain/core.js"
-import type { ChatTurn, FeedbackCategory } from "@lib/contracts"
+import type { ChatStreamEvent, ChatTurn, FeedbackCategory } from "@lib/contracts"
 
 /* -------------------------------------------------------------------------- */
 /*                                  Domain                                    */
@@ -337,7 +339,14 @@ export const useChatStore = defineStore("chat", () => {
     return sessions.value.find((s) => s.id === id) ?? null
   })
 
-  let abort: AbortController | null = null
+  /** In-flight chat turns keyed by sessionId. A turn keeps streaming even
+   *  after the user navigates away from its session — we DETACH instead of
+   *  aborting (openSession / startNewSession / Ask Sadhu used to call
+   *  `cancelStream` here). `runChatTurn` persists the finalised reply to
+   *  SQLite regardless of whether the UI is still consuming it, so the
+   *  answer is never lost on a mid-stream session switch. The Stop button
+   *  (`cancelStream`) only targets the active session's controller. */
+  const turnControllers = new Map<string, AbortController>()
   let suggestionsAbort: AbortController | null = null
 
   /** Id of the assistant placeholder for the turn currently streaming.
@@ -367,6 +376,9 @@ export const useChatStore = defineStore("chat", () => {
 
   function streamClient() {
     return app.chatStreamClient
+  }
+  function resumeService() {
+    return app.chatResumeService
   }
   function titleService() {
     return app.chatTitleService
@@ -407,14 +419,17 @@ export const useChatStore = defineStore("chat", () => {
     // Without this guard, that second call would abort the in-flight
     // suggestions request and reload the message list redundantly.
     if (activeSessionId.value === id) return
-    // Switching away from a session mid-stream must abort its turn —
-    // otherwise the in-flight turn keeps yielding and its terminal
-    // finalised/error would land in the session we just opened (the
-    // consume loop's session guard is the second line of defence). The
-    // assistant message is still persisted to its own session in SQLite.
-    cancelStream()
+    // Switching away from a session mid-stream DETACHES its turn rather
+    // than aborting it: the turn keeps streaming and `runChatTurn`
+    // persists its finalised reply to the turn's own session in SQLite,
+    // so navigating away no longer loses the answer. The consume loop's
+    // session guard stops its events from leaking into the session we're
+    // opening; `cancelSuggestions` still cancels the (unrelated)
+    // suggestion fetch. The Stop button is the only explicit abort.
     cancelSuggestions()
+    streamingMessageId = null
     activeSessionId.value = id
+    syncComposeBusy()
     const repos = chatRepos()
     const rows = await repos.messages.listBySession(id as ChatSessionId)
     messages.value = rows.map((m) => ({ ...m }))
@@ -441,10 +456,13 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   function startNewSession(): void {
-    if (sending.value) cancelStream()
+    // Detach (don't abort) any in-flight turn — it finishes and persists
+    // to its own session. Starting a fresh chat just clears the view.
     cancelSuggestions()
+    streamingMessageId = null
     activeSessionId.value = null
     messages.value = []
+    sending.value = false
   }
 
   /**
@@ -455,7 +473,7 @@ export const useChatStore = defineStore("chat", () => {
    * (`trackId === null`) are not touched.
    */
   async function openOrCreateFocusedSession(trackId: TrackId): Promise<ChatSessionId> {
-    if (sending.value) cancelStream()
+    // Detach (don't abort) any in-flight turn — see openSession.
     cancelSuggestions()
     const repos = chatRepos()
     const existing = await repos.sessions.findLatestByTrack(trackId)
@@ -465,9 +483,11 @@ export const useChatStore = defineStore("chat", () => {
     }
     const id = randomId() as ChatSessionId
     const created = await repos.sessions.create({ id, title: null, trackId })
+    streamingMessageId = null
     activeSessionId.value = id
     messages.value = []
     sessions.value = [created, ...sessions.value.filter((s) => s.id !== id)]
+    syncComposeBusy()
     return id
   }
 
@@ -659,7 +679,8 @@ export const useChatStore = defineStore("chat", () => {
     // Only the assistant reply waits on the network, never the user's
     // own message.
     const sessionId = (await ensureActiveSession(clean)) as ChatSessionId
-    abort = new AbortController()
+    const controller = new AbortController()
+    turnControllers.set(sessionId, controller)
     const repos = chatRepos()
 
     // Snapshot history BEFORE we add the new turn so the server doesn't
@@ -697,7 +718,7 @@ export const useChatStore = defineStore("chat", () => {
           focus: options?.focus,
           isFirstAssistantTurn: isFirst,
           newMessageId: () => randomId() as ChatMessageId,
-          signal: abort.signal,
+          signal: controller.signal,
         },
         {
           sessions: repos.sessions,
@@ -732,7 +753,15 @@ export const useChatStore = defineStore("chat", () => {
           // implies the user has the session open, and `openSession`
           // already cleared seen_at. Replying is no longer the trigger.
         }
-        if (event.kind === "assistant-placeholder") assistantMsgId = event.messageId
+        if (event.kind === "assistant-placeholder") {
+          assistantMsgId = event.messageId
+          // Persist a pending record so a background/kill mid-turn can be
+          // recovered by polling the server's buffer on return.
+          void addPending(event.messageId, sessionId)
+          // Lifecycle signal for the notification layer (arms the predictive
+          // "answer ready" alarm). The store stays oblivious to how it's shown.
+          emitTurnStarted({ assistantMessageId: event.messageId, sessionId })
+        }
       }
     } catch (err) {
       // Typed structural failures (426 protocol mismatch, 503 backend
@@ -765,8 +794,13 @@ export const useChatStore = defineStore("chat", () => {
         }
       }
     } finally {
-      abort = null
-      sending.value = false
+      // Deregister only our own controller — a newer turn for the same
+      // session (after a detach + return) may have replaced it.
+      if (turnControllers.get(sessionId) === controller) turnControllers.delete(sessionId)
+      // Only the turn whose session is still on screen owns the shared
+      // compose state. A detached turn finishing later must not flip
+      // compose for the session the user navigated to.
+      if (activeSessionId.value === sessionId) sending.value = false
       // Abort path only: chatClient.ts swallows AbortError silently, so
       // no `error` event reached applyTurnEvent and the placeholder is
       // still streaming. Drop it so the spinner doesn't linger. (Real
@@ -995,6 +1029,15 @@ export const useChatStore = defineStore("chat", () => {
         // Replace the streaming placeholder with the persisted entity.
         const idx = streamingIndex()
         streamingMessageId = null
+        // Turn reached a clean terminal — drop it from the resume queue.
+        void removePending(event.message.id)
+        // Success → notification layer surfaces it (toast if foreground,
+        // notification if backgrounded) and cancels the predictive alarm.
+        emitTurnSettled({
+          assistantMessageId: event.message.id,
+          sessionId: event.message.sessionId,
+          ok: true,
+        })
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
         } else {
@@ -1046,6 +1089,17 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "error": {
+        // Terminal failure / stop — drop it from the resume queue so it
+        // isn't re-polled and replayed later, and tell the notification layer
+        // to cancel the predictive alarm (no "ready" toast on a failure).
+        if (streamingMessageId) {
+          void removePending(streamingMessageId)
+          emitTurnSettled({
+            assistantMessageId: streamingMessageId,
+            sessionId: (activeSessionId.value ?? "") as string,
+            ok: false,
+          })
+        }
         // User-stop-with-no-content: runChatTurn emits a dedicated
         // `stopped_empty` code so we can drop the placeholder silently
         // instead of leaving a "no content" failed-bubble. There's
@@ -1171,9 +1225,168 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  /** Explicit Stop — abort the turn streaming in the ACTIVE session.
+   *  Detached turns in other sessions keep running (see turnControllers). */
   function cancelStream(): void {
-    if (abort) abort.abort()
-    abort = null
+    const id = activeSessionId.value
+    if (!id) return
+    const assistantId = streamingMessageId
+    const controller = turnControllers.get(id)
+    if (controller) {
+      controller.abort()
+      turnControllers.delete(id)
+    }
+    // Explicit Stop ≠ passive disconnect: really cancel the turn
+    // server-side and drop it from the resume queue so it isn't re-polled
+    // or replayed later.
+    if (assistantId) {
+      void removePending(assistantId)
+      void resumeService().cancelTurn(assistantId)
+    }
+  }
+
+  /** Abort every in-flight turn — used by clearAll before wiping tables so
+   *  no detached turn's finally persists a reply into emptied tables. */
+  function cancelAllStreams(): void {
+    for (const controller of turnControllers.values()) controller.abort()
+    turnControllers.clear()
+  }
+
+  /** Reflect whether the active session has an in-flight (possibly
+   *  detached) turn into the compose-busy flag — disables input + shows
+   *  Stop. Called after every session switch since a turn may still be
+   *  running in the session we just opened. */
+  function syncComposeBusy(): void {
+    const id = activeSessionId.value
+    sending.value = id != null && turnControllers.has(id)
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*                      Resume in-flight turns                        */
+  /* ---------------------------------------------------------------- */
+  // When the app is backgrounded/killed mid-turn the live SSE stream
+  // dies, but the server keeps generating and buffers the result. We
+  // persist a tiny pending record per in-flight turn (survives an app
+  // kill) and, on return, poll the server and replay the buffered events
+  // through the SAME runChatTurn fold so the answer is rebuilt exactly —
+  // never lost.
+
+  const PENDING_TURNS_KEY = "chat:pending_turns"
+  const PENDING_TTL_MS = 24 * 60 * 60 * 1000 // mirrors the server buffer TTL
+
+  interface PendingTurn {
+    readonly assistantMessageId: string
+    readonly sessionId: string
+    readonly createdAt: number
+  }
+
+  async function readPending(): Promise<PendingTurn[]> {
+    try {
+      const raw = await app.preferences.get(PENDING_TURNS_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as PendingTurn[]
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  async function writePending(list: PendingTurn[]): Promise<void> {
+    try {
+      if (list.length === 0) await app.preferences.remove(PENDING_TURNS_KEY)
+      else await app.preferences.set(PENDING_TURNS_KEY, JSON.stringify(list))
+    } catch {
+      // best-effort — a failed persist just means weaker kill-recovery
+    }
+  }
+
+  async function addPending(assistantMessageId: string, sessionId: string): Promise<void> {
+    const list = await readPending()
+    if (list.some((p) => p.assistantMessageId === assistantMessageId)) return
+    list.push({ assistantMessageId, sessionId, createdAt: Date.now() })
+    await writePending(list)
+  }
+
+  async function removePending(assistantMessageId: string): Promise<void> {
+    const list = await readPending()
+    const next = list.filter((p) => p.assistantMessageId !== assistantMessageId)
+    if (next.length !== list.length) await writePending(next)
+  }
+
+  /** Replay a completed turn's buffered events into its session, rebuilding
+   *  the assistant message through the `replayChatTurn` use-case (same fold
+   *  as the live path). Events arrive already parsed from the resume adapter;
+   *  the use-case needs no live-stream deps. */
+  async function replayBufferedTurn(
+    entry: PendingTurn,
+    events: readonly ChatStreamEvent[]
+  ): Promise<void> {
+    async function* replayEvents(): AsyncIterable<ChatStreamEvent> {
+      for (const ev of events) yield ev
+    }
+    const repos = chatRepos()
+    for await (const event of replayChatTurn(
+      {
+        assistantMessageId: entry.assistantMessageId as ChatMessageId,
+        sessionId: entry.sessionId as ChatSessionId,
+        lang: chatLanguage.value || appLanguage.value,
+        events: replayEvents(),
+      },
+      { messages: repos.messages, sessions: repos.sessions, extractFollowups }
+    )) {
+      // The use-case persists internally regardless; only reflect into the
+      // view when the user is actually looking at this session.
+      if (activeSessionId.value === entry.sessionId) applyTurnEvent(event)
+    }
+  }
+
+  async function resumeOnePendingTurn(entry: PendingTurn): Promise<void> {
+    let buffered
+    try {
+      buffered = await resumeService().getTurn(entry.assistantMessageId)
+    } catch {
+      // Transient (offline / token refresh) — leave pending, retry next resume.
+      return
+    }
+    if (buffered === null) {
+      // Never received, expired, or not ours. Drop only once it's older than
+      // the server buffer TTL so a momentary 404 race doesn't lose a turn.
+      if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
+        await removePending(entry.assistantMessageId)
+      }
+      return
+    }
+    if (buffered.state === "running") {
+      // Still generating — leave pending; a later resume re-polls.
+      return
+    }
+    // done | error. If the live turn already persisted this assistant message
+    // (app killed AFTER finalise but before pending was cleared), the answer
+    // is already on disk — re-running the replay would INSERT a duplicate id
+    // (chat_messages.id is a PK) and throw. Skip the replay in that case; just
+    // clear pending. The try/finally guarantees we never strand an entry in a
+    // re-throw loop on any replay failure.
+    try {
+      const rows = await chatRepos().messages.listBySession(entry.sessionId as ChatSessionId)
+      const alreadyPersisted = rows.some((m) => m.id === entry.assistantMessageId)
+      if (!alreadyPersisted) {
+        await replayBufferedTurn(entry, buffered.events)
+      }
+    } catch (err) {
+      console.error("[chat] resume replay failed", err)
+    } finally {
+      await removePending(entry.assistantMessageId)
+    }
+  }
+
+  /** On app resume / cold start: poll + replay any turn whose live stream
+   *  was dropped. Skips turns still streaming live in this session. */
+  async function resumePendingTurns(): Promise<void> {
+    const list = await readPending()
+    for (const entry of list) {
+      if (turnControllers.has(entry.sessionId)) continue
+      void resumeOnePendingTurn(entry)
+    }
   }
 
   /**
@@ -1396,10 +1609,10 @@ export const useChatStore = defineStore("chat", () => {
   }
 
   async function clearAll(): Promise<void> {
-    // Stop any in-flight SSE stream first — otherwise the streaming
+    // Stop ALL in-flight SSE streams first — otherwise a streaming
     // finally-block would persist its accumulated reply into the
     // freshly-emptied tables, leaving an orphan row.
-    cancelStream()
+    cancelAllStreams()
     cancelSuggestions()
     const repos = chatRepos()
     await repos.messages.clearAll()
@@ -1482,12 +1695,16 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  // Native app-lifecycle wiring (cold start + appStateChange resume) lives
+  // in the `useChatResume` composable, mounted by App.vue — the store
+  // exposes `resumePendingTurns` and stays free of Capacitor.
   return {
     sessions,
     activeSession,
     activeSessionId,
     messages,
     sending,
+    resumePendingTurns,
     loadingFocusIds,
     inputFocusToken,
     composeBlockedUntil,

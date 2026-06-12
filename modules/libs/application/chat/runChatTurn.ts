@@ -15,6 +15,7 @@ import type { IChatMessageRepository } from "@lib/domain/ports/chatMessageReposi
 import type { IChatSessionRepository } from "@lib/domain/ports/chatSessionRepository.js"
 import type {
   ChatActionPayload as WireChatActionPayload,
+  ChatStreamEvent,
   IChatStreamClient,
   IChatTitleService,
   ChatTurn,
@@ -209,22 +210,36 @@ export interface RunChatTurnInput {
   readonly newMessageId: () => ChatMessageId
   /** AbortSignal — closed by the store's cancelStream. */
   readonly signal: AbortSignal
+  /** Pin the assistant message id instead of minting a fresh one. Set on
+   *  the resume path so the replayed reply overwrites the original
+   *  placeholder. Live turns omit it. */
+  readonly assistantMessageId?: ChatMessageId
+  /** Resume path: a pre-built stream of the turn's buffered events
+   *  (parsed from the server's turn store). When present, runChatTurn
+   *  skips the user-message persist + context build + opening a real SSE
+   *  stream, and re-folds these events into the finalised message through
+   *  the exact same logic the live turn uses — no second parser. */
+  readonly replayEvents?: AsyncIterable<ChatStreamEvent>
 }
 
 export interface RunChatTurnDeps {
   readonly sessions: IChatSessionRepository
   readonly messages: IChatMessageRepository
-  readonly stream: IChatStreamClient
-  readonly title: IChatTitleService
-  /** Built per-call by the consumer (composable) so player state is
-   *  fresh. The use-case stays pinia-free. */
-  readonly buildUserContext: (
-    focus?: FocusFragmentPayload
-  ) => Promise<UserContextPayload>
   /** Pull `[followup:<text>]` chip texts out of the final assistant
    *  content. Strict parser — malformed markers leak into prose and
    *  return no chip (fix lives in the prompt, not here). */
   readonly extractFollowups: (content: string) => readonly string[]
+  /** Live-stream deps — required for a live turn, unused on the resume /
+   *  replay path (gated by `input.replayEvents`). Optional so the
+   *  `replayChatTurn` use-case can run a turn off buffered events without
+   *  fabricating a stream / title service / context builder it never calls. */
+  readonly stream?: IChatStreamClient
+  readonly title?: IChatTitleService
+  /** Built per-call by the consumer (composable) so player state is fresh.
+   *  The use-case stays pinia-free. */
+  readonly buildUserContext?: (
+    focus?: FocusFragmentPayload
+  ) => Promise<UserContextPayload>
   /** Optional: refresh the auth claim right before the SSE stream opens
    *  so a tier flip that happened while backgrounded is attached to this
    *  turn. Called AFTER the user message + placeholder are yielded, so it
@@ -253,38 +268,45 @@ export async function* runChatTurn(
 ): AsyncIterable<RunChatTurnEvent> {
   const now = Date.now()
 
-  // 1. Persist user message.
-  const userMsg = await deps.messages.create({
-    id: input.newMessageId(),
-    sessionId: input.sessionId,
-    role: "user",
-    content: input.text,
-    createdAt: now,
-  })
-  await deps.sessions.touch(input.sessionId, now)
-  yield { kind: "user-message", message: userMsg }
-
-  // 2. Optimistic assistant placeholder.
-  const assistantId = input.newMessageId()
-  yield { kind: "assistant-placeholder", messageId: assistantId }
-
-  // 3. Build UserContext (delegated; the composable injects player state).
-  let userContext: unknown = undefined
-  try {
-    userContext = await deps.buildUserContext(input.focus)
-  } catch {
-    // Server tolerates missing user_context — degrade gracefully.
+  // 1. Persist user message. Skipped on the resume path — the user
+  // message was already persisted by the original live turn.
+  if (!input.replayEvents) {
+    const userMsg = await deps.messages.create({
+      id: input.newMessageId(),
+      sessionId: input.sessionId,
+      role: "user",
+      content: input.text,
+      createdAt: now,
+    })
+    await deps.sessions.touch(input.sessionId, now)
+    yield { kind: "user-message", message: userMsg }
   }
 
-  // 3b. Refresh the auth claim just before opening the stream. This runs
-  // AFTER the user message + placeholder have been yielded, so the user
-  // sees their bubble instantly and only the assistant reply waits on the
-  // network. Best-effort — a stale claim still attempts the stream.
-  if (deps.ensureFresh) {
+  // 2. Optimistic assistant placeholder. On resume the id is pinned to the
+  // original assistant message so the replay overwrites it.
+  const assistantId = input.assistantMessageId ?? input.newMessageId()
+  yield { kind: "assistant-placeholder", messageId: assistantId }
+
+  // 3. Build UserContext + refresh auth — live path only. The resume path
+  // has no real stream to open, so neither is needed.
+  let userContext: unknown = undefined
+  if (!input.replayEvents) {
     try {
-      await deps.ensureFresh()
+      userContext = await deps.buildUserContext?.(input.focus)
     } catch {
-      // ensureFresh swallows its own errors; this guards a sync throw.
+      // Server tolerates missing user_context — degrade gracefully.
+    }
+
+    // 3b. Refresh the auth claim just before opening the stream. This runs
+    // AFTER the user message + placeholder have been yielded, so the user
+    // sees their bubble instantly and only the assistant reply waits on the
+    // network. Best-effort — a stale claim still attempts the stream.
+    if (deps.ensureFresh) {
+      try {
+        await deps.ensureFresh()
+      } catch {
+        // ensureFresh swallows its own errors; this guards a sync throw.
+      }
     }
   }
 
@@ -317,25 +339,33 @@ export async function* runChatTurn(
     { role: "user", content: input.text },
   ]
 
+  // Resume path replays the buffered events; live path opens the SSE
+  // stream (requires the live-only `deps.stream`). Both feed the SAME fold.
+  let eventSource: AsyncIterable<ChatStreamEvent>
+  if (input.replayEvents) {
+    eventSource = input.replayEvents
+  } else {
+    if (!deps.stream) {
+      throw new Error("runChatTurn: a live turn requires deps.stream")
+    }
+    eventSource = deps.stream.streamChat(turnsForServer, input.lang, {
+      signal: input.signal,
+      userContext,
+      sessionId: input.sessionId,
+      sessionTitle: input.sessionTitle,
+      // Pre-minted assistant id flows through to the adapter, which
+      // ships it as `X-Trace-Id` so the server's Langfuse trace is
+      // keyed on the same value. Feedback POSTs later reference this
+      // exact id (hyphenless on the wire) to land scores on the
+      // right trace.
+      assistantMessageId: assistantId,
+      translateCitations: input.translateCitations,
+      capabilities: CLIENT_CAPABILITIES,
+    })
+  }
+
   try {
-    for await (const event of deps.stream.streamChat(
-      turnsForServer,
-      input.lang,
-      {
-        signal: input.signal,
-        userContext,
-        sessionId: input.sessionId,
-        sessionTitle: input.sessionTitle,
-        // Pre-minted assistant id flows through to the adapter, which
-        // ships it as `X-Trace-Id` so the server's Langfuse trace is
-        // keyed on the same value. Feedback POSTs later reference this
-        // exact id (hyphenless on the wire) to land scores on the
-        // right trace.
-        assistantMessageId: assistantId,
-        translateCitations: input.translateCitations,
-        capabilities: CLIENT_CAPABILITIES,
-      }
-    )) {
+    for await (const event of eventSource) {
       if (input.signal.aborted) break
       // Mutate the closure state used by the finalise branch + yield
       // the consumer-facing event so the store can reflect on the
@@ -611,7 +641,7 @@ export async function* runChatTurn(
   // assistant reply. If `/title` returns null or throws, the session
   // keeps its locally-derived (or null) title — no retry mechanism,
   // the UI falls back to a generic header.
-  if (input.isFirstAssistantTurn && acc.length > 0) {
+  if (input.isFirstAssistantTurn && acc.length > 0 && deps.title) {
     const turns: readonly ChatTurn[] = [
       { role: "user", content: input.text },
       { role: "assistant", content: acc },

@@ -7,7 +7,7 @@ import json
 import re
 import uuid
 from time import perf_counter
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Awaitable, Callable
 
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -21,7 +21,6 @@ from lectorium_chat.application.chat_turn import run_chat_turn
 from lectorium_chat.application.proactive_turn import run_proactive_turn
 from lectorium_chat.application.rate_limiter import _next_midnight_utc
 from lectorium_chat.composition import AppDeps, get_deps
-from lectorium_chat.config import get_settings
 from lectorium_chat.domain.user_context import UserContext
 from lectorium_chat.infra.auth.jwt_verifier import VerifiedUser
 from lectorium_chat.observability.logging import get_logger
@@ -171,102 +170,105 @@ async def chat(
             await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
         raise
 
-    async def event_stream() -> AsyncIterator[dict[str, Any]]:
-        turn_started = perf_counter()
-        # Track turn outcome so the idempotency key is released on any
-        # non-success: an in-turn `error` event (the graph catches its
-        # own exceptions and streams an error frame rather than raising)
-        # or a client disconnect (sse-starlette raises into this loop,
-        # so `completed` stays False). A successful turn keeps the key,
-        # which is the genuine dedup case.
-        had_error = False
-        completed = False
-        try:
-            if body.proactive is not None:
-                # Proactive turn — rule-specific prompt swap. Same tool
-                # registry, same SSE response shape; the client doesn't
-                # render the stream live, it collects it into a single
-                # `chat_messages.body_md` row for later display.
-                stream = run_proactive_turn(
-                    body.proactive.rule_kind,
-                    body.proactive.rule_context,
-                    lang=body.lang,
-                    request_id=request_id,
-                    user_context=user_ctx,
-                    is_disconnected=request.is_disconnected,
-                )
-            else:
-                stream = run_chat_turn(
-                    [m.model_dump() for m in body.messages],
-                    lang=body.lang,
-                    translate_citations=body.translate_citations,
-                    capabilities=body.capabilities,
-                    request_id=request_id,
-                    user_context=user_ctx,
-                    is_disconnected=request.is_disconnected,
-                    deps=deps,
-                    session_id=body.session_id,
-                    session_title=body.session_title,
-                    client_trace_id=client_trace_id,
-                    region=region,
-                    turn_config=(body.config.model_dump() if body.config else None),
-                )
-            async for ev in stream:
-                if ev.type == "error":
-                    had_error = True
-                yield {
-                    "event": ev.type,
-                    "data": json.dumps(ev.data, ensure_ascii=False),
-                }
-            completed = True
-        finally:
-            # Release the idempotency key on a failed / cancelled turn so
-            # a retry isn't 409-blocked for the full TTL. Skipped for a
-            # clean success (key stays to dedup genuine duplicate sends)
-            # and when no key was supplied. Best-effort by contract.
-            if idempotency_key and (had_error or not completed):
-                await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
-            # Refund the quota unit charged at the gate when the turn ended
-            # in an error frame (LLM out of credits, graph crash) — the
-            # user paid but got no answer. Deliberately NOT on a bare
-            # client disconnect (`not completed` without `had_error`): a
-            # partial answer may already have streamed, and refunding there
-            # would let a user farm free quota by disconnecting mid-turn.
-            usage_current = rl.current_after
-            if had_error:
-                refunded = await deps.rate_limiter.refund(
-                    user.id, user.anonymous, ip,
-                    scope="chat", quota_id=user.quota_id,
-                )
-                if refunded is not None:
-                    usage_current = refunded
-            log.info(
-                "stage_timing",
-                stage="turn_total",
-                stage_ms=round((perf_counter() - turn_started) * 1000, 1),
-                status="error" if had_error else ("cancelled" if not completed else "ok"),
+    # Effective trace id keys the turn buffer. Client-minted when present
+    # (so the same id polls the result on return); a server-minted fallback
+    # for legacy clients — which then simply can't resume.
+    effective_trace_id = client_trace_id or uuid.uuid4().hex
+    turn_started = perf_counter()
+
+    def build_stream(
+        is_cancelled: Callable[[], Awaitable[bool]],
+    ) -> AsyncIterator[Any]:
+        # Resume / disconnect is the runner's concern; here we only choose
+        # which turn to run and thread the runner's cancel predicate in.
+        if body.proactive is not None:
+            return run_proactive_turn(
+                body.proactive.rule_kind,
+                body.proactive.rule_context,
+                lang=body.lang,
                 request_id=request_id,
-                proactive=body.proactive is not None,
+                user_context=user_ctx,
+                is_disconnected=is_cancelled,
             )
-            # Emit the usage chip frame regardless of how the turn ended:
-            # success (stream completed cleanly), in-loop LLM error, or
-            # client disconnect (sse-starlette raises into here). On the
-            # happy path `usage_current` is the `rl` gate's post-increment
-            # snapshot (re-reading the store would race sibling requests);
-            # on an error it's the post-refund count so the chip shows the
-            # unit handed back.
-            yield {
-                "event": "usage",
-                "data": json.dumps(
-                    {
-                        "scope": "chat",
-                        "current": usage_current,
-                        "limit": rl.limit_for_scope,
-                        "resets_at_epoch": int(_next_midnight_utc().timestamp()),
-                    },
-                    ensure_ascii=False,
-                ),
-            }
+        return run_chat_turn(
+            [m.model_dump() for m in body.messages],
+            lang=body.lang,
+            translate_citations=body.translate_citations,
+            capabilities=body.capabilities,
+            request_id=request_id,
+            user_context=user_ctx,
+            is_disconnected=is_cancelled,
+            deps=deps,
+            session_id=body.session_id,
+            session_title=body.session_title,
+            client_trace_id=client_trace_id,
+            region=region,
+            turn_config=(body.config.model_dump() if body.config else None),
+        )
+
+    async def finalize(had_error: bool, completed: bool) -> dict[str, Any]:
+        # Turn-specific teardown (the runner owns the task / buffer / finish):
+        # release the idempotency key only on a real failure (a clean turn
+        # keeps it to dedup genuine duplicate sends). A bare client disconnect
+        # no longer releases or refunds — the turn still completes and
+        # delivers its answer to the buffer.
+        if idempotency_key and had_error:
+            await deps.idempotency_store.release(f"chat:{user.id}:{idempotency_key}")
+        usage_current = rl.current_after
+        if had_error:
+            refunded = await deps.rate_limiter.refund(
+                user.id, user.anonymous, ip,
+                scope="chat", quota_id=user.quota_id,
+            )
+            if refunded is not None:
+                usage_current = refunded
+        log.info(
+            "stage_timing",
+            stage="turn_total",
+            stage_ms=round((perf_counter() - turn_started) * 1000, 1),
+            status="error" if had_error else ("cancelled" if not completed else "ok"),
+            request_id=request_id,
+            proactive=body.proactive is not None,
+        )
+        # Usage chip frame is part of the buffered turn so a reconnecting
+        # client hydrates the chip too.
+        return {
+            "event": "usage",
+            "data": json.dumps(
+                {
+                    "scope": "chat",
+                    "current": usage_current,
+                    "limit": rl.limit_for_scope,
+                    "resets_at_epoch": int(_next_midnight_utc().timestamp()),
+                },
+                ensure_ascii=False,
+            ),
+        }
+
+    # The turn runs DETACHED via the runner: it keeps generating after the
+    # client socket drops (background / navigation) and buffers its events for
+    # resume. The SSE response below is just a live view tailing the runner's
+    # queue; closing it does NOT cancel the turn — only DELETE /chat/turn/{id}
+    # does. The producer-task lifecycle + cancel registry live in the runner,
+    # not as module globals in this route.
+    queue = deps.turn_runner.start(
+        effective_trace_id,
+        user.id,
+        stream_factory=build_stream,
+        finalize=finalize,
+    )
+
+    async def event_stream() -> AsyncIterator[dict[str, Any]]:
+        # Thin live view: drain the producer's queue until the sentinel or
+        # until the client drops (sse-starlette stops iterating here). The
+        # producer keeps running either way.
+        try:
+            while True:
+                frame = await queue.get()
+                if frame is None:
+                    break
+                yield frame
+        finally:
             structlog.contextvars.unbind_contextvars(
                 "request_id", "user_id", "anonymous", "ip", "region",
             )
@@ -285,3 +287,43 @@ async def chat(
         # surprise us.)
         ping=15,
     )
+
+
+@router.get("/chat/turn/{trace_id}")
+async def get_turn(
+    trace_id: str,
+    user: VerifiedUser = Depends(get_current_user),
+    deps: AppDeps = Depends(get_deps),
+):
+    """Poll a turn's buffered result by its trace id.
+
+    A reconnecting client (came back from background / app restart) reads
+    `{state}` — `running` (keep polling), `done` / `error` (replay the
+    buffered SSE events to rebuild the message). 404 means the turn was
+    never received OR its buffer expired (24h) OR it belongs to another
+    user — we never leak existence across identities.
+    """
+    if not _TRACE_ID_RE.match(trace_id):
+        raise HTTPException(status_code=400, detail="invalid trace id")
+    blob = await deps.turn_store.get(trace_id)
+    if blob is None or blob.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="turn not found")
+    return {"state": blob.get("state"), "events": blob.get("events", [])}
+
+
+@router.delete("/chat/turn/{trace_id}")
+async def cancel_turn(
+    trace_id: str,
+    user: VerifiedUser = Depends(get_current_user),
+    deps: AppDeps = Depends(get_deps),
+):
+    """Explicit Stop — really cancel the turn (vs a passive disconnect,
+    which lets it finish). Cancels the producer on this replica instantly
+    and sets a cross-replica Redis flag for the case it runs elsewhere."""
+    if not _TRACE_ID_RE.match(trace_id):
+        raise HTTPException(status_code=400, detail="invalid trace id")
+    blob = await deps.turn_store.get(trace_id)
+    if blob is not None and blob.get("user_id") != user.id:
+        raise HTTPException(status_code=404, detail="turn not found")
+    await deps.turn_runner.cancel(trace_id)
+    return {"ok": True}
