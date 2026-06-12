@@ -384,14 +384,13 @@ export function useNotesController(): NotesControllerReturn {
         },
       },
     ]
-    // Non-subscribers still see the row (with the PRO pill) so the feature
-    // is discoverable; tapping opens the paywall rather than the editor.
-    // The pill is a CSS ::after (`.action-sheet-pro` in theme/misc.css) —
-    // same marker as the Share row, since Ionic buttons can't host a
-    // component.
+    // The PRO pill always shows; tapping opens the paywall for
+    // non-subscribers rather than the editor. The pill is a CSS ::after
+    // (`.action-sheet-pro` in theme/misc.css) — same marker as the Share
+    // row, since Ionic buttons can't host a component.
     buttons.push({
       text: t("studio.openInStudio"),
-      cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
+      cssClass: "action-sheet-pro",
       handler: () => {
         onOpenInStudioClicked()
       },
