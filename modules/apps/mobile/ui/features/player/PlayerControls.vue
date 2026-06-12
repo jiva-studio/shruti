@@ -40,7 +40,11 @@ defineProps<{
   gap: 0.15rem;
 }
 
+/* IonLabel sets its own color from --ion-text-color, which is tuned for the
+   page background, not the player's saffron surface. Pin both lines to the
+   player surface's contrast token so they stay readable in both themes. */
 .author {
+  color: var(--ion-color-primary-contrast);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -48,6 +52,7 @@ defineProps<{
 }
 
 .title {
+  color: var(--ion-color-primary-contrast);
   font-weight: bold;
   overflow: hidden;
   white-space: nowrap;

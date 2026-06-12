@@ -165,7 +165,7 @@ function commit(value: number): void {
 .rail {
   height: 4px;
   width: 42%;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--ion-color-primary-contrast-rgb), 0.35);
   border-radius: 2px;
 }
 
@@ -181,10 +181,15 @@ function commit(value: number): void {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  /* Same warm off-white + dark hairline border as the speed slider's
-     pill puck — makes the two sliders feel like one family. */
+  /* Same warm pill as the speed slider's puck — makes the two sliders feel
+     like one family. Built on the surface's contrast token so the puck stays
+     visible against the saffron player surface in both light and dark. */
   background: #f4e7d2;
-  background: color-mix(in srgb, white 88%, var(--ion-color-primary) 12%);
+  background: color-mix(
+    in srgb,
+    var(--ion-color-primary-contrast) 88%,
+    var(--ion-color-primary) 12%
+  );
   border: 1.5px solid color-mix(in srgb, var(--ion-color-primary-shade) 35%, transparent);
   transform: translate(-50%, -50%);
   transition: border-color 0.15s ease;

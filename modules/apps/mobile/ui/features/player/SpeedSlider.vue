@@ -200,7 +200,7 @@ function applyFromClientX(clientX: number, rect: DragRect): void {
   left: 10px;
   right: 10px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--ion-color-primary-contrast-rgb), 0.35);
   border-radius: 2px;
 }
 
@@ -210,7 +210,7 @@ function applyFromClientX(clientX: number, rect: DragRect): void {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(var(--ion-color-primary-contrast-rgb), 0.55);
   transform: translate(-50%, -50%);
   pointer-events: none;
   transition:
@@ -233,7 +233,11 @@ function applyFromClientX(clientX: number, rect: DragRect): void {
   height: 20px;
   border-radius: 50%;
   background: #f4e7d2;
-  background: color-mix(in srgb, white 88%, var(--ion-color-primary) 12%);
+  background: color-mix(
+    in srgb,
+    var(--ion-color-primary-contrast) 88%,
+    var(--ion-color-primary) 12%
+  );
   border: 1.5px solid color-mix(in srgb, var(--ion-color-primary-shade) 35%, transparent);
   transform: translate(-50%, -50%);
   cursor: grab;
@@ -259,7 +263,7 @@ function applyFromClientX(clientX: number, rect: DragRect): void {
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(var(--ion-color-primary-contrast-rgb), 0.6);
   pointer-events: none;
 }
 </style>
