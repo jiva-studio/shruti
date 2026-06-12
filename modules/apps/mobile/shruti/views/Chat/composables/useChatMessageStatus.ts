@@ -5,6 +5,7 @@ import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useChatStore, type ChatMessage } from "@shruti/stores/useChatStore.js"
 import { useAnonymousSignInFlow } from "@shruti/composables/useAnonymousSignInFlow.js"
 import type { QuotaTier } from "@lib/domain/chatMessage.js"
+import { classifyChatNotice } from "./chatNotice.js"
 
 export interface ChatNoticeCta {
   label: string
@@ -259,87 +260,63 @@ export function useChatMessageStatus(opts: {
     { immediate: true }
   )
 
-  const noticeKind = computed<"error" | "warning" | "upsell" | "info">(() => {
-    const e = failedError.value
-    if (!e) return "error"
-    if (isOfflineFailure.value) return "info"
-    // Backend out of credits / provider down — not the user's fault and
-    // transient, so render it calm (info) with a Retry, not an alarm.
-    if (e.code === "chat_unavailable") return "info"
-    if (e.code !== "rate_limited") return "error"
-    if (isUnknownQuotaTier.value) return "warning"
-    if (effectiveQuotaTier.value === "pro") return "warning"
-    return "upsell"
-  })
+  // The kind/title/body/cta branching is the pure `classifyChatNotice`; this
+  // composable only resolves the i18n keys, fills the rate-limit countdown,
+  // and binds the cta kind to an action.
+  const notice = computed(() =>
+    classifyChatNotice({
+      code: failedError.value?.code ?? null,
+      tier: effectiveQuotaTier.value,
+      isOffline: isOfflineFailure.value,
+      isUnknownTier: isUnknownQuotaTier.value,
+      retryAllowed: failedRetryAllowed.value,
+    })
+  )
+
+  const noticeKind = computed<"error" | "warning" | "upsell" | "info">(() => notice.value.kind)
 
   const noticeTitle = computed<string>(() => {
-    const e = failedError.value
-    if (!e) return ""
-    if (isOfflineFailure.value) return t("chat.errOffline.title")
-    if (e.code === "chat_unavailable") return t("chat.errUnavailable.title")
-    if (e.code.startsWith("http_5")) return t("chat.errServer.title")
-    if (e.code !== "rate_limited") return ""
-    if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownTitle")
-    const tier = effectiveQuotaTier.value
-    if (tier === "anonymous") return t("chat.errQuotaAnonTitle")
-    if (tier === "pro") return t("chat.errQuotaProTitle")
-    if (tier === "free") return t("chat.errQuotaFreeTitle")
-    return ""
+    const key = notice.value.titleKey
+    return key ? t(key) : ""
   })
 
   const noticeBody = computed<string>(() => {
-    const e = failedError.value
-    if (!e) return ""
-    if (isOfflineFailure.value) return t("chat.errOffline.body")
-    if (e.code === "chat_unavailable") return t("chat.errUnavailable.body")
-    if (e.code.startsWith("http_5")) return t("chat.errServer.body")
-    if (e.code === "rate_limited") {
-      if (isUnknownQuotaTier.value) return t("chat.errQuotaUnknownBody")
-      const tier = effectiveQuotaTier.value
-      if (tier) {
-        const when = formatResetWhen(e.retryAfterAt)
-        if (tier === "anonymous") return t("chat.errQuotaAnonBody", { when })
-        if (tier === "free") return t("chat.errQuotaFreeBody", { when })
-        if (tier === "pro") return t("chat.errQuotaProBody", { when })
-      }
+    const key = notice.value.bodyKey
+    if (!key) return failedText.value // generic / non-quota → the failed text
+    // The rate-limit tier bodies carry a `{ when }` reset countdown.
+    if (failedError.value?.code === "rate_limited") {
+      return t(key, { when: formatResetWhen(failedError.value.retryAfterAt) })
     }
-    return failedText.value
+    return t(key)
   })
 
   const noticeCta = computed<ChatNoticeCta | undefined>(() => {
-    const e = failedError.value
-    if (!e) return undefined
-    if (isOfflineFailure.value) {
-      return {
-        label: t("chat.errOffline.cta"),
-        action: onRetry,
-        disabled: !canRetry.value || isOffline.value,
-      }
-    }
-    if (e.code === "rate_limited") {
-      if (isUnknownQuotaTier.value) return undefined
-      const tier = effectiveQuotaTier.value
-      if (tier === "anonymous") {
+    switch (notice.value.cta) {
+      case "none":
+        return undefined
+      case "signin":
         return {
           label: t("chat.signInForMoreCta"),
           action: () => {
             void triggerSignIn()
           },
         }
-      }
-      if (tier === "free") {
-        return {
-          label: t("chat.upgradeToProCta"),
-          action: () => paywall.requestOpen("chat"),
-        }
-      }
-      return undefined // pro tier → no CTA, just wait
-    }
-    if (!failedRetryAllowed.value) return undefined
-    return {
-      label: t("chat.actionRetry"),
-      action: onRetry,
-      disabled: !failedRetryEnabled.value || !canRetry.value,
+      case "upgrade":
+        return { label: t("chat.upgradeToProCta"), action: () => paywall.requestOpen("chat") }
+      case "retry":
+        return isOfflineFailure.value
+          ? {
+              label: t("chat.errOffline.cta"),
+              action: onRetry,
+              disabled: !canRetry.value || isOffline.value,
+            }
+          : {
+              label: t("chat.actionRetry"),
+              action: onRetry,
+              disabled: !failedRetryEnabled.value || !canRetry.value,
+            }
+      default:
+        return undefined
     }
   })
 
