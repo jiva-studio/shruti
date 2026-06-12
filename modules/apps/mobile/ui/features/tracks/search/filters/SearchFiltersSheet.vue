@@ -19,12 +19,7 @@
           {{ activeSection ? activeSection.title : $t("search.filtersSheetTitle") }}
         </IonTitle>
         <IonButtons slot="end">
-          <IonButton
-            v-if="!activeSection"
-            class="filters-secondary-button"
-            :disabled="!canReset"
-            @click="onReset"
-          >
+          <IonButton v-if="!activeSection" color="medium" :disabled="!canReset" @click="onReset">
             {{ $t("search.filtersReset") }}
           </IonButton>
           <IonButton strong @click="onPrimary">
@@ -149,24 +144,6 @@ function onDismiss(): void {
 </script>
 
 <style>
-/* Pin both end-of-toolbar buttons to the same font size so RESET and
-   OK read as a pair regardless of Ionic's internal `strong` styling. */
-.filters-sheet ion-buttons[slot="end"] ion-button {
-  font-size: 14px;
-  letter-spacing: 0.04em;
-}
-
-/* RESET is the secondary affordance: mute the colour and drop the
-   opacity so the eye lands on OK first. `strong` keeps OK heavier,
-   which is the correct visual hierarchy for primary action. */
-.filters-sheet .filters-secondary-button {
-  --color: var(--ion-color-medium);
-  opacity: 0.55;
-}
-.filters-sheet .filters-secondary-button.button-disabled {
-  opacity: 0.3;
-}
-
 /* `expand-to-scroll="false"` on the modal keeps the sheet at a fixed
    height and routes content drags to IonContent's scroll. Surface a
    visible scrollbar so long lists (e.g. Languages) read as scrollable
@@ -179,7 +156,6 @@ function onDismiss(): void {
   border-radius: 3px;
 }
 </style>
-
 <style scoped>
 .view-stack {
   position: relative;
