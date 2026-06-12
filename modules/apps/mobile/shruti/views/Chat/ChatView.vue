@@ -22,7 +22,7 @@
           :aria-label="$t('chat.newSession')"
           @click="onNewSession"
         >
-          <IconPlus :size="22" />
+          <IconMessageCirclePlus :size="22" />
         </button>
         <span v-else class="action-btn" aria-hidden="true" />
       </div>
@@ -96,7 +96,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonContent, IonPage, IonSpinner, onIonViewWillLeave } from "@ionic/vue"
-import { IconHistory, IconPlus } from "@tabler/icons-vue"
+import { IconHistory, IconMessageCirclePlus } from "@tabler/icons-vue"
 import { pauseGroup } from "@shruti/composables/useAudioOrchestrator.js"
 import { PageSticker } from "@ui/primitives/index.js"
 import ChatMessageList from "./components/ChatMessageList.vue"
