@@ -265,7 +265,7 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Daily reminder",
   proactiveSessionTitleSmartLibrary: "Smart Library",
-  proactiveSessionTitleNextShloka: "Next verse",
+  proactiveSessionTitleNextShloka: "Lecture on the next verse",
   proactiveSessionTitleUnfinishedLecture: "Unfinished lecture",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
