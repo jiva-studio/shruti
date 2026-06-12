@@ -4,18 +4,27 @@
       <p>{{ error }}</p>
     </IonText>
     <template v-else>
-      <!-- At most ONE nag banner at a time. The notifications nag takes
-           precedence over the subscription nag (showSubscriptionNag gates
-           on !showNotificationsNag) so we never stack two asks at the top
-           of the home screen. -->
-      <NotificationsNagBanner
+      <!-- At most ONE nag banner at a time. Both use the same presentational
+           NagBanner; this view decides which to show and with what copy. The
+           notifications nag takes precedence over the subscription nag
+           (showSubscriptionNag gates on !showNotificationsNag) so we never
+           stack two asks at the top of the home screen. -->
+      <NagBanner
         v-if="showNotificationsNag"
-        @enable="onEnableNotifications"
+        variant="success"
+        :title="$t('home.notificationsNag.title')"
+        :description="$t('home.notificationsNag.description')"
+        :dismiss-label="$t('home.notificationsNag.dismiss')"
+        @action="onEnableNotifications"
         @dismiss="onDismissNotificationsNag"
       />
-      <SubscriptionNagBanner
+      <NagBanner
         v-if="showSubscriptionNag"
-        @open="paywall.requestOpen()"
+        variant="success"
+        :title="$t('home.subscriptionNag.title')"
+        :description="$t('home.subscriptionNag.description')"
+        :dismiss-label="$t('home.subscriptionNag.dismiss')"
+        @action="paywall.requestOpen()"
         @dismiss="onDismissSubscriptionNag"
       />
       <template v-if="showActivity">
@@ -69,11 +78,10 @@ import { DurationBadge } from "@ui/components/badges/index.js"
 import { ActivitySection, CompletedBadge, StreakBadge } from "@ui/features/activity/index.js"
 import { useI18n } from "vue-i18n"
 import {
-  NotificationsNagBanner,
+  NagBanner,
   PlaylistCountBadge,
   PlaylistSection,
   PlaylistStarterPacks,
-  SubscriptionNagBanner,
 } from "@ui/features/playlist/index.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
@@ -162,12 +170,17 @@ const subscriptionNagDismissedAt = useConfig<number | null>(
 // not granted, and tapping it requests permission so the proactive pushes
 // can finally surface. Requesting permission is the whole job — we don't
 // silently arm the daily reminder here; that stays its own opt-in in
-// Settings. Native only — web notifications aren't part of the product.
-// It takes precedence over the subscription nag (engagement before
+// Settings. It takes precedence over the subscription nag (engagement before
 // monetization) and re-appears 14 days after a dismiss, mirroring the
 // subscription cooldown.
+//
+// The trigger is "the user has added lectures" — we never nag on an empty
+// playlist. Adding tracks is the moment notifications start paying off
+// (queue progress, finish-your-lecture, etc.), and a permission ask before
+// the user has any content is the wrong first impression. Once there's
+// something in the queue we ask; if ignored, the 14-day cooldown brings the
+// banner back periodically.
 const app = useLectorium()
-const isNativePlatform = app.platform !== "web"
 const notificationsNagDismissedAt = useConfig<number | null>(
   "home.notificationsNag.dismissedAt",
   null
@@ -176,14 +189,14 @@ const notificationsNagDismissedAt = useConfig<number | null>(
 // permission check resolves; flipped to the real value on mount / resume.
 const notificationsGranted = ref(true)
 const showNotificationsNag = computed(() => {
-  if (!isNativePlatform) return false
   if (notificationsGranted.value) return false
+  // Trigger: the user has added lectures. Stay silent on an empty playlist.
+  if (rows.value.length === 0) return false
   const ts = notificationsNagDismissedAt.value
   if (!ts) return true
   return Date.now() - ts >= FOURTEEN_DAYS_MS
 })
 async function refreshNotificationPermission(): Promise<void> {
-  if (!isNativePlatform) return
   const p = await app.notifications.checkPermission().catch(() => "unknown" as const)
   notificationsGranted.value = p === "granted"
 }
