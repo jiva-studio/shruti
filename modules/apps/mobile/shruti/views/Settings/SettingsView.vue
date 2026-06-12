@@ -265,8 +265,59 @@ function onOpenPrivacyPolicy(): void {
 // Contact links. Capacitor's webview hands `mailto:` and external https
 // schemes to the system (mail client / browser); `_system` keeps the
 // in-app webview from trying to navigate to them itself.
-function onOpenEmail(): void {
-  window.open("mailto:support@akdasa.studio", "_system")
+
+/** Recent log tail appended to the support email (oldest-first). */
+const SUPPORT_LOG_CHARS = 4000
+
+async function supportDeviceId(): Promise<string> {
+  try {
+    const { Device } = await import("@capacitor/device")
+    return (await Device.getId()).identifier
+  } catch {
+    return "—"
+  }
+}
+
+async function supportAppVersion(): Promise<string> {
+  try {
+    const { App } = await import("@capacitor/app")
+    const info = await App.getInfo()
+    return `${info.version} (${info.build})`
+  } catch {
+    // Web build has no native App plugin; fall back to the bundled version.
+    return `${version} (${buildId})`
+  }
+}
+
+// Pre-fills the system mail client with the technical diagnostics support
+// needs to reproduce an issue. Mirrors the "Can't pay?" precedent in
+// useSubscriptionBinding.ts.
+async function onOpenEmail(): Promise<void> {
+  // Tail the ring buffer so the mailto URL stays a sane length; the full
+  // dump is still available via the debug "copy logs" action.
+  const logsText = logs.asText()
+  const logsTail =
+    logsText.length > SUPPORT_LOG_CHARS ? logsText.slice(-SUPPORT_LOG_CHARS) : logsText
+
+  const lines = [
+    t("settings.contacts.email.emailIntro"),
+    "",
+    "—",
+    `User ID: ${auth.userId ?? "—"}`,
+    `Email: ${auth.email ?? "—"}`,
+    `Tier: ${auth.tier}${auth.isPro ? " (pro)" : ""}`,
+    `RevenueCat App User ID: ${subscription.appUserId ?? "—"}`,
+    `Device ID: ${await supportDeviceId()}`,
+    `Platform: ${shruti.platform}`,
+    `App version: ${await supportAppVersion()}`,
+    `Locale: ${i18n.locale.value as string}`,
+    "",
+    "— logs —",
+    logsTail,
+  ]
+  const subject = encodeURIComponent(t("settings.contacts.email.emailSubject"))
+  const body = encodeURIComponent(lines.join("\n"))
+  window.open(`mailto:support@akdasa.studio?subject=${subject}&body=${body}`, "_system")
 }
 
 function onOpenVk(): void {
