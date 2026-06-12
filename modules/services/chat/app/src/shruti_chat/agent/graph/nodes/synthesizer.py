@@ -16,6 +16,10 @@ Wraps `application/synthesizer_turn.py`. Differences this node owns:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
+from typing import Any
+
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
@@ -73,30 +77,80 @@ async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
         payload["mt"] = True
 
 
-async def _emit_verse_card(ctx: TurnContext, vref, writer, emitted: set) -> None:
-    """Build + emit ONE verse card payload at the moment it's cited.
+async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> None:
+    """Forward synthesizer events to the SSE writer, OVERLAPPING citation
+    translation with generation.
 
-    `build_verse_payload` does the (cheap) DB fetch and, for a non-corpus
-    answer, the verse-prose translation — so the translation runs ONLY for
-    cited verses, not the whole aliased pool the eager flush would cover.
-    Deduped by (source_id, tokens) so a twice-cited verse ships once."""
-    key = (vref.source_id, vref.tokens)
-    if key in emitted:
-        return
-    emitted.add(key)
-    payload = await build_verse_payload(ctx, vref)
-    if payload is None:
-        return
-    writer(
-        {
-            "type": "action",
-            "data": {
-                "kind": "verse",
-                "id": f"verse_{vref.source_id}_{vref.tokens}",
-                "payload": payload,
-            },
-        }
-    )
+    The naive version awaited each card's translation inline, which suspended
+    the generator → the LLM stopped streaming for ~1.5s per translated card.
+    Here a producer task drives the synthesizer stream and, the instant a
+    `[commentary:N]`/`[verse:…]` marker is produced, kicks off that card's
+    translation (commentary) or build+translate (verse) as a background task.
+    The LLM keeps streaming into a queue while those run. The consumer drains
+    the queue in order, awaiting each card's task right before writing it —
+    by which point it's usually already done (it has been running concurrently
+    with the prose that followed). Ordering (the card's `action` before its
+    marker delta) is preserved because the producer enqueues them in order and
+    the consumer never reorders.
+    """
+    emitted_verses: set[tuple[str, str]] = set()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def produce() -> None:
+        try:
+            async for event in events:
+                if event.type == "delta":
+                    await queue.put(("delta", event.data, None))
+                elif event.type == "action" and event.data.get("kind") == "commentary":
+                    # Translate this purport concurrently; consumer awaits it.
+                    task = asyncio.ensure_future(_maybe_translate_commentary(ctx, event.data))
+                    await queue.put(("action", event.data, task))
+                elif event.type == "action":
+                    await queue.put(("action", event.data, None))
+                elif event.type == "verse_request":
+                    vref = event.data["vref"]
+                    key = (vref.source_id, vref.tokens)
+                    if key in emitted_verses:
+                        continue
+                    emitted_verses.add(key)
+                    # Build (DB fetch) + translate this verse concurrently.
+                    task = asyncio.ensure_future(build_verse_payload(ctx, vref))
+                    await queue.put(("verse", vref, task))
+                # `done` is handled by the chat_turn wrapper — ignore here.
+        finally:
+            await queue.put((None, None, None))  # sentinel
+
+    producer = asyncio.ensure_future(produce())
+    try:
+        while True:
+            kind, data, task = await queue.get()
+            if kind is None:
+                break
+            if kind == "delta":
+                writer({"type": "delta", "data": data})
+            elif kind == "action":
+                if task is not None:
+                    await task  # translation mutated data["payload"] in place
+                writer({"type": "action", "data": data})
+            elif kind == "verse":
+                payload = await task
+                if payload is not None:
+                    writer(
+                        {
+                            "type": "action",
+                            "data": {
+                                "kind": "verse",
+                                "id": f"verse_{data.source_id}_{data.tokens}",
+                                "payload": payload,
+                            },
+                        }
+                    )
+        await producer
+    finally:
+        if not producer.done():
+            producer.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await producer
 
 
 # The synthesizer's "voice" sections — these shape FINAL prose, which
@@ -145,11 +199,12 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         else None
     )
 
-    # Verse cards already emitted this stream, keyed by (source_id, tokens),
-    # so a verse cited twice doesn't ship two identical payloads.
-    emitted_verses: set[tuple[str, str]] = set()
-
-    async for event in run_synthesizer_turn(
+    # Bridge use-case events into the SSE writer channel, overlapping each
+    # cited card's translation with the prose generation that follows it (so
+    # translation no longer stalls the stream). The transport layer
+    # (api/chat.py) consumes these via `graph.astream(stream_mode=…)`. The
+    # `done` event is left for the chat_turn wrapper (terminal SSE + audit).
+    events = run_synthesizer_turn(
         state["user_query"],
         tool_results=state.get("tool_results", []),
         llm=ctx.llm,
@@ -159,34 +214,7 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         outline=state.get("outline"),
         request_id=ctx.request_id,
         callbacks=[cb] if cb is not None else None,
-    ):
-        # Bridge use-case events into the SSE writer channel. The
-        # transport layer (api/chat.py) consumes these via
-        # `graph.astream(stream_mode=["custom", ...])`.
-        if event.type == "delta":
-            writer({"type": "delta", "data": event.data})
-        elif event.type == "action":
-            # Commentary-card payload emitted mid-stream by the expander,
-            # just before the delta carrying its `[commentary:N]` marker.
-            # LAZY translation: translate ONLY this cited purport, here, the
-            # instant it's cited — instead of pre-translating the whole
-            # candidate pool (most of which never reaches the answer). One
-            # call per shown card, and none at all for native (ru/en)
-            # answers. Awaited before the write so the payload-before-marker
-            # ordering holds.
-            await _maybe_translate_commentary(ctx, event.data)
-            writer({"type": "action", "data": event.data})
-        elif event.type == "verse_request":
-            # Card-capable client cited a verse: build + (cited-only)
-            # translate + emit its payload now, before the marker's delta —
-            # instead of the eager flush translating every aliased verse.
-            await _emit_verse_card(ctx, event.data["vref"], writer, emitted_verses)
-        elif event.type == "done":
-            # The use-case's `done` is internal: the wrapper in
-            # `application/chat_turn.py` writes the terminal SSE `done`
-            # event itself (with the aliases map attached) AND runs the
-            # bypass-marker audit on the accumulated delta text — so
-            # this node has nothing to do at end-of-stream.
-            pass
+    )
+    await _bridge_synth_events(events, ctx, writer)
 
     return {}
