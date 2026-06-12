@@ -1,7 +1,7 @@
 <template>
   <div class="message-actions">
     <button type="button" class="message-action" :aria-label="t('chat.copyAction')" @click="onCopy">
-      <IconCopy :size="16" stroke-width="2" />
+      <IconCopy :size="20" stroke-width="2" />
     </button>
     <button
       type="button"
@@ -9,27 +9,25 @@
       :aria-label="t('chat.shareAction')"
       @click="onShare"
     >
-      <IconShare :size="16" stroke-width="2" />
+      <IconShare :size="20" stroke-width="2" />
     </button>
     <button
       type="button"
       class="message-action"
       :class="{ selected: feedbackState === 'up' }"
       :aria-label="t('chat.feedback.thumbsUp')"
-      :disabled="feedbackInFlight"
       @click="onThumbsUp"
     >
-      <IconThumbUp :size="16" stroke-width="2" />
+      <IconThumbUp :size="20" stroke-width="2" />
     </button>
     <button
       type="button"
       class="message-action"
       :class="{ selected: feedbackState === 'down' }"
       :aria-label="t('chat.feedback.thumbsDown')"
-      :disabled="feedbackInFlight"
       @click="onThumbsDown"
     >
-      <IconThumbDown :size="16" stroke-width="2" />
+      <IconThumbDown :size="20" stroke-width="2" />
     </button>
     <button
       v-if="retryVisible"
@@ -39,7 +37,7 @@
       :disabled="retryDisabled"
       @click="onRetry"
     >
-      <IconRefresh :size="16" stroke-width="2" />
+      <IconRefresh :size="20" stroke-width="2" />
     </button>
 
     <FeedbackSheet
@@ -165,16 +163,16 @@ function onSheetCancel(): void {
  * flush against the same left edge as the prose above. */
 .message-actions {
   display: flex;
-  gap: 4px;
-  margin: 2px 0 4px -6px;
+  gap: 6px;
+  margin: 2px 0 4px -8px;
 }
 
 .message-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   border: 0;
   border-radius: 6px;
   background: transparent;

@@ -120,10 +120,6 @@ function onCancel(): void {
 </script>
 
 <style scoped>
-.feedback-sheet {
-  --height: auto;
-}
-
 .title {
   margin: 0 0 4px;
   font-size: 18px;
