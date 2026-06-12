@@ -2,10 +2,15 @@ export default {
   enableDailyNotifications:
     "Enable reminders. They will help you maintain your sadhana and stay inspired.",
   timeToListen: "It is time to listen to a sadhu!",
-  // Re-engagement push fired by the `inactivity` proactive rule. It is
-  // scheduled while the app is in the background, before the message
-  // body exists, so the copy has to be static rather than derived.
-  proactiveInactivityBody: "It's been a while — fresh lectures are waiting for you.",
+  // Escalating re-engagement pushes fired by the `inactivity` proactive
+  // ladder at 3 / 7 / 14 / 30 / 60 days of no opens. Scheduled while the
+  // app is backgrounded, so the copy is static; it warms from a gentle
+  // nudge to a final "it's been a long while".
+  proactiveInactivityBody3: "It's been a few days — fresh lectures are waiting for you.",
+  proactiveInactivityBody7: "A week without a lecture. Come back and let's continue.",
+  proactiveInactivityBody14: "Two weeks away. Your practice misses you — tap to return.",
+  proactiveInactivityBody30: "A whole month has passed. One tap brings you back to the flow.",
+  proactiveInactivityBody60: "It's been a long while. Maybe it's time to return to the lectures?",
   // Re-engagement push fired by the `unfinished_lecture` rule, scheduled
   // in the background a day after the user left a lecture unfinished.
   // `{title}` is the lecture's localised catalog title.

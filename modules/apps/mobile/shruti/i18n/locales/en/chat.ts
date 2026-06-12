@@ -267,6 +267,13 @@ export default {
   proactiveSessionTitleSmartLibrary: "Smart Library",
   proactiveSessionTitleNextShloka: "Lecture on the next verse",
   proactiveSessionTitleUnfinishedLecture: "Unfinished lecture",
+  proactiveSessionTitleInactivity: "Return to your practice",
+
+  // Static body for the `inactivity` re-engagement session. The escalating
+  // copy lives on the notifications; the chat session itself carries one
+  // warm welcome that's ready the moment the row is created (no LLM).
+  proactiveInactivityWelcomeBody:
+    "It's been a while. Fresh lectures are waiting — open your library and pick up where you left off.",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The

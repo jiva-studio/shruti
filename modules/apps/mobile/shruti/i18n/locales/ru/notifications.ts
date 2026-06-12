@@ -2,10 +2,14 @@ export default {
   enableDailyNotifications:
     "Включите напоминания. Они помогут поддерживать садхану и оставаться вдохновлёнными!",
   timeToListen: "Время слушать садху!",
-  // Re-engagement push fired by the `inactivity` proactive rule. It is
-  // scheduled while the app is in the background, before the message
-  // body exists, so the copy has to be static rather than derived.
-  proactiveInactivityBody: "Давно вас не было — для вас уже готовы свежие лекции.",
+  // Эскалирующие push-напоминания правила `inactivity` на 3 / 7 / 14 /
+  // 30 / 60 дней без открытий. Планируются в фоне, поэтому текст
+  // статичный; тон нарастает от мягкого до финального «давно не виделись».
+  proactiveInactivityBody3: "Прошло несколько дней — свежие лекции уже ждут тебя.",
+  proactiveInactivityBody7: "Неделя без лекций. Возвращайся — продолжим вместе.",
+  proactiveInactivityBody14: "Две недели в стороне. Практика скучает — нажми, чтобы вернуться.",
+  proactiveInactivityBody30: "Прошёл целый месяц. Один тап — и ты снова в потоке.",
+  proactiveInactivityBody60: "Давно не виделись. Может, самое время вернуться к лекциям?",
   // Re-engagement push fired by the `unfinished_lecture` rule, scheduled
   // in the background a day after the user left a lecture unfinished.
   // `{title}` — название лекции в локали пользователя.
