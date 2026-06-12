@@ -1,4 +1,4 @@
-import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
+import type { ChatMessageId } from "@lib/domain/core.js"
 import { notificationIdFor } from "../hash.js"
 import { NOTIFICATION_PRIORITY, type NotificationCandidate } from "../notificationPlanner.js"
 import { resolveSessionId } from "../sessions.js"
@@ -68,9 +68,6 @@ const handler: ProactiveRuleHandler = {
 
     const existing = await repo.findByRuleAndDate("inactivity", RULE_DATE)
 
-    let chatMessageId: string
-    let sessionId: ChatSessionId
-
     if (existing !== null) {
       // Already anchored within the last hour for this same target — the
       // ladder stands, don't re-anchor (the planner already holds the
@@ -81,13 +78,11 @@ const handler: ProactiveRuleHandler = {
       ) {
         return
       }
-      chatMessageId = existing.chatMessageId
-      sessionId = existing.sessionId
       // Re-anchor the row to this background moment. The planner reads
       // `visible_at` to derive the five stage fire times and reschedules.
       await repo.rearm(existing.chatMessageId, firstStageSec)
     } else {
-      sessionId = await resolveSessionId(
+      const sessionId = await resolveSessionId(
         {
           config: {
             id: "inactivity",
@@ -110,7 +105,7 @@ const handler: ProactiveRuleHandler = {
         ctx.nowMs,
         sessions
       )
-      chatMessageId = randomId()
+      const chatMessageId = randomId()
       const created = await repo.create({
         chatMessageId: chatMessageId as ChatMessageId,
         sessionId,
