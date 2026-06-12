@@ -4,6 +4,7 @@
     class="filters-sheet"
     :breakpoints="[0, 0.5, 0.9]"
     :initial-breakpoint="0.9"
+    :expand-to-scroll="false"
     handle
     @did-dismiss="onDismiss"
   >
@@ -33,7 +34,7 @@
       </IonToolbar>
     </Header>
 
-    <IonContent>
+    <IonContent class="filters-content">
       <div class="view-stack">
         <Transition :name="transitionName">
           <!-- List view: every dimension as a drill-in row. -->
@@ -164,6 +165,18 @@ function onDismiss(): void {
 }
 .filters-sheet .filters-secondary-button.button-disabled {
   opacity: 0.3;
+}
+
+/* `expand-to-scroll="false"` on the modal keeps the sheet at a fixed
+   height and routes content drags to IonContent's scroll. Surface a
+   visible scrollbar so long lists (e.g. Languages) read as scrollable
+   rather than inviting a modal-handle drag. */
+.filters-sheet .filters-content::part(scroll)::-webkit-scrollbar {
+  width: 6px;
+}
+.filters-sheet .filters-content::part(scroll)::-webkit-scrollbar-thumb {
+  background: var(--ion-color-medium);
+  border-radius: 3px;
 }
 </style>
 
