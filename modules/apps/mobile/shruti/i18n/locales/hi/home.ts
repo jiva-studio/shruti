@@ -2,8 +2,7 @@ export default {
   upNext: "आगे",
   playlistIsEmpty: "प्लेलिस्ट खाली है",
   tapToAddTracks: '"खोज" अनुभाग में प्रवचन जोड़ें',
-  tapToAddTracksWithPacks:
-    '"खोज" अनुभाग में प्रवचन जोड़ें या नीचे दिए सुझावों में से चुनें',
+  tapToAddTracksWithPacks: '"खोज" अनुभाग में प्रवचन जोड़ें या नीचे दिए सुझावों में से चुनें',
   starterPacks: {
     error: "प्रवचन जोड़ने में विफल",
   },

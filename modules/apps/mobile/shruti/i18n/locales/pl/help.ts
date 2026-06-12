@@ -67,7 +67,8 @@ export default {
     screens: {
       home: {
         title: "Główna — Twoja playlista",
-        description: "Każdy wykład tutaj jest na Twojej playliście. Znacznik pokazuje Twoje postępy.",
+        description:
+          "Każdy wykład tutaj jest na Twojej playliście. Znacznik pokazuje Twoje postępy.",
       },
       search: {
         title: "Szukaj i Biblioteka",

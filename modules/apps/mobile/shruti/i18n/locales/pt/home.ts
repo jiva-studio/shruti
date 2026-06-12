@@ -2,8 +2,7 @@ export default {
   upNext: "A seguir",
   playlistIsEmpty: "A playlist está vazia",
   tapToAddTracks: 'Adicione aulas na seção "Busca"',
-  tapToAddTracksWithPacks:
-    'Adicione aulas na seção "Busca" ou escolha entre as sugestões abaixo',
+  tapToAddTracksWithPacks: 'Adicione aulas na seção "Busca" ou escolha entre as sugestões abaixo',
   starterPacks: {
     error: "Não foi possível adicionar as aulas",
   },

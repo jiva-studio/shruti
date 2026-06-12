@@ -1,7 +1,8 @@
 export default {
   downloadFailed: "Download non riuscito. Controlla la connessione a internet e riprova.",
   filtersNotSaved: "Impossibile salvare il filtro. Verrà reimpostato al prossimo avvio.",
-  downloadsCacheUnavailable: "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",
+  downloadsCacheUnavailable:
+    "Impossibile leggere l'indice dei download. I file in cache sono ancora sul dispositivo.",
   trackNotFound: "Traccia non trovata.",
   languageListUnavailable: "Impossibile caricare le lingue — mostro un elenco ridotto.",
 }

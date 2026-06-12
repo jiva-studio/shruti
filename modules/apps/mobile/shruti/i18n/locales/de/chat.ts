@@ -15,7 +15,8 @@ export default {
   searchEmpty: "Keine Treffer",
   untitledSession: "Ohne Titel",
   clearHistory: "Chatverlauf löschen",
-  clearHistoryConfirm: "Alle Chats und Nachrichten löschen? Das kann nicht rückgängig gemacht werden.",
+  clearHistoryConfirm:
+    "Alle Chats und Nachrichten löschen? Das kann nicht rückgängig gemacht werden.",
   clearedToast: "Chatverlauf gelöscht.",
   citationActionHeader: "Zitat öffnen",
   citationOpen: "Vortrag öffnen",
@@ -126,9 +127,11 @@ export default {
   // strings every time we tune. The "{when}" placeholder shows the
   // actual reset boundary so users still know how long the wait is.
   errQuotaAnonTitle: "Tägliches Nachrichtenlimit erreicht",
-  errQuotaAnonBody: "Melde dich an, um mehr Chatnachrichten pro Tag zu erhalten. Wird {when} zurückgesetzt.",
+  errQuotaAnonBody:
+    "Melde dich an, um mehr Chatnachrichten pro Tag zu erhalten. Wird {when} zurückgesetzt.",
   errQuotaFreeTitle: "Tägliches Nachrichtenlimit erreicht",
-  errQuotaFreeBody: "Mit Shruti Pro entfällt das tägliche Nachrichtenlimit. Wird {when} zurückgesetzt.",
+  errQuotaFreeBody:
+    "Mit Shruti Pro entfällt das tägliche Nachrichtenlimit. Wird {when} zurückgesetzt.",
   errQuotaProTitle: "Tageslimit erreicht",
   errQuotaProBody: "Du hast die heutigen Chatnachrichten aufgebraucht. Wird {when} zurückgesetzt.",
   /** CTAs under quota InlineNotices. Anon → opens Settings (where the

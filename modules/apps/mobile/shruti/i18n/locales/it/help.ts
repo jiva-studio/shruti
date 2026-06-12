@@ -79,7 +79,8 @@ export default {
     common: {
       downloading: {
         title: "Download in corso",
-        description: "La traccia si sta scaricando. L'anello si riempie man mano che il download procede.",
+        description:
+          "La traccia si sta scaricando. L'anello si riempie man mano che il download procede.",
       },
       failed: {
         title: "Download non riuscito",

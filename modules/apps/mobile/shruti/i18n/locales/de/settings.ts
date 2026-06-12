@@ -37,7 +37,8 @@ export default {
       alreadyDeletedToast: "Dein Konto ist bereits gelöscht.",
       rateLimitedToast: "Bitte warte einen Moment, bevor du es erneut versuchst.",
       networkErrorToast: "Keine Verbindung. Prüfe dein Internet und versuche es erneut.",
-      serverErrorToast: "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es gleich erneut.",
+      serverErrorToast:
+        "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es gleich erneut.",
     },
   },
 
@@ -104,7 +105,8 @@ export default {
       },
       notesStudio: {
         title: "Notiz-Studio",
-        description: "Verwandle deine Notizen aus Vorträgen in kurze Videos und teile sie mit Freunden.",
+        description:
+          "Verwandle deine Notizen aus Vorträgen in kurze Videos und teile sie mit Freunden.",
       },
       trackInfo: {
         title: "Track-Info-Layout",

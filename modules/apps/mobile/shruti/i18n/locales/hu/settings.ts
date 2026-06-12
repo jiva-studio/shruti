@@ -37,7 +37,8 @@ export default {
       alreadyDeletedToast: "A fiókod már törölve van.",
       rateLimitedToast: "Kérlek, várj egy kicsit, mielőtt újra próbálnád.",
       networkErrorToast: "Nincs kapcsolat. Ellenőrizd az internetet, és próbáld újra.",
-      serverErrorToast: "Valami elromlott a mi oldalunkon. Kérlek, próbáld újra egy pillanat múlva.",
+      serverErrorToast:
+        "Valami elromlott a mi oldalunkon. Kérlek, próbáld újra egy pillanat múlva.",
     },
   },
 
@@ -46,7 +47,7 @@ export default {
     description: "Előfizetés kezelése",
     subscriptionIsActive: "Az előfizetés aktív",
     tapToManage: "Koppints a megtekintéshez vagy kezeléshez",
-    choose: 'Támogasd a „Shruti”-t',
+    choose: "Támogasd a „Shruti”-t",
     subscribe: "Előfizetés",
     subscribed: "Az előfizetés megtörtént",
     manage: "Előfizetés kezelése",
@@ -104,7 +105,8 @@ export default {
       },
       notesStudio: {
         title: "Jegyzetstúdió",
-        description: "Alakítsd az előadásokból készült jegyzeteidet rövid videókká, és oszd meg őket barátaiddal.",
+        description:
+          "Alakítsd az előadásokból készült jegyzeteidet rövid videókká, és oszd meg őket barátaiddal.",
       },
       trackInfo: {
         title: "Felvételadatok elrendezése",
