@@ -31,16 +31,15 @@ export function createHttpChatStreamClient(deps: HttpChatStreamClientDeps): ICha
       lang: string,
       opts?: StreamChatOptions
     ): AsyncIterable<PortChatStreamEvent> {
-      // The chatClient generator's event types are structurally compatible
-      // with PortChatStreamEvent — same `type` discriminator, same payload
-      // shapes. The cast keeps the boundary explicit without runtime cost.
-      // We merge the port-shaped opts with the DI'd auth provider before
+      // chatClient now yields the contracts `ChatStreamEvent` directly (its
+      // wire types ARE the @lib/contracts ones), so no cast is needed — we
+      // just merge the port-shaped opts with the DI'd auth provider before
       // calling into the chatClient (which needs the explicit token).
       return streamChat(turns, lang, {
         ...(opts ?? {}),
         getAccessToken: deps.getAccessToken,
         request: deps.request,
-      }) as AsyncIterable<PortChatStreamEvent>
+      })
     },
   }
 }

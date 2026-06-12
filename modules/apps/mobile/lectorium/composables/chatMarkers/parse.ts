@@ -47,7 +47,7 @@ export type ChatToken =
       /** Chapter-location widget — "where in scripture is this?". Rendered
        *  by `ChapterCard.vue`. Names a region `(sourceId, regionToken)`;
        *  the canto/chapter titles ride the `chapter` SSE payload and are
-       *  read from `useChapterBodyStore`. `caption` is the region label
+       *  read from the message's `chapters` map. `caption` is the region label
        *  (canto heading / book name) carried inline on the marker. */
       readonly kind: "chapter"
       readonly sourceId: string
@@ -69,7 +69,7 @@ export type ChatToken =
   | {
       /** Commentary / prose-chapter / letter citation rendered as a CARD
        *  (text + author + reference), the audio-citation shape. `ref` is the
-       *  integer join key into `useCommentaryBodyStore`, where the
+       *  integer join key into the message's `commentaries` map, where the
        *  `commentary` SSE action stashed the quote. Emitted only for
        *  card-capable clients; legacy turns inline a `quote` token instead. */
       readonly kind: "commentary"
@@ -101,8 +101,8 @@ export const OUTLINE_RE = /\[outline:([A-Za-z0-9_.-]+)\]/g
 export const VERSE_RE = /\[verse:([A-Za-z0-9_]+)\/([0-9.,-]+)(?:\|([^\]\n]*))?\]/g
 // Chapter-location widget marker: a source_id and a region token, optional
 // `|label` carrying the canto heading / book name. The region token is an
-// OPAQUE join key (marker ↔ `chapter` payload / body store) — the client must
-// NOT assume its shape. The server owns source structure: it's a canto ("12"),
+// OPAQUE join key (marker ↔ the `chapter` payload on the message's `chapters`
+// map) — the client must NOT assume its shape. The server owns source structure: it's a canto ("12"),
 // a chapter ("9"), EMPTY for book-level regions (2-level books like BG/CC), or
 // anything a future book layout needs. Match any run up to `|`/`]` (incl.
 // empty) so new source shapes never require a client regex change.
@@ -115,7 +115,8 @@ export const CHAPTER_RE = /\[chapter:([A-Za-z0-9_]+)\/([^|\]\n]*)(?:\|([^\]\n]*)
 export const MEDIA_RE = /\[media:([A-Za-z0-9_.-]+)(?:\|([^\]\n]*))?\]/g
 // Commentary citation marker. Just the integer ref — the quote text,
 // author, and reference ride the `commentary` SSE action payload (the
-// audio-citation pattern), keyed by this ref in `useCommentaryBodyStore`.
+// audio-citation pattern), keyed by this ref in the message's
+// `commentaries` map.
 export const COMMENTARY_RE = /\[commentary:(\d+)\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture

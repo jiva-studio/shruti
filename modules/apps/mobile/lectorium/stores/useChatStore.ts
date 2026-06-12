@@ -5,6 +5,8 @@ import { toastController } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { emitTurnSettled, emitTurnStarted } from "@lectorium/chat/turnNotificationEvents.js"
+import { applyStreamingTurnEvent } from "@lectorium/stores/chatTurnReducer.js"
+import { createPendingTurnStore, type PendingTurn } from "@lectorium/stores/chatPendingTurns.js"
 import { useToast } from "@kit/composables"
 import { openStorePage } from "@lectorium/utils/openStorePage.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -18,12 +20,8 @@ import {
 } from "@lectorium/composables/useTrackUserState.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
-import { useChapterBodyStore } from "@lectorium/stores/useChapterBodyStore.js"
-import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
-import { useCommentaryBodyStore } from "@lectorium/stores/useCommentaryBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
+import { extractFollowups } from "@lectorium/composables/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
   replayChatTurn,
@@ -108,31 +106,6 @@ function parseQuotaTier(raw: string | undefined): QuotaTier | undefined {
   return undefined
 }
 
-/**
- * Log a structured warning for every `[action:<kind>|id=X]` marker the
- * LLM emitted whose id has no matching payload in `message.actions`. The
- * card renders the broken-state placeholder anyway; we surface the
- * mismatch so residual marker/payload-id drift is greppable in logs
- * after the agent-side tool-call validation lands.
- *
- * Doesn't throw, doesn't mutate the message — pure observability.
- */
-function warnOrphanActionMarkers(message: ChatMessage): void {
-  if (message.role !== "assistant") return
-  const tokens = parseChatMarkers(message.content)
-  const actions = message.actions ?? {}
-  for (const t of tokens) {
-    if (t.kind !== "action") continue
-    if (actions[t.actionId]) continue
-    console.warn("[chat] orphan action marker — no matching payload", {
-      messageId: message.id,
-      sessionId: message.sessionId,
-      actionKind: t.actionKind,
-      actionId: t.actionId,
-    })
-  }
-}
-
 /* -------------------------------------------------------------------------- */
 /*                                   Store                                    */
 /* -------------------------------------------------------------------------- */
@@ -154,10 +127,6 @@ export const useChatStore = defineStore("chat", () => {
   const chatTranslateCitations = useChatTranslateCitations()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
-  const verseBodyStore = useVerseBodyStore()
-  const chapterBodyStore = useChapterBodyStore()
-  const citeTranscriptStore = useCiteTranscriptStore()
-  const commentaryBodyStore = useCommentaryBodyStore()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -986,25 +955,26 @@ export const useChatStore = defineStore("chat", () => {
    * Reflect ONE turn event from `runChatTurn` — shared by the live consume
    * loop and the resume replay so the two can't diverge.
    *
-   * Verse / citation / commentary / chapter payloads populate GLOBAL persisted
-   * caches the cards read from; they must be applied even when their session
-   * isn't on screen — otherwise a turn that finishes while the user is
-   * elsewhere (live switch-away OR a cold-start resume) renders with empty
-   * cards. They don't touch the message list. Every other (view-mutating)
-   * event applies only to the session currently on screen.
+   * Applies ONLY to the session currently on screen. A turn that finishes
+   * while the user is elsewhere (live switch-away OR a cold-start resume)
+   * still persists its verse/cite/chapter/commentary cards via `runChatTurn`
+   * → `messages.create` (keyed to that turn's own session), so reopening the
+   * session loads them from SQLite — there is nothing to render off-screen.
+   * Reflecting an off-screen turn here would be actively wrong: the card
+   * cases write into `messages.value[streamingIndex()]`, i.e. whatever bubble
+   * is streaming on the CURRENT session, so an off-screen turn's card would
+   * land on the wrong message.
    */
   function reflectTurnEvent(event: RunChatTurnEvent, sessionId: string): void {
-    const populatesCache =
-      event.kind === "verse-payload" ||
-      event.kind === "chapter-payload" ||
-      event.kind === "cite-transcript-payload" ||
-      event.kind === "commentary-payload"
-    if (populatesCache || activeSessionId.value === sessionId) {
-      applyTurnEvent(event)
-    }
+    if (activeSessionId.value === sessionId) applyTurnEvent(event)
   }
 
   function applyTurnEvent(event: RunChatTurnEvent): void {
+    // Streaming-accumulation events (prose deltas, status/research chips, and
+    // the per-message card maps) only mutate the on-screen streaming bubble —
+    // delegated to `applyStreamingTurnEvent`. The lifecycle cases below touch
+    // broader store state (sessions, usage, notifications) and stay here.
+    if (applyStreamingTurnEvent(event, messages, streamingIndex)) return
     switch (event.kind) {
       case "user-message":
         messages.value = [...messages.value, event.message]
@@ -1024,194 +994,6 @@ export const useChatStore = defineStore("chat", () => {
           streaming: true,
         }
         messages.value = [...messages.value, placeholder]
-        return
-      }
-      case "delta": {
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        next[idx] = { ...next[idx], content: next[idx].content + event.text }
-        messages.value = next
-        return
-      }
-      case "tool-start": {
-        // A tool re-run discards the first pass: clear the prose AND
-        // the per-turn action/outline accumulators + the ephemeral
-        // research lists on the bubble, so the finalised message can't
-        // carry orphaned cards from the abandoned pass. (runChatTurn
-        // resets its own closure-side `actions`/`outlines` maps on the
-        // same event, keeping the persisted message in lockstep.) The
-        // verse/chapter/cite payload caches are append-only, keyed by
-        // their own source ids, and only render when a marker in the
-        // final prose references them — a discarded pass leaves no such
-        // marker, so stale cache entries are inert and don't need a
-        // sweep here.
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        next[idx] = {
-          ...next[idx],
-          content: "",
-          actions: undefined,
-          outlines: undefined,
-          media: undefined,
-          researchQuestions: undefined,
-          researchSources: undefined,
-        }
-        messages.value = next
-        return
-      }
-      case "status": {
-        // i18n status key from the server (e.g. "searching_corpus",
-        // "composing_answer"). Surfaced as `statusKey` on the streaming
-        // bubble so StatusPill.vue can render the localized label
-        // without polling.
-        //
-        // We also clear the accumulated `researchQuestions` /
-        // `researchSources` here — each status event marks a new
-        // pipeline epoch, and stale research items would otherwise
-        // keep showing up in the ticker rotation after the server
-        // moved on (e.g. when `composing_answer` lands, the user
-        // doesn't want to keep seeing "природа buddhi" sub-queries).
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        next[idx] = {
-          ...next[idx],
-          statusKey: event.statusKey,
-          statusParams: event.params,
-          researchQuestions: undefined,
-          researchSources: undefined,
-        }
-        messages.value = next
-        return
-      }
-      case "research-question": {
-        // Append a sub-query the research pipeline just generated.
-        // Ephemeral — lives on the streaming bubble only; dropped on
-        // `finalised` (which replaces the whole message) or `error`
-        // (which removes the placeholder).
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const cur = messages.value[idx]
-        const next = [...messages.value]
-        next[idx] = {
-          ...cur,
-          researchQuestions: [...(cur.researchQuestions ?? []), event.question],
-        }
-        messages.value = next
-        return
-      }
-      case "research-source": {
-        // Add (or replace, last-write-wins) one inspected source.
-        // Dedup happens here — server emits per-query, multiple
-        // sub-queries inspecting the same chunk collapse into one chip.
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const cur = messages.value[idx]
-        const nextMap = new Map(cur.researchSources ?? new Map())
-        nextMap.set(event.id, { sourceKind: event.sourceKind, label: event.label })
-        const next = [...messages.value]
-        next[idx] = { ...cur, researchSources: nextMap }
-        messages.value = next
-        return
-      }
-      case "action": {
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        const cur = next[idx]
-        next[idx] = {
-          ...cur,
-          actions: { ...(cur.actions ?? {}), [event.actionId]: event.payload },
-        }
-        messages.value = next
-        return
-      }
-      case "outline": {
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        const cur = next[idx]
-        next[idx] = {
-          ...cur,
-          outlines: { ...(cur.outlines ?? {}), [event.trackId]: event.payload },
-        }
-        messages.value = next
-        return
-      }
-      case "verse-payload": {
-        // Server-streamed verse body for one (source_id, tokens). The
-        // store caches it (with persistence) so `VerseCard.vue`
-        // can render the full block. Does NOT touch the message list
-        // — verse-payload arrives BEFORE the prose deltas containing
-        // the marker, and the marker itself is what triggers render.
-        verseBodyStore.set(event.sourceId, event.tokens, {
-          addrLabel: event.addrLabel,
-          sanskrit: event.sanskrit,
-          transliteration: event.transliteration,
-          transliterationOriginal: event.transliterationOriginal,
-          translation: event.translation,
-          audioUrl: event.audioUrl,
-          mt: event.mt,
-        })
-        return
-      }
-      case "chapter-payload": {
-        // Server-streamed chapter-location region (locate intent). Cached
-        // (with persistence) so `ChapterCard.vue` renders the chapter
-        // list; arrives BEFORE the prose delta with the `[chapter:…]`
-        // marker, same ordering contract as verse-payload.
-        chapterBodyStore.set(event.sourceId, event.regionToken, {
-          regionLabel: event.regionLabel,
-          chapters: event.chapters,
-        })
-        return
-      }
-      case "cite-transcript-payload": {
-        // Server-streamed transcript snippet for one cited fragment.
-        // Cached (with persistence) so `CitationCard.vue` renders the
-        // full quote card; arrives BEFORE the prose delta with the
-        // `[cite:...]` marker, and a late arrival upgrades the chip
-        // reactively. Does NOT touch the message list.
-        citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text, {
-          mt: event.mt,
-          textOriginal: event.textOriginal,
-        })
-        return
-      }
-      case "commentary-payload": {
-        // Server-streamed purport / prose-chapter / letter quote for one
-        // `[commentary:N]` marker. Cached (with persistence) so
-        // `CommentaryCard.vue` renders the quote card; arrives BEFORE the
-        // prose delta with the marker. Does NOT touch the message list.
-        commentaryBodyStore.set(event.ref, {
-          text: event.text,
-          authorName: event.authorName,
-          addrLabel: event.addrLabel,
-          commentaryKind: event.commentaryKind,
-          mt: event.mt,
-          textOriginal: event.textOriginal,
-        })
-        return
-      }
-      case "media-payload": {
-        // Server-streamed media result (video/audio + transcript) for one
-        // `[media:<id>]` marker. Unlike verse/chapter/cite (which live in
-        // their own persisted caches), media is stashed directly on the
-        // message's `media` map — mirroring the `action` event — so it
-        // round-trips through `messages.create` → SQLite `meta`. Arrives
-        // BEFORE the prose delta with the marker; the marker triggers
-        // MediaCard render.
-        const idx = streamingIndex()
-        if (idx < 0) return
-        const next = [...messages.value]
-        const cur = next[idx]
-        next[idx] = {
-          ...cur,
-          media: { ...(cur.media ?? {}), [event.payload.id]: event.payload },
-        }
-        messages.value = next
         return
       }
       case "finalised": {
@@ -1240,12 +1022,6 @@ export const useChatStore = defineStore("chat", () => {
         for (const action of Object.values(event.message.actions ?? {})) {
           void recordInlineHintCooldown(event.message.id, action)
         }
-        // Visibility for orphan action markers: any `[action:...|id=X]`
-        // in the finalised prose whose id has no matching payload will
-        // render the broken-card placeholder. Log so we can grep for
-        // residual LLM marker/payload-id drift after the agent-side
-        // tool-call validation lands.
-        warnOrphanActionMarkers(event.message)
         return
       }
       case "usage": {
@@ -1447,47 +1223,15 @@ export const useChatStore = defineStore("chat", () => {
   // through the SAME runChatTurn fold so the answer is rebuilt exactly —
   // never lost.
 
-  const PENDING_TURNS_KEY = "chat:pending_turns"
   const PENDING_TTL_MS = 24 * 60 * 60 * 1000 // mirrors the server buffer TTL
 
-  interface PendingTurn {
-    readonly assistantMessageId: string
-    readonly sessionId: string
-    readonly createdAt: number
-  }
-
-  async function readPending(): Promise<PendingTurn[]> {
-    try {
-      const raw = await app.preferences.get(PENDING_TURNS_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as PendingTurn[]
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-
-  async function writePending(list: PendingTurn[]): Promise<void> {
-    try {
-      if (list.length === 0) await app.preferences.remove(PENDING_TURNS_KEY)
-      else await app.preferences.set(PENDING_TURNS_KEY, JSON.stringify(list))
-    } catch {
-      // best-effort — a failed persist just means weaker kill-recovery
-    }
-  }
-
-  async function addPending(assistantMessageId: string, sessionId: string): Promise<void> {
-    const list = await readPending()
-    if (list.some((p) => p.assistantMessageId === assistantMessageId)) return
-    list.push({ assistantMessageId, sessionId, createdAt: Date.now() })
-    await writePending(list)
-  }
-
-  async function removePending(assistantMessageId: string): Promise<void> {
-    const list = await readPending()
-    const next = list.filter((p) => p.assistantMessageId !== assistantMessageId)
-    if (next.length !== list.length) await writePending(next)
-  }
+  // Preferences-backed persistence of the in-flight-turn records lives in its
+  // own module; the store keeps only the resume orchestration below. Aliased
+  // to the historical names so every call site reads unchanged.
+  const pendingTurns = createPendingTurnStore(app.preferences)
+  const readPending = pendingTurns.read
+  const addPending = pendingTurns.add
+  const removePending = pendingTurns.remove
 
   /** Replay a completed turn's buffered events into its session, rebuilding
    *  the assistant message through the `replayChatTurn` use-case (same fold
@@ -1584,6 +1328,24 @@ export const useChatStore = defineStore("chat", () => {
           return
         }
         if (buffered.state === "running") {
+          // A turn stuck `running` server-side forever would otherwise strand
+          // the pending record AND its thinking placeholder past the buffer
+          // TTL (the poll loop only runs ~2.5 min per resume, but re-arms on
+          // every app resume). Give up once older than the TTL: settle ok:false
+          // (cancels the pre-armed forward notification) and clear the record +
+          // this entry's lingering placeholder.
+          if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
+            emitTurnSettled({
+              assistantMessageId: entry.assistantMessageId,
+              sessionId: entry.sessionId,
+              ok: false,
+            })
+            if (activeSessionId.value === entry.sessionId) {
+              messages.value = messages.value.filter((m) => m.id !== entry.assistantMessageId)
+            }
+            await removePending(entry.assistantMessageId)
+            return
+          }
           if (activeSessionId.value === entry.sessionId) {
             ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId)
           }
@@ -1610,6 +1372,17 @@ export const useChatStore = defineStore("chat", () => {
           // finalise but before pending was cleared — replaying would dupe).
           if (!existing || existing.error) {
             await replayBufferedTurn(entry, buffered.events)
+          } else {
+            // Clean answer already persisted — no replay needed, but still
+            // settle the turn (ok:true) so the pre-armed forward notification
+            // is cancelled instead of firing a false "answer ready" for an
+            // answer already on disk. replayBufferedTurn would have settled;
+            // this skip path must too.
+            emitTurnSettled({
+              assistantMessageId: entry.assistantMessageId,
+              sessionId: entry.sessionId,
+              ok: true,
+            })
           }
         } catch (err) {
           console.error("[chat] resume replay failed", err)

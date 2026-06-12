@@ -15,7 +15,7 @@ import {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Verse body lookup callback (matches `useVerseBodyStore().get`). Kept
+ * Verse body lookup callback (matches a `ChatMessage.verses` entry). Kept
  * as an injected dependency so `messageToMarkdown` stays pure /
  * pinia-free and can be unit-tested with synthetic verse data.
  */
@@ -29,7 +29,7 @@ export type VerseLookup = (sourceId: string, tokens: string) => VerseBodyLike | 
 
 /**
  * Audio-citation body lookup — the cite analog of `VerseBodyLike`. `text`
- * is the transcript snippet (cached in `useCiteTranscriptStore`); the
+ * is the transcript snippet (from `ChatMessage.cites`); the
  * optional attribution fields mirror what `CitationCard.vue` shows,
  * resolved client-side and already localized to the UI language. A null
  * return (no transcript cached) makes the cite strip out, exactly as it
@@ -46,7 +46,7 @@ export type CiteLookup = (trackId: string, startMs: number, endMs: number) => Ci
 
 /**
  * Commentary body lookup — the commentary analog of `CiteBodyLike`,
- * matching `useCommentaryBodyStore().get`. `text` is the cited quote;
+ * matching a `ChatMessage.commentaries` entry. `text` is the cited quote;
  * `authorName` + `addrLabel` form the attribution. A null return (no
  * payload cached) strips the marker, same as a cite cache miss.
  */
@@ -107,9 +107,9 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   out = out.replace(OUTLINE_RE, "")
   out = out.replace(ACTION_RE, "")
   out = out.replace(FOLLOWUP_RE, "")
-  // Chapter-location widget: chapter titles live in the body store, not
-  // the message text, so there's nothing portable to expand — strip the
-  // marker (same as card / outline).
+  // Chapter-location widget: chapter titles live on the message's `chapters`
+  // map, not the message text, so there's nothing portable to expand — strip
+  // the marker (same as card / outline).
   out = out.replace(CHAPTER_RE, "")
   // Media result widget: the video/audio file + transcript live in the
   // `media` SSE payload, not the message text — nothing portable to
@@ -131,9 +131,9 @@ export function messageToMarkdown(input: string, opts: MessageToMarkdownOptions)
   )
   // Commentary citations: expand into a transcript-style blockquote +
   // attribution, the commentary analog of the cite expansion above. The
-  // quote text lives in the body store (card-capable turns); a cache miss
-  // returns "" (strip). Legacy turns embed the quote as a `>` blockquote in
-  // the prose directly, so they never hit this path.
+  // quote text lives on the message's `commentaries` map (card-capable
+  // turns); a lookup miss returns "" (strip). Legacy turns embed the quote as
+  // a `>` blockquote in the prose directly, so they never hit this path.
   const commentaryRe = new RegExp(COMMENTARY_RE.source, "g")
   out = out.replace(commentaryRe, (_full, refStr: string) => {
     const body = opts.commentaryLookup?.(Number(refStr) | 0)

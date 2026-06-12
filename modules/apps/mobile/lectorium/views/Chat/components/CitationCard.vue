@@ -60,7 +60,6 @@ import { formatReference } from "@lib/domain/services/references.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import { useAddToPlaylist } from "@lectorium/composables/useAddToPlaylist.js"
 import { useChatActions } from "@lectorium/composables/useChatActions.js"
-import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
 import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
@@ -68,6 +67,7 @@ import { useStudioHandoffStore } from "@lectorium/stores/useStudioHandoffStore.j
 import { useToast } from "@kit/composables"
 import type { AuthorId, TrackId } from "@lib/domain/core.js"
 import type { Author } from "@lib/domain/author.js"
+import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
 import type { Track } from "@lib/domain/track.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import NotesInlinePlayer from "@lectorium/views/Notes/NotesInlinePlayer.vue"
@@ -84,13 +84,15 @@ const props = defineProps<{
   /** LLM-generated snippet caption from the marker. Used by the chip
    *  fallback; the full card shows the transcript text instead. */
   caption?: string
+  /** Transcript snippet from the owning message's `cites` map; absent ⇒
+   *  chip fallback. */
+  body?: ChatCiteSnippet
 }>()
 
 const { t } = useI18n()
 const app = useLectorium()
 const appLanguage = useAppLanguage()
 const dictionaries = useDictionariesStore()
-const citeTranscriptStore = useCiteTranscriptStore()
 const purchases = usePurchasesStore()
 const paywall = usePaywallStore()
 const studioHandoff = useStudioHandoffStore()
@@ -108,9 +110,7 @@ const showOriginal = ref(false)
 
 /** Transcript snippet pushed by the server ahead of the marker. Null
  *  until it lands (or forever for pre-feature history) → chip fallback. */
-const snippet = computed(() =>
-  citeTranscriptStore.getEntry(props.trackId, props.startMs, props.endMs)
-)
+const snippet = computed(() => props.body ?? null)
 const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
 /** True when the shown text is a machine translation with an original to
  *  flip to. */
@@ -255,9 +255,6 @@ async function loadMetadata(): Promise<void> {
 }
 
 onMounted(() => {
-  // Hydrate the persisted snippet cache so reopened chat history shows
-  // cards (not chips) for previously-streamed citations.
-  void citeTranscriptStore.hydrate()
   // Sources are needed to format the shloka reference, like the Notes
   // list does; one-shot full load, cached across the session.
   void dictionaries.ensureLoaded()
