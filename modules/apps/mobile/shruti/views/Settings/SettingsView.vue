@@ -270,7 +270,7 @@ function onOpenEmail(): void {
 }
 
 function onOpenVk(): void {
-  window.open("https://vk.com/shruti", "_system")
+  window.open("https://vk.com/akd.studio", "_system")
 }
 
 function onOpenTelegram(): void {
