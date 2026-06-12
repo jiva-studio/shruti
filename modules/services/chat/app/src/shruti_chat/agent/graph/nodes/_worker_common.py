@@ -19,7 +19,8 @@ runs; toolset is parameterised.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
@@ -195,7 +196,7 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     native (ru/en) answers translate nothing. Returns None on fetch failure
     or missing body.
 
-    Shared by the eager `flush_verse_payloads` (legacy inline clients) and
+    Shared by the eager `flush_card_payloads` (legacy clients) and
     the lazy synth-time emit (`synthesizer._emit_verse_card`): the DB fetch
     is cheap and identical, but card clients call this only for the verses
     actually CITED, so the (expensive) translation never runs on the rest of
@@ -261,170 +262,76 @@ async def build_verse_payload(ctx: TurnContext, vref: VerseRef) -> dict[str, Any
     return payload
 
 
-async def flush_verse_payloads(ctx: TurnContext) -> None:
-    """Emit `action.kind=verse` events for every verse alias minted on this
-    turn that hasn't been emitted yet — ordering invariant: the payload
-    arrives BEFORE the inline `[verse:…]` marker in delta text.
-
-    LEGACY / inline clients only. Card-capable clients emit verse cards
-    LAZILY at synth time (`synthesizer._emit_verse_card`) — only the verses
-    actually cited — so the prose translation never runs on the uncited rest
-    of the candidate pool. Skipped entirely for them here.
-    """
-    if (
-        ctx.aliases is None
-        or ctx.library_db_path is None
-        or ctx.capabilities.get("commentary_card")
-    ):
-        return
-    writer = get_stream_writer()
-    for ref_num, vref in ctx.aliases.verse_refs():
-        if ref_num in ctx.emitted_verse_refs:
-            continue
-        ctx.emitted_verse_refs.add(ref_num)
-        if not isinstance(vref, VerseRef):
-            continue
-        payload = await build_verse_payload(ctx, vref)
-        if payload is None:
-            continue
-        writer(
-            {
-                "type": "action",
-                "data": {
-                    "kind": "verse",
-                    "id": f"verse_{vref.source_id}_{vref.tokens}",
-                    "payload": payload,
-                },
-            }
-        )
-
-
-async def flush_chapter_payloads(ctx: TurnContext) -> None:
-    """Emit `action.kind=chapter` events for every chapter-location alias
-    minted this turn that hasn't been emitted yet. Mirrors
-    `flush_verse_payloads`: the payload MUST arrive BEFORE the
-    `[chapter:source/region|label]` marker in the delta so `ChapterCard.vue`
-    renders the chapter list (titles verbatim from `library_titles`) rather
-    than a bare chip. Titles already ride on the alias — no DB re-read.
-    """
-    if ctx.aliases is None:
-        return
-    writer = get_stream_writer()
-    for ref_num, cref in ctx.aliases.chapter_refs():
-        if ref_num in ctx.emitted_chapter_refs:
-            continue
-        ctx.emitted_chapter_refs.add(ref_num)
-        if not isinstance(cref, ChapterRef):
-            continue
-        # Chapter titles are already resolved en-preferred (fetch_titles does
-        # a lang→en→any fallback), so the default behaviour needs no change.
-        # When MT is opted in, translate each title into the answer language
-        # and carry the original on `title_original` per chapter. The
-        # translator's same-language guard + cache make a no-op (title already
-        # in ctx.lang) cheap and mt-free.
-        chapters_out: list[dict[str, Any]] = []
-        chapter_mt = False
-        for tok, title in cref.chapters:
-            entry: dict[str, Any] = {"tokens": tok, "title": title}
-            if title and ctx.translate_citations and ctx.translator is not None:
-                shown, original, mt = await localize_citation(
-                    ctx, variants={}, source_text=title, src_lang=None,
-                )
-                if mt:
-                    entry["title"] = shown
-                    entry["title_original"] = original
-                    chapter_mt = True
-            chapters_out.append(entry)
-        payload: dict[str, Any] = {
-            "source_id": cref.source_id,
-            "region_token": cref.region_token,
-            "region_label": cref.region_label,
-            "chapters": chapters_out,
-        }
-        if chapter_mt:
-            payload["mt"] = True
-        writer(
-            {
-                "type": "action",
-                "data": {
-                    "kind": "chapter",
-                    "id": f"chapter_{cref.source_id}_{cref.region_token}",
-                    "payload": payload,
-                },
-            }
-        )
-
-
-async def flush_media_payloads(ctx: TurnContext) -> None:
-    """Emit `action.kind=media` events for every media-clip alias minted
-    this turn that hasn't been emitted yet. Mirrors `flush_verse_payloads`:
-    the payload MUST arrive BEFORE the `[media:<id>|caption]` marker in the
-    delta so the client renders the playable clip card (player + text)
-    rather than a bare chip.
-
-    Media chunks are reference-only — the alias carries just the
-    `library_media` id, so the playable handle (url / type / speaker) is
-    resolved HERE at turn time via fetch_media(item_id), exactly like a
-    verse resolves its body via fetch_verse_body.
-
-    Payload shape (relative `url` path — the client resolves it against the
-    media CDN base, same contract as track/verse audio):
-      {id, url, type, title, speaker?, text}
-    """
-    if ctx.aliases is None or ctx.library_db_path is None:
-        return
-    writer = get_stream_writer()
-    for ref_num, mref in ctx.aliases.media_refs():
-        if ref_num in ctx.emitted_media_refs:
-            continue
-        ctx.emitted_media_refs.add(ref_num)
-        if not isinstance(mref, MediaRef):
-            continue
-        try:
-            row = await fetch_media(ctx.library_db_path, mref.item_id)
-        except Exception as exc:
-            log.warning(
-                "media_payload_fetch_failed",
-                request_id=ctx.request_id,
-                item_id=mref.item_id,
-                error=str(exc),
-            )
-            continue
-        if row is None:
-            continue
-        payload: dict[str, Any] = {
-            "id": mref.item_id,
-            "url": row["url"],
-            "type": row["type"],
-            "title": mref.label,
-            "text": mref.text,
-        }
-        # Media-clip text localisation. Native when the clip's language is
-        # the answer language; otherwise translate-if-opted-in (with the
-        # original on `text_original`), else show the source verbatim.
-        media_lang = mref.lang or row.get("lang") or None
-        if mref.text and media_lang and media_lang != ctx.lang:
+async def build_chapter_payload(ctx: TurnContext, cref: ChapterRef) -> dict[str, Any] | None:
+    """Build ONE chapter-location card payload (the canto/chapter list). When
+    MT is opted in, each title is translated into the answer language with the
+    original on `title_original` (the translator's same-language guard + cache
+    make a native no-op free). Titles ride on the alias — no DB read."""
+    if not isinstance(cref, ChapterRef):
+        return None
+    chapters_out: list[dict[str, Any]] = []
+    chapter_mt = False
+    for tok, title in cref.chapters:
+        entry: dict[str, Any] = {"tokens": tok, "title": title}
+        if title and ctx.translate_citations and ctx.translator is not None:
             shown, original, mt = await localize_citation(
-                ctx, variants={media_lang: mref.text},
-                source_text=mref.text, src_lang=media_lang,
+                ctx, variants={}, source_text=title, src_lang=None,
             )
             if mt:
-                payload["text"] = shown
-                payload["text_original"] = original
-                payload["mt"] = True
-        speaker = (row["meta"] or {}).get("speaker")
-        if speaker:
-            payload["speaker"] = speaker
-        writer(
-            {
-                "type": "action",
-                "data": {
-                    "kind": "media",
-                    "id": f"media_{mref.item_id}",
-                    "payload": payload,
-                },
-            }
+                entry["title"] = shown
+                entry["title_original"] = original
+                chapter_mt = True
+        chapters_out.append(entry)
+    payload: dict[str, Any] = {
+        "source_id": cref.source_id,
+        "region_token": cref.region_token,
+        "region_label": cref.region_label,
+        "chapters": chapters_out,
+    }
+    if chapter_mt:
+        payload["mt"] = True
+    return payload
+
+
+async def build_media_payload(ctx: TurnContext, mref: MediaRef) -> dict[str, Any] | None:
+    """Build ONE media-clip card payload. The alias carries only the
+    `library_media` id, so the playable handle (url / type / speaker) is
+    resolved here via `fetch_media`. The transcript `text` is translated for
+    a non-corpus answer (with the original on `text_original`). Returns None
+    on fetch failure / missing row (marker degrades to the chip)."""
+    if not isinstance(mref, MediaRef) or ctx.library_db_path is None:
+        return None
+    try:
+        row = await fetch_media(ctx.library_db_path, mref.item_id)
+    except Exception as exc:
+        log.warning(
+            "media_payload_fetch_failed",
+            request_id=ctx.request_id, item_id=mref.item_id, error=str(exc),
         )
+        return None
+    if row is None:
+        return None
+    payload: dict[str, Any] = {
+        "id": mref.item_id,
+        "url": row["url"],
+        "type": row["type"],
+        "title": mref.label,
+        "text": mref.text,
+    }
+    media_lang = mref.lang or row.get("lang") or None
+    if mref.text and media_lang and media_lang != ctx.lang:
+        shown, original, mt = await localize_citation(
+            ctx, variants={media_lang: mref.text},
+            source_text=mref.text, src_lang=media_lang,
+        )
+        if mt:
+            payload["text"] = shown
+            payload["text_original"] = original
+            payload["mt"] = True
+    speaker = (row["meta"] or {}).get("speaker")
+    if speaker:
+        payload["speaker"] = speaker
+    return payload
 
 
 async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
@@ -468,57 +375,13 @@ async def _fetch_cite_text(ctx: TurnContext, cref: ChunkRef) -> str:
     return text.strip() if isinstance(text, str) else ""
 
 
-async def flush_cite_payloads(ctx: TurnContext) -> None:
-    """Emit `action.kind=cite_transcript` events for every cite-able
-    lecture fragment whose transcript text is known and hasn't been
-    emitted yet. Mirrors `flush_verse_payloads`: the payload MUST arrive
-    BEFORE the `[cite:track@s-e|caption]` marker in the delta text, so
-    `CitationCard.vue` can render the full quote block (player + text +
-    attributes) instead of the small chip fallback.
-
-    Text comes from `aliases.chunk_texts`, filled by the research
-    pipeline over the same cite-able set the caption pass uses. A fragment
-    aliased OUTSIDE that pass — by a catalog/action/help ReAct worker, the
-    pre-minted focus fragment, or round-tripped from a prior turn — has no
-    stashed text, so the snippet is re-fetched on demand from the chunk
-    repo (mirroring how `flush_verse_payloads` re-reads verse bodies).
-    Only a genuine miss (no repo / DB error / fragment gone) degrades to
-    the chip.
-    """
-    # Card clients emit cite cards LAZILY at synth time (cited-only) — see
-    # `synthesizer._bridge_synth_events`. Skip the eager whole-pool path: on
-    # a lecture-heavy turn it translated dozens of aliased fragments the
-    # answer never cites, one after another (the ~60s `cite_transcript`
-    # stall). Legacy (non-card) clients keep the eager flush.
-    if ctx.aliases is None or ctx.capabilities.get("commentary_card"):
-        return
-    writer = get_stream_writer()
-    for ref_num, cref in ctx.aliases.cite_refs():
-        if ref_num in ctx.emitted_cite_refs:
-            continue
-        payload = await build_cite_payload(ctx, ref_num, cref)
-        if payload is None:
-            continue
-        ctx.emitted_cite_refs.add(ref_num)
-        writer(
-            {
-                "type": "action",
-                "data": {
-                    "kind": "cite_transcript",
-                    "id": f"cite_{cref.track_id}_{cref.start_ms}_{cref.end_ms}",
-                    "payload": payload,
-                },
-            }
-        )
-
-
 async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[str, Any] | None:
     """Build ONE lecture-transcript cite payload: resolve the snippet text
     (stashed by the research caption pass, else re-fetched) and, for a
     non-corpus answer with translation opted in, translate it. Returns None
     when no text is available (the marker degrades to the chip).
 
-    Shared by the eager `flush_cite_payloads` (legacy clients) and the lazy
+    Shared by the eager `flush_card_payloads` (legacy clients) and the lazy
     synth-time emit (card clients) — the latter calls this only for the
     fragments actually CITED, so the translation runs on a handful instead
     of the whole research pool, and overlaps generation via the bridge."""
@@ -548,6 +411,90 @@ async def build_cite_payload(ctx: TurnContext, ref_num: int, cref: Any) -> dict[
             payload["text_original"] = original
             payload["mt"] = True
     return payload
+
+
+@dataclass(frozen=True)
+class CardSpec:
+    """One auto-render card kind (verse / cite / media / chapter).
+
+    The eager flush AND the lazy synth-time emit both drive this single
+    registry, and the (translation-bearing) `build` is the ONLY place a
+    payload is produced. So a new card kind is wired everywhere by adding
+    ONE entry here — there is no separate per-kind eager-gate or translate
+    step left to forget. See `flush_card_payloads` (eager) and
+    `synthesizer._bridge_synth_events` (lazy), both of which iterate this.
+    """
+
+    family: str                                     # marker family the expander queues
+    action_kind: str                                # SSE `action.kind`
+    refs: Callable[[Any], list[tuple[int, Any]]]    # aliases -> [(ref_num, ref)]
+    build: Callable[[TurnContext, int, Any], Any]   # (ctx, ref_num, ref) -> awaitable[payload|None]
+    card_id: Callable[[Any], str]                   # ref -> action id
+    dedup_key: Callable[[Any], tuple]               # ref -> once-per-turn dedup key
+
+
+CARD_SPECS: tuple[CardSpec, ...] = (
+    CardSpec(
+        "verse", "verse",
+        lambda a: a.verse_refs(),
+        lambda ctx, n, r: build_verse_payload(ctx, r),
+        lambda r: f"verse_{r.source_id}_{r.tokens}",
+        lambda r: (r.source_id, r.tokens),
+    ),
+    CardSpec(
+        "cite", "cite_transcript",
+        lambda a: a.cite_refs(),
+        build_cite_payload,
+        lambda r: f"cite_{r.track_id}_{r.start_ms}_{r.end_ms}",
+        lambda r: (r.track_id, r.start_ms, r.end_ms),
+    ),
+    CardSpec(
+        "media", "media",
+        lambda a: a.media_refs(),
+        lambda ctx, n, r: build_media_payload(ctx, r),
+        lambda r: f"media_{r.item_id}",
+        lambda r: (r.item_id,),
+    ),
+    CardSpec(
+        "chapter", "chapter",
+        lambda a: a.chapter_refs(),
+        lambda ctx, n, r: build_chapter_payload(ctx, r),
+        lambda r: f"chapter_{r.source_id}_{r.region_token}",
+        lambda r: (r.source_id, r.region_token),
+    ),
+)
+
+CARD_SPEC_BY_FAMILY: dict[str, CardSpec] = {s.family: s for s in CARD_SPECS}
+
+
+async def flush_card_payloads(ctx: TurnContext) -> None:
+    """Eager emission of every auto-render card (verse / cite / media /
+    chapter) for LEGACY clients. THE single gate: card-capable clients emit
+    these lazily (cited-only) at synth time via the synthesizer bridge, so
+    this returns immediately for them — no per-kind gate to forget. Iterates
+    `CARD_SPECS`, so a new card kind is covered with no change here."""
+    if ctx.aliases is None or ctx.capabilities.get("commentary_card"):
+        return
+    writer = get_stream_writer()
+    for spec in CARD_SPECS:
+        for ref_num, ref in spec.refs(ctx.aliases):
+            key = (spec.family, spec.dedup_key(ref))
+            if key in ctx.emitted_card_keys:
+                continue
+            payload = await spec.build(ctx, ref_num, ref)
+            if payload is None:
+                continue
+            ctx.emitted_card_keys.add(key)
+            writer(
+                {
+                    "type": "action",
+                    "data": {
+                        "kind": spec.action_kind,
+                        "id": spec.card_id(ref),
+                        "payload": payload,
+                    },
+                }
+            )
 
 
 async def translate_commentaries(ctx: TurnContext) -> None:
@@ -725,9 +672,7 @@ async def run_worker(
     # the synthesizer streams. Each flush itself may translate verse / cite /
     # media text; running them concurrently overlaps those calls too.
     await asyncio.gather(
-        flush_verse_payloads(ctx),
-        flush_media_payloads(ctx),
-        flush_cite_payloads(ctx),
+        flush_card_payloads(ctx),
         translate_commentaries(ctx),
     )
     return result

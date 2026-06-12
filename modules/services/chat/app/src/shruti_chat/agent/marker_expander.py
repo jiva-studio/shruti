@@ -41,6 +41,7 @@ State machine:
 from __future__ import annotations
 
 import re
+from typing import NamedTuple
 
 from shruti_chat.agent.turn_aliases import (
     ChapterRef,
@@ -54,6 +55,22 @@ from shruti_chat.observability.logging import get_logger
 
 
 log = get_logger(__name__)
+
+
+# The alias ref behind an auto-render card. Each maps to one CARD_SPECS entry.
+CardRef = VerseRef | ChunkRef | MediaRef | ChapterRef
+
+
+class CardRequest(NamedTuple):
+    """One auto-render card queued for lazy synth-time emit.
+
+    `family` keys the `_worker_common.CARD_SPECS` registry the synthesizer
+    bridge dispatches on; `ref_num` is the alias number (needed by the cite
+    builder for its stashed transcript text); `ref` is the alias ref."""
+
+    family: str
+    ref_num: int
+    ref: CardRef
 
 
 # `[^N]` with integer N, optionally `[^N|s=0,2,5]` for commentary
@@ -129,23 +146,19 @@ class MarkerExpander:
         request_id: str | None = None,
         emitted_action_ids: set[str] | None = None,
         commentary_as_card: bool = False,
-        lazy_verse: bool = False,
-        lazy_cite: bool = False,
+        lazy_cards: bool = False,
     ) -> None:
         self._aliases = aliases
         self._request_id = request_id
-        # When True (card-capable client), verse cards are emitted LAZILY at
-        # synth time: expanding a `[verse:…]` marker queues the VerseRef here,
-        # the synthesizer builds + (cited-only) translates + emits the payload
-        # just before the marker's delta. When False (legacy), the eager
-        # `flush_verse_payloads` emits every aliased verse up front.
-        self._lazy_verse = lazy_verse
-        self._pending_verse_requests: list[VerseRef] = []
-        # Same for lecture-transcript cites: expanding `[cite:track@s-e]`
-        # queues `(alias_num, ChunkRef)` so the synthesizer builds + translates
-        # + emits only the CITED fragments. Off → eager `flush_cite_payloads`.
-        self._lazy_cite = lazy_cite
-        self._pending_cite_requests: list[tuple[int, ChunkRef]] = []
+        # When True (card-capable client), the auto-render cards (verse / cite
+        # / media / chapter) are emitted LAZILY at synth time: expanding the
+        # card's marker queues `(family, alias_num, ref)` here, and the
+        # synthesizer bridge builds + (cited-only) translates + emits the
+        # payload just before the marker's delta — driven by the single
+        # `_worker_common.CARD_SPECS` registry. When False (legacy clients),
+        # the eager `flush_card_payloads` emits every aliased card up front.
+        self._lazy_cards = lazy_cards
+        self._pending_card_requests: list[CardRequest] = []
         # When True (client declared the `commentary_card` capability),
         # `_format_commentary` emits a `[commentary:item/seg|s=…|addr]`
         # marker — handled exactly like `[verse:…]` (its structured payload
@@ -543,17 +556,17 @@ class MarkerExpander:
                 return self._format_commentary_card(n, ref, sentence_indices)
             return self._format_commentary(ref, sentence_indices)
 
+        # Card clients: queue each auto-render card for lazy synth-time emit
+        # (build + cited-only translate). The `family` keys the
+        # `_worker_common.CARD_SPECS` registry the bridge dispatches on.
         if isinstance(ref, VerseRef):
-            # Card clients: queue the verse for lazy synth-time emission
-            # (build + translate only this cited verse). Legacy clients got
-            # the payload from the eager flush already.
-            if self._lazy_verse:
-                self._pending_verse_requests.append(ref)
+            self._queue_card("verse", n, ref)
             body = f"{ref.source_id}/{ref.tokens}"
             label = ref.addr_label or ""
             return f"[verse:{body}|{label}]" if label else f"[verse:{body}]"
 
         if isinstance(ref, MediaRef):
+            self._queue_card("media", n, ref)
             # Caption defaults to the server-built label ("speaker · date" /
             # title). The full playable payload (url + type + text) rides
             # ahead of this marker via the `media` SSE event; the marker
@@ -562,16 +575,14 @@ class MarkerExpander:
             return f"[media:{ref.item_id}|{caption}]" if caption else f"[media:{ref.item_id}]"
 
         if isinstance(ref, ChapterRef):
+            self._queue_card("chapter", n, ref)
             body = f"{ref.source_id}/{ref.region_token}"
             label = ref.region_label or ""
             return f"[chapter:{body}|{label}]" if label else f"[chapter:{body}]"
 
         if isinstance(ref, ChunkRef):
             if ref.start_ms is not None and ref.end_ms is not None:
-                # Card clients: queue this cited fragment for lazy synth-time
-                # build+translate+emit (legacy got it from the eager flush).
-                if self._lazy_cite:
-                    self._pending_cite_requests.append((n, ref))
+                self._queue_card("cite", n, ref)
                 body = f"{ref.track_id}@{ref.start_ms}-{ref.end_ms}"
                 caption = self._aliases.captions.get(n, "")
                 return f"[cite:{body}|{caption}]" if caption else f"[cite:{body}]"
@@ -719,26 +730,22 @@ class MarkerExpander:
         self._pending_commentary_actions = []
         return out
 
-    def take_verse_requests(self) -> list[VerseRef]:
-        """Return + clear the VerseRefs of `[verse:…]` markers expanded since
-        the last call (card clients only). The synthesizer builds + translates
-        + emits each one's payload BEFORE the delta carrying its marker —
-        only for verses actually cited, so uncited verses cost no translation."""
-        if not self._pending_verse_requests:
-            return []
-        out = self._pending_verse_requests
-        self._pending_verse_requests = []
-        return out
+    def _queue_card(self, family: str, ref_num: int, ref: CardRef) -> None:
+        """Queue one auto-render card for lazy synth-time emit (card clients
+        only — `_lazy_cards`). No-op for legacy clients, whose payloads come
+        from the eager `flush_card_payloads`."""
+        if self._lazy_cards:
+            self._pending_card_requests.append(CardRequest(family, ref_num, ref))
 
-    def take_cite_requests(self) -> list[tuple[int, ChunkRef]]:
-        """Return + clear the `(alias_num, ChunkRef)` of `[cite:…]` markers
-        expanded since the last call (card clients only). The synthesizer
-        builds + translates + emits each cited fragment's payload — only the
-        fragments actually cited, instead of the whole research pool."""
-        if not self._pending_cite_requests:
+    def take_card_requests(self) -> list[CardRequest]:
+        """Return + clear the cards queued since the last call. The synthesizer
+        bridge builds + (cited-only) translates + emits each one's payload
+        BEFORE the delta carrying its marker — only for the cards actually
+        cited, so the uncited candidate pool costs no fetch / translation."""
+        if not self._pending_card_requests:
             return []
-        out = self._pending_cite_requests
-        self._pending_cite_requests = []
+        out = self._pending_card_requests
+        self._pending_card_requests = []
         return out
 
     def _join_commentary_picks(self, picks: list[tuple[int, str]]) -> str:

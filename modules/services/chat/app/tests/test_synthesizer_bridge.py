@@ -8,8 +8,13 @@ from __future__ import annotations
 import shruti_chat.agent.graph.nodes._worker_common as wc
 from shruti_chat.agent.graph.nodes.synthesizer import _bridge_synth_events
 from shruti_chat.agent.graph.turn_context import TurnContext
+from shruti_chat.agent.marker_expander import CardRequest
 from shruti_chat.agent.turn_aliases import TurnAliasMap
 from shruti_chat.application.synthesizer_turn import SynthesizerEvent
+
+
+def _card_req(family: str, ref_num: int, ref) -> SynthesizerEvent:
+    return SynthesizerEvent(type="card_request", data={"req": CardRequest(family, ref_num, ref)})
 
 
 class _Tr:
@@ -86,7 +91,7 @@ async def test_bridge_builds_verse_card(monkeypatch):
     monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
-        SynthesizerEvent(type="verse_request", data={"vref": vref}),
+        _card_req("verse", 0, vref),
         SynthesizerEvent(type="delta", data={"text": "[verse:BG/2.13|BG 2.13]"}),
     )
     await _bridge_synth_events(events, ctx, out.append)
@@ -110,8 +115,8 @@ async def test_bridge_dedups_repeated_verse(monkeypatch):
     monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
     out: list[dict] = []
     events = _events(
-        SynthesizerEvent(type="verse_request", data={"vref": vref}),
-        SynthesizerEvent(type="verse_request", data={"vref": vref}),  # cited twice
+        _card_req("verse", 0, vref),
+        _card_req("verse", 0, vref),  # cited twice
     )
     await _bridge_synth_events(events, ctx, out.append)
     verses = [e for e in out if e["data"].get("kind") == "verse"]
@@ -137,7 +142,7 @@ async def test_bridge_builds_cite_card():
     ctx = TurnContext(lang="sr-Cyrl", translate_citations=True, translator=tr, aliases=am)
     out: list[dict] = []
     events = _events(
-        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
+        _card_req("cite", n, cref),
         SynthesizerEvent(type="delta", data={"text": "[cite:track_X@1000-2000]"}),
     )
     await _bridge_synth_events(events, ctx, out.append)
@@ -158,8 +163,8 @@ async def test_bridge_dedups_repeated_cite():
     ctx = TurnContext(lang="en", translate_citations=True, translator=_Tr(), aliases=am)
     out: list[dict] = []
     events = _events(
-        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
-        SynthesizerEvent(type="cite_request", data={"ref_num": n, "cref": cref}),
+        _card_req("cite", n, cref),
+        _card_req("cite", n, cref),
     )
     await _bridge_synth_events(events, ctx, out.append)
     cites = [e for e in out if e["data"].get("kind") == "cite_transcript"]

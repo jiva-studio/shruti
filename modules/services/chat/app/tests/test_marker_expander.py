@@ -573,57 +573,49 @@ async def test_commentary_card_mode_off_keeps_blockquote_no_action() -> None:
     assert e.take_commentary_actions() == []
 
 
-# ── Lazy verse cards (card clients emit at synth time) ───────────────
+# ── Lazy cards (card clients emit verse/cite/media/chapter at synth time) ──
 
 
-async def test_lazy_verse_queues_request_and_keeps_marker() -> None:
-    """With `lazy_verse`, expanding a verse `[^N]` still emits the
-    `[verse:…]` marker AND queues the VerseRef for synth-time build/emit."""
+async def test_lazy_cards_queue_verse_request_and_keep_marker() -> None:
+    """With `lazy_cards`, expanding a verse `[^N]` still emits the `[verse:…]`
+    marker AND queues a CardRequest(family="verse") for synth-time emit."""
     aliases = TurnAliasMap()
     n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
-    e = MarkerExpander(aliases, lazy_verse=True)
+    e = MarkerExpander(aliases, lazy_cards=True)
     out = await _expand(e, f"see [^{n}].")
     assert "[verse:source_BG/2.13|BG 2.13]" in out
-    reqs = e.take_verse_requests()
+    reqs = e.take_card_requests()
     assert len(reqs) == 1
-    assert (reqs[0].source_id, reqs[0].tokens) == ("source_BG", "2.13")
-    assert e.take_verse_requests() == []  # drained
+    assert reqs[0].family == "verse"
+    assert (reqs[0].ref.source_id, reqs[0].ref.tokens) == ("source_BG", "2.13")
+    assert e.take_card_requests() == []  # drained
 
 
-async def test_no_verse_requests_without_lazy_flag() -> None:
-    """Legacy mode (eager flush owns verse payloads): the expander queues
-    nothing; the marker is unchanged."""
-    aliases = TurnAliasMap()
-    n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
-    e = MarkerExpander(aliases)
-    out = await _expand(e, f"see [^{n}].")
-    assert "[verse:source_BG/2.13|BG 2.13]" in out
-    assert e.take_verse_requests() == []
-
-
-async def test_lazy_cite_queues_request_and_keeps_marker() -> None:
-    """With `lazy_cite`, expanding a cite `[^N]` still emits the `[cite:…]`
-    marker AND queues `(alias_num, ChunkRef)` for synth-time build/emit."""
+async def test_lazy_cards_queue_cite_request_with_ref_num() -> None:
     aliases = TurnAliasMap()
     n = aliases.alias_chunk("track_X", 1000, 2000)
-    e = MarkerExpander(aliases, lazy_cite=True)
+    e = MarkerExpander(aliases, lazy_cards=True)
     out = await _expand(e, f"see [^{n}].")
     assert "[cite:track_X@1000-2000" in out
-    reqs = e.take_cite_requests()
+    reqs = e.take_card_requests()
     assert len(reqs) == 1
-    ref_num, cref = reqs[0]
-    assert ref_num == n
+    assert reqs[0].family == "cite"
+    assert reqs[0].ref_num == n  # cite builder needs the alias num for its text
+    cref = reqs[0].ref
     assert (cref.track_id, cref.start_ms, cref.end_ms) == ("track_X", 1000, 2000)
-    assert e.take_cite_requests() == []  # drained
 
 
-async def test_no_cite_requests_without_lazy_flag() -> None:
+async def test_no_card_requests_without_lazy_flag() -> None:
+    """Legacy mode (eager flush owns payloads): the expander queues nothing;
+    markers unchanged."""
     aliases = TurnAliasMap()
-    n = aliases.alias_chunk("track_X", 1000, 2000)
+    nv = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
+    nc = aliases.alias_chunk("track_X", 1000, 2000)
     e = MarkerExpander(aliases)
-    out = await _expand(e, f"see [^{n}].")
+    out = await _expand(e, f"see [^{nv}] and [^{nc}].")
+    assert "[verse:source_BG/2.13|BG 2.13]" in out
     assert "[cite:track_X@1000-2000" in out
-    assert e.take_cite_requests() == []
+    assert e.take_card_requests() == []
 
 
 # ── Adjacent commentary blockquotes — merge or separate ──────────────

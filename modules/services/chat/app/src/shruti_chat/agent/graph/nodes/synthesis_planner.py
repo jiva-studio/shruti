@@ -25,9 +25,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from shruti_chat.agent.graph.nodes._worker_common import (
-    flush_cite_payloads,
-    flush_media_payloads,
-    flush_verse_payloads,
+    flush_card_payloads,
     translate_commentaries,
 )
 from shruti_chat.agent.graph.state import ChatState
@@ -264,9 +262,7 @@ async def synthesis_planner_node(
     # (the next node) streams the markers that cite them — otherwise the
     # client renders a bare chip with no transcript. The per-turn
     # `emitted_*_refs` dedup means research_worker's refs aren't re-sent.
-    await flush_verse_payloads(ctx)
-    await flush_media_payloads(ctx)
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
     # Translate the purports Stage 1/2 just attached. research_worker only
     # translated the refs that existed when IT ran; the planner's lazy attach
     # adds more AFTER that, so without this they'd stream untranslated. The
