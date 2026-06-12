@@ -105,6 +105,76 @@ export interface MediaPayload {
 }
 
 /**
+ * Library verse body for a `[verse:<source>/<tokens>|caption]` marker,
+ * streamed ahead of the marker on a `verse` SSE action and stashed in
+ * `ChatMessage.verses["<sourceId>|<tokens>"]` so `VerseCard.vue` renders
+ * the full block (sanskrit + transliteration + per-locale translation)
+ * without re-fetching — and so the card still renders when the answer is
+ * re-opened long after the turn. `translation` is keyed by language code;
+ * the card picks the active locale (falling back to `en`).
+ */
+export interface ChatVerseBody {
+  readonly addrLabel: string
+  readonly sanskrit: string
+  readonly transliteration: string
+  /** Original IAST (Latin) transliteration; present only when the shown
+   *  one is a different script. The card flips to it on "view original". */
+  readonly transliterationOriginal?: string
+  readonly translation: { readonly [lang: string]: string }
+  /** Full public URL of the Sanskrit recitation, when one exists. */
+  readonly audioUrl?: string
+  /** True when the active-locale `translation` entry is a machine
+   *  translation (card shows a footnote + a toggle to `translation.en`). */
+  readonly mt?: boolean
+}
+
+/**
+ * Transcript snippet for a `[cite:<track>@<start>-<end>|caption]` marker,
+ * stashed in `ChatMessage.cites["<trackId>|<startMs>-<endMs>"]` so
+ * `CitationCard.vue` renders the full quote without re-fetching. The
+ * client holds no transcripts locally, so this is the only text source —
+ * persisting it on the message keeps the card alive across reloads.
+ */
+export interface ChatCiteSnippet {
+  readonly text: string
+  /** True when `text` is a machine translation into the answer language. */
+  readonly mt?: boolean
+  /** Verbatim source-language transcript, present only when `mt` is true. */
+  readonly textOriginal?: string
+}
+
+/**
+ * Chapter-location region for a `[chapter:<source>/<region>|label]` marker,
+ * stashed in `ChatMessage.chapters["<sourceId>|<regionToken>"]` so
+ * `ChapterCard.vue` renders the chapter list. Titles are verbatim from the
+ * server (`library_titles`), never composed on-device.
+ */
+export interface ChatChapterBody {
+  readonly regionLabel: string
+  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
+}
+
+/**
+ * Purport / prose-chapter / letter citation for a `[commentary:<ref>]`
+ * marker, stashed in `ChatMessage.commentaries["<ref>"]` so
+ * `CommentaryCard.vue` renders the quote card. The `<ref>` is a per-turn
+ * integer alias, so it MUST live on its own message — a global cache would
+ * collide across messages that each number their commentaries from 1.
+ */
+export interface ChatCommentaryBody {
+  readonly text: string
+  readonly authorName: string
+  /** Human address / reference, e.g. "БГ 2.13". */
+  readonly addrLabel: string
+  /** Source kind: "commentary" | "prose_chapter" | "letter". */
+  readonly commentaryKind: string
+  /** True when `text` is a machine translation into the answer language. */
+  readonly mt?: boolean
+  /** Verbatim source-language quote, present only when `mt` is true. */
+  readonly textOriginal?: string
+}
+
+/**
  * User-side state of an action card (after the LLM proposed it, the
  * UI tracks whether the user confirmed / it's executing / it landed /
  * it failed). Persisted alongside the action payload so card state
@@ -212,6 +282,19 @@ export interface ChatMessage {
    *  Streamed ahead of the marker on a `media` SSE action; `MediaCard.vue`
    *  reads `media[token.mediaId]`. */
   media?: Record<string, MediaPayload>
+  /** Verse bodies keyed `"<sourceId>|<tokens>"` — `VerseCard.vue` reads
+   *  `verses[`${sourceId}|${tokens}`]`. Streamed ahead of the marker on a
+   *  `verse` SSE action; persisted so the card survives a reopen. */
+  verses?: Record<string, ChatVerseBody>
+  /** Citation transcript snippets keyed `"<trackId>|<startMs>-<endMs>"` —
+   *  `CitationCard.vue` reads its snippet here. */
+  cites?: Record<string, ChatCiteSnippet>
+  /** Chapter-location regions keyed `"<sourceId>|<regionToken>"` —
+   *  `ChapterCard.vue` reads its region here. */
+  chapters?: Record<string, ChatChapterBody>
+  /** Commentary citations keyed by the `[commentary:<ref>]` ref (the
+   *  per-turn integer alias as a string) — `CommentaryCard.vue` reads here. */
+  commentaries?: Record<string, ChatCommentaryBody>
   /** User-confirmation state per action id. Defaults to "pending" for
    *  any id present in `actions` but not here. */
   actionStates?: Record<string, ChatActionState>
