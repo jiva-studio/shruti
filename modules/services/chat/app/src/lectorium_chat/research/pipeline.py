@@ -31,6 +31,7 @@ from lectorium_chat.agent.tools._envelope import (
     resolve_commentary_author_names,
 )
 from lectorium_chat.indexer.library.repo import fetch_document_body
+from lectorium_chat.observability.langfuse_client import langfuse_span
 from lectorium_chat.observability.logging import get_logger
 from lectorium_chat.research.attribution_lookup import find_attributions
 from lectorium_chat.research.caption_generator import generate_captions
@@ -148,27 +149,31 @@ async def _safe(coro_factory, *, default, timeout: float, name: str, request_id:
     Emits `stage_timing {stage, stage_ms, status}` on every outcome so the
     research pipeline is fully covered by the same instrumentation as the
     rest of the turn — without having to wrap each call site separately.
+    Also opens a Langfuse span (`retrieval.<stage>`) so the same per-stage
+    timing shows up in the trace timeline next to the LLM generations — that
+    is where the previously un-instrumented retrieval seconds were hiding.
     """
     started = perf_counter()
     status = "ok"
-    try:
-        return await asyncio.wait_for(coro_factory(), timeout=timeout)
-    except asyncio.TimeoutError:
-        status = "timeout"
-        log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
-        return default
-    except Exception as exc:  # noqa: BLE001 — best-effort
-        status = "error"
-        log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
-        return default
-    finally:
-        log.info(
-            "stage_timing",
-            stage=name,
-            stage_ms=round((perf_counter() - started) * 1000, 1),
-            status=status,
-            request_id=request_id,
-        )
+    with langfuse_span(f"retrieval.{name}"):
+        try:
+            return await asyncio.wait_for(coro_factory(), timeout=timeout)
+        except asyncio.TimeoutError:
+            status = "timeout"
+            log.warning("pipeline_stage_timeout", stage=name, timeout=timeout, request_id=request_id)
+            return default
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            status = "error"
+            log.warning("pipeline_stage_error", stage=name, error=str(exc), request_id=request_id)
+            return default
+        finally:
+            log.info(
+                "stage_timing",
+                stage=name,
+                stage_ms=round((perf_counter() - started) * 1000, 1),
+                status=status,
+                request_id=request_id,
+            )
 
 
 _LIBRARY_DOC_TYPES = ("commentary", "prose_chapter", "letter")

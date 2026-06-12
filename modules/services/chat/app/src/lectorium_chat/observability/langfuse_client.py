@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable
 
@@ -147,6 +147,33 @@ def get_langfuse() -> Any | None:
     helpers (`prompt_with_fallback`, `langfuse_node_callback`) which
     handle the None branch internally."""
     return _LANGFUSE
+
+
+@contextmanager
+def langfuse_span(name: str) -> Any:
+    """Best-effort Langfuse span around a block, attaching to the active
+    turn trace via OTel context propagation (no trace_id threading needed).
+
+    Used to surface NON-LLM stages — retrieval (embed / pgvector fanout /
+    rerank), per-thesis augmentation — in the trace timeline next to the LLM
+    generations, so latency analysis sees where the un-instrumented seconds
+    go. No-op (yields None) when Langfuse is disabled or span creation fails;
+    the wrapped block always runs. Safe across `await` — the span stays
+    current within the task, so nested generations nest under it.
+    """
+    client = _LANGFUSE
+    span_cm = None
+    if client is not None:
+        try:
+            span_cm = client.start_as_current_span(name=name)
+        except Exception as exc:  # noqa: BLE001 — telemetry never breaks a turn
+            log.warning("langfuse_span_open_failed", name=name, error=str(exc))
+            span_cm = None
+    if span_cm is None:
+        yield None
+        return
+    with span_cm as span:
+        yield span
 
 
 def warm_prompt_cache(names: list[str]) -> None:
