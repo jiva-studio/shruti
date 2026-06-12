@@ -59,7 +59,7 @@
     @activate="emit('manage-subscription')"
   >
     <template #icon>
-      <IconChip><IconRosetteDiscountCheckFilled /></IconChip>
+      <IconChip><IconCrownFilled /></IconChip>
     </template>
   </SettingsActionItem>
 
@@ -71,7 +71,7 @@
     @activate="emit('open-paywall')"
   >
     <template #icon>
-      <IconChip><IconRosetteDiscountCheckFilled /></IconChip>
+      <IconChip><IconCrownFilled /></IconChip>
     </template>
   </SettingsActionItem>
 
@@ -94,7 +94,7 @@ import { computed, ref } from "vue"
 import { useI18n } from "vue-i18n"
 import { IonActionSheet, IonLabel, IonListHeader } from "@ionic/vue"
 import { SettingsAccountItem, SettingsActionItem } from "@kit/ui"
-import { IconRosetteDiscountCheckFilled, IconUserFilled, IconUserPlus } from "@tabler/icons-vue"
+import { IconCrownFilled, IconUserFilled, IconUserPlus } from "@tabler/icons-vue"
 import { IconChip } from "@ui/primitives/index.js"
 import ServerSettingsItem from "../ServerSettingsItem.vue"
 
