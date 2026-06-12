@@ -28,11 +28,33 @@ function rowToSession(r: ChatSessionRow): ChatSession {
 export function createSqlChatSessionRepository(db: IDatabase): IChatSessionRepository {
   return {
     async list(limit = 200): Promise<readonly ChatSession[]> {
+      // Only surface a session once it has at least one VISIBLE message.
+      // Proactive sessions are minted ahead of time (a holiday/weekly row
+      // can be created 12–48h before its `visible_at`, with an empty body
+      // still being prepped), but the session row itself carries no
+      // visibility metadata — that lives on the message's proactive
+      // sidecar. Without this EXISTS gate the session leaks into the
+      // history list early, and tapping it opens an empty chat because
+      // `listBySession` (correctly) hides the not-yet-visible message.
+      // Mirror that exact gate here so a proactive session appears in the
+      // list at the same moment its message becomes readable — which is
+      // what `visible_at` was introduced for. Regular sessions have
+      // messages with no sidecar row (`p.*` NULL → admitted), so they are
+      // unaffected; truly empty sessions stay out of history.
       return queryMany<ChatSessionRow, ChatSession>(
         db,
-        `SELECT id, title, created_at, updated_at, track_id
-           FROM chat_sessions
-          ORDER BY updated_at DESC
+        `SELECT s.id, s.title, s.created_at, s.updated_at, s.track_id
+           FROM chat_sessions s
+          WHERE EXISTS (
+                  SELECT 1
+                    FROM chat_messages m
+                    LEFT JOIN chat_messages_proactive_state p
+                      ON p.chat_message_id = m.id
+                   WHERE m.session_id = s.id
+                     AND (p.visible_at IS NULL OR p.visible_at <= unixepoch('now'))
+                     AND (p.prep_state IS NULL OR p.prep_state IN ('ready','degraded'))
+                )
+          ORDER BY s.updated_at DESC
           LIMIT ?`,
         [limit],
         rowToSession

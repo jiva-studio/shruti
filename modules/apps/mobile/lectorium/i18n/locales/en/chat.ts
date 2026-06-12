@@ -265,8 +265,15 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Daily reminder",
   proactiveSessionTitleSmartLibrary: "Smart Library",
-  proactiveSessionTitleNextShloka: "Next verse",
+  proactiveSessionTitleNextShloka: "Lecture on the next verse",
   proactiveSessionTitleUnfinishedLecture: "Unfinished lecture",
+  proactiveSessionTitleInactivity: "Return to your practice",
+
+  // Static body for the `inactivity` re-engagement session. The escalating
+  // copy lives on the notifications; the chat session itself carries one
+  // warm welcome that's ready the moment the row is created (no LLM).
+  proactiveInactivityWelcomeBody:
+    "It's been a while. Fresh lectures are waiting — open your library and pick up where you left off.",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The
@@ -284,6 +291,17 @@ export default {
     "I'd like to show you Smart Library — a Pro feature that keeps your library full of fresh lectures without your having to queue anything by hand.\n\nYou pick the criteria — favourite authors, topics, sources, lecture length — and Smart Library quietly pulls matching lectures into your library to a target queue duration (e.g. 2 hours, 8 hours, 10 hours). When something is finished it gets archived automatically so the queue stays fresh.\n\nGood for commutes and walks where you don't want to spend time choosing what to listen to next.",
   proactiveEnableNotificationsBody:
     "You've been listening a few days in a row — nice rhythm. I'd like to suggest setting up a daily reminder so you don't lose it.\n\nIt's one gentle local notification at the time you choose (I'll start with 07:00, you can change it any time in Settings). No noise on the network — it lives on your device and only fires when the time comes.\n\nUseful as a daily anchor: a small nudge that the lecture is waiting whenever your day allows.",
+
+  // Weekly sadhana digest card (`weekly_digest` rule). Deterministic — no
+  // LLM. All labels static; lecture titles come localised from the catalog.
+  weeklyDigestTitle: "Your week",
+  weeklyDigestTotalTime: "Total listening time",
+  weeklyDigestLectures: "Lectures this week",
+  weeklyDigestStreak: "Day streak",
+  weeklyDigestCompleted: "Completed",
+  weeklyDigestEmpty:
+    "You didn't listen this week — pick something fresh to get back into the rhythm.",
+  weeklyDigestMore: "+{count} more",
 
   actionEnableReminderTitle: "Daily reminder",
   actionEnableReminderBody:

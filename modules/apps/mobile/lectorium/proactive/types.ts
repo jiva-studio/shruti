@@ -3,6 +3,7 @@ import type { ChatActionPayload } from "@lib/domain/chatMessage.js"
 import type { ProactiveStateEntry } from "@lib/domain/ports/proactiveStateRepository.js"
 import type { IProactiveChatService } from "@lib/contracts"
 import type { AppRepositories } from "@lectorium/repositories.js"
+import type { NotificationCandidate } from "./notificationPlanner.js"
 
 /**
  * Snapshot of device-side state every rule's detector / validator /
@@ -113,6 +114,27 @@ export interface ProactiveRuleHandler {
    * notifications speculatively (currently only `inactivity`).
    */
   onAppPause?(ctx: ProactiveContext): Promise<void>
+
+  /**
+   * Surface the engagement push(es) this rule would like to fire for a
+   * given row. The notification planner gathers these across all rules
+   * (plus the daily reminder) and keeps only ONE per local day by
+   * priority — rules no longer schedule OS pushes themselves.
+   *
+   * `phase` is `"foreground"` during a tick (user is present) and
+   * `"background"` from `onAppPause`. Away-only rules (inactivity) return
+   * `[]` in the foreground; the planner cancels their alarms when the
+   * user comes back and they're absent from the desired set.
+   *
+   * The `title` may be left empty for proactive (session-backed) kinds —
+   * the planner resolves the chat session's title before arbitration,
+   * since it has async repo access.
+   */
+  collectNotifications?(
+    entry: ProactiveStateEntry,
+    ctx: ProactiveContext,
+    phase: "foreground" | "background"
+  ): NotificationCandidate[]
 }
 
 /**

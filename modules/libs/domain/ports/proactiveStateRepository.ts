@@ -158,6 +158,17 @@ export interface IProactiveStateRepository {
   ): Promise<void>
 
   /**
+   * Re-arm a reused proactive row for a fresh cycle: move its
+   * visibility moment to `visibleAtSec` and clear `seen_at` so the row
+   * goes dormant again (hidden until the new moment) and re-lights the
+   * unseen badge when it next becomes due. Used by the inactivity
+   * ladder, which keeps ONE stable row and re-anchors it to the user's
+   * latest background each time they leave — instead of minting a new
+   * row (and chat session) per absence.
+   */
+  rearm(chatMessageId: ChatMessageId, visibleAtSec: number): Promise<void>
+
+  /**
    * Garbage-collect rows in terminal states older than
    * `olderThanUnixSec`. The underlying chat_messages rows are deleted
    * by the FK cascade. Returns the number of rows swept.

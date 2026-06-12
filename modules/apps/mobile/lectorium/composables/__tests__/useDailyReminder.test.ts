@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { applyDailyReminder, nextOccurrence } from "../useDailyReminder.js"
+import { on as onProactive } from "@lectorium/proactive/events.js"
 import type { INotificationScheduler } from "@ports/app/notifications.js"
 
 function makeNotifications(
@@ -42,10 +43,6 @@ describe("nextOccurrence", () => {
   })
 
   it("rolls over correctly across a DST-style local clock jump", () => {
-    // Even if local time jumps an hour forward, the next occurrence
-    // formula reads "the next moment local-time hour:minute matches" —
-    // computing from a `now` that's just after the jump still produces
-    // a target later today (not tomorrow).
     const now = new Date("2026-03-29T03:30:00")
     const at = nextOccurrence("09:00", now)
     expect(at).toBe(new Date("2026-03-29T09:00:00").getTime())
@@ -53,66 +50,37 @@ describe("nextOccurrence", () => {
 })
 
 describe("applyDailyReminder", () => {
-  it("always cancels the previous reminder before scheduling — prevents stragglers", async () => {
+  it("never schedules — the planner now owns the daily reminder", async () => {
     const notifications = makeNotifications()
     await applyDailyReminder(
       { enabled: true, time: "09:00", title: "T", body: "B" },
       { notifications }
     )
-    expect(notifications.cancel).toHaveBeenCalledTimes(1)
-    expect(notifications.cancel.mock.invocationCallOrder[0]).toBeLessThan(
-      notifications.schedule.mock.invocationCallOrder[0]
-    )
+    expect(notifications.schedule).not.toHaveBeenCalled()
+    expect(notifications.requestPermission).not.toHaveBeenCalled()
   })
 
-  it("does not call schedule when reminder is disabled", async () => {
+  it("cancels the legacy recurring alarm (id 9001) as a migration step", async () => {
     const notifications = makeNotifications()
     await applyDailyReminder(
       { enabled: false, time: "09:00", title: "T", body: "B" },
       { notifications }
     )
-    expect(notifications.cancel).toHaveBeenCalledTimes(1)
-    expect(notifications.requestPermission).not.toHaveBeenCalled()
-    expect(notifications.schedule).not.toHaveBeenCalled()
+    expect(notifications.cancel).toHaveBeenCalledWith(9001)
   })
 
-  it("aborts (no schedule) when the user denies notification permission", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
-    const notifications = makeNotifications({
-      requestPermission: vi.fn().mockResolvedValue("denied"),
-    })
-    await applyDailyReminder(
-      { enabled: true, time: "09:00", title: "T", body: "B" },
-      { notifications }
-    )
-    expect(notifications.schedule).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
-  })
-
-  it("passes the caller-localized title and body straight through to the scheduler", async () => {
+  it("emits `replan` so the scheduler re-runs the planner promptly", async () => {
     const notifications = makeNotifications()
-    await applyDailyReminder(
-      { enabled: true, time: "09:00", title: "Lectorium", body: "Время слушать садху!" },
-      { notifications }
-    )
-    expect(notifications.schedule).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Lectorium",
-        body: "Время слушать садху!",
-        every: "day",
-      })
-    )
-  })
-
-  it("does not schedule when the time string is malformed", async () => {
-    const notifications = makeNotifications()
-    await applyDailyReminder(
-      { enabled: true, time: "bogus", title: "T", body: "B" },
-      { notifications }
-    )
-    expect(notifications.schedule).not.toHaveBeenCalled()
-    // Cancel still runs so that an existing reminder is cleared.
-    expect(notifications.cancel).toHaveBeenCalled()
+    const replan = vi.fn()
+    const off = onProactive("replan", replan)
+    try {
+      await applyDailyReminder(
+        { enabled: true, time: "09:00", title: "T", body: "B" },
+        { notifications }
+      )
+    } finally {
+      off()
+    }
+    expect(replan).toHaveBeenCalledTimes(1)
   })
 })
