@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import type { ChatSessionId } from "@lib/domain/core.js"
+import type {
+  ChatChapterBody,
+  ChatCiteSnippet,
+  ChatCommentaryBody,
+  ChatVerseBody,
+} from "@lib/domain/chatMessage.js"
+import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
 import type { IDatabase } from "@ports/app/index.js"
 import { createSqlChatMessageRepository } from "../chatMessagesRepository.sql.js"
 import { createInMemoryTestDatabase } from "./testDb.js"
@@ -102,5 +108,114 @@ describe("chatMessagesRepository — listBySession proactive visibility gate", (
     await insertProactiveState(db, "m-superseded", "superseded", "2026-05-19")
     const rows = await repo.listBySession(SESSION as ChatSessionId)
     expect(rows).toHaveLength(0)
+  })
+})
+
+describe("chatMessagesRepository — card-body meta round-trip", () => {
+  let db: IDatabase
+  let repo: ReturnType<typeof createSqlChatMessageRepository>
+  const SESSION = "session-cards" as ChatSessionId
+  const MSG = "m-cards" as ChatMessageId
+
+  // The four card maps keyed exactly as the store writes them — these ride
+  // the message's `meta` envelope and must survive create → listBySession so
+  // a reopened answer renders cards (not chips). Regression guard for the
+  // move off the old global LRU caches.
+  const VERSE: ChatVerseBody = {
+    addrLabel: "BG 2.13",
+    sanskrit: "dehino 'smin yathā dehe",
+    transliteration: "dehino 'smin yathā dehe",
+    translation: { en: "As the embodied soul…", ru: "Воплощённая душа…" },
+    audioUrl: "https://cdn/bg_2_13.mp3",
+    mt: true,
+  }
+  const CITE: ChatCiteSnippet = {
+    text: "the soul is eternal",
+    mt: true,
+    textOriginal: "душа вечна",
+  }
+  const CHAPTER: ChatChapterBody = {
+    regionLabel: "Canto 1",
+    chapters: [
+      { tokens: "1", title: "Creation" },
+      { tokens: "2", title: "Divinity and Divine Service" },
+    ],
+  }
+  const COMMENTARY: ChatCommentaryBody = {
+    text: "purport text",
+    authorName: "Śrīla Prabhupāda",
+    addrLabel: "BG 2.13",
+    commentaryKind: "commentary",
+  }
+
+  beforeEach(async () => {
+    db = await createInMemoryTestDatabase()
+    await setupSchema(db)
+    repo = createSqlChatMessageRepository(db)
+  })
+
+  async function createWithCards(): Promise<void> {
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "see [verse:bg/2.13] and [cite:track_x@1000-2000|x] [commentary:3] [chapter:bg/1]",
+      createdAt: 1000,
+      verses: { "bg|2.13": VERSE },
+      cites: { "track_x|1000-2000": CITE },
+      chapters: { "bg|1": CHAPTER },
+      commentaries: { "3": COMMENTARY },
+    })
+  }
+
+  it("rehydrates verses/cites/chapters/commentaries through create → listBySession", async () => {
+    await createWithCards()
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.verses).toEqual({ "bg|2.13": VERSE })
+    expect(row.cites).toEqual({ "track_x|1000-2000": CITE })
+    expect(row.chapters).toEqual({ "bg|1": CHAPTER })
+    expect(row.commentaries).toEqual({ "3": COMMENTARY })
+  })
+
+  it("returns empty card maps when none were persisted", async () => {
+    await repo.create({
+      id: MSG,
+      sessionId: SESSION,
+      role: "assistant",
+      content: "plain answer",
+      createdAt: 1000,
+    })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.verses).toEqual({})
+    expect(row.cites).toEqual({})
+    expect(row.chapters).toEqual({})
+    expect(row.commentaries).toEqual({})
+  })
+
+  it("updateActionStates preserves the card bodies", async () => {
+    await createWithCards()
+    await repo.updateActionStates(MSG, { a1: "done" })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.actionStates).toEqual({ a1: "done" })
+    expect(row.verses).toEqual({ "bg|2.13": VERSE })
+    expect(row.commentaries).toEqual({ "3": COMMENTARY })
+  })
+
+  it("updateFollowups preserves the card bodies", async () => {
+    await createWithCards()
+    await repo.updateFollowups(MSG, ["next?"])
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.followups).toEqual(["next?"])
+    expect(row.cites).toEqual({ "track_x|1000-2000": CITE })
+    expect(row.chapters).toEqual({ "bg|1": CHAPTER })
+  })
+
+  it("updateFeedback preserves the card bodies", async () => {
+    await createWithCards()
+    await repo.updateFeedback(MSG, { state: "down", category: "bad_citations" })
+    const [row] = await repo.listBySession(SESSION)
+    expect(row.feedbackState).toBe("down")
+    expect(row.verses).toEqual({ "bg|2.13": VERSE })
+    expect(row.cites).toEqual({ "track_x|1000-2000": CITE })
   })
 })

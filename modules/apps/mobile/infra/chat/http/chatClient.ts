@@ -240,7 +240,7 @@ export interface VersePayload {
 /** Wire shape of a citation transcript snippet — carried by an `action`
  *  event with `kind: "cite_transcript"`, arriving ahead of the prose
  *  delta with the `[cite:track@start-end|caption]` marker it backs.
- *  The store caches it under `${track_id}|${start_ms}-${end_ms}` so
+ *  Stashed on `ChatMessage.cites["<track_id>|<start_ms>-<end_ms>"]` so
  *  CitationCard renders the full quote block instead of the chip. */
 export interface CiteTranscriptPayload {
   readonly track_id: string
@@ -258,9 +258,9 @@ export interface CiteTranscriptPayload {
 /** Wire shape of a purport / prose-chapter / letter citation — carried by
  *  an `action` event with `kind: "commentary"`, arriving ahead of the prose
  *  delta with the `[commentary:<ref>]` marker it backs (audio-citation
- *  shape, card-capable clients only). The store caches it under `ref` so
- *  `CommentaryCard.vue` renders the quote as a card (text + author +
- *  reference), like the audio card. */
+ *  shape, card-capable clients only). Stashed on
+ *  `ChatMessage.commentaries["<ref>"]` so `CommentaryCard.vue` renders the
+ *  quote as a card (text + author + reference), like the audio card. */
 export interface CommentaryPayload {
   readonly ref: number
   readonly text: string
@@ -277,7 +277,7 @@ export interface CommentaryPayload {
 /** Wire shape of a chapter-location region — carried by an `action`
  *  event with `kind: "chapter"` (locate intent), arriving ahead of the
  *  prose delta with the `[chapter:source_id/region_token|label]` marker.
- *  The store caches it under `${source_id}|${region_token}` so
+ *  Stashed on `ChatMessage.chapters["<source_id>|<region_token>"]` so
  *  ChapterCard renders the canto/chapter list instead of the chip. */
 export interface ChapterPayload {
   readonly source_id: string

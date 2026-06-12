@@ -978,22 +978,18 @@ export const useChatStore = defineStore("chat", () => {
    * Reflect ONE turn event from `runChatTurn` — shared by the live consume
    * loop and the resume replay so the two can't diverge.
    *
-   * Verse / citation / commentary / chapter payloads populate GLOBAL persisted
-   * caches the cards read from; they must be applied even when their session
-   * isn't on screen — otherwise a turn that finishes while the user is
-   * elsewhere (live switch-away OR a cold-start resume) renders with empty
-   * cards. They don't touch the message list. Every other (view-mutating)
-   * event applies only to the session currently on screen.
+   * Applies ONLY to the session currently on screen. A turn that finishes
+   * while the user is elsewhere (live switch-away OR a cold-start resume)
+   * still persists its verse/cite/chapter/commentary cards via `runChatTurn`
+   * → `messages.create` (keyed to that turn's own session), so reopening the
+   * session loads them from SQLite — there is nothing to render off-screen.
+   * Reflecting an off-screen turn here would be actively wrong: the card
+   * cases write into `messages.value[streamingIndex()]`, i.e. whatever bubble
+   * is streaming on the CURRENT session, so an off-screen turn's card would
+   * land on the wrong message.
    */
   function reflectTurnEvent(event: RunChatTurnEvent, sessionId: string): void {
-    const populatesCache =
-      event.kind === "verse-payload" ||
-      event.kind === "chapter-payload" ||
-      event.kind === "cite-transcript-payload" ||
-      event.kind === "commentary-payload"
-    if (populatesCache || activeSessionId.value === sessionId) {
-      applyTurnEvent(event)
-    }
+    if (activeSessionId.value === sessionId) applyTurnEvent(event)
   }
 
   function applyTurnEvent(event: RunChatTurnEvent): void {
