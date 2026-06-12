@@ -313,6 +313,10 @@ async def run_chat_turn(
             # emits a `[commentary:…]` marker (paired with an action
             # payload) instead of inlining a markdown blockquote.
             commentary_as_card=bool(caps.get("commentary_card")),
+            # Same card-capable clients get verse cards emitted lazily at
+            # synth time (cited-only), so verse-prose translation never runs
+            # on the uncited candidate pool.
+            lazy_verse=bool(caps.get("commentary_card")),
         )
 
         # Speculative embed: most non-trivial intents (research,

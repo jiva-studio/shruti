@@ -12,6 +12,7 @@ import pytest
 
 import shruti_chat.agent.graph.nodes._worker_common as wc
 from shruti_chat.agent.graph.nodes._worker_common import (
+    build_verse_payload,
     flush_cite_payloads,
     flush_verse_payloads,
     localize_citation,
@@ -189,6 +190,47 @@ async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
     payload = capture_writer[0]["data"]["payload"]
     assert "mt" not in payload
     assert payload["translation"]["uk"] == "український вірш"
+
+
+async def test_flush_verse_skipped_for_card_client(capture_writer, monkeypatch):
+    """Card-capable clients emit verse cards lazily at synth time, so the
+    eager flush must NOT translate or emit the aliased verse pool."""
+    tr = FakeTranslator()
+    ctx = TurnContext(
+        lang="uk", translate_citations=True, translator=tr,
+        library_db_path="/fake/library.db", capabilities={"commentary_card": True},
+    )
+    ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
+
+    async def fake_fetch(db, source_id, tokens):
+        return _fake_verse_body({"en": "english verse"})
+
+    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    await flush_verse_payloads(ctx)
+    assert capture_writer == []   # nothing emitted
+    assert tr.calls == []         # nothing translated
+
+
+async def test_build_verse_payload_translates_cited(monkeypatch):
+    """The extracted builder still fetches + translates one verse (used by
+    the lazy synth-time emit, so translation runs only for cited verses)."""
+    tr = FakeTranslator()
+    ctx = TurnContext(
+        lang="uk", translate_citations=True, translator=tr,
+        library_db_path="/fake/library.db",
+    )
+    ctx.aliases.alias_verse("BG", "2.13", addr_label="BG 2.13")
+    _, vref = ctx.aliases.verse_refs()[0]
+
+    async def fake_fetch(db, source_id, tokens):
+        return _fake_verse_body({"en": "english verse"})
+
+    monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
+    payload = await build_verse_payload(ctx, vref)
+    assert payload is not None
+    assert payload["mt"] is True
+    assert payload["translation"]["uk"] == "[uk] english verse"
+    assert payload["translation"]["en"] == "english verse"
 
 
 # ── retrieval-lang derivation ────────────────────────────────────────────

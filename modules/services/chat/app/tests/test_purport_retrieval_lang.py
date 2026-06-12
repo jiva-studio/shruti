@@ -139,3 +139,82 @@ async def test_translate_commentaries_translates_only_new_refs() -> None:
     await translate_commentaries(ctx)
     assert tr.calls > calls_after_first
     assert am.resolve(n2).sentences_translated is not None
+
+
+async def test_translate_commentaries_skipped_for_card_clients() -> None:
+    """Card-capable clients translate lazily at emit time, so the eager
+    whole-pool pass must be a no-op — zero translator calls, no pre-fill."""
+    from shruti_chat.agent.graph.nodes._worker_common import translate_commentaries
+
+    ctx, am, tr, n = _ctx_with_commentary()
+    ctx.capabilities = {"commentary_card": True}
+    await translate_commentaries(ctx)
+    assert tr.calls == 0
+    assert am.resolve(n).sentences_translated is None
+
+
+# ── lazy commentary-card translation (synthesizer side) ──────────────
+
+
+def _commentary_action(text: str = "S0. … S2.") -> dict:
+    return {
+        "kind": "commentary",
+        "id": "commentary_7",
+        "payload": {"ref": 7, "text": text, "author_name": "A", "addr_label": "BG 2.13"},
+    }
+
+
+async def test_lazy_translate_commentary_card_non_corpus_answer() -> None:
+    from shruti_chat.agent.graph.nodes.synthesizer import _maybe_translate_commentary
+
+    tr = _CountingTranslator()
+    ctx = TurnContext(
+        lang="sr-Cyrl", retrieval_lang="en", translate_citations=True, translator=tr
+    )
+    data = _commentary_action("The soul is eternal.")
+    await _maybe_translate_commentary(ctx, data)
+    p = data["payload"]
+    assert tr.calls == 1  # exactly one call, for this one cited card
+    assert p["mt"] is True
+    assert p["text_original"] == "The soul is eternal."
+    assert p["text"] == "ru:The soul is eternal."  # the fake "translation"
+
+
+async def test_lazy_translate_skipped_for_native_answer() -> None:
+    """ru answer over a ru-corpus retrieval → source already native → no
+    translator call, no mt badge."""
+    from shruti_chat.agent.graph.nodes.synthesizer import _maybe_translate_commentary
+
+    tr = _CountingTranslator()
+    ctx = TurnContext(
+        lang="ru", retrieval_lang="ru", translate_citations=True, translator=tr
+    )
+    data = _commentary_action()
+    await _maybe_translate_commentary(ctx, data)
+    assert tr.calls == 0
+    assert "mt" not in data["payload"]
+
+
+async def test_lazy_translate_ignores_non_commentary_actions() -> None:
+    from shruti_chat.agent.graph.nodes.synthesizer import _maybe_translate_commentary
+
+    tr = _CountingTranslator()
+    ctx = TurnContext(
+        lang="sr-Cyrl", retrieval_lang="en", translate_citations=True, translator=tr
+    )
+    data = {"kind": "verse", "id": "verse_x", "payload": {"text": "x"}}
+    await _maybe_translate_commentary(ctx, data)
+    assert tr.calls == 0
+
+
+async def test_lazy_translate_off_when_not_opted_in() -> None:
+    from shruti_chat.agent.graph.nodes.synthesizer import _maybe_translate_commentary
+
+    tr = _CountingTranslator()
+    ctx = TurnContext(
+        lang="sr-Cyrl", retrieval_lang="en", translate_citations=False, translator=tr
+    )
+    data = _commentary_action()
+    await _maybe_translate_commentary(ctx, data)
+    assert tr.calls == 0
+    assert "mt" not in data["payload"]
