@@ -110,7 +110,8 @@ const sanskrit = computed(() => (body.value?.sanskrit || "").replace(/\n{2,}/g, 
 const transliteration = computed(() => {
   const b = body.value
   if (!b) return ""
-  const s = showOriginal.value && b.transliterationOriginal ? b.transliterationOriginal : b.transliteration
+  const s =
+    showOriginal.value && b.transliterationOriginal ? b.transliterationOriginal : b.transliteration
   return (s || "").replace(/\n{2,}/g, "\n")
 })
 

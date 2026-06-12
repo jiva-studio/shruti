@@ -90,6 +90,9 @@ import { useAutoDownloadLoop } from "@shruti/composables/useAutoDownloadLoop.js"
 import { useChatStoreProactiveSync } from "@shruti/composables/useChatStoreProactiveSync.js"
 import { useProactiveDeepLink } from "@shruti/composables/useProactiveDeepLink.js"
 import { useProactiveScheduler } from "@shruti/composables/useProactiveScheduler.js"
+import { useChatResume } from "@shruti/composables/useChatResume.js"
+import { useUserNotifier } from "@shruti/composables/useUserNotifier.js"
+import { useChatTurnNotifications } from "@shruti/composables/useChatTurnNotifications.js"
 import { useShruti } from "@shruti/shruti.js"
 
 const app = useShruti()
@@ -149,6 +152,9 @@ useAutoArchiveSweep()
 const pulsing = usePlayerTutorialPulse()
 useAutoDownloadLoop()
 useProactiveScheduler()
+useChatResume()
+useUserNotifier()
+useChatTurnNotifications()
 useProactiveDeepLink()
 useChatStoreProactiveSync()
 
