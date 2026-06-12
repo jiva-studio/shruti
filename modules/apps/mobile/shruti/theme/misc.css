@@ -66,3 +66,58 @@ ion-header.flat-header::after {
   background: var(--kit-pro-badge-bg, var(--ion-color-primary));
   color: var(--kit-pro-badge-fg, var(--ion-color-primary-contrast));
 }
+
+/* "Answer ready" / proactive notification toast (useUserNotifier). The Sadhu
+ * avatar is drawn as a CSS background on the `content` ::part — Ionic 8 only
+ * renders an HTML/IonicSafeString message when `innerHTMLTemplatesEnabled` is
+ * on (default off), so the text stays plain nodes and the avatar comes from
+ * the stylesheet instead. We target `content` (which wraps BOTH the header and
+ * the message) rather than `message` alone, so the avatar sits vertically
+ * centred against the title + body together. `::part()` is reachable from this
+ * global sheet even though the toast lives in shadow DOM. */
+ion-toast.sadhu-toast {
+  /* Uses the app's own "dark" palette colour + its contrast — on-brand AND
+   * theme-adaptive: espresso surface + cream text in light mode, the inverse
+   * in dark mode, so the toast always contrasts with the page. */
+  --background: var(--ion-color-dark);
+  --color: var(--ion-color-dark-contrast);
+  --border-radius: 14px;
+  --box-shadow: 0 8px 24px rgba(var(--ion-color-dark-rgb), 0.34);
+}
+ion-toast.sadhu-toast::part(content) {
+  /* The Sadhu PNG is transparent, so on its own he floated on the dark toast
+   * ("guy on black"). Two layered backgrounds: the icon on TOP of a radial-
+   * gradient that fakes a light circular disc behind him (same idea as the
+   * round avatar in the chat tab). A real <div> isn't an option — Ionic renders
+   * the toast as plain text, no inner HTML. The disc + icon are vertically
+   * centred over the whole content box (title + body together). */
+  padding-top: 9px;
+  padding-bottom: 9px;
+  padding-inline-start: 56px;
+  padding-inline-end: 4px;
+  min-height: 42px;
+  background-image: url("/agent-icon.png"),
+    radial-gradient(
+      circle 20px at 29px calc(50% - 1px),
+      rgba(var(--ion-color-dark-contrast-rgb), 0.2) 0 19px,
+      transparent 20px
+    );
+  background-repeat: no-repeat, no-repeat;
+  background-position: 10px calc(50% - 1px), 0 0;
+  background-size: 38px 38px, auto;
+}
+/* First line: the chat title — bold. */
+ion-toast.sadhu-toast::part(header) {
+  margin-bottom: 1px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  line-height: 1.25;
+}
+/* Second line: "answer ready" — regular weight, muted (inherits the cream
+ * --color via opacity so it stays on-palette in both themes). */
+ion-toast.sadhu-toast::part(message) {
+  font-weight: 400;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  opacity: 0.7;
+}
