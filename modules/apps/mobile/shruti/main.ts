@@ -45,7 +45,7 @@ import { useCapacitorAuth } from "@infra/auth/capacitor/useCapacitorAuth.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useMediaDownloaderAdapter } from "@infra/mediaDownloader/plugin/index.js"
 import { useHttpServerProber } from "@infra/servers/index.js"
-import { useHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
+import { createHttpProactiveChatService } from "@infra/chat/http/httpProactiveChatService.js"
 import { useCapacitorExcerptCache } from "@infra/excerptCache/capacitor/index.js"
 import {
   useWebRemoteFilesStorage,
@@ -172,7 +172,7 @@ initShruti({
   // the last-persisted region, not necessarily the bundled default.
   initialServer: getRegions()[0]!,
   serverProber: useHttpServerProber(() => getRegions()),
-  proactiveChat: useHttpProactiveChatService({
+  proactiveChat: createHttpProactiveChatService({
     getAccessToken: () => useShruti().auth.getAccessToken(),
     request: (path, init) => chatHttp.request(path, init),
   }),
