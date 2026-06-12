@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
-import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
+import { extractFollowups } from "@lectorium/composables/chatMarkers.js"
 import {
   recordInlineHintCooldown as recordInlineHintCooldownUC,
   replayChatTurn,
@@ -104,31 +104,6 @@ function deriveTitle(text: string, max = 48): string {
 function parseQuotaTier(raw: string | undefined): QuotaTier | undefined {
   if (raw === "anonymous" || raw === "free" || raw === "pro") return raw
   return undefined
-}
-
-/**
- * Log a structured warning for every `[action:<kind>|id=X]` marker the
- * LLM emitted whose id has no matching payload in `message.actions`. The
- * card renders the broken-state placeholder anyway; we surface the
- * mismatch so residual marker/payload-id drift is greppable in logs
- * after the agent-side tool-call validation lands.
- *
- * Doesn't throw, doesn't mutate the message — pure observability.
- */
-function warnOrphanActionMarkers(message: ChatMessage): void {
-  if (message.role !== "assistant") return
-  const tokens = parseChatMarkers(message.content)
-  const actions = message.actions ?? {}
-  for (const t of tokens) {
-    if (t.kind !== "action") continue
-    if (actions[t.actionId]) continue
-    console.warn("[chat] orphan action marker — no matching payload", {
-      messageId: message.id,
-      sessionId: message.sessionId,
-      actionKind: t.actionKind,
-      actionId: t.actionId,
-    })
-  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1047,12 +1022,6 @@ export const useChatStore = defineStore("chat", () => {
         for (const action of Object.values(event.message.actions ?? {})) {
           void recordInlineHintCooldown(event.message.id, action)
         }
-        // Visibility for orphan action markers: any `[action:...|id=X]`
-        // in the finalised prose whose id has no matching payload will
-        // render the broken-card placeholder. Log so we can grep for
-        // residual LLM marker/payload-id drift after the agent-side
-        // tool-call validation lands.
-        warnOrphanActionMarkers(event.message)
         return
       }
       case "usage": {
