@@ -18,8 +18,8 @@
         :completed-steps="position"
         :total-steps="duration"
         :animate-speed="750"
-        start-color="rgba(255, 255, 255, .65)"
-        stop-color="rgba(255, 255, 255, .65)"
+        :start-color="ringColor"
+        :stop-color="ringColor"
         inner-stroke-color="rgba(255, 255, 255, 0)"
       />
     </div>
@@ -27,7 +27,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, onMounted, onUnmounted, ref } from "vue"
 import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { IconRosetteDiscountCheckFilled } from "@ui/icons/index.js"
 import RadialProgress from "vue3-radial-progress"
@@ -47,6 +47,33 @@ const props = defineProps<{
 const emit = defineEmits<{
   play: []
 }>()
+
+// The progress ring is an SVG `stop-color` attribute, which can't read a
+// CSS variable via var(). Resolve --ion-color-primary-contrast from the
+// computed style instead, and re-resolve on theme change so the ring tracks
+// the saffron play-button's contrast colour in both light and dark themes.
+const ringColor = ref("rgba(255, 255, 255, .65)")
+
+function resolveRingColor(): void {
+  const c = getComputedStyle(document.documentElement)
+    .getPropertyValue("--ion-color-primary-contrast")
+    .trim()
+  if (c) ringColor.value = c
+}
+
+const darkQuery =
+  typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-color-scheme: dark)")
+    : null
+
+onMounted(() => {
+  resolveRingColor()
+  darkQuery?.addEventListener("change", resolveRingColor)
+})
+
+onUnmounted(() => {
+  darkQuery?.removeEventListener("change", resolveRingColor)
+})
 
 const trackCompleted = computed(() => props.duration > 0 && props.position >= props.duration)
 

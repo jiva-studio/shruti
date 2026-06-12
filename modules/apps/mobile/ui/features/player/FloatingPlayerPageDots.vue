@@ -31,10 +31,10 @@ defineProps<{
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(var(--ion-color-primary-contrast-rgb), 0.35);
 }
 
 .dot.active {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(var(--ion-color-primary-contrast-rgb), 0.85);
 }
 </style>
