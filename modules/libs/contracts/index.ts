@@ -31,7 +31,11 @@ export type {
   ChatTurn,
   ChatVersePayloadWire,
   ChatCiteTranscriptPayloadWire,
+  ChatCommentaryPayloadWire,
+  ChatChapterPayloadWire,
+  ChatMediaPayloadWire,
   ChatSharePdfItemPayload,
+  ChatSharePdfRefPayload,
   ResearchSourceKind,
   StreamChatOptions,
 } from "./chat/chatStreamClient.js"
