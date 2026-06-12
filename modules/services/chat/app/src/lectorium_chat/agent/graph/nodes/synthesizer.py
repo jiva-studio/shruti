@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, NamedTuple
+from typing import Any
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from lectorium_chat.agent.graph.nodes._worker_common import build_cite_payload, build_verse_payload
+from lectorium_chat.agent.graph.nodes._worker_common import CARD_SPEC_BY_FAMILY
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.prompts import build_prompt
 from lectorium_chat.application.synthesizer_turn import run_synthesizer_turn
@@ -33,22 +33,6 @@ from lectorium_chat.observability.logging import bind_node_role, get_logger
 
 
 log = get_logger(__name__)
-
-
-class _VerseKey(NamedTuple):
-    """Identity of a verse card, for once-per-stream dedup."""
-
-    source_id: str
-    tokens: str
-
-
-class _CiteKey(NamedTuple):
-    """Identity of a lecture-transcript cite (track + time window), for
-    once-per-stream dedup."""
-
-    track_id: str
-    start_ms: int
-    end_ms: int
 
 
 async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
@@ -100,17 +84,16 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
     The naive version awaited each card's translation inline, which suspended
     the generator → the LLM stopped streaming for ~1.5s per translated card.
     Here a producer task drives the synthesizer stream and, the instant a
-    `[commentary:N]`/`[verse:…]` marker is produced, kicks off that card's
-    translation (commentary) or build+translate (verse) as a background task.
-    The LLM keeps streaming into a queue while those run. The consumer drains
-    the queue in order, awaiting each card's task right before writing it —
-    by which point it's usually already done (it has been running concurrently
-    with the prose that followed). Ordering (the card's `action` before its
-    marker delta) is preserved because the producer enqueues them in order and
-    the consumer never reorders.
+    card marker is produced, kicks off that card's translation (commentary) or
+    build+translate (verse / cite / media / chapter, via its CARD_SPECS entry)
+    as a background task. The LLM keeps streaming into a queue while those run.
+    The consumer drains the queue in order, awaiting each card's task right
+    before writing it — by which point it's usually already done (it has been
+    running concurrently with the prose that followed). Ordering (the card's
+    `action` before its marker delta) is preserved because the producer
+    enqueues them in order and the consumer never reorders.
     """
-    emitted_verses: set[_VerseKey] = set()
-    emitted_cites: set[_CiteKey] = set()
+    emitted_cards: set[tuple] = set()
     queue: asyncio.Queue = asyncio.Queue()
 
     async def produce() -> None:
@@ -124,25 +107,18 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                     await queue.put(("action", event.data, task))
                 elif event.type == "action":
                     await queue.put(("action", event.data, None))
-                elif event.type == "verse_request":
-                    vref = event.data["vref"]
-                    vkey = _VerseKey(vref.source_id, vref.tokens)
-                    if vkey in emitted_verses:
+                elif event.type == "card_request":
+                    # One generic path for verse / cite / media / chapter —
+                    # dispatch on the CARD_SPECS registry, so a new card kind
+                    # needs no change here.
+                    req = event.data["req"]
+                    spec = CARD_SPEC_BY_FAMILY[req.family]
+                    key = (req.family, spec.dedup_key(req.ref))
+                    if key in emitted_cards:
                         continue
-                    emitted_verses.add(vkey)
-                    # Build (DB fetch) + translate this verse concurrently.
-                    task = asyncio.ensure_future(build_verse_payload(ctx, vref))
-                    await queue.put(("verse", vref, task))
-                elif event.type == "cite_request":
-                    ref_num = event.data["ref_num"]
-                    cref = event.data["cref"]
-                    ckey = _CiteKey(cref.track_id, cref.start_ms, cref.end_ms)
-                    if ckey in emitted_cites:
-                        continue
-                    emitted_cites.add(ckey)
-                    # Resolve text + translate this cited fragment concurrently.
-                    task = asyncio.ensure_future(build_cite_payload(ctx, ref_num, cref))
-                    await queue.put(("cite", cref, task))
+                    emitted_cards.add(key)
+                    task = asyncio.ensure_future(spec.build(ctx, req.ref_num, req.ref))
+                    await queue.put(("card", (spec, req.ref), task))
                 # `done` is handled by the chat_turn wrapper — ignore here.
         finally:
             await queue.put((None, None, None))  # sentinel
@@ -159,28 +135,16 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                 if task is not None:
                     await task  # translation mutated data["payload"] in place
                 writer({"type": "action", "data": data})
-            elif kind == "verse":
+            elif kind == "card":
+                spec, ref = data
                 payload = await task
                 if payload is not None:
                     writer(
                         {
                             "type": "action",
                             "data": {
-                                "kind": "verse",
-                                "id": f"verse_{data.source_id}_{data.tokens}",
-                                "payload": payload,
-                            },
-                        }
-                    )
-            elif kind == "cite":
-                payload = await task
-                if payload is not None:
-                    writer(
-                        {
-                            "type": "action",
-                            "data": {
-                                "kind": "cite_transcript",
-                                "id": f"cite_{data.track_id}_{data.start_ms}_{data.end_ms}",
+                                "kind": spec.action_kind,
+                                "id": spec.card_id(ref),
                                 "payload": payload,
                             },
                         }

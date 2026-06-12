@@ -594,13 +594,12 @@ async def run_synthesizer_turn(
             # same invariant the worker flushes uphold for verse/cite).
             for action in expander.take_commentary_actions():
                 yield SynthesizerEvent(type=action["type"], data=action["data"])
-            # Verse cards (card-capable clients): the expander queued the
-            # VerseRef of each `[verse:…]` it produced — the synthesizer node
-            # builds + translates + emits the payload, only for cited verses.
-            for vref in expander.take_verse_requests():
-                yield SynthesizerEvent(type="verse_request", data={"vref": vref})
-            for ref_num, cref in expander.take_cite_requests():
-                yield SynthesizerEvent(type="cite_request", data={"ref_num": ref_num, "cref": cref})
+            # Auto-render cards (verse / cite / media / chapter): the expander
+            # queued a CardRequest for each marker it produced — the bridge
+            # builds + (cited-only) translates + emits each payload, only for
+            # the cards actually cited.
+            for req in expander.take_card_requests():
+                yield SynthesizerEvent(type="card_request", data={"req": req})
             if cleaned:
                 prose_chars += len(cleaned)
                 yield SynthesizerEvent(type="delta", data={"text": cleaned})
@@ -608,10 +607,8 @@ async def run_synthesizer_turn(
         tail = await expander.flush()
         for action in expander.take_commentary_actions():
             yield SynthesizerEvent(type=action["type"], data=action["data"])
-        for vref in expander.take_verse_requests():
-            yield SynthesizerEvent(type="verse_request", data={"vref": vref})
-        for ref_num, cref in expander.take_cite_requests():
-            yield SynthesizerEvent(type="cite_request", data={"ref_num": ref_num, "cref": cref})
+        for req in expander.take_card_requests():
+            yield SynthesizerEvent(type="card_request", data={"req": req})
         if tail:
             prose_chars += len(tail)
             yield SynthesizerEvent(type="delta", data={"text": tail})

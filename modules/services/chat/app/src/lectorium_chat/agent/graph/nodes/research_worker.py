@@ -19,9 +19,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
-    flush_cite_payloads,
-    flush_media_payloads,
-    flush_verse_payloads,
+    flush_card_payloads,
     run_worker,
     translate_commentaries,
 )
@@ -158,9 +156,7 @@ async def research_worker_node(
     # holds. When MT is off, translate_commentaries / the in-flush translate
     # branches are no-ops, so this is the prior behaviour plus parallelism.
     await asyncio.gather(
-        flush_verse_payloads(ctx),
-        flush_media_payloads(ctx),
-        flush_cite_payloads(ctx),
+        flush_card_payloads(ctx),
         translate_commentaries(ctx),
     )
 

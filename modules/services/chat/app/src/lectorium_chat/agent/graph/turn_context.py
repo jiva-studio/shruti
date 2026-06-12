@@ -106,18 +106,11 @@ class TurnContext:
     # ── Citation pipeline (mutable, shared by reference) ──────────────
     aliases: TurnAliasMap = field(default_factory=TurnAliasMap)
     expander: MarkerExpander | None = None
-    emitted_verse_refs: set[int] = field(default_factory=set)
-    # Dedup tracker for `action.kind=cite_transcript` events — once a
-    # fragment's transcript text is pushed it's NOT re-emitted within
-    # the same turn. Mirrors `emitted_verse_refs`.
-    emitted_cite_refs: set[int] = field(default_factory=set)
-    # Dedup tracker for `action.kind=chapter` events (locate worker) —
-    # mirrors `emitted_verse_refs`.
-    emitted_chapter_refs: set[int] = field(default_factory=set)
-    # Dedup tracker for `action.kind=media` events — once a media clip's
-    # payload is pushed it's NOT re-emitted within the same turn. Mirrors
-    # `emitted_verse_refs`.
-    emitted_media_refs: set[int] = field(default_factory=set)
+    # Once-per-turn dedup for the eager card flush (`flush_card_payloads`):
+    # a `(card_family, dedup_key)` is emitted at most once across the multiple
+    # flush calls in a turn. Card-capable clients don't use this — the lazy
+    # synth-time bridge keeps its own per-stream dedup.
+    emitted_card_keys: set[tuple] = field(default_factory=set)
     # Action ids that were actually emitted as a real `action` SSE event
     # this turn (minted by track_pdf_generate / propose_* tools).
     # `_worker_common._yield_event` records each one here; the

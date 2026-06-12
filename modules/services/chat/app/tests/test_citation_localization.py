@@ -13,8 +13,7 @@ import pytest
 import lectorium_chat.agent.graph.nodes._worker_common as wc
 from lectorium_chat.agent.graph.nodes._worker_common import (
     build_verse_payload,
-    flush_cite_payloads,
-    flush_verse_payloads,
+    flush_card_payloads,
     localize_citation,
 )
 from lectorium_chat.agent.graph.turn_context import TurnContext
@@ -106,7 +105,7 @@ async def test_flush_cite_translates_non_native(capture_writer):
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
     assert payload["mt"] is True
@@ -124,7 +123,7 @@ async def test_flush_cite_skipped_for_card_client(capture_writer):
     )
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
     assert capture_writer == []  # nothing emitted
     assert tr.calls == []        # nothing translated
 
@@ -134,7 +133,7 @@ async def test_flush_cite_native_no_mt_field(capture_writer):
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
     assert "mt" not in payload
@@ -148,7 +147,7 @@ async def test_flush_cite_flag_off_no_translation(capture_writer):
     n = ctx.aliases.alias_chunk("t1", 1000, 2000, lang="en")
     ctx.aliases.chunk_texts[n] = "english transcript"
 
-    await flush_cite_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
     assert "mt" not in payload
@@ -179,7 +178,7 @@ async def test_flush_verse_translates_into_lang(capture_writer, monkeypatch):
         return _fake_verse_body({"en": "english verse"})
 
     monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
-    await flush_verse_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
     assert payload["mt"] is True
@@ -200,7 +199,7 @@ async def test_flush_verse_native_no_mt(capture_writer, monkeypatch):
         return _fake_verse_body({"en": "english verse", "uk": "український вірш"})
 
     monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
-    await flush_verse_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     payload = capture_writer[0]["data"]["payload"]
     assert "mt" not in payload
@@ -221,7 +220,7 @@ async def test_flush_verse_skipped_for_card_client(capture_writer, monkeypatch):
         return _fake_verse_body({"en": "english verse"})
 
     monkeypatch.setattr(wc, "fetch_verse_body", fake_fetch)
-    await flush_verse_payloads(ctx)
+    await flush_card_payloads(ctx)
     assert capture_writer == []   # nothing emitted
     assert tr.calls == []         # nothing translated
 

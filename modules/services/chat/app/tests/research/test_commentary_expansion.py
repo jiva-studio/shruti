@@ -138,7 +138,11 @@ async def test_cap_respected_with_author_diversity_first():
 
 
 @pytest.mark.asyncio
-async def test_lang_fallback_when_strict_lang_empty():
+async def test_no_lang_fallback_when_strict_lang_empty():
+    # #904 removed the `lang=None` cross-language fallback: a miss in the
+    # retrieval language attaches NOTHING rather than a foreign-language
+    # purport. So an empty strict lookup → no purport, and only ONE lookup
+    # (no second `lang=None` probe even though one is seeded here).
     repo = FakeChunkRepo(by_addr={
         ("BG", "2.13", "ru"): [],
         ("BG", "2.13", None): [
@@ -151,10 +155,8 @@ async def test_lang_fallback_when_strict_lang_empty():
         [_verse_env("BG", "2.13")],
         chunk_repo=repo, alias_map=FakeAliasMap(), lang="ru",
     )
-    assert len(out) == 1
-    assert out[0]["lang"] == "en"
-    # Two lookups: strict ru → fallback None
-    assert repo.calls == [("BG", "2.13", "ru"), ("BG", "2.13", None)]
+    assert out == []  # no fallback → no foreign-language purport attached
+    assert repo.calls == [("BG", "2.13", "ru")]  # strict only, no None probe
 
 
 @pytest.mark.asyncio

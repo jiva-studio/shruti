@@ -17,8 +17,7 @@ from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
 from lectorium_chat.agent.graph.nodes._worker_common import (
-    flush_chapter_payloads,
-    flush_verse_payloads,
+    flush_card_payloads,
     run_worker,
 )
 from lectorium_chat.agent.graph.state import ChatState
@@ -136,8 +135,7 @@ async def locate_worker_node(
     notes = _notes_from_result(locate_result, ctx.aliases)
 
     # Payloads MUST precede the inline markers in the delta stream.
-    await flush_chapter_payloads(ctx)
-    await flush_verse_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     log.info(
         "locate_worker_complete",

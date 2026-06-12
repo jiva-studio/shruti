@@ -1,9 +1,9 @@
-"""Tests for the media-clip SSE path — `MEDIA_RE` grammar + `flush_media_payloads`.
+"""Tests for the media-clip SSE path — `MEDIA_RE` grammar + `flush_card_payloads`.
 
 A media clip renders as a playable card on the client only if a
 `media` SSE payload precedes its `[media:<id>|caption]` marker. Media
 chunks are REFERENCE-ONLY: the alias carries just the `library_media` id
-plus the display label/text, so `flush_media_payloads` resolves the
+plus the display label/text, so `flush_card_payloads` resolves the
 playback handle (relative `url`, clip `type`, optional `speaker`) from
 `library_media` at turn time via fetch_media(item_id) — exactly like a
 verse resolves its body via fetch_verse_body.
@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 import lectorium_chat.agent.graph.nodes._worker_common as wc
-from lectorium_chat.agent.graph.nodes._worker_common import flush_media_payloads
+from lectorium_chat.agent.graph.nodes._worker_common import flush_card_payloads
 from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.agent.markers import MEDIA_RE
 
@@ -46,7 +46,7 @@ def test_media_re_id_charset() -> None:
     assert m.group(1) == "clip.7-abc_DEF"
 
 
-# ── flush_media_payloads SSE shape ───────────────────────────────────
+# ── flush_card_payloads SSE shape ───────────────────────────────────
 
 
 def _seed_media(
@@ -93,13 +93,13 @@ async def test_flush_resolves_full_payload_via_fetch_media(
         meta='{"speaker": "Хари Шаури", "date": "1976"}',
     )
     ctx = TurnContext(library_db_path=db)
-    n = ctx.aliases.alias_media(
+    ctx.aliases.alias_media(
         "media_abc",
         label="Хари Шаури · 1976",
         text="Я помню, как Шрила Прабхупада...",
     )
 
-    await flush_media_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     assert len(capture_writer) == 1
     ev = capture_writer[0]
@@ -115,7 +115,7 @@ async def test_flush_resolves_full_payload_via_fetch_media(
     assert payload["speaker"] == "Хари Шаури"
     # text is the display string carried on the alias (envelope time).
     assert payload["text"] == "Я помню, как Шрила Прабхупада..."
-    assert n in ctx.emitted_media_refs
+    assert ("media", ("media_abc",)) in ctx.emitted_card_keys
 
 
 async def test_flush_omits_speaker_when_absent(
@@ -128,7 +128,7 @@ async def test_flush_omits_speaker_when_absent(
     ctx = TurnContext(library_db_path=db)
     ctx.aliases.alias_media("media_x", label="Untitled clip")
 
-    await flush_media_payloads(ctx)
+    await flush_card_payloads(ctx)
 
     assert len(capture_writer) == 1
     payload = capture_writer[0]["data"]["payload"]
@@ -146,8 +146,8 @@ async def test_flush_dedups_within_turn(
     ctx = TurnContext(library_db_path=db)
     ctx.aliases.alias_media("media_a", label="L")
 
-    await flush_media_payloads(ctx)
-    await flush_media_payloads(ctx)  # second call must not re-emit
+    await flush_card_payloads(ctx)
+    await flush_card_payloads(ctx)  # second call must not re-emit
 
     assert len(capture_writer) == 1
 
@@ -163,18 +163,18 @@ async def test_flush_skips_when_row_absent(
     ctx = TurnContext(library_db_path=db)
     ctx.aliases.alias_media("missing", label="L")
 
-    await flush_media_payloads(ctx)
+    await flush_card_payloads(ctx)
     assert capture_writer == []
 
 
 async def test_flush_no_aliases_is_noop(capture_writer, tmp_path: Path) -> None:
     ctx = TurnContext(library_db_path=tmp_path / "library.db")
-    await flush_media_payloads(ctx)
+    await flush_card_payloads(ctx)
     assert capture_writer == []
 
 
 async def test_flush_no_library_db_is_noop(capture_writer) -> None:
     ctx = TurnContext()  # library_db_path is None
     ctx.aliases.alias_media("media_a", label="L")
-    await flush_media_payloads(ctx)
+    await flush_card_payloads(ctx)
     assert capture_writer == []

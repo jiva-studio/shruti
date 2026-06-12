@@ -313,13 +313,11 @@ async def run_chat_turn(
             # emits a `[commentary:…]` marker (paired with an action
             # payload) instead of inlining a markdown blockquote.
             commentary_as_card=bool(caps.get("commentary_card")),
-            # Same card-capable clients get verse cards emitted lazily at
-            # synth time (cited-only), so verse-prose translation never runs
-            # on the uncited candidate pool.
-            lazy_verse=bool(caps.get("commentary_card")),
-            # …and the same for lecture-transcript cites — translate only the
-            # cited fragments, not the whole (often dozens-strong) pool.
-            lazy_cite=bool(caps.get("commentary_card")),
+            # Card-capable clients get ALL auto-render cards (verse / cite /
+            # media / chapter) emitted lazily at synth time, cited-only — so
+            # citation translation runs only on what the answer shows, never
+            # the whole candidate pool. Driven by the CARD_SPECS registry.
+            lazy_cards=bool(caps.get("commentary_card")),
         )
 
         # Speculative embed: most non-trivial intents (research,
