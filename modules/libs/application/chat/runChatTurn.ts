@@ -522,11 +522,24 @@ export async function* runChatTurn(
             break
           }
           if (event.payload.kind === "media") {
-            // Stash on the closure `media` map so the finalised message
-            // persists it (mirrors `actions`/`outlines`), and yield so the
-            // store reflects it on the streaming bubble before the
-            // `[media:<id>]` marker triggers MediaCard render.
-            const mp = event.payload.payload
+            // Map the snake_case wire payload to the camelCase domain
+            // `MediaPayload` (the one boundary that does this, same as the
+            // verse/cite/chapter/commentary branches above). Stash on the
+            // closure `media` map so the finalised message persists it
+            // (mirrors `actions`/`outlines`), and yield so the store reflects
+            // it on the streaming bubble before the `[media:<id>]` marker
+            // triggers MediaCard render.
+            const w = event.payload.payload
+            const mp: MediaPayload = {
+              id: w.id,
+              url: w.url,
+              type: w.type,
+              title: w.title,
+              text: w.text,
+              ...(w.speaker ? { speaker: w.speaker } : {}),
+              ...(w.mt ? { mt: true } : {}),
+              ...(w.text_original ? { textOriginal: w.text_original } : {}),
+            }
             media[mp.id] = mp
             yield { kind: "media-payload", payload: mp }
             break

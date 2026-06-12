@@ -283,6 +283,47 @@ describe("runChatTurn — card bodies persisted onto the finalised message", () 
     }
   })
 
+  it("maps a media wire payload (snake_case) to the camelCase domain shape", async () => {
+    const mediaAction = {
+      type: "action",
+      payload: {
+        kind: "media",
+        id: "a1",
+        payload: {
+          id: "vid1",
+          url: "public/media/vid1.mp4",
+          type: "video",
+          title: "Prabhupada · 1977",
+          text: "transcript",
+          mt: true,
+          text_original: "оригинал",
+        },
+      },
+    } as unknown as ChatStreamEvent
+    const stream = makeStream([
+      mediaAction,
+      { type: "delta", text: "see [media:vid1]" } as ChatStreamEvent,
+      { type: "done" } as ChatStreamEvent,
+    ])
+    const ctl = new AbortController()
+    const events = await collect(runChatTurn(baseInput(ctl.signal), baseDeps(stream)))
+
+    const finalised = events.find((e) => e.kind === "finalised")
+    expect(finalised).toBeDefined()
+    if (finalised && finalised.kind === "finalised") {
+      // Wire `text_original` → domain `textOriginal`; no snake_case leaks.
+      expect(finalised.message.media?.["vid1"]).toEqual({
+        id: "vid1",
+        url: "public/media/vid1.mp4",
+        type: "video",
+        title: "Prabhupada · 1977",
+        text: "transcript",
+        mt: true,
+        textOriginal: "оригинал",
+      })
+    }
+  })
+
   it("tool_start resets the card maps too — a verse from the abandoned pass is dropped", async () => {
     const stream = makeStream([
       verseAction,
