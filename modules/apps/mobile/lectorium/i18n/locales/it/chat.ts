@@ -265,8 +265,11 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Promemoria quotidiano",
   proactiveSessionTitleSmartLibrary: "Biblioteca intelligente",
-  proactiveSessionTitleNextShloka: "Verso successivo",
+  proactiveSessionTitleNextShloka: "Lezione sul prossimo verso",
   proactiveSessionTitleUnfinishedLecture: "Lezione non terminata",
+  proactiveSessionTitleInactivity: "Torna alla tua pratica",
+  proactiveInactivityWelcomeBody:
+    "È passato un po' di tempo. Nuove lezioni ti aspettano — apri la tua biblioteca e riprendi da dove avevi lasciato.",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The
@@ -279,6 +282,15 @@ export default {
   // follow-up `queue_next_track` action card lives below as a marker.
   proactiveUnfinishedLectureBody:
     "Hai iniziato “{title}” ma non l'hai finita. Vuoi riprendere da dove eri rimasto?",
+
+  weeklyDigestTitle: "La tua settimana",
+  weeklyDigestTotalTime: "Tempo di ascolto totale",
+  weeklyDigestLectures: "Lezioni di questa settimana",
+  weeklyDigestStreak: "Giorni di fila",
+  weeklyDigestCompleted: "Completate",
+  weeklyDigestEmpty:
+    "Questa settimana non hai ascoltato — scegli qualcosa di nuovo per ritrovare il ritmo.",
+  weeklyDigestMore: "+{count} in più",
 
   proactiveSmartLibraryHintBody:
     "Vorrei mostrarti la Biblioteca intelligente — una funzione Pro che tiene la tua biblioteca sempre piena di nuove lezioni senza che tu debba aggiungerne nessuna a mano.\n\nScegli tu i criteri — autori preferiti, temi, fonti, durata delle lezioni — e la Biblioteca intelligente porta in modo discreto le lezioni corrispondenti nella tua biblioteca fino a una durata obiettivo della coda (ad esempio 2 ore, 8 ore, 10 ore). Quando una lezione è terminata viene archiviata automaticamente, così la coda resta sempre fresca.\n\nUtile per gli spostamenti e le passeggiate, quando non vuoi perdere tempo a scegliere cosa ascoltare dopo.",

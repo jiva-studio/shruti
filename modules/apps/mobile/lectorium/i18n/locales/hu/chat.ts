@@ -265,8 +265,21 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Napi emlékeztető",
   proactiveSessionTitleSmartLibrary: "Okos könyvtár",
-  proactiveSessionTitleNextShloka: "Következő vers",
+  proactiveSessionTitleNextShloka: "Előadás a következő versről",
   proactiveSessionTitleUnfinishedLecture: "Befejezetlen előadás",
+  proactiveSessionTitleInactivity: "Térj vissza a gyakorlásodhoz",
+  proactiveInactivityWelcomeBody:
+    "Rég jártál itt. Friss előadások várnak — nyisd meg a könyvtáradat, és folytasd ott, ahol abbahagytad.",
+
+  // Weekly digest — proactive summary of the past week's listening.
+  weeklyDigestTitle: "A heted",
+  weeklyDigestTotalTime: "Összes hallgatási idő",
+  weeklyDigestLectures: "Előadások a héten",
+  weeklyDigestStreak: "Napos sorozat",
+  weeklyDigestCompleted: "Befejezve",
+  weeklyDigestEmpty:
+    "Ezen a héten nem hallgattál semmit — válassz valami frisset, hogy visszatalálj a ritmusba.",
+  weeklyDigestMore: "+{count} további",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The

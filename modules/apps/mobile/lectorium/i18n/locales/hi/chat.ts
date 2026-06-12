@@ -265,8 +265,21 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "दैनिक अनुस्मारक",
   proactiveSessionTitleSmartLibrary: "स्मार्ट लाइब्रेरी",
-  proactiveSessionTitleNextShloka: "अगला श्लोक",
+  proactiveSessionTitleNextShloka: "अगले श्लोक पर प्रवचन",
   proactiveSessionTitleUnfinishedLecture: "अधूरा प्रवचन",
+  proactiveSessionTitleInactivity: "अपनी साधना पर लौटें",
+  proactiveInactivityWelcomeBody:
+    "काफ़ी समय बीत गया। ताज़ा प्रवचन आपका इंतज़ार कर रहे हैं — अपनी लाइब्रेरी खोलें और जहाँ छोड़ा था वहीं से आगे बढ़ें।",
+
+  // Weekly-digest proactive session — a short rollup of the past week's
+  // listening. `{count}` in `weeklyDigestMore` is the overflow count.
+  weeklyDigestTitle: "आपका सप्ताह",
+  weeklyDigestTotalTime: "कुल सुनने का समय",
+  weeklyDigestLectures: "इस सप्ताह के प्रवचन",
+  weeklyDigestStreak: "लगातार दिन",
+  weeklyDigestCompleted: "पूर्ण",
+  weeklyDigestEmpty: "इस सप्ताह आपने कुछ नहीं सुना — लय में लौटने के लिए कोई ताज़ा प्रवचन चुनें।",
+  weeklyDigestMore: "+{count} और",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The

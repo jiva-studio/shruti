@@ -268,8 +268,11 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Tägliche Erinnerung",
   proactiveSessionTitleSmartLibrary: "Intelligente Bibliothek",
-  proactiveSessionTitleNextShloka: "Nächster Vers",
+  proactiveSessionTitleNextShloka: "Vortrag zum nächsten Vers",
   proactiveSessionTitleUnfinishedLecture: "Unbeendeter Vortrag",
+  proactiveSessionTitleInactivity: "Zurück zu deiner Praxis",
+  proactiveInactivityWelcomeBody:
+    "Du warst eine Weile weg. Frische Vorträge warten schon — öffne deine Bibliothek und höre dort weiter, wo du aufgehört hast.",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The
@@ -282,6 +285,17 @@ export default {
   // follow-up `queue_next_track` action card lives below as a marker.
   proactiveUnfinishedLectureBody:
     "Du hast „{title}“ begonnen, aber nicht zu Ende gehört. Möchtest du dort weitermachen, wo du aufgehört hast?",
+
+  // Weekly digest proactive session — recap of the past week's listening.
+  // `{count}` is the number of additional lectures beyond those listed.
+  weeklyDigestTitle: "Deine Woche",
+  weeklyDigestTotalTime: "Gesamte Hörzeit",
+  weeklyDigestLectures: "Vorträge diese Woche",
+  weeklyDigestStreak: "Tage in Folge",
+  weeklyDigestCompleted: "Zu Ende gehört",
+  weeklyDigestEmpty:
+    "Diese Woche hast du nichts gehört — wähle etwas Frisches und finde zurück in den Rhythmus.",
+  weeklyDigestMore: "+{count} weitere",
 
   proactiveSmartLibraryHintBody:
     "Ich möchte dir die Intelligente Bibliothek zeigen — eine Pro-Funktion, die deine Bibliothek voller frischer Vorträge hält, ohne dass du etwas von Hand in die Warteschlange stellen musst.\n\nDu wählst die Kriterien — Lieblingsautoren, Themen, Quellen, Vortragslänge — und die Intelligente Bibliothek zieht passende Vorträge bis zu einer Ziel-Warteschlangendauer (z. B. 2 Stunden, 8 Stunden, 10 Stunden) leise in deine Bibliothek. Wenn etwas zu Ende gehört ist, wird es automatisch archiviert, damit die Warteschlange frisch bleibt.\n\nGut für den Arbeitsweg und für Spaziergänge, bei denen du keine Zeit damit verbringen möchtest, das Nächste auszuwählen.",
