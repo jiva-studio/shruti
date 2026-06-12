@@ -64,7 +64,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
 import { useChatActions } from "@shruti/composables/useChatActions.js"
-import { useAudioSource } from "@shruti/composables/useAudioOrchestrator.js"
+import { useCitationAudio } from "../composables/useCitationAudio.js"
 import { useToast } from "@kit/composables"
 import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
@@ -98,27 +98,30 @@ const { addToPlaylist } = useAddToPlaylist()
 const { saveCitation } = useChatActions()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
-function pauseSelf(): void {
-  const el = audioEl.value
-  if (!el) return
-  clearPlayTimer()
-  isPreparing.value = false
-  el.pause()
-}
-
-// Register as an "inline" audio source. `claim()` (in onPlay) pauses
-// every other source — sibling chips, the focus card, AND the main
-// lecture player; `pauseSelf` runs whenever any of them claims.
-const { claim } = useAudioSource("inline", pauseSelf)
-
-const isPlaying = ref(false)
-const isPreparing = ref(false)
 const cachedUrl = ref<string | null>(null)
 const actionSheetOpen = ref(false)
 /** Guard so a second tap on "Save as note" while the transcript is still
  *  loading does NOT create a duplicate note. */
 const savingNote = ref(false)
-const progressPct = ref(0)
+
+// The audio-playback engine (orchestrator claim, spinner state, progress,
+// stall watchdog, media-event handlers) lives in its own composable. It calls
+// `ensureUrl` (declared below; hoisted) to lazily resolve the excerpt URL on
+// first play. The returned handlers are bound by name in the template.
+const {
+  isPlaying,
+  isPreparing,
+  progressPct,
+  toggle,
+  onPlay,
+  onPlaying,
+  onCanPlay,
+  onWaiting,
+  onError,
+  onPause,
+  onEnded,
+  onTimeUpdate,
+} = useCitationAudio({ audioEl, resolveUrl: ensureUrl })
 
 const chipStyle = computed(() => ({
   "--progress": `${progressPct.value}%`,
@@ -135,19 +138,6 @@ const metaLoaded = ref(false)
 const LONG_PRESS_MS = 500
 let pressTimer: ReturnType<typeof setTimeout> | null = null
 let suppressClick = false
-
-// After a long pollUntilReady the element can resolve `play()` (and fire
-// `play`) while still buffering/stalled — silent pause icon. We hold the
-// spinner until real playback (`playing`/`canplay`) and arm a watchdog so
-// a wedged buffer resets cleanly instead of stranding the user.
-const PLAY_TIMEOUT_MS = 15000
-let playTimer: ReturnType<typeof setTimeout> | null = null
-function clearPlayTimer(): void {
-  if (playTimer) {
-    clearTimeout(playTimer)
-    playTimer = null
-  }
-}
 
 const lectureTitle = computed(() => {
   if (!track.value) return ""
@@ -305,46 +295,14 @@ async function ensureUrl(): Promise<string | null> {
   }
 }
 
+/** Primary tap: a long-press already opened the action sheet (and set
+ *  `suppressClick`), so swallow the trailing click; otherwise toggle play. */
 async function onPrimary(): Promise<void> {
   if (suppressClick) {
     suppressClick = false
     return
   }
-  const el = audioEl.value
-  if (!el) return
-  if (isPlaying.value) {
-    el.pause()
-    return
-  }
-  isPreparing.value = true
-  if (!cachedUrl.value) {
-    const url = await ensureUrl()
-    if (!url) {
-      isPreparing.value = false
-      return
-    }
-    el.src = url
-  } else if (!el.src) {
-    el.src = cachedUrl.value
-  }
-  // Keep the spinner up across play() — cleared by `playing`/`canplay`,
-  // not the resolved promise — and watchdog a stalled buffer.
-  clearPlayTimer()
-  playTimer = setTimeout(() => {
-    playTimer = null
-    if (!isPlaying.value) {
-      isPreparing.value = false
-      el.pause()
-      console.warn("[citation-chip] playback did not start in time")
-    }
-  }, PLAY_TIMEOUT_MS)
-  try {
-    await el.play()
-  } catch (err) {
-    clearPlayTimer()
-    isPreparing.value = false
-    console.warn("[citation-chip] play failed", err)
-  }
+  await toggle()
 }
 
 function onOpenDetails(): void {
@@ -367,55 +325,6 @@ function onPointerCancel(): void {
   }
 }
 
-function onPlay(): void {
-  clearPlayTimer()
-  isPlaying.value = true
-  isPreparing.value = false
-  claim()
-}
-
-function onPlaying(): void {
-  clearPlayTimer()
-  isPlaying.value = true
-  isPreparing.value = false
-}
-
-function onCanPlay(): void {
-  if (isPlaying.value) isPreparing.value = false
-}
-
-function onWaiting(): void {
-  isPreparing.value = true
-}
-
-function onError(): void {
-  clearPlayTimer()
-  isPlaying.value = false
-  isPreparing.value = false
-  console.warn("[citation-chip] audio element error")
-}
-
-function onPause(): void {
-  isPlaying.value = false
-}
-
-function onEnded(): void {
-  clearPlayTimer()
-  isPlaying.value = false
-  isPreparing.value = false
-  const el = audioEl.value
-  if (el) el.currentTime = 0
-  progressPct.value = 0
-}
-
-function onTimeUpdate(): void {
-  const el = audioEl.value
-  if (!el) return
-  const dur = el.duration
-  if (!Number.isFinite(dur) || dur <= 0) return
-  progressPct.value = Math.min(100, Math.max(0, (el.currentTime / dur) * 100))
-}
-
 watch(
   () => props.trackId,
   () => {
@@ -428,9 +337,9 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  // Audio cleanup (timer + pause) is owned by useCitationAudio; here we only
+  // disarm the long-press gesture timer.
   if (pressTimer) clearTimeout(pressTimer)
-  clearPlayTimer()
-  audioEl.value?.pause()
 })
 </script>
 
