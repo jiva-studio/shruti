@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from "vue"
-import { loadingController, onIonViewWillEnter } from "@ionic/vue"
+import { actionSheetController, loadingController, onIonViewWillEnter } from "@ionic/vue"
 import { useI18n } from "vue-i18n"
 import router from "@lectorium/router/index.js"
 import type { UiNoteRow } from "@ui/features/notes/index.js"
@@ -348,6 +348,44 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   /**
+   * Second-level "Share" sheet (Text / Audio / Video), mirroring the
+   * per-track share sub-menu in {@link useShareTrack}. Opened imperatively
+   * via the controller so it can stack on top of the top-level note sheet.
+   */
+  async function presentShareMenu(): Promise<void> {
+    void haptics.impact("light")
+    const sheet = await actionSheetController.create({
+      header: t("notes.share"),
+      buttons: [
+        {
+          text: t("notes.shareText"),
+          handler: () => {
+            void onShareNoteClicked()
+          },
+        },
+        {
+          text: t("notes.shareAudio"),
+          handler: () => {
+            void onShareNoteAudioClicked()
+          },
+        },
+        {
+          text: t("notes.shareVideo"),
+          cssClass: "action-sheet-pro",
+          handler: () => {
+            onOpenInStudioClicked()
+          },
+        },
+        {
+          text: t("app.close"),
+          role: "cancel",
+        },
+      ],
+    })
+    await sheet.present()
+  }
+
+  /**
    * Studio entry point. Pro-gated — non-subscribers see the paywall
    * instead of navigating to the editor. The editor itself re-checks
    * the gate on mount so a stale "subscribed" cache can't slip through.
@@ -370,36 +408,20 @@ export function useNotesController(): NotesControllerReturn {
   }
 
   const actionSheetButtons = computed<readonly NotesActionSheetButton[]>(() => {
-    const buttons: NotesActionSheetButton[] = [
+    // Top level: quick Copy-text + the nested Share menu (which holds the
+    // text/audio/video shares and Open in Studio). Copy text drops the note
+    // straight on the clipboard; Share opens the second sheet.
+    return [
       {
-        text: t("notes.shareText"),
-        handler: () => {
-          void onShareNoteClicked()
-        },
-      },
-      {
-        text: t("notes.shareAudio"),
-        handler: () => {
-          void onShareNoteAudioClicked()
-        },
-      },
-    ]
-    // The PRO pill always shows; tapping opens the paywall for
-    // non-subscribers rather than the editor. The pill is a CSS ::after
-    // (`.action-sheet-pro` in theme/misc.css) — same marker as the Share
-    // row, since Ionic buttons can't host a component.
-    buttons.push({
-      text: t("studio.openInStudio"),
-      cssClass: "action-sheet-pro",
-      handler: () => {
-        onOpenInStudioClicked()
-      },
-    })
-    buttons.push(
-      {
-        text: t("app.copy"),
+        text: t("notes.copyText"),
         handler: () => {
           void onCopyNoteClicked()
+        },
+      },
+      {
+        text: t("app.share"),
+        handler: () => {
+          void presentShareMenu()
         },
       },
       {
@@ -412,9 +434,8 @@ export function useNotesController(): NotesControllerReturn {
       {
         text: t("app.cancel"),
         role: "cancel",
-      }
-    )
-    return buttons
+      },
+    ]
   })
 
   async function onQuery(next: string): Promise<void> {
