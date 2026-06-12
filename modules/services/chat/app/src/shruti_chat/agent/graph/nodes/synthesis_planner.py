@@ -32,7 +32,7 @@ from shruti_chat.agent.graph.nodes._worker_common import (
 )
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.graph.turn_context import TurnContext
-from shruti_chat.observability.langfuse_client import langfuse_node_callback
+from shruti_chat.observability.langfuse_client import langfuse_node_callback, langfuse_span
 from shruti_chat.observability.logging import bind_node_role, get_logger
 from shruti_chat.research.commentary_expansion import (
     rerank_and_attach_commentaries,
@@ -212,25 +212,27 @@ async def synthesis_planner_node(
             log.warning("synthesis_planner_intro_stream_failed", error=str(exc))
 
     # Stage 1 has been running while the intro was written — collect it now.
-    enriched, new_commentaries = await stage1_task
+    with langfuse_span("planner.stage1_rerank_attach"):
+        enriched, new_commentaries = await stage1_task
 
     # Stage 2: per-thesis thin-support augmentation.
     # For theses still weak after Stage 1 (max cosine < threshold or
     # fewer than 2 strong notes), run a fresh thesis-targeted ANN
     # fetch — respecting the user's router_args filters — and re-rank.
     # Fires conditionally per-thesis; if all are strong, no DB calls.
-    augmented, fresh_chunks = await augment_thin_theses(
-        enriched,
-        list(tool_results) + list(new_commentaries),
-        chunk_repo=ctx.chunk_repo,
-        embedder=ctx.embedder,
-        alias_map=ctx.aliases,
-        catalog_repo=ctx.catalog_repo,
-        lang=retrieval_lang,
-        router_args=state.get("extracted_args") or {},
-        reranker=reranker,
-        user_query=user_query,
-    )
+    with langfuse_span("planner.stage2_augment"):
+        augmented, fresh_chunks = await augment_thin_theses(
+            enriched,
+            list(tool_results) + list(new_commentaries),
+            chunk_repo=ctx.chunk_repo,
+            embedder=ctx.embedder,
+            alias_map=ctx.aliases,
+            catalog_repo=ctx.catalog_repo,
+            lang=retrieval_lang,
+            router_args=state.get("extracted_args") or {},
+            reranker=reranker,
+            user_query=user_query,
+        )
 
     # Emit a one-shot summary event so chat_turn can pull outline-shape
     # data into TurnSummary for Langfuse scoring. Custom-event channel —
