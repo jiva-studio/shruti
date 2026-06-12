@@ -14,11 +14,14 @@
         @retry="$emit('retry', $event)"
         @send-suggestion="$emit('send-suggestion', $event)"
       />
-      <FollowupChips
+      <ChatChips
         v-if="
           i === lastAssistantIndex && !msg.streaming && msg.followups && msg.followups.length > 0
         "
-        :followups="msg.followups"
+        class="followups"
+        :items="msg.followups"
+        align="end"
+        aria-label-key="chat.followupAriaLabel"
         @pick="$emit('pick-followup', $event)"
       />
     </div>
@@ -29,7 +32,7 @@
 import { computed } from "vue"
 import type { ChatMessage } from "@lectorium/stores/useChatStore.js"
 import ChatMessageBubble from "./ChatMessageBubble.vue"
-import FollowupChips from "./FollowupChips.vue"
+import ChatChips from "./ChatChips.vue"
 
 const props = defineProps<{
   messages: readonly ChatMessage[]
@@ -110,5 +113,11 @@ const lastAssistantIndex = computed<number>(() => {
   display: flex;
   flex-direction: column;
   min-height: calc(100svh - 200px);
+}
+
+/* Inline follow-up chips sit right-aligned (tapping one sends it as the
+ * next user message, and user bubbles live on the right). */
+.followups {
+  margin: 4px 12px 12px;
 }
 </style>
