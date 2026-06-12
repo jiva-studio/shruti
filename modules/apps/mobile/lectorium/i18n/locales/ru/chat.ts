@@ -265,7 +265,7 @@ export default {
   // когда правило срабатывает первый раз для пользователя.
   proactiveSessionTitleEnableReminder: "Ежедневное напоминание",
   proactiveSessionTitleSmartLibrary: "Умная библиотека",
-  proactiveSessionTitleNextShloka: "Следующий шлок",
+  proactiveSessionTitleNextShloka: "Лекция по следующему стиху",
   proactiveSessionTitleUnfinishedLecture: "Незаконченная лекция",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the canonical
