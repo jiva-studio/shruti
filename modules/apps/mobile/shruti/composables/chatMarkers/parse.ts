@@ -84,6 +84,16 @@ export type ChatToken =
       readonly bodyHtml: string
       readonly attributionHtml?: string
     }
+  | {
+      /** Weekly sadhana digest card — a deterministic recap of the past 7
+       *  days (chart + listened lectures + summary badges). Rendered by
+       *  `WeeklyDigestCard.vue`, which fetches its own data from the
+       *  listening-session / track repositories for the `[fromMs, toMs)`
+       *  window the proactive `weekly_digest` rule emitted. No LLM. */
+      readonly kind: "digest"
+      readonly fromMs: number
+      readonly toMs: number
+    }
 
 /* -------------------------------------------------------------------------- */
 /*                                  Regexes                                   */
@@ -118,6 +128,10 @@ export const MEDIA_RE = /\[media:([A-Za-z0-9_.-]+)(?:\|([^\]\n]*))?\]/g
 // audio-citation pattern), keyed by this ref in the message's
 // `commentaries` map.
 export const COMMENTARY_RE = /\[commentary:(\d+)\]/g
+// Weekly-digest card marker. Two unix-ms bounds — the `[fromMs, toMs)`
+// window the proactive `weekly_digest` rule recaps. The card fetches its
+// own data, so the marker carries nothing but the window.
+export const DIGEST_RE = /\[digest:(\d+)-(\d+)\]/g
 // Markdown blockquote run: one or more consecutive lines starting with `>`.
 // Match begins after a line boundary (start-of-string or `\n`). The capture
 // group keeps the raw lines (each still prefixed by `>`) so the parser can
@@ -240,6 +254,14 @@ export function parseChatMarkers(input: string): ChatToken[] {
       start,
       end: start + full.length,
       token: { kind: "commentary", ref: Number(refStr) | 0 },
+    }
+  })
+  collect(DIGEST_RE, (m, start) => {
+    const [full, fromStr, toStr] = m
+    return {
+      start,
+      end: start + full.length,
+      token: { kind: "digest", fromMs: Number(fromStr), toMs: Number(toStr) },
     }
   })
   // Markdown blockquotes — group consecutive `> ...` lines into one
@@ -389,6 +411,7 @@ function collapseBlanksAroundCards(tokens: ChatToken[]): ChatToken[] {
     k === "verse" ||
     k === "chapter" ||
     k === "media" ||
+    k === "digest" ||
     // `cite` now renders as a block quote-card (CitationCard) when its
     // transcript text is present; collapse surrounding <br>/whitespace
     // like the other block tokens. (In chip-fallback mode it's inline —
