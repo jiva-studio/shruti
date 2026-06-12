@@ -44,7 +44,7 @@ export const useDictionariesStore = defineStore("dictionaries", () => {
       const [authorList, languageList, locationList, sourceList, tagList, yearList] =
         await Promise.all([
           repos.authors.listAll(),
-          repos.languages.listAll(),
+          repos.languages.listWithTracks(),
           repos.locations.listAll(),
           repos.sources.listAll(),
           repos.tags.listAll(),

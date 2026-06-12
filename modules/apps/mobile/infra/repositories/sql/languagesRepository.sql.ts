@@ -25,5 +25,19 @@ export function createSqlLanguageRepository(contentDb: IDatabase): ILanguageRepo
         rowToLanguage
       )
     },
+
+    async listWithTracks(): Promise<readonly Language[]> {
+      return queryMany<LanguageRow, Language>(
+        contentDb,
+        `SELECT DISTINCT l.* FROM languages l
+           JOIN track_variants v ON l.code = v.language
+          WHERE EXISTS (
+            SELECT 1 FROM tracks t WHERE t.id = v.track_id AND t.hidden = 0
+          )
+          ORDER BY l.code ASC`,
+        [],
+        rowToLanguage
+      )
+    },
   }
 }
