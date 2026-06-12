@@ -24,7 +24,8 @@ export default {
     },
     transcripts: {
       title: "Transcriptions",
-      summary: "Lisez en suivant l'audio, naviguez par phrase et sélectionnez des fragments à enregistrer",
+      summary:
+        "Lisez en suivant l'audio, naviguez par phrase et sélectionnez des fragments à enregistrer",
     },
     notes: {
       title: "Notes",
@@ -67,7 +68,8 @@ export default {
     screens: {
       home: {
         title: "Accueil — votre playlist",
-        description: "Chaque conférence ici est dans votre playlist. Le badge indique votre progression.",
+        description:
+          "Chaque conférence ici est dans votre playlist. Le badge indique votre progression.",
       },
       search: {
         title: "Recherche et Bibliothèque",
@@ -79,11 +81,13 @@ export default {
     common: {
       downloading: {
         title: "Téléchargement",
-        description: "La conférence est en cours de téléchargement. L'anneau se remplit à mesure de la progression.",
+        description:
+          "La conférence est en cours de téléchargement. L'anneau se remplit à mesure de la progression.",
       },
       failed: {
         title: "Échec du téléchargement",
-        description: "Le téléchargement a été interrompu. Appuyez sur la conférence pour réessayer.",
+        description:
+          "Le téléchargement a été interrompu. Appuyez sur la conférence pour réessayer.",
       },
       completed: {
         title: "Terminé",

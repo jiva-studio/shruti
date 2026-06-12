@@ -238,7 +238,22 @@ import bnStudio from "./locales/bn/studio.js"
 import bnTranscript from "./locales/bn/transcript.js"
 import bnWelcome from "./locales/bn/welcome.js"
 
-export const SUPPORTED_LOCALES = ["en", "ru", "uk", "sr-Latn", "sr-Cyrl", "es", "pt", "it", "de", "fr", "pl", "hu", "hi", "bn"] as const
+export const SUPPORTED_LOCALES = [
+  "en",
+  "ru",
+  "uk",
+  "sr-Latn",
+  "sr-Cyrl",
+  "es",
+  "pt",
+  "it",
+  "de",
+  "fr",
+  "pl",
+  "hu",
+  "hi",
+  "bn",
+] as const
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 const en = {
@@ -561,7 +576,22 @@ export const i18n = createI18n({
   legacy: false,
   locale: detectLocale(),
   fallbackLocale: "en",
-  messages: { en, ru, uk, "sr-Latn": srLatn, "sr-Cyrl": srCyrl, es, pt, it, de, fr, pl, hu, hi, bn },
+  messages: {
+    en,
+    ru,
+    uk,
+    "sr-Latn": srLatn,
+    "sr-Cyrl": srCyrl,
+    es,
+    pt,
+    it,
+    de,
+    fr,
+    pl,
+    hu,
+    hi,
+    bn,
+  },
 })
 
 export function setLocale(locale: SupportedLocale): void {

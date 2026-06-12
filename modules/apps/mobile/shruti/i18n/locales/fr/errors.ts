@@ -1,7 +1,9 @@
 export default {
   downloadFailed: "Échec du téléchargement. Vérifiez votre connexion internet et réessayez.",
-  filtersNotSaved: "Impossible d'enregistrer le filtre. Il sera réinitialisé au prochain lancement.",
-  downloadsCacheUnavailable: "Impossible de lire l'index de vos téléchargements. Les fichiers en cache sont toujours sur le disque.",
+  filtersNotSaved:
+    "Impossible d'enregistrer le filtre. Il sera réinitialisé au prochain lancement.",
+  downloadsCacheUnavailable:
+    "Impossible de lire l'index de vos téléchargements. Les fichiers en cache sont toujours sur le disque.",
   trackNotFound: "Conférence introuvable.",
   languageListUnavailable: "Impossible de charger les langues — liste réduite affichée.",
 }

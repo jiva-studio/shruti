@@ -28,7 +28,8 @@ export default {
     },
     notes: {
       title: "Jegyzetek",
-      summary: "Részletek mentése előadásokból, a részlet újrahallgatása, megosztás vagy exportálás",
+      summary:
+        "Részletek mentése előadásokból, a részlet újrahallgatása, megosztás vagy exportálás",
     },
     "activity-tracker": {
       title: "Aktivitáskövető",
@@ -67,7 +68,8 @@ export default {
     screens: {
       home: {
         title: "Főoldal — a lejátszási listád",
-        description: "Itt minden felvétel a lejátszási listádban van. A jelvény a haladásodat mutatja.",
+        description:
+          "Itt minden felvétel a lejátszási listádban van. A jelvény a haladásodat mutatja.",
       },
       search: {
         title: "Keresés és Könyvtár",

@@ -2,8 +2,7 @@ export default {
   upNext: "Następne w kolejce",
   playlistIsEmpty: "Playlista jest pusta",
   tapToAddTracks: 'Dodaj wykłady w sekcji "Szukaj"',
-  tapToAddTracksWithPacks:
-    'Dodaj wykłady w sekcji "Szukaj" lub wybierz spośród propozycji poniżej',
+  tapToAddTracksWithPacks: 'Dodaj wykłady w sekcji "Szukaj" lub wybierz spośród propozycji poniżej',
   starterPacks: {
     error: "Nie udało się dodać wykładów",
   },

@@ -355,5 +355,4 @@ async function toggle(): Promise<void> {
   line-height: 1.45;
   white-space: pre-wrap;
 }
-
 </style>

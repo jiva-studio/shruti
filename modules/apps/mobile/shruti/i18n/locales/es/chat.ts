@@ -15,7 +15,8 @@ export default {
   searchEmpty: "Sin coincidencias",
   untitledSession: "Chat sin título",
   clearHistory: "Borrar historial de chats",
-  clearHistoryConfirm: "¿Eliminar todas las sesiones y mensajes de chat? Esto no se puede deshacer.",
+  clearHistoryConfirm:
+    "¿Eliminar todas las sesiones y mensajes de chat? Esto no se puede deshacer.",
   clearedToast: "Historial de chats borrado.",
   citationActionHeader: "Abrir cita",
   citationOpen: "Abrir clase",
@@ -126,9 +127,11 @@ export default {
   // strings every time we tune. The "{when}" placeholder shows the
   // actual reset boundary so users still know how long the wait is.
   errQuotaAnonTitle: "Has alcanzado el límite diario de mensajes",
-  errQuotaAnonBody: "Inicia sesión para conseguir más mensajes de chat al día. Se restablece {when}.",
+  errQuotaAnonBody:
+    "Inicia sesión para conseguir más mensajes de chat al día. Se restablece {when}.",
   errQuotaFreeTitle: "Has alcanzado el límite diario de mensajes",
-  errQuotaFreeBody: "Shruti Pro elimina el límite diario de mensajes. Se restablece {when}.",
+  errQuotaFreeBody:
+    "Shruti Pro elimina el límite diario de mensajes. Se restablece {when}.",
   errQuotaProTitle: "Has alcanzado el límite diario",
   errQuotaProBody: "Has agotado los mensajes de chat de hoy. Se restablece {when}.",
   /** CTAs under quota InlineNotices. Anon → opens Settings (where the

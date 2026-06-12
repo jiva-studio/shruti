@@ -9,5 +9,6 @@ export default {
   // Re-engagement push fired by the `unfinished_lecture` rule, scheduled
   // in the background a day after the user left a lecture unfinished.
   // `{title}` is the lecture's localised catalog title.
-  unfinishedLectureBody: "Nem fejezted be a(z) „{title}” előadást. Koppints, hogy visszatérj és befejezd.",
+  unfinishedLectureBody:
+    "Nem fejezted be a(z) „{title}” előadást. Koppints, hogy visszatérj és befejezd.",
 }

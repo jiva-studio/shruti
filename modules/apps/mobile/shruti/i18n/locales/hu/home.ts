@@ -1,9 +1,9 @@
 export default {
   upNext: "Következik",
   playlistIsEmpty: "A lejátszási lista üres",
-  tapToAddTracks: 'Adj hozzá előadásokat a „Keresés” részben',
+  tapToAddTracks: "Adj hozzá előadásokat a „Keresés” részben",
   tapToAddTracksWithPacks:
-    'Adj hozzá előadásokat a „Keresés” részben, vagy válassz az alábbi ajánlatokból',
+    "Adj hozzá előadásokat a „Keresés” részben, vagy válassz az alábbi ajánlatokból",
   starterPacks: {
     error: "Nem sikerült hozzáadni az előadásokat",
   },

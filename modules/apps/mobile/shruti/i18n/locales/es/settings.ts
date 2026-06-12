@@ -79,8 +79,7 @@ export default {
       },
       benefit3: {
         title: "Seminarios y cursos",
-        description:
-          "Añade seminarios y cursos a tu lista para escucharlos en un orden cómodo.",
+        description: "Añade seminarios y cursos a tu lista para escucharlos en un orden cómodo.",
       },
       benefit4: {
         title: "Colecciones dinámicas",
@@ -104,7 +103,8 @@ export default {
       },
       notesStudio: {
         title: "Estudio de notas",
-        description: "Convierte tus notas de las clases en vídeos cortos y compártelos con tus amigos.",
+        description:
+          "Convierte tus notas de las clases en vídeos cortos y compártelos con tus amigos.",
       },
       trackInfo: {
         title: "Diseño de la información de pista",
