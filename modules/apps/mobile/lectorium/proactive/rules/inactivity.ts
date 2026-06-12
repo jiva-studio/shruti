@@ -1,6 +1,6 @@
 import type { ChatMessageId, ChatSessionId } from "@lib/domain/core.js"
-import { useLectorium } from "@lectorium/lectorium.js"
 import { notificationIdFor } from "../hash.js"
+import { NOTIFICATION_PRIORITY, type NotificationCandidate } from "../notificationPlanner.js"
 import { resolveSessionId } from "../sessions.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
@@ -34,7 +34,7 @@ const STAGE_DAYS = [3, 7, 14, 30, 60] as const
 const RULE_DATE = "ladder"
 
 /** i18n key for each stage's notification body. */
-const STAGE_BODY_KEY: Record<number, string> = {
+export const STAGE_BODY_KEY: Record<number, string> = {
   3: "notifications.proactiveInactivityBody3",
   7: "notifications.proactiveInactivityBody7",
   14: "notifications.proactiveInactivityBody14",
@@ -51,19 +51,6 @@ function stageNotificationId(chatMessageId: string, day: number): number {
   return notificationIdFor(`${chatMessageId}#inactivity-${day}`)
 }
 
-async function cancelLadder(
-  app: ReturnType<typeof useLectorium>,
-  chatMessageId: string
-): Promise<void> {
-  for (const day of STAGE_DAYS) {
-    try {
-      await app.notifications.cancel(stageNotificationId(chatMessageId, day))
-    } catch (err) {
-      console.warn("[proactive/inactivity] cancel stage failed", day, err)
-    }
-  }
-}
-
 const handler: ProactiveRuleHandler = {
   id: "inactivity",
 
@@ -75,7 +62,6 @@ const handler: ProactiveRuleHandler = {
   },
 
   async onAppPause(ctx) {
-    const app = useLectorium()
     const repo = ctx.repos.proactiveState
     const sessions = ctx.repos.chatSessions
     const firstStageSec = Math.floor((ctx.nowMs + STAGE_DAYS[0] * DAY_MS) / 1000)
@@ -87,7 +73,8 @@ const handler: ProactiveRuleHandler = {
 
     if (existing !== null) {
       // Already anchored within the last hour for this same target — the
-      // ladder stands, don't churn the OS alarms.
+      // ladder stands, don't re-anchor (the planner already holds the
+      // matching alarms).
       if (
         existing.visibleAt !== null &&
         Math.abs(existing.visibleAt - firstStageSec) < REARM_EPSILON_SEC
@@ -96,8 +83,8 @@ const handler: ProactiveRuleHandler = {
       }
       chatMessageId = existing.chatMessageId
       sessionId = existing.sessionId
-      // Cancel the previous cycle's alarms before re-anchoring.
-      await cancelLadder(app, chatMessageId)
+      // Re-anchor the row to this background moment. The planner reads
+      // `visible_at` to derive the five stage fire times and reschedules.
       await repo.rearm(existing.chatMessageId, firstStageSec)
     } else {
       sessionId = await resolveSessionId(
@@ -146,32 +133,38 @@ const handler: ProactiveRuleHandler = {
         return
       }
     }
-
-    // (Re)schedule the full ladder from now. `schedule()` is idempotent
-    // on id, so a re-arm replaces each alarm rather than duplicating it.
-    for (const day of STAGE_DAYS) {
-      try {
-        await app.notifications.schedule({
-          id: stageNotificationId(chatMessageId, day),
-          title: ctx.t("app.name"),
-          body: ctx.t(STAGE_BODY_KEY[day]),
-          at: ctx.nowMs + day * DAY_MS,
-          extra: { chatSessionId: sessionId, chatMessageId },
-        })
-      } catch (err) {
-        console.warn("[proactive/inactivity] schedule stage failed", day, err)
-      }
-    }
+    // The five stage alarms are no longer scheduled here. The planner
+    // (run right after `onAppPause` from the background path) reads this
+    // row via `collectNotifications` and arbitrates the ladder against
+    // the day's higher-priority pushes — one per local day.
   },
 
-  async validate(entry) {
-    // `validate` only runs from a foreground tick → the user is here, so
-    // the absence is broken. Cancel every pending stage alarm; the next
+  collectNotifications(entry, ctx, phase): NotificationCandidate[] {
+    // Foreground = the user is here, the absence is broken — no ladder.
+    // The planner cancels any armed stage alarms because none of these
+    // ids appear in the desired set.
+    if (phase === "foreground") return []
+    if (entry.visibleAt === null) return []
+    // `visible_at` is anchored at (background moment + 3 days), i.e. the
+    // first stage. Recover the background moment to lay out all stages.
+    const anchor = entry.visibleAt * 1000 - STAGE_DAYS[0] * DAY_MS
+    return STAGE_DAYS.map((day) => ({
+      id: stageNotificationId(entry.chatMessageId, day),
+      fireAtMs: anchor + day * DAY_MS,
+      priority: NOTIFICATION_PRIORITY.inactivity,
+      kind: "inactivity",
+      title: ctx.t("app.name"),
+      body: ctx.t(STAGE_BODY_KEY[day]),
+      extra: { chatSessionId: entry.sessionId, chatMessageId: entry.chatMessageId },
+    }))
+  },
+
+  async validate() {
+    // `validate` runs from a foreground tick → the user is here, so the
+    // absence is broken. Keep the row (it's the single reused session);
+    // the planner cancels the stage alarms this pass because the
+    // foreground `collectNotifications` returns `[]`. The next
     // `onAppPause` re-anchors the ladder to the new last-activity moment.
-    // Keep the row (it's the single reused session) rather than
-    // superseding it — re-arming hides it again until the next absence.
-    const app = useLectorium()
-    await cancelLadder(app, entry.chatMessageId)
     return true
   },
 

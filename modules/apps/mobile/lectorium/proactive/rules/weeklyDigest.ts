@@ -1,3 +1,6 @@
+import { notificationIdFor } from "../hash.js"
+import { toNotificationPreview } from "../notificationPreview.js"
+import { NOTIFICATION_PRIORITY } from "../notificationPlanner.js"
 import type { ProactiveRuleHandler } from "../types.js"
 import { registerRule } from "../registry.js"
 
@@ -88,6 +91,23 @@ const handler: ProactiveRuleHandler = {
     // Weekly digests are always relevant — even an empty week is worth
     // noting ("you didn't listen this week, here's something fresh").
     return true
+  },
+
+  collectNotifications(entry) {
+    if (!entry.notify || entry.visibleAt === null) return []
+    const body = toNotificationPreview(entry.bodyMd)
+    if (body === "") return []
+    return [
+      {
+        id: notificationIdFor(entry.chatMessageId),
+        fireAtMs: entry.visibleAt * 1000,
+        priority: NOTIFICATION_PRIORITY.weekly_digest,
+        kind: "weekly_digest",
+        title: "",
+        body,
+        extra: { chatSessionId: entry.sessionId, chatMessageId: entry.chatMessageId },
+      },
+    ]
   },
 
   async buildContent(entry) {
