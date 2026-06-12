@@ -19,12 +19,84 @@ from __future__ import annotations
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
+from shruti_chat.agent.graph.nodes._worker_common import build_verse_payload
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
 from shruti_chat.application.synthesizer_turn import run_synthesizer_turn
 from shruti_chat.agent.graph.turn_context import TurnContext
 from shruti_chat.observability.langfuse_client import langfuse_node_callback
-from shruti_chat.observability.logging import bind_node_role
+from shruti_chat.observability.logging import bind_node_role, get_logger
+
+
+log = get_logger(__name__)
+
+
+async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
+    """Translate one commentary card's quote in place — only when needed.
+
+    Fires only for an `action.kind == "commentary"` payload on a non-native
+    answer (`retrieval_lang != lang`) with translation opted in. Translates
+    the card's shown (cited) text — ONE LLM call per shown card — and records
+    the source as `text_original` + `mt` so the client's original toggle
+    works. This replaces the eager whole-pool `translate_commentaries` for
+    card clients: we translate exactly what the answer cites, nothing more.
+    Failure leaves the source text untouched (a citation never fails the
+    turn). The translator is cached, so repeats are free.
+    """
+    if data.get("kind") != "commentary":
+        return
+    if not (
+        ctx.translate_citations
+        and ctx.translator is not None
+        and ctx.retrieval_lang
+        and ctx.retrieval_lang != ctx.lang
+    ):
+        return
+    payload = data.get("payload") or {}
+    src = payload.get("text") or ""
+    if not src:
+        return
+    try:
+        translated = await ctx.translator.translate(
+            src, src_lang=ctx.retrieval_lang, tgt_lang=ctx.lang
+        )
+    except Exception as exc:  # noqa: BLE001 — a citation never fails the turn
+        log.warning(
+            "commentary_card_translate_failed",
+            request_id=ctx.request_id,
+            error=str(exc),
+        )
+        return
+    if translated and translated != src:
+        payload["text_original"] = src
+        payload["text"] = translated
+        payload["mt"] = True
+
+
+async def _emit_verse_card(ctx: TurnContext, vref, writer, emitted: set) -> None:
+    """Build + emit ONE verse card payload at the moment it's cited.
+
+    `build_verse_payload` does the (cheap) DB fetch and, for a non-corpus
+    answer, the verse-prose translation — so the translation runs ONLY for
+    cited verses, not the whole aliased pool the eager flush would cover.
+    Deduped by (source_id, tokens) so a twice-cited verse ships once."""
+    key = (vref.source_id, vref.tokens)
+    if key in emitted:
+        return
+    emitted.add(key)
+    payload = await build_verse_payload(ctx, vref)
+    if payload is None:
+        return
+    writer(
+        {
+            "type": "action",
+            "data": {
+                "kind": "verse",
+                "id": f"verse_{vref.source_id}_{vref.tokens}",
+                "payload": payload,
+            },
+        }
+    )
 
 
 # The synthesizer's "voice" sections — these shape FINAL prose, which
@@ -73,6 +145,10 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         else None
     )
 
+    # Verse cards already emitted this stream, keyed by (source_id, tokens),
+    # so a verse cited twice doesn't ship two identical payloads.
+    emitted_verses: set[tuple[str, str]] = set()
+
     async for event in run_synthesizer_turn(
         state["user_query"],
         tool_results=state.get("tool_results", []),
@@ -92,7 +168,19 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
         elif event.type == "action":
             # Commentary-card payload emitted mid-stream by the expander,
             # just before the delta carrying its `[commentary:N]` marker.
+            # LAZY translation: translate ONLY this cited purport, here, the
+            # instant it's cited — instead of pre-translating the whole
+            # candidate pool (most of which never reaches the answer). One
+            # call per shown card, and none at all for native (ru/en)
+            # answers. Awaited before the write so the payload-before-marker
+            # ordering holds.
+            await _maybe_translate_commentary(ctx, event.data)
             writer({"type": "action", "data": event.data})
+        elif event.type == "verse_request":
+            # Card-capable client cited a verse: build + (cited-only)
+            # translate + emit its payload now, before the marker's delta —
+            # instead of the eager flush translating every aliased verse.
+            await _emit_verse_card(ctx, event.data["vref"], writer, emitted_verses)
         elif event.type == "done":
             # The use-case's `done` is internal: the wrapper in
             # `application/chat_turn.py` writes the terminal SSE `done`

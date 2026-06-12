@@ -573,6 +573,34 @@ async def test_commentary_card_mode_off_keeps_blockquote_no_action() -> None:
     assert e.take_commentary_actions() == []
 
 
+# ── Lazy verse cards (card clients emit at synth time) ───────────────
+
+
+async def test_lazy_verse_queues_request_and_keeps_marker() -> None:
+    """With `lazy_verse`, expanding a verse `[^N]` still emits the
+    `[verse:…]` marker AND queues the VerseRef for synth-time build/emit."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
+    e = MarkerExpander(aliases, lazy_verse=True)
+    out = await _expand(e, f"see [^{n}].")
+    assert "[verse:source_BG/2.13|BG 2.13]" in out
+    reqs = e.take_verse_requests()
+    assert len(reqs) == 1
+    assert (reqs[0].source_id, reqs[0].tokens) == ("source_BG", "2.13")
+    assert e.take_verse_requests() == []  # drained
+
+
+async def test_no_verse_requests_without_lazy_flag() -> None:
+    """Legacy mode (eager flush owns verse payloads): the expander queues
+    nothing; the marker is unchanged."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_verse("source_BG", "2.13", addr_label="BG 2.13")
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"see [^{n}].")
+    assert "[verse:source_BG/2.13|BG 2.13]" in out
+    assert e.take_verse_requests() == []
+
+
 # ── Adjacent commentary blockquotes — merge or separate ──────────────
 
 
