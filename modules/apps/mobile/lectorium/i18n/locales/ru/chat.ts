@@ -267,6 +267,13 @@ export default {
   proactiveSessionTitleSmartLibrary: "Умная библиотека",
   proactiveSessionTitleNextShloka: "Лекция по следующему стиху",
   proactiveSessionTitleUnfinishedLecture: "Незаконченная лекция",
+  proactiveSessionTitleInactivity: "Вернись к практике",
+
+  // Статичный текст сессии возврата (`inactivity`). Эскалация — на
+  // уведомлениях, а сама сессия несёт одно тёплое приветствие, готовое
+  // в момент создания строки (без LLM).
+  proactiveInactivityWelcomeBody:
+    "Давно тебя не было. Свежие лекции уже ждут — загляни в библиотеку и продолжи слушать.",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the canonical
   // verse label (e.g. "2.14"); `{title}` is the catalog title in the

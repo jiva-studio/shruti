@@ -296,6 +296,16 @@ export function createSqlProactiveStateRepository(db: IDatabase): IProactiveStat
       }
     },
 
+    async rearm(chatMessageId: ChatMessageId, visibleAtSec: number): Promise<void> {
+      // Re-anchor a reused row: push visibility to the new moment and
+      // clear seen_at so the unseen badge lights again when it surfaces.
+      await mutate(
+        db,
+        "UPDATE chat_messages_proactive_state SET visible_at = ?, seen_at = NULL WHERE chat_message_id = ?",
+        [visibleAtSec, chatMessageId]
+      )
+    },
+
     async sweepTerminal(olderThanUnixSec: number): Promise<number> {
       // chat_messages FK cascade pulls the corresponding proactive_state
       // row out automatically; we drive deletion from chat_messages.
