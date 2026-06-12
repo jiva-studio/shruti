@@ -109,22 +109,12 @@ export function useUserNotifier(): void {
   }
 
   async function showToast(intent: NotifyIntent): Promise<void> {
-    // The Sadhu avatar is drawn as a CSS background on the `content` `::part`
-    // (see `.sadhu-toast` in theme/misc.css). We deliberately do NOT pass HTML
-    // / IonicSafeString here: Ionic 8 renders the message as a plain text node
-    // unless the app opts into `innerHTMLTemplatesEnabled` (default false), so
-    // an HTML string would render broken. `::part(message)` styling needs no
-    // such flag and keeps the text plain + safe.
-    // Mirror the native notification: a bold header with the session's own
-    // title (falling back to the intent's generic title), and the neutral body
-    // below it. Without the header the in-app toast was just "answer ready"
-    // with no hint of WHICH chat — the native notification had the title.
     const header =
       (intent.sessionId ? chat.sessionTitleFor(intent.sessionId) : null) ?? intent.title
     const toast = await toastController.create({
       header,
       message: intent.body,
-      cssClass: "sadhu-toast",
+      color: "primary",
       duration: 6500,
       position: "top",
     })
