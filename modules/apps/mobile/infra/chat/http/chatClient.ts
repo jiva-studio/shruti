@@ -10,310 +10,37 @@ export { BackendUnavailableError, ProtocolVersionMismatchError }
 /*                              Wire-protocol types                           */
 /* -------------------------------------------------------------------------- */
 
-export type ChatRole = "user" | "assistant"
+// The SSE wire protocol is owned by `@lib/contracts` (the shared kernel) so a
+// server protocol change is edited in ONE place. Imported here under shorter
+// local names for the parsers below; decoded payloads stay snake_case
+// (verbatim from the wire), and the `runChatTurn` use-case is the single
+// boundary that maps them to the camelCase domain shapes — `media` included.
+import type {
+  ChatTurn,
+  ResearchSourceKind,
+  ChatStreamEvent,
+  ChatActionPayload as ActionPayload,
+  ChatOutlinePayload as OutlinePayload,
+  ChatSharePdfRefPayload as SharePdfRefPayload,
+  ChatSharePdfItemPayload as SharePdfItemPayload,
+  ChatVersePayloadWire as VersePayload,
+  ChatCiteTranscriptPayloadWire as CiteTranscriptPayload,
+  ChatCommentaryPayloadWire as CommentaryPayload,
+  ChatChapterPayloadWire as ChapterPayload,
+  ChatMediaPayloadWire as MediaPayload,
+} from "@lib/contracts"
 
-export interface ChatTurn {
-  readonly role: ChatRole
-  readonly content: string
-  /** Round-tripped from a prior turn's `aliases` SSE event. Only
-   *  present on assistant turns whose `meta.aliases` was persisted.
-   *  Domain stays camelCase; `buildRequestBody` converts to the wire
-   *  snake_case shape before sending. */
-  readonly aliases?: Readonly<
-    Record<string, { readonly trackId: string; readonly startMs?: number; readonly endMs?: number }>
-  >
-}
-
-export interface OutlineItemPayload {
+/** One outline list-item. `@lib/contracts` inlines this inside
+ *  `ChatOutlinePayload.items`; named here for the parser's local use. */
+interface OutlineItemPayload {
   readonly startMs: number
   readonly title: string
 }
 
-export interface OutlinePayload {
-  readonly trackId: string
-  readonly items: readonly OutlineItemPayload[]
-}
-
-export interface SharePdfRefPayload {
-  readonly shortName: string | null
-  readonly fullName: string | null
-  readonly sourceId: string | null
-  readonly tokens: string | null
-}
-
-export interface SharePdfItemPayload {
-  readonly trackId: string
-  readonly lang: string
-  readonly title: string
-  readonly author: string | null
-  readonly date: string | null
-  readonly location: string | null
-  readonly references: readonly SharePdfRefPayload[]
-  readonly tags: readonly string[]
-  /** Bucket key of the transcript to render. The client POSTs this +
-   *  the cover fields to share-transcript on tap (no pre-rendered URL). */
-  readonly transcriptKey: string
-}
-
-/**
- * v1 SSE protocol: every `action` event is `{kind, id, payload: {...}}`.
- * The discriminator is `kind`; payload shape depends on it. Splitting
- * the static fields (kind, id) from the kind-specific body simplifies
- * routing on the client — one switch on `kind`, kind-specific reading
- * pulled from `payload`.
- *
- * Auto-render kinds (card, outline, verse) pair with an inline
- * marker in delta text — the action event arrives first and stashes
- * the payload; the marker triggers render. Interactive kinds
- * (share_pdf, enable_daily_reminder, …) render a standalone card
- * with a confirm button — no inline marker.
- */
-export type ActionPayload =
-  | {
-      readonly kind: "share_pdf"
-      readonly id: string
-      readonly payload: {
-        readonly items: readonly SharePdfItemPayload[]
-      }
-    }
-  | {
-      readonly kind: "enable_daily_reminder"
-      readonly id: string
-      readonly payload: {
-        /** `'HH:mm'` 24h local time. */
-        readonly time: string
-      }
-    }
-  | {
-      readonly kind: "configure_smart_library"
-      readonly id: string
-      readonly payload: {
-        readonly filters: {
-          readonly authorIds?: readonly string[]
-          readonly tagIds?: readonly string[]
-          readonly sourceIds?: readonly string[]
-          readonly locationIds?: readonly string[]
-          readonly languageCodes?: readonly string[]
-        }
-      }
-    }
-  | {
-      readonly kind: "upgrade_to_pro"
-      readonly id: string
-      readonly payload: { readonly reason: string }
-    }
-  // Auto-render widgets paired with inline markers in delta text.
-  | {
-      readonly kind: "outline"
-      readonly id: string
-      readonly payload: OutlinePayload
-    }
-  | {
-      readonly kind: "verse"
-      readonly id: string
-      readonly payload: VersePayload
-    }
-  | {
-      readonly kind: "cite_transcript"
-      readonly id: string
-      readonly payload: CiteTranscriptPayload
-    }
-  | {
-      readonly kind: "chapter"
-      readonly id: string
-      readonly payload: ChapterPayload
-    }
-  | {
-      readonly kind: "media"
-      readonly id: string
-      readonly payload: MediaPayload
-    }
-  | {
-      readonly kind: "commentary"
-      readonly id: string
-      readonly payload: CommentaryPayload
-    }
-
-/** Discriminator for `research_source` events — what kind of corpus
- *  item the research pipeline is inspecting right now. */
-export type ResearchSourceKind = "verse" | "lecture_chunk" | "library_doc"
-
-/**
- * Decoded SSE events — v1 protocol (9 types). Negotiated via the
- * `X-Chat-Protocol-Version: 1` request header; server rejects with
- * 426 if absent. See backend `agent/events.py` for the contract.
- *
- * - `delta`      streaming text fragment
- * - `tool_start` / `tool_end`  tool-call lifecycle (UI thinking pill)
- * - `status`     i18n status label (key + optional params)
- * - `action`     widget payload — auto-render (paired with marker in
- *                delta text) or interactive (standalone card). The
- *                action event MUST arrive BEFORE its paired marker.
- * - `research_question` / `research_source` — live progress events
- *                from the research pipeline (sub-queries it generated,
- *                sources it's inspecting). Additive in protocol v1:
- *                old clients ignore them via the parser default branch.
- *                Wire `kind` field renamed to `sourceKind` in the
- *                decoded shape to avoid clashing with the `kind`
- *                discriminator used by `ActionPayload`.
- * - `done`       terminal; carries alias map for next-turn round-trip
- * - `error`      terminal failure
- */
-export type ChatStreamEvent =
-  | { readonly type: "delta"; readonly text: string }
-  | { readonly type: "tool_start"; readonly name?: string }
-  | { readonly type: "tool_end"; readonly name?: string }
-  | {
-      readonly type: "status"
-      readonly key: string
-      readonly params?: Readonly<Record<string, string | number>>
-    }
-  | { readonly type: "action"; readonly payload: ActionPayload }
-  | { readonly type: "research_question"; readonly question: string }
-  | {
-      readonly type: "research_source"
-      readonly sourceKind: ResearchSourceKind
-      readonly id: string
-      readonly label: string
-    }
-  | { readonly type: "done"; readonly aliases?: AliasMapPayload }
-  | {
-      readonly type: "error"
-      readonly code: string
-      readonly message: string
-      readonly retryAfter?: number
-      /** Subscription tier the limit was looked up under. "anonymous" |
-       *  "free" | "pro". Set only on rate_limited; absent on
-       *  network/server/auth errors. Old servers (pre-Phase 4) omit
-       *  this; the consumer falls back to a tier-agnostic message. */
-      readonly tier?: string
-      /** UTC Unix-seconds epoch of the next reset. Set only on
-       *  rate_limited; absent on old servers. */
-      readonly resetsAtEpoch?: number
-      /** Post-increment counter from the rejecting bucket — used to
-       *  hydrate the usage chip from the 429 body without waiting for
-       *  a successful follow-up turn. Only set on rate_limited. */
-      readonly current?: number
-      /** Limit the request was checked against. Pairs with `current`. */
-      readonly limit?: number
-      /** Which bucket exhausted: `user` (per-JWT) vs `ip` (per-IP defence).
-       *  The chat usage chip only hydrates on `user` — an IP-cap 429
-       *  isn't about THIS user's quota. */
-      readonly keyType?: "user" | "ip"
-    }
-  /** Per-turn usage frame from the server's SSE finally-block. The chat
-   *  composer's progress chip hydrates from this event whether the turn
-   *  succeeded, the LLM errored mid-stream, or the client disconnected.
-   *  Scope is "chat" for now; other endpoints can reuse the same name. */
-  | {
-      readonly type: "usage"
-      readonly scope: string
-      readonly current: number
-      readonly limit: number
-      readonly resetsAtEpoch: number
-    }
-
-/** Wire shape of a verse body — carried by an `action` event with
- *  `kind: "verse"` per SSE v1. `translation` is keyed by ISO-639
- *  language code (`ru`, `en`, …); rendering picks the entry matching
- *  the user's current locale and falls back to any available one. */
-export interface VersePayload {
-  readonly source_id: string
-  readonly tokens: string
-  readonly addr_label: string
-  readonly sanskrit: string
-  readonly transliteration: string
-  /** Original IAST (Latin) transliteration, present only when the shown
-   *  `transliteration` is in a different script — lets the card flip the
-   *  transliteration alongside the translation on "view original". */
-  readonly transliteration_original?: string
-  readonly translation: { readonly [lang: string]: string }
-  /** Full public URL of the verse's Sanskrit recitation, or undefined
-   *  when the library has no audio for it. */
-  readonly audio_url?: string
-  /** True when `translation[lang]` is a machine translation (no native
-   *  text existed). VerseCard surfaces a footnote + a toggle to the
-   *  original `translation.en`. Additive — absent ⇒ no badge. */
-  readonly mt?: boolean
-}
-
-/** Wire shape of a citation transcript snippet — carried by an `action`
- *  event with `kind: "cite_transcript"`, arriving ahead of the prose
- *  delta with the `[cite:track@start-end|caption]` marker it backs.
- *  The store caches it under `${track_id}|${start_ms}-${end_ms}` so
- *  CitationCard renders the full quote block instead of the chip. */
-export interface CiteTranscriptPayload {
-  readonly track_id: string
-  readonly start_ms: number
-  readonly end_ms: number
-  readonly text: string
-  /** True when `text` is a machine translation into the answer language.
-   *  CitationCard surfaces a footnote + a toggle to `text_original`.
-   *  Additive — absent ⇒ no badge. */
-  readonly mt?: boolean
-  /** Verbatim source-language transcript, present only when `mt` is true. */
-  readonly text_original?: string
-}
-
-/** Wire shape of a purport / prose-chapter / letter citation — carried by
- *  an `action` event with `kind: "commentary"`, arriving ahead of the prose
- *  delta with the `[commentary:<ref>]` marker it backs (audio-citation
- *  shape, card-capable clients only). The store caches it under `ref` so
- *  `CommentaryCard.vue` renders the quote as a card (text + author +
- *  reference), like the audio card. */
-export interface CommentaryPayload {
-  readonly ref: number
-  readonly text: string
-  readonly author_name: string
-  readonly addr_label: string
-  readonly kind: string
-  /** True when `text` is a machine translation; the card surfaces a
-   *  footnote + a toggle to `text_original`. Additive — absent ⇒ no badge. */
-  readonly mt?: boolean
-  /** Verbatim source-language quote, present only when `mt` is true. */
-  readonly text_original?: string
-}
-
-/** Wire shape of a chapter-location region — carried by an `action`
- *  event with `kind: "chapter"` (locate intent), arriving ahead of the
- *  prose delta with the `[chapter:source_id/region_token|label]` marker.
- *  The store caches it under `${source_id}|${region_token}` so
- *  ChapterCard renders the canto/chapter list instead of the chip. */
-export interface ChapterPayload {
-  readonly source_id: string
-  readonly region_token: string
-  readonly region_label: string
-  readonly chapters: readonly { readonly tokens: string; readonly title: string }[]
-}
-
-/** Wire shape of a media result — carried by an `action` event with
- *  `kind: "media"`, arriving ahead of the prose delta with the
- *  `[media:<id>|<caption>]` marker it backs. The store stashes it on
- *  `ChatMessage.media[id]` so `MediaCard.vue` renders the player + the
- *  transcript. `url` is a RELATIVE storage path (from the bucket root,
- *  e.g. `public/media/<id>.mp4`). */
-export interface MediaPayload {
-  readonly id: string
-  readonly url: string
-  readonly type: "video" | "audio"
-  readonly title: string
-  readonly speaker?: string
-  readonly text: string
-  /** True when `text` is a machine translation into the answer language.
-   *  MediaCard surfaces a footnote + a toggle to `textOriginal`.
-   *  Additive — absent ⇒ no badge. */
-  readonly mt?: boolean
-  /** Verbatim source-language transcript, present only when `mt` is true.
-   *  Decoded from the wire's `text_original`. */
-  readonly textOriginal?: string
-}
-
-/** Wire shape of the alias map emitted by the agent. Keys are integer
- *  aliases serialised as strings (JSON limitation); start/end ms are
- *  present only for cite-level chunk aliases. Wire layer keeps the
- *  snake_case from the agent payload; the domain layer maps it to
- *  camelCase `ChatAliasEntry`. */
-export interface AliasMapPayload {
+/** Decoded alias map — same shape as the wire `done.aliases`. Keys are
+ *  integer aliases serialised as strings; start/end ms only on cite-level
+ *  chunk aliases. The use-case maps it to camelCase `ChatAliasEntry`. */
+interface AliasMapPayload {
   readonly [refStr: string]: {
     readonly track_id: string
     readonly start_ms?: number
@@ -1337,7 +1064,7 @@ function parseMediaPayload(p: Record<string, unknown>): MediaPayload | null {
     text,
     ...(speaker ? { speaker } : {}),
     ...(mt ? { mt: true } : {}),
-    ...(textOriginal ? { textOriginal } : {}),
+    ...(textOriginal ? { text_original: textOriginal } : {}),
   }
 }
 

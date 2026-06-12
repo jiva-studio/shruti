@@ -1,9 +1,13 @@
 import type {
   ChatActionPayload,
   ChatAliasEntry,
+  ChatChapterBody,
+  ChatCiteSnippet,
+  ChatCommentaryBody,
   ChatMessage,
   ChatMessageError,
   ChatOutlinePayload,
+  ChatVerseBody,
   MediaPayload,
 } from "@lib/domain/chatMessage.js"
 import {
@@ -327,6 +331,14 @@ export async function* runChatTurn(
   const actions: Record<string, ChatActionPayload> = {}
   const outlines: Record<string, ChatOutlinePayload> = {}
   const media: Record<string, MediaPayload> = {}
+  // Card bodies for verse / cite / chapter / commentary markers, keyed
+  // exactly as the matching `ChatMessage` fields. Accumulated like `media`
+  // so the finalised message persists them — the card then survives a
+  // reopen instead of degrading to a chip once an in-memory cache churns.
+  const verses: Record<string, ChatVerseBody> = {}
+  const cites: Record<string, ChatCiteSnippet> = {}
+  const chapters: Record<string, ChatChapterBody> = {}
+  const commentaries: Record<string, ChatCommentaryBody> = {}
   let aliases: Record<string, ChatAliasEntry> | undefined
 
   // The history passed by the caller is the conversation BEFORE this
@@ -384,6 +396,10 @@ export async function* runChatTurn(
           for (const k of Object.keys(actions)) delete actions[k]
           for (const k of Object.keys(outlines)) delete outlines[k]
           for (const k of Object.keys(media)) delete media[k]
+          for (const k of Object.keys(verses)) delete verses[k]
+          for (const k of Object.keys(cites)) delete cites[k]
+          for (const k of Object.keys(chapters)) delete chapters[k]
+          for (const k of Object.keys(commentaries)) delete commentaries[k]
           yield { kind: "tool-start" }
           break
         case "tool_end":
@@ -426,61 +442,104 @@ export async function* runChatTurn(
             break
           }
           if (event.payload.kind === "verse") {
+            const p = event.payload.payload
+            verses[`${p.source_id}|${p.tokens}`] = {
+              addrLabel: p.addr_label,
+              sanskrit: p.sanskrit,
+              transliteration: p.transliteration,
+              transliterationOriginal: p.transliteration_original,
+              translation: p.translation,
+              audioUrl: p.audio_url,
+              mt: p.mt,
+            }
             yield {
               kind: "verse-payload",
-              sourceId: event.payload.payload.source_id,
-              tokens: event.payload.payload.tokens,
-              addrLabel: event.payload.payload.addr_label,
-              sanskrit: event.payload.payload.sanskrit,
-              transliteration: event.payload.payload.transliteration,
-              transliterationOriginal: event.payload.payload.transliteration_original,
-              translation: event.payload.payload.translation,
-              audioUrl: event.payload.payload.audio_url,
-              mt: event.payload.payload.mt,
+              sourceId: p.source_id,
+              tokens: p.tokens,
+              addrLabel: p.addr_label,
+              sanskrit: p.sanskrit,
+              transliteration: p.transliteration,
+              transliterationOriginal: p.transliteration_original,
+              translation: p.translation,
+              audioUrl: p.audio_url,
+              mt: p.mt,
             }
             break
           }
           if (event.payload.kind === "cite_transcript") {
+            const p = event.payload.payload
+            cites[`${p.track_id}|${p.start_ms}-${p.end_ms}`] = {
+              text: p.text,
+              mt: p.mt,
+              textOriginal: p.text_original,
+            }
             yield {
               kind: "cite-transcript-payload",
-              trackId: event.payload.payload.track_id,
-              startMs: event.payload.payload.start_ms,
-              endMs: event.payload.payload.end_ms,
-              text: event.payload.payload.text,
-              mt: event.payload.payload.mt,
-              textOriginal: event.payload.payload.text_original,
+              trackId: p.track_id,
+              startMs: p.start_ms,
+              endMs: p.end_ms,
+              text: p.text,
+              mt: p.mt,
+              textOriginal: p.text_original,
             }
             break
           }
           if (event.payload.kind === "commentary") {
+            const p = event.payload.payload
+            commentaries[String(p.ref)] = {
+              text: p.text,
+              authorName: p.author_name,
+              addrLabel: p.addr_label,
+              commentaryKind: p.kind,
+              mt: p.mt,
+              textOriginal: p.text_original,
+            }
             yield {
               kind: "commentary-payload",
-              ref: event.payload.payload.ref,
-              text: event.payload.payload.text,
-              authorName: event.payload.payload.author_name,
-              addrLabel: event.payload.payload.addr_label,
-              commentaryKind: event.payload.payload.kind,
-              mt: event.payload.payload.mt,
-              textOriginal: event.payload.payload.text_original,
+              ref: p.ref,
+              text: p.text,
+              authorName: p.author_name,
+              addrLabel: p.addr_label,
+              commentaryKind: p.kind,
+              mt: p.mt,
+              textOriginal: p.text_original,
             }
             break
           }
           if (event.payload.kind === "chapter") {
+            const p = event.payload.payload
+            chapters[`${p.source_id}|${p.region_token}`] = {
+              regionLabel: p.region_label,
+              chapters: p.chapters,
+            }
             yield {
               kind: "chapter-payload",
-              sourceId: event.payload.payload.source_id,
-              regionToken: event.payload.payload.region_token,
-              regionLabel: event.payload.payload.region_label,
-              chapters: event.payload.payload.chapters,
+              sourceId: p.source_id,
+              regionToken: p.region_token,
+              regionLabel: p.region_label,
+              chapters: p.chapters,
             }
             break
           }
           if (event.payload.kind === "media") {
-            // Stash on the closure `media` map so the finalised message
-            // persists it (mirrors `actions`/`outlines`), and yield so the
-            // store reflects it on the streaming bubble before the
-            // `[media:<id>]` marker triggers MediaCard render.
-            const mp = event.payload.payload
+            // Map the snake_case wire payload to the camelCase domain
+            // `MediaPayload` (the one boundary that does this, same as the
+            // verse/cite/chapter/commentary branches above). Stash on the
+            // closure `media` map so the finalised message persists it
+            // (mirrors `actions`/`outlines`), and yield so the store reflects
+            // it on the streaming bubble before the `[media:<id>]` marker
+            // triggers MediaCard render.
+            const w = event.payload.payload
+            const mp: MediaPayload = {
+              id: w.id,
+              url: w.url,
+              type: w.type,
+              title: w.title,
+              text: w.text,
+              ...(w.speaker ? { speaker: w.speaker } : {}),
+              ...(w.mt ? { mt: true } : {}),
+              ...(w.text_original ? { textOriginal: w.text_original } : {}),
+            }
             media[mp.id] = mp
             yield { kind: "media-payload", payload: mp }
             break
@@ -600,6 +659,10 @@ export async function* runChatTurn(
       actions,
       outlines,
       media,
+      verses,
+      cites,
+      chapters,
+      commentaries,
       error: errorMeta,
       followups: followups.length > 0 ? followups : undefined,
       aliases,

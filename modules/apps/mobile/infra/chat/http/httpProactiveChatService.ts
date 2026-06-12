@@ -22,7 +22,7 @@ export interface HttpProactiveChatServiceDeps {
  * messages don't stream to the user, the scheduler only stores the
  * final result on `chat_messages.content`.
  */
-export function useHttpProactiveChatService(
+export function createHttpProactiveChatService(
   deps: HttpProactiveChatServiceDeps
 ): IProactiveChatService {
   return {
