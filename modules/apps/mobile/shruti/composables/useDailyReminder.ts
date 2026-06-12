@@ -1,6 +1,10 @@
 import type { INotificationScheduler } from "@ports/app/notifications.js"
+import { emit as emitProactive } from "@shruti/proactive/events.js"
 
-const NOTIFICATION_ID = 9001
+/** The legacy recurring daily-reminder id. Kept only so we can cancel a
+ *  straggler left by a previous app version that scheduled an
+ *  `every:"day"` alarm here. */
+const LEGACY_NOTIFICATION_ID = 9001
 
 interface Deps {
   readonly notifications: INotificationScheduler
@@ -10,45 +14,33 @@ interface State {
   enabled: boolean
   /** "HH:mm" — 24h local time. */
   time: string
-  /** Localized copy — caller resolves via i18n so this module stays Vue-free. */
+  /** Localized copy — kept for signature compatibility with the Settings
+   *  controller. The notification planner now owns the daily reminder and
+   *  resolves its own copy from i18n, so these are unused here. */
   title: string
   body: string
 }
 
 /**
- * Reconciles the platform scheduler with the Settings toggles. We keep a
- * single daily notification id so flipping the toggle off + on doesn't
- * leave stragglers behind.
+ * The daily reminder is now owned by the notification planner (see
+ * `notificationPlanner.collectDailyCandidates` + `useProactiveScheduler`),
+ * which arbitrates ALL engagement pushes so a user never gets the daily
+ * push AND an inactivity / holiday push on the same local day.
  *
- * Uses the `every: "day"` recurrence so the OS keeps re-arming the alarm
- * on its own — previously a one-shot `at` schedule worked on iOS (calendar
- * triggers handle recurrence natively) but stopped firing on Android
- * after the first occurrence unless the user opened the app. The plugin's
- * boot receiver carries the recurring alarm across reboots.
+ * This function no longer schedules anything. On a Settings change it:
+ *   1. Cancels the legacy recurring `every:"day"` alarm (id 9001) a
+ *      previous app version may have left armed, so it can't double with
+ *      the planner's rolling per-date daily ids.
+ *   2. Emits `replan` so the scheduler re-runs immediately and the daily
+ *      push turns on/off promptly instead of waiting for the next tick.
+ *
+ * The planner reads `settings.notificationsEnabled` / `notificationsTime`
+ * itself, so the enabled/time/copy state is consumed there, not here.
  */
 export async function applyDailyReminder(state: State, deps: Deps): Promise<void> {
-  await deps.notifications.cancel(NOTIFICATION_ID)
-  if (!state.enabled) return
-  const at = nextOccurrence(state.time)
-  if (at === null) return
-  const permission = await deps.notifications.requestPermission()
-  if (permission === "denied") {
-    // Don't silently swallow — without surfacing this the toggle reads as
-    // ON in Settings but no notification ever fires. The Settings UI
-    // can grow a banner later; for now this is the only signal.
-    console.warn(
-      "[daily-reminder] cannot schedule — notification permission denied. " +
-        "Enable notifications in system settings to receive reminders."
-    )
-    return
-  }
-  await deps.notifications.schedule({
-    id: NOTIFICATION_ID,
-    title: state.title,
-    body: state.body,
-    at,
-    every: "day",
-  })
+  void state
+  await deps.notifications.cancel(LEGACY_NOTIFICATION_ID).catch(() => undefined)
+  emitProactive("replan")
 }
 
 export function nextOccurrence(time: string, now: Date = new Date()): number | null {

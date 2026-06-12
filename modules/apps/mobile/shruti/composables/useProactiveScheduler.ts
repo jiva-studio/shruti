@@ -14,11 +14,14 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useShruti } from "@shruti/shruti.js"
 import { isEligible } from "@shruti/proactive/eligibility.js"
-import { notificationIdFor } from "@shruti/proactive/hash.js"
 import { isWithinCooldown } from "@shruti/proactive/cooldown.js"
-import { resolveProactiveFireTime } from "@shruti/proactive/notificationTiming.js"
 import { validateAndScrubActions } from "@shruti/proactive/markerValidator.js"
-import { toNotificationPreview } from "@shruti/proactive/notificationPreview.js"
+import {
+  arbitrate,
+  collectDailyCandidates,
+  reconcile,
+  type NotificationCandidate,
+} from "@shruti/proactive/notificationPlanner.js"
 import { resolveRules } from "@shruti/proactive/registry.js"
 // Side-effect import: each rule module calls `registerRule()` at load
 // time so the registry knows about it. Removing this line silently
@@ -26,7 +29,7 @@ import { resolveRules } from "@shruti/proactive/registry.js"
 import "@shruti/proactive/rules/index.js"
 import { resolveSessionId } from "@shruti/proactive/sessions.js"
 import type { ProactiveContext, ResolvedProactiveRule } from "@shruti/proactive/types.js"
-import { emit as emitProactive } from "@shruti/proactive/events.js"
+import { emit as emitProactive, on as onProactive } from "@shruti/proactive/events.js"
 import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
 
 /** Foreground tick cadence — every 30 minutes while the app is open. */
@@ -36,6 +39,13 @@ const TICK_INTERVAL_MS = 30 * 60 * 1000
 const ACTIVITY_WINDOW_DAYS = 224
 /** Garbage-collect terminal-state rows older than 90 days. */
 const PROACTIVE_GC_RETENTION_DAYS = 90
+/** How many days ahead the planner pre-arms the rolling daily reminder.
+ *  Re-armed each tick, so the OS always holds ~2 weeks of daily pushes
+ *  even if the app isn't opened for a while. */
+const DAILY_HORIZON_DAYS = 14
+/** The legacy recurring daily-reminder id (`useDailyReminder` used 9001).
+ *  Cancelled once on the first planner run as a migration step. */
+const LEGACY_DAILY_NOTIFICATION_ID = 9001
 
 /**
  * Mobile-driven scheduler for agent-initiated chat messages. Mounted
@@ -58,18 +68,22 @@ export function useProactiveScheduler(): void {
   // never sees a fresh install on the same DB twice, so a single config
   // key is enough. days_since_install_at_least reads this.
   const firstSeenAt = useConfig<number | null>("proactive.firstSeenAtMs", null)
+  // Daily-reminder Settings toggles — the planner reads these to materialize
+  // the rolling daily candidates (replacing the old recurring 9001 alarm).
+  const dailyEnabled = useConfig<boolean>("settings.notificationsEnabled", false)
+  const dailyTime = useConfig<[number, number] | undefined>("settings.notificationsTime", [9, 0])
 
   /** Mutex keyed by `ruleKind|ruleDate`. Holds during prep/build so the
    *  next tick doesn't double-call an in-flight LLM/template build. */
   const inFlight = new Set<string>()
 
-  /** Last-armed notification signature per Capacitor id. `scheduleNotificationIfNeeded`
-   *  runs on every tick (mount / 30-min interval / each foreground resume) for every
-   *  live row, and `schedule()` is idempotent on id — so without this we re-arm (and
-   *  re-log) an unchanged notification on every tick, which reads as the SAME
-   *  notification being "scheduled 3×" in the debug log. Re-arm only when the fire
-   *  time / title / body actually changed; otherwise skip the redundant native call. */
-  const scheduledSignatures = new Map<number, string>()
+  /** Notification ids the planner currently owns → the signature each was
+   *  last scheduled with. `runPlanner` runs on every tick (mount / 30-min
+   *  interval / each foreground resume / each background) and `reconcile`
+   *  uses this to skip re-arming an unchanged push and to cancel pushes
+   *  that dropped out of the winning set. Module-scoped so it survives a
+   *  remount of the composable within the same app session. */
+  const plannerManaged = new Map<number, string>()
 
   /** Fast-retry counter for the "repos not open yet" path. App.vue mounts
    *  this composable before Welcome finishes opening the content DB, so the
@@ -88,9 +102,14 @@ export function useProactiveScheduler(): void {
    *  history list. The mutex prevents the race entirely. */
   let tickInFlight = false
 
+  /** Guards the one-time legacy-9001 cancel so we don't re-cancel every
+   *  planner run. */
+  let legacyDailyCancelled = false
+
   let interval: ReturnType<typeof setInterval> | null = null
   let resumeHandle: PluginListenerHandle | null = null
   let pauseHandle: PluginListenerHandle | null = null
+  let unsubscribeReplan: (() => void) | null = null
 
   function mutexKey(ruleKind: string, ruleDate: string): string {
     return `${ruleKind}|${ruleDate}`
@@ -207,20 +226,10 @@ export function useProactiveScheduler(): void {
       const stillValid = await rule.handler.validate(entry, ctx)
       if (!stillValid) {
         await repo.updatePrepState(entry.chatMessageId, "superseded")
-        // If a LocalNotification was scheduled for this entry (any row
-        // with notify=true), cancel it — without this the OS will still
-        // fire the alarm and the deep-link will land on a hidden chat
-        // message. Idempotent: cancelling a non-existent id is a no-op.
-        if (entry.notify) {
-          try {
-            await app.notifications.cancel(notificationIdFor(entry.chatMessageId))
-            // Forget the armed signature so a future re-detection of the same
-            // row schedules (and logs) afresh rather than being deduped away.
-            scheduledSignatures.delete(notificationIdFor(entry.chatMessageId))
-          } catch (err) {
-            console.warn("[proactive] cancel notification failed", entry.chatMessageId, err)
-          }
-        }
+        // No notification to cancel here — the planner owns OS pushes. A
+        // superseded row drops out of `listByPrepStates(["ready",
+        // "degraded"])`, so `runPlanner` (run after this loop) won't
+        // collect a candidate for it and `reconcile` cancels its id.
         return false
       }
       return true
@@ -288,83 +297,95 @@ export function useProactiveScheduler(): void {
     }
   }
 
-  async function scheduleNotificationIfNeeded(
-    entry: ProactiveStateEntry,
-    repo: IProactiveStateRepository
+  /**
+   * Single arbiter run. Gathers candidate pushes from every live
+   * proactive row (via each rule's `collectNotifications`) plus the
+   * daily reminder, keeps ONE per local day by priority, and reconciles
+   * the OS scheduler to exactly that set.
+   *
+   * `phase` is `"foreground"` from a tick (user present → inactivity
+   * pushes suppressed) and `"background"` from `onAppPause`.
+   */
+  async function runPlanner(
+    ctx: ProactiveContext,
+    rules: readonly ResolvedProactiveRule[],
+    phase: "foreground" | "background"
   ): Promise<void> {
-    if (!entry.notify || entry.visibleAt === null) return
+    const repo = proactiveRepo()
+    if (!repo) return
 
-    // Past `visible_at` used to silently skip the schedule. That's fine
-    // for events whose moment already rolled off (we don't want a late
-    // notification two weeks after a holiday), but for today's event
-    // whose hour already passed we want to surface it now — otherwise
-    // the user only ever sees notifications for holidays detected
-    // ≥48h in advance. Fire ~5s out so the OS has time to accept the
-    // schedule and the user lands on the chat without the notification
-    // racing the row's prep_state transition.
-    // Fire at visible_at; if that moment already passed, fire ~5s out
-    // only when the event is still for today (local TZ), else skip. See
-    // resolveProactiveFireTime.
-    const fireAtMs = resolveProactiveFireTime(entry.visibleAt * 1000, Date.now())
-    if (fireAtMs === null) return
+    // One-time migration off the legacy recurring daily alarm (id 9001).
+    // The planner now owns the daily reminder via per-date rolling ids;
+    // cancel the old `every:"day"` alarm once so it doesn't double-fire.
+    await migrateLegacyDailyAlarm()
 
-    // `entry` was read by `listByPrepStates` BEFORE `prepIfStale` ran
-    // this same tick, so its `bodyMd` can be stale (empty for a row
-    // that just flipped pending → ready). Re-read the row so the
-    // notification carries the freshly-built content rather than "".
-    const fresh = await repo.findByRuleAndDate(entry.ruleKind, entry.ruleDate)
-    const bodyMd = fresh?.bodyMd ?? entry.bodyMd
-    const body = toNotificationPreview(bodyMd)
-    if (body === "") {
-      // Nothing to show yet (prep hasn't produced content, or it
-      // scrubbed down to markers only). Skip rather than schedule a
-      // blank notification — `schedule()` re-runs every tick, so we'll
-      // pick it up once the body lands, and any rule that pre-scheduled
-      // a static notification (inactivity) keeps its copy.
-      return
+    const byRule = new Map<string, ResolvedProactiveRule>()
+    for (const r of rules) byRule.set(r.config.id, r)
+
+    const live = await repo.listByPrepStates(["ready", "degraded"])
+    const candidates: NotificationCandidate[] = []
+    for (const entry of live) {
+      const rule = byRule.get(entry.ruleKind)
+      const collect = rule?.handler.collectNotifications
+      if (!collect) continue
+      let produced: NotificationCandidate[]
+      try {
+        produced = collect(entry, ctx, phase)
+      } catch (err) {
+        console.warn("[notify-planner] collect threw", entry.ruleKind, err)
+        continue
+      }
+      for (const c of produced) {
+        // Proactive (session-backed) candidates leave `title` empty so the
+        // planner — which has async repo access — resolves the chat
+        // session's title (holiday name, "Weekly progress", …), falling
+        // back to the app name.
+        const title =
+          c.title !== ""
+            ? c.title
+            : (await app.repositories().chatSessions.getById(entry.sessionId))?.title?.trim() ||
+              t("app.name")
+        candidates.push(title === c.title ? c : { ...c, title })
+      }
     }
 
-    // Title comes from the chat session the message lives in — holiday
-    // names, "Weekly progress", etc. Sessions without a title (e.g.
-    // inactivity) fall back to the app's user-facing name.
-    const session = await app.repositories().chatSessions.getById(entry.sessionId)
-    const title = session?.title?.trim() || t("app.name")
-
-    // Capacitor LocalNotifications.id is a 32-bit integer; chat_message
-    // ids are random text. We hash to keep cancel-safety while staying
-    // in-bounds. `schedule()` is idempotent on `id` — re-calling on
-    // every tick with the same id replaces, doesn't duplicate. So we
-    // don't need a "notified_at" flag to gate re-scheduling.
-    const id = notificationIdFor(entry.chatMessageId)
-    // Skip the re-arm when nothing changed since we last scheduled this id —
-    // the OS already holds an identical alarm. This is what stops the debug
-    // log from showing the same notification "scheduled" on every tick.
-    const signature = `${fireAtMs}|${title}|${body}`
-    if (scheduledSignatures.get(id) === signature) return
-    try {
-      await app.notifications.schedule({
-        id,
-        title,
-        body,
-        at: fireAtMs,
-        extra: {
-          chatSessionId: entry.sessionId,
-          chatMessageId: entry.chatMessageId,
-        },
+    // Daily reminder — a rolling window of per-date candidates.
+    const time = dailyTime.value ? `${pad(dailyTime.value[0])}:${pad(dailyTime.value[1])}` : "09:00"
+    candidates.push(
+      ...collectDailyCandidates({
+        enabled: dailyEnabled.value,
+        time,
+        title: t("app.name"),
+        body: t("notifications.timeToListen"),
+        nowMs: ctx.nowMs,
+        horizonDays: DAILY_HORIZON_DAYS,
       })
-      scheduledSignatures.set(id, signature)
-      // Surfaced in the in-app debug log so we can see WHICH notification was
-      // scheduled, WHY (rule kind), WHEN it fires, and the exact copy. Logged
-      // once per actual (re)arm — unchanged re-schedules are deduped above.
-      console.info(
-        "[notify] scheduled",
-        `rule=${entry.ruleKind}`,
-        `at=${new Date(fireAtMs).toISOString()}`,
-        `title=${JSON.stringify(title)}`,
-        `body=${JSON.stringify(body)}`
-      )
+    )
+
+    const winners = arbitrate(candidates, ctx.nowMs)
+    await reconcile(winners, app.notifications, plannerManaged)
+
+    const byKind = new Map<string, number>()
+    for (const w of winners) byKind.set(w.kind, (byKind.get(w.kind) ?? 0) + 1)
+    console.info(
+      "[notify-planner]",
+      `phase=${phase}`,
+      `candidates=${candidates.length}`,
+      `scheduled=${winners.length}`,
+      `won=${[...byKind.entries()].map(([k, n]) => `${k}:${n}`).join(",") || "none"}`
+    )
+  }
+
+  /** Cancel the legacy `every:"day"` reminder (id 9001) exactly once per
+   *  app session. The planner replaces it with rolling per-date ids; if
+   *  both lived, the user would get a duplicate daily push. */
+  async function migrateLegacyDailyAlarm(): Promise<void> {
+    if (legacyDailyCancelled) return
+    legacyDailyCancelled = true
+    try {
+      await app.notifications.cancel(LEGACY_DAILY_NOTIFICATION_ID)
     } catch (err) {
-      console.warn("[proactive] schedule notification failed", entry.chatMessageId, err)
+      console.warn("[notify-planner] legacy daily cancel failed", err)
     }
   }
 
@@ -488,8 +509,12 @@ export function useProactiveScheduler(): void {
       const stillValid = await reValidateRow(entry, rule, ctx, repo)
       if (!stillValid) continue
       await prepIfStale(entry, rule, ctx, repo)
-      await scheduleNotificationIfNeeded(entry, repo)
     }
+
+    // 3. Arbitrate all engagement pushes into ONE per local day and
+    // reconcile the OS scheduler. Runs after prep so freshly-built rows
+    // carry their content into the candidate's body.
+    await runPlanner(ctx, rules, "foreground")
   }
 
   async function onPause(): Promise<void> {
@@ -508,6 +533,10 @@ export function useProactiveScheduler(): void {
         console.warn("[proactive] onAppPause threw", rule.config.id, err)
       }
     }
+    // Speculative-prep rules (inactivity, unfinished_lecture) just
+    // (re)anchored their rows. Run the planner in the background phase so
+    // their away-only pushes get armed for the OS while the app is closed.
+    await runPlanner(ctx, rules, "background")
   }
 
   async function sweepOldRows(): Promise<void> {
@@ -539,6 +568,10 @@ export function useProactiveScheduler(): void {
     }).then((handle) => {
       resumeHandle = handle
     })
+    // Settings flipping the daily-reminder toggle emits `replan` — re-run
+    // a foreground tick so the daily push is (un)armed promptly instead of
+    // waiting up to 30 minutes for the next interval.
+    unsubscribeReplan = onProactive("replan", () => void tick())
   })
 
   onBeforeUnmount(() => {
@@ -550,6 +583,8 @@ export function useProactiveScheduler(): void {
     resumeHandle = null
     void pauseHandle?.remove()
     pauseHandle = null
+    unsubscribeReplan?.()
+    unsubscribeReplan = null
   })
 }
 

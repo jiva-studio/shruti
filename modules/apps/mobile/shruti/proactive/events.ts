@@ -22,12 +22,16 @@
  *                     This is the moment the badge / per-session dot
  *                     should appear, since `listUnseenSessionIds`
  *                     filters by `prep_state IN ('ready','degraded')`.
+ *   - `replan`      — external state that affects the notification
+ *                     planner changed (e.g. the daily-reminder Settings
+ *                     toggle). The scheduler re-runs a tick so the
+ *                     daily push turns on/off promptly.
  *
  * Listeners run synchronously inside emit. Throwing is swallowed
  * per-listener so one buggy subscriber doesn't take the bus down.
  */
 
-export type ProactiveEvent = "tick-ready" | "row-created" | "row-prepped"
+export type ProactiveEvent = "tick-ready" | "row-created" | "row-prepped" | "replan"
 
 const listeners = new Map<ProactiveEvent, Set<() => void>>()
 
