@@ -267,8 +267,21 @@ export default {
   // Session titles for autonomous tutorial-style proactive sessions.
   proactiveSessionTitleEnableReminder: "Дневни подсетник",
   proactiveSessionTitleSmartLibrary: "Паметна библиотека",
-  proactiveSessionTitleNextShloka: "Следећи стих",
+  proactiveSessionTitleNextShloka: "Предавање о следећем стиху",
   proactiveSessionTitleUnfinishedLecture: "Недовршено предавање",
+  proactiveSessionTitleInactivity: "Вратите се својој пракси",
+  proactiveInactivityWelcomeBody:
+    "Дуго вас није било. Свежа предавања вас чекају — отворите библиотеку и наставите одакле сте стали.",
+
+  // Weekly-digest proactive session — a short rollup of the user's
+  // listening over the past 7 days.
+  weeklyDigestTitle: "Ваша недеља",
+  weeklyDigestTotalTime: "Укупно време слушања",
+  weeklyDigestLectures: "Предавања ове недеље",
+  weeklyDigestStreak: "Низ дана",
+  weeklyDigestCompleted: "Завршено",
+  weeklyDigestEmpty: "Нисте слушали ове недеље — изаберите нешто свеже да се вратите у ритам.",
+  weeklyDigestMore: "+{count} још",
 
   // Pre-baked body for the `next_shloka` rule. `{ref}` is the verse
   // label (e.g. "2.14"); `{title}` is the localised catalog title. The

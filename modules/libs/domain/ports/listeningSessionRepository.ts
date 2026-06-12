@@ -22,6 +22,15 @@ export interface RecentTrackProgress {
   readonly positionSec: TrackPositionSec
 }
 
+/** Total seconds listened on a single track within a time window, used
+ *  by the weekly digest to list "what you listened to this week". Sums
+ *  every session of every playlist item pointing at the track. */
+export interface TrackListeningTotal {
+  readonly trackId: TrackId
+  /** Sum of `to_position - from_position` (clamped ≥ 0) in seconds. */
+  readonly listenedSeconds: number
+}
+
 export interface IListeningSessionRepository {
   /**
    * Open a new session that *continues* the item's listening history.
@@ -88,6 +97,18 @@ export interface IListeningSessionRepository {
    * the SQL adapter cleans up its IN-list size accordingly.
    */
   listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]>
+
+  /**
+   * Sum listened seconds per track for sessions whose `ended_at` falls in
+   * `[fromMs, toMs)`, ordered by listened time DESC. Only tracks with > 0
+   * seconds are returned. Input is milliseconds for interop with
+   * `Date.now()`. Powers the weekly-digest "lectures you listened to"
+   * list.
+   */
+  getTracksListenedInRange(
+    fromMs: number,
+    toMs: number
+  ): Promise<readonly TrackListeningTotal[]>
 
   /**
    * Wipe every session row. Used by the "delete account" / "clear user
