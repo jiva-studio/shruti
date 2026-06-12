@@ -1609,6 +1609,24 @@ export const useChatStore = defineStore("chat", () => {
           return
         }
         if (buffered.state === "running") {
+          // A turn stuck `running` server-side forever would otherwise strand
+          // the pending record AND its thinking placeholder past the buffer
+          // TTL (the poll loop only runs ~2.5 min per resume, but re-arms on
+          // every app resume). Give up once older than the TTL: settle ok:false
+          // (cancels the pre-armed forward notification) and clear the record +
+          // this entry's lingering placeholder.
+          if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
+            emitTurnSettled({
+              assistantMessageId: entry.assistantMessageId,
+              sessionId: entry.sessionId,
+              ok: false,
+            })
+            if (activeSessionId.value === entry.sessionId) {
+              messages.value = messages.value.filter((m) => m.id !== entry.assistantMessageId)
+            }
+            await removePending(entry.assistantMessageId)
+            return
+          }
           if (activeSessionId.value === entry.sessionId) {
             ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId)
           }
@@ -1635,6 +1653,17 @@ export const useChatStore = defineStore("chat", () => {
           // finalise but before pending was cleared — replaying would dupe).
           if (!existing || existing.error) {
             await replayBufferedTurn(entry, buffered.events)
+          } else {
+            // Clean answer already persisted — no replay needed, but still
+            // settle the turn (ok:true) so the pre-armed forward notification
+            // is cancelled instead of firing a false "answer ready" for an
+            // answer already on disk. replayBufferedTurn would have settled;
+            // this skip path must too.
+            emitTurnSettled({
+              assistantMessageId: entry.assistantMessageId,
+              sessionId: entry.sessionId,
+              ok: true,
+            })
           }
         } catch (err) {
           console.error("[chat] resume replay failed", err)
