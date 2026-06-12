@@ -9,6 +9,7 @@ import { migration_006_notes_meta } from "./006_notes_meta.js"
 import { migration_007_chat_messages } from "./007_chat_messages.js"
 import { migration_008_chat_messages_proactive_state } from "./008_chat_messages_proactive_state.js"
 import { migration_009_chat_sessions_track_id } from "./009_chat_sessions_track_id.js"
+import { migration_010_listening_sessions_fix_negative_delta } from "./010_listening_sessions_fix_negative_delta.js"
 
 /**
  * Ordered list of user-DB migrations. Append new migrations at the end —
@@ -25,4 +26,5 @@ export const userMigrations: readonly Migration[] = [
   migration_007_chat_messages,
   migration_008_chat_messages_proactive_state,
   migration_009_chat_sessions_track_id,
+  migration_010_listening_sessions_fix_negative_delta,
 ]
