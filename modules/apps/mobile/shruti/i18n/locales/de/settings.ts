@@ -103,6 +103,11 @@ export default {
         description:
           "Vorträge laufen nacheinander — wenn einer endet, beginnt der nächste automatisch, auch bei gesperrtem Bildschirm.",
       },
+      shareTranscript: {
+        title: "Teilen & Export",
+        description:
+          "Teile einen Vortrag als PDF oder Text-Transkript, oder teile das Audio — mit jedem.",
+      },
       notesStudio: {
         title: "Notiz-Studio",
         description:

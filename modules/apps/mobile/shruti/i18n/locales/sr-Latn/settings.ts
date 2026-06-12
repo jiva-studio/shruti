@@ -110,6 +110,11 @@ export default {
         description:
           "Predavanja idu jedno za drugim — kada se jedno završi, sledeće počinje automatski, čak i sa zaključanim ekranom.",
       },
+      shareTranscript: {
+        title: "Deli i izvezi",
+        description:
+          "Podelite predavanje kao PDF ili tekstualni transkript, ili podelite audio — sa bilo kim.",
+      },
       notesStudio: {
         title: "Studio za beleške",
         description:

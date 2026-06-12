@@ -38,6 +38,9 @@ const MATCH_HIGHLIGHT_MIN_LENGTH = 4
 export interface NotesActionSheetButton {
   readonly text: string
   readonly role?: "destructive" | "cancel"
+  /** Passed straight through to the Ionic action-sheet button (e.g.
+   *  `action-sheet-pro` for the Pro pill on Open-in-Studio). */
+  readonly cssClass?: string
   readonly handler?: () => void
 }
 
@@ -381,13 +384,14 @@ export function useNotesController(): NotesControllerReturn {
         },
       },
     ]
-    // Non-subscribers still see the row (with the PRO suffix) so the
-    // feature is discoverable; tapping opens the paywall rather than the
-    // editor. Action sheets can't render rich children, so the PRO marker
-    // is part of the label text.
-    const proSuffix = purchases.isSubscribed ? "" : ` · ${t("app.proBadge")}`
+    // Non-subscribers still see the row (with the PRO pill) so the feature
+    // is discoverable; tapping opens the paywall rather than the editor.
+    // The pill is a CSS ::after (`.action-sheet-pro` in theme/misc.css) —
+    // same marker as the Share row, since Ionic buttons can't host a
+    // component.
     buttons.push({
-      text: t("studio.openInStudio") + proSuffix,
+      text: t("studio.openInStudio"),
+      cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
       handler: () => {
         onOpenInStudioClicked()
       },

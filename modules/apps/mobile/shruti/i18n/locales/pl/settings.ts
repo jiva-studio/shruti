@@ -102,6 +102,11 @@ export default {
         description:
           "Wykłady odtwarzają się jeden po drugim — gdy jeden się kończy, automatycznie zaczyna się następny, nawet przy zablokowanym ekranie.",
       },
+      shareTranscript: {
+        title: "Udostępnianie i eksport",
+        description:
+          "Udostępnij wykład jako PDF lub transkrypcję tekstową, albo udostępnij audio — komukolwiek.",
+      },
       notesStudio: {
         title: "Studio notatek",
         description:

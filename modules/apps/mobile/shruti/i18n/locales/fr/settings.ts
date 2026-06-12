@@ -103,6 +103,11 @@ export default {
         description:
           "Les conférences s'enchaînent — quand l'une se termine, la suivante démarre automatiquement, même écran verrouillé.",
       },
+      shareTranscript: {
+        title: "Partager et exporter",
+        description:
+          "Partagez une conférence en PDF ou en transcription texte, ou partagez l'audio — avec n'importe qui.",
+      },
       notesStudio: {
         title: "Studio de notes",
         description:

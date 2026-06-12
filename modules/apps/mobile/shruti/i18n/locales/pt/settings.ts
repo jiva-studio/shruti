@@ -102,6 +102,11 @@ export default {
         description:
           "As aulas tocam uma após a outra — quando uma termina, a próxima começa automaticamente, mesmo com a tela bloqueada.",
       },
+      shareTranscript: {
+        title: "Compartilhar e exportar",
+        description:
+          "Compartilhe uma palestra em PDF ou transcrição de texto, ou compartilhe o áudio — com quem quiser.",
+      },
       notesStudio: {
         title: "Estúdio de Notas",
         description: "Transforme suas notas das aulas em vídeos curtos e compartilhe com amigos.",

@@ -8,6 +8,23 @@ export default {
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
+    share: "Поделиться",
+  },
+  share: {
+    title: "Поделиться",
+    pdf: "Транскрипт (PDF)",
+    text: "Транскрипт (текст)",
+    audio: "Аудио",
+    preparingPdf: "Готовим PDF…",
+    preparingText: "Готовим транскрипт…",
+    preparingAudio: "Готовим аудио…",
+    preparingAudioPct: "Загружаем аудио… {pct}%",
+    dialogPdf: "Поделиться транскриптом",
+    dialogText: "Поделиться транскриптом",
+    dialogAudio: "Поделиться аудио",
+    noTranscript: "У этой лекции нет транскрипта.",
+    noAudio: "У этой лекции нет аудио.",
+    error: "Не удалось подготовить файл. Попробуйте ещё раз.",
   },
   filters: {
     any: "Любые",

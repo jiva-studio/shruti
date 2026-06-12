@@ -7,6 +7,23 @@ export default {
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
+    share: "Share",
+  },
+  share: {
+    title: "Share",
+    pdf: "Transcript (PDF)",
+    text: "Transcript (text)",
+    audio: "Audio",
+    preparingPdf: "Preparing PDF…",
+    preparingText: "Preparing transcript…",
+    preparingAudio: "Preparing audio…",
+    preparingAudioPct: "Downloading audio… {pct}%",
+    dialogPdf: "Share transcript",
+    dialogText: "Share transcript",
+    dialogAudio: "Share audio",
+    noTranscript: "This lecture has no transcript.",
+    noAudio: "This lecture has no audio.",
+    error: "Couldn't prepare the file. Please try again.",
   },
   filters: {
     any: "Any",

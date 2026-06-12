@@ -47,3 +47,22 @@ ion-header.flat-header::after {
 ion-header.flat-header::after {
   display: none;
 }
+
+/* "PRO" pill on an action-sheet button (e.g. Share). Ionic action-sheet
+ * buttons can't host a Vue component, so we replicate the ProBadge
+ * (kit `ProBadge.vue`) look as a right-aligned ::after on the button's
+ * inner flex row. Action sheets render in the light DOM, so this global
+ * rule reaches them. `margin-left:auto` pushes the pill to the trailing
+ * edge; colours/shape mirror ProBadge exactly. */
+.action-sheet-pro .action-sheet-button-inner::after {
+  content: "PRO";
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  background: var(--kit-pro-badge-bg, var(--ion-color-primary));
+  color: var(--kit-pro-badge-fg, var(--ion-color-primary-contrast));
+}
