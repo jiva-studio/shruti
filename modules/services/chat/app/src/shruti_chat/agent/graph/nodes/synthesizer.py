@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any
+from typing import Any, NamedTuple
 
 from langgraph.config import get_stream_writer
 from langgraph.runtime import Runtime
 
-from shruti_chat.agent.graph.nodes._worker_common import build_verse_payload
+from shruti_chat.agent.graph.nodes._worker_common import build_cite_payload, build_verse_payload
 from shruti_chat.agent.graph.state import ChatState
 from shruti_chat.agent.prompts import build_prompt
 from shruti_chat.application.synthesizer_turn import run_synthesizer_turn
@@ -33,6 +33,22 @@ from shruti_chat.observability.logging import bind_node_role, get_logger
 
 
 log = get_logger(__name__)
+
+
+class _VerseKey(NamedTuple):
+    """Identity of a verse card, for once-per-stream dedup."""
+
+    source_id: str
+    tokens: str
+
+
+class _CiteKey(NamedTuple):
+    """Identity of a lecture-transcript cite (track + time window), for
+    once-per-stream dedup."""
+
+    track_id: str
+    start_ms: int
+    end_ms: int
 
 
 async def _maybe_translate_commentary(ctx: TurnContext, data: dict) -> None:
@@ -93,7 +109,8 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
     marker delta) is preserved because the producer enqueues them in order and
     the consumer never reorders.
     """
-    emitted_verses: set[tuple[str, str]] = set()
+    emitted_verses: set[_VerseKey] = set()
+    emitted_cites: set[_CiteKey] = set()
     queue: asyncio.Queue = asyncio.Queue()
 
     async def produce() -> None:
@@ -109,13 +126,23 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                     await queue.put(("action", event.data, None))
                 elif event.type == "verse_request":
                     vref = event.data["vref"]
-                    key = (vref.source_id, vref.tokens)
-                    if key in emitted_verses:
+                    vkey = _VerseKey(vref.source_id, vref.tokens)
+                    if vkey in emitted_verses:
                         continue
-                    emitted_verses.add(key)
+                    emitted_verses.add(vkey)
                     # Build (DB fetch) + translate this verse concurrently.
                     task = asyncio.ensure_future(build_verse_payload(ctx, vref))
                     await queue.put(("verse", vref, task))
+                elif event.type == "cite_request":
+                    ref_num = event.data["ref_num"]
+                    cref = event.data["cref"]
+                    ckey = _CiteKey(cref.track_id, cref.start_ms, cref.end_ms)
+                    if ckey in emitted_cites:
+                        continue
+                    emitted_cites.add(ckey)
+                    # Resolve text + translate this cited fragment concurrently.
+                    task = asyncio.ensure_future(build_cite_payload(ctx, ref_num, cref))
+                    await queue.put(("cite", cref, task))
                 # `done` is handled by the chat_turn wrapper — ignore here.
         finally:
             await queue.put((None, None, None))  # sentinel
@@ -141,6 +168,19 @@ async def _bridge_synth_events(events: Any, ctx: TurnContext, writer: Any) -> No
                             "data": {
                                 "kind": "verse",
                                 "id": f"verse_{data.source_id}_{data.tokens}",
+                                "payload": payload,
+                            },
+                        }
+                    )
+            elif kind == "cite":
+                payload = await task
+                if payload is not None:
+                    writer(
+                        {
+                            "type": "action",
+                            "data": {
+                                "kind": "cite_transcript",
+                                "id": f"cite_{data.track_id}_{data.start_ms}_{data.end_ms}",
                                 "payload": payload,
                             },
                         }

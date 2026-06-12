@@ -601,6 +601,31 @@ async def test_no_verse_requests_without_lazy_flag() -> None:
     assert e.take_verse_requests() == []
 
 
+async def test_lazy_cite_queues_request_and_keeps_marker() -> None:
+    """With `lazy_cite`, expanding a cite `[^N]` still emits the `[cite:…]`
+    marker AND queues `(alias_num, ChunkRef)` for synth-time build/emit."""
+    aliases = TurnAliasMap()
+    n = aliases.alias_chunk("track_X", 1000, 2000)
+    e = MarkerExpander(aliases, lazy_cite=True)
+    out = await _expand(e, f"see [^{n}].")
+    assert "[cite:track_X@1000-2000" in out
+    reqs = e.take_cite_requests()
+    assert len(reqs) == 1
+    ref_num, cref = reqs[0]
+    assert ref_num == n
+    assert (cref.track_id, cref.start_ms, cref.end_ms) == ("track_X", 1000, 2000)
+    assert e.take_cite_requests() == []  # drained
+
+
+async def test_no_cite_requests_without_lazy_flag() -> None:
+    aliases = TurnAliasMap()
+    n = aliases.alias_chunk("track_X", 1000, 2000)
+    e = MarkerExpander(aliases)
+    out = await _expand(e, f"see [^{n}].")
+    assert "[cite:track_X@1000-2000" in out
+    assert e.take_cite_requests() == []
+
+
 # ── Adjacent commentary blockquotes — merge or separate ──────────────
 
 
