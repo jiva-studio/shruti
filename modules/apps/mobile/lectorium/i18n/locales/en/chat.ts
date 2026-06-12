@@ -292,6 +292,17 @@ export default {
   proactiveEnableNotificationsBody:
     "You've been listening a few days in a row — nice rhythm. I'd like to suggest setting up a daily reminder so you don't lose it.\n\nIt's one gentle local notification at the time you choose (I'll start with 07:00, you can change it any time in Settings). No noise on the network — it lives on your device and only fires when the time comes.\n\nUseful as a daily anchor: a small nudge that the lecture is waiting whenever your day allows.",
 
+  // Weekly sadhana digest card (`weekly_digest` rule). Deterministic — no
+  // LLM. All labels static; lecture titles come localised from the catalog.
+  weeklyDigestTitle: "Your week",
+  weeklyDigestTotalTime: "Total listening time",
+  weeklyDigestLectures: "Lectures this week",
+  weeklyDigestStreak: "Day streak",
+  weeklyDigestCompleted: "Completed",
+  weeklyDigestEmpty:
+    "You didn't listen this week — pick something fresh to get back into the rhythm.",
+  weeklyDigestMore: "+{count} more",
+
   actionEnableReminderTitle: "Daily reminder",
   actionEnableReminderBody:
     "Pick a time each day and I'll nudge you to come listen. You can change or turn it off later in Settings.",
