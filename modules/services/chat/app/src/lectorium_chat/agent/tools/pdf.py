@@ -1,36 +1,25 @@
-"""generate_track_pdf — render + cache a transcript PDF per track.
+"""track_pdf_generate — offer printable transcript PDF(s) for a track.
 
-Flow per (track_id, lang):
-1. Catalog → resolve transcript path + effective lang.
-2. PdfStorage → HEAD; if hit, reuse the public URL.
-3. Cold path → fetch transcript, best-effort fetch cached outline,
-   render PDF, upload, return URL.
+Rendering lives in the standalone `share-transcript` service now; this tool no
+longer renders or blocks the turn. It resolves each track's transcript
+location + cover metadata from the catalog and emits a single `share_pdf`
+action carrying those per track (NO ready URL). The mobile client renders
+on demand — it POSTs the metadata + `transcript_key` to share-transcript when the
+user taps the share card, then downloads + shares. Same client-initiated
+model as audio cuts: the chat turn doesn't wait on PDF generation.
 
-The tool always emits a single `action` side-event of kind `share_pdf`
-with one row per successfully-prepared track. The mobile client mounts a
-share-sheet card from that payload; the LLM embeds
-`[action:share_pdf|id=<action_id>]` inline where the card should land.
-
-`track_ids` is a list — the tool accepts a single id or a small batch
-without forcing the LLM to dispatch the tool N times. Hard cap on batch
-size keeps the worst case (gen N PDFs serially) bounded.
+`track_ids` is a list so the tool can offer a small batch in one call.
 """
 
 from __future__ import annotations
 
 import asyncio
-import re
 import secrets
 from typing import Any, Callable
 
 from lectorium_chat.agent.tools._registry import ToolDef, register_tool
-from lectorium_chat.agent.tools.outline import ensure_outline_payload
 from lectorium_chat.domain.entities import Track
 from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
-from lectorium_chat.domain.ports.outline_cache import OutlineCache
-from lectorium_chat.domain.ports.pdf_storage import PdfStorage
-from lectorium_chat.domain.ports.transcript_storage import TranscriptStorage
-from lectorium_chat.infra.pdf import render_transcript_pdf
 from lectorium_chat.observability.logging import get_logger
 
 
@@ -44,146 +33,60 @@ def _noop_yield(_type: str, _data: dict[str, Any]) -> None:
     """Fallback when this tool is invoked outside the agent loop (tests)."""
 
 
-# Hard ceiling on a single dispatch. Each PDF means: 1× catalog query,
-# 1× transcript fetch, 1× LLM-free PDF render (~50-500 ms on real
-# lectures), 1× S3 PUT. 10 is well above any realistic share-set the
-# user would pick and well below where serial rendering becomes
-# pathological.
+# Hard ceiling on a single dispatch — each id is one cheap catalog read
+# now (no render), but the share card stays readable at a small count.
 MAX_BATCH = 10
-
-# Cap on concurrent renders to bound peak CPU/memory inside the worker.
-_RENDER_CONCURRENCY = 3
 
 
 def _new_action_id() -> str:
-    """Stable, opaque token for the action marker. Hex (no URL-unsafe
-    characters) so it round-trips cleanly through the marker grammar."""
+    """Stable, opaque token for the action marker (hex, marker-safe)."""
     return secrets.token_hex(4)
 
 
-async def _prepare_one(
-    *,
+async def _resolve_one(
     track_id: str,
     requested_lang: str,
     catalog_repo: CatalogRepository,
-    transcript_storage: TranscriptStorage,
-    outline_cache: OutlineCache,
-    pdf_storage: PdfStorage,
 ) -> dict[str, Any]:
-    """Resolve, render-if-needed, and return the wire dict for one track.
+    """Resolve transcript location + cover metadata for one track.
 
-    Returns one of:
-      `{track_id, lang, title, author, pdf_url}` on success
-      `{track_id, error: "..."}`                  on a recoverable failure
+    Returns the wire dict the client forwards to share-transcript, or
+    `{track_id, error}` on a recoverable failure.
     """
     transcript_path, effective_lang = await catalog_repo.resolve_transcript_path(
         track_id, requested_lang=requested_lang,
     )
     if not transcript_path:
         return {"track_id": track_id, "error": "transcript_unavailable"}
-
-    # Warm path — artifact already on the CDN.
-    try:
-        already = await pdf_storage.head(track_id, effective_lang)
-    except Exception as exc:
-        log.warning(
-            "pdf_head_failed",
-            track_id=track_id, lang=effective_lang, error=str(exc),
-        )
-        already = False
-    if already:
-        track = await catalog_repo.get_track(track_id, lang=effective_lang)
-        if track is None:
-            return {"track_id": track_id, "error": "track_not_found"}
-        return _wire(
-            track, effective_lang,
-            pdf_storage.public_url(track_id, effective_lang),
-        )
-
-    # Cold path. We need: track metadata, transcript JSON, optional outline.
     track = await catalog_repo.get_track(track_id, lang=effective_lang)
     if track is None:
         return {"track_id": track_id, "error": "track_not_found"}
-
-    try:
-        transcript = await transcript_storage.fetch(transcript_path)
-    except Exception as exc:
-        log.warning(
-            "pdf_transcript_fetch_failed",
-            track_id=track_id, lang=effective_lang, path=transcript_path,
-            error=str(exc),
-        )
-        return {"track_id": track_id, "error": "transcript_fetch_failed"}
-
-    # Outline drives both the cover TOC and the section-anchored
-    # paragraph splits in the body. On cache miss we generate it
-    # here (same logic as `get_track_outline`) so the PDF always
-    # gets the structured layout. `ensure_outline_payload` returns
-    # `None` on any failure — we render an outline-less PDF as the
-    # graceful degradation.
-    outline = await ensure_outline_payload(
-        track_id, transcript_path, effective_lang,
-        transcript_storage=transcript_storage,
-        outline_cache=outline_cache,
-    )
-
-    try:
-        pdf_bytes = await asyncio.to_thread(
-            render_transcript_pdf,
-            track=track, transcript=transcript, outline=outline, lang=effective_lang,
-        )
-    except Exception as exc:
-        log.exception(
-            "pdf_render_failed",
-            track_id=track_id, lang=effective_lang, error=str(exc),
-        )
-        return {"track_id": track_id, "error": "render_failed"}
-
-    try:
-        pdf_url = await pdf_storage.put(
-            track_id, effective_lang, pdf_bytes,
-            download_filename=_share_filename(track, effective_lang),
-        )
-    except Exception as exc:
-        log.exception(
-            "pdf_upload_failed",
-            track_id=track_id, lang=effective_lang, error=str(exc),
-        )
-        return {"track_id": track_id, "error": "upload_failed"}
-
-    return _wire(track, effective_lang, pdf_url)
+    return _wire(track, effective_lang, transcript_path)
 
 
-def _wire(track: Track, lang: str, pdf_url: str) -> dict[str, Any]:
+def _wire(track: Track, lang: str, transcript_key: str) -> dict[str, Any]:
+    """Per-track share-card row. Carries everything share-transcript needs to
+    render (cover metadata + the transcript S3 key) — no pre-rendered URL;
+    the client triggers the render on tap."""
     return {
         "track_id": track.id,
         "lang": lang,
         "title": track.title or track.id,
         "author": track.author_name or track.author_id,
         "date": track.date,
-        "pdf_url": pdf_url,
+        "location": track.location_name or track.location_id,
+        "references": [
+            {
+                "short_name": r.short_name,
+                "full_name": r.full_name,
+                "source_id": r.source_id,
+                "tokens": r.tokens,
+            }
+            for r in track.references
+        ],
+        "tags": list(track.tag_names),
+        "transcript_key": transcript_key,
     }
-
-
-# Filesystem-unsafe characters Windows + macOS reject in share targets;
-# Cyrillic and IAST diacritics pass through untouched.
-_BAD_FNAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
-
-
-def _share_filename(track: Track, lang: str) -> str:
-    """Human-readable filename for the artifact's `Content-Disposition`.
-
-    Format: `<title> (<date>).pdf` (date dropped when absent). Fallback
-    to `<track_id>.<lang>.pdf` for unnamed tracks. The mobile client
-    typically caches the file under its own short filename anyway —
-    this only governs what a direct browser download lands as.
-    """
-    base = (track.title or "").strip() or track.id
-    safe = _BAD_FNAME_CHARS.sub("", base)
-    safe = re.sub(r"\s+", " ", safe).strip()[:80] or track.id
-    if track.date:
-        safe = f"{safe} ({track.date})"
-    return f"{safe}.pdf"
 
 
 async def generate_track_pdf(
@@ -192,13 +95,9 @@ async def generate_track_pdf(
     *,
     yield_event: YieldEvent = _noop_yield,
     catalog_repo: CatalogRepository,
-    transcript_storage: TranscriptStorage,
-    outline_cache: OutlineCache,
-    pdf_storage: PdfStorage,
 ) -> dict[str, Any]:
-    # De-dup + cap upfront so the rest of the function works on a stable
-    # set. Maintaining input order keeps the share card visually aligned
-    # with whatever the user just saw in the chat above.
+    # De-dup + cap upfront, preserving input order so the share card lines
+    # up with whatever the user just saw above.
     seen: set[str] = set()
     cleaned: list[str] = []
     for tid in track_ids or []:
@@ -215,28 +114,14 @@ async def generate_track_pdf(
     if not cleaned:
         return {"error": "track_ids_required"}
 
-    sem = asyncio.Semaphore(_RENDER_CONCURRENCY)
-
-    async def _run(tid: str) -> dict[str, Any]:
-        async with sem:
-            return await _prepare_one(
-                track_id=tid,
-                requested_lang=lang,
-                catalog_repo=catalog_repo,
-                transcript_storage=transcript_storage,
-                outline_cache=outline_cache,
-                pdf_storage=pdf_storage,
-            )
-
-    results = await asyncio.gather(*[_run(tid) for tid in cleaned])
-    ok_items = [r for r in results if "pdf_url" in r]
+    results = await asyncio.gather(
+        *[_resolve_one(tid, lang, catalog_repo) for tid in cleaned]
+    )
+    ok_items = [r for r in results if "transcript_key" in r]
     errors = [r for r in results if "error" in r]
 
     if not ok_items:
-        return {
-            "error": "no_pdfs_prepared",
-            "details": errors,
-        }
+        return {"error": "no_pdfs_prepared", "details": errors}
 
     action_id = _new_action_id()
     yield_event(
@@ -249,9 +134,8 @@ async def generate_track_pdf(
     )
     return {
         "ok": True,
-        # `kind` lets the synthesizer's note-renderer recognise this
-        # as an action result (vs a regular chunk envelope) and emit
-        # the `[action:share_pdf|id=...]` marker in prose.
+        # Lets the synthesizer's note-renderer recognise this as an action
+        # result and emit the `[action:share_pdf|id=...]` marker in prose.
         "kind": "share_pdf",
         "action_id": action_id,
         "items": ok_items,
@@ -264,16 +148,16 @@ register_tool(ToolDef(
     fn=generate_track_pdf,
     emits_events=True,
     description=(
-        "Render and cache printable PDF(s) of full lecture transcripts (cover "
-        "+ optional table of contents + time-coded body). Returns public "
-        "https URLs the user can download or share. Use when the user asks "
-        "for «pdf / скачать / поделиться лекцией / share the lecture / "
+        "Offer downloadable / shareable PDF(s) of full lecture transcripts "
+        "(cover + table of contents + time-coded body). Use when the user "
+        "asks to «pdf / скачать / поделиться лекцией / share the lecture / "
         "download the transcript» on one or more tracks. Pass the "
-        "`track_ids` of every lecture the user wants — the tool fans out "
-        "and reuses already-cached PDFs (cap 10 per call). After calling, "
-        "embed the marker `[action:share_pdf|id=<action_id>]` inline in your "
-        "reply where the share card should render — DO NOT also emit "
-        "`[card:...]` for the same tracks, the share card lists them itself."
+        "`track_ids` of every lecture the user wants (cap 10). The PDF is "
+        "rendered on demand by the client when the user taps the card — this "
+        "tool returns instantly without waiting on generation. After calling, "
+        "embed the marker `[action:share_pdf|id=<action_id>]` inline where the "
+        "share card should render — DO NOT also emit `[card:...]` for the same "
+        "tracks, the share card lists them itself."
     ),
     parameters={
         "type": "object",
@@ -281,13 +165,13 @@ register_tool(ToolDef(
             "track_ids": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Track ids to prepare PDFs for. 1 to 10.",
+                "description": "Track ids to offer PDFs for. 1 to 10.",
             },
             "lang": {
                 "type": "string",
                 "enum": ["ru", "en"],
-                "description": "Preferred transcript language. The tool falls "
-                               "back to any available language per track.",
+                "description": "Preferred transcript language. Falls back to "
+                               "any available language per track.",
             },
         },
         "required": ["track_ids"],

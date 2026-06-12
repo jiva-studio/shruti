@@ -34,13 +34,25 @@ export interface OutlinePayload {
   readonly items: readonly OutlineItemPayload[]
 }
 
+export interface SharePdfRefPayload {
+  readonly shortName: string | null
+  readonly fullName: string | null
+  readonly sourceId: string | null
+  readonly tokens: string | null
+}
+
 export interface SharePdfItemPayload {
   readonly trackId: string
   readonly lang: string
   readonly title: string
   readonly author: string | null
   readonly date: string | null
-  readonly pdfUrl: string
+  readonly location: string | null
+  readonly references: readonly SharePdfRefPayload[]
+  readonly tags: readonly string[]
+  /** Bucket key of the transcript to render. The client POSTs this +
+   *  the cover fields to share-transcript on tap (no pre-rendered URL). */
+  readonly transcriptKey: string
 }
 
 /**
@@ -1368,15 +1380,33 @@ function parseActionPayload(p: Record<string, unknown>): ActionPayload | null {
       if (!raw || typeof raw !== "object") continue
       const it = raw as Record<string, unknown>
       const trackId = typeof it.track_id === "string" ? it.track_id : ""
-      const pdfUrl = typeof it.pdf_url === "string" ? it.pdf_url : ""
-      if (!trackId || !pdfUrl) continue
+      const transcriptKey = typeof it.transcript_key === "string" ? it.transcript_key : ""
+      if (!trackId || !transcriptKey) continue
+      const refsRaw = Array.isArray(it.references) ? it.references : []
+      const references: SharePdfRefPayload[] = []
+      for (const r of refsRaw) {
+        if (!r || typeof r !== "object") continue
+        const ro = r as Record<string, unknown>
+        references.push({
+          shortName: typeof ro.short_name === "string" ? ro.short_name : null,
+          fullName: typeof ro.full_name === "string" ? ro.full_name : null,
+          sourceId: typeof ro.source_id === "string" ? ro.source_id : null,
+          tokens: typeof ro.tokens === "string" ? ro.tokens : null,
+        })
+      }
+      const tags = Array.isArray(it.tags)
+        ? it.tags.filter((x): x is string => typeof x === "string")
+        : []
       items.push({
         trackId,
         lang: typeof it.lang === "string" ? it.lang : "",
         title: typeof it.title === "string" ? it.title : trackId,
         author: typeof it.author === "string" ? it.author : null,
         date: typeof it.date === "string" ? it.date : null,
-        pdfUrl,
+        location: typeof it.location === "string" ? it.location : null,
+        references,
+        tags,
+        transcriptKey,
       })
     }
     if (items.length === 0) return null

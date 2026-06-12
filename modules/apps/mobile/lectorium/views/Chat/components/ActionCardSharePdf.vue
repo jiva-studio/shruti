@@ -37,6 +37,7 @@ import type { ChatSharePdfItemPayload as SharePdfItemPayload } from "@lib/domain
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { useShareJobStore } from "@lectorium/stores/useShareJobStore.js"
+import { useShareTranscript } from "@lectorium/composables/useShareTranscript.js"
 
 type RowState = "idle" | "sharing" | "shared" | "error"
 
@@ -46,9 +47,10 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-const { shareService, excerptCache } = useLectorium()
+const { shareService } = useLectorium()
 const toast = useToast()
 const shareJob = useShareJobStore()
+const shareTranscript = useShareTranscript()
 
 // Local per-row state. Doesn't need to persist across navigation —
 // re-tapping a "shared" row just redoes the share-sheet handoff, which
@@ -85,6 +87,14 @@ function localFilename(item: SharePdfItemPayload): string {
 
 async function onShare(item: SharePdfItemPayload): Promise<void> {
   if (rowState(item.trackId) === "sharing") return
+  // Legacy card persisted before the share-transcript migration carried a
+  // pre-rendered `pdfUrl`, not a `transcriptKey` — it can't be re-rendered.
+  // Surface a clear error instead of POSTing an undefined key (→ 422).
+  if (!item.transcriptKey) {
+    rowStates.value = { ...rowStates.value, [item.trackId]: "error" }
+    await toast.error(t("chat.actionPdfError"))
+    return
+  }
   // Cross-tab share is a single-slot operation in this app — the same
   // tap-block as Notes audio applies. If another share is already in
   // flight, drop a toast and bail; the user can retap once the slot
@@ -95,10 +105,22 @@ async function onShare(item: SharePdfItemPayload): Promise<void> {
   }
   rowStates.value = { ...rowStates.value, [item.trackId]: "sharing" }
   try {
-    const localUri = await excerptCache.download({
-      url: item.pdfUrl,
-      filename: localFilename(item),
-    })
+    // Render on demand via share-transcript (resolveShareArtifact reuses a
+    // warm CDN copy when present), then hand the local file to the sheet.
+    const localUri = await shareTranscript.prepareLocalPdf(
+      {
+        trackId: item.trackId,
+        lang: item.lang || "ru",
+        transcriptKey: item.transcriptKey,
+        title: item.title,
+        author: item.author,
+        date: item.date,
+        location: item.location,
+        references: item.references,
+        tags: item.tags,
+      },
+      localFilename(item)
+    )
     await shareService.share({
       url: localUri,
       title: item.title,

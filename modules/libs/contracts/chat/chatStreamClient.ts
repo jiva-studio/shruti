@@ -70,13 +70,25 @@ export type ChatActionPayload =
       readonly payload: ChatCommentaryPayloadWire
     }
 
+export interface ChatSharePdfRefPayload {
+  readonly shortName: string | null
+  readonly fullName: string | null
+  readonly sourceId: string | null
+  readonly tokens: string | null
+}
+
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
   readonly lang: string
   readonly title: string
   readonly author: string | null
   readonly date: string | null
-  readonly pdfUrl: string
+  readonly location: string | null
+  readonly references: readonly ChatSharePdfRefPayload[]
+  readonly tags: readonly string[]
+  /** Bucket key of the transcript to render. The client renders the PDF
+   *  on tap via share-transcript — no pre-rendered URL on the wire. */
+  readonly transcriptKey: string
 }
 
 export interface ChatOutlinePayload {

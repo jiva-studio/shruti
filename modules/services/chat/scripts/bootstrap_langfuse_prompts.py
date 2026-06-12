@@ -63,7 +63,7 @@ from typing import Any, Iterable
 # Langfuse is empty (fallback path) the chat code falls back to these
 # same values via `Settings`, so behaviour is identical.
 _DEFAULT_LLM = "openrouter/deepseek/deepseek-chat"
-_OUTLINE_LLM = "openrouter/google/gemini-2.0-flash-001"
+_OUTLINE_LLM = "openrouter/google/gemini-2.5-flash-lite"
 _FLASH_LITE = "openrouter/google/gemini-3.1-flash-lite"
 _FLASH = "openrouter/google/gemini-2.5-flash"
 

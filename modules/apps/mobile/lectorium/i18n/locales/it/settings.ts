@@ -102,6 +102,11 @@ export default {
         description:
           "Le lezioni si susseguono — quando una finisce inizia automaticamente la successiva, anche a schermo bloccato.",
       },
+      shareTranscript: {
+        title: "Condividi ed esporta",
+        description:
+          "Condividi una lezione come PDF o trascrizione testuale, oppure condividi l'audio — con chiunque.",
+      },
       notesStudio: {
         title: "Studio delle note",
         description:

@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     # Outline generation is a one-shot JSON-mode call, not the chat agent
     # itself — picked separately for cost (~$0.0007 per lecture, see
     # /tmp/outline_bench.py).
-    llm_outline: str = "openrouter/google/gemini-2.0-flash-001"
+    llm_outline: str = "openrouter/google/gemini-2.5-flash-lite"
 
     # Research pipeline knobs.
     # Query planner + topic extractor share a model — both are short

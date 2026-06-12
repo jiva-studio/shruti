@@ -396,6 +396,46 @@ services:
       retries: 40
       start_period: 30s
 
+  # share-transcript: synchronous transcript-PDF render + S3 upload. No DB, no
+  # queue — like share-audio. Reads the transcript JSON from S3 and, on a
+  # TOC cache miss, calls OpenRouter for the outline; so it needs the S3
+  # creds + the OpenRouter key.
+  share-transcript:
+    # Both roles — renders close to the bucket the PDF lands in, so the
+    # returned URL belongs to the regional bucket (RU → Yandex, global → AWS).
+    profiles: [origin, proxy]
+    image: ${LECTORIUM_REGISTRY:-ghcr.io/akdasa-studios}/lectorium-share-transcript:${LECTORIUM_SHARE_TRANSCRIPT_TAG:-latest}
+    restart: unless-stopped
+    logging: *default-logging
+    <<: *app-hardening
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+    env_file:
+      - ${LECTORIUM_ENV_FILE:-../../../.env}
+    environment:
+      LECTORIUM_S3_BUCKET: ${LECTORIUM_S3_BUCKET:?}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Empty on origin (AWS default); on the RU proxy points share-transcript at
+      # Yandex Object Storage.
+      S3_ENDPOINT_URL: ${LECTORIUM_S3_ENDPOINT_URL:-}
+      # Public CDN base for the returned PDF URL. Without it share-transcript
+      # builds AWS virtual-host URLs for files that live on Yandex. Set
+      # LECTORIUM_S3_PUBLIC_BASE on RU.
+      PDFS_PUBLIC_BASE: ${LECTORIUM_S3_PUBLIC_BASE:-}
+      # Outline (TOC) generation. Must match the chat service's model so
+      # the outline cache artifact is shared.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      LLM_OUTLINE_MODEL: ${LECTORIUM_LLM_OUTLINE_MODEL:-openrouter/google/gemini-2.5-flash-lite}
+      ENV: ${LECTORIUM_ENV:-dev}
+      SERVICE_VERSION: ${LECTORIUM_SHARE_TRANSCRIPT_TAG:-latest}
+    networks: [lectorium]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
   search-mcp:
     # origin only — read-only MCP over pgvector, reached over tailscale.
     profiles: [origin]

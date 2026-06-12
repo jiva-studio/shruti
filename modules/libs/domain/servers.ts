@@ -29,6 +29,15 @@ export { buildServerUrl } from "@kit/servers"
 export interface CdnServer extends KitCdnServer {
   readonly shareAudioUrl: string
   readonly shareVideoUrl: string
+  /** Base URL of the share-transcript service for this region, e.g.
+   *  `https://<host>/share/transcripts`. The client appends the output
+   *  format as a path segment (`/pdf` today); Caddy strips the
+   *  `/share/transcripts` prefix before the app sees `/pdf`.
+   *
+   *  Optional: a published `config.json` predating this field omits it;
+   *  the composition root then derives it from `chatBaseUrl` (the
+   *  share-* routes live behind the same Caddy as chat). */
+  readonly shareTranscriptUrl?: string
   /** Base URL of the lectorium auth service for this region, e.g.
    *  `https://<host>/auth`. Read at call time via the composition
    *  root's `activeServer` ref so a region flip routes auth traffic
@@ -53,6 +62,7 @@ export const SERVERS: readonly CdnServer[] = [
     urlTemplate: "https://akds-lectorium.s3.us-east-1.amazonaws.com/{path}",
     shareAudioUrl: `${HOST}/share/audio/excerpts`,
     shareVideoUrl: `${HOST}/share/video/reels`,
+    shareTranscriptUrl: `${HOST}/share/transcripts`,
     authBaseUrl: `${HOST}/auth`,
     chatBaseUrl: HOST,
   },
@@ -69,6 +79,7 @@ export const SERVERS: readonly CdnServer[] = [
     // storage. The global host's share-* containers serve everyone else.
     shareAudioUrl: `${HOST_RU}/share/audio/excerpts`,
     shareVideoUrl: `${HOST_RU}/share/video/reels`,
+    shareTranscriptUrl: `${HOST_RU}/share/transcripts`,
     authBaseUrl: `${HOST_RU}/auth`,
     chatBaseUrl: HOST_RU,
   },

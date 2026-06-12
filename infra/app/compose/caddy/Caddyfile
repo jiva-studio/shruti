@@ -113,6 +113,16 @@ import role-proxy.conf
             events 20
             window 1h
         }
+        # /share/transcripts/* — PDF render (~0.1-0.5s, or a few s on a cold TOC
+        # LLM call). Idempotent + CDN-cached, so keep it loose like audio.
+        zone share_transcript {
+            match {
+                path /share/transcripts/*
+            }
+            key {client_ip}
+            events 60
+            window 1m
+        }
         # /chat/* root — main LLM cost surface. Loose DoS shield: this
         # cap is for catching obvious botnet-scale abuse from one IP,
         # not for governing legitimate user behaviour. The 200/h cap we
@@ -182,6 +192,23 @@ import role-proxy.conf
                 max_size 100KB
             }
             reverse_proxy share-video:8083 {
+                transport http {
+                    dial_timeout 5s
+                    response_header_timeout 30s
+                }
+            }
+        }
+
+        # ── /share/transcripts/* — share-transcript service ───────────────────────
+        # Terminates locally on every region so the returned PDF URL
+        # belongs to the regional bucket. handle_path strips the prefix so
+        # the FastAPI app sees /pdf. Header timeout covers a cold TOC LLM.
+        handle_path /share/transcripts/* {
+            request_header -X-Lectorium-Region
+            request_body {
+                max_size 100KB
+            }
+            reverse_proxy share-transcript:8084 {
                 transport http {
                     dial_timeout 5s
                     response_header_timeout 30s

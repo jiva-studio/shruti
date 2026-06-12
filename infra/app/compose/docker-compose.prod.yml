@@ -60,12 +60,14 @@ services:
     networks: [lectorium]
     # required: false lets caddy start on proxy hosts where chat/auth
     # are profile-excluded (the proxy reverse-proxies them to global).
-    # share-audio + share-video are present on both roles so stay strict.
+    # share-audio + share-video + share-transcript are present on both roles so
+    # stay strict.
     depends_on:
       chat:         { condition: service_healthy, required: false }
       auth:         { condition: service_healthy, required: false }
       share-audio:  { condition: service_healthy }
       share-video:  { condition: service_healthy }
+      share-transcript:    { condition: service_healthy }
 
   # Tightens Watchtower's access to the docker daemon. Without this proxy
   # Watchtower would mount /var/run/docker.sock directly and have root

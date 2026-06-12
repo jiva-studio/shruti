@@ -1,0 +1,24 @@
+[project]
+name = "lectorium-share-transcript"
+version = "0.1.0"
+description = "Lectorium share-transcript — renders printable transcript PDFs on demand and caches them to S3."
+requires-python = ">=3.12"
+authors = [{ name = "Advaita Krishna Das", email = "advaita.krishna.das@gmail.com" }]
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "boto3>=1.35",
+  "reportlab>=4.2",
+  "litellm>=1.51",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"share_transcript.render" = ["fonts/*.ttf"]

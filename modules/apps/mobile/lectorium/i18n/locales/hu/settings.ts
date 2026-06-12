@@ -103,6 +103,11 @@ export default {
         description:
           "Az előadások egymás után szólnak — amikor az egyik véget ér, automatikusan elindul a következő, lezárt képernyő mellett is.",
       },
+      shareTranscript: {
+        title: "Megosztás és exportálás",
+        description:
+          "Oszd meg az előadást PDF-ként vagy szöveges átiratként, vagy oszd meg a hangot — bárkivel.",
+      },
       notesStudio: {
         title: "Jegyzetstúdió",
         description:

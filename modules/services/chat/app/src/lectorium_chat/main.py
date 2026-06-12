@@ -46,9 +46,7 @@ from lectorium_chat.infra.cache.memory_kv_cache import MemoryKVCache
 from lectorium_chat.infra.cache.redis_kv_cache import RedisKVCache
 from lectorium_chat.infra.cache.tiered_kv_cache import TieredKVCache
 from lectorium_chat.infra.auth.jwt_verifier import JwtVerifier
-from lectorium_chat.infra.pdf import register_fonts
 from lectorium_chat.infra.storage.s3_outline_cache import S3OutlineCache
-from lectorium_chat.infra.storage.s3_pdf_storage import S3PdfStorage
 from lectorium_chat.infra.storage.s3_transcript_storage import S3TranscriptStorage
 from lectorium_chat.observability.bootstrap import bootstrap_score_configs
 from lectorium_chat.observability.langfuse_client import (
@@ -93,10 +91,6 @@ async def lifespan(app: FastAPI):
     llm.configure_providers(s)
     embedder = get_embedder(s)
 
-    # PDF export uses bundled TTFs — register once at startup so the
-    # first request doesn't pay the cost on the hot path.
-    register_fonts()
-
     # KV cache — L1 (in-proc LRU+TTL) always; L2 (Redis, AOF-persistent)
     # when REDIS_URL is configured. Either tier degrades gracefully:
     # L2 circuit-opens on repeated failure and L1 keeps serving; L1
@@ -137,7 +131,6 @@ async def lifespan(app: FastAPI):
     catalog_repo = SqliteCatalogRepository(catalog_db_path=s.catalog_db_path)
     transcript_storage = S3TranscriptStorage(settings=s)
     outline_cache = S3OutlineCache(settings=s)
-    pdf_storage = S3PdfStorage(settings=s)
     if not s.redis_url:
         raise RuntimeError("REDIS_URL is required for the rate-limit store")
     rate_limit_store = RedisRateLimitStore(s.redis_url)
@@ -197,7 +190,6 @@ async def lifespan(app: FastAPI):
         catalog_repo=catalog_repo,
         transcript_storage=transcript_storage,
         outline_cache=outline_cache,
-        pdf_storage=pdf_storage,
         rate_limiter=rate_limiter,
         jwt_verifier=jwt_verifier,
         kv_cache=kv_cache,
@@ -216,7 +208,6 @@ async def lifespan(app: FastAPI):
         catalog_repo=catalog_repo,
         transcript_storage=transcript_storage,
         outline_cache=outline_cache,
-        pdf_storage=pdf_storage,
         embedder=embedder,
     )
 

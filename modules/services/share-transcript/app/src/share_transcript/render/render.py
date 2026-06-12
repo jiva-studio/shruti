@@ -2,7 +2,7 @@
 
 Input shape:
 
-- `track`: domain `Track` — supplies title, author, date, location, source
+- `track`: domain `TrackMeta` — supplies title, author, date, location, source
   references.
 - `transcript`: parsed transcript JSON (`{blocks: [...]}`) as fetched from
   S3 by `TranscriptStorage`. Blocks are `paragraph` / `sentence` /
@@ -46,8 +46,8 @@ from reportlab.platypus import (
     Spacer,
 )
 
-from lectorium_chat.domain.entities import Track
-from lectorium_chat.infra.pdf.fonts import (
+from share_transcript.meta import TrackMeta
+from share_transcript.render.fonts import (
     BODY_FONT,
     HEAD_FONT,
     HEAD_FONT_BOLD,
@@ -221,7 +221,7 @@ def _fmt_ts(ms: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _track_subtitle(track: Track) -> str:
+def _track_subtitle(track: TrackMeta) -> str:
     """Author plus date – e.g. 'A. C. Bhaktivedanta Swami Prabhupada · 1972'."""
     parts: list[str] = []
     if track.author_name:
@@ -233,7 +233,7 @@ def _track_subtitle(track: Track) -> str:
     return " · ".join(parts)
 
 
-def _metadata_lines(track: Track, lang: str) -> list[str]:
+def _metadata_lines(track: TrackMeta, lang: str) -> list[str]:
     L = _labels(lang)
     out: list[str] = []
     if track.location_name or track.location_id:
@@ -260,7 +260,7 @@ def _escape(s: str | None) -> str:
     )
 
 
-def _cover(track: Track, outline: dict[str, Any] | None, lang: str, st: _Styles) -> list:
+def _cover(track: TrackMeta, outline: dict[str, Any] | None, lang: str, st: _Styles) -> list:
     flow: list = []
     title = track.title or track.id
     flow.append(Paragraph(_escape(title), st.title))
@@ -444,7 +444,7 @@ def _body(
 # ---------------------------------------------------------------------------
 
 
-def _on_page(track: Track, lang: str):
+def _on_page(track: TrackMeta, lang: str):
     """Footer painter: page number + brand on every page."""
     L = _labels(lang)
     brand = L["footer_brand"]
@@ -469,7 +469,7 @@ def _on_page(track: Track, lang: str):
 
 def render_transcript_pdf(
     *,
-    track: Track,
+    track: TrackMeta,
     transcript: dict[str, Any],
     outline: dict[str, Any] | None,
     lang: str,

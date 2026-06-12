@@ -183,7 +183,7 @@ async def fetch_transcript(key: str, settings: Settings | None = None) -> dict:
 def outline_model_tag(model: str) -> str:
     """S3-safe filename segment derived from the litellm/openrouter model id.
 
-    `openrouter/google/gemini-2.0-flash-001` → `openrouter_google_gemini-2.0-flash-001`.
+    `openrouter/google/gemini-2.5-flash-lite` → `openrouter_google_gemini-2.5-flash-lite`.
     Slashes become underscores; everything else passes through. The tag
     is embedded in the artifact key so a model upgrade (config change to
     `llm_outline`) starts a fresh cache — old outlines stay reachable
@@ -268,99 +268,3 @@ def put_outline_sync(
         if if_none_match and err.get("Code") in ("PreconditionFailed", "412"):
             raise OutlineAlreadyExists(key) from exc
         raise
-
-
-# -----------------------------------------------------------------------------
-# Public-export helpers — printable PDF derived from a transcript. Unlike
-# outlines (internal under `artifacts/`), these live under `public/` so the
-# mobile client can hand the URL straight to the platform share sheet
-# without proxying through us.
-#
-# `_PDF_RENDER_VERSION` lives in S3 object metadata (`x-amz-meta-renderer-
-# version`), NOT in the object key. Earlier iterations put the version
-# in the filename which left every previous version sitting as an
-# orphan after a layout change; the metadata-only approach lets the
-# PUT clobber the same key on regen and keeps `public/tracks/<id>/
-# exports/` clean (one PDF per language, full stop). HEAD reads the
-# metadata and treats a version mismatch the same as a 404.
-# -----------------------------------------------------------------------------
-
-
-_PDF_RENDER_VERSION = "v4"
-_PDF_VERSION_META_KEY = "renderer-version"
-
-
-def track_pdf_key(track_id: str, lang: str) -> str:
-    return f"public/tracks/{track_id}/exports/{lang}.pdf"
-
-
-def track_pdf_public_url(track_id: str, lang: str, settings: Settings | None = None) -> str:
-    s = settings or get_settings()
-    return f"{s.s3_public_url}/{track_pdf_key(track_id, lang)}"
-
-
-def track_pdf_exists_sync(
-    track_id: str, lang: str, settings: Settings | None = None,
-) -> bool:
-    """HEAD the PDF artifact + check the renderer-version tag.
-
-    Returns False on a true 404 / NoSuchKey OR when the cached
-    object was rendered by an older renderer version. Re-raises on
-    every other error so the caller can decide whether to retry
-    rather than silently treating a transient failure as "absent"
-    and triggering a redundant cold-path regeneration."""
-    s = settings or get_settings()
-    client = _make_s3_client(s)
-    key = track_pdf_key(track_id, lang)
-    try:
-        resp = client.head_object(Bucket=s.s3_bucket, Key=key)
-    except ClientError as exc:
-        err = exc.response.get("Error", {})
-        if err.get("Code") in _S3_ABSENT_CODES:
-            return False
-        raise
-    meta = resp.get("Metadata") or {}
-    # boto3 lowercases user-metadata keys on the way back. Treat a
-    # missing tag as "older than we track" → regen.
-    return meta.get(_PDF_VERSION_META_KEY) == _PDF_RENDER_VERSION
-
-
-def put_track_pdf_sync(
-    track_id: str, lang: str, pdf_bytes: bytes, settings: Settings | None = None,
-    *, download_filename: str | None = None,
-) -> None:
-    """PUT the PDF under the canonical key. Always overwrites — the
-    artifact is content-addressed only by `(track_id, lang)`, so a
-    regeneration replaces it in place. The renderer-version tag
-    travels in object metadata, NOT in the key, so a layout bump
-    invalidates the cache without leaving an orphan behind."""
-    s = settings or get_settings()
-    client = _make_s3_client(s)
-    key = track_pdf_key(track_id, lang)
-    fname = download_filename or f"{track_id}.{lang}.pdf"
-    client.put_object(
-        Bucket=s.s3_bucket,
-        Key=key,
-        Body=pdf_bytes,
-        ContentType="application/pdf",
-        ContentDisposition=_content_disposition_for(fname),
-        CacheControl="public, max-age=86400",
-        Metadata={_PDF_VERSION_META_KEY: _PDF_RENDER_VERSION},
-    )
-
-
-def _content_disposition_for(filename: str) -> str:
-    """RFC 5987-compliant `inline; filename=...; filename*=UTF-8''...`.
-
-    `filename` carries the human-readable name with Cyrillic / IAST
-    diacritics intact; `filename` (legacy) gets an ASCII-only fallback
-    so old downloaders that ignore the `*` form still see something
-    sensible. Modern share sheets / browsers honour the `*` form.
-    """
-    from urllib.parse import quote
-    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "transcript.pdf"
-    ascii_fallback = ascii_fallback.replace('"', "")
-    return (
-        f'inline; filename="{ascii_fallback}"; '
-        f"filename*=UTF-8''{quote(filename, safe='')}"
-    )

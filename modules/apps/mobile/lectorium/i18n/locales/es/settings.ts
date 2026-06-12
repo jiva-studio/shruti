@@ -101,6 +101,11 @@ export default {
         description:
           "Las clases suenan una tras otra — cuando una termina, la siguiente comienza automáticamente, incluso con la pantalla bloqueada.",
       },
+      shareTranscript: {
+        title: "Compartir y exportar",
+        description:
+          "Comparte una conferencia como PDF o transcripción de texto, o comparte su audio — con quien quieras.",
+      },
       notesStudio: {
         title: "Estudio de notas",
         description:

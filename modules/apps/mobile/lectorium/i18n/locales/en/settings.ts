@@ -102,6 +102,11 @@ export default {
         description:
           "Lectures play one after another — when one ends the next begins automatically, even with the screen locked.",
       },
+      shareTranscript: {
+        title: "Share & Export",
+        description:
+          "Share a lecture as a PDF or text transcript, or share its audio — with anyone.",
+      },
       notesStudio: {
         title: "Notes Studio",
         description: "Turn your notes from lectures into short videos and share them with friends.",

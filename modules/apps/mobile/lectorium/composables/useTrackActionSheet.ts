@@ -3,9 +3,12 @@ import { actionSheetController } from "@ionic/vue"
 import type { TrackId } from "@lib/domain/core.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useOverlaysStore } from "@lectorium/stores/useOverlaysStore.js"
+import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
+import { usePurchasesStore } from "@lectorium/stores/usePurchasesStore.js"
 import { useTranscriptStore } from "@lectorium/stores/useTranscriptStore.js"
 import { useTutorialStore } from "@lectorium/stores/useTutorialStore.js"
 import { useAddToPlaylist } from "./useAddToPlaylist.js"
+import { useShareTrack } from "./useShareTrack.js"
 
 export interface UseTrackActionSheetReturn {
   present: (trackId: TrackId) => Promise<void>
@@ -26,7 +29,10 @@ export function useTrackActionSheet(): UseTrackActionSheetReturn {
   const transcriptStore = useTranscriptStore()
   const tutorial = useTutorialStore()
   const overlays = useOverlaysStore()
+  const purchases = usePurchasesStore()
+  const paywall = usePaywallStore()
   const { addToPlaylist } = useAddToPlaylist()
+  const { presentShareMenu } = useShareTrack()
 
   async function present(trackId: TrackId): Promise<void> {
     void app.haptics.impact("light")
@@ -56,6 +62,24 @@ export function useTrackActionSheet(): UseTrackActionSheetReturn {
             // stops inviting on subsequent opens.
             void tutorial.dismiss("transcriptOpened")
             transcriptStore.show(trackId)
+          },
+        },
+        {
+          text: t("search.actions.share"),
+          // Pro feature. Non-subscribers get the upsell pill + the paywall
+          // on tap; subscribers see a clean row. The "PRO" pill is a CSS
+          // ::after (Ionic buttons can't host a Vue component) — see
+          // theme/misc.css `.action-sheet-pro`.
+          cssClass: purchases.isSubscribed ? undefined : "action-sheet-pro",
+          handler: () => {
+            if (!purchases.isSubscribed) {
+              paywall.requestOpen("shareTranscript")
+              return
+            }
+            // Opens a second action sheet with the per-format share
+            // options (PDF / text / audio); each row resolves its own
+            // availability there.
+            void presentShareMenu(trackId)
           },
         },
         {

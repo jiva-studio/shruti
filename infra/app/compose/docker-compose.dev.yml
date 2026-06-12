@@ -100,3 +100,12 @@ services:
     build:
       context: ../../../modules
       dockerfile: services/share-video/Dockerfile
+
+  share-transcript:
+    image: lectorium-share-transcript:dev
+    pull_policy: never
+    build:
+      context: ../../../modules
+      dockerfile: services/share-transcript/Dockerfile
+    ports:
+      - "${LECTORIUM_SHARE_TRANSCRIPT_PORT:-11085}:8084"
