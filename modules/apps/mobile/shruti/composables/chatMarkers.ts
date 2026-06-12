@@ -12,6 +12,7 @@
  */
 export type { ActionKind, ChatToken } from "./chatMarkers/parse.js"
 export { parseChatMarkers, extractFollowups } from "./chatMarkers/parse.js"
+export { inlineMd } from "./chatMarkers/renderHtml.js"
 export type {
   VerseBodyLike,
   CiteBodyLike,
