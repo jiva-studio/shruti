@@ -339,6 +339,14 @@ export const useChatStore = defineStore("chat", () => {
     return sessions.value.find((s) => s.id === id) ?? null
   })
 
+  /** The session's own title, or null when it has none yet (a fresh focused
+   *  session before its first reply). Used to label "answer ready"
+   *  notifications so multiple chats are distinguishable. */
+  function sessionTitleFor(sessionId: string): string | null {
+    const title = sessions.value.find((s) => s.id === sessionId)?.title?.trim()
+    return title ? title : null
+  }
+
   /** In-flight chat turns keyed by sessionId. A turn keeps streaming even
    *  after the user navigates away from its session — we DETACH instead of
    *  aborting (openSession / startNewSession / Ask Sadhu used to call
@@ -405,9 +413,103 @@ export const useChatStore = defineStore("chat", () => {
     // previous set in place rather than throw.
     try {
       const ids = await app.repositories().proactiveState.listUnseenSessionIds()
-      unseenProactiveSessionIds.value = new Set(ids)
+      // Union with answered-while-away sessions (persisted) so the same
+      // per-session dot + tab badge also light up when a chat reply lands
+      // while the user isn't viewing it.
+      const answers = await readUnreadAnswers()
+      unseenProactiveSessionIds.value = new Set([...ids, ...answers])
     } catch {
       // proactiveState repo not ready — leave previous set.
+    }
+  }
+
+  /* ---- Unread chat answers — badge for replies that arrived while away ---- */
+  // The per-session dot + tab/inbox badge already render off
+  // `unseenProactiveSessionIds`. A reply to the user's OWN question that
+  // lands while they aren't viewing the session is surfaced the same way:
+  // its id is merged into that set and persisted so the badge survives a
+  // restart, and cleared when the session is opened.
+  const UNREAD_ANSWERS_KEY = "chat:unread_answers"
+
+  async function readUnreadAnswers(): Promise<string[]> {
+    try {
+      const raw = await app.preferences.get(UNREAD_ANSWERS_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as string[]
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  async function writeUnreadAnswers(ids: string[]): Promise<void> {
+    try {
+      if (ids.length === 0) await app.preferences.remove(UNREAD_ANSWERS_KEY)
+      else await app.preferences.set(UNREAD_ANSWERS_KEY, JSON.stringify(ids))
+    } catch {
+      // best-effort — a failed persist just means weaker cross-restart badge
+    }
+  }
+
+  /** Mark a session as having an unread answer (a reply landed while the user
+   *  wasn't viewing it). Lights the dot + badge immediately and persists. */
+  async function markAnswerUnread(sessionId: string): Promise<void> {
+    if (!unseenProactiveSessionIds.value.has(sessionId)) {
+      const next = new Set(unseenProactiveSessionIds.value)
+      next.add(sessionId)
+      unseenProactiveSessionIds.value = next
+    }
+    const ids = await readUnreadAnswers()
+    if (!ids.includes(sessionId)) {
+      ids.push(sessionId)
+      await writeUnreadAnswers(ids)
+    }
+  }
+
+  async function clearAnswerUnread(sessionId: string): Promise<void> {
+    const ids = await readUnreadAnswers()
+    const next = ids.filter((x) => x !== sessionId)
+    if (next.length !== ids.length) await writeUnreadAnswers(next)
+  }
+
+  /* ---- Last-seen message per session — scroll anchor on reopen ---- */
+  // We persist the id of the LAST message the user actually saw in each
+  // session. On reopen the view anchors that message at the top, so anything
+  // that arrived while they were away (a resumed answer, a proactive reply)
+  // reads downward from its start instead of being scrolled past to the
+  // bottom. This is a plain "last read message id", not a time- or
+  // unread-flag heuristic. Map is sessionId → messageId.
+  const LAST_SEEN_KEY = "chat:last_seen_message"
+
+  async function readLastSeen(): Promise<Record<string, string>> {
+    try {
+      const raw = await app.preferences.get(LAST_SEEN_KEY)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw) as Record<string, string>
+      return parsed && typeof parsed === "object" ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+
+  /** Id of the last message the user saw in this session, or null if never
+   *  opened. Read this BEFORE `openSession` to decide the scroll anchor. */
+  async function getLastSeenMessageId(sessionId: string): Promise<string | null> {
+    return (await readLastSeen())[sessionId] ?? null
+  }
+
+  /** Record that the user has seen `messageId` as the latest message in the
+   *  session. Called by the view while the session is on screen — only with
+   *  NON-streaming messages, so a streaming placeholder (which shares the
+   *  final answer's id) never counts as "read" if the user leaves mid-turn. */
+  async function markSessionSeen(sessionId: string, messageId: string): Promise<void> {
+    const map = await readLastSeen()
+    if (map[sessionId] === messageId) return
+    map[sessionId] = messageId
+    try {
+      await app.preferences.set(LAST_SEEN_KEY, JSON.stringify(map))
+    } catch {
+      // best-effort — a failed persist just means weaker scroll anchoring
     }
   }
 
@@ -433,6 +535,15 @@ export const useChatStore = defineStore("chat", () => {
     const repos = chatRepos()
     const rows = await repos.messages.listBySession(id as ChatSessionId)
     messages.value = rows.map((m) => ({ ...m }))
+    // A turn for this session may still be in flight (its live stream kept
+    // running after we navigated away, or it's resuming after a background).
+    // Show the thinking indicator and — if no live stream owns it — kick a
+    // resume poll so the answer (and the indicator) actually land.
+    const inflight = (await readPending()).find((p) => p.sessionId === id)
+    if (inflight) {
+      ensureThinkingPlaceholder(id, inflight.assistantMessageId)
+      if (!turnControllers.has(id)) void resumeOnePendingTurn(inflight)
+    }
     // Opening a session counts as "the user saw any proactive messages
     // in it". Drop the session from the in-memory unseen set first
     // (so the dot disappears immediately, no roundtrip wait) and stamp
@@ -442,6 +553,8 @@ export const useChatStore = defineStore("chat", () => {
       next.delete(id)
       unseenProactiveSessionIds.value = next
     }
+    // Opening the session also clears its persisted unread-answer badge.
+    void clearAnswerUnread(id)
     // Persist seen_at off the critical path — the in-memory set above
     // already cleared the dot instantly, and this write only needs to
     // survive a reload. NOT awaited so it never extends the session-open
@@ -703,6 +816,11 @@ export const useChatStore = defineStore("chat", () => {
       })
 
     let assistantMsgId: ChatMessageId | null = null
+    // Set when the live SSE socket dies mid-turn (typically the OS froze the
+    // WebView on backgrounding). NOT a failure — the server keeps generating
+    // and buffers the turn — so we suppress the error, keep the pending record
+    // + thinking placeholder, and recover via the resume poll (see `finally`).
+    let resumableDrop = false
 
     try {
       const isFirst =
@@ -734,33 +852,59 @@ export const useChatStore = defineStore("chat", () => {
           ensureFresh: () => useAuthStore().ensureFresh(),
         }
       )) {
-        // Guard against a session switch mid-stream: if the user opened
-        // a different session while this turn was still streaming, stop
-        // applying its events — they belong to `sessionId`, not the now-
-        // active one, and the message is already persisted to its own
-        // session. Without this the terminal `finalised`/`error` would
-        // leak a foreign bubble into the open conversation.
-        if (activeSessionId.value !== sessionId) continue
-        applyTurnEvent(event)
-        if (event.kind === "user-message") {
-          // session list re-order
+        // Same unified reflection as the resume replay: caches always, the
+        // view (incl. the streaming bubble) only when this turn's session is
+        // on screen — so a session switch mid-stream can't leak a foreign
+        // bubble into the open conversation, while verse/citation caches still
+        // fill for the turn's own session.
+        // A dropped connection — our SSE socket died after the server had
+        // accepted the turn (typically the OS froze the WebView when the user
+        // left) — is NOT a failure: the server keeps generating and buffers
+        // the whole turn. Detect it and surface NOTHING — no "connection
+        // dropped" bubble, no settle (which would cancel the pre-armed
+        // notification), and crucially DON'T clear the pending record. The
+        // `finally` below keeps the thinking placeholder and kicks the resume
+        // poll, which replays the full buffered answer. Two shapes:
+        //   • error code "stream" AFTER the placeholder (dropped before prose)
+        //   • finalised carrying a truncated/"stream" marker (dropped mid-prose;
+        //     runChatTurn already persisted a partial row — resume overwrites it)
+        const isDropError = event.kind === "error" && event.code === "stream" && !!assistantMsgId
+        const isDropFinalise =
+          event.kind === "finalised" &&
+          event.message.error?.kind === "truncated" &&
+          event.message.error.reason === "stream"
+        if (isDropError || isDropFinalise) {
+          resumableDrop = true
+          continue
+        }
+
+        reflectTurnEvent(event, sessionId)
+        // App-level turn lifecycle — fires regardless of which page is on
+        // screen (the loop lives in the singleton store, not the view), so the
+        // answer notifies / badges / clears its pending record even after the
+        // user navigates away from the session.
+        if (event.kind === "assistant-placeholder") {
+          assistantMsgId = event.messageId
+          void addPending(event.messageId, sessionId)
+          emitTurnStarted({ assistantMessageId: event.messageId, sessionId })
+        }
+        if (event.kind === "finalised") {
+          void removePending(event.message.id)
+          emitTurnSettled({ assistantMessageId: event.message.id, sessionId, ok: true })
+        }
+        if (event.kind === "error" && assistantMsgId) {
+          void removePending(assistantMsgId)
+          emitTurnSettled({ assistantMessageId: assistantMsgId, sessionId, ok: false })
+        }
+        if (event.kind === "user-message" && activeSessionId.value === sessionId) {
+          // Session list re-order — view-scoped. No need to touch the unseen
+          // set: sending implies the session is open and openSession cleared
+          // seen_at.
           const idx = sessions.value.findIndex((s) => s.id === sessionId)
           if (idx >= 0) {
             const updated = { ...sessions.value[idx], updatedAt: Date.now() }
             sessions.value = [updated, ...sessions.value.filter((_, i) => i !== idx)]
           }
-          // No need to touch the unseen set here — sending a message
-          // implies the user has the session open, and `openSession`
-          // already cleared seen_at. Replying is no longer the trigger.
-        }
-        if (event.kind === "assistant-placeholder") {
-          assistantMsgId = event.messageId
-          // Persist a pending record so a background/kill mid-turn can be
-          // recovered by polling the server's buffer on return.
-          void addPending(event.messageId, sessionId)
-          // Lifecycle signal for the notification layer (arms the predictive
-          // "answer ready" alarm). The store stays oblivious to how it's shown.
-          emitTurnStarted({ assistantMessageId: event.messageId, sessionId })
         }
       }
     } catch (err) {
@@ -801,12 +945,31 @@ export const useChatStore = defineStore("chat", () => {
       // compose state. A detached turn finishing later must not flip
       // compose for the session the user navigated to.
       if (activeSessionId.value === sessionId) sending.value = false
-      // Abort path only: chatClient.ts swallows AbortError silently, so
-      // no `error` event reached applyTurnEvent and the placeholder is
-      // still streaming. Drop it so the spinner doesn't linger. (Real
-      // errors are converted to failed-bubble by the error handler
-      // above, which clears `streaming`, so this branch skips them.)
-      if (assistantMsgId) {
+      if (resumableDrop && assistantMsgId) {
+        // Connection dropped but the server has the turn buffered. Keep the
+        // thinking placeholder up (if this session is on screen) and recover
+        // the full answer via resume — the controller is now deregistered, so
+        // `resumeOnePendingTurn`'s "live stream owns it" guard lets it run.
+        if (activeSessionId.value === sessionId) {
+          ensureThinkingPlaceholder(sessionId, assistantMsgId)
+        }
+        // Prefer the persisted entry (real createdAt for TTL), but synthesize
+        // one if `addPending` hasn't flushed yet — the server buffer is keyed
+        // by the message id, so resume works regardless of the local record.
+        const entry = (await readPending()).find(
+          (p) => p.assistantMessageId === assistantMsgId
+        ) ?? {
+          assistantMessageId: assistantMsgId,
+          sessionId,
+          createdAt: Date.now(),
+        }
+        void resumeOnePendingTurn(entry)
+      } else if (assistantMsgId) {
+        // Abort path only: chatClient.ts swallows AbortError silently, so
+        // no `error` event reached applyTurnEvent and the placeholder is
+        // still streaming. Drop it so the spinner doesn't linger. (Real
+        // errors are converted to failed-bubble by the error handler
+        // above, which clears `streaming`, so this branch skips them.)
         const idx = messages.value.findIndex((m) => m.id === assistantMsgId)
         if (idx >= 0 && messages.value[idx].streaming) {
           messages.value = messages.value.filter((m) => m.id !== assistantMsgId)
@@ -819,12 +982,39 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
+  /**
+   * Reflect ONE turn event from `runChatTurn` — shared by the live consume
+   * loop and the resume replay so the two can't diverge.
+   *
+   * Verse / citation / commentary / chapter payloads populate GLOBAL persisted
+   * caches the cards read from; they must be applied even when their session
+   * isn't on screen — otherwise a turn that finishes while the user is
+   * elsewhere (live switch-away OR a cold-start resume) renders with empty
+   * cards. They don't touch the message list. Every other (view-mutating)
+   * event applies only to the session currently on screen.
+   */
+  function reflectTurnEvent(event: RunChatTurnEvent, sessionId: string): void {
+    const populatesCache =
+      event.kind === "verse-payload" ||
+      event.kind === "chapter-payload" ||
+      event.kind === "cite-transcript-payload" ||
+      event.kind === "commentary-payload"
+    if (populatesCache || activeSessionId.value === sessionId) {
+      applyTurnEvent(event)
+    }
+  }
+
   function applyTurnEvent(event: RunChatTurnEvent): void {
     switch (event.kind) {
       case "user-message":
         messages.value = [...messages.value, event.message]
         return
       case "assistant-placeholder": {
+        streamingMessageId = event.messageId
+        // Idempotent: a thinking placeholder may already be on screen (added by
+        // `ensureThinkingPlaceholder` when the session was reopened mid-turn /
+        // mid-resume) — don't add a duplicate bubble.
+        if (messages.value.some((m) => m.id === event.messageId)) return
         const placeholder: ChatMessage = {
           id: event.messageId,
           sessionId: (activeSessionId.value ?? "") as ChatSessionId,
@@ -833,7 +1023,6 @@ export const useChatStore = defineStore("chat", () => {
           createdAt: Date.now(),
           streaming: true,
         }
-        streamingMessageId = event.messageId
         messages.value = [...messages.value, placeholder]
         return
       }
@@ -1027,17 +1216,12 @@ export const useChatStore = defineStore("chat", () => {
       }
       case "finalised": {
         // Replace the streaming placeholder with the persisted entity.
+        // The turn-settled lifecycle (notification / toast / unread badge +
+        // resume cleanup) is emitted from the CONSUME LOOP, not here —
+        // applyTurnEvent runs only for the on-screen session, but the answer
+        // must notify even when the user has navigated away.
         const idx = streamingIndex()
         streamingMessageId = null
-        // Turn reached a clean terminal — drop it from the resume queue.
-        void removePending(event.message.id)
-        // Success → notification layer surfaces it (toast if foreground,
-        // notification if backgrounded) and cancels the predictive alarm.
-        emitTurnSettled({
-          assistantMessageId: event.message.id,
-          sessionId: event.message.sessionId,
-          ok: true,
-        })
         if (idx < 0) {
           messages.value = [...messages.value, { ...event.message }]
         } else {
@@ -1089,17 +1273,9 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "error": {
-        // Terminal failure / stop — drop it from the resume queue so it
-        // isn't re-polled and replayed later, and tell the notification layer
-        // to cancel the predictive alarm (no "ready" toast on a failure).
-        if (streamingMessageId) {
-          void removePending(streamingMessageId)
-          emitTurnSettled({
-            assistantMessageId: streamingMessageId,
-            sessionId: (activeSessionId.value ?? "") as string,
-            ok: false,
-          })
-        }
+        // Terminal lifecycle (resume cleanup + the settle signal) is emitted
+        // from the CONSUME LOOP, not here — applyTurnEvent is view-gated, but
+        // a failure must still clear the pending record app-wide.
         // User-stop-with-no-content: runChatTurn emits a dedicated
         // `stopped_empty` code so we can drop the placeholder silently
         // instead of leaving a "no content" failed-bubble. There's
@@ -1334,48 +1510,116 @@ export const useChatStore = defineStore("chat", () => {
       },
       { messages: repos.messages, sessions: repos.sessions, extractFollowups }
     )) {
-      // The use-case persists internally regardless; only reflect into the
-      // view when the user is actually looking at this session.
-      if (activeSessionId.value === entry.sessionId) applyTurnEvent(event)
+      reflectTurnEvent(event, entry.sessionId)
+      // Surface a resumed answer the same way a live one is — notification /
+      // toast / unread badge — since it arrived while the user was away. An
+      // `error` settles too (ok:false) so the pre-armed forward notification is
+      // cancelled instead of firing a false "answer ready".
+      if (event.kind === "finalised") {
+        emitTurnSettled({
+          assistantMessageId: entry.assistantMessageId,
+          sessionId: entry.sessionId,
+          ok: true,
+        })
+      } else if (event.kind === "error") {
+        emitTurnSettled({
+          assistantMessageId: entry.assistantMessageId,
+          sessionId: entry.sessionId,
+          ok: false,
+        })
+      }
     }
   }
 
+  /** Show a "thinking" placeholder for an in-flight turn when its session is
+   *  (re)opened — so returning to a session whose answer is still generating
+   *  shows the streaming indicator instead of an empty thread. Idempotent. */
+  function ensureThinkingPlaceholder(sessionId: string, assistantMessageId: string): void {
+    streamingMessageId = assistantMessageId as ChatMessageId
+    if (messages.value.some((m) => m.id === assistantMessageId)) return
+    messages.value = [
+      ...messages.value,
+      {
+        id: assistantMessageId as ChatMessageId,
+        sessionId: sessionId as ChatSessionId,
+        role: "assistant",
+        content: "",
+        createdAt: Date.now(),
+        streaming: true,
+      },
+    ]
+  }
+
+  // Dedup guard so overlapping resume triggers don't stack poll loops per turn.
+  const resumePolling = new Set<string>()
+
   async function resumeOnePendingTurn(entry: PendingTurn): Promise<void> {
-    let buffered
+    if (resumePolling.has(entry.assistantMessageId)) return
+    resumePolling.add(entry.assistantMessageId)
     try {
-      buffered = await resumeService().getTurn(entry.assistantMessageId)
-    } catch {
-      // Transient (offline / token refresh) — leave pending, retry next resume.
-      return
-    }
-    if (buffered === null) {
-      // Never received, expired, or not ours. Drop only once it's older than
-      // the server buffer TTL so a momentary 404 race doesn't lose a turn.
-      if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
-        await removePending(entry.assistantMessageId)
+      // Poll until the turn is done/error (or ~2.5 min). While `running`, keep
+      // the thinking indicator up if its session is on screen.
+      for (let i = 0; i < 60; i++) {
+        // A live stream owns this session's turn — don't double-drive it.
+        if (turnControllers.has(entry.sessionId)) return
+        let buffered
+        try {
+          buffered = await resumeService().getTurn(entry.assistantMessageId)
+        } catch {
+          return // transient (offline / token refresh) — retry next resume
+        }
+        if (buffered === null) {
+          // Never received, expired, or not ours. Drop only once older than the
+          // server TTL so a momentary 404 race doesn't lose a turn — and settle
+          // it (ok:false) so the pre-armed forward notification is cancelled
+          // rather than firing a false "answer ready".
+          if (Date.now() - entry.createdAt > PENDING_TTL_MS) {
+            emitTurnSettled({
+              assistantMessageId: entry.assistantMessageId,
+              sessionId: entry.sessionId,
+              ok: false,
+            })
+            await removePending(entry.assistantMessageId)
+          }
+          return
+        }
+        if (buffered.state === "running") {
+          if (activeSessionId.value === entry.sessionId) {
+            ensureThinkingPlaceholder(entry.sessionId, entry.assistantMessageId)
+          }
+          await new Promise((resolve) => setTimeout(resolve, 2500))
+          continue
+        }
+        // done | error. If the live turn already persisted this assistant
+        // message (app killed AFTER finalise, before pending was cleared) the
+        // answer is on disk — re-running the replay would INSERT a duplicate id
+        // (PK) and throw. Skip the replay then; just clear pending. The finally
+        // guarantees no entry is ever stranded in a re-throw loop.
+        try {
+          const rows = await chatRepos().messages.listBySession(entry.sessionId as ChatSessionId)
+          const existing = rows.find((m) => m.id === entry.assistantMessageId)
+          if (existing?.error) {
+            // A truncated/failed live stub left by a dropped connection — drop
+            // it from disk AND the in-memory view so the buffered FULL answer
+            // replaces it cleanly (re-running the replay otherwise hits the
+            // PK on insert).
+            await chatRepos().messages.delete(entry.assistantMessageId as ChatMessageId)
+            messages.value = messages.value.filter((m) => m.id !== entry.assistantMessageId)
+          }
+          // Replay unless a CLEAN answer is already on disk (app killed after
+          // finalise but before pending was cleared — replaying would dupe).
+          if (!existing || existing.error) {
+            await replayBufferedTurn(entry, buffered.events)
+          }
+        } catch (err) {
+          console.error("[chat] resume replay failed", err)
+        } finally {
+          await removePending(entry.assistantMessageId)
+        }
+        return
       }
-      return
-    }
-    if (buffered.state === "running") {
-      // Still generating — leave pending; a later resume re-polls.
-      return
-    }
-    // done | error. If the live turn already persisted this assistant message
-    // (app killed AFTER finalise but before pending was cleared), the answer
-    // is already on disk — re-running the replay would INSERT a duplicate id
-    // (chat_messages.id is a PK) and throw. Skip the replay in that case; just
-    // clear pending. The try/finally guarantees we never strand an entry in a
-    // re-throw loop on any replay failure.
-    try {
-      const rows = await chatRepos().messages.listBySession(entry.sessionId as ChatSessionId)
-      const alreadyPersisted = rows.some((m) => m.id === entry.assistantMessageId)
-      if (!alreadyPersisted) {
-        await replayBufferedTurn(entry, buffered.events)
-      }
-    } catch (err) {
-      console.error("[chat] resume replay failed", err)
     } finally {
-      await removePending(entry.assistantMessageId)
+      resumePolling.delete(entry.assistantMessageId)
     }
   }
 
@@ -1705,6 +1949,11 @@ export const useChatStore = defineStore("chat", () => {
     messages,
     sending,
     resumePendingTurns,
+    listPendingTurns: readPending,
+    sessionTitleFor,
+    markAnswerUnread,
+    getLastSeenMessageId,
+    markSessionSeen,
     loadingFocusIds,
     inputFocusToken,
     composeBlockedUntil,
