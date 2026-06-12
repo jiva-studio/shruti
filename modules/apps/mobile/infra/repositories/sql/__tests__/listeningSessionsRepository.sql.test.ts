@@ -62,6 +62,28 @@ describe("listeningSessionsRepository.sql", () => {
     expect(sessions[1].to_position).toBe(5400)
   })
 
+  it("start() clamps from_position to position when (re)starting before the prior end", async () => {
+    // Prior session finished the lecture at 1467s; the user replays it and
+    // resume resets to 0. from_position must clamp to the new position, not
+    // inherit 1467 — otherwise to - from is negative and cancels the day.
+    await rawInsert(db, {
+      id: "ls1",
+      itemId: ITEM_A,
+      startedAt: 1000,
+      endedAt: 1300,
+      fromPosition: 0,
+      toPosition: 1467,
+    })
+    const repo = createSqlListeningSessionRepository(db)
+    await repo.start({ itemId: ITEM_A, position: 1 })
+    const sessions = await db.query<{ from_position: number; to_position: number }>(
+      "SELECT from_position, to_position FROM listening_sessions ORDER BY ended_at"
+    )
+    expect(sessions[1].from_position).toBe(1)
+    expect(sessions[1].to_position).toBe(1)
+    expect(sessions[1].to_position - sessions[1].from_position).toBeGreaterThanOrEqual(0)
+  })
+
   it("forceStart() ignores prior session and uses the given position", async () => {
     await rawInsert(db, {
       id: "ls1",
@@ -228,5 +250,37 @@ describe("listeningSessionsRepository.sql", () => {
     // regardless of how it splits across two adjacent dates.
     const sum = totals.reduce((acc, t) => acc + t.listenedSeconds, 0)
     expect(sum).toBe(600 + 900 + 400)
+  })
+
+  it("aggregates clamp legacy negative-delta rows to zero", async () => {
+    // A legacy row written before the start() clamp (to < from). It must
+    // not subtract from the day's heatmap total or the lifetime total.
+    const t = Math.floor(new Date("2026-04-15T10:00:00Z").getTime() / 1000)
+    await rawInsert(db, {
+      id: "good",
+      itemId: ITEM_A,
+      startedAt: t,
+      endedAt: t,
+      fromPosition: 0,
+      toPosition: 600,
+    })
+    await rawInsert(db, {
+      id: "bad",
+      itemId: ITEM_A,
+      startedAt: t,
+      endedAt: t,
+      fromPosition: 1467,
+      toPosition: 1,
+    })
+
+    const repo = createSqlListeningSessionRepository(db)
+    // Lifetime total: 600 (good) + 0 (bad clamped), not 600 + (-1466).
+    expect(await repo.getTotalListenedSeconds()).toBe(600)
+
+    const fromMs = new Date("2026-04-14T00:00:00Z").getTime()
+    const toMs = new Date("2026-04-17T00:00:00Z").getTime()
+    const totals = await repo.getDailyTotals(fromMs, toMs)
+    const sum = totals.reduce((acc, x) => acc + x.listenedSeconds, 0)
+    expect(sum).toBe(600)
   })
 })

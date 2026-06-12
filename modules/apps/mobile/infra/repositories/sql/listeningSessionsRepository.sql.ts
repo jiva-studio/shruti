@@ -52,8 +52,16 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
 
   return {
     async start({ itemId, position }) {
+      // `from_position` is where THIS listening interval begins. Resuming
+      // forward from where we left off, the previous session's end is the
+      // true start (the first progress frame may already be a beat ahead),
+      // so we prefer `lastTo`. But when playback (re)starts BEFORE that mark
+      // — replaying a finished lecture (resume resets to 0) or pressing play
+      // after seeking back — `lastTo > position` would make `to - from`
+      // negative and silently cancel the day's heatmap total. Clamp to
+      // `position` so a session can never count negative time.
       const lastTo = await lastToPositionForItem(itemId)
-      const fromPosition = lastTo ?? position
+      const fromPosition = Math.min(lastTo ?? position, position)
       return insert(itemId, fromPosition, position)
     },
 
@@ -137,8 +145,10 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
     },
 
     async getTotalListenedSeconds(): Promise<number> {
+      // MAX(0, …) per row so any legacy negative-delta sessions (written
+      // before the `start()` clamp) can't drag the total below the truth.
       const rows = await db.query<{ total: number | null }>(
-        "SELECT SUM(to_position - from_position) AS total FROM listening_sessions"
+        "SELECT SUM(MAX(0, to_position - from_position)) AS total FROM listening_sessions"
       )
       return Number(rows[0]?.total ?? 0)
     },
@@ -148,7 +158,7 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
       const toSec = Math.floor(toMs / 1000)
       const rows = await db.query<{ date: string; listened_seconds: number }>(
         `SELECT date(ended_at, 'unixepoch', 'localtime') AS date,
-                SUM(to_position - from_position) AS listened_seconds
+                SUM(MAX(0, to_position - from_position)) AS listened_seconds
            FROM listening_sessions
           WHERE ended_at >= ? AND ended_at < ?
           GROUP BY date
