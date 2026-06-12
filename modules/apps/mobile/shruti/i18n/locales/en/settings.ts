@@ -264,6 +264,8 @@ export default {
     email: {
       title: "Send us an email",
       description: "Have questions or suggestions?",
+      emailSubject: "Support request",
+      emailIntro: "Please describe your question or problem above this line.",
     },
     // VK / Telegram rows render only in the ru locale (Russian-audience
     // communities), so their strings live solely in ru/settings.ts.
