@@ -6,6 +6,7 @@ import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { emitTurnSettled, emitTurnStarted } from "@lectorium/chat/turnNotificationEvents.js"
 import { applyStreamingTurnEvent } from "@lectorium/stores/chatTurnReducer.js"
+import { createPendingTurnStore, type PendingTurn } from "@lectorium/stores/chatPendingTurns.js"
 import { useToast } from "@kit/composables"
 import { openStorePage } from "@lectorium/utils/openStorePage.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
@@ -1253,47 +1254,15 @@ export const useChatStore = defineStore("chat", () => {
   // through the SAME runChatTurn fold so the answer is rebuilt exactly —
   // never lost.
 
-  const PENDING_TURNS_KEY = "chat:pending_turns"
   const PENDING_TTL_MS = 24 * 60 * 60 * 1000 // mirrors the server buffer TTL
 
-  interface PendingTurn {
-    readonly assistantMessageId: string
-    readonly sessionId: string
-    readonly createdAt: number
-  }
-
-  async function readPending(): Promise<PendingTurn[]> {
-    try {
-      const raw = await app.preferences.get(PENDING_TURNS_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw) as PendingTurn[]
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-
-  async function writePending(list: PendingTurn[]): Promise<void> {
-    try {
-      if (list.length === 0) await app.preferences.remove(PENDING_TURNS_KEY)
-      else await app.preferences.set(PENDING_TURNS_KEY, JSON.stringify(list))
-    } catch {
-      // best-effort — a failed persist just means weaker kill-recovery
-    }
-  }
-
-  async function addPending(assistantMessageId: string, sessionId: string): Promise<void> {
-    const list = await readPending()
-    if (list.some((p) => p.assistantMessageId === assistantMessageId)) return
-    list.push({ assistantMessageId, sessionId, createdAt: Date.now() })
-    await writePending(list)
-  }
-
-  async function removePending(assistantMessageId: string): Promise<void> {
-    const list = await readPending()
-    const next = list.filter((p) => p.assistantMessageId !== assistantMessageId)
-    if (next.length !== list.length) await writePending(next)
-  }
+  // Preferences-backed persistence of the in-flight-turn records lives in its
+  // own module; the store keeps only the resume orchestration below. Aliased
+  // to the historical names so every call site reads unchanged.
+  const pendingTurns = createPendingTurnStore(app.preferences)
+  const readPending = pendingTurns.read
+  const addPending = pendingTurns.add
+  const removePending = pendingTurns.remove
 
   /** Replay a completed turn's buffered events into its session, rebuilding
    *  the assistant message through the `replayChatTurn` use-case (same fold
