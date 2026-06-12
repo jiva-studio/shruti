@@ -572,7 +572,16 @@ async def translate_commentaries(ctx: TurnContext) -> None:
             n, sentences_translated=parts, mt=True,
         )
 
-    targets = ctx.aliases.commentary_refs()
+    # Skip refs already translated on an earlier pass — this runs both in
+    # research_worker and (for the planner's lazy attaches) in
+    # synthesis_planner, so it must be idempotent. `sentences_translated`
+    # set ⇒ already handled; None ⇒ never attempted (or a prior failure,
+    # safe to retry).
+    targets = [
+        (n, ref)
+        for n, ref in ctx.aliases.commentary_refs()
+        if ref.sentences_translated is None
+    ]
     if not targets:
         return
     await asyncio.gather(*(_one(n, ref.sentences) for n, ref in targets))

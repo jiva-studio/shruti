@@ -66,10 +66,16 @@ async def _fetch_one(
     tokens: str,
     lang: str | None,
 ) -> list[LibraryChunk]:
-    """Single (source_id, tokens) → commentary chunks, with native-lang
-    fallback identical to `_fetch_refs` in pipeline.py."""
+    """Single (source_id, tokens) → commentary chunks in `lang` ONLY.
+
+    No cross-language fallback. Callers pass the corpus-clamped
+    `retrieval_lang` (English for a non-corpus answer). A `lang=None`
+    fallback used to fire on a miss and grab the purport in WHATEVER
+    language existed — which handed Russian purports to a Serbian / English
+    answer. A miss now returns nothing: better no purport than a foreign one.
+    """
     try:
-        chunks = await chunk_repo.get_chunks_by_verse(
+        return await chunk_repo.get_chunks_by_verse(
             source_id=source_id, tokens=tokens, kinds=["commentary"], lang=lang,
         )
     except Exception as exc:  # noqa: BLE001
@@ -78,14 +84,6 @@ async def _fetch_one(
             source_id=source_id, tokens=tokens, error=str(exc),
         )
         return []
-    if not chunks and lang is not None:
-        try:
-            chunks = await chunk_repo.get_chunks_by_verse(
-                source_id=source_id, tokens=tokens, kinds=["commentary"], lang=None,
-            )
-        except Exception:  # noqa: BLE001
-            chunks = []
-    return chunks
 
 
 def _select_capped(
