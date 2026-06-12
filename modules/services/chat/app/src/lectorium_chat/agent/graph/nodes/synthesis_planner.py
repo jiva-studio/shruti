@@ -28,6 +28,7 @@ from lectorium_chat.agent.graph.nodes._worker_common import (
     flush_cite_payloads,
     flush_media_payloads,
     flush_verse_payloads,
+    translate_commentaries,
 )
 from lectorium_chat.agent.graph.state import ChatState
 from lectorium_chat.agent.graph.turn_context import TurnContext
@@ -41,6 +42,7 @@ from lectorium_chat.research.outline_builder import (
     build_outline,
     synthesize_intro,
 )
+from lectorium_chat.research.pipeline import resolve_retrieval_lang
 from lectorium_chat.research.thesis_augmentation import augment_thin_theses
 
 
@@ -132,6 +134,15 @@ async def synthesis_planner_node(
     reranker = ctx.reranker if enable_reranker else None
     user_query = state.get("user_query", "")
 
+    # Corpus-constrained retrieval language — the SAME clamp research_worker
+    # used. The lazy commentary attach below MUST fetch purports in this
+    # (corpus) language, NOT the raw answer language: for a non-corpus answer
+    # (uk / sr-*) `state["lang"]` finds no purport and falls back to a stray
+    # Russian one. `distinct_langs` is cached, so this is a cache hit.
+    retrieval_lang = await resolve_retrieval_lang(
+        ctx.chunk_repo, state.get("lang") or "ru", request_id=ctx.request_id
+    )
+
     # Stage 1: lazy commentary attach + per-thesis rerank.
     # Pulls purports ONLY for verses the planner picked, then re-ranks
     # the pool against each thesis text — replaces planner's tentative
@@ -150,7 +161,7 @@ async def synthesis_planner_node(
         chunk_repo=ctx.chunk_repo,
         embedder=ctx.embedder,
         alias_map=ctx.aliases,
-        lang=state.get("lang"),
+        lang=retrieval_lang,
         catalog_repo=ctx.catalog_repo,
         on_event=None,  # planner runs after the live SSE progress panel
         reranker=reranker,
@@ -214,7 +225,7 @@ async def synthesis_planner_node(
         embedder=ctx.embedder,
         alias_map=ctx.aliases,
         catalog_repo=ctx.catalog_repo,
-        lang=state.get("lang"),
+        lang=retrieval_lang,
         router_args=state.get("extracted_args") or {},
         reranker=reranker,
         user_query=user_query,
@@ -253,6 +264,12 @@ async def synthesis_planner_node(
     await flush_verse_payloads(ctx)
     await flush_media_payloads(ctx)
     await flush_cite_payloads(ctx)
+    # Translate the purports Stage 1/2 just attached. research_worker only
+    # translated the refs that existed when IT ran; the planner's lazy attach
+    # adds more AFTER that, so without this they'd stream untranslated. The
+    # call is idempotent — refs already translated are skipped — so it only
+    # covers the late arrivals. Must finish before the synthesizer streams.
+    await translate_commentaries(ctx)
 
     # Stage 1/2 carried the planner's raw intro through untouched; settle the
     # final intro now. If we painted it early, hand the synthesizer an

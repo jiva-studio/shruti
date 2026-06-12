@@ -98,6 +98,29 @@ def clamp_retrieval_lang(answer_lang: str, corpus_langs: list[str]) -> str:
     return _DEFAULT_RETRIEVAL_LANG
 
 
+async def resolve_retrieval_lang(
+    chunk_repo: Any, answer_lang: str, *, request_id: str | None = None
+) -> str:
+    """Corpus-constrained retrieval language for a turn answering in
+    `answer_lang`: probe the corpus languages (`distinct_langs`, cached) and
+    `clamp_retrieval_lang`. On any probe failure, clamp against the empty
+    set → English, so retrieval never runs with a non-corpus lang.
+
+    Shared by `research_worker` and `synthesis_planner` so BOTH attach
+    purports in the same corpus language. Without it the planner's lazy
+    commentary attach used the raw answer language (e.g. `sr-Cyrl`), found
+    nothing, and fell back to a stray Russian purport — see
+    `commentary_expansion._fetch_one`.
+    """
+    corpus_langs: list[str] = []
+    if chunk_repo is not None and hasattr(chunk_repo, "distinct_langs"):
+        try:
+            corpus_langs = await chunk_repo.distinct_langs()
+        except Exception as exc:  # noqa: BLE001 — never fail a turn
+            log.warning("distinct_langs_failed", request_id=request_id, error=str(exc))
+    return clamp_retrieval_lang(answer_lang, corpus_langs)
+
+
 def _emit_question(on_event: OnEvent | None, query: str, original: str) -> None:
     """Emit one `research_question` event. Skips echoes of the original
     user question so the panel never shows the user their own words back

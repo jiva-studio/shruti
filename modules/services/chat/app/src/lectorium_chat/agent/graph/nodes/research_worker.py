@@ -30,7 +30,7 @@ from lectorium_chat.agent.graph.turn_context import TurnContext
 from lectorium_chat.observability.langfuse_client import langfuse_node_callback
 from lectorium_chat.observability.logging import bind_node_role, get_logger
 from lectorium_chat.research.corpus_fanout import dedup_notes_by_key
-from lectorium_chat.research.pipeline import clamp_retrieval_lang, run_research
+from lectorium_chat.research.pipeline import resolve_retrieval_lang, run_research
 
 
 log = get_logger(__name__)
@@ -38,21 +38,11 @@ log = get_logger(__name__)
 
 async def _derive_retrieval_lang(ctx: TurnContext, answer_lang: str) -> str:
     """Resolve the corpus-constrained retrieval language for `answer_lang`.
-
-    Reads the corpus language set from `distinct_langs()` (cached). On any
-    failure (no repo / DB error) falls back to a conservative clamp against
-    the empty set → English, so retrieval never runs with a non-corpus lang.
-    """
-    corpus_langs: list[str] = []
-    repo = ctx.chunk_repo
-    if repo is not None and hasattr(repo, "distinct_langs"):
-        try:
-            corpus_langs = await repo.distinct_langs()
-        except Exception as exc:  # noqa: BLE001 — never fail a turn
-            log.warning(
-                "distinct_langs_failed", request_id=ctx.request_id, error=str(exc)
-            )
-    return clamp_retrieval_lang(answer_lang, corpus_langs)
+    Thin wrapper over the shared `research.pipeline.resolve_retrieval_lang`
+    so the worker and the synthesis planner clamp identically."""
+    return await resolve_retrieval_lang(
+        ctx.chunk_repo, answer_lang, request_id=ctx.request_id
+    )
 
 
 async def research_worker_node(
