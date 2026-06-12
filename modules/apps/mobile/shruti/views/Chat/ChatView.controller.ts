@@ -154,10 +154,20 @@ export function useChatController(): ChatControllerReturn {
       // message lands in view.
       const sameSession = store.activeSessionId === sessionId
       if (!sameSession) scrollReady.value = false
+      // Anchor on the last message the user actually saw in this session.
+      // Anything that arrived while they were away (a resumed answer, a
+      // proactive reply) sits below it and reads downward from its start,
+      // instead of the view snapping to the bottom past the beginning.
+      // Read BEFORE openSession (the seen-tracking watcher updates it once
+      // the messages load). Bottom when nothing newer arrived.
+      const lastSeenId = await store.getLastSeenMessageId(sessionId)
       try {
         await store.openSession(sessionId)
         await nextTick()
-        await scrollToBottom()
+        const last = store.messages[store.messages.length - 1]
+        const anchor = lastSeenId && last && last.id !== lastSeenId ? lastSeenId : null
+        if (anchor) scrollMessageToTop(anchor, "auto")
+        else await scrollToBottom()
       } catch (err) {
         console.warn("chat: failed to open session", err)
         store.startNewSession()
@@ -347,14 +357,14 @@ export function useChatController(): ChatControllerReturn {
    * variable handles the device-dependent offset (safe-area-top + the
    * button row height).
    */
-  function scrollMessageToTop(messageId: string): void {
+  function scrollMessageToTop(messageId: string, behavior: ScrollBehavior = "smooth"): void {
     const el = contentRef.value
     if (!el) return
     const target = el.querySelector(
       `[data-message-id="${CSS.escape(messageId)}"]`
     ) as HTMLElement | null
     if (!target) return
-    target.scrollIntoView({ block: "start", behavior: "smooth" })
+    target.scrollIntoView({ block: "start", behavior })
   }
 
   /**
@@ -445,6 +455,31 @@ export function useChatController(): ChatControllerReturn {
       const target = isUserMessage ? last.id : findLastUserMessageId(store.messages)
       if (target) scrollMessageToTop(target)
     }
+  )
+
+  // Remember the last message the user has seen in the open session, so
+  // reopening it can anchor there (see `ensureSessionFromRoute`). Only
+  // NON-streaming messages count: a streaming placeholder shares the final
+  // answer's id, so if the user leaves mid-turn the last-seen id must stay
+  // on the prior (fully-read) message, not jump to the not-yet-written
+  // answer. While the session is on screen the watcher keeps the last-seen
+  // id current; backgrounding freezes JS so it can't falsely mark unread
+  // content as seen.
+  watch(
+    () => {
+      const last = store.messages[store.messages.length - 1]
+      if (!last || last.streaming) return ""
+      return `${store.activeSessionId ?? ""}|${last.id}`
+    },
+    (key) => {
+      if (!key) return
+      const sid = store.activeSessionId
+      if (!sid || sessionIdFromRoute() !== sid) return
+      const last = store.messages[store.messages.length - 1]
+      if (!last || last.streaming) return
+      void store.markSessionSeen(sid, last.id)
+    },
+    { immediate: true }
   )
 
   watch(
