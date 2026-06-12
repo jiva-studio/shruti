@@ -18,10 +18,6 @@ import {
 } from "@lectorium/composables/useTrackUserState.js"
 import { useAuthStore } from "@lectorium/stores/useAuthStore.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
-import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
-import { useChapterBodyStore } from "@lectorium/stores/useChapterBodyStore.js"
-import { useCiteTranscriptStore } from "@lectorium/stores/useCiteTranscriptStore.js"
-import { useCommentaryBodyStore } from "@lectorium/stores/useCommentaryBodyStore.js"
 import { applyDailyReminder } from "@lectorium/composables/useDailyReminder.js"
 import { extractFollowups, parseChatMarkers } from "@lectorium/composables/chatMarkers.js"
 import {
@@ -154,10 +150,6 @@ export const useChatStore = defineStore("chat", () => {
   const chatTranslateCitations = useChatTranslateCitations()
   const trackUserState = useTrackUserState()
   const playlist = usePlaylistStore()
-  const verseBodyStore = useVerseBodyStore()
-  const chapterBodyStore = useChapterBodyStore()
-  const citeTranscriptStore = useCiteTranscriptStore()
-  const commentaryBodyStore = useCommentaryBodyStore()
   const { t } = useI18n()
   const toast = useToast()
 
@@ -1035,17 +1027,13 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "tool-start": {
-        // A tool re-run discards the first pass: clear the prose AND
-        // the per-turn action/outline accumulators + the ephemeral
-        // research lists on the bubble, so the finalised message can't
-        // carry orphaned cards from the abandoned pass. (runChatTurn
-        // resets its own closure-side `actions`/`outlines` maps on the
-        // same event, keeping the persisted message in lockstep.) The
-        // verse/chapter/cite payload caches are append-only, keyed by
-        // their own source ids, and only render when a marker in the
-        // final prose references them — a discarded pass leaves no such
-        // marker, so stale cache entries are inert and don't need a
-        // sweep here.
+        // A tool re-run discards the first pass: clear the prose AND the
+        // per-turn card accumulators (action/outline/media + the verse/
+        // chapter/cite/commentary bodies now stashed on the message) plus
+        // the ephemeral research lists on the bubble, so the finalised
+        // message can't carry orphaned cards from the abandoned pass.
+        // (runChatTurn resets its own closure-side maps on the same event,
+        // keeping the persisted message in lockstep.)
         const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]
@@ -1055,6 +1043,10 @@ export const useChatStore = defineStore("chat", () => {
           actions: undefined,
           outlines: undefined,
           media: undefined,
+          verses: undefined,
+          cites: undefined,
+          chapters: undefined,
+          commentaries: undefined,
           researchQuestions: undefined,
           researchSources: undefined,
         }
@@ -1141,68 +1133,105 @@ export const useChatStore = defineStore("chat", () => {
         return
       }
       case "verse-payload": {
-        // Server-streamed verse body for one (source_id, tokens). The
-        // store caches it (with persistence) so `VerseCard.vue`
-        // can render the full block. Does NOT touch the message list
-        // — verse-payload arrives BEFORE the prose deltas containing
-        // the marker, and the marker itself is what triggers render.
-        verseBodyStore.set(event.sourceId, event.tokens, {
-          addrLabel: event.addrLabel,
-          sanskrit: event.sanskrit,
-          transliteration: event.transliteration,
-          transliterationOriginal: event.transliterationOriginal,
-          translation: event.translation,
-          audioUrl: event.audioUrl,
-          mt: event.mt,
-        })
+        // Verse body for one (source_id, tokens), stashed on the streaming
+        // message's `verses` map — mirroring `media-payload` — so it
+        // round-trips through `messages.create` → SQLite `meta` and the
+        // card still renders when the answer is reopened long after the
+        // turn. Arrives BEFORE the prose delta with the marker; the marker
+        // is what triggers VerseCard render.
+        const idx = streamingIndex()
+        if (idx < 0) return
+        const key = `${event.sourceId}|${event.tokens}`
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          verses: {
+            ...(cur.verses ?? {}),
+            [key]: {
+              addrLabel: event.addrLabel,
+              sanskrit: event.sanskrit,
+              transliteration: event.transliteration,
+              transliterationOriginal: event.transliterationOriginal,
+              translation: event.translation,
+              audioUrl: event.audioUrl,
+              mt: event.mt,
+            },
+          },
+        }
+        messages.value = next
         return
       }
       case "chapter-payload": {
-        // Server-streamed chapter-location region (locate intent). Cached
-        // (with persistence) so `ChapterCard.vue` renders the chapter
-        // list; arrives BEFORE the prose delta with the `[chapter:…]`
-        // marker, same ordering contract as verse-payload.
-        chapterBodyStore.set(event.sourceId, event.regionToken, {
-          regionLabel: event.regionLabel,
-          chapters: event.chapters,
-        })
+        // Chapter-location region (locate intent), stashed on the streaming
+        // message's `chapters` map — same ordering + persistence contract
+        // as verse-payload.
+        const idx = streamingIndex()
+        if (idx < 0) return
+        const key = `${event.sourceId}|${event.regionToken}`
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          chapters: {
+            ...(cur.chapters ?? {}),
+            [key]: { regionLabel: event.regionLabel, chapters: event.chapters },
+          },
+        }
+        messages.value = next
         return
       }
       case "cite-transcript-payload": {
-        // Server-streamed transcript snippet for one cited fragment.
-        // Cached (with persistence) so `CitationCard.vue` renders the
-        // full quote card; arrives BEFORE the prose delta with the
-        // `[cite:...]` marker, and a late arrival upgrades the chip
-        // reactively. Does NOT touch the message list.
-        citeTranscriptStore.set(event.trackId, event.startMs, event.endMs, event.text, {
-          mt: event.mt,
-          textOriginal: event.textOriginal,
-        })
+        // Transcript snippet for one cited fragment, stashed on the
+        // streaming message's `cites` map. A late arrival upgrades the chip
+        // to the full card reactively; persisted so it survives a reopen.
+        const idx = streamingIndex()
+        if (idx < 0) return
+        const key = `${event.trackId}|${event.startMs}-${event.endMs}`
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          cites: {
+            ...(cur.cites ?? {}),
+            [key]: { text: event.text, mt: event.mt, textOriginal: event.textOriginal },
+          },
+        }
+        messages.value = next
         return
       }
       case "commentary-payload": {
-        // Server-streamed purport / prose-chapter / letter quote for one
-        // `[commentary:N]` marker. Cached (with persistence) so
-        // `CommentaryCard.vue` renders the quote card; arrives BEFORE the
-        // prose delta with the marker. Does NOT touch the message list.
-        commentaryBodyStore.set(event.ref, {
-          text: event.text,
-          authorName: event.authorName,
-          addrLabel: event.addrLabel,
-          commentaryKind: event.commentaryKind,
-          mt: event.mt,
-          textOriginal: event.textOriginal,
-        })
+        // Purport / prose-chapter / letter quote for one `[commentary:N]`
+        // marker, stashed on the streaming message's `commentaries` map
+        // keyed by the per-turn ref. Living on the message (not a global
+        // cache) is also what keeps a ref from colliding across messages.
+        const idx = streamingIndex()
+        if (idx < 0) return
+        const next = [...messages.value]
+        const cur = next[idx]
+        next[idx] = {
+          ...cur,
+          commentaries: {
+            ...(cur.commentaries ?? {}),
+            [String(event.ref)]: {
+              text: event.text,
+              authorName: event.authorName,
+              addrLabel: event.addrLabel,
+              commentaryKind: event.commentaryKind,
+              mt: event.mt,
+              textOriginal: event.textOriginal,
+            },
+          },
+        }
+        messages.value = next
         return
       }
       case "media-payload": {
         // Server-streamed media result (video/audio + transcript) for one
-        // `[media:<id>]` marker. Unlike verse/chapter/cite (which live in
-        // their own persisted caches), media is stashed directly on the
-        // message's `media` map — mirroring the `action` event — so it
-        // round-trips through `messages.create` → SQLite `meta`. Arrives
-        // BEFORE the prose delta with the marker; the marker triggers
-        // MediaCard render.
+        // `[media:<id>]` marker, stashed directly on the message's `media`
+        // map — mirroring the `action` event — so it round-trips through
+        // `messages.create` → SQLite `meta`. Arrives BEFORE the prose delta
+        // with the marker; the marker triggers MediaCard render.
         const idx = streamingIndex()
         if (idx < 0) return
         const next = [...messages.value]

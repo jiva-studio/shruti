@@ -3,9 +3,9 @@
     Chapter-location card — the locate intent's answer to "where in
     scripture is this?". Block-level: region heading (canto title / book
     name) + the list of chapters the narrative spans, each "N. Title".
-    Renders only when the chapterBodyStore has the region cached (server
-    streamed it via `chapter_payload` earlier in the turn, or persisted
-    from an earlier session). Falls back to an inline chip when missing.
+    Renders only when the message carries this region's `body` (server
+    streamed it via `chapter_payload` during the turn). Falls back to an
+    inline chip when missing.
   -->
   <article v-if="body" class="chapter-card">
     <header v-if="body.regionLabel" class="chapter-card-region">{{ body.regionLabel }}</header>
@@ -34,31 +34,27 @@
 /**
  * Chapter-location widget. Two render modes (mirrors `VerseCard`):
  *
- *  - body present (cache hit) → block card: region heading + chapter list.
+ *  - body present → block card: region heading + chapter list.
  *  - body missing → inline chip with the region label.
  *
- * Body comes from `useChapterBodyStore`, populated by the `chapter_payload`
- * SSE event the chat server streams ahead of the marker. Titles are read
- * verbatim from the payload (server-side from `library_titles`) — never
- * composed on-device.
+ * Body comes from the owning message's `chapters` map (stashed there from
+ * the `chapter_payload` SSE event during the turn and persisted). Titles
+ * are read verbatim from the payload (server-side from `library_titles`) —
+ * never composed on-device.
  */
-import { computed, onMounted } from "vue"
+import { computed } from "vue"
 import { IconBook2 } from "@tabler/icons-vue"
-import { useChapterBodyStore } from "@lectorium/stores/useChapterBodyStore.js"
+import type { ChatChapterBody } from "@lib/domain/chatMessage.js"
 
 const props = defineProps<{
   sourceId: string
   regionToken: string
   caption?: string
+  /** Chapter region from the message's `chapters` map; absent ⇒ chip. */
+  body?: ChatChapterBody
 }>()
 
-const chapterBodyStore = useChapterBodyStore()
-
-onMounted(() => {
-  void chapterBodyStore.hydrate()
-})
-
-const body = computed(() => chapterBodyStore.get(props.sourceId, props.regionToken))
+const body = computed(() => props.body ?? null)
 
 const displayCaption = computed(
   () => props.caption?.trim() || body.value?.regionLabel || props.regionToken

@@ -1,11 +1,10 @@
 <template>
   <!--
     Block-level verse card: addr header + sanskrit + transliteration +
-    translation in the user's UI locale. Renders only when the
-    verseBodyStore has the body cached (server streamed it via
-    `verse_payload` earlier in the same turn, or persisted from an
-    earlier session). Falls back to the inline chip if the body is
-    missing — keeps the bubble readable even on a cold cache or when
+    translation in the user's UI locale. Renders only when the message
+    carries this verse's `body` (server streamed it via `verse_payload`
+    during the turn). Falls back to the inline chip if the body is
+    missing — keeps the bubble readable for pre-feature history or when
     library.db hadn't indexed this verse at server-cite time.
   -->
   <article v-if="body" class="verse-card">
@@ -60,18 +59,17 @@
  *    / translation in the active locale.
  *  - body missing → inline chip placeholder with the verse addr.
  *
- * Body comes from `useVerseBodyStore`, populated by the `verse_payload`
- * SSE event the chat server streams ahead of the marker. The store
- * persists across sessions, so a verse cited in a past turn renders as
- * a block immediately on next open.
+ * Body comes from the owning message's `verses` map (the `verse_payload`
+ * SSE event is stashed there during the turn and persisted to SQLite), so
+ * a verse cited in a past turn renders as a block immediately on reopen.
  */
-import { computed, onMounted, ref } from "vue"
+import { computed, ref } from "vue"
 // `showOriginal` toggles the verse translation between the active-locale
 // machine translation and the original English.
 import { IonSpinner } from "@ionic/vue"
 import { IconBook2, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useI18n } from "vue-i18n"
-import { useVerseBodyStore } from "@lectorium/stores/useVerseBodyStore.js"
+import type { ChatVerseBody } from "@lib/domain/chatMessage.js"
 import { useExcerptAudioPlayer } from "@lectorium/composables/useExcerptAudioPlayer.js"
 import { useCachedExcerptUrl } from "@lectorium/composables/useCachedExcerptUrl.js"
 import TranslationNotice from "./TranslationNotice.vue"
@@ -81,18 +79,13 @@ const props = defineProps<{
   sourceId: string
   tokens: string
   caption?: string
+  /** Verse body from the message's `verses` map; absent ⇒ chip fallback. */
+  body?: ChatVerseBody
 }>()
 
-const verseBodyStore = useVerseBodyStore()
 const { locale } = useI18n()
 
-// Hydrate Preferences-backed cache on first mount of any verse card.
-// Cheap no-op after the first call.
-onMounted(() => {
-  void verseBodyStore.hydrate()
-})
-
-const body = computed(() => verseBodyStore.get(props.sourceId, props.tokens))
+const body = computed(() => props.body ?? null)
 
 const displayCaption = computed(() => props.caption?.trim() || props.tokens)
 const displayAddr = computed(() => body.value?.addrLabel || props.caption?.trim() || props.tokens)

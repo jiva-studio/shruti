@@ -41,15 +41,6 @@ vi.mock("@lectorium/stores/usePlaylistStore.js", () => ({
   usePlaylistStore: () => ({ add: playlistAdd }),
 }))
 
-vi.mock("@lectorium/stores/useVerseBodyStore.js", () => ({
-  useVerseBodyStore: () => ({ set: vi.fn() }),
-}))
-vi.mock("@lectorium/stores/useChapterBodyStore.js", () => ({
-  useChapterBodyStore: () => ({ set: vi.fn() }),
-}))
-vi.mock("@lectorium/stores/useCiteTranscriptStore.js", () => ({
-  useCiteTranscriptStore: () => ({ set: vi.fn() }),
-}))
 vi.mock("@lectorium/stores/useAuthStore.js", () => ({
   useAuthStore: () => ({ quotaId: "", isPro: false, ensureFresh: vi.fn() }),
 }))

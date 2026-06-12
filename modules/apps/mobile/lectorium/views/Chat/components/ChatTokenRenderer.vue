@@ -15,6 +15,7 @@
       :start-ms="token.startMs"
       :end-ms="token.endMs"
       :caption="token.caption"
+      :body="message.cites?.[`${token.trackId}|${token.startMs}-${token.endMs}`]"
     />
     <TrackList v-else-if="token.kind === 'cards'" :track-ids="token.trackIds" />
     <OutlineCard
@@ -63,15 +64,20 @@
       :source-id="token.sourceId"
       :tokens="token.tokens"
       :caption="token.caption"
+      :body="message.verses?.[`${token.sourceId}|${token.tokens}`]"
     />
     <ChapterCard
       v-else-if="token.kind === 'chapter'"
       :source-id="token.sourceId"
       :region-token="token.regionToken"
       :caption="token.caption"
+      :body="message.chapters?.[`${token.sourceId}|${token.regionToken}`]"
     />
     <MediaCard v-else-if="token.kind === 'media'" :payload="message.media?.[token.mediaId]" />
-    <CommentaryCard v-else-if="token.kind === 'commentary'" :commentary-ref="token.ref" />
+    <CommentaryCard
+      v-else-if="token.kind === 'commentary'"
+      :body="message.commentaries?.[String(token.ref)]"
+    />
     <!--
       Markdown blockquote (library document citation). bodyHtml and
       attributionHtml are output of marked.parseInline on a vetted text
