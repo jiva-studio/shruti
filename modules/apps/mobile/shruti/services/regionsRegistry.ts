@@ -54,6 +54,7 @@ const DEV_REGIONS: readonly CdnServer[] =
           urlTemplate: SERVERS[0]!.urlTemplate,
           shareAudioUrl: SERVERS[0]!.shareAudioUrl,
           shareVideoUrl: SERVERS[0]!.shareVideoUrl,
+          shareTranscriptUrl: SERVERS[0]!.shareTranscriptUrl,
           authBaseUrl:
             (import.meta.env.VITE_DEV_AUTH_URL as string | undefined) ??
             "http://localhost:11081/auth",
@@ -105,6 +106,9 @@ function isValidRegion(r: unknown): r is CdnServer {
     (o.urlTemplate as string).includes("{path}") &&
     nonEmptyStr(o.shareAudioUrl) &&
     nonEmptyStr(o.shareVideoUrl) &&
+    // shareTranscriptUrl is intentionally NOT required: a published
+    // config.json predating this field must stay valid. The composition
+    // root derives it from chatBaseUrl when absent.
     nonEmptyStr(o.authBaseUrl) &&
     nonEmptyStr(o.chatBaseUrl)
   )

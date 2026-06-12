@@ -19,6 +19,7 @@ import type {
   IServerProber,
   IShareAudioService,
   IShareService,
+  IShareTranscriptService,
   IShareVideoService,
   IStoragePublicUrl,
 } from "@ports/app/index.js"
@@ -28,6 +29,7 @@ import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useStoragePublicUrl } from "@kit/infra"
 import { useHttpShareAudioService } from "@infra/shareAudio/http/useHttpShareAudioService.js"
 import { useHttpShareVideoService } from "@infra/shareVideo/http/useHttpShareVideoService.js"
+import { useHttpShareTranscriptService } from "@infra/shareTranscript/http/useHttpShareTranscriptService.js"
 import { createSqlSchemeVersionRepository } from "@infra/repositories/sql/index.js"
 import { createHttpChatStreamClient } from "@infra/chat/http/httpChatStreamClient.js"
 import { createHttpChatTitleService } from "@infra/chat/http/httpChatTitleService.js"
@@ -77,6 +79,11 @@ export interface Shruti {
    * `shareAudioService` — picks the per-region endpoint at call time.
    */
   readonly shareVideoService: IShareVideoService
+  /**
+   * Cloud-side transcript-PDF renderer (share-transcript). Same lazy
+   * per-region getter as shareAudioService; the client appends `/pdf`.
+   */
+  readonly shareTranscriptService: IShareTranscriptService
   /**
    * Per-note excerpt cache (Filesystem stat / downloadFile + HEAD
    * probe). Hides the Capacitor + fetch choreography from the Notes
@@ -224,6 +231,13 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     () => activeServer.value.shareVideoUrl,
     () => seed.auth.getAccessToken()
   )
+  // share-transcript base. A published config.json predating the field
+  // omits it — derive from chatBaseUrl (share-* routes live behind the
+  // same Caddy as chat) so old configs keep working.
+  const shareTranscriptService = useHttpShareTranscriptService(
+    () =>
+      activeServer.value.shareTranscriptUrl ?? `${activeServer.value.chatBaseUrl}/share/transcripts`
+  )
 
   // Chat service adapters. Built here (not in the chat store) so the
   // composition root stays the only place that knows concrete @infra
@@ -251,6 +265,7 @@ export function initShruti(seed: InitShrutiSeed): Shruti {
     shareService: seed.shareService,
     shareAudioService,
     shareVideoService,
+    shareTranscriptService,
     excerptCache: seed.excerptCache,
     haptics: seed.haptics,
     mediaDownloader: seed.mediaDownloader,

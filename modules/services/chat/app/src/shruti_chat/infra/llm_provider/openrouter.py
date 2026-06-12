@@ -188,7 +188,7 @@ def _build_model_allowlist(settings: Settings) -> frozenset[str]:
         # model in Langfuse prompt-config doesn't need a code deploy. Listing
         # a vetted model here just silences the warning. See `_validate_model`.
         "openrouter/anthropic/claude-3-haiku",
-        "openrouter/google/gemini-2.0-flash-001",
+        "openrouter/google/gemini-2.5-flash-lite",
         "openrouter/google/gemini-2.5-flash",
         "openrouter/google/gemini-3.1-flash-lite",
         "openrouter/google/gemini-3.5-flash",

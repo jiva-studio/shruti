@@ -51,14 +51,25 @@ export type ChatActionPayload =
       readonly trackId: string
     }
 
-/** One downloadable PDF inside a `share_pdf` action card. */
+export interface ChatSharePdfRefPayload {
+  readonly shortName: string | null
+  readonly fullName: string | null
+  readonly sourceId: string | null
+  readonly tokens: string | null
+}
+
+/** One shareable transcript inside a `share_pdf` action card. */
 export interface ChatSharePdfItemPayload {
   readonly trackId: string
   readonly lang: string
   readonly title: string
   readonly author: string | null
   readonly date: string | null
-  readonly pdfUrl: string
+  readonly location: string | null
+  readonly references: readonly ChatSharePdfRefPayload[]
+  readonly tags: readonly string[]
+  /** Bucket key of the transcript; the client renders the PDF on tap. */
+  readonly transcriptKey: string
 }
 
 /** Outline payload for a `[outline:<track_id>]` marker. */

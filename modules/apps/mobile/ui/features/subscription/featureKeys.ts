@@ -7,6 +7,7 @@ export type SubscriptionFeatureKey =
   | "continuousPlayback"
   | "trackInfo"
   | "notesStudio"
+  | "shareTranscript"
 
 export interface FeatureSlideDef {
   readonly key: SubscriptionFeatureKey
@@ -32,6 +33,12 @@ export const FEATURE_SLIDES: readonly FeatureSlideDef[] = [
     key: "notesStudio",
     i18nKey: "notesStudio",
     icon: "/subscription/notesStudio.png",
+    soon: false,
+  },
+  {
+    key: "shareTranscript",
+    i18nKey: "shareTranscript",
+    icon: "/subscription/shareTranscript.png",
     soon: false,
   },
 ] as const
