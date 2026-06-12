@@ -53,3 +53,4 @@ export type {
   FeedbackCategory,
   SubmitChatFeedbackOptions,
 } from "./chat/chatFeedbackService.js"
+export type { IChatResumeService, ResumedTurn, ResumedTurnState } from "./chat/chatResumeService.js"
