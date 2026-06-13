@@ -102,6 +102,13 @@ class CatalogRepository(Protocol):
         Used to compose a human verse address ("БГ 2.13") for show_verse."""
         ...
 
+    async def language_name(self, code: str) -> str | None:
+        """Native language name for a locale code from the `languages` table
+        ("ru"→"Русский", "sr-Latn"→"Srpski"). None when unknown. Used so the
+        synthesizer's language directive names the language instead of passing
+        a bare code the LLM mis-resolves."""
+        ...
+
     def invalidate_cache(self) -> None:
         """Hook for the indexer to call after the catalog DB swaps."""
         ...
