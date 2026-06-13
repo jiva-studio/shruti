@@ -8,25 +8,25 @@ import (
 
 // --- collection methods on Lazy (open-on-demand wrapper) ---
 
-func (l *Lazy) CreateCollectionLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error {
+func (l *Lazy) CreateCollectionLocale(ctx context.Context, id, language, name, cover, description, meta string, sortOrder int) error {
 	r, err := l.open(ctx)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	if err := r.CreateCollectionLocale(ctx, id, language, name, featured, sortOrder); err != nil {
+	if err := r.CreateCollectionLocale(ctx, id, language, name, cover, description, meta, sortOrder); err != nil {
 		return err
 	}
 	return markModified(l.Path)
 }
 
-func (l *Lazy) UpdateCollectionLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error {
+func (l *Lazy) UpdateCollectionLocale(ctx context.Context, id, language string, name, cover, description, meta *string, sortOrder *int) error {
 	r, err := l.open(ctx)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	if err := r.UpdateCollectionLocale(ctx, id, language, name, featured, sortOrder); err != nil {
+	if err := r.UpdateCollectionLocale(ctx, id, language, name, cover, description, meta, sortOrder); err != nil {
 		return err
 	}
 	return markModified(l.Path)
@@ -105,6 +105,42 @@ func (l *Lazy) RemoveCollectionTrack(ctx context.Context, collectionID, language
 	}
 	defer r.Close()
 	if err := r.RemoveCollectionTrack(ctx, collectionID, language, trackID); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
+func (l *Lazy) SetCollectionTags(ctx context.Context, collectionID, language string, tagIDs []string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetCollectionTags(ctx, collectionID, language, tagIDs); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
+func (l *Lazy) AddCollectionTag(ctx context.Context, collectionID, language, tagID string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.AddCollectionTag(ctx, collectionID, language, tagID); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
+func (l *Lazy) RemoveCollectionTag(ctx context.Context, collectionID, language, tagID string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.RemoveCollectionTag(ctx, collectionID, language, tagID); err != nil {
 		return err
 	}
 	return markModified(l.Path)
