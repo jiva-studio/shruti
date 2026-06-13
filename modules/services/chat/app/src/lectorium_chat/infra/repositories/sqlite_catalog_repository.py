@@ -30,7 +30,7 @@ from typing import Any, Iterator
 from rapidfuzz import fuzz, process, utils
 
 from lectorium_chat.agent.tools._fts import matches as _title_matches, tokens as _title_tokens
-from lectorium_chat.domain.entities import Reference, ResolvedEntity, Track
+from lectorium_chat.domain.entities import Collection, Reference, ResolvedEntity, Track
 from lectorium_chat.domain.ports.catalog_repository import ResolveKind
 from lectorium_chat.infra.repositories._ref_filter import (
     matches_ref as _matches_ref,
@@ -799,9 +799,114 @@ def _resolve_sync(
 
 # --- repository -------------------------------------------------------------
 
+def _collection_track_ids(
+    conn: sqlite3.Connection, collection_id: str, language: str,
+) -> tuple[str, ...]:
+    rows = conn.execute(
+        """
+        SELECT track_id FROM collection_tracks
+        WHERE collection_id = ? AND collection_language = ?
+        ORDER BY position ASC, track_id ASC
+        """,
+        (collection_id, language),
+    ).fetchall()
+    return tuple(r[0] for r in rows)
+
+
+def _search_collections_sync(
+    db_path: Path, query: str | None, lang: str | None, limit: int,
+) -> list[Collection]:
+    """Find collections by name. With no query, returns the featured set.
+    Per-locale: filters to `lang` when given. Returns [] when the catalog
+    predates the schema.
+
+    Name matching is done in Python with `casefold()` substring rather than SQL
+    `LIKE COLLATE NOCASE`, which only folds ASCII — a Russian query like «ишоп»
+    would never match the title «Ишопанишад». The collection corpus is small
+    enough that fetching the locale's rows and filtering in Python is cheap.
+    """
+    needle = (query or "").strip().casefold()
+    try:
+        with _catalog_conn(db_path) as conn:
+            sql = (
+                "SELECT id, language, name, COALESCE(cover, ''), COALESCE(description, '') "
+                "FROM collections WHERE 1 = 1"
+            )
+            params: list[Any] = []
+            if lang:
+                sql += " AND language = ?"
+                params.append(lang)
+            if not needle:
+                sql += (
+                    " AND EXISTS (SELECT 1 FROM collection_tags ct "
+                    "WHERE ct.collection_id = collections.id "
+                    "AND ct.collection_language = collections.language "
+                    "AND ct.tag_id = 'tag_featured')"
+                )
+            sql += " ORDER BY sort_order ASC, id ASC"
+            rows = conn.execute(sql, params).fetchall()
+            out: list[Collection] = []
+            for r in rows:
+                if needle and needle not in (r[2] or "").casefold():
+                    continue
+                cid, clang = r[0], r[1]
+                out.append(Collection(
+                    id=cid, name=r[2], cover=r[3], description=r[4],
+                    track_ids=_collection_track_ids(conn, cid, clang),
+                ))
+                if len(out) >= limit:
+                    break
+            return out
+    except sqlite3.OperationalError:
+        return []  # collections / collection_tags absent on an older catalog
+
+
+def _get_collection_sync(
+    db_path: Path, collection_id: str, lang: str | None,
+) -> Collection | None:
+    try:
+        with _catalog_conn(db_path) as conn:
+            sql = (
+                "SELECT id, language, name, COALESCE(cover, ''), COALESCE(description, '') "
+                "FROM collections WHERE id = ?"
+            )
+            params: list[Any] = [collection_id]
+            if lang:
+                sql += " AND language = ?"
+                params.append(lang)
+            sql += (
+                " ORDER BY CASE language WHEN ? THEN 0 WHEN 'en' THEN 1 ELSE 2 END LIMIT 1"
+            )
+            params.append(lang or "en")
+            row = conn.execute(sql, params).fetchone()
+            if row is None:
+                return None
+            cid, clang = row[0], row[1]
+            return Collection(
+                id=cid, name=row[2], cover=row[3], description=row[4],
+                track_ids=_collection_track_ids(conn, cid, clang),
+            )
+    except sqlite3.OperationalError:
+        return None
+
+
 class SqliteCatalogRepository:
     def __init__(self, *, catalog_db_path: Path) -> None:
         self._db_path = catalog_db_path
+
+    async def search_collections(
+        self, query: str | None, *, lang: str | None, limit: int = 10,
+    ) -> list[Collection]:
+        return await asyncio.to_thread(
+            _search_collections_sync, self._db_path, query, lang, limit,
+        )
+
+    async def get_collection(
+        self, collection_id: str, *, lang: str | None = None,
+    ) -> Collection | None:
+        return await asyncio.to_thread(
+            _get_collection_sync, self._db_path, collection_id, lang,
+        )
 
     async def get_track(self, track_id: str, *, lang: str) -> Track | None:
         return await asyncio.to_thread(
