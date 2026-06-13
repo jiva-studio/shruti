@@ -32,11 +32,13 @@ type UseCase struct {
 // optional: empty means "mint a new id" (typical first-locale call);
 // non-empty means "attach a new locale to this existing collection id".
 type CreateInput struct {
-	ID        string
-	Language  string
-	Name      string
-	Featured  bool
-	SortOrder int
+	ID          string
+	Language    string
+	Name        string
+	Cover       string
+	Description string
+	Meta        string
+	SortOrder   int
 }
 
 // Create inserts a new (id, language) collection row. Returns the canonical id
@@ -57,7 +59,7 @@ func (uc UseCase) Create(ctx context.Context, in CreateInput) (string, error) {
 	} else if !CollectionIDPattern.MatchString(id) {
 		return "", fmt.Errorf("id %q does not match pack_<12 alnum>", id)
 	}
-	if err := uc.Catalog.CreateCollectionLocale(ctx, id, lang, name, in.Featured, in.SortOrder); err != nil {
+	if err := uc.Catalog.CreateCollectionLocale(ctx, id, lang, name, in.Cover, in.Description, in.Meta, in.SortOrder); err != nil {
 		return "", err
 	}
 	return id, nil
@@ -66,11 +68,13 @@ func (uc UseCase) Create(ctx context.Context, in CreateInput) (string, error) {
 // UpdateInput is the patch payload for `collection.update`. nil pointers
 // leave the existing column untouched.
 type UpdateInput struct {
-	ID        string
-	Language  string
-	Name      *string
-	Featured  *bool
-	SortOrder *int
+	ID          string
+	Language    string
+	Name        *string
+	Cover       *string
+	Description *string
+	Meta        *string
+	SortOrder   *int
 }
 
 func (uc UseCase) Update(ctx context.Context, in UpdateInput) error {
@@ -80,7 +84,7 @@ func (uc UseCase) Update(ctx context.Context, in UpdateInput) error {
 	if strings.TrimSpace(in.Language) == "" {
 		return fmt.Errorf("language is required")
 	}
-	return uc.Catalog.UpdateCollectionLocale(ctx, in.ID, in.Language, in.Name, in.Featured, in.SortOrder)
+	return uc.Catalog.UpdateCollectionLocale(ctx, in.ID, in.Language, in.Name, in.Cover, in.Description, in.Meta, in.SortOrder)
 }
 
 func (uc UseCase) Get(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
@@ -151,6 +155,45 @@ func (uc UseCase) RemoveTrack(ctx context.Context, collectionID, language, track
 		return fmt.Errorf("language is required")
 	}
 	return uc.Catalog.RemoveCollectionTrack(ctx, collectionID, language, trackID)
+}
+
+// SetTags replaces the full tag membership of (collectionID, language).
+func (uc UseCase) SetTags(ctx context.Context, collectionID, language string, tagIDs []string) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+	}
+	if strings.TrimSpace(language) == "" {
+		return fmt.Errorf("language is required")
+	}
+	return uc.Catalog.SetCollectionTags(ctx, collectionID, language, tagIDs)
+}
+
+// AddTag adds one tag to a collection locale (idempotent).
+func (uc UseCase) AddTag(ctx context.Context, collectionID, language, tagID string) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+	}
+	if strings.TrimSpace(language) == "" {
+		return fmt.Errorf("language is required")
+	}
+	if strings.TrimSpace(tagID) == "" {
+		return fmt.Errorf("tag_id is required")
+	}
+	return uc.Catalog.AddCollectionTag(ctx, collectionID, language, tagID)
+}
+
+// RemoveTag removes one tag from a collection locale (idempotent).
+func (uc UseCase) RemoveTag(ctx context.Context, collectionID, language, tagID string) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+	}
+	if strings.TrimSpace(language) == "" {
+		return fmt.Errorf("language is required")
+	}
+	if strings.TrimSpace(tagID) == "" {
+		return fmt.Errorf("tag_id is required")
+	}
+	return uc.Catalog.RemoveCollectionTag(ctx, collectionID, language, tagID)
 }
 
 func (uc UseCase) assertTrackLanguage(ctx context.Context, trackID, language string) error {

@@ -90,8 +90,8 @@ type Repository interface {
 // on the library/home surfaces; unlike dicts they are never fuzzy-resolved, so
 // the port stays small and is consumed only by the collectioncrud use case.
 type CollectionRepository interface {
-	CreateCollectionLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error
-	UpdateCollectionLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error
+	CreateCollectionLocale(ctx context.Context, id, language, name, cover, description, meta string, sortOrder int) error
+	UpdateCollectionLocale(ctx context.Context, id, language string, name, cover, description, meta *string, sortOrder *int) error
 	GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error)
 	ListCollections(ctx context.Context, opts catalog.CollectionListOpts) ([]catalog.Collection, error)
 	DeleteCollection(ctx context.Context, id string) error
@@ -99,6 +99,9 @@ type CollectionRepository interface {
 	SetCollectionTracks(ctx context.Context, collectionID, language string, trackIDs []string) error
 	AddCollectionTrack(ctx context.Context, collectionID, language, trackID string, position *int) error
 	RemoveCollectionTrack(ctx context.Context, collectionID, language, trackID string) error
+	SetCollectionTags(ctx context.Context, collectionID, language string, tagIDs []string) error
+	AddCollectionTag(ctx context.Context, collectionID, language, tagID string) error
+	RemoveCollectionTag(ctx context.Context, collectionID, language, tagID string) error
 	// TrackLanguages returns the set of languages this track has a
 	// `track_variants` row for. The collectioncrud use case uses this to
 	// enforce the per-locale invariant: a track may only join a collection
