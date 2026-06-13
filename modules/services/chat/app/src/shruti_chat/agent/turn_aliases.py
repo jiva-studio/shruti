@@ -345,6 +345,19 @@ class TurnAliasMap:
             if isinstance(ref, VerseRef)
         ]
 
+    def has_verse_or_chapter(self, source_id: str, tokens: str) -> bool:
+        """True if a verse/chapter with this (source_id, tokens) was aliased
+        this turn — i.e. actually surfaced by retrieval. Lets the marker
+        expander reject a bypass `[verse:…]`/`[chapter:…]` the model TYPED for
+        content it was never given (a hallucinated card — observed: prose said
+        BG 16.4-18 but the marker pointed at BG 17.16)."""
+        for ref in self._chunks.values():
+            if isinstance(ref, VerseRef) and ref.source_id == source_id and ref.tokens == tokens:
+                return True
+            if isinstance(ref, ChapterRef) and ref.source_id == source_id and ref.region_token == tokens:
+                return True
+        return False
+
     def chapter_refs(self) -> list[tuple[int, ChapterRef]]:
         """All currently-minted chapter-location aliases, in mint order.
         Used by `flush_chapter_payloads` to emit a `chapter` payload per
