@@ -130,3 +130,57 @@ export function pushTextToken(out: ChatToken[], raw: string): void {
   flushBuffer()
   if (html) out.push({ kind: "text", html })
 }
+
+/* -------------------------------------------------------------------------- */
+/*               Excerpt rendering (citation / commentary cards)              */
+/* -------------------------------------------------------------------------- */
+
+/** Markdown blockquote run: consecutive lines starting with `>`. Mirrors
+ *  `QUOTE_RE` in parse.ts but kept local so this module doesn't import from
+ *  parse.ts — which already imports from here (avoids an import cycle). */
+const EXCERPT_QUOTE_RE = /(?:^|\n)((?:[ \t]*>[^\n]*(?:\n|$))+)/g
+
+/** A `>` blockquote block (e.g. a śloka quoted inside a purport) → an italic
+ *  `.excerpt-quote` block: each line's leading `>` is stripped and the body
+ *  sits on its own line. A whole-block `*…*` / `_…_` italic wrapper (the
+ *  transliteration emphasis) is peeled so no stray asterisks survive — the
+ *  CSS already italicises the block. */
+function renderQuoteBlock(block: string): string {
+  const lines = block.split("\n").map((l) => l.replace(/^[ \t]*>[ \t]?/, ""))
+  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop()
+  if (lines.length === 0) return ""
+  let bodyRaw = lines.join("\n").trim()
+  const wrap = bodyRaw.match(/^([*_])([\s\S]+)\1$/)
+  if (wrap && !wrap[2].includes(wrap[1])) bodyRaw = wrap[2]
+  const bodyHtml = bodyRaw ? inlineMd(bodyRaw).replace(/\n/g, "<br>") : ""
+  return `<blockquote class="excerpt-quote">${bodyHtml}</blockquote>`
+}
+
+/**
+ * Render an excerpt body (citation transcript snippet / commentary purport)
+ * to HTML for `ExcerptCard` → `HighlightText` (`v-html`). Uses the same
+ * inline pipeline as the chat bubble (`*`/`**`/code/links, bullets → •) and
+ * additionally lifts markdown blockquotes (`> …`) into styled
+ * `.excerpt-quote` blocks, so a quoted śloka renders as an italic quote on
+ * its own line instead of printing the literal `>`.
+ */
+export function renderExcerptHtml(raw: string): string {
+  if (!raw) return ""
+  let out = ""
+  let cursor = 0
+  for (const m of raw.matchAll(EXCERPT_QUOTE_RE)) {
+    const block = m[1]
+    const blockStart = (m.index ?? 0) + (m[0].length - block.length)
+    if (blockStart > cursor) {
+      const prose = raw.slice(cursor, blockStart).replace(/\n+$/, "")
+      if (prose) out += renderInlineRun(prose)
+    }
+    out += renderQuoteBlock(block)
+    cursor = (m.index ?? 0) + m[0].length
+  }
+  if (cursor < raw.length) {
+    const prose = raw.slice(cursor).replace(/^\n+/, "")
+    if (prose) out += renderInlineRun(prose)
+  }
+  return out
+}
