@@ -106,6 +106,40 @@ async def fetch_verse_body(
     return await asyncio.to_thread(_fetch_verse_body_sync, library_db, source_id, tokens)
 
 
+def _fetch_verse_commentary_sync(
+    library_db: Path, source_id: str, tokens: str, lang: str,
+) -> str | None:
+    """Full purport (commentary body) for a verse, in `lang` with en/any
+    fallback. None when the verse has no commentary doc."""
+    with sqlite3.connect(f"file:{library_db}?mode=ro", uri=True) as conn:
+        row = conn.execute(
+            "SELECT id FROM library_documents "
+            "WHERE source_id = ? AND tokens = ? AND kind = 'commentary' LIMIT 1",
+            (source_id, tokens),
+        ).fetchone()
+        if row is None:
+            return None
+        variants = dict(
+            conn.execute(
+                "SELECT language, body FROM library_document_variants WHERE document_id = ?",
+                (row[0],),
+            ).fetchall()
+        )
+    return variants.get(lang) or variants.get("en") or next(iter(variants.values()), None)
+
+
+async def fetch_verse_commentary(
+    library_db: Path, source_id: str, tokens: str, *, lang: str,
+) -> str | None:
+    """Async wrapper — the verse's full purport, or None (degrade to card-only).
+    Used by show_verse to summarize the purport in the same LLM turn."""
+    if not library_db.exists():
+        return None
+    return await asyncio.to_thread(
+        _fetch_verse_commentary_sync, library_db, source_id, tokens, lang,
+    )
+
+
 def _fetch_titles_sync(
     library_db: Path, source_id: str, token_prefix: str, lang: str,
 ) -> dict[str, str]:
