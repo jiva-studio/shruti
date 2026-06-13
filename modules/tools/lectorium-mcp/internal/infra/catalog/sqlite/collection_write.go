@@ -10,11 +10,11 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/infra/sqliteutil"
 )
 
-// CreatePackLocaleImpl inserts one (id, language) pack row. Caller has
+// CreateCollectionLocaleImpl inserts one (id, language) collection row. Caller has
 // already minted (or supplied) the id and resolved the per-locale
 // metadata. Uniqueness is enforced by the PK on (id, language); a
 // second create on an existing locale errors with a clear SQLITE_CONSTRAINT.
-func (r *Repo) CreatePackLocaleImpl(ctx context.Context, id, language, name string, featured bool, sortOrder int) error {
+func (r *Repo) CreateCollectionLocaleImpl(ctx context.Context, id, language, name string, featured bool, sortOrder int) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -25,16 +25,16 @@ func (r *Repo) CreatePackLocaleImpl(ctx context.Context, id, language, name stri
 		f = 1
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO packs (id, language, name, featured, sort_order) VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO collections (id, language, name, featured, sort_order) VALUES (?, ?, ?, ?, ?)`,
 		id, language, name, f, sortOrder); err != nil {
-		return fmt.Errorf("insert pack: %w", err)
+		return fmt.Errorf("insert collection: %w", err)
 	}
 	return tx.Commit()
 }
 
-// UpdatePackLocaleImpl patches one pack locale row. Nil pointers leave
+// UpdateCollectionLocaleImpl patches one collection locale row. Nil pointers leave
 // the existing column untouched.
-func (r *Repo) UpdatePackLocaleImpl(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error {
+func (r *Repo) UpdateCollectionLocaleImpl(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -44,12 +44,12 @@ func (r *Repo) UpdatePackLocaleImpl(ctx context.Context, id, language string, na
 	// Confirm the row exists so the caller gets a NotFound rather than a
 	// silent no-op on a typo'd id.
 	var n int
-	row := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM packs WHERE id = ? AND language = ?`, id, language)
+	row := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM collections WHERE id = ? AND language = ?`, id, language)
 	if err := row.Scan(&n); err != nil {
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("pack/%s/%s not found", id, language)
+		return fmt.Errorf("collection/%s/%s not found", id, language)
 	}
 
 	setParts := []string{}
@@ -75,7 +75,7 @@ func (r *Repo) UpdatePackLocaleImpl(ctx context.Context, id, language string, na
 	}
 	args = append(args, id, language)
 
-	stmt := `UPDATE packs SET `
+	stmt := `UPDATE collections SET `
 	for i, p := range setParts {
 		if i > 0 {
 			stmt += ", "
@@ -84,21 +84,21 @@ func (r *Repo) UpdatePackLocaleImpl(ctx context.Context, id, language string, na
 	}
 	stmt += ` WHERE id = ? AND language = ?`
 	if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
-		return fmt.Errorf("update pack: %w", err)
+		return fmt.Errorf("update collection: %w", err)
 	}
 	return tx.Commit()
 }
 
-// GetPackImpl returns the pack collapsed across locales plus its ordered
+// GetCollectionImpl returns the collection collapsed across locales plus its ordered
 // list of (language → track_id slices). Found=false when no locale exists.
-func (r *Repo) GetPackImpl(ctx context.Context, id string) (catalog.Pack, map[string][]string, bool, error) {
+func (r *Repo) GetCollectionImpl(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, language, name, featured, sort_order FROM packs WHERE id = ?`, id)
+		`SELECT id, language, name, featured, sort_order FROM collections WHERE id = ?`, id)
 	if err != nil {
-		return catalog.Pack{}, nil, false, err
+		return catalog.Collection{}, nil, false, err
 	}
 	defer rows.Close()
-	pack := catalog.Pack{
+	collection := catalog.Collection{
 		Id:        id,
 		Names:     map[string]string{},
 		Featured:  map[string]bool{},
@@ -109,34 +109,34 @@ func (r *Repo) GetPackImpl(ctx context.Context, id string) (catalog.Pack, map[st
 		var rid, lang, name string
 		var featured, sortOrder int
 		if err := rows.Scan(&rid, &lang, &name, &featured, &sortOrder); err != nil {
-			return catalog.Pack{}, nil, false, err
+			return catalog.Collection{}, nil, false, err
 		}
 		found = true
-		pack.Names[lang] = name
-		pack.Featured[lang] = featured != 0
-		pack.SortOrder[lang] = sortOrder
+		collection.Names[lang] = name
+		collection.Featured[lang] = featured != 0
+		collection.SortOrder[lang] = sortOrder
 	}
 	if !found {
-		return catalog.Pack{}, nil, false, rows.Err()
+		return catalog.Collection{}, nil, false, rows.Err()
 	}
 
 	tracksByLang := map[string][]string{}
-	for lang := range pack.Names {
-		ids, err := r.listPackTrackIDsForLocale(ctx, id, lang)
+	for lang := range collection.Names {
+		ids, err := r.listCollectionTrackIDsForLocale(ctx, id, lang)
 		if err != nil {
-			return catalog.Pack{}, nil, false, err
+			return catalog.Collection{}, nil, false, err
 		}
 		tracksByLang[lang] = ids
 	}
-	return pack, tracksByLang, true, rows.Err()
+	return collection, tracksByLang, true, rows.Err()
 }
 
-func (r *Repo) listPackTrackIDsForLocale(ctx context.Context, packID, language string) ([]string, error) {
+func (r *Repo) listCollectionTrackIDsForLocale(ctx context.Context, collectionID, language string) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT track_id FROM pack_tracks
-		 WHERE pack_id = ? AND pack_language = ?
+		`SELECT track_id FROM collection_tracks
+		 WHERE collection_id = ? AND collection_language = ?
 		 ORDER BY position ASC, track_id ASC`,
-		packID, language)
+		collectionID, language)
 	if err != nil {
 		return nil, err
 	}
@@ -152,10 +152,10 @@ func (r *Repo) listPackTrackIDsForLocale(ctx context.Context, packID, language s
 	return out, rows.Err()
 }
 
-// ListPacksImpl returns packs collapsed across locales, filtered by
+// ListCollectionsImpl returns collections collapsed across locales, filtered by
 // opts.Language / opts.Featured. Returned without their track lists for
 // compact responses.
-func (r *Repo) ListPacksImpl(ctx context.Context, opts catalog.PackListOpts) ([]catalog.Pack, error) {
+func (r *Repo) ListCollectionsImpl(ctx context.Context, opts catalog.CollectionListOpts) ([]catalog.Collection, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = 100
 	}
@@ -181,16 +181,16 @@ func (r *Repo) ListPacksImpl(ctx context.Context, opts catalog.PackListOpts) ([]
 
 	// Pick the distinct id window in stable order, then hydrate every
 	// locale row for those ids (so the caller sees the same shape it
-	// gets from GetPack).
+	// gets from GetCollection).
 	idStmt := fmt.Sprintf(`
-		SELECT DISTINCT id FROM packs%s AND id > ?
+		SELECT DISTINCT id FROM collections%s AND id > ?
 		ORDER BY id ASC
 		LIMIT ?`, ifEmpty(where, " WHERE 1=1"))
 	args = append(args, opts.Cursor, opts.Limit)
 
 	idRows, err := r.db.QueryContext(ctx, idStmt, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list pack ids: %w", err)
+		return nil, fmt.Errorf("list collection ids: %w", err)
 	}
 	var ids []string
 	for idRows.Next() {
@@ -206,17 +206,17 @@ func (r *Repo) ListPacksImpl(ctx context.Context, opts catalog.PackListOpts) ([]
 		return nil, err
 	}
 
-	out := make([]catalog.Pack, 0, len(ids))
+	out := make([]catalog.Collection, 0, len(ids))
 	for _, id := range ids {
 		// Re-read every locale row. We deliberately do NOT re-apply the
 		// language filter here — once an id is included, the caller
 		// sees its full per-locale metadata, mirroring ListDict.
 		rows, err := r.db.QueryContext(ctx,
-			`SELECT language, name, featured, sort_order FROM packs WHERE id = ?`, id)
+			`SELECT language, name, featured, sort_order FROM collections WHERE id = ?`, id)
 		if err != nil {
 			return nil, err
 		}
-		pack := catalog.Pack{
+		collection := catalog.Collection{
 			Id:        id,
 			Names:     map[string]string{},
 			Featured:  map[string]bool{},
@@ -229,40 +229,40 @@ func (r *Repo) ListPacksImpl(ctx context.Context, opts catalog.PackListOpts) ([]
 				rows.Close()
 				return nil, err
 			}
-			pack.Names[lang] = name
-			pack.Featured[lang] = featured != 0
-			pack.SortOrder[lang] = sortOrder
+			collection.Names[lang] = name
+			collection.Featured[lang] = featured != 0
+			collection.SortOrder[lang] = sortOrder
 		}
 		rows.Close()
-		out = append(out, pack)
+		out = append(out, collection)
 	}
 	return out, nil
 }
 
-// DeletePackImpl removes all locales of a pack. The FK cascade clears
-// pack_tracks for both locales.
-func (r *Repo) DeletePackImpl(ctx context.Context, id string) error {
+// DeleteCollectionImpl removes all locales of a collection. The FK cascade clears
+// collection_tracks for both locales.
+func (r *Repo) DeleteCollectionImpl(ctx context.Context, id string) error {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `DELETE FROM packs WHERE id = ?`, id)
+	res, err := tx.ExecContext(ctx, `DELETE FROM collections WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("pack/%s not found", id)
+		return fmt.Errorf("collection/%s not found", id)
 	}
 	return tx.Commit()
 }
 
-// DeletePackLocaleImpl removes one (id, language) row. If it's the last
-// locale, also clears any pack_tracks rows defensively (the FK cascade
+// DeleteCollectionLocaleImpl removes one (id, language) row. If it's the last
+// locale, also clears any collection_tracks rows defensively (the FK cascade
 // already does this, but stays explicit). The other locale's tracks are
 // preserved untouched.
-func (r *Repo) DeletePackLocaleImpl(ctx context.Context, id, language string) error {
+func (r *Repo) DeleteCollectionLocaleImpl(ctx context.Context, id, language string) error {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
@@ -270,65 +270,65 @@ func (r *Repo) DeletePackLocaleImpl(ctx context.Context, id, language string) er
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM packs WHERE id = ? AND language = ?`, id, language)
+		`DELETE FROM collections WHERE id = ? AND language = ?`, id, language)
 	if err != nil {
 		return err
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("pack/%s/%s not found", id, language)
+		return fmt.Errorf("collection/%s/%s not found", id, language)
 	}
 	return tx.Commit()
 }
 
-// SetPackTracksImpl atomically replaces the full ordered membership of
-// (pack_id, pack_language) with `trackIDs`. Returns NotFound if the
-// pack locale doesn't exist.
-func (r *Repo) SetPackTracksImpl(ctx context.Context, packID, language string, trackIDs []string) error {
+// SetCollectionTracksImpl atomically replaces the full ordered membership of
+// (collection_id, collection_language) with `trackIDs`. Returns NotFound if the
+// collection locale doesn't exist.
+func (r *Repo) SetCollectionTracksImpl(ctx context.Context, collectionID, language string, trackIDs []string) error {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	if err := assertPackLocale(ctx, tx, packID, language); err != nil {
+	if err := assertCollectionLocale(ctx, tx, collectionID, language); err != nil {
 		return err
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM pack_tracks WHERE pack_id = ? AND pack_language = ?`,
-		packID, language); err != nil {
-		return fmt.Errorf("clear pack_tracks: %w", err)
+		`DELETE FROM collection_tracks WHERE collection_id = ? AND collection_language = ?`,
+		collectionID, language); err != nil {
+		return fmt.Errorf("clear collection_tracks: %w", err)
 	}
 	for i, tid := range trackIDs {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO pack_tracks (pack_id, pack_language, track_id, position) VALUES (?, ?, ?, ?)`,
-			packID, language, tid, i); err != nil {
-			return fmt.Errorf("insert pack_track[%d]: %w", i, err)
+			`INSERT INTO collection_tracks (collection_id, collection_language, track_id, position) VALUES (?, ?, ?, ?)`,
+			collectionID, language, tid, i); err != nil {
+			return fmt.Errorf("insert collection_track[%d]: %w", i, err)
 		}
 	}
 	return tx.Commit()
 }
 
-// AddPackTrackImpl appends a track to the pack (or inserts at the given
+// AddCollectionTrackImpl appends a track to the collection (or inserts at the given
 // position, shifting subsequent rows). Position semantics mirror "insert
 // before index N"; len(existing) appends to the tail.
-func (r *Repo) AddPackTrackImpl(ctx context.Context, packID, language, trackID string, position *int) error {
+func (r *Repo) AddCollectionTrackImpl(ctx context.Context, collectionID, language, trackID string, position *int) error {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	if err := assertPackLocale(ctx, tx, packID, language); err != nil {
+	if err := assertCollectionLocale(ctx, tx, collectionID, language); err != nil {
 		return err
 	}
 
-	// Idempotent: if the track is already in the pack, do nothing.
+	// Idempotent: if the track is already in the collection, do nothing.
 	var existing int
 	row := tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM pack_tracks WHERE pack_id = ? AND pack_language = ? AND track_id = ?`,
-		packID, language, trackID)
+		`SELECT COUNT(*) FROM collection_tracks WHERE collection_id = ? AND collection_language = ? AND track_id = ?`,
+		collectionID, language, trackID)
 	if err := row.Scan(&existing); err != nil {
 		return err
 	}
@@ -339,8 +339,8 @@ func (r *Repo) AddPackTrackImpl(ctx context.Context, packID, language, trackID s
 	// Compute insertion position. nil → append.
 	var rowCount int
 	row = tx.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM pack_tracks WHERE pack_id = ? AND pack_language = ?`,
-		packID, language)
+		`SELECT COUNT(*) FROM collection_tracks WHERE collection_id = ? AND collection_language = ?`,
+		collectionID, language)
 	if err := row.Scan(&rowCount); err != nil {
 		return err
 	}
@@ -358,39 +358,39 @@ func (r *Repo) AddPackTrackImpl(ctx context.Context, packID, language, trackID s
 	// Shift subsequent positions up by 1.
 	if pos < rowCount {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE pack_tracks SET position = position + 1
-			 WHERE pack_id = ? AND pack_language = ? AND position >= ?`,
-			packID, language, pos); err != nil {
+			`UPDATE collection_tracks SET position = position + 1
+			 WHERE collection_id = ? AND collection_language = ? AND position >= ?`,
+			collectionID, language, pos); err != nil {
 			return fmt.Errorf("shift positions: %w", err)
 		}
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO pack_tracks (pack_id, pack_language, track_id, position) VALUES (?, ?, ?, ?)`,
-		packID, language, trackID, pos); err != nil {
-		return fmt.Errorf("insert pack_track: %w", err)
+		`INSERT INTO collection_tracks (collection_id, collection_language, track_id, position) VALUES (?, ?, ?, ?)`,
+		collectionID, language, trackID, pos); err != nil {
+		return fmt.Errorf("insert collection_track: %w", err)
 	}
 	return tx.Commit()
 }
 
-// RemovePackTrackImpl deletes one (pack, language, track_id) row and
+// RemoveCollectionTrackImpl deletes one (collection, language, track_id) row and
 // compacts the position sequence so callers iterating ORDER BY position
 // don't see gaps. Idempotent: missing track is success.
-func (r *Repo) RemovePackTrackImpl(ctx context.Context, packID, language, trackID string) error {
+func (r *Repo) RemoveCollectionTrackImpl(ctx context.Context, collectionID, language, trackID string) error {
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	if err := assertPackLocale(ctx, tx, packID, language); err != nil {
+	if err := assertCollectionLocale(ctx, tx, collectionID, language); err != nil {
 		return err
 	}
 
 	var removedPos int
 	row := tx.QueryRowContext(ctx,
-		`SELECT position FROM pack_tracks
-		 WHERE pack_id = ? AND pack_language = ? AND track_id = ?`,
-		packID, language, trackID)
+		`SELECT position FROM collection_tracks
+		 WHERE collection_id = ? AND collection_language = ? AND track_id = ?`,
+		collectionID, language, trackID)
 	if err := row.Scan(&removedPos); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return tx.Commit()
@@ -398,27 +398,27 @@ func (r *Repo) RemovePackTrackImpl(ctx context.Context, packID, language, trackI
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM pack_tracks WHERE pack_id = ? AND pack_language = ? AND track_id = ?`,
-		packID, language, trackID); err != nil {
-		return fmt.Errorf("delete pack_track: %w", err)
+		`DELETE FROM collection_tracks WHERE collection_id = ? AND collection_language = ? AND track_id = ?`,
+		collectionID, language, trackID); err != nil {
+		return fmt.Errorf("delete collection_track: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE pack_tracks SET position = position - 1
-		 WHERE pack_id = ? AND pack_language = ? AND position > ?`,
-		packID, language, removedPos); err != nil {
+		`UPDATE collection_tracks SET position = position - 1
+		 WHERE collection_id = ? AND collection_language = ? AND position > ?`,
+		collectionID, language, removedPos); err != nil {
 		return fmt.Errorf("compact positions: %w", err)
 	}
 	return tx.Commit()
 }
 
-func assertPackLocale(ctx context.Context, tx *sql.Tx, packID, language string) error {
+func assertCollectionLocale(ctx context.Context, tx *sql.Tx, collectionID, language string) error {
 	row := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM packs WHERE id = ? AND language = ? LIMIT 1`,
-		packID, language)
+		`SELECT 1 FROM collections WHERE id = ? AND language = ? LIMIT 1`,
+		collectionID, language)
 	var n int
 	if err := row.Scan(&n); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("pack/%s/%s not found", packID, language)
+			return fmt.Errorf("collection/%s/%s not found", collectionID, language)
 		}
 		return err
 	}
@@ -427,51 +427,51 @@ func assertPackLocale(ctx context.Context, tx *sql.Tx, packID, language string) 
 
 // --- public Repo methods (with retry wrapper) ---
 
-func (r *Repo) CreatePackLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error {
+func (r *Repo) CreateCollectionLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.CreatePackLocaleImpl(ctx, id, language, name, featured, sortOrder)
+		return r.CreateCollectionLocaleImpl(ctx, id, language, name, featured, sortOrder)
 	})
 }
-func (r *Repo) UpdatePackLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error {
+func (r *Repo) UpdateCollectionLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.UpdatePackLocaleImpl(ctx, id, language, name, featured, sortOrder)
+		return r.UpdateCollectionLocaleImpl(ctx, id, language, name, featured, sortOrder)
 	})
 }
-func (r *Repo) GetPack(ctx context.Context, id string) (catalog.Pack, map[string][]string, bool, error) {
-	return r.GetPackImpl(ctx, id)
+func (r *Repo) GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
+	return r.GetCollectionImpl(ctx, id)
 }
-func (r *Repo) ListPacks(ctx context.Context, opts catalog.PackListOpts) ([]catalog.Pack, error) {
-	return r.ListPacksImpl(ctx, opts)
+func (r *Repo) ListCollections(ctx context.Context, opts catalog.CollectionListOpts) ([]catalog.Collection, error) {
+	return r.ListCollectionsImpl(ctx, opts)
 }
-func (r *Repo) DeletePack(ctx context.Context, id string) error {
+func (r *Repo) DeleteCollection(ctx context.Context, id string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.DeletePackImpl(ctx, id)
+		return r.DeleteCollectionImpl(ctx, id)
 	})
 }
-func (r *Repo) DeletePackLocale(ctx context.Context, id, language string) error {
+func (r *Repo) DeleteCollectionLocale(ctx context.Context, id, language string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.DeletePackLocaleImpl(ctx, id, language)
+		return r.DeleteCollectionLocaleImpl(ctx, id, language)
 	})
 }
-func (r *Repo) SetPackTracks(ctx context.Context, packID, language string, trackIDs []string) error {
+func (r *Repo) SetCollectionTracks(ctx context.Context, collectionID, language string, trackIDs []string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.SetPackTracksImpl(ctx, packID, language, trackIDs)
+		return r.SetCollectionTracksImpl(ctx, collectionID, language, trackIDs)
 	})
 }
-func (r *Repo) AddPackTrack(ctx context.Context, packID, language, trackID string, position *int) error {
+func (r *Repo) AddCollectionTrack(ctx context.Context, collectionID, language, trackID string, position *int) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.AddPackTrackImpl(ctx, packID, language, trackID, position)
+		return r.AddCollectionTrackImpl(ctx, collectionID, language, trackID, position)
 	})
 }
-func (r *Repo) RemovePackTrack(ctx context.Context, packID, language, trackID string) error {
+func (r *Repo) RemoveCollectionTrack(ctx context.Context, collectionID, language, trackID string) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.RemovePackTrackImpl(ctx, packID, language, trackID)
+		return r.RemoveCollectionTrackImpl(ctx, collectionID, language, trackID)
 	})
 }
 
 // TrackLanguages returns the set of languages this track has a variant
-// for. Used by the pack usecase to enforce the per-locale invariant
-// (an EN track may not be added to an RU pack).
+// for. Used by the collection usecase to enforce the per-locale invariant
+// (an EN track may not be added to an RU collection).
 func (r *Repo) TrackLanguages(ctx context.Context, trackID string) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT language FROM track_variants WHERE track_id = ?`, trackID)

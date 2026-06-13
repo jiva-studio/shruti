@@ -18,9 +18,9 @@ import (
 	adminconfigapp "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/alignpdf"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncrud"
 	configpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/dictcrud"
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/refresh"
@@ -490,8 +490,8 @@ func main() {
 				Minter:     minter,
 			},
 		},
-		PackCRUD: tools.PackCRUDDeps{
-			UseCase: packcrud.UseCase{
+		CollectionCRUD: tools.CollectionCRUDDeps{
+			UseCase: collectioncrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
 				Minter:  minter,
 			},

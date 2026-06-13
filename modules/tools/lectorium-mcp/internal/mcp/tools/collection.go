@@ -7,42 +7,42 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/packcrud"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncrud"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/domain/catalog"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/mcp/envelope"
 )
 
-// PackCRUDDeps wires `pack.*` tools to the packcrud use case.
-type PackCRUDDeps struct {
-	UseCase packcrud.UseCase
+// CollectionCRUDDeps wires `collection.*` tools to the collectioncrud use case.
+type CollectionCRUDDeps struct {
+	UseCase collectioncrud.UseCase
 }
 
-// RegisterPackCRUD registers all 9 starter-pack tools:
+// RegisterCollectionCRUD registers all 9 starter-collection tools:
 //
-//	pack.create / pack.update / pack.get / pack.list /
-//	pack.delete / pack.delete_locale /
-//	pack.tracks.set / pack.tracks.add / pack.tracks.remove
+//	collection.create / collection.update / collection.get / collection.list /
+//	collection.delete / collection.delete_locale /
+//	collection.tracks.set / collection.tracks.add / collection.tracks.remove
 //
 // All sync; envelope shape `{ok, kind, result}`.
-func RegisterPackCRUD(s *server.MCPServer, deps PackCRUDDeps) {
-	registerPackCreate(s, deps)
-	registerPackUpdate(s, deps)
-	registerPackGet(s, deps)
-	registerPackList(s, deps)
-	registerPackDelete(s, deps)
-	registerPackDeleteLocale(s, deps)
-	registerPackTracksSet(s, deps)
-	registerPackTracksAdd(s, deps)
-	registerPackTracksRemove(s, deps)
+func RegisterCollectionCRUD(s *server.MCPServer, deps CollectionCRUDDeps) {
+	registerCollectionCreate(s, deps)
+	registerCollectionUpdate(s, deps)
+	registerCollectionGet(s, deps)
+	registerCollectionList(s, deps)
+	registerCollectionDelete(s, deps)
+	registerCollectionDeleteLocale(s, deps)
+	registerCollectionTracksSet(s, deps)
+	registerCollectionTracksAdd(s, deps)
+	registerCollectionTracksRemove(s, deps)
 }
 
-func registerPackCreate(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.create"
+func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.create"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription(`Create a starter-pack locale row. id is optional: omit to mint a new pack_<12 alnum>; supply an existing id to add a second locale to an existing pack.`),
-		mcp.WithString("id", mcp.Description("Existing pack id (for second-locale create). Empty/omitted = mint new.")),
+		mcp.WithDescription(`Create a starter-collection locale row. id is optional: omit to mint a new pack_<12 alnum>; supply an existing id to add a second locale to an existing collection.`),
+		mcp.WithString("id", mcp.Description("Existing collection id (for second-locale create). Empty/omitted = mint new.")),
 		mcp.WithString("language", mcp.Required(), mcp.Description("Locale code (e.g. ru / en).")),
-		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable pack name in this locale.")),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable collection name in this locale.")),
 		mcp.WithBoolean("featured", mcp.Description("Show on mobile empty-state Home (default false).")),
 		mcp.WithNumber("sort_order", mcp.Description("ASC display key (default 0).")),
 	)
@@ -55,7 +55,7 @@ func registerPackCreate(s *server.MCPServer, deps PackCRUDDeps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		in := packcrud.CreateInput{
+		in := collectioncrud.CreateInput{
 			ID:        req.GetString("id", ""),
 			Language:  lang,
 			Name:      name,
@@ -76,10 +76,10 @@ func registerPackCreate(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackUpdate(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.update"
+func registerCollectionUpdate(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.update"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Patch one (pack.id, language) locale. Only fields you supply are changed."),
+		mcp.WithDescription("Patch one (collection.id, language) locale. Only fields you supply are changed."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("name"),
@@ -96,7 +96,7 @@ func registerPackUpdate(s *server.MCPServer, deps PackCRUDDeps) {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		args := req.GetArguments()
-		in := packcrud.UpdateInput{ID: id, Language: lang}
+		in := collectioncrud.UpdateInput{ID: id, Language: lang}
 		if v, ok := args["name"].(string); ok {
 			in.Name = &v
 		}
@@ -114,10 +114,10 @@ func registerPackUpdate(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackGet(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.get"
+func registerCollectionGet(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.get"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Get the pack collapsed across locales plus its track membership per locale."),
+		mcp.WithDescription("Get the collection collapsed across locales plus its track membership per locale."),
 		mcp.WithString("id", mcp.Required()),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -125,24 +125,24 @@ func registerPackGet(s *server.MCPServer, deps PackCRUDDeps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		pack, tracks, ok, err := deps.UseCase.Get(ctx, id)
+		collection, tracks, ok, err := deps.UseCase.Get(ctx, id)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		if !ok {
-			return envelope.Err(kind, envelope.CodeNotFound, fmt.Sprintf("pack/%s not found", id), nil), nil
+			return envelope.Err(kind, envelope.CodeNotFound, fmt.Sprintf("collection/%s not found", id), nil), nil
 		}
 		return envelope.Result(kind, map[string]any{
-			"pack":   packToWire(pack),
-			"tracks": tracks,
+			"collection": collectionToWire(collection),
+			"tracks":     tracks,
 		}), nil
 	})
 }
 
-func registerPackList(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.list"
+func registerCollectionList(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.list"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("List packs filtered by language / featured. Returns packs without their track membership for compact responses."),
+		mcp.WithDescription("List collections filtered by language / featured. Returns collections without their track membership for compact responses."),
 		mcp.WithString("language", mcp.Description("Filter to a single locale.")),
 		mcp.WithBoolean("featured", mcp.Description("If set, only featured=true (or =false) rows are returned.")),
 		mcp.WithNumber("limit", mcp.Description("Page size (default 100).")),
@@ -150,7 +150,7 @@ func registerPackList(s *server.MCPServer, deps PackCRUDDeps) {
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := req.GetArguments()
-		opts := catalog.PackListOpts{
+		opts := catalog.CollectionListOpts{
 			Limit:  int(req.GetFloat("limit", 0)),
 			Cursor: req.GetString("cursor", ""),
 		}
@@ -160,22 +160,22 @@ func registerPackList(s *server.MCPServer, deps PackCRUDDeps) {
 		if v, ok := args["featured"].(bool); ok {
 			opts.Featured = &v
 		}
-		packs, err := deps.UseCase.List(ctx, opts)
+		collections, err := deps.UseCase.List(ctx, opts)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
 		}
-		out := make([]map[string]any, 0, len(packs))
-		for _, p := range packs {
-			out = append(out, packToWire(p))
+		out := make([]map[string]any, 0, len(collections))
+		for _, p := range collections {
+			out = append(out, collectionToWire(p))
 		}
-		return envelope.Result(kind, map[string]any{"packs": out}), nil
+		return envelope.Result(kind, map[string]any{"collections": out}), nil
 	})
 }
 
-func registerPackDelete(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.delete"
+func registerCollectionDelete(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.delete"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Delete all locales of a pack (cascades pack_tracks)."),
+		mcp.WithDescription("Delete all locales of a collection (cascades collection_tracks)."),
 		mcp.WithString("id", mcp.Required()),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -190,10 +190,10 @@ func registerPackDelete(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackDeleteLocale(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.delete_locale"
+func registerCollectionDeleteLocale(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.delete_locale"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Delete one locale row of a pack. The other locale (and its tracks) is preserved."),
+		mcp.WithDescription("Delete one locale row of a collection. The other locale (and its tracks) is preserved."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 	)
@@ -213,10 +213,10 @@ func registerPackDeleteLocale(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackTracksSet(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.tracks.set"
+func registerCollectionTracksSet(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tracks.set"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Replace the full ordered membership of (pack id, language) atomically. Each candidate track must have a track_variants row in that language; otherwise the whole call is rejected."),
+		mcp.WithDescription("Replace the full ordered membership of (collection id, language) atomically. Each candidate track must have a track_variants row in that language; otherwise the whole call is rejected."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithArray("track_ids", mcp.Required(), mcp.Description("Ordered list of track ids (position 0 first).")),
@@ -245,10 +245,10 @@ func registerPackTracksSet(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackTracksAdd(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.tracks.add"
+func registerCollectionTracksAdd(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tracks.add"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Add one track to a pack locale at `position` (default: append). Idempotent — duplicate track id is a no-op."),
+		mcp.WithDescription("Add one track to a collection locale at `position` (default: append). Idempotent — duplicate track id is a no-op."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("track_id", mcp.Required()),
@@ -280,10 +280,10 @@ func registerPackTracksAdd(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-func registerPackTracksRemove(s *server.MCPServer, deps PackCRUDDeps) {
-	kind := "pack.tracks.remove"
+func registerCollectionTracksRemove(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tracks.remove"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Remove one track from a pack locale. Idempotent — missing track is a no-op."),
+		mcp.WithDescription("Remove one track from a collection locale. Idempotent — missing track is a no-op."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("track_id", mcp.Required()),
@@ -308,9 +308,9 @@ func registerPackTracksRemove(s *server.MCPServer, deps PackCRUDDeps) {
 	})
 }
 
-// packToWire flattens the per-locale maps into a JSON object suitable for
+// collectionToWire flattens the per-locale maps into a JSON object suitable for
 // the MCP response. Keys are the language codes; consumers iterate them.
-func packToWire(p catalog.Pack) map[string]any {
+func collectionToWire(p catalog.Collection) map[string]any {
 	return map[string]any{
 		"id":         p.Id,
 		"names":      p.Names,

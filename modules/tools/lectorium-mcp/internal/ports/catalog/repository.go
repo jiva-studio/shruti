@@ -85,23 +85,23 @@ type Repository interface {
 	TrackRepository
 }
 
-// PackRepository is the starter-pack side of the catalog (`packs` +
-// `pack_tracks`). Packs are curated, locale-keyed bundles surfaced on
-// empty-state screens; unlike dicts they are never fuzzy-resolved, so
-// the port stays small and is consumed only by the packcrud use case.
-type PackRepository interface {
-	CreatePackLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error
-	UpdatePackLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error
-	GetPack(ctx context.Context, id string) (catalog.Pack, map[string][]string, bool, error)
-	ListPacks(ctx context.Context, opts catalog.PackListOpts) ([]catalog.Pack, error)
-	DeletePack(ctx context.Context, id string) error
-	DeletePackLocale(ctx context.Context, id, language string) error
-	SetPackTracks(ctx context.Context, packID, language string, trackIDs []string) error
-	AddPackTrack(ctx context.Context, packID, language, trackID string, position *int) error
-	RemovePackTrack(ctx context.Context, packID, language, trackID string) error
+// CollectionRepository is the collection side of the catalog (`collections` +
+// `collection_tracks`). Collections are curated, locale-keyed bundles surfaced
+// on the library/home surfaces; unlike dicts they are never fuzzy-resolved, so
+// the port stays small and is consumed only by the collectioncrud use case.
+type CollectionRepository interface {
+	CreateCollectionLocale(ctx context.Context, id, language, name string, featured bool, sortOrder int) error
+	UpdateCollectionLocale(ctx context.Context, id, language string, name *string, featured *bool, sortOrder *int) error
+	GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error)
+	ListCollections(ctx context.Context, opts catalog.CollectionListOpts) ([]catalog.Collection, error)
+	DeleteCollection(ctx context.Context, id string) error
+	DeleteCollectionLocale(ctx context.Context, id, language string) error
+	SetCollectionTracks(ctx context.Context, collectionID, language string, trackIDs []string) error
+	AddCollectionTrack(ctx context.Context, collectionID, language, trackID string, position *int) error
+	RemoveCollectionTrack(ctx context.Context, collectionID, language, trackID string) error
 	// TrackLanguages returns the set of languages this track has a
-	// `track_variants` row for. The packcrud use case uses this to
-	// enforce the per-locale invariant: a track may only join a pack
+	// `track_variants` row for. The collectioncrud use case uses this to
+	// enforce the per-locale invariant: a track may only join a collection
 	// whose language matches one of its variants.
 	TrackLanguages(ctx context.Context, trackID string) ([]string, error)
 }
@@ -121,7 +121,7 @@ type ResolveRequest struct {
 }
 
 type ResolveResponse struct {
-	MatchedID  string // "" when no candidate fits
+	MatchedID string // "" when no candidate fits
 	// MatchedName is the canonical name that gets persisted in the
 	// metadata payload (so commit can look it up against the live
 	// catalog rather than relying on a frozen id). For author /
@@ -142,4 +142,3 @@ const (
 	ConfLow    Confidence = "low"
 	ConfNone   Confidence = "none"
 )
-

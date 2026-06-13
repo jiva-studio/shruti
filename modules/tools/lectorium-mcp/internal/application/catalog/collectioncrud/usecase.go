@@ -1,9 +1,9 @@
-// Package packcrud is the application use case for starter-pack
-// mutations. Mirrors `dictcrud` for the pack entity: thin orchestration
-// over `catalogport.PackRepository`, with id minting + id-shape
+// Package collectioncrud is the application use case for starter-collection
+// mutations. Mirrors `dictcrud` for the collection entity: thin orchestration
+// over `catalogport.CollectionRepository`, with id minting + id-shape
 // validation + the per-locale invariants (track language must match
-// pack language).
-package packcrud
+// collection language).
+package collectioncrud
 
 import (
 	"context"
@@ -16,21 +16,21 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/ports/ids"
 )
 
-// PackIDPattern is the canonical shape: `pack_<12 alnum>`. Caller-
+// CollectionIDPattern is the canonical shape: `pack_<12 alnum>`. Caller-
 // supplied ids are rejected if they don't match — server mints on the
 // happy path, but supports a caller-supplied id when adding a second
-// locale to an existing pack.
-var PackIDPattern = regexp.MustCompile(`^pack_[A-Za-z0-9]{12}$`)
+// locale to an existing collection.
+var CollectionIDPattern = regexp.MustCompile(`^pack_[A-Za-z0-9]{12}$`)
 
-// UseCase wraps a PackRepository with id minting + validation.
+// UseCase wraps a CollectionRepository with id minting + validation.
 type UseCase struct {
-	Catalog catalogport.PackRepository
+	Catalog catalogport.CollectionRepository
 	Minter  ids.Minter
 }
 
-// CreateInput is the user-supplied payload for `pack.create`. ID is
+// CreateInput is the user-supplied payload for `collection.create`. ID is
 // optional: empty means "mint a new id" (typical first-locale call);
-// non-empty means "attach a new locale to this existing pack id".
+// non-empty means "attach a new locale to this existing collection id".
 type CreateInput struct {
 	ID        string
 	Language  string
@@ -39,7 +39,7 @@ type CreateInput struct {
 	SortOrder int
 }
 
-// Create inserts a new (id, language) pack row. Returns the canonical id
+// Create inserts a new (id, language) collection row. Returns the canonical id
 // (newly minted or echo of the caller-supplied id). Errors on duplicate
 // (id, language) — that's an UPDATE, not a CREATE.
 func (uc UseCase) Create(ctx context.Context, in CreateInput) (string, error) {
@@ -53,17 +53,17 @@ func (uc UseCase) Create(ctx context.Context, in CreateInput) (string, error) {
 	}
 	id := strings.TrimSpace(in.ID)
 	if id == "" {
-		id = catalog.PackIDPrefix + uc.Minter.MintTail()
-	} else if !PackIDPattern.MatchString(id) {
+		id = catalog.CollectionIDPrefix + uc.Minter.MintTail()
+	} else if !CollectionIDPattern.MatchString(id) {
 		return "", fmt.Errorf("id %q does not match pack_<12 alnum>", id)
 	}
-	if err := uc.Catalog.CreatePackLocale(ctx, id, lang, name, in.Featured, in.SortOrder); err != nil {
+	if err := uc.Catalog.CreateCollectionLocale(ctx, id, lang, name, in.Featured, in.SortOrder); err != nil {
 		return "", err
 	}
 	return id, nil
 }
 
-// UpdateInput is the patch payload for `pack.update`. nil pointers
+// UpdateInput is the patch payload for `collection.update`. nil pointers
 // leave the existing column untouched.
 type UpdateInput struct {
 	ID        string
@@ -74,50 +74,50 @@ type UpdateInput struct {
 }
 
 func (uc UseCase) Update(ctx context.Context, in UpdateInput) error {
-	if !PackIDPattern.MatchString(in.ID) {
+	if !CollectionIDPattern.MatchString(in.ID) {
 		return fmt.Errorf("id %q does not match pack_<12 alnum>", in.ID)
 	}
 	if strings.TrimSpace(in.Language) == "" {
 		return fmt.Errorf("language is required")
 	}
-	return uc.Catalog.UpdatePackLocale(ctx, in.ID, in.Language, in.Name, in.Featured, in.SortOrder)
+	return uc.Catalog.UpdateCollectionLocale(ctx, in.ID, in.Language, in.Name, in.Featured, in.SortOrder)
 }
 
-func (uc UseCase) Get(ctx context.Context, id string) (catalog.Pack, map[string][]string, bool, error) {
-	if !PackIDPattern.MatchString(id) {
-		return catalog.Pack{}, nil, false, fmt.Errorf("id %q does not match pack_<12 alnum>", id)
+func (uc UseCase) Get(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
+	if !CollectionIDPattern.MatchString(id) {
+		return catalog.Collection{}, nil, false, fmt.Errorf("id %q does not match pack_<12 alnum>", id)
 	}
-	return uc.Catalog.GetPack(ctx, id)
+	return uc.Catalog.GetCollection(ctx, id)
 }
 
-func (uc UseCase) List(ctx context.Context, opts catalog.PackListOpts) ([]catalog.Pack, error) {
-	return uc.Catalog.ListPacks(ctx, opts)
+func (uc UseCase) List(ctx context.Context, opts catalog.CollectionListOpts) ([]catalog.Collection, error) {
+	return uc.Catalog.ListCollections(ctx, opts)
 }
 
 func (uc UseCase) Delete(ctx context.Context, id string) error {
-	if !PackIDPattern.MatchString(id) {
+	if !CollectionIDPattern.MatchString(id) {
 		return fmt.Errorf("id %q does not match pack_<12 alnum>", id)
 	}
-	return uc.Catalog.DeletePack(ctx, id)
+	return uc.Catalog.DeleteCollection(ctx, id)
 }
 
 func (uc UseCase) DeleteLocale(ctx context.Context, id, language string) error {
-	if !PackIDPattern.MatchString(id) {
+	if !CollectionIDPattern.MatchString(id) {
 		return fmt.Errorf("id %q does not match pack_<12 alnum>", id)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
 	}
-	return uc.Catalog.DeletePackLocale(ctx, id, language)
+	return uc.Catalog.DeleteCollectionLocale(ctx, id, language)
 }
 
-// SetTracks replaces the full ordered membership of (packID, language).
+// SetTracks replaces the full ordered membership of (collectionID, language).
 // Each candidate track_id must exist and have a `track_variants` row in
 // `language`; otherwise the call is rejected wholesale (no partial
-// commit — pack composition is a deliberate edit).
-func (uc UseCase) SetTracks(ctx context.Context, packID, language string, trackIDs []string) error {
-	if !PackIDPattern.MatchString(packID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", packID)
+// commit — collection composition is a deliberate edit).
+func (uc UseCase) SetTracks(ctx context.Context, collectionID, language string, trackIDs []string) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -127,12 +127,12 @@ func (uc UseCase) SetTracks(ctx context.Context, packID, language string, trackI
 			return err
 		}
 	}
-	return uc.Catalog.SetPackTracks(ctx, packID, language, trackIDs)
+	return uc.Catalog.SetCollectionTracks(ctx, collectionID, language, trackIDs)
 }
 
-func (uc UseCase) AddTrack(ctx context.Context, packID, language, trackID string, position *int) error {
-	if !PackIDPattern.MatchString(packID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", packID)
+func (uc UseCase) AddTrack(ctx context.Context, collectionID, language, trackID string, position *int) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -140,17 +140,17 @@ func (uc UseCase) AddTrack(ctx context.Context, packID, language, trackID string
 	if err := uc.assertTrackLanguage(ctx, trackID, language); err != nil {
 		return err
 	}
-	return uc.Catalog.AddPackTrack(ctx, packID, language, trackID, position)
+	return uc.Catalog.AddCollectionTrack(ctx, collectionID, language, trackID, position)
 }
 
-func (uc UseCase) RemoveTrack(ctx context.Context, packID, language, trackID string) error {
-	if !PackIDPattern.MatchString(packID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", packID)
+func (uc UseCase) RemoveTrack(ctx context.Context, collectionID, language, trackID string) error {
+	if !CollectionIDPattern.MatchString(collectionID) {
+		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
 	}
-	return uc.Catalog.RemovePackTrack(ctx, packID, language, trackID)
+	return uc.Catalog.RemoveCollectionTrack(ctx, collectionID, language, trackID)
 }
 
 func (uc UseCase) assertTrackLanguage(ctx context.Context, trackID, language string) error {
@@ -166,6 +166,6 @@ func (uc UseCase) assertTrackLanguage(ctx context.Context, trackID, language str
 			return nil
 		}
 	}
-	return fmt.Errorf("track %q has no %s variant (has: %s) — language mismatch with pack",
+	return fmt.Errorf("track %q has no %s variant (has: %s) — language mismatch with collection",
 		trackID, language, strings.Join(langs, ","))
 }
