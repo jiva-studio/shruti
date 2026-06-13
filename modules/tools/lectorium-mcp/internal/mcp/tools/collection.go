@@ -17,11 +17,12 @@ type CollectionCRUDDeps struct {
 	UseCase collectioncrud.UseCase
 }
 
-// RegisterCollectionCRUD registers all 9 starter-collection tools:
+// RegisterCollectionCRUD registers all 12 collection tools:
 //
 //	collection.create / collection.update / collection.get / collection.list /
 //	collection.delete / collection.delete_locale /
-//	collection.tracks.set / collection.tracks.add / collection.tracks.remove
+//	collection.tracks.set / collection.tracks.add / collection.tracks.remove /
+//	collection.tags.set / collection.tags.add / collection.tags.remove
 //
 // All sync; envelope shape `{ok, kind, result}`.
 func RegisterCollectionCRUD(s *server.MCPServer, deps CollectionCRUDDeps) {
@@ -34,16 +35,21 @@ func RegisterCollectionCRUD(s *server.MCPServer, deps CollectionCRUDDeps) {
 	registerCollectionTracksSet(s, deps)
 	registerCollectionTracksAdd(s, deps)
 	registerCollectionTracksRemove(s, deps)
+	registerCollectionTagsSet(s, deps)
+	registerCollectionTagsAdd(s, deps)
+	registerCollectionTagsRemove(s, deps)
 }
 
 func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
 	kind := "collection.create"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription(`Create a starter-collection locale row. id is optional: omit to mint a new pack_<12 alnum>; supply an existing id to add a second locale to an existing collection.`),
+		mcp.WithDescription(`Create a collection locale row. id is optional: omit to mint a new pack_<12 alnum>; supply an existing id to add a second locale to an existing collection. To feature it on the mobile home, add the tag_featured tag via collection.tags.add.`),
 		mcp.WithString("id", mcp.Description("Existing collection id (for second-locale create). Empty/omitted = mint new.")),
 		mcp.WithString("language", mcp.Required(), mcp.Description("Locale code (e.g. ru / en).")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Human-readable collection name in this locale.")),
-		mcp.WithBoolean("featured", mcp.Description("Show on mobile empty-state Home (default false).")),
+		mcp.WithString("cover", mcp.Description("S3 asset key for the cover, e.g. public/collections/<id>/cover.jpg.")),
+		mcp.WithString("description", mcp.Description("Collection description in this locale.")),
+		mcp.WithString("meta", mcp.Description("Optional raw JSON blob for forward-compatible fields.")),
 		mcp.WithNumber("sort_order", mcp.Description("ASC display key (default 0).")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -56,22 +62,26 @@ func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		in := collectioncrud.CreateInput{
-			ID:        req.GetString("id", ""),
-			Language:  lang,
-			Name:      name,
-			Featured:  req.GetBool("featured", false),
-			SortOrder: int(req.GetFloat("sort_order", 0)),
+			ID:          req.GetString("id", ""),
+			Language:    lang,
+			Name:        name,
+			Cover:       req.GetString("cover", ""),
+			Description: req.GetString("description", ""),
+			Meta:        req.GetString("meta", ""),
+			SortOrder:   int(req.GetFloat("sort_order", 0)),
 		}
 		id, err := deps.UseCase.Create(ctx, in)
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		return envelope.Result(kind, map[string]any{
-			"id":         id,
-			"language":   lang,
-			"name":       name,
-			"featured":   in.Featured,
-			"sort_order": in.SortOrder,
+			"id":          id,
+			"language":    lang,
+			"name":        name,
+			"cover":       in.Cover,
+			"description": in.Description,
+			"meta":        in.Meta,
+			"sort_order":  in.SortOrder,
 		}), nil
 	})
 }
@@ -79,11 +89,13 @@ func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
 func registerCollectionUpdate(s *server.MCPServer, deps CollectionCRUDDeps) {
 	kind := "collection.update"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("Patch one (collection.id, language) locale. Only fields you supply are changed."),
+		mcp.WithDescription("Patch one (collection.id, language) locale. Only fields you supply are changed. Featured state is a tag — use collection.tags.add/remove."),
 		mcp.WithString("id", mcp.Required()),
 		mcp.WithString("language", mcp.Required()),
 		mcp.WithString("name"),
-		mcp.WithBoolean("featured"),
+		mcp.WithString("cover"),
+		mcp.WithString("description"),
+		mcp.WithString("meta"),
 		mcp.WithNumber("sort_order"),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -100,8 +112,14 @@ func registerCollectionUpdate(s *server.MCPServer, deps CollectionCRUDDeps) {
 		if v, ok := args["name"].(string); ok {
 			in.Name = &v
 		}
-		if v, ok := args["featured"].(bool); ok {
-			in.Featured = &v
+		if v, ok := args["cover"].(string); ok {
+			in.Cover = &v
+		}
+		if v, ok := args["description"].(string); ok {
+			in.Description = &v
+		}
+		if v, ok := args["meta"].(string); ok {
+			in.Meta = &v
 		}
 		if v, ok := args["sort_order"].(float64); ok {
 			n := int(v)
@@ -142,9 +160,9 @@ func registerCollectionGet(s *server.MCPServer, deps CollectionCRUDDeps) {
 func registerCollectionList(s *server.MCPServer, deps CollectionCRUDDeps) {
 	kind := "collection.list"
 	tool := mcp.NewTool(kind,
-		mcp.WithDescription("List collections filtered by language / featured. Returns collections without their track membership for compact responses."),
+		mcp.WithDescription("List collections filtered by language and/or tag (e.g. tag=tag_featured for the home shelf). Returns collections without their track membership for compact responses."),
 		mcp.WithString("language", mcp.Description("Filter to a single locale.")),
-		mcp.WithBoolean("featured", mcp.Description("If set, only featured=true (or =false) rows are returned.")),
+		mcp.WithString("tag", mcp.Description("If set, only collections carrying this tag id are returned (e.g. tag_featured).")),
 		mcp.WithNumber("limit", mcp.Description("Page size (default 100).")),
 		mcp.WithString("cursor", mcp.Description("Opaque id cursor for pagination.")),
 	)
@@ -157,8 +175,8 @@ func registerCollectionList(s *server.MCPServer, deps CollectionCRUDDeps) {
 		if v, ok := args["language"].(string); ok && v != "" {
 			opts.Language = &v
 		}
-		if v, ok := args["featured"].(bool); ok {
-			opts.Featured = &v
+		if v, ok := args["tag"].(string); ok && v != "" {
+			opts.Tag = &v
 		}
 		collections, err := deps.UseCase.List(ctx, opts)
 		if err != nil {
@@ -308,14 +326,101 @@ func registerCollectionTracksRemove(s *server.MCPServer, deps CollectionCRUDDeps
 	})
 }
 
+func registerCollectionTagsSet(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tags.set"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Replace the full tag membership of (collection id, language). Use tag_featured to surface the collection on the mobile home shelf."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+		mcp.WithArray("tag_ids", mcp.Required(), mcp.Description("Tag ids (e.g. tag_featured).")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		lang, err := req.RequireString("language")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		tags, err := requireStringList(req, "tag_ids")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		if err := deps.UseCase.SetTags(ctx, id, lang, tags); err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, map[string]any{"id": id, "language": lang, "count": len(tags)}), nil
+	})
+}
+
+func registerCollectionTagsAdd(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tags.add"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Add one tag to a collection locale. Idempotent — duplicate tag is a no-op."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+		mcp.WithString("tag_id", mcp.Required(), mcp.Description("Tag id (e.g. tag_featured).")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		lang, err := req.RequireString("language")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		tagID, err := req.RequireString("tag_id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		if err := deps.UseCase.AddTag(ctx, id, lang, tagID); err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, map[string]bool{"ok": true}), nil
+	})
+}
+
+func registerCollectionTagsRemove(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.tags.remove"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Remove one tag from a collection locale. Idempotent — missing tag is a no-op."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Required()),
+		mcp.WithString("tag_id", mcp.Required()),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		lang, err := req.RequireString("language")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		tagID, err := req.RequireString("tag_id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		if err := deps.UseCase.RemoveTag(ctx, id, lang, tagID); err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, map[string]bool{"ok": true}), nil
+	})
+}
+
 // collectionToWire flattens the per-locale maps into a JSON object suitable for
 // the MCP response. Keys are the language codes; consumers iterate them.
-func collectionToWire(p catalog.Collection) map[string]any {
+func collectionToWire(c catalog.Collection) map[string]any {
 	return map[string]any{
-		"id":         p.Id,
-		"names":      p.Names,
-		"featured":   p.Featured,
-		"sort_order": p.SortOrder,
+		"id":           c.Id,
+		"names":        c.Names,
+		"descriptions": c.Descriptions,
+		"covers":       c.Covers,
+		"meta":         c.Meta,
+		"sort_order":   c.SortOrder,
+		"tags":         c.TagIDs,
 	}
 }
 

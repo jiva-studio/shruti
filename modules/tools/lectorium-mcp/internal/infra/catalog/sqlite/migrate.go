@@ -51,6 +51,9 @@ func ensureCollectionTables(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("create collection tables: %w", err)
 		}
 	}
+	if err := finalizeCollectionSchema(ctx, db); err != nil {
+		return fmt.Errorf("finalize collection schema: %w", err)
+	}
 	// Bumped scheme: the table rename is breaking for old binaries, so the
 	// scheme moves to 20260613 (mirrors scheme.go / db-scheme.json). The name
 	// sorts after the legacy '003_add_packs' row so the SchemeReader picks it.
@@ -98,16 +101,20 @@ func renamePacksToCollections(ctx context.Context, db *sql.DB) error {
 	return tx.Commit()
 }
 
-// createCollectionTables builds the schema from scratch. In production the
-// catalog always ships with the tables already present (legacy `packs` or the
-// renamed `collections`), so this path is only exercised by fresh test DBs.
+// createCollectionTables builds the final schema from scratch. In production
+// the catalog always ships with the tables already present (legacy `packs` or
+// the renamed `collections`), so this path is only exercised by fresh test DBs.
+// The shared shape (new columns, collection_tags) is guaranteed by
+// finalizeCollectionSchema, which runs on every open.
 func createCollectionTables(ctx context.Context, db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS collections (
 			id          TEXT NOT NULL,
 			language    TEXT NOT NULL,
 			name        TEXT NOT NULL,
-			featured    INTEGER NOT NULL DEFAULT 0,
+			cover       TEXT,
+			description TEXT,
+			meta        TEXT,
 			sort_order  INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (id, language)
 		)`,
@@ -127,6 +134,89 @@ func createCollectionTables(ctx context.Context, db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// finalizeCollectionSchema brings the `collections` table to its current shape
+// regardless of origin — freshly created or renamed from legacy `packs`:
+//   - adds the cover / description / meta columns when missing;
+//   - creates the `collection_tags` membership table;
+//   - seeds the `tag_featured` curation tag;
+//   - migrates a legacy `featured` column to a tag_featured membership in
+//     `collection_tags`, then drops the column.
+//
+// Idempotent: on an already-final schema every step is a no-op.
+func finalizeCollectionSchema(ctx context.Context, db *sql.DB) error {
+	for _, col := range []string{"cover", "description", "meta"} {
+		has, err := columnExists(ctx, db, "collections", col)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := db.ExecContext(ctx,
+				fmt.Sprintf(`ALTER TABLE collections ADD COLUMN %s TEXT`, col)); err != nil {
+				return fmt.Errorf("add column %s: %w", col, err)
+			}
+		}
+	}
+
+	if _, err := db.ExecContext(ctx,
+		`CREATE TABLE IF NOT EXISTS collection_tags (
+			collection_id        TEXT NOT NULL,
+			collection_language  TEXT NOT NULL,
+			tag_id               TEXT NOT NULL,
+			PRIMARY KEY (collection_id, collection_language, tag_id),
+			FOREIGN KEY (collection_id, collection_language) REFERENCES collections(id, language) ON DELETE CASCADE
+		)`); err != nil {
+		return fmt.Errorf("create collection_tags: %w", err)
+	}
+
+	// Seed the curation tag. `tags` is part of the canonical published schema.
+	// (Literal kept here — migrations are schema snapshots; mirrors catalog.FeaturedTagID.)
+	for _, t := range []struct{ lang, name string }{{"ru", "Рекомендуем"}, {"en", "Featured"}} {
+		if _, err := db.ExecContext(ctx,
+			`INSERT OR IGNORE INTO tags (id, language, full_name) VALUES ('tag_featured', ?, ?)`,
+			t.lang, t.name); err != nil {
+			return fmt.Errorf("seed featured tag: %w", err)
+		}
+	}
+
+	hasFeatured, err := columnExists(ctx, db, "collections", "featured")
+	if err != nil {
+		return err
+	}
+	if hasFeatured {
+		if _, err := db.ExecContext(ctx,
+			`INSERT OR IGNORE INTO collection_tags (collection_id, collection_language, tag_id)
+			 SELECT id, language, 'tag_featured' FROM collections WHERE featured = 1`); err != nil {
+			return fmt.Errorf("backfill featured tag: %w", err)
+		}
+		if _, err := db.ExecContext(ctx, `ALTER TABLE collections DROP COLUMN featured`); err != nil {
+			return fmt.Errorf("drop featured column: %w", err)
+		}
+	}
+	return nil
+}
+
+func columnExists(ctx context.Context, db *sql.DB, table, col string) (bool, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid, notnull, pk int
+			name, ctype      string
+			dflt             sql.NullString
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == col {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // backfillCombinedFtsRows ensures every track has a `kind='combined'`

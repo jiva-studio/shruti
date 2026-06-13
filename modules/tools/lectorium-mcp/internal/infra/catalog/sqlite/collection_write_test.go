@@ -31,6 +31,13 @@ func setupCollectionSchema(t *testing.T, db *sql.DB) {
 			name       TEXT PRIMARY KEY,
 			scheme     INTEGER,
 			applied_at INTEGER NOT NULL)`,
+		// `tags` is part of the canonical schema; finalizeCollectionSchema seeds
+		// tag_featured into it.
+		`CREATE TABLE tags (
+			id        TEXT NOT NULL,
+			language  TEXT NOT NULL,
+			full_name TEXT,
+			PRIMARY KEY (id, language))`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -79,6 +86,7 @@ func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
 
 	legacy := []string{
 		`CREATE TABLE migrations (name TEXT PRIMARY KEY, scheme INTEGER, applied_at INTEGER NOT NULL)`,
+		`CREATE TABLE tags (id TEXT NOT NULL, language TEXT NOT NULL, full_name TEXT, PRIMARY KEY (id, language))`,
 		`CREATE TABLE packs (
 			id TEXT NOT NULL, language TEXT NOT NULL, name TEXT NOT NULL,
 			featured INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0,
@@ -112,14 +120,30 @@ func TestEnsureCollectionTablesRenamesLegacyPacks(t *testing.T) {
 	}
 
 	var name string
-	var featured, sortOrder int
+	var sortOrder int
 	if err := db.QueryRow(
-		`SELECT name, featured, sort_order FROM collections WHERE id='pack_AbCdEfGhIjKl' AND language='ru'`).
-		Scan(&name, &featured, &sortOrder); err != nil {
+		`SELECT name, sort_order FROM collections WHERE id='pack_AbCdEfGhIjKl' AND language='ru'`).
+		Scan(&name, &sortOrder); err != nil {
 		t.Fatalf("read collections: %v", err)
 	}
-	if name != "Карма" || featured != 1 || sortOrder != 10 {
-		t.Fatalf("collection row not preserved: %q featured=%d sort=%d", name, featured, sortOrder)
+	if name != "Карма" || sortOrder != 10 {
+		t.Fatalf("collection row not preserved: %q sort=%d", name, sortOrder)
+	}
+
+	// The legacy featured column is dropped; featured=1 is backfilled into
+	// collection_tags as tag_featured.
+	if has, _ := columnExists(ctx, db, "collections", "featured"); has {
+		t.Fatal("legacy featured column should have been dropped")
+	}
+	var featuredTags int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM collection_tags
+		 WHERE collection_id='pack_AbCdEfGhIjKl' AND collection_language='ru' AND tag_id='tag_featured'`).
+		Scan(&featuredTags); err != nil {
+		t.Fatalf("read collection_tags: %v", err)
+	}
+	if featuredTags != 1 {
+		t.Fatalf("featured backfill: got %d tag_featured rows, want 1", featuredTags)
 	}
 
 	rows, err := db.Query(
@@ -163,10 +187,10 @@ func TestCollectionCRUDLifecycle(t *testing.T) {
 	const collectionID = "pack_AbCdEfGhIjKl"
 
 	// Create RU + EN locales for the same logical collection.
-	if err := r.CreateCollectionLocale(ctx, collectionID, "ru", "Лекции о карме", true, 10); err != nil {
+	if err := r.CreateCollectionLocale(ctx, collectionID, "ru", "Лекции о карме", "public/collections/x/cover.jpg", "Про карму", "", 10); err != nil {
 		t.Fatalf("create ru: %v", err)
 	}
-	if err := r.CreateCollectionLocale(ctx, collectionID, "en", "Lectures on karma", true, 10); err != nil {
+	if err := r.CreateCollectionLocale(ctx, collectionID, "en", "Lectures on karma", "", "", "", 10); err != nil {
 		t.Fatalf("create en: %v", err)
 	}
 
@@ -181,16 +205,32 @@ func TestCollectionCRUDLifecycle(t *testing.T) {
 	if collection.Names["ru"] != "Лекции о карме" || collection.Names["en"] != "Lectures on karma" {
 		t.Errorf("names mismatch: %#v", collection.Names)
 	}
-	if !collection.Featured["ru"] || !collection.Featured["en"] {
-		t.Errorf("featured mismatch: %#v", collection.Featured)
+	if collection.Covers["ru"] != "public/collections/x/cover.jpg" || collection.Descriptions["ru"] != "Про карму" {
+		t.Errorf("cover/description mismatch: %#v / %#v", collection.Covers, collection.Descriptions)
 	}
 	if len(tracksByLang["ru"]) != 0 || len(tracksByLang["en"]) != 0 {
 		t.Errorf("expected empty track lists, got %#v", tracksByLang)
 	}
 
+	// Featured is modelled as a tag — add tag_featured to both locales.
+	if err := r.AddCollectionTag(ctx, collectionID, "ru", "tag_featured"); err != nil {
+		t.Fatalf("add tag ru: %v", err)
+	}
+	if err := r.AddCollectionTag(ctx, collectionID, "en", "tag_featured"); err != nil {
+		t.Fatalf("add tag en: %v", err)
+	}
+	// Idempotent re-add.
+	if err := r.AddCollectionTag(ctx, collectionID, "ru", "tag_featured"); err != nil {
+		t.Fatalf("re-add tag ru: %v", err)
+	}
+	collection, _, _, _ = r.GetCollection(ctx, collectionID)
+	if len(collection.TagIDs["ru"]) != 1 || collection.TagIDs["ru"][0] != "tag_featured" {
+		t.Errorf("ru tags mismatch: %#v", collection.TagIDs)
+	}
+
 	// Update one locale.
 	newName := "Лекции о карме и судьбе"
-	if err := r.UpdateCollectionLocale(ctx, collectionID, "ru", &newName, nil, nil); err != nil {
+	if err := r.UpdateCollectionLocale(ctx, collectionID, "ru", &newName, nil, nil, nil, nil); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	collection, _, _, _ = r.GetCollection(ctx, collectionID)
@@ -259,10 +299,10 @@ func TestCollectionCRUDLifecycle(t *testing.T) {
 		}
 	}
 
-	// List with filter.
+	// List filtered by the featured tag.
 	ru := "ru"
-	featured := true
-	collections, err := r.ListCollections(ctx, catalog.CollectionListOpts{Language: &ru, Featured: &featured})
+	featuredTag := "tag_featured"
+	collections, err := r.ListCollections(ctx, catalog.CollectionListOpts{Language: &ru, Tag: &featuredTag})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
