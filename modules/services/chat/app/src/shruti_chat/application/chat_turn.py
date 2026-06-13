@@ -79,6 +79,7 @@ _CATALOG_TOOL_NAMES = frozenset({
     "location_resolve",
     "tag_resolve",
     "tracks_list",
+    "collections_find",
     "track_get",
     "user_tracks_list",
     "user_recommendations_get",
