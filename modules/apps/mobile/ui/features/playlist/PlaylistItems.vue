@@ -1,87 +1,75 @@
 <template>
-  <template v-for="row in rows" :key="row.id">
-    <div :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]">
-      <WithDeleteAction @delete="emit('delete', row.id)">
-        <TrackListItem
-          :track-id="row.id"
-          :title="row.title"
-          :author="row.author"
-          :location="row.location"
-          :references="row.references"
-          :tags="row.tags"
-          :date="row.date"
-          :duration="row.duration"
-          @select="emit('click', row.id)"
-        >
-          <template #state>
-            <TrackStateIndicator :state="row.state" :progress="row.progressPct" />
-          </template>
-        </TrackListItem>
-      </WithDeleteAction>
-    </div>
+  <template v-for="item in items" :key="itemKey(item)">
+    <PlaylistRow
+      v-if="item.kind === 'track'"
+      :row="item.row"
+      @click="emit('click', $event)"
+      @delete="emit('delete', $event)"
+    />
+    <IonAccordionGroup v-else :value="item.id" class="collection-group">
+      <IonAccordion :value="item.id">
+        <IonItem slot="header" lines="none" class="group-header">
+          <IonLabel>{{ item.name }}</IonLabel>
+          <IonNote slot="end">{{ item.rows.length }}</IonNote>
+        </IonItem>
+        <div slot="content" class="group-content">
+          <PlaylistRow
+            v-for="row in item.rows"
+            :key="row.id"
+            :row="row"
+            @click="emit('click', $event)"
+            @delete="emit('delete', $event)"
+          />
+        </div>
+      </IonAccordion>
+    </IonAccordionGroup>
   </template>
 </template>
 
 <script setup lang="ts">
-import { WithDeleteAction } from "@ui/primitives/index.js"
-import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
-import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import { IonAccordion, IonAccordionGroup, IonItem, IonLabel, IonNote } from "@ionic/vue"
+import PlaylistRow from "./PlaylistRow.vue"
+import type { PlaylistRenderItem } from "./types.js"
 
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
+/**
+ * Renders the Home playlist as a mix of standalone track rows and collapsible
+ * collection groups. Groups start expanded (the accordion's value matches its
+ * own id) so the user sees the collection's tracks immediately and can collapse
+ * it. Grouping is derived upstream (usePlaylistGroups) from collection
+ * membership — this component is presentation-only.
+ */
 defineProps<{
-  rows: readonly UiTrackRow[]
+  items: readonly PlaylistRenderItem[]
 }>()
 
 const emit = defineEmits<{
   click: [trackId: string]
   delete: [trackId: string]
 }>()
+
+function itemKey(item: PlaylistRenderItem): string {
+  return item.kind === "track" ? `t:${item.row.id}` : `g:${item.id}:${item.rows[0]?.id ?? ""}`
+}
 </script>
 
 <style scoped>
-/* Disabled / dimmed visuals sit on the outermost wrapper, OUTSIDE
-   WithDeleteAction (IonItemSliding) — Ionic Stencil components reparent
-   slotted content into shadow DOM, which broke opacity/pointer-events
-   on inner wrappers. A regular <div> at the top level isn't touched by
-   Ionic.
-
-   `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
-   `is-disabled` is the hard non-interactive flag (used while a download
-   is in flight). Both can coexist: a downloading row is both dimmed and
-   non-interactive.
-
-   Ionic's `<IonItem :disabled>` is intentionally NOT used inside
-   TrackListItem — it stacks its own ~0.5 dim on top, making a
-   downloading row visibly darker than a failed one. Tap blocking is
-   owned by this wrapper's pointer-events:none alone.
-
-   The dim is scoped to <ion-label> only — the state indicator slot
-   (red X / spinner / completed check) sits OUTSIDE the label inside
-   TrackListItem, so it stays at full opacity and reads as the same
-   vivid red on Home as on Search. */
-/* IonItemSliding translates the IonItem horizontally to reveal the
-   IonItemOptions (trash) underneath. The IonItem is set to a transparent
-   background globally (TrackListItem.vue), so on Search/Library the row
-   blends with the surrounding list. On the Home playlist, however, the
-   transparent IonItem lets the revealed trash icon bleed through the
-   row content during the swipe. Force an opaque background only here,
-   on the actually-translated layer (the IonItem). The previous
-   background-color on `.playlist-row` was a no-op for this — that
-   wrapper never moves. */
-.playlist-row {
-  background-color: var(--ion-background-color);
+/* The group container blends into the playlist background; the header is a
+   lightweight subheader, not a heavy card, so grouped runs read as a labelled
+   stretch of the same list rather than a separate widget. */
+.collection-group {
+  background: transparent;
 }
-.playlist-row :deep(ion-item.track) {
-  --ion-item-background: var(--ion-background-color);
+
+.group-header {
   --background: var(--ion-background-color);
+  --min-height: 40px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-color-primary);
 }
-.playlist-row.is-dimmed :deep(ion-label) {
-  opacity: 0.65;
-}
-.playlist-row.is-disabled {
-  pointer-events: none;
+
+.group-content {
+  /* Slight indent so nested rows read as belonging to the group above. */
+  padding-left: 6px;
 }
 </style>
