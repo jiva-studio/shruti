@@ -96,6 +96,12 @@ class CatalogRepository(Protocol):
         falls back to author_id if no name is available)."""
         ...
 
+    async def source_short_label(self, source_id: str, *, lang: str) -> str | None:
+        """Short display name for a source ("БГ" / "BG" / "CC Madhya"),
+        in `lang` with an en fallback. None when the source is unknown.
+        Used to compose a human verse address ("БГ 2.13") for show_verse."""
+        ...
+
     def invalidate_cache(self) -> None:
         """Hook for the indexer to call after the catalog DB swaps."""
         ...

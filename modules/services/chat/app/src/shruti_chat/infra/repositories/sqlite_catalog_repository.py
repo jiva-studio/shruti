@@ -247,16 +247,35 @@ def _load_dict(
 def _fuzzy_top(query: str, rows: list[_DictRow], limit: int) -> list[tuple[_DictRow, float]]:
     if not rows or not query.strip():
         return []
+    # Match against full_name AND short_name (when present, e.g. sources:
+    # "БГ"/"BG"/"CC Madhya"). Without the short_name in the pool, an
+    # abbreviation query scores near-zero against the full name and the
+    # address classifier / source filter silently miss. Parallel lists let
+    # one id own several matchable strings; we keep the best score per id.
+    choices: list[str] = []
+    owners: list[str] = []
+    for r in rows:
+        choices.append(r.full_name)
+        owners.append(r.id)
+        short = r.extra.get("short_name")
+        if short:
+            choices.append(short)
+            owners.append(r.id)
     matches = process.extract(
         query,
-        {r.id: r.full_name for r in rows},
+        choices,
         scorer=fuzz.token_set_ratio,
         processor=utils.default_process,
-        limit=limit,
+        limit=limit * 2,
         score_cutoff=40,
     )
     by_id = {r.id: r for r in rows}
-    return [(by_id[mid], score / 100.0) for (_name, score, mid) in matches]
+    best: dict[str, float] = {}
+    for (_text, score, idx) in matches:
+        oid = owners[idx]
+        best[oid] = max(best.get(oid, 0.0), score)
+    ranked = sorted(best.items(), key=lambda kv: -kv[1])[:limit]
+    return [(by_id[oid], score / 100.0) for oid, score in ranked]
 
 
 # --- sync SQL bodies (moved from agent/tools/*) -----------------------------
@@ -730,6 +749,20 @@ def _resolve_transcript_path_sync(
     return None, requested_lang
 
 
+def _source_short_label_sync(db_path: Path, source_id: str, lang: str) -> str | None:
+    """short_name for a source in `lang`, falling back to en then any."""
+    try:
+        with _catalog_conn(db_path) as conn:
+            rows = conn.execute(
+                "SELECT language, short_name FROM sources WHERE id = ?",
+                (source_id,),
+            ).fetchall()
+    except sqlite3.Error:
+        return None
+    by_lang = {r["language"]: r["short_name"] for r in rows if r["short_name"]}
+    return by_lang.get(lang) or by_lang.get("en") or next(iter(by_lang.values()), None)
+
+
 def _resolve_sync(
     db_path: Path,
     kind: ResolveKind,
@@ -858,6 +891,11 @@ class SqliteCatalogRepository:
             return {}
         return await asyncio.to_thread(
             _get_author_names_sync, self._db_path, author_ids, lang,
+        )
+
+    async def source_short_label(self, source_id: str, *, lang: str) -> str | None:
+        return await asyncio.to_thread(
+            _source_short_label_sync, self._db_path, source_id, lang,
         )
 
     def invalidate_cache(self) -> None:

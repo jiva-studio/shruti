@@ -54,6 +54,7 @@ from shruti_chat.research.corpus_fanout import (
     fanout_search_with_boost,
     merge_fanout,
 )
+from shruti_chat.research.kind_intent import boost_kinds_from
 from shruti_chat.research.coverage_gate import (
     is_coverage_good_enough,
     should_bail_out,
@@ -609,6 +610,7 @@ async def run_research(
                     on_event=on_event,
                     reranker=reranker,
                     rerank_query=question,
+                    boost_kinds=boost_kinds_from(question, router_args),
                 ),
                 default=FanoutResult(), timeout=TIMEOUT_FANOUT_S,
                 name="supplementary_fanout", request_id=request_id,
@@ -893,6 +895,7 @@ async def _research_path(
                 on_event=on_event,
                 reranker=reranker,
                 rerank_query=question,
+                boost_kinds=boost_kinds_from(question, router_args),
             ),
             default=None, timeout=TIMEOUT_FANOUT_S,
             name=f"fanout_round_{round_idx}", request_id=request_id,

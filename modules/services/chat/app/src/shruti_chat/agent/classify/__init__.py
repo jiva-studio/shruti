@@ -1,0 +1,10 @@
+"""Deterministic classifier chain (pre-LLM routing).
+
+See `base.Classifier` for the contract and `run_classifier_chain` for the
+runner. `router_node` runs the chain first and falls back to the LLM router.
+"""
+
+from shruti_chat.agent.classify.address import AddressClassifier
+from shruti_chat.agent.classify.base import Classifier, run_classifier_chain
+
+__all__ = ["AddressClassifier", "Classifier", "run_classifier_chain"]
