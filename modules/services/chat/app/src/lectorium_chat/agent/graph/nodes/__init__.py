@@ -11,6 +11,7 @@ from lectorium_chat.agent.graph.nodes.help_worker import help_worker_node
 from lectorium_chat.agent.graph.nodes.locate_worker import locate_worker_node
 from lectorium_chat.agent.graph.nodes.research_worker import research_worker_node
 from lectorium_chat.agent.graph.nodes.router import router_node
+from lectorium_chat.agent.graph.nodes.show_verse_worker import show_verse_worker_node
 from lectorium_chat.agent.graph.nodes.synthesizer import synthesizer_node
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "catalog_worker_node",
     "action_worker_node",
     "help_worker_node",
+    "show_verse_worker_node",
     "synthesizer_node",
 ]

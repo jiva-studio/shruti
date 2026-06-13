@@ -28,6 +28,7 @@ Intent = Literal[
     "research",         # search across lectures / verses / commentaries / letters
     "locate",           # WHERE in scripture is a topic/story — canto/chapter/verse address
     "find_track",       # catalog lookup by author/source/date — specific track or list
+    "show_verse",       # a bare scripture reference ("БГ 2.13") — fetch + show that verse
     "create_action",    # user wants to create something (playlist, PDF, reminder)
     "unknown",          # ambiguous or out-of-scope; soft fallback to synthesizer
 ]

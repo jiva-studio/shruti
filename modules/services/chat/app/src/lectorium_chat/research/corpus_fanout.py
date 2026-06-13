@@ -239,11 +239,30 @@ def _library_dedup_key(c: Any) -> tuple:
     return (c.item_kind, c.item_id, c.segment_index)
 
 
+# Additive nudge to the rerank SORT KEY for a content kind the user explicitly
+# asked for ("покажи видео…" → media, "…с пурпортами" → commentary/verse). Gated
+# on an explicit request (boost_kinds is empty otherwise), ordering-only — the
+# cosine `score` that feeds the coverage gate is never touched, so retrieval
+# breadth stays honest. Magnitude is intentionally modest; calibrate via probe.
+KIND_BOOST_DELTA = 0.15
+# Guarantee at least this many of an explicitly-requested kind survive the cut
+# (so the planner actually SEES the clips, not just ranks them).
+RERANK_MIN_BOOST = 3
+
+
+def _rank_key(r: "_RawScored", boost_kinds: frozenset[str]) -> tuple[float, float]:
+    base = r.rerank_score if r.rerank_score is not None else -1.0
+    if boost_kinds and r.kind in boost_kinds:
+        base += KIND_BOOST_DELTA
+    return (base, r.score)
+
+
 async def _rerank_pool(
     deduped: dict[tuple, _RawScored],
     *,
     reranker: Any,
     rerank_query: str | None,
+    boost_kinds: frozenset[str] = frozenset(),
 ) -> list[_RawScored]:
     """Cross-encode the deduped pool against the question and cut by fixed
     top-k with a lecture reserve. Sets `rerank_score` on survivors (cosine
@@ -280,7 +299,7 @@ async def _rerank_pool(
     # sinks below scored items but keeps cosine as a stable tiebreak.
     ranked_all = sorted(
         pool,
-        key=lambda r: (r.rerank_score if r.rerank_score is not None else -1.0, r.score),
+        key=lambda r: _rank_key(r, boost_kinds),
         reverse=True,
     )
 
@@ -323,11 +342,15 @@ async def _rerank_pool(
 
     _reserve(lambda k: k == "verse", RERANK_MIN_VERSES)
     _reserve(lambda k: k in ("commentary", "prose_chapter", "letter"), RERANK_MIN_LIBRARY)
+    # Reserve for an explicitly-requested kind — so e.g. "show me video" can't
+    # have its clips crowded out of the cut by higher-scored letters.
+    if boost_kinds:
+        _reserve(lambda k: k in boost_kinds, RERANK_MIN_BOOST)
 
-    # Re-sort the final set so reserve additions land in rerank order,
-    # not appended at the tail.
+    # Re-sort the final set so reserve additions land in rerank order
+    # (incl. the boost nudge), not appended at the tail.
     kept.sort(
-        key=lambda r: (r.rerank_score if r.rerank_score is not None else -1.0, r.score),
+        key=lambda r: _rank_key(r, boost_kinds),
         reverse=True,
     )
     return kept
@@ -351,6 +374,7 @@ async def fanout_search_with_boost(
     on_event: OnEvent | None = None,
     reranker: Any = None,
     rerank_query: str | None = None,
+    boost_kinds: frozenset[str] = frozenset(),
 ) -> FanoutResult:
     """One round of fanout. Returns top-K envelopes.
 
@@ -586,6 +610,7 @@ async def fanout_search_with_boost(
         _t_rerank = time.perf_counter()
         ranked = await _rerank_pool(
             deduped, reranker=reranker, rerank_query=rerank_query,
+            boost_kinds=boost_kinds,
         )
         rerank_ms = (time.perf_counter() - _t_rerank) * 1000.0
     else:

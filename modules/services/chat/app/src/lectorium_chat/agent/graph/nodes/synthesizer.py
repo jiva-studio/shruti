@@ -193,7 +193,23 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     if ctx.llm is None:
         raise RuntimeError("synthesizer_node requires runtime.context.llm to be set")
 
-    system_prompt = build_prompt(_SYNTH_PROMPT_SECTIONS, lang=state["lang"])
+    # show_verse: append the show_verse.md section, which pins a terse lead-in
+    # + the chain-driving follow-up chips (their MEANING and the verse
+    # reference are fixed; the LLM still writes the chip TEXT in the user's
+    # language). The prompt lives in agent/prompts/show_verse.md (Langfuse-
+    # hosted, .md fallback) like every other section — never inline. `{{ADDR}}`
+    # is substituted with the human verse address, same as `{{LANG}}`.
+    sections = _SYNTH_PROMPT_SECTIONS
+    if state.get("intent") == "show_verse":
+        sections = _SYNTH_PROMPT_SECTIONS + ("show_verse",)
+    system_prompt = build_prompt(sections, lang=state["lang"])
+    if state.get("intent") == "show_verse":
+        addr = next(
+            (n.get("text") for n in state.get("tool_results", [])
+             if n.get("type") == "verse" and n.get("text")),
+            "",
+        ) or "this verse"
+        system_prompt = system_prompt.replace("{{ADDR}}", addr)
     writer = get_stream_writer()
     writer({"type": "status", "data": {"key": "composing_answer"}})
 
