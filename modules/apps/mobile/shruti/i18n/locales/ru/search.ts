@@ -50,4 +50,9 @@ export default {
     sortByDateAsc: "По дате (старые сверху)",
     sortByReference: "По шлоке",
   },
+  collections: {
+    addAll: "Добавить коллекцию",
+    trackCount: "Лекций: {count}",
+    addError: "Не удалось добавить коллекцию",
+  },
 }

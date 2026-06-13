@@ -49,4 +49,9 @@ export default {
     sortByDateAsc: "Date (oldest first)",
     sortByReference: "By reference",
   },
+  collections: {
+    addAll: "Add collection",
+    trackCount: "Lectures: {count}",
+    addError: "Couldn’t add the collection",
+  },
 }

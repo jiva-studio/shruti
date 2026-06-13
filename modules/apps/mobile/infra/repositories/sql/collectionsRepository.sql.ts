@@ -11,6 +11,7 @@ import type { IDatabase } from "@ports/app/index.js"
 export interface FeaturedCollectionRow {
   readonly id: string
   readonly name: string
+  readonly cover: string
   readonly sort_order: number
 }
 
@@ -80,7 +81,7 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
     async listFeaturedCollections(locale: string): Promise<readonly FeaturedCollectionRow[]> {
       try {
         return await contentDb.query<FeaturedCollectionRow>(
-          `SELECT c.id, c.name, c.sort_order
+          `SELECT c.id, c.name, COALESCE(c.cover, '') AS cover, c.sort_order
              FROM collections c
              JOIN collection_tags ct
                ON ct.collection_id = c.id AND ct.collection_language = c.language
@@ -131,7 +132,10 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
       }
     },
 
-    async getTrackCollections(trackId: string, locale: string): Promise<readonly TrackCollectionRef[]> {
+    async getTrackCollections(
+      trackId: string,
+      locale: string
+    ): Promise<readonly TrackCollectionRef[]> {
       try {
         return await contentDb.query<TrackCollectionRef>(
           `SELECT c.id, c.name
