@@ -16,11 +16,13 @@ from lectorium_chat.domain.ports.catalog_repository import CatalogRepository
 
 
 def _to_wire(c: Collection) -> dict[str, Any]:
+    # Deliberately NO raw track_ids: the chat alias invariant is that the LLM
+    # only ever sees integer refs, never real ids. The client resolves a
+    # collection's tracks itself (it has the catalog DB) from `collection_id`.
     return {
         "collection_id": c.id,
         "name": c.name,
         "description": c.description,
-        "track_ids": list(c.track_ids),
         "track_count": len(c.track_ids),
     }
 
