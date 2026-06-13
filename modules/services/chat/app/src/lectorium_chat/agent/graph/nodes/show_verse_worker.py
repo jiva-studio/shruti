@@ -3,11 +3,13 @@
 Reached when `AddressClassifier` (pre-router) resolved the query to a concrete
 verse and set `intent="show_verse"` + `extracted_args={source_id, tokens}`.
 
-No research pipeline: it mints a verse alias, flushes the verse-card payload
-(so the client renders the full card — sanskrit / transliteration / translation
-in the user's language, MT-fallback handled by `build_verse_payload`), and hands
-a single verse note to the synthesizer for a short lead-in + follow-up chips.
-Mirrors `locate_worker` (worker → synthesizer, no `synthesis_planner`).
+No research pipeline / no fanout: it mints a verse alias, flushes the verse-card
+payload (so the client renders the full card — sanskrit / transliteration /
+translation, MT-fallback handled by `build_verse_payload`), and deterministically
+reads the verse's purport from the library. It hands the synthesizer the verse +
+commentary notes so the SAME LLM turn (the one that writes the follow-up chips)
+also adds a short intro + a brief purport summary. Mirrors `locate_worker`
+(worker → synthesizer, no `synthesis_planner`).
 """
 
 from __future__ import annotations
@@ -53,12 +55,36 @@ async def show_verse_worker_node(
         if short:
             addr_label = f"{short} {tokens}"
     ref = ctx.aliases.alias_verse(source_id, tokens, addr_label=addr_label)
-    note = {
-        "type": "verse",
-        "ref": ref,
-        "text": addr_label or tokens,
-        "meta": {"source_id": source_id, "tokens": tokens},
-    }
+    notes: list[dict] = [
+        {
+            "type": "verse",
+            "ref": ref,
+            "text": addr_label or tokens,
+            "meta": {"source_id": source_id, "tokens": tokens},
+        }
+    ]
+
+    # Pull the verse's full purport so the synthesizer can add a SHORT summary
+    # in the SAME LLM turn it already makes for the follow-up chips — no extra
+    # call. Deterministic library read (no embeddings / no fanout); degrades to
+    # card-only when the verse has no commentary.
+    if ctx.library_db_path is not None:
+        try:
+            from lectorium_chat.indexer.library.repo import fetch_verse_commentary
+
+            purport = await fetch_verse_commentary(
+                ctx.library_db_path, source_id, tokens, lang=ctx.lang,
+            )
+        except Exception:  # noqa: BLE001 — a purport miss must never fail the turn
+            purport = None
+        if purport:
+            notes.append({
+                "type": "commentary",
+                "text": purport,
+                "label": addr_label or tokens,
+                "meta": {"source_id": source_id, "tokens": tokens},
+            })
+
     # Eager card payload for legacy clients; the lazy synth-time emit covers
     # the rest. Must precede the inline `[^N]` marker in the delta stream.
     await flush_card_payloads(ctx)
@@ -68,5 +94,6 @@ async def show_verse_worker_node(
         request_id=ctx.request_id,
         source_id=source_id,
         tokens=tokens,
+        has_purport=len(notes) > 1,
     )
-    return {"tool_results": [note]}
+    return {"tool_results": notes}
