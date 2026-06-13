@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol
 
-from shruti_chat.domain.entities import ResolvedEntity, Track
+from shruti_chat.domain.entities import Collection, ResolvedEntity, Track
 
 
 ResolveKind = Literal["author", "source", "location", "tag"]
@@ -83,6 +83,20 @@ class CatalogRepository(Protocol):
         lang: str | None,
         limit: int,
     ) -> list[ResolvedEntity]:
+        ...
+
+    async def search_collections(
+        self, query: str | None, *, lang: str | None, limit: int = 10,
+    ) -> list[Collection]:
+        """Find collections (curated track groups / seminars) by name, or the
+        featured set when `query` is None. Per-locale via `lang`."""
+        ...
+
+    async def get_collection(
+        self, collection_id: str, *, lang: str | None = None,
+    ) -> Collection | None:
+        """One collection with its ordered track membership, in `lang`
+        (en fallback). None when unknown or the catalog predates the schema."""
         ...
 
     async def get_author_names(
