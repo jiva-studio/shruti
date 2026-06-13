@@ -12,7 +12,7 @@
     @pointerup="onPointerCancel"
     @pointerleave="onPointerCancel"
     @pointercancel="onPointerCancel"
-    @contextmenu.prevent="onOpenDetails"
+    @contextmenu.prevent="openActions"
   >
     <span class="chip-progress" aria-hidden="true" />
     <span class="chip-body">
@@ -26,7 +26,7 @@
         type="button"
         class="more-btn"
         :aria-label="$t('chat.citationDetailsTitle')"
-        @click.stop="onOpenDetails"
+        @click.stop="openActions"
       >
         <IconDots :size="12" stroke="2" />
       </button>
@@ -46,7 +46,7 @@
     />
     <IonActionSheet
       :is-open="actionSheetOpen"
-      :header="actionSheetHeader"
+      :header="trackTitle"
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
@@ -54,24 +54,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue"
+import { computed, onBeforeUnmount, ref, useTemplateRef } from "vue"
 import { useI18n } from "vue-i18n"
-import router from "@shruti/router/index.js"
 import { IonActionSheet, IonSpinner } from "@ionic/vue"
 import { IconDots, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
-import { useShruti } from "@shruti/shruti.js"
-import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveTrackTitle } from "@lib/domain/services/localizedName.js"
-import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
-import { useChatActions } from "@shruti/composables/useChatActions.js"
+import { useCitationActions } from "../composables/useCitationActions.js"
 import { useCitationAudio } from "../composables/useCitationAudio.js"
 import { useToast } from "@kit/composables"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
-import type { AuthorId, TrackId } from "@lib/domain/core.js"
-import type { Track } from "@lib/domain/track.js"
-import type { Author } from "@lib/domain/author.js"
 import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
 import { useCitationSnippet } from "../composables/useCitationSnippet.js"
 
@@ -85,24 +74,22 @@ const props = defineProps<{
 }>()
 
 const { t } = useI18n()
-// Singleton import — see NotesView.controller for the why.
 const toast = useToast()
-const app = useShruti()
-const appLanguage = useAppLanguage()
-const purchases = usePurchasesStore()
-const paywall = usePaywallStore()
-const studioHandoff = useStudioHandoffStore()
 const { resolveUrl } = useCitationSnippet()
 const { resolve: resolveCachedUrl } = useCachedExcerptUrl()
-const { addToPlaylist } = useAddToPlaylist()
-const { saveCitation } = useChatActions()
 const audioEl = useTemplateRef<HTMLAudioElement>("audioEl")
 
 const cachedUrl = ref<string | null>(null)
-const actionSheetOpen = ref(false)
-/** Guard so a second tap on "Save as note" while the transcript is still
- *  loading does NOT create a duplicate note. */
-const savingNote = ref(false)
+
+// Metadata + the Save/Studio/Playlist action sheet are shared with the block
+// CitationCard. The chip keeps only its inline display + audio + long-press.
+const { track, metaLoaded, trackTitle, actionSheetOpen, actionSheetButtons, openActions } =
+  useCitationActions(() => ({
+    trackId: props.trackId,
+    startMs: props.startMs,
+    endMs: props.endMs,
+    caption: props.caption,
+  }))
 
 // The audio-playback engine (orchestrator claim, spinner state, progress,
 // stall watchdog, media-event handlers) lives in its own composable. It calls
@@ -127,10 +114,6 @@ const chipStyle = computed(() => ({
   "--progress": `${progressPct.value}%`,
 }))
 
-const track = ref<Track | null>(null)
-const author = ref<Author | null>(null)
-const metaLoaded = ref(false)
-
 // Long-press detection. The pointerdown handler arms a 500 ms timer;
 // pointerup / leave / cancel disarms it. If the timer fires before
 // disarm, we mark `suppressClick = true` so the trailing `click` event
@@ -138,11 +121,6 @@ const metaLoaded = ref(false)
 const LONG_PRESS_MS = 500
 let pressTimer: ReturnType<typeof setTimeout> | null = null
 let suppressClick = false
-
-const lectureTitle = computed(() => {
-  if (!track.value) return ""
-  return resolveTrackTitle(track.value, appLanguage.value) ?? ""
-})
 
 const referenceLabel = computed<string>(() => {
   const refs = track.value?.references ?? []
@@ -161,7 +139,7 @@ const chipTitle = computed<string>(() => {
   const cap = props.caption?.trim()
   if (cap) return cap
   if (!metaLoaded.value) return "…"
-  if (lectureTitle.value) return lectureTitle.value
+  if (trackTitle.value) return trackTitle.value
   if (referenceLabel.value) return referenceLabel.value
   return t("chat.citationDetailsTitle")
 })
@@ -170,109 +148,6 @@ const ariaLabel = computed(() => {
   if (isPreparing.value) return t("chat.citationLoading")
   return chipTitle.value
 })
-
-interface ChipActionSheetButton {
-  readonly text: string
-  readonly role?: "cancel" | "destructive"
-  readonly handler: () => void
-}
-
-/** Header — lecture title only. The chip's caption already sits in the
- *  message body above, so duplicating it here was visual noise. */
-const actionSheetHeader = computed(() => lectureTitle.value)
-
-const actionSheetButtons = computed<readonly ChipActionSheetButton[]>(() => [
-  {
-    text: t("chat.citationSaveAsNote"),
-    handler: (): void => {
-      void onSaveAsNote()
-    },
-  },
-  {
-    text: t("chat.citationOpenInStudio"),
-    handler: (): void => {
-      void onOpenInStudio()
-    },
-  },
-  {
-    text: t("chat.citationAddLectureToPlaylist"),
-    handler: (): void => {
-      void onAddToPlaylist()
-    },
-  },
-  {
-    text: t("app.cancel"),
-    role: "cancel",
-    handler: (): void => undefined,
-  },
-])
-
-async function onAddToPlaylist(): Promise<void> {
-  try {
-    await addToPlaylist(props.trackId)
-    await toast.info(t("chat.citationAddedToPlaylist"))
-  } catch (err) {
-    console.warn("[citation-chip] add to playlist failed", err)
-    await toast.error(t("chat.citationAddFailed"))
-  }
-}
-
-/**
- * Open this citation in Studio (transient mode — no Note is created).
- * The citation payload is parked in `useStudioHandoffStore` and the
- * receiving controller consumes it on mount; Ionic's IonRouterOutlet
- * drops `history.state` when navigating out of a dismissing
- * IonActionSheet, so the store is the only reliable channel here.
- */
-function onOpenInStudio(): void {
-  if (!purchases.isSubscribed) {
-    paywall.requestOpen("notesStudio")
-    return
-  }
-  studioHandoff.setPending({
-    kind: "citation",
-    trackId: props.trackId,
-    startMs: props.startMs,
-    endMs: props.endMs,
-    caption: props.caption ?? "",
-  })
-  void router.push("/tabs/studio")
-}
-
-async function onSaveAsNote(): Promise<void> {
-  // Local reentrancy guard — local because it controls THIS chip's
-  // disabled state, not a global "saving" notion. The transcript fetch
-  // + overlap + createNote pipeline itself lives in saveCitation.
-  if (savingNote.value) return
-  savingNote.value = true
-  try {
-    await saveCitation({
-      trackId: props.trackId,
-      startMs: props.startMs,
-      endMs: props.endMs,
-      caption: props.caption ?? "",
-    })
-  } finally {
-    savingNote.value = false
-  }
-}
-
-async function loadMetadata(): Promise<void> {
-  try {
-    const repos = app.repositories()
-    const t0 = await repos.tracks.getById(props.trackId as TrackId)
-    track.value = t0 ?? null
-    if (t0 && t0.authorId) {
-      author.value = (await repos.authors.getById(t0.authorId as AuthorId)) ?? null
-    } else {
-      author.value = null
-    }
-  } catch (err) {
-    console.warn("[citation-chip] metadata load failed", err)
-  } finally {
-    metaLoaded.value = true
-  }
-}
 
 async function ensureUrl(): Promise<string | null> {
   if (cachedUrl.value) return cachedUrl.value
@@ -305,16 +180,12 @@ async function onPrimary(): Promise<void> {
   await toggle()
 }
 
-function onOpenDetails(): void {
-  actionSheetOpen.value = true
-}
-
 function onPointerDown(): void {
   if (pressTimer) clearTimeout(pressTimer)
   pressTimer = setTimeout(() => {
     pressTimer = null
     suppressClick = true
-    onOpenDetails()
+    openActions()
   }, LONG_PRESS_MS)
 }
 
@@ -324,17 +195,6 @@ function onPointerCancel(): void {
     pressTimer = null
   }
 }
-
-watch(
-  () => props.trackId,
-  () => {
-    track.value = null
-    author.value = null
-    metaLoaded.value = false
-    void loadMetadata()
-  },
-  { immediate: true }
-)
 
 onBeforeUnmount(() => {
   // Audio cleanup (timer + pause) is owned by useCitationAudio; here we only
