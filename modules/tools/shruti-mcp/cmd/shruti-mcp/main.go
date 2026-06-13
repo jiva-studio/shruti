@@ -18,9 +18,9 @@ import (
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
 	configpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
-	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
@@ -490,8 +490,8 @@ func main() {
 				Minter:     minter,
 			},
 		},
-		PackCRUD: tools.PackCRUDDeps{
-			UseCase: packcrud.UseCase{
+		CollectionCRUD: tools.CollectionCRUDDeps{
+			UseCase: collectioncrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
 				Minter:  minter,
 			},
