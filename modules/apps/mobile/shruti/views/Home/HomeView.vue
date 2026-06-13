@@ -89,7 +89,7 @@ import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import { useConfig } from "@shruti/composables/useConfig.js"
 import { useDurationFormatter } from "@shruti/composables/useDurationFormatter.js"
-import { useStarterPacks } from "@shruti/composables/useStarterPacks.js"
+import { useCollections } from "@shruti/composables/useCollections.js"
 import { useSubscriptionBinding } from "@shruti/views/Settings/composables/useSubscriptionBinding.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useToast } from "@kit/composables"
@@ -249,7 +249,7 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 const playlist = usePlaylistStore()
 const appLanguage = useAppLanguage()
 const toast = useToast()
-const { packs: starterPacks } = useStarterPacks(appLanguage)
+const { collections: starterPacks } = useCollections(appLanguage)
 const addingPack = ref(false)
 
 // Append the "or pick from the suggestions below" call-to-action only
