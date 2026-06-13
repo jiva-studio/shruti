@@ -34,6 +34,7 @@ def build_prompt(
     sections: Iterable[str],
     *,
     lang: str | None = None,
+    lang_name: str | None = None,
 ) -> str:
     """Assemble the system prompt from the named sections in order.
 
@@ -64,5 +65,13 @@ def build_prompt(
         parts.append(prompt.text)
     text = "".join(parts)
     if lang:
+        # `{{LANG_NAME}}` = the human language name from the catalog `languages`
+        # table (e.g. "Srpski", "Español", "हिन्दी"), passed by the caller — a
+        # bare code ("sr-Latn") makes the LLM drift (it answered Russian). The
+        # table is our single source of truth and auto-extends with new
+        # languages, so nothing here needs maintaining. Falls back to the code
+        # when no name was resolved. `{{LANG}}` stays the raw code for places
+        # that need it (retrieval-lang matching, transliteration script hints).
+        text = text.replace("{{LANG_NAME}}", lang_name or lang)
         text = text.replace("{{LANG}}", lang)
     return text
