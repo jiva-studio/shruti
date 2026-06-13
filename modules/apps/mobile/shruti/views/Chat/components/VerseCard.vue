@@ -7,7 +7,7 @@
     missing — keeps the bubble readable for pre-feature history or when
     library.db hadn't indexed this verse at server-cite time.
   -->
-  <article v-if="body" class="verse-card">
+  <ScriptureBlock v-if="body">
     <button v-if="audioUrl" type="button" class="verse-play" @click="onToggle">
       <IonSpinner v-if="isPreparing" name="crescent" class="verse-play-spin" />
       <IconPlayerPauseFilled v-else-if="isPlaying" :size="13" />
@@ -34,19 +34,8 @@
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onMetadata"
     />
-  </article>
-  <span
-    v-else
-    role="button"
-    tabindex="0"
-    class="verse-chip"
-    :aria-label="ariaLabel"
-    @click="onTap"
-    @keydown.enter.space.prevent="onTap"
-  >
-    <IconBook2 :size="14" stroke="1.75" class="verse-icon" />
-    <span class="verse-caption">{{ displayCaption }}</span>
-  </span>
+  </ScriptureBlock>
+  <ScriptureChip v-else :caption="displayCaption" :aria-label="ariaLabel" @tap="onTap" />
 
   <TranslationNotice v-if="isMt" v-model:show-original="showOriginal" />
 </template>
@@ -67,13 +56,15 @@ import { computed, ref } from "vue"
 // `showOriginal` toggles the verse translation between the active-locale
 // machine translation and the original English.
 import { IonSpinner } from "@ionic/vue"
-import { IconBook2, IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
+import { IconPlayerPauseFilled, IconPlayerPlayFilled } from "@tabler/icons-vue"
 import { useI18n } from "vue-i18n"
 import type { ChatVerseBody } from "@lib/domain/chatMessage.js"
 import { useExcerptAudioPlayer } from "@shruti/composables/useExcerptAudioPlayer.js"
 import { useCachedExcerptUrl } from "@shruti/composables/useCachedExcerptUrl.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
+import ScriptureChip from "./ScriptureChip.vue"
+import ScriptureBlock from "./ScriptureBlock.vue"
 
 const props = defineProps<{
   sourceId: string
@@ -180,58 +171,9 @@ function onTap() {
 </script>
 
 <style scoped>
-.verse-card {
-  position: relative;
-  display: block;
-  margin: 10px 0;
-  padding: 10px 0;
-  /* Concrete px instead of em so children's px sizes don't compound
-     against an em-relative parent. The verse card reads slightly
-     smaller than bubble prose (15px) to visually distinguish the
-     sub-block. */
-  font-size: 14px;
-  line-height: 1.45;
-}
-/* Top & bottom rules rendered as 1px gradient bands instead of solid
- * borders so the line fades in from the edges and peaks in the middle
- * — soft visual divider, no hard corners. */
-.verse-card::before,
-.verse-card::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background-image: linear-gradient(
-    to right,
-    transparent,
-    rgba(var(--ion-color-tertiary-rgb), 0.1),
-    transparent
-  );
-  pointer-events: none;
-}
-.verse-card::before {
-  top: 0;
-}
-.verse-card::after {
-  bottom: 0;
-}
-/* Adjacent verse cards (LLM stacked several): the previous card's
- * bottom band + this card's top band would render as one double-bright
- * line. Drop the top band on the runner-up and collapse the top margin
- * so a single shared rule sits between them. */
-.verse-card + .verse-card {
-  margin-top: 0;
-  /* Zero out the lower stacked card's top padding: the addr header's
-   * own line-box leading already provides all the visual breathing
-   * room below the shared rule. Anything extra reads as a larger gap
-   * below the rule than above. Single (un-stacked) cards keep
-   * symmetric 10/10. */
-  padding-top: 0;
-}
-.verse-card + .verse-card::before {
-  display: none;
-}
+/* Block layout + the gradient dividers live in the shared `.scripture-block`
+ * class (theme/misc.css); only verse-specific content styling is below. */
+
 /* Small semi-transparent round play button, pinned to the card's
  * top-right corner. The card is position:relative so it anchors here. */
 .verse-play {
@@ -293,39 +235,5 @@ function onTap() {
 .verse-card-translation {
   margin: 0;
   white-space: pre-wrap;
-}
-
-.verse-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  margin: 0 2px;
-  border-radius: 999px;
-  border: 1px solid var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.3;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-  vertical-align: baseline;
-  transition: background 0.15s ease;
-}
-.verse-chip:hover,
-.verse-chip:focus-visible {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  outline: none;
-}
-.verse-icon {
-  flex: 0 0 auto;
-}
-.verse-caption {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 18ch;
 }
 </style>

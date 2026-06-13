@@ -12,14 +12,31 @@
   <div v-if="!snippetText" class="citation-chip-line">
     <CitationChip :track-id="trackId" :start-ms="startMs" :end-ms="endMs" :caption="caption" />
   </div>
+  <!-- Fixed-height skeleton held until BOTH the snippet text and the
+       async track/author metadata are ready, so the card reveals at its
+       final size in one step instead of growing as the meta-block lands
+       (issue #926). The skeleton's height matches the real card so there
+       is no reflow on reveal. -->
+  <AccentFrame
+    v-else-if="!metaLoaded"
+    class="citation-card citation-card--loading"
+    aria-hidden="true"
+  >
+    <div class="citation-skeleton">
+      <span class="citation-skeleton-player" />
+      <span class="citation-skeleton-line citation-skeleton-line--text" />
+      <span class="citation-skeleton-line citation-skeleton-line--text short" />
+      <span class="citation-skeleton-line citation-skeleton-line--meta" />
+    </div>
+  </AccentFrame>
   <AccentFrame
     v-else
     class="citation-card"
     role="button"
     tabindex="0"
-    :aria-label="actionSheetHeader || $t('chat.citationDetailsTitle')"
-    @click="onOpenActions"
-    @keydown.enter.space.prevent="onOpenActions"
+    :aria-label="trackTitle || $t('chat.citationDetailsTitle')"
+    @click="openActions"
+    @keydown.enter.space.prevent="openActions"
   >
     <AutoHeight>
       <ExcerptCard
@@ -39,7 +56,7 @@
 
     <IonActionSheet
       :is-open="actionSheetOpen"
-      :header="actionSheetHeader"
+      :header="trackTitle"
       :buttons="actionSheetButtons"
       @did-dismiss="actionSheetOpen = false"
     />
@@ -49,29 +66,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue"
-import { useI18n } from "vue-i18n"
-import { IonActionSheet } from "@ionic/vue"
-import router from "@shruti/router/index.js"
-import { useShruti } from "@shruti/shruti.js"
+import { computed, onMounted } from "vue"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { resolveLocalizedName, resolveTrackTitle } from "@lib/domain/services/localizedName.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
-import { useAddToPlaylist } from "@shruti/composables/useAddToPlaylist.js"
-import { useChatActions } from "@shruti/composables/useChatActions.js"
 import { useDictionariesStore } from "@shruti/stores/useDictionariesStore.js"
-import { usePaywallStore } from "@shruti/stores/usePaywallStore.js"
-import { usePurchasesStore } from "@shruti/stores/usePurchasesStore.js"
-import { useStudioHandoffStore } from "@shruti/stores/useStudioHandoffStore.js"
-import { useToast } from "@kit/composables"
-import type { AuthorId, TrackId } from "@lib/domain/core.js"
-import type { Author } from "@lib/domain/author.js"
 import type { ChatCiteSnippet } from "@lib/domain/chatMessage.js"
-import type { Track } from "@lib/domain/track.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import NotesInlinePlayer from "@shruti/views/Notes/NotesInlinePlayer.vue"
 import { citationExcerptId } from "../composables/useCitationSnippet.js"
+import { useCitationActions } from "../composables/useCitationActions.js"
+import { useTranslatable } from "../composables/useTranslatable.js"
 import CitationChip from "./CitationChip.vue"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
@@ -89,39 +94,38 @@ const props = defineProps<{
   body?: ChatCiteSnippet
 }>()
 
-const { t } = useI18n()
-const app = useShruti()
 const appLanguage = useAppLanguage()
 const dictionaries = useDictionariesStore()
-const purchases = usePurchasesStore()
-const paywall = usePaywallStore()
-const studioHandoff = useStudioHandoffStore()
-const toast = useToast()
-const { addToPlaylist } = useAddToPlaylist()
-const { saveCitation } = useChatActions()
-
-const track = ref<Track | null>(null)
-const author = ref<Author | null>(null)
-const actionSheetOpen = ref(false)
-const savingNote = ref(false)
-/** Toggles the card text between the (shown) translation and the
- *  original; only meaningful when the snippet is a machine translation. */
-const showOriginal = ref(false)
 
 /** Transcript snippet pushed by the server ahead of the marker. Null
  *  until it lands (or forever for pre-feature history) → chip fallback. */
 const snippet = computed(() => props.body ?? null)
 const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
-/** True when the shown text is a machine translation with an original to
- *  flip to. */
-const isMt = computed<boolean>(() => !!snippet.value?.mt && !!snippet.value?.textOriginal)
-/** What the card renders: the original when toggled (and available),
- *  otherwise the shown (possibly translated) text. */
-const displayText = computed<string>(() => {
-  const s = snippet.value
-  if (!s) return ""
-  return showOriginal.value && s.textOriginal ? s.textOriginal : s.text
-})
+// Translation toggle (show original ↔ machine translation), shared with
+// CommentaryCard.
+const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
+
+// Metadata load + the Save/Studio/Playlist action sheet are shared with the
+// chip fallback. `metaLoaded` gates the skeleton → card reveal (issue #926).
+const {
+  track,
+  metaLoaded,
+  trackTitle,
+  authorName,
+  actionSheetOpen,
+  actionSheetButtons,
+  openActions,
+} = useCitationActions(
+  () => ({
+    trackId: props.trackId,
+    startMs: props.startMs,
+    endMs: props.endMs,
+    caption: props.caption,
+  }),
+  // Card mode only renders with the snippet text known; pass it so a saved
+  // note carries the real fragment, not a re-fetch / the caption.
+  { snippetText: () => snippetText.value }
+)
 
 const audioPath = computed<string>(() => {
   if (!track.value) return ""
@@ -145,14 +149,6 @@ const playerRef = computed(() => ({
   timeEnd: props.endMs,
 }))
 
-const trackTitle = computed<string>(() =>
-  track.value ? (resolveTrackTitle(track.value, appLanguage.value) ?? "") : ""
-)
-
-const authorName = computed<string>(
-  () => resolveLocalizedName(author.value, appLanguage.value) ?? ""
-)
-
 const referenceLabel = computed<string>(() => {
   const first = track.value?.references?.[0]
   if (!first) return ""
@@ -161,114 +157,11 @@ const referenceLabel = computed<string>(() => {
 
 const trackDate = computed<string>(() => track.value?.date || "")
 
-const actionSheetHeader = computed<string>(() => trackTitle.value)
-
-interface CardActionSheetButton {
-  readonly text: string
-  readonly role?: "cancel" | "destructive"
-  readonly handler: () => void
-}
-
-const actionSheetButtons = computed<readonly CardActionSheetButton[]>(() => [
-  {
-    text: t("chat.citationSaveAsNote"),
-    handler: (): void => {
-      void onSaveAsNote()
-    },
-  },
-  {
-    text: t("chat.citationOpenInStudio"),
-    handler: (): void => {
-      void onOpenInStudio()
-    },
-  },
-  {
-    text: t("chat.citationAddLectureToPlaylist"),
-    handler: (): void => {
-      void onAddToPlaylist()
-    },
-  },
-  {
-    text: t("app.cancel"),
-    role: "cancel",
-    handler: (): void => undefined,
-  },
-])
-
-function onOpenActions(): void {
-  actionSheetOpen.value = true
-}
-
-async function onAddToPlaylist(): Promise<void> {
-  try {
-    await addToPlaylist(props.trackId)
-    await toast.info(t("chat.citationAddedToPlaylist"))
-  } catch (err) {
-    console.warn("[citation-card] add to playlist failed", err)
-    await toast.error(t("chat.citationAddFailed"))
-  }
-}
-
-function onOpenInStudio(): void {
-  if (!purchases.isSubscribed) {
-    paywall.requestOpen("notesStudio")
-    return
-  }
-  studioHandoff.setPending({
-    kind: "citation",
-    trackId: props.trackId,
-    startMs: props.startMs,
-    endMs: props.endMs,
-    caption: props.caption ?? "",
-  })
-  void router.push("/tabs/studio")
-}
-
-async function onSaveAsNote(): Promise<void> {
-  if (savingNote.value) return
-  savingNote.value = true
-  try {
-    await saveCitation({
-      trackId: props.trackId,
-      startMs: props.startMs,
-      endMs: props.endMs,
-      caption: props.caption ?? "",
-      // Card mode only renders when the snippet text is known; pass it so
-      // the note body is the real fragment, not a re-fetch / the caption.
-      ...(snippetText.value ? { text: snippetText.value } : {}),
-    })
-  } finally {
-    savingNote.value = false
-  }
-}
-
-async function loadMetadata(): Promise<void> {
-  try {
-    const repos = app.repositories()
-    const t0 = await repos.tracks.getById(props.trackId as TrackId)
-    track.value = t0 ?? null
-    author.value =
-      t0 && t0.authorId ? ((await repos.authors.getById(t0.authorId as AuthorId)) ?? null) : null
-  } catch (err) {
-    console.warn("[citation-card] metadata load failed", err)
-  }
-}
-
 onMounted(() => {
   // Sources are needed to format the shloka reference, like the Notes
   // list does; one-shot full load, cached across the session.
   void dictionaries.ensureLoaded()
 })
-
-watch(
-  () => props.trackId,
-  () => {
-    track.value = null
-    author.value = null
-    void loadMetadata()
-  },
-  { immediate: true }
-)
 </script>
 
 <style scoped>
@@ -290,5 +183,41 @@ watch(
   margin-bottom: 0;
   border-radius: 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+/* Loading placeholder: a fixed-height shimmer that approximates the real
+ * card (player strip + two text lines + a meta line) so the reveal causes
+ * no layout shift. Non-interactive while it stands in. */
+.citation-card--loading {
+  cursor: default;
+}
+.citation-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.citation-skeleton-player {
+  height: 40px;
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+.citation-skeleton-line {
+  height: 12px;
+  margin: 8px 12px 0;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(120, 120, 120, 0.12),
+    rgba(120, 120, 120, 0.06),
+    rgba(120, 120, 120, 0.12)
+  );
+}
+.citation-skeleton-line--text.short {
+  width: 65%;
+}
+.citation-skeleton-line--meta {
+  width: 40%;
+  align-self: flex-end;
+  margin-right: 12px;
+  margin-bottom: 10px;
 }
 </style>

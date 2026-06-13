@@ -17,13 +17,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed } from "vue"
 import type { ChatCommentaryBody } from "@lib/domain/chatMessage.js"
 import { inlineMd } from "@shruti/composables/chatMarkers.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
 import AccentFrame from "./AccentFrame.vue"
+import { useTranslatable } from "../composables/useTranslatable.js"
 
 const props = defineProps<{
   /** Commentary quote from the owning message's `commentaries` map (keyed
@@ -33,18 +34,9 @@ const props = defineProps<{
 
 const body = computed(() => props.body ?? null)
 
-/** True when the shown quote is a machine translation with an original to
- *  flip to. */
-const isMt = computed<boolean>(() => !!body.value?.mt && !!body.value?.textOriginal)
-const showOriginal = ref(false)
-
-/** Quote text: the original verbatim source when toggled (and available),
- *  otherwise the shown (possibly translated) text. */
-const displayText = computed<string>(() => {
-  const b = body.value
-  if (!b) return ""
-  return isMt.value && showOriginal.value && b.textOriginal ? b.textOriginal : b.text
-})
+// Translation toggle (show original ↔ machine translation), shared with
+// CitationCard.
+const { isMt, showOriginal, displayText } = useTranslatable(() => body.value)
 
 /** Comment text rendered through the same inline-markdown pipeline the chat
  *  bubble uses, so bold / italic / code in server-provided commentary render
