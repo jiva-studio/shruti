@@ -89,7 +89,7 @@ import { usePaywallStore } from "@lectorium/stores/usePaywallStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useConfig } from "@lectorium/composables/useConfig.js"
 import { useDurationFormatter } from "@lectorium/composables/useDurationFormatter.js"
-import { useStarterPacks } from "@lectorium/composables/useStarterPacks.js"
+import { useCollections } from "@lectorium/composables/useCollections.js"
 import { useSubscriptionBinding } from "@lectorium/views/Settings/composables/useSubscriptionBinding.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
@@ -249,7 +249,7 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 const playlist = usePlaylistStore()
 const appLanguage = useAppLanguage()
 const toast = useToast()
-const { packs: starterPacks } = useStarterPacks(appLanguage)
+const { collections: starterPacks } = useCollections(appLanguage)
 const addingPack = ref(false)
 
 // Append the "or pick from the suggestions below" call-to-action only
