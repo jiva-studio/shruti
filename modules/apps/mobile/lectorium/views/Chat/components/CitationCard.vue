@@ -40,7 +40,7 @@
   >
     <AutoHeight>
       <ExcerptCard
-        :text="displayText"
+        :text="displayHtml"
         :author-name="authorName"
         :track-title="trackTitle"
         :reference="referenceLabel"
@@ -68,6 +68,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { renderExcerptHtml } from "@lectorium/composables/chatMarkers.js"
 import { formatReference } from "@lib/domain/services/references.js"
 import { pickPlayableVariant } from "@lib/domain/track.js"
 import { useDictionariesStore } from "@lectorium/stores/useDictionariesStore.js"
@@ -104,6 +105,12 @@ const snippetText = computed<string | null>(() => snippet.value?.text ?? null)
 // Translation toggle (show original ↔ machine translation), shared with
 // CommentaryCard.
 const { isMt, showOriginal, displayText } = useTranslatable(() => snippet.value)
+
+/** Transcript snippet rendered through the shared excerpt-markdown pipeline
+ *  (inline emphasis/bold + `>` block quotes), same as CommentaryCard, so a
+ *  quoted śloka or stray markdown renders instead of printing literally.
+ *  Consumed by `ExcerptCard` → `HighlightText` via `v-html`. */
+const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 
 // Metadata load + the Save/Studio/Playlist action sheet are shared with the
 // chip fallback. `metaLoaded` gates the skeleton → card reveal (issue #926).
@@ -183,6 +190,36 @@ onMounted(() => {
   margin-bottom: 0;
   border-radius: 0;
   background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+/* Inline markdown styles for the transcript text (renderExcerptHtml / marked
+ * output), mirrored from CommentaryCard. :deep penetrates the scope into the
+ * v-html span rendered by HighlightText. */
+.citation-card :deep(strong) {
+  font-weight: 600;
+}
+.citation-card :deep(em) {
+  font-style: italic;
+}
+.citation-card :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.citation-card :deep(a) {
+  color: var(--ion-color-primary);
+  text-decoration: underline;
+}
+/* `> …` block quote (a śloka quoted inside the snippet): its own line,
+ * italic, with a quiet left rule — no literal `>`. */
+.citation-card :deep(.excerpt-quote) {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4);
+  font-style: italic;
+  line-height: 1.4;
 }
 
 /* Loading placeholder: a fixed-height shimmer that approximates the real

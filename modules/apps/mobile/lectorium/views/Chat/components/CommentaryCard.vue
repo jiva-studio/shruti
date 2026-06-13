@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import type { ChatCommentaryBody } from "@lib/domain/chatMessage.js"
-import { inlineMd } from "@lectorium/composables/chatMarkers.js"
+import { renderExcerptHtml } from "@lectorium/composables/chatMarkers.js"
 import { ExcerptCard } from "@ui/components/excerpt/index.js"
 import TranslationNotice from "./TranslationNotice.vue"
 import AutoHeight from "./AutoHeight.vue"
@@ -38,11 +38,12 @@ const body = computed(() => props.body ?? null)
 // CitationCard.
 const { isMt, showOriginal, displayText } = useTranslatable(() => body.value)
 
-/** Comment text rendered through the same inline-markdown pipeline the chat
- *  bubble uses, so bold / italic / code in server-provided commentary render
- *  instead of printing literally. `marked` escapes raw text by default; the
- *  result is consumed by `ExcerptCard` → `HighlightText` via `v-html`. */
-const displayHtml = computed<string>(() => inlineMd(displayText.value))
+/** Comment text rendered through the same markdown pipeline the chat bubble
+ *  uses, so bold / italic / code and `>` block quotes (a śloka quoted inside
+ *  a purport) render instead of printing literally. `marked` escapes raw text
+ *  by default; the result is consumed by `ExcerptCard` → `HighlightText` via
+ *  `v-html`. */
+const displayHtml = computed<string>(() => renderExcerptHtml(displayText.value))
 </script>
 
 <style scoped>
@@ -70,5 +71,14 @@ const displayHtml = computed<string>(() => inlineMd(displayText.value))
 .commentary-card :deep(a) {
   color: var(--ion-color-primary);
   text-decoration: underline;
+}
+/* `> …` block quote (e.g. a śloka quoted inside the purport): its own line,
+ * italic, with a quiet left rule — no literal `>`. */
+.commentary-card :deep(.excerpt-quote) {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4);
+  font-style: italic;
+  line-height: 1.4;
 }
 </style>
