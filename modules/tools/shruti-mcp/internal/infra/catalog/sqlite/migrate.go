@@ -11,8 +11,8 @@ import (
 // already match `SupportedDBScheme` — the publisher owns schema; the
 // client only opens.
 func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
-	if err := ensurePackTables(ctx, db); err != nil {
-		return fmt.Errorf("ensure pack tables: %w", err)
+	if err := ensureCollectionTables(ctx, db); err != nil {
+		return fmt.Errorf("ensure collection tables: %w", err)
 	}
 	if err := seedKindTags(ctx, db); err != nil {
 		return fmt.Errorf("seed kind tags: %w", err)
@@ -23,17 +23,87 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// ensurePackTables creates the `packs` and `pack_tracks` tables when
-// missing AND records the migration in the `migrations` table so the
-// mobile scheme-validator (which reads scheme from migrations.ORDER BY
-// name DESC LIMIT 1) accepts the freshly-published current.db.
+// ensureCollectionTables guarantees the `collections` / `collection_tracks`
+// schema exists and records the migration row so the mobile scheme-validator
+// (which reads scheme from migrations ORDER BY name DESC LIMIT 1) accepts the
+// freshly-published current.db.
 //
-// IF NOT EXISTS keeps the DDL idempotent; the INSERT OR IGNORE makes
-// the migrations row idempotent against repeat open() calls and against
-// already-shipped catalogs.
-func ensurePackTables(ctx context.Context, db *sql.DB) error {
+// The catalog `current.db` is a binary snapshot mutated in place — there is no
+// rebuild-from-DDL path — so the historical `packs` → `collections` rename is
+// applied here as a migration-on-open: if the legacy `packs` table is present
+// and `collections` is not, rename it in place. Idempotent: once `collections`
+// exists, this is a no-op apart from the INSERT OR IGNORE migrations row.
+func ensureCollectionTables(ctx context.Context, db *sql.DB) error {
+	hasCollections, err := tableExists(ctx, db, "collections")
+	if err != nil {
+		return err
+	}
+	if !hasCollections {
+		hasPacks, err := tableExists(ctx, db, "packs")
+		if err != nil {
+			return err
+		}
+		if hasPacks {
+			if err := renamePacksToCollections(ctx, db); err != nil {
+				return fmt.Errorf("rename packs to collections: %w", err)
+			}
+		} else if err := createCollectionTables(ctx, db); err != nil {
+			return fmt.Errorf("create collection tables: %w", err)
+		}
+	}
+	// Bumped scheme: the table rename is breaking for old binaries, so the
+	// scheme moves to 20260613 (mirrors scheme.go / db-scheme.json). The name
+	// sorts after the legacy '003_add_packs' row so the SchemeReader picks it.
+	if _, err := db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('004_rename_packs_to_collections', 20260613, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`); err != nil {
+		return fmt.Errorf("record migration row: %w", err)
+	}
+	return nil
+}
+
+func tableExists(ctx context.Context, db *sql.DB, name string) (bool, error) {
+	var n int
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).
+		Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// renamePacksToCollections renames the legacy starter-pack tables in place.
+// SQLite (>= 3.25) auto-updates the child FK reference when the parent table
+// is renamed and the FK local columns when those columns are renamed, so no
+// rebuild is needed for the rename alone.
+func renamePacksToCollections(ctx context.Context, db *sql.DB) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS packs (
+		`ALTER TABLE packs RENAME TO collections`,
+		`ALTER TABLE pack_tracks RENAME TO collection_tracks`,
+		`ALTER TABLE collection_tracks RENAME COLUMN pack_id TO collection_id`,
+		`ALTER TABLE collection_tracks RENAME COLUMN pack_language TO collection_language`,
+		`DROP INDEX IF EXISTS idx_pack_tracks_pack`,
+		`CREATE INDEX IF NOT EXISTS idx_collection_tracks ON collection_tracks(collection_id, collection_language, position)`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// createCollectionTables builds the schema from scratch. In production the
+// catalog always ships with the tables already present (legacy `packs` or the
+// renamed `collections`), so this path is only exercised by fresh test DBs.
+func createCollectionTables(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS collections (
 			id          TEXT NOT NULL,
 			language    TEXT NOT NULL,
 			name        TEXT NOT NULL,
@@ -41,19 +111,15 @@ func ensurePackTables(ctx context.Context, db *sql.DB) error {
 			sort_order  INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (id, language)
 		)`,
-		`CREATE TABLE IF NOT EXISTS pack_tracks (
-			pack_id        TEXT NOT NULL,
-			pack_language  TEXT NOT NULL,
-			track_id       TEXT NOT NULL,
-			position       INTEGER NOT NULL DEFAULT 0,
-			PRIMARY KEY (pack_id, pack_language, track_id),
-			FOREIGN KEY (pack_id, pack_language) REFERENCES packs(id, language) ON DELETE CASCADE
+		`CREATE TABLE IF NOT EXISTS collection_tracks (
+			collection_id        TEXT NOT NULL,
+			collection_language  TEXT NOT NULL,
+			track_id             TEXT NOT NULL,
+			position             INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (collection_id, collection_language, track_id),
+			FOREIGN KEY (collection_id, collection_language) REFERENCES collections(id, language) ON DELETE CASCADE
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_pack_tracks_pack ON pack_tracks(pack_id, pack_language, position)`,
-		// Make this look like a regular numbered migration so the mobile
-		// SchemeReader sees scheme=20260520 at the top of the table.
-		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
-		 VALUES ('003_add_packs', 20260520, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`,
+		`CREATE INDEX IF NOT EXISTS idx_collection_tracks ON collection_tracks(collection_id, collection_language, position)`,
 	}
 	for _, s := range stmts {
 		if _, err := db.ExecContext(ctx, s); err != nil {
@@ -153,4 +219,3 @@ func seedKindTags(ctx context.Context, db *sql.DB) error {
 	}
 	return tx.Commit()
 }
-
