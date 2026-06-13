@@ -19,6 +19,14 @@
          row isn't hidden on initial paint. -->
     <div class="search-content-spacer" />
 
+    <!-- Discovery surface: featured collections, shown only when the user
+         hasn't typed a query yet. Scrolls up under the fixed search bar. -->
+    <CollectionsCarousel
+      v-if="!search.query.value"
+      :locale="appLanguage"
+      @select="onSelectCollection"
+    />
+
     <IonText v-if="search.error.value" color="danger" class="ion-padding">
       <p>{{ search.error.value }}</p>
     </IonText>
@@ -43,10 +51,17 @@
       @update:open="search.filtersOpen.value = $event"
       @reset="search.resetFilters"
     />
+
+    <CollectionDetailModal
+      v-model:open="detailOpen"
+      :collection-id="selectedCollectionId"
+      :locale="appLanguage"
+    />
   </AppPage>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import {
   IonText,
   IonInfiniteScroll,
@@ -61,11 +76,22 @@ import {
   SearchFiltersSheet,
 } from "@ui/features/tracks/search/filters/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import { CollectionsCarousel, CollectionDetailModal } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useSearchController } from "./SearchView.controller.js"
 
 const player = usePlayerStore()
 const search = useSearchController()
+const appLanguage = useAppLanguage()
+
+const selectedCollectionId = ref<string | null>(null)
+const detailOpen = ref(false)
+
+function onSelectCollection(id: string): void {
+  selectedCollectionId.value = id
+  detailOpen.value = true
+}
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await search.loadMore()
