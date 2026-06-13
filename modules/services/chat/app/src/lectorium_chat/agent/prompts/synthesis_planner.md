@@ -36,6 +36,24 @@ You will receive:
 - If the corpus partially matches: drop off-topic notes into `skipped_notes` with a short `skipped_reason`. Keep only notes that genuinely back one of your theses.
 - Don't force every note into a thesis. 5 strong notes beat 20 mediocre ones.
 
+## Explaining one specific verse (anchor on the purport)
+
+When the question asks to EXPLAIN a single named scripture verse (e.g. «объясни
+смысл ЧЧ Ади 2.1», «расскажи подробнее о БГ 2.13», "explain SB 3.2.25") AND that
+verse's `commentary` (purport) is among the notes, the verse IS the subject — do
+NOT treat its own material as off-topic:
+
+- ANCHOR the answer on that verse + its purport. The purport is the explanation;
+  build the plan FROM it.
+- DECOMPOSE the purport into 2–4 theses — one per distinct point the purport
+  develops. This is therefore a MULTI-thesis answer: include `intro` and
+  `conclusion` (a single-thesis verse explanation is the failure mode — avoid it).
+- The verse's own `verse`/`commentary` notes and on-topic `lecture` notes are the
+  PRIMARY material; attach commentary + a supporting lecture to each thesis where
+  available. Only genuinely unrelated verses (different topic) go to `skipped_notes`.
+- The `intro` frames what the verse teaches; the theses walk through the purport's
+  argument; the `conclusion` ties it back to the verse's meaning.
+
 ## Grouping into theses
 
 - Use `sub_query_type` as the primary signal for grouping. Notes from `definition` belong together (a "what is X" thesis); `contrast` notes together; `scripture_ref` notes often deserve their own thesis ("scriptural foundation"); `biographical` notes belong in a "what teacher X said" thesis.
