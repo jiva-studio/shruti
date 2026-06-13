@@ -118,6 +118,16 @@ _STRICT_PATTERNS = (
 # so the client never renders the orphan as «Карточка повреждена».
 _ACTION_ID_RE = re.compile(r"^\[action:[a-z][a-z0-9_]*\|id=([A-Za-z0-9_-]+)\]$")
 
+# Extracts (source_id, tokens) from a grammar-valid bypass verse/chapter marker.
+# A legit verse/chapter card always reaches the client via `[^N]` alias
+# expansion; a raw `[verse:src/tokens]` the model TYPED is only legitimate when
+# that ref was actually surfaced this turn. One typed for content never
+# retrieved is a hallucination (observed: prose «глава 16, стихи 4-18» but the
+# marker was `[verse:…/17.16]`) — validate against the alias map, DROP if absent.
+_CARD_REF_RE = re.compile(
+    r"^\[(?:verse|chapter):([A-Za-z0-9_]+)/([0-9.,-]+)(?:\|[^\]\n]*)?\]$"
+)
+
 # Runaway buffer cap — if we don't see `]` after this many chars, it
 # wasn't a marker.
 _MAX_BUFFER = 200
@@ -462,6 +472,22 @@ class MarkerExpander:
                                 emitted=sorted(self._emitted_action_ids),
                             )
                             return ""
+                    # Verse/chapter card markers: same validation — a grammar-
+                    # valid card the model TYPED for a verse/chapter never
+                    # surfaced this turn is a hallucination. Legit cards arrive
+                    # via `[^N]` expansion, so any raw one here must match a
+                    # turn alias or it's dropped.
+                    cm = _CARD_REF_RE.match(marker)
+                    if cm is not None and not self._aliases.has_verse_or_chapter(
+                        cm.group(1), cm.group(2)
+                    ):
+                        self._malformed_count += 1
+                        log.info(
+                            "chat_card_marker_ungrounded_dropped",
+                            request_id=self._request_id,
+                            marker=marker[:120],
+                        )
+                        return ""
                     return marker
             self._malformed_count += 1
             log.info(
