@@ -82,6 +82,38 @@ async def test_footnote_to_verse_no_addr_label() -> None:
     assert out == "[verse:source_BG/2.13]"
 
 
+# ── bypass [verse:…] grounding (anti-hallucination) ──────────────────
+
+
+async def test_bypass_verse_marker_ungrounded_is_dropped() -> None:
+    """The model TYPED a `[verse:…]` for a verse never retrieved this turn
+    (nothing aliased) — a hallucinated card. Drop it, don't render."""
+    aliases = TurnAliasMap()  # nothing surfaced this turn
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "Глава 16 [verse:source_BG/17.16|БГ 17.16] об этом")
+    assert "[verse:" not in out
+
+
+async def test_bypass_verse_marker_wrong_verse_dropped() -> None:
+    """Repro of the prod bug: prose says BG 16.4 (what was retrieved) but the
+    model emits a card for BG 17.16 (not aliased) — drop the mismatched card."""
+    aliases = TurnAliasMap()
+    aliases.alias_verse("source_BG", "16.4", addr_label="БГ 16.4")
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "[verse:source_BG/17.16|БГ 17.16]")
+    assert "[verse:" not in out
+
+
+async def test_bypass_verse_marker_grounded_passes() -> None:
+    """A raw `[verse:…]` whose ref WAS surfaced this turn is legit (the model
+    just wrote the expanded form instead of `[^N]`) — keep it."""
+    aliases = TurnAliasMap()
+    aliases.alias_verse("source_BG", "2.13", addr_label="БГ 2.13")
+    e = MarkerExpander(aliases)
+    out = await _expand(e, "see [verse:source_BG/2.13|БГ 2.13] now")
+    assert "[verse:source_BG/2.13|БГ 2.13]" in out
+
+
 # ── [^N] — media clip ────────────────────────────────────────────────
 
 
