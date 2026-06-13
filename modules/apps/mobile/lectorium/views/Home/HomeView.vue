@@ -40,7 +40,7 @@
         <ActivitySection :days="heatmapDays" />
       </template>
       <PlaylistSection
-        :rows="rows"
+        :items="playlistItems"
         :empty-header="$t('home.playlistIsEmpty')"
         :empty-message="emptyMessage"
         :empty-image="emptyImage"
@@ -95,6 +95,7 @@ import { useLectorium } from "@lectorium/lectorium.js"
 import { useToast } from "@kit/composables"
 import { addTracksToPlaylist } from "@lib/application"
 import { useHomeController } from "./HomeView.controller.js"
+import { usePlaylistGroups } from "./usePlaylistGroups.js"
 
 const { t } = useI18n()
 const showActivityTracker = useConfig<boolean>("settings.showActivityTracker", true)
@@ -248,6 +249,8 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 // empty-state degrades to the pre-feature look on older builds.
 const playlist = usePlaylistStore()
 const appLanguage = useAppLanguage()
+// Derive collection groups (accordions) from the flat playlist rows.
+const { items: playlistItems } = usePlaylistGroups(rows, appLanguage)
 const toast = useToast()
 const { collections: starterPacks } = useCollections(appLanguage)
 const addingPack = ref(false)
