@@ -125,6 +125,8 @@ def route_after_router(state: ChatState) -> str:
         return "help_worker"
     if intent == "find_track":
         return "catalog_worker"
+    if intent == "show_verse":
+        return "show_verse_worker"
     if intent == "create_action":
         args = state.get("extracted_args") or {}
         action_kind = args.get("action_kind")

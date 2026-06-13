@@ -52,6 +52,7 @@ from shruti_chat.agent.graph.nodes import (
     locate_worker_node,
     research_worker_node,
     router_node,
+    show_verse_worker_node,
     synthesizer_node,
 )
 from shruti_chat.agent.graph.nodes.synthesis_planner import (
@@ -75,6 +76,7 @@ def build_chat_graph() -> Pregel:
     builder.add_node("catalog_worker", catalog_worker_node)
     builder.add_node("action_worker", action_worker_node)
     builder.add_node("help_worker", help_worker_node)
+    builder.add_node("show_verse_worker", show_verse_worker_node)
     builder.add_node("synthesis_planner", synthesis_planner_node)
     builder.add_node("synthesizer", synthesizer_node)
 
@@ -88,6 +90,7 @@ def build_chat_graph() -> Pregel:
             "catalog_worker": "catalog_worker",
             "action_worker": "action_worker",
             "help_worker": "help_worker",
+            "show_verse_worker": "show_verse_worker",
             "synthesizer": "synthesizer",
         },
     )
@@ -125,6 +128,9 @@ def build_chat_graph() -> Pregel:
     # straight to synthesizer; the outline-first synthesis_planner is for
     # essay-grounding research notes, not for a "where is it" pointer.
     builder.add_edge("locate_worker", "synthesizer")
+    # show_verse_worker emits one verse note + card payload — straight to the
+    # synthesizer for a short lead-in + follow-up chips; no planning needed.
+    builder.add_edge("show_verse_worker", "synthesizer")
     builder.add_edge("synthesis_planner", "synthesizer")
     builder.add_edge("synthesizer", END)
 
