@@ -763,6 +763,20 @@ def _source_short_label_sync(db_path: Path, source_id: str, lang: str) -> str | 
     return by_lang.get(lang) or by_lang.get("en") or next(iter(by_lang.values()), None)
 
 
+def _language_name_sync(db_path: Path, code: str) -> str | None:
+    """Native language name for a locale code from the `languages` table
+    ("ru"→"Русский", "sr-Latn"→"Srpski", "hi"→"हिन्दी"). The table is the
+    source of truth and already carries every shipped locale, so this needs no
+    per-language maintenance. Falls back to the primary subtag, else None."""
+    try:
+        with _catalog_conn(db_path) as conn:
+            rows = conn.execute("SELECT code, full_name FROM languages").fetchall()
+    except sqlite3.Error:
+        return None
+    by_code = {r["code"]: r["full_name"] for r in rows if r["full_name"]}
+    return by_code.get(code) or by_code.get(code.split("-")[0])
+
+
 def _resolve_sync(
     db_path: Path,
     kind: ResolveKind,
@@ -897,6 +911,9 @@ class SqliteCatalogRepository:
         return await asyncio.to_thread(
             _source_short_label_sync, self._db_path, source_id, lang,
         )
+
+    async def language_name(self, code: str) -> str | None:
+        return await asyncio.to_thread(_language_name_sync, self._db_path, code)
 
     def invalidate_cache(self) -> None:
         invalidate_dict_cache()

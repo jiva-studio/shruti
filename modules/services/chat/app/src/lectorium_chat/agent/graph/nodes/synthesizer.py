@@ -199,10 +199,20 @@ async def synthesizer_node(state: ChatState, runtime: Runtime[TurnContext]) -> d
     # language). The prompt lives in agent/prompts/show_verse.md (Langfuse-
     # hosted, .md fallback) like every other section — never inline. `{{ADDR}}`
     # is substituted with the human verse address, same as `{{LANG}}`.
+    # Resolve the human language NAME for the directive — a bare locale code
+    # ("sr-Latn") makes the LLM drift (answered Russian) on planner-less paths.
+    # Sourced from the catalog `languages` table (auto-extends; no hardcode).
+    lang_name: str | None = None
+    if ctx.catalog_repo is not None:
+        try:
+            lang_name = await ctx.catalog_repo.language_name(state["lang"])
+        except Exception:  # noqa: BLE001 — language hint must never fail the turn
+            lang_name = None
+
     sections = _SYNTH_PROMPT_SECTIONS
     if state.get("intent") == "show_verse":
         sections = _SYNTH_PROMPT_SECTIONS + ("show_verse",)
-    system_prompt = build_prompt(sections, lang=state["lang"])
+    system_prompt = build_prompt(sections, lang=state["lang"], lang_name=lang_name)
     if state.get("intent") == "show_verse":
         addr = next(
             (n.get("text") for n in state.get("tool_results", [])
