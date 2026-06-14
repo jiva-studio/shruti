@@ -274,6 +274,23 @@ public final class AudioPlayerPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setSourceMix(PluginCall call) {
+        Float level = call.getFloat("level", 0f);
+        if (level == null) {
+            call.reject("Argument 'level' is required");
+            return;
+        }
+        if (!ensureController(call)) return;
+        Bundle args = new Bundle();
+        args.putFloat("level", level);
+        mainHandler.post(() -> {
+            controller.sendCustomCommand(
+                    new SessionCommand(AudioPlayerService.ACTION_SET_SOURCE_MIX, Bundle.EMPTY), args);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
     public void setProgressInterval(PluginCall call) {
         Integer intervalMs = call.getInt("intervalMs");
         if (intervalMs == null) {
@@ -559,7 +576,7 @@ public final class AudioPlayerPlugin extends Plugin {
      */
     static MediaItem buildMediaItem(
             android.content.Context context,
-            String itemId, String url, String title, String author,
+            String itemId, String url, String secondaryUrl, String title, String author,
             String cover, long durationMs) {
         MediaMetadata.Builder meta = new MediaMetadata.Builder()
                 .setTitle(title)
@@ -577,11 +594,20 @@ public final class AudioPlayerPlugin extends Plugin {
                 meta.setArtworkData(artwork, MediaMetadata.PICTURE_TYPE_FRONT_COVER);
             }
         }
-        return new MediaItem.Builder()
+        MediaItem.Builder builder = new MediaItem.Builder()
                 .setUri(url)
                 .setMediaId(itemId == null ? "" : itemId)
-                .setMediaMetadata(meta.build())
-                .build();
+                .setMediaMetadata(meta.build());
+        // Stash the optional clean source on the item so the service can load
+        // it into the sidecar player when this item becomes current.
+        if (secondaryUrl != null && !secondaryUrl.isEmpty()) {
+            Bundle extras = new Bundle();
+            extras.putString("secondaryUrl", secondaryUrl);
+            builder.setRequestMetadata(new MediaItem.RequestMetadata.Builder()
+                    .setExtras(extras)
+                    .build());
+        }
+        return builder.build();
     }
 
     private static volatile byte[] cachedArtwork;
