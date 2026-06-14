@@ -34,8 +34,7 @@ import { FlatHeader } from "@ui/primitives/index.js"
 import { CollectionListItem } from "@ui/features/collections/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { buildServerUrl } from "@lib/domain/servers.js"
-import { getRegions } from "@shruti/services/regionsRegistry.js"
+import { resolveAssetUrl } from "@shruti/services/regionsRegistry.js"
 
 const props = defineProps<{ groupId?: string }>()
 
@@ -55,12 +54,6 @@ const title = ref("")
 const description = ref("")
 const collections = ref<readonly Row[]>([])
 
-function coverUrl(cover: string): string | undefined {
-  if (!cover) return undefined
-  const region = getRegions()[0]
-  return region ? buildServerUrl(region, cover) : undefined
-}
-
 async function load(groupId: string | undefined, locale: string): Promise<void> {
   title.value = ""
   description.value = ""
@@ -76,7 +69,7 @@ async function load(groupId: string | undefined, locale: string): Promise<void> 
       collections.value = cols.map((c) => ({
         id: c.id,
         name: c.name,
-        coverUrl: coverUrl(c.cover),
+        coverUrl: resolveAssetUrl(c.cover),
         description: c.description,
       }))
     } else {
@@ -85,7 +78,7 @@ async function load(groupId: string | undefined, locale: string): Promise<void> 
       collections.value = cols.map((c) => ({
         id: c.id,
         name: c.name,
-        coverUrl: coverUrl(c.cover),
+        coverUrl: resolveAssetUrl(c.cover),
         description: c.description,
       }))
     }
