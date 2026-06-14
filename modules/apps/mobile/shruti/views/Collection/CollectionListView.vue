@@ -1,13 +1,13 @@
 <template>
   <IonPage>
-    <IonHeader>
+    <FlatHeader>
       <IonToolbar>
         <IonButtons slot="start">
           <IonBackButton default-href="/tabs/search" />
         </IonButtons>
         <IonTitle>{{ title }}</IonTitle>
       </IonToolbar>
-    </IonHeader>
+    </FlatHeader>
 
     <IonContent :fullscreen="true">
       <div class="list">
@@ -28,15 +28,8 @@
 import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import { useRouter } from "vue-router"
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue"
+import { IonBackButton, IonButtons, IonContent, IonPage, IonTitle, IonToolbar } from "@ionic/vue"
+import { FlatHeader } from "@ui/primitives/index.js"
 import { CollectionListItem } from "@ui/features/collections/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
