@@ -60,5 +60,6 @@ export default {
     others: "Другие коллекции",
     all: "Все коллекции",
     seeAll: "Показать все",
+    seeAllNamed: "Показать все: {name}",
   },
 }

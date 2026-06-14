@@ -5,7 +5,7 @@
         <IonLabel>{{ g.name }}</IonLabel>
         <IonButton
           class="no-ripple"
-          :aria-label="$t('search.collections.seeAll')"
+          :aria-label="$t('search.collections.seeAllNamed', { name: g.name })"
           @click="openGroup(g.id)"
         >
           <IconChevronRight :size="20" />
@@ -19,7 +19,9 @@
         <IonLabel>{{ $t("search.collections.others") }}</IonLabel>
         <IonButton
           class="no-ripple"
-          :aria-label="$t('search.collections.seeAll')"
+          :aria-label="
+            $t('search.collections.seeAllNamed', { name: $t('search.collections.others') })
+          "
           @click="openAllCollections"
         >
           <IconChevronRight :size="20" />
@@ -35,21 +37,23 @@
       />
     </template>
 
-    <IonListHeader>
-      <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
-      <IonButton
-        class="no-ripple"
-        :aria-label="$t('search.collections.seeAll')"
-        @click="openTracks"
-      >
-        <IconChevronRight :size="20" />
-      </IonButton>
-    </IonListHeader>
-    <TracksList :rows="previewLectures" @select="onSelectTrack">
-      <template #state="{ state, progressPct }">
-        <TrackStateIndicator :state="state" :progress="progressPct" />
-      </template>
-    </TracksList>
+    <template v-if="previewLectures.length">
+      <IonListHeader>
+        <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
+        <IonButton
+          class="no-ripple"
+          :aria-label="$t('search.collections.seeAllNamed', { name: $t('search.lecturesTitle') })"
+          @click="openTracks"
+        >
+          <IconChevronRight :size="20" />
+        </IonButton>
+      </IonListHeader>
+      <TracksList :rows="previewLectures" @select="onSelectTrack">
+        <template #state="{ state, progressPct }">
+          <TrackStateIndicator :state="state" :progress="progressPct" />
+        </template>
+      </TracksList>
+    </template>
   </AppPage>
 </template>
 
