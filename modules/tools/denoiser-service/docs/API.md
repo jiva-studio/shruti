@@ -49,10 +49,8 @@ Queue a denoise job. Returns `201`.
 | `dest.acl` | string | no | Canned ACL, e.g. `public-read`. |
 | `dest.content_type` | string | no | Default `audio/mpeg`. |
 | `filename` | string | no | Display name; defaults to the URL basename. |
-| `params.normalize` | bool | no | Default `true`. |
+| `params.normalize` | bool | no | Loudness-match the clean to the original (EBU R128). Default `true`. |
 | `params.noise_profile` | bool | no | Spectral subtraction (slower ~3×). Default `false`. |
-| `params.mix_min` | number | no | % original mixed back where no voice (0-100). Default `0`. |
-| `params.mix_max` | number | no | % original mixed back where voice present (0-100). Default `0`. |
 | `params.sample_rate` | int | no | Default `48000`. |
 
 ### Response `201`
