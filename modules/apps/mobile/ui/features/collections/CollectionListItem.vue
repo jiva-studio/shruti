@@ -60,9 +60,9 @@ const loaded = ref(false)
 .thumb {
   position: relative;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
+  width: 50px;
+  height: 50px;
+  border-radius: 9px;
   overflow: hidden;
   background: var(--ion-color-light);
 }
@@ -101,6 +101,9 @@ const loaded = ref(false)
   line-height: 1.3;
   font-weight: 500;
   color: var(--ion-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .desc {
