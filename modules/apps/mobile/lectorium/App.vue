@@ -4,6 +4,8 @@
     <FloatingPlayer
       v-model:mix-position="player.mixPosition"
       v-model:playback-speed="player.playbackSpeed"
+      v-model:source-mix-level="player.sourceMixLevel"
+      :source-mix-available="player.sourceMixAvailable"
       :playing="player.playing"
       :title="player.title"
       :author="player.authorName"
@@ -18,6 +20,7 @@
       @click="onOpenTranscript"
       @mix-tick="onSliderTick"
       @speed-tick="onSliderTick"
+      @source-mix-tick="onSliderTick"
       @skip-back="onSkipBack"
       @skip-forward="onSkipForward"
     />
