@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-STRATEGIES = ("afftdn", "rnnoise", "rnnoise-mix")
+STRATEGIES = ("afftdn", "rnnoise", "rnnoise-mix", "afftdn-rnnoise-mix")
 DEFAULT_STRATEGY = "afftdn"
 
 # afftdn knobs
@@ -97,54 +97,77 @@ def smooth_mix_audio(
     return mixed.astype(np.int16)
 
 
-def _denoise_rnnoise(in_path, out_path, mix=False,
-                     mix_min=DEFAULT_MIX_MIN, mix_max=DEFAULT_MIX_MAX):
-    """RNNoise denoise (mono 48k), optionally blended back with the original by
-    voice probability (mix=True → the 'rnnoise-mix' strategy). Exports 128k mp3."""
+def _load_int16_mono(path):
+    """Load an audio file as a mono 48k int16 numpy array (RNNoise's format)."""
     from pydub import AudioSegment
-    from pyrnnoise import RNNoise
-    import soundfile as sf
     import numpy as np
 
-    audio = AudioSegment.from_file(str(in_path))
+    audio = AudioSegment.from_file(str(path))
     if audio.channels > 1:
         audio = audio.set_channels(1)
     if audio.frame_rate != SAMPLE_RATE:
         audio = audio.set_frame_rate(SAMPLE_RATE)
     audio = audio.set_sample_width(2)
+    return np.array(audio.get_array_of_samples(), dtype=np.int16)
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as ti, \
-         tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as to_:
-        temp_in, temp_out = ti.name, to_.name
+
+def _denoise_rnnoise(in_path, out_path, mix=False,
+                     mix_min=DEFAULT_MIX_MIN, mix_max=DEFAULT_MIX_MAX,
+                     mix_reference=None):
+    """RNNoise denoise (mono 48k), optionally blended back by voice probability.
+
+    `mix_reference` is what gets blended in (defaults to `in_path`). For the
+    chained strategy it's the TRUE original, while `in_path` is the afftdn-cleaned
+    intermediate — so the blend reintroduces a natural floor from the original,
+    not from the intermediate. Exports 128k mp3.
+    """
+    from pyrnnoise import RNNoise
+    from pydub import AudioSegment
+    import soundfile as sf
+    import numpy as np
+
+    audio_data = _load_int16_mono(in_path)
+
+    denoiser = RNNoise(sample_rate=SAMPLE_RATE)
+    frames, probs = [], []
+    for speech_prob, frame in denoiser.denoise_chunk(audio_data, partial=True):
+        frames.append(frame)
+        probs.append(speech_prob)
+    if not frames:
+        raise ValueError("No audio frames were denoised")
+    out_data = np.concatenate([f.flatten() for f in frames])
+
+    if mix:
+        ref = _load_int16_mono(mix_reference) if mix_reference else audio_data
+        n = min(len(ref), len(out_data))
+        out_data = smooth_mix_audio(
+            ref[:n], out_data[:n], np.array(probs),
+            mix_min, mix_max, sample_rate=SAMPLE_RATE,
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as to_:
+        temp_out = to_.name
     try:
-        arr = np.array(audio.get_array_of_samples(), dtype=np.int16)
-        sf.write(temp_in, arr.astype(np.float32) / 32768.0, SAMPLE_RATE, subtype="PCM_16")
-        audio_data, _ = sf.read(temp_in, dtype="int16")
-        if audio_data.ndim > 1:
-            audio_data = audio_data[:, 0]
-
-        denoiser = RNNoise(sample_rate=SAMPLE_RATE)
-        frames, probs = [], []
-        for speech_prob, frame in denoiser.denoise_chunk(audio_data, partial=True):
-            frames.append(frame)
-            probs.append(speech_prob)
-        if not frames:
-            raise ValueError("No audio frames were denoised")
-        out_data = np.concatenate([f.flatten() for f in frames])
-
-        if mix:
-            n = min(len(audio_data), len(out_data))
-            out_data = smooth_mix_audio(
-                audio_data[:n], out_data[:n], np.array(probs),
-                mix_min, mix_max, sample_rate=SAMPLE_RATE,
-            )
-
         sf.write(temp_out, out_data, SAMPLE_RATE, subtype="PCM_16")
         AudioSegment.from_wav(temp_out).export(str(out_path), format="mp3", bitrate="128k")
     finally:
-        for p in (temp_in, temp_out):
-            if os.path.exists(p):
-                os.unlink(p)
+        if os.path.exists(temp_out):
+            os.unlink(temp_out)
+
+
+def _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max):
+    """Chain: afftdn (gentle FFT clean) → RNNoise → blend the TRUE original back
+    by voice probability. afftdn first tames steady noise; RNNoise then handles
+    the rest; the original blended into pauses keeps a natural floor."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+        pre = tf.name
+    try:
+        _denoise_afftdn(in_path, pre, nr, nf)
+        _denoise_rnnoise(pre, out_path, mix=True, mix_min=mix_min, mix_max=mix_max,
+                         mix_reference=in_path)
+    finally:
+        if os.path.exists(pre):
+            os.unlink(pre)
 
 
 # ─────────────────────────────── dispatch ──────────────────────────────────
@@ -160,6 +183,8 @@ def denoise_one(in_path, out_path, strategy=DEFAULT_STRATEGY,
         _denoise_rnnoise(in_path, out_path, mix=False)
     elif strategy == "rnnoise-mix":
         _denoise_rnnoise(in_path, out_path, mix=True, mix_min=mix_min, mix_max=mix_max)
+    elif strategy == "afftdn-rnnoise-mix":
+        _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max)
     else:
         raise ValueError(f"unknown strategy: {strategy!r} (one of {STRATEGIES})")
 
