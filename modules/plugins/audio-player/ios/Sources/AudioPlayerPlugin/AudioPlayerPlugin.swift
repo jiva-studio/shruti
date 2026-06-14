@@ -274,7 +274,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Public API: single-track convenience (one play path)
 
     @objc func open(_ call: CAPPluginCall) {
-        guard let urlString = call.getString("url"), URL(string: urlString) != nil else {
+        let audios = (call.getArray("audios") ?? []).compactMap { $0 as? String }
+        guard let urlString = audios.first, URL(string: urlString) != nil else {
             call.reject("Invalid URL provided")
             return
         }
@@ -283,8 +284,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let itemId = call.getString("itemId") ?? ""
 
         // open() is a queue of length 1 — there is ONE native play path.
+        // audios[0] = primary, audios[1] = optional crossfade source.
         let item = QueueItemSpec(itemId: itemId, url: urlString,
-                                 secondaryUrl: call.getString("secondaryUrl"),
+                                 secondaryUrl: audios.count > 1 ? audios[1] : nil,
                                  title: title, author: author, duration: nil)
         replaceQueue(with: [item], startIndex: 0, startPosition: 0)
         call.resolve()
@@ -378,13 +380,15 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func parseQueueItem(_ raw: Any) -> QueueItemSpec? {
         guard let dict = raw as? [String: Any] else { return nil }
+        let audios = (dict["audios"] as? [Any])?.compactMap { $0 as? String } ?? []
         guard let itemId = dict["itemId"] as? String,
-              let url = dict["url"] as? String,
+              let url = audios.first,
               !url.isEmpty else { return nil }
         let title = dict["title"] as? String ?? "Unknown Title"
         let author = dict["author"] as? String ?? "Unknown Artist"
         let duration = (dict["duration"] as? NSNumber)?.doubleValue
-        let secondaryUrl = dict["secondaryUrl"] as? String
+        // audios[0] = primary, audios[1] = optional crossfade source.
+        let secondaryUrl = audios.count > 1 ? audios[1] : nil
         return QueueItemSpec(itemId: itemId, url: url, secondaryUrl: secondaryUrl,
                              title: title, author: author, duration: duration)
     }

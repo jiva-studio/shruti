@@ -129,15 +129,15 @@ public final class AudioPlayerPlugin extends Plugin {
 
     @PluginMethod
     public void open(PluginCall call) {
-        String url = call.getString("url");
-        String secondaryUrl = call.getString("secondaryUrl");
+        // audios[0] = primary (played), audios[1] = optional crossfade source.
+        JSArray audios = call.getArray("audios");
         String itemId = call.getString("itemId", "");
         String title = call.getString("title", "");
         String author = call.getString("author", "");
         String cover = call.getString("cover");
 
-        if (url == null) {
-            call.reject("Argument 'url' is required");
+        if (audios == null || audios.length() == 0) {
+            call.reject("Argument 'audios' (non-empty array) is required");
             return;
         }
         if (!ensureController(call)) {
@@ -151,10 +151,7 @@ public final class AudioPlayerPlugin extends Plugin {
             JSONArray items = new JSONArray();
             JSONObject o = new JSONObject();
             o.put("itemId", itemId);
-            o.put("url", url);
-            if (secondaryUrl != null && !secondaryUrl.isEmpty()) {
-                o.put("secondaryUrl", secondaryUrl);
-            }
+            o.put("audios", audios);
             o.put("title", title);
             o.put("author", author);
             if (cover != null && !cover.isEmpty()) {
@@ -507,10 +504,8 @@ public final class AudioPlayerPlugin extends Plugin {
                 }
                 JSONObject o = new JSONObject();
                 o.put("itemId", in.optString("itemId", ""));
-                o.put("url", in.optString("url", ""));
-                if (in.has("secondaryUrl") && !in.isNull("secondaryUrl")) {
-                    o.put("secondaryUrl", in.optString("secondaryUrl", ""));
-                }
+                JSONArray audios = in.optJSONArray("audios");
+                o.put("audios", audios != null ? audios : new JSONArray());
                 o.put("title", in.optString("title", ""));
                 o.put("author", in.optString("author", ""));
                 if (in.has("cover") && !in.isNull("cover")) {

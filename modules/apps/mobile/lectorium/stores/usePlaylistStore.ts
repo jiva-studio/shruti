@@ -271,7 +271,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       if (!variant?.audio) continue
       // Source-mix: when the variant has BOTH versions, play the original as
       // the primary (slider default 0 = original) and carry the clean as
-      // `secondaryUrl` so the crossfade survives native auto-advance.
+      // 2nd source (audios[1]) so the crossfade survives native auto-advance.
       // Otherwise a single source (the preferred pick). Mirrors openTrack.
       const originalAudio = variant.audios.find((a) => a.kind === "original")
       const cleanAudio = variant.audios.find((a) => a.kind === "clean")
@@ -280,6 +280,8 @@ export const usePlaylistStore = defineStore("playlist", () => {
       const url = await resolveUrl(primaryAudio.path)
       const secondaryUrl =
         hasSourceMix && cleanAudio ? await resolveUrl(cleanAudio.path) : undefined
+      // Sources in priority order: [0] = what plays, [1] = crossfade source.
+      const audioUrls = secondaryUrl ? [url, secondaryUrl] : [url]
       let author = ""
       if (track.authorId) {
         if (!authorCache.has(track.authorId)) {
@@ -293,8 +295,7 @@ export const usePlaylistStore = defineStore("playlist", () => {
       }
       out.push({
         itemId: item.id,
-        url,
-        secondaryUrl,
+        audios: audioUrls,
         title: variant.title,
         author,
         durationMs: primaryAudio.duration != null ? primaryAudio.duration * 1000 : undefined,

@@ -432,6 +432,8 @@ export const usePlayerStore = defineStore("player", () => {
       if (stale()) return { ok: true, value: undefined }
       secondaryUrl = cleanLocal ?? app.storagePublicUrl.get(cleanAudio.path)
     }
+    // Sources in priority order: [0] = what plays, [1] = the crossfade source.
+    const audioUrls = secondaryUrl ? [url, secondaryUrl] : [url]
 
     // Continuous playback (Pro): hand the whole playlist tail to the native
     // engine so it can auto-advance on its own — including in the
@@ -446,8 +448,8 @@ export const usePlayerStore = defineStore("player", () => {
         const queue = await usePlaylistStore().buildQueueFrom(cmd.itemId, args.preferredLanguage)
         const startIndex = queue.findIndex((q) => q.itemId === cmd.itemId)
         if (queue.length > 0 && startIndex >= 0) {
-          // Use the just-ensured (downloaded) URL for the start item.
-          queue[startIndex] = { ...queue[startIndex], url, secondaryUrl }
+          // Use the just-ensured (downloaded) sources for the start item.
+          queue[startIndex] = { ...queue[startIndex], audios: audioUrls }
           currentQueue = queue
           queueActive = true
           await app.audioPlayer.setQueue(queue, startIndex, resumeMs)
@@ -459,8 +461,7 @@ export const usePlayerStore = defineStore("player", () => {
         queueActive = false
         await app.audioPlayer.open({
           itemId: cmd.itemId,
-          url,
-          secondaryUrl,
+          audios: audioUrls,
           title: cmd.title,
           author: cmd.authorName,
         })

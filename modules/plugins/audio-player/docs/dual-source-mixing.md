@@ -106,10 +106,12 @@ indicator must reflect **both**.
 
 ## 5. Plugin API changes (`modules/plugins/audio-player/src/definitions.ts`)
 
-Additive, back-compatible:
+Source list, role by position:
 
-- `OpenParams` / `QueueItem`: add optional `secondaryUrl?: string` (the clean
-  file). When absent → today's single-source behaviour, unchanged.
+- `OpenParams` / `QueueItem`: `audios: string[]` — sources in priority order
+  (`audios[0]` plays and owns the timeline; `audios[1]` is the optional
+  crossfade source). One entry → single-source behaviour. The player is
+  agnostic about what each source is; the caller decides which file goes where.
 - New method `setSourceMix({ level: number /* 0..1 */ }): Promise<void>`.
   `0` = original only, `1` = clean only. Distinct from `setMix` (channel).
 - New status field (optional): echo current `sourceMixLevel` for resume.
@@ -178,7 +180,7 @@ Lowest effort — build here first to validate UX + the JS/store/API layer.
 
 ## 8. Phasing
 
-1. **JS/API + store + Web** — define `secondaryUrl`/`setSourceMix`, wire the
+1. **JS/API + store + Web** — define `audios[]`/`setSourceMix`, wire the
    store, build the web graph, ship the floating-player slide. Fully testable in
    the browser. ✅ validates UX and the whole non-native stack.
 2. **iOS** — `AVAudioEngine` source-mode path.
