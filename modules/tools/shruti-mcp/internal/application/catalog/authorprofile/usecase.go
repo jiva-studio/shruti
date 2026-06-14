@@ -8,15 +8,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image"
-	"image/jpeg"
-	_ "image/png" // register PNG decoder for image.Decode
 	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
 
@@ -58,7 +56,7 @@ func (uc UseCase) UploadImage(ctx context.Context, id, source string) (string, e
 	if err != nil {
 		return "", err
 	}
-	jpg, err := toJPEG(raw)
+	jpg, err := imageutil.ToJPEG(raw, 85)
 	if err != nil {
 		return "", err
 	}
@@ -95,16 +93,4 @@ func readSource(ctx context.Context, source string) ([]byte, error) {
 		return io.ReadAll(io.LimitReader(resp.Body, 25<<20))
 	}
 	return os.ReadFile(s)
-}
-
-func toJPEG(data []byte) ([]byte, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("decode source image: %w", err)
-	}
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
-		return nil, fmt.Errorf("encode jpeg: %w", err)
-	}
-	return buf.Bytes(), nil
 }

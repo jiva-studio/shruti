@@ -9,12 +9,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"image"
-	"image/jpeg"
-	_ "image/png" // register PNG decoder for image.Decode
 	"strings"
 
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imageutil"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/imagegen"
 	s3port "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/s3"
 )
@@ -60,7 +58,7 @@ func (uc UseCase) Generate(ctx context.Context, id, language, extra string) (str
 	if err != nil {
 		return "", err
 	}
-	jpg, err := toJPEG(raw)
+	jpg, err := imageutil.ToJPEG(raw, 82)
 	if err != nil {
 		return "", err
 	}
@@ -101,16 +99,4 @@ func buildPrompt(name, desc, extra, style string) string {
 		}
 	}
 	return strings.Join(parts, ". ")
-}
-
-func toJPEG(data []byte) ([]byte, error) {
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("decode generated image: %w", err)
-	}
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, fmt.Errorf("encode jpeg: %w", err)
-	}
-	return buf.Bytes(), nil
 }
