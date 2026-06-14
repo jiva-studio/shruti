@@ -1,7 +1,7 @@
 """S3-backed `OutlineCache`.
 
 Caches generated outline JSON under
-`artifacts/tracks/<id>/outlines/<lang>.<model_tag>.json`. The model tag
+`artifacts/tracks/<id>/outlines/<lang>.<model_tag>.c1.json`. The model tag
 is injected by the existing helpers in `indexer.s3` so a model upgrade
 implicitly invalidates the cache — the caller (and the port) only see
 `(track_id, lang)`.
