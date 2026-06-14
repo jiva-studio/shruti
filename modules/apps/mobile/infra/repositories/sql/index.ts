@@ -36,6 +36,7 @@ export type {
   FeaturedCollectionRow,
   CollectionDetail,
   TrackCollectionRef,
+  CollectionGroupRow,
   ISqlCollectionRepository,
 } from "./collectionsRepository.sql.js"
 

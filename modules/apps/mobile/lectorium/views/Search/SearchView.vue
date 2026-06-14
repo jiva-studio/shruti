@@ -19,13 +19,14 @@
          row isn't hidden on initial paint. -->
     <div class="search-content-spacer" />
 
-    <!-- Discovery surface: featured collections, shown only when the user
-         hasn't typed a query yet. Scrolls up under the fixed search bar. -->
-    <CollectionsCarousel
-      v-if="!search.query.value"
-      :locale="appLanguage"
-      @select="onSelectCollection"
-    />
+    <!-- Discovery surface: collection groups (shelves), shown only when the
+         user hasn't typed a query yet. Each group = title + a carousel. -->
+    <template v-if="!search.query.value">
+      <div v-for="g in collectionGroups" :key="g.id" class="collection-group">
+        <h2 class="collection-group-title">{{ g.name }}</h2>
+        <CollectionsCarousel :items="g.collections" @select="onSelectCollection" />
+      </div>
+    </template>
 
     <IonText v-if="search.error.value" color="danger" class="ion-padding">
       <p>{{ search.error.value }}</p>
@@ -79,11 +80,13 @@ import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { CollectionsCarousel, CollectionDetailModal } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useCollectionGroups } from "@lectorium/composables/useCollectionGroups.js"
 import { useSearchController } from "./SearchView.controller.js"
 
 const player = usePlayerStore()
 const search = useSearchController()
 const appLanguage = useAppLanguage()
+const { groups: collectionGroups } = useCollectionGroups(appLanguage)
 
 const selectedCollectionId = ref<string | null>(null)
 const detailOpen = ref(false)
@@ -127,6 +130,16 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 .search-row {
   position: relative;
+}
+
+/* Group shelf header — sits above each collections carousel. Matches the
+   warm/cream theme; weight + size read as a section title, not a card. */
+.collection-group-title {
+  margin: 14px 0 2px;
+  padding: 0 20px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ion-text-color);
 }
 
 /* IonInput renders inside SearchInputAndroid wrapped with `margin: 10px`.

@@ -109,6 +109,21 @@ type CollectionRepository interface {
 	TrackLanguages(ctx context.Context, trackID string) ([]string, error)
 }
 
+// CollectionGroupRepository is the group side of the catalog (`collection_groups`
+// + `collection_group_items`). A group is a named, ordered shelf of collections;
+// consumed only by the collectiongroupcrud use case.
+type CollectionGroupRepository interface {
+	CreateCollectionGroupLocale(ctx context.Context, id, language, name, description, meta string, sortOrder int) error
+	UpdateCollectionGroupLocale(ctx context.Context, id, language string, name, description, meta *string, sortOrder *int) error
+	GetCollectionGroup(ctx context.Context, id string) (catalog.CollectionGroup, map[string][]string, bool, error)
+	ListCollectionGroups(ctx context.Context, opts catalog.CollectionGroupListOpts) ([]catalog.CollectionGroup, error)
+	DeleteCollectionGroup(ctx context.Context, id string) error
+	DeleteCollectionGroupLocale(ctx context.Context, id, language string) error
+	SetCollectionGroupCollections(ctx context.Context, groupID, language string, collectionIDs []string) error
+	AddCollectionGroupCollection(ctx context.Context, groupID, language, collectionID string, position *int) error
+	RemoveCollectionGroupCollection(ctx context.Context, groupID, language, collectionID string) error
+}
+
 // Resolver maps a raw extracted string (author/location/source/tag) to an ID
 // in the catalog. Implementations: exact (string match) and anthropic (LLM).
 type Resolver interface {
