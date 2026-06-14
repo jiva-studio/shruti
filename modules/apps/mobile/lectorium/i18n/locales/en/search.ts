@@ -55,6 +55,7 @@ export default {
     addAll: "Add collection",
     trackCount: "Lectures: {count}",
     addError: "Couldn’t add the collection",
+    addConfirm: "Add {count} lecture to the playlist? | Add {count} lectures to the playlist?",
     others: "Other collections",
     all: "All collections",
     seeAll: "See all",

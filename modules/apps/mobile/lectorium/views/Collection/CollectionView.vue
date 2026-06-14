@@ -6,6 +6,16 @@
           <IonBackButton default-href="/tabs/search" />
         </IonButtons>
         <IonTitle>{{ detail?.name ?? "" }}</IonTitle>
+        <IonButtons slot="end">
+          <IonButton
+            class="no-ripple"
+            :disabled="adding || !detail || detail.trackIds.length === 0"
+            :aria-label="t('search.collections.addAll')"
+            @click="onAdd"
+          >
+            <IconPlaylistAdd :size="24" />
+          </IonButton>
+        </IonButtons>
       </IonToolbar>
     </FlatHeader>
 
@@ -16,16 +26,6 @@
           <TrackStateIndicator :state="state" :progress="progressPct" />
         </template>
       </TracksList>
-      <div class="actions">
-        <IonButton
-          class="add-button"
-          expand="block"
-          :disabled="adding || !detail || detail.trackIds.length === 0"
-          @click="onAdd"
-        >
-          {{ t("search.collections.addAll") }}
-        </IonButton>
-      </div>
     </IonContent>
   </IonPage>
 </template>
@@ -34,6 +34,7 @@
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import {
+  alertController,
   IonBackButton,
   IonButton,
   IonButtons,
@@ -42,6 +43,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
+import { IconPlaylistAdd } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { TracksList, type UiTrackRow } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
@@ -102,6 +104,20 @@ async function onSelectTrack(trackId: string): Promise<void> {
 }
 
 async function onAdd(): Promise<void> {
+  const count = detail.value?.trackIds.length ?? 0
+  if (count === 0) return
+  const alert = await alertController.create({
+    header: t("search.collections.addAll"),
+    message: t("search.collections.addConfirm", { count }, count),
+    buttons: [
+      { text: t("app.cancel"), role: "cancel" },
+      { text: t("app.ok"), role: "confirm", handler: () => void performAdd() },
+    ],
+  })
+  await alert.present()
+}
+
+async function performAdd(): Promise<void> {
   if (!detail.value || detail.value.trackIds.length === 0) return
   adding.value = true
   try {
@@ -125,13 +141,5 @@ async function onAdd(): Promise<void> {
   font-size: 14px;
   line-height: 1.45;
   color: var(--ion-color-medium-shade);
-}
-
-.actions {
-  padding: 8px 12px 16px;
-}
-
-.add-button {
-  --box-shadow: none;
 }
 </style>
