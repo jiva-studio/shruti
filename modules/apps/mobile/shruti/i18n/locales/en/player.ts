@@ -5,4 +5,10 @@ export default {
     /** Right-channel marker on the stereo mix slider — "R" for "Right". */
     right: "R",
   },
+  sourceMix: {
+    /** Left end of the original↔clean slider — the raw recording. */
+    original: "Original",
+    /** Right end — the denoised version. */
+    clean: "Clean",
+  },
 }
