@@ -53,5 +53,6 @@ export default {
     addAll: "Add collection",
     trackCount: "Lectures: {count}",
     addError: "Couldn’t add the collection",
+    others: "Other collections",
   },
 }
