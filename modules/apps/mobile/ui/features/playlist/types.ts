@@ -12,5 +12,8 @@ export type PlaylistRenderItem =
       readonly kind: "group"
       readonly id: string
       readonly name: string
+      /** Dominant author across the group's lectures ("" when unknown), with an
+       *  "…and others" suffix already applied when more than one author. */
+      readonly author: string
       readonly rows: readonly UiTrackRow[]
     }
