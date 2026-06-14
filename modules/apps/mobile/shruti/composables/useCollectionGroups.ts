@@ -8,8 +8,6 @@ export interface GroupCollection {
   readonly id: string
   readonly name: string
   readonly coverUrl?: string
-  /** Avatars of the collection's authors, shown as overlapping circles. */
-  readonly authorImageUrls: readonly string[]
 }
 
 /** A named group (shelf) with its ordered collections, ready to render. */
@@ -46,19 +44,11 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
       const built = await Promise.all(
         headers.map(async (g) => {
           const cols = await repos.collections.getGroupCollections(g.id, currentLocale)
-          const collections = await Promise.all(
-            cols.map(async (c) => {
-              const authors = await repos.collections.getCollectionAuthors(c.id, currentLocale)
-              return {
-                id: c.id,
-                name: c.name,
-                coverUrl: coverUrl(c.cover),
-                authorImageUrls: authors
-                  .map((a) => (a.image ? coverUrl(a.image) : undefined))
-                  .filter((u): u is string => !!u),
-              }
-            })
-          )
+          const collections = cols.map((c) => ({
+            id: c.id,
+            name: c.name,
+            coverUrl: coverUrl(c.cover),
+          }))
           return { id: g.id, name: g.name, collections }
         })
       )

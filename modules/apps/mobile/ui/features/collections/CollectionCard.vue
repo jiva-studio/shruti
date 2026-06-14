@@ -13,23 +13,19 @@
       :class="{ 'is-loaded': loaded }"
       @load="loaded = true"
     />
-    <span v-if="authorImageUrls && authorImageUrls.length" class="author-pile">
-      <AuthorAvatar v-for="(url, i) in shownAuthors" :key="i" :url="url" :alt="name" />
-    </span>
     <span class="name">{{ name }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef } from "vue"
+import { ref, toRef } from "vue"
 import { useCachedImageUrl } from "@shruti/composables/useCachedImageUrl.js"
-import AuthorAvatar from "./AuthorAvatar.vue"
 
 /**
  * One collection card for the Search carousel: cover image with the name
  * overlaid at the bottom over a readability scrim. Falls back to a cream
  * gradient tile when no cover is published yet, so the card never shows a
- * broken image.
+ * broken image. (The author is shown inside the detail sheet, not on the card.)
  *
  * The cover is served through `useCachedImageUrl` so it's fetched from S3 once
  * and reused from the local cache afterwards. The image is an
@@ -40,17 +36,12 @@ const props = defineProps<{
   name: string
   /** Remote cover image URL, or undefined to show the placeholder tile. */
   coverUrl?: string
-  /** Author avatar URLs, rendered as overlapping circles, top-right. */
-  authorImageUrls?: readonly string[]
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
 
 const { src } = useCachedImageUrl(toRef(props, "coverUrl"))
 const loaded = ref(false)
-
-// Cap the pile so a many-author collection doesn't overrun the corner.
-const shownAuthors = computed(() => (props.authorImageUrls ?? []).slice(0, 3))
 </script>
 
 <style scoped>
@@ -101,21 +92,6 @@ const shownAuthors = computed(() => (props.authorImageUrls ?? []).slice(0, 3))
 
 .collection-card .cover.is-loaded {
   opacity: 1;
-}
-
-/* Author avatar pile — overlapping circles in the top-right corner, above the
-   cover. Negative gap makes each avatar tuck under the previous one. */
-.author-pile {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  flex-direction: row-reverse;
-  --author-avatar-size: 26px;
-}
-
-.author-pile :deep(.author-avatar:not(:last-child)) {
-  margin-left: -10px;
 }
 
 .name {
