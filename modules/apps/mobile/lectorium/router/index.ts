@@ -61,24 +61,24 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
-        path: "collection/:id",
+        path: "search/collection/:id",
         name: "collection",
         component: () => import("@lectorium/views/Collection/CollectionView.vue"),
         props: true,
       },
       {
-        path: "collection-group/:groupId",
+        path: "search/collection-group/:groupId",
         name: "collection-group",
         component: () => import("@lectorium/views/Collection/CollectionListView.vue"),
         props: true,
       },
       {
-        path: "collections",
+        path: "search/collections",
         name: "collections",
         component: () => import("@lectorium/views/Collection/CollectionListView.vue"),
       },
       {
-        path: "tracks",
+        path: "search/tracks",
         name: "tracks",
         component: () => import("@lectorium/views/Tracks/TracksView.vue"),
       },
