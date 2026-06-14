@@ -259,13 +259,27 @@ export const usePlaylistStore = defineStore("playlist", () => {
     const authorCache = new Map<AuthorId, Author | null>()
     const repos = app.repositories()
     const out: AudioQueueItem[] = []
+    // Local-or-CDN URL for a storage path: prefer a downloaded copy, fall
+    // back to the public CDN for streaming.
+    const resolveUrl = async (path: string): Promise<string> => {
+      const probe = buildServerUrl(app.activeServer.value, path)
+      const local = await app.mediaDownloader.resolveLocalUrl(probe).catch(() => null)
+      return local ?? app.storagePublicUrl.get(path)
+    }
     for (const { item, track } of slice) {
       const variant = pickVariant(track, preferredLanguage)
       if (!variant?.audio) continue
-      const path = variant.audio.path
-      const probe = buildServerUrl(app.activeServer.value, path)
-      const local = await app.mediaDownloader.resolveLocalUrl(probe).catch(() => null)
-      const url = local ?? app.storagePublicUrl.get(path)
+      // Source-mix: when the variant has BOTH versions, play the original as
+      // the primary (slider default 0 = original) and carry the clean as
+      // `secondaryUrl` so the crossfade survives native auto-advance.
+      // Otherwise a single source (the preferred pick). Mirrors openTrack.
+      const originalAudio = variant.audios.find((a) => a.kind === "original")
+      const cleanAudio = variant.audios.find((a) => a.kind === "clean")
+      const hasSourceMix = !!originalAudio && !!cleanAudio
+      const primaryAudio = hasSourceMix ? originalAudio! : variant.audio
+      const url = await resolveUrl(primaryAudio.path)
+      const secondaryUrl =
+        hasSourceMix && cleanAudio ? await resolveUrl(cleanAudio.path) : undefined
       let author = ""
       if (track.authorId) {
         if (!authorCache.has(track.authorId)) {
@@ -280,9 +294,10 @@ export const usePlaylistStore = defineStore("playlist", () => {
       out.push({
         itemId: item.id,
         url,
+        secondaryUrl,
         title: variant.title,
         author,
-        durationMs: variant.audio.duration != null ? variant.audio.duration * 1000 : undefined,
+        durationMs: primaryAudio.duration != null ? primaryAudio.duration * 1000 : undefined,
       })
     }
     return out

@@ -52,8 +52,9 @@ class DenoiseParams(BaseModel):
     strategy: str = Field(
         "afftdn",
         description="Cleaning strategy: 'afftdn' (default, ffmpeg FFT denoise — "
-        "fast, no dead pauses), 'rnnoise' (RNNoise, aggressive), or 'rnnoise-mix' "
-        "(RNNoise blended back with the original by voice probability).",
+        "fast, no dead pauses), 'rnnoise' (RNNoise, aggressive), 'rnnoise-mix' "
+        "(RNNoise blended back with the original by voice probability), or "
+        "'afftdn-rnnoise-mix' (afftdn then RNNoise, original blended back).",
     )
     # afftdn knobs
     nr: float = Field(

@@ -42,14 +42,29 @@ S3 config can be preloaded from env: `DENOISER_S3_BUCKET`,
 |---|---|
 | `set_s3_config` | Set upload bucket + credentials (+ region/endpoint/acl) at runtime. |
 | `get_s3_config` | Show the current S3 config (secret masked). |
-| `denoise_wait` | Queue a job (`source_url` → `dest_key`) and long-poll until done. `timeout_s=0` enqueues and returns the id. |
-| `denoise_batch` | Fan out hundreds/thousands of jobs in one call. Non-blocking. Enumerate a `source_prefix` (service lists + presigns each file) or pass explicit `items_json`. |
+| `denoise_wait` | Queue a job (`source_url` → `dest_key`) and long-poll until done. `timeout_s=0` enqueues and returns the id. Accepts the strategy params below. |
+| `denoise_batch` | Fan out hundreds/thousands of jobs in one call. Non-blocking. Enumerate a `source_prefix` (service lists + presigns each file) or pass explicit `items_json`. Accepts the strategy params below. |
 | `list_objects` | List a bucket/prefix (using the S3 config creds) to discover files before a batch. |
 | `get_job` | Fetch one job's status / `dest_url` / metrics. |
 | `list_jobs` | List recent jobs, optional status filter. |
 | `delete_job` | Remove a finished/failed job. |
 | `get_service_url` / `set_service_url` | Inspect / repoint the upstream service. |
 | `health` | Probe this MCP + the upstream service `/healthz`. |
+
+## Cleaning strategies
+
+`denoise_wait` / `denoise_batch` take an optional `strategy` (default `afftdn`):
+
+| Strategy | What it does |
+|---|---|
+| `afftdn` (default) | ffmpeg FFT denoise — fast, no ML deps, no dead pauses. Matches the original's loudness; the cleanest choice for archival lectures. |
+| `rnnoise` | RNNoise speech denoiser, straight output. Aggressive — can leave dead-silent pauses. |
+| `rnnoise-mix` | RNNoise blended back with the original by voice probability — keeps a natural noise floor in pauses. |
+| `afftdn-rnnoise-mix` | afftdn → RNNoise → original blended back. |
+
+Knobs: `nr` (afftdn noise reduction dB, default 12), `nf` (afftdn noise floor dB,
+default -25), `mix_min`/`mix_max` (rnnoise-mix original ratio in pauses / on
+voice, default 0.10 / 0.25).
 
 ## Typical flow
 
