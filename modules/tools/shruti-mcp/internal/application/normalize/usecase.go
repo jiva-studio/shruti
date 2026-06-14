@@ -32,7 +32,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id) (rerr error) {
 	defer stagefail.MarkOnExit(uc.Registry, id, stageKey, ctx, &rerr)
 
 	in := uc.Audio.SourceArtifactPath(id)
-	out := uc.Audio.PublicAudioPath(id)
+	out := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 
 	report, err := uc.Normalizer.Normalize(ctx, in, out)
 	if err != nil {

@@ -14,6 +14,9 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := ensureCollectionTables(ctx, db); err != nil {
 		return fmt.Errorf("ensure collection tables: %w", err)
 	}
+	if err := ensureTrackAudioTable(ctx, db); err != nil {
+		return fmt.Errorf("ensure track_audio table: %w", err)
+	}
 	if err := seedKindTags(ctx, db); err != nil {
 		return fmt.Errorf("seed kind tags: %w", err)
 	}
@@ -22,6 +25,49 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	}
 	if err := ensureAuthorProfileColumns(ctx, db); err != nil {
 		return fmt.Errorf("ensure author profile columns: %w", err)
+	}
+	return nil
+}
+
+// ensureTrackAudioTable creates the `track_audio` table and backfills it from
+// the legacy single-audio columns on track_variants, then records the migration
+// so the mobile scheme-validator accepts the freshly-published current.db.
+//
+// track_audio holds N audio versions per (track, language) — `kind` ∈
+// {original, clean, …} — instead of one fixed audio_path on track_variants.
+// The pre-existing published file becomes the `original` row; the denoiser adds
+// a `clean` row. IF NOT EXISTS + INSERT OR IGNORE keep this idempotent against
+// repeat open() calls and already-migrated catalogs.
+func ensureTrackAudioTable(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS track_audio (
+			track_id  TEXT    NOT NULL,
+			language  TEXT    NOT NULL,
+			kind      TEXT    NOT NULL,            -- original | clean | ...
+			path      TEXT    NOT NULL,
+			filesize  INTEGER,
+			duration  INTEGER,                     -- milliseconds
+			PRIMARY KEY (track_id, language, kind),
+			FOREIGN KEY (track_id, language)
+				REFERENCES track_variants(track_id, language) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_track_audio_track
+			ON track_audio(track_id, language)`,
+		// Backfill: every variant that currently has audio becomes its 'original' row.
+		`INSERT OR IGNORE INTO track_audio (track_id, language, kind, path, filesize, duration)
+			SELECT track_id, language, 'original', audio_path, audio_filesize, audio_duration
+			FROM track_variants
+			WHERE audio_path IS NOT NULL AND audio_path != ''`,
+		// Numbered migration row so the mobile SchemeReader (ORDER BY name DESC
+		// LIMIT 1) sees the bumped scheme. '005_' sorts after collections'
+		// '004_rename_packs_to_collections', so this scheme (20260614) wins.
+		`INSERT OR IGNORE INTO migrations (name, scheme, applied_at)
+		 VALUES ('005_add_track_audio', 20260614, CAST((strftime('%s','now')||substr(strftime('%f','now'),4)) AS INTEGER))`,
+	}
+	for _, s := range stmts {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("apply %q: %w", s, err)
+		}
 	}
 	return nil
 }

@@ -5,15 +5,19 @@ import type { TrackVariant } from "@lib/domain/trackVariant.js"
 import type { Author } from "@lib/domain/author.js"
 import type { AuthorId, LanguageCode, TrackId } from "@lib/domain/core.js"
 
-const mkVariant = (lang: LanguageCode, hasAudio: boolean): TrackVariant => ({
-  trackId: "t-1" as TrackId,
-  language: lang,
-  title: `Title ${lang}`,
-  audio: hasAudio
-    ? { path: `public/audio/${lang}.mp3`, filesize: 100, duration: 60_000, kind: "original" }
-    : null,
-  transcript: null,
-})
+const mkVariant = (lang: LanguageCode, hasAudio: boolean): TrackVariant => {
+  const audio = hasAudio
+    ? { path: `public/audio/${lang}.mp3`, filesize: 100, duration: 60_000, kind: "original" as const }
+    : null
+  return {
+    trackId: "t-1" as TrackId,
+    language: lang,
+    title: `Title ${lang}`,
+    audios: audio ? [audio] : [],
+    audio,
+    transcript: null,
+  }
+}
 
 const mkTrack = (variants: readonly TrackVariant[]): Track => ({
   id: "t-1" as TrackId,

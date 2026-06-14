@@ -34,6 +34,9 @@ export interface ListeningSessionRow {
 export interface MediaItemRow {
   readonly id: string
   readonly track_id: string
+  /** "original" | "clean". Older rows (pre-011 migration) have no value;
+   *  the mapper defaults them to "original". */
+  readonly kind: string | null
   readonly state: string
   readonly local_path: string | null
   readonly created_at: number
