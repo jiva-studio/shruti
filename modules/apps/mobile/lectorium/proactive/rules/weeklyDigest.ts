@@ -80,6 +80,10 @@ const handler: ProactiveRuleHandler = {
         ruleDate: formatYmd(sunday),
         visibleAt: Math.floor(visibleAtMs / 1000),
         notify: true,
+        // Localised session header — the override beats any (English)
+        // `session_title_template` in the published config, so the digest
+        // title follows the user's app language like every other rule.
+        sessionTitleOverride: ctx.t("chat.proactiveSessionTitleWeeklyDigest"),
         templateContext: {
           week_label: weekLabel(new Date(sunday.getTime() - 6 * 86_400_000), sunday, ctx.locale),
         },

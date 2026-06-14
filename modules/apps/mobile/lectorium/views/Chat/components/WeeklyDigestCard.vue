@@ -113,7 +113,7 @@ async function load(): Promise<void> {
     const now = Date.now()
 
     const [dailyTotals, ranged, overview] = await Promise.all([
-      repos.listeningSessions.getDailyTotals(props.fromMs, props.toMs),
+      repos.listeningSessions.getDailyTotalsByDayOffset(props.fromMs, props.toMs),
       repos.listeningSessions.getTracksListenedInRange(props.fromMs, props.toMs),
       getActivityOverview(
         { fromMs: props.fromMs, toMs: props.toMs, nowMs: now, totalDays: 7 },
@@ -133,17 +133,18 @@ async function load(): Promise<void> {
 
     // Build a fixed 7-day chart from `fromMs`, filling gaps with zero so
     // the bar row always has seven columns regardless of which days had
-    // any listening.
-    const byDate = new Map(dailyTotals.map((d) => [d.date, d.listenedSeconds]))
+    // any listening. Bars are keyed by day offset from `fromMs` — the same
+    // anchor the totals are bucketed against — so they never depend on a
+    // calendar-date string lining up across the SQLite/JS timezone boundary.
+    const byOffset = new Map(dailyTotals.map((d) => [d.dayOffset, d.listenedSeconds]))
     const todayIso = isoDate(new Date(now))
     const days: ChartDay[] = []
     for (let i = 0; i < 7; i++) {
       const d = new Date(props.fromMs + i * 86_400_000)
-      const iso = isoDate(d)
       days.push({
         label: d.toLocaleDateString(appLanguage.value, { weekday: "narrow" }),
-        listenedSeconds: byDate.get(iso) ?? 0,
-        isToday: iso === todayIso,
+        listenedSeconds: byOffset.get(i) ?? 0,
+        isToday: isoDate(d) === todayIso,
       })
     }
     chartDays.value = days

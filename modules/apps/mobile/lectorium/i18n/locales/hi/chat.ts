@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "अगले श्लोक पर प्रवचन",
   proactiveSessionTitleUnfinishedLecture: "अधूरा प्रवचन",
   proactiveSessionTitleInactivity: "अपनी साधना पर लौटें",
+  proactiveSessionTitleWeeklyDigest: "आपका सप्ताह",
   proactiveInactivityWelcomeBody:
     "काफ़ी समय बीत गया। ताज़ा प्रवचन आपका इंतज़ार कर रहे हैं — अपनी लाइब्रेरी खोलें और जहाँ छोड़ा था वहीं से आगे बढ़ें।",
 

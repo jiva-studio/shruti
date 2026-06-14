@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "Predavanje o sledećem stihu",
   proactiveSessionTitleUnfinishedLecture: "Nedovršeno predavanje",
   proactiveSessionTitleInactivity: "Vratite se svojoj praksi",
+  proactiveSessionTitleWeeklyDigest: "Vaša nedelja",
   proactiveInactivityWelcomeBody:
     "Dugo vas nije bilo. Sveža predavanja vas čekaju — otvorite biblioteku i nastavite odakle ste stali.",
 

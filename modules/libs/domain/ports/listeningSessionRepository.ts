@@ -31,6 +31,15 @@ export interface TrackListeningTotal {
   readonly listenedSeconds: number
 }
 
+/** Seconds listened in one whole-day bucket, addressed by its 0-based
+ *  offset from the window start rather than a calendar date. Powers the
+ *  weekly-digest chart, whose columns step days from the same anchor. */
+export interface DayOffsetListeningTotal {
+  /** Whole days elapsed from the window's `fromMs` (0 = first day). */
+  readonly dayOffset: number
+  readonly listenedSeconds: number
+}
+
 export interface IListeningSessionRepository {
   /**
    * Open a new session that *continues* the item's listening history.
@@ -85,6 +94,20 @@ export interface IListeningSessionRepository {
    * milliseconds for ergonomic interop with `Date.now()`.
    */
   getDailyTotals(fromMs: number, toMs: number): Promise<readonly DailyListeningTotal[]>
+
+  /**
+   * Sum `to_position - from_position` per whole-day bucket measured as the
+   * integer day offset from `fromMs` (`floor((ended_at - fromMs) / 1 day)`),
+   * restricted to `[fromMs, toMs)`. Unlike `getDailyTotals` this buckets by
+   * pure epoch arithmetic from the window anchor instead of SQLite's
+   * `localtime` calendar date, so the buckets always line up with a client
+   * that steps days from the same `fromMs` regardless of the device's
+   * timezone. Powers the weekly-digest chart.
+   */
+  getDailyTotalsByDayOffset(
+    fromMs: number,
+    toMs: number
+  ): Promise<readonly DayOffsetListeningTotal[]>
 
   /** Sum `to_position - from_position` across every session, in seconds. */
   getTotalListenedSeconds(): Promise<number>

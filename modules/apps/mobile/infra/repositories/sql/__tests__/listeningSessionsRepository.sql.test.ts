@@ -252,6 +252,44 @@ describe("listeningSessionsRepository.sql", () => {
     expect(sum).toBe(600 + 900 + 400)
   })
 
+  it("getDailyTotalsByDayOffset buckets by whole-day offset from fromMs (timezone-independent)", async () => {
+    // Window anchored at an arbitrary local midnight; the offset buckets
+    // must NOT depend on SQLite's `localtime`, so a session late in the
+    // local day still lands on the same offset the client steps to.
+    const fromMs = new Date("2026-04-13T00:00:00Z").getTime()
+    const toMs = fromMs + 7 * 86_400_000
+    const day = (i: number, hourUtc: number): number =>
+      Math.floor((fromMs + i * 86_400_000) / 1000) + hourUtc * 3600
+
+    await rawInsert(db, {
+      id: "d0",
+      itemId: ITEM_A,
+      startedAt: day(0, 9),
+      endedAt: day(0, 9),
+      fromPosition: 0,
+      toPosition: 600,
+    })
+    // A session late on day 2 — the kind `localtime` could have shifted to
+    // the wrong calendar date; here it stays on offset 2 by construction.
+    await rawInsert(db, {
+      id: "d2",
+      itemId: ITEM_B,
+      startedAt: day(2, 23),
+      endedAt: day(2, 23),
+      fromPosition: 100,
+      toPosition: 400,
+    })
+
+    const repo = createSqlListeningSessionRepository(db)
+    const totals = await repo.getDailyTotalsByDayOffset(fromMs, toMs)
+    const byOffset = new Map(totals.map((t) => [t.dayOffset, t.listenedSeconds]))
+    expect(byOffset.get(0)).toBe(600)
+    expect(byOffset.get(2)).toBe(300)
+    // No listening on the other five days → no rows for them.
+    expect(byOffset.has(1)).toBe(false)
+    expect(byOffset.has(3)).toBe(false)
+  })
+
   it("aggregates clamp legacy negative-delta rows to zero", async () => {
     // A legacy row written before the start() clamp (to < from). It must
     // not subtract from the day's heatmap total or the lifetime total.

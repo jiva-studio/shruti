@@ -8,6 +8,7 @@ import {
   type TrackPositionSec,
 } from "@lib/domain/listeningSession.js"
 import type {
+  DayOffsetListeningTotal,
   IListeningSessionRepository,
   ProgressEntry,
   RecentTrackProgress,
@@ -167,6 +168,30 @@ export function createSqlListeningSessionRepository(db: IDatabase): IListeningSe
         [fromSec, toSec]
       )
       return rows.map((r) => ({ date: r.date, listenedSeconds: Number(r.listened_seconds) }))
+    },
+
+    async getDailyTotalsByDayOffset(fromMs, toMs): Promise<readonly DayOffsetListeningTotal[]> {
+      const fromSec = Math.floor(fromMs / 1000)
+      const toSec = Math.floor(toMs / 1000)
+      // Bucket by whole-day offset from the window anchor using plain epoch
+      // arithmetic — NO `localtime`. `ended_at >= fromSec` keeps the dividend
+      // non-negative so integer division floors. The client steps its chart
+      // columns from the same `fromMs`, so offset `i` ↔ column `i` exactly,
+      // regardless of the device timezone (`getDailyTotals`' local-date string
+      // could disagree with the client's, dropping bars to zero).
+      const rows = await db.query<{ day_offset: number; listened_seconds: number }>(
+        `SELECT CAST((ended_at - ?) / 86400 AS INTEGER) AS day_offset,
+                SUM(MAX(0, to_position - from_position)) AS listened_seconds
+           FROM listening_sessions
+          WHERE ended_at >= ? AND ended_at < ?
+          GROUP BY day_offset
+          ORDER BY day_offset`,
+        [fromSec, fromSec, toSec]
+      )
+      return rows.map((r) => ({
+        dayOffset: Number(r.day_offset),
+        listenedSeconds: Number(r.listened_seconds),
+      }))
     },
 
     async listRecentTracksWithProgress(limit: number): Promise<readonly RecentTrackProgress[]> {

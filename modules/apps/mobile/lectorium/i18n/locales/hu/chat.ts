@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "Előadás a következő versről",
   proactiveSessionTitleUnfinishedLecture: "Befejezetlen előadás",
   proactiveSessionTitleInactivity: "Térj vissza a gyakorlásodhoz",
+  proactiveSessionTitleWeeklyDigest: "A heted",
   proactiveInactivityWelcomeBody:
     "Rég jártál itt. Friss előadások várnak — nyisd meg a könyvtáradat, és folytasd ott, ahol abbahagytad.",
 
