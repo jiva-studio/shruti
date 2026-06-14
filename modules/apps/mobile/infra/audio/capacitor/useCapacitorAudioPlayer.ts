@@ -59,6 +59,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       await AudioPlayer.open({
         itemId: params.itemId,
         url: params.url,
+        secondaryUrl: params.secondaryUrl,
         title: params.title,
         author: params.author,
         cover: params.cover,
@@ -85,6 +86,9 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
     async setMix(params: AudioMixParams): Promise<void> {
       const ratio = clamp01(params.ratio)
       await AudioPlayer.setMix({ enabled: params.enabled, ratio })
+    },
+    async setSourceMix(level: number): Promise<void> {
+      await AudioPlayer.setSourceMix({ level: clamp01(level) })
     },
     async setPlaybackRate(rate: number): Promise<void> {
       let safe = Number.isFinite(rate) ? rate : 1
@@ -145,6 +149,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
 function toPluginQueueItem(item: AudioQueueItem): {
   itemId: string
   url: string
+  secondaryUrl?: string
   title: string
   author: string
   cover?: string
@@ -153,6 +158,7 @@ function toPluginQueueItem(item: AudioQueueItem): {
   return {
     itemId: item.itemId,
     url: item.url,
+    secondaryUrl: item.secondaryUrl,
     title: item.title,
     author: item.author,
     cover: item.cover,
