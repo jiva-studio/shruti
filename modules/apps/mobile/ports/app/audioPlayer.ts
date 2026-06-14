@@ -7,6 +7,9 @@
 export interface AudioOpenParams {
   itemId: string
   url: string
+  /** Optional denoised "clean" source; when present the engine plays it in
+   *  sync with `url` and blends per `setSourceMix`. */
+  secondaryUrl?: string
   title: string
   author: string
   /** Optional http(s) artwork URL for the lock-screen large icon. */
@@ -49,6 +52,8 @@ export interface AudioMixParams {
 export interface AudioQueueItem {
   itemId: string
   url: string
+  /** Optional denoised "clean" source, played in sync and blended via setSourceMix. */
+  secondaryUrl?: string
   title: string
   author: string
   /** Optional http(s) artwork URL for the lock-screen large icon. */
@@ -94,6 +99,13 @@ export interface IAudioPlayer {
   seekBy(deltaMs: number): Promise<void>
   stop(): Promise<void>
   setMix(params: AudioMixParams): Promise<void>
+  /**
+   * Cross-fade between the original recording and its denoised "clean"
+   * version (0 = original, 1 = clean). No-op when the current item has no
+   * secondary source. Distinct from `setMix` (which blends L/R channels of
+   * one file).
+   */
+  setSourceMix(level: number): Promise<void>
   /** Set playback rate (1.0 = normal). Engines preserve pitch. */
   setPlaybackRate(rate: number): Promise<void>
   /**
