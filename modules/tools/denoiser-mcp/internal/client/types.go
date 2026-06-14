@@ -1,0 +1,80 @@
+// Package client is a typed HTTP client for denoiser-service. DTOs are
+// duplicated from the service to keep this package independently versioned.
+package client
+
+// Status is the lifecycle state of a denoise job.
+type Status string
+
+const (
+	StatusQueued  Status = "queued"
+	StatusRunning Status = "running"
+	StatusDone    Status = "done"
+	StatusFailed  Status = "failed"
+)
+
+// S3Dest is the upload destination + credentials sent with each job. The MCP
+// server holds these (set_s3_config) and injects them per request; the service
+// never persists them.
+type S3Dest struct {
+	Bucket          string `json:"bucket"`
+	Key             string `json:"key"`
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	Region          string `json:"region,omitempty"`
+	EndpointURL     string `json:"endpoint_url,omitempty"`
+	ACL             string `json:"acl,omitempty"`
+	ContentType     string `json:"content_type,omitempty"`
+}
+
+// DenoiseParams are the algorithm knobs forwarded to denoise_mp3.py.
+type DenoiseParams struct {
+	Normalize    bool    `json:"normalize"`
+	NoiseProfile bool    `json:"noise_profile"`
+	MixMin       float64 `json:"mix_min"`
+	MixMax       float64 `json:"mix_max"`
+	SampleRate   int     `json:"sample_rate"`
+}
+
+// CreateJobRequest is the POST /jobs body.
+type CreateJobRequest struct {
+	SourceURL string        `json:"source_url"`
+	Dest      S3Dest        `json:"dest"`
+	Filename  string        `json:"filename,omitempty"`
+	Params    DenoiseParams `json:"params"`
+}
+
+// CreateJobResponse is returned from POST /jobs.
+type CreateJobResponse struct {
+	JobID    string `json:"job_id"`
+	Status   Status `json:"status"`
+	Filename string `json:"filename"`
+}
+
+// Job is the metadata record for one denoise job.
+type Job struct {
+	JobID                 string  `json:"job_id"`
+	Filename              string  `json:"filename"`
+	SourceURL             string  `json:"source_url,omitempty"`
+	DestBucket            string  `json:"dest_bucket,omitempty"`
+	DestKey               string  `json:"dest_key,omitempty"`
+	Status                Status  `json:"status"`
+	UploadedAt            int64   `json:"uploaded_at"`
+	StartedAt             int64   `json:"started_at,omitempty"`
+	CompletedAt           int64   `json:"completed_at,omitempty"`
+	DurationSeconds       float64 `json:"duration_seconds,omitempty"`
+	ProcessingTimeSeconds float64 `json:"processing_time_seconds,omitempty"`
+	RTFx                  float64 `json:"rtfx,omitempty"`
+	DestURL               string  `json:"dest_url,omitempty"`
+	Error                 string  `json:"error,omitempty"`
+}
+
+// Health is the response of GET /healthz.
+type Health struct {
+	Workers       int   `json:"workers"`
+	Queued        int   `json:"queued"`
+	Running       int   `json:"running"`
+	Done          int   `json:"done"`
+	Failed        int   `json:"failed"`
+	DenoiserReady bool  `json:"denoiser_ready"`
+	UptimeS       int64 `json:"uptime_s"`
+}
