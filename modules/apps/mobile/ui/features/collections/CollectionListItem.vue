@@ -1,7 +1,7 @@
 <template>
   <button type="button" class="collection-row" @click="emit('click')">
-    <span class="thumb" :class="{ 'is-placeholder': !coverUrl }">
-      <CachedImage :url="coverUrl" :alt="name" />
+    <span class="thumb" :class="{ 'is-placeholder': !loaded }">
+      <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
     </span>
     <span class="text">
       <span class="name">{{ name }}</span>
@@ -11,12 +11,14 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
 import { CachedImage } from "@ui/primitives/index.js"
 
 /**
  * A single collection rendered as a list row (small square cover + name) —
  * the "other collections" list on the Search page, styled to sit alongside
- * the track rows. Cover is served from the local image cache via CachedImage.
+ * the track rows. Cover is served from the local image cache via CachedImage;
+ * until it decodes the thumb shows the shared flat placeholder tile.
  */
 defineProps<{
   name: string
@@ -25,6 +27,8 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
+
+const loaded = ref(false)
 </script>
 
 <style scoped>
@@ -56,12 +60,10 @@ const emit = defineEmits<{ (e: "click"): void }>()
   background: var(--ion-color-light);
 }
 
+/* Flat warm coffee tile while the cover decodes — shared verbatim with
+   CollectionCard so the two surfaces match. */
 .thumb.is-placeholder {
-  background: linear-gradient(
-    135deg,
-    rgba(var(--ion-color-primary-rgb), 0.55),
-    rgba(var(--ion-color-tertiary-rgb), 0.7)
-  );
+  background: #6f4e37;
 }
 
 .text {

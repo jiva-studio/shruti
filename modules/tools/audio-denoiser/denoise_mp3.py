@@ -51,6 +51,12 @@ DEFAULT_MIX_MAX = 0.25  # on voice
 
 SAMPLE_RATE = 48000  # RNNoise native rate
 
+# Final loudness stage applied after denoise: speechnorm gently pulls up quiet
+# speech (less pumping than dynaudnorm), then loudnorm hits a consistent
+# broadcast target (−16 LUFS, true-peak −1.5 dB) across the whole corpus.
+# Applied in the same encode as the denoise output (no double mp3 pass).
+NORMALIZE_FILTER = "speechnorm=e=12.5:r=0.0001:l=1,loudnorm=I=-16:TP=-1.5:LRA=11"
+
 
 # ─────────────────────────────── afftdn ────────────────────────────────────
 
@@ -228,7 +234,9 @@ def _denoise_deepfilternet(in_path, out_path):
         wav_out = os.path.join(outdir, "in.wav")
         if not os.path.exists(wav_out):
             raise RuntimeError("deep-filter produced no output")
+        # Single encode: denoised wav → loudness-normalized mono 128k mp3.
         _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", wav_out,
+              "-af", NORMALIZE_FILTER,
               "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)])
 
 
