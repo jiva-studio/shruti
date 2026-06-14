@@ -18,6 +18,7 @@ import (
 	adminconfigapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
 	configpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
@@ -54,6 +55,7 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 	sha256hash "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
+	openrouterimage "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
@@ -382,6 +384,38 @@ func main() {
 		OutDir:      cfg.Out,
 	}
 
+	// Collection cover generation (optional — disabled when images.api_key is
+	// empty). Uploads generated covers to the AWS bucket at generate time.
+	var coverGen collectioncover.UseCase
+	if cfg.Images.APIKey != "" && cfg.S3.AWS.Bucket != "" {
+		imgClient, err := openrouterimage.New(openrouterimage.Config{
+			Endpoint: cfg.Images.Endpoint,
+			APIKey:   cfg.Images.APIKey,
+			Model:    cfg.Images.Model,
+		})
+		if err != nil {
+			log.Fatalf("image generator: %v", err)
+		}
+		coverUploader, err := awss3.New(ctx, awss3.Target{
+			Name:            "aws",
+			Bucket:          cfg.S3.AWS.Bucket,
+			Region:          cfg.S3.AWS.Region,
+			Endpoint:        cfg.S3.AWS.Endpoint,
+			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
+			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
+		})
+		if err != nil {
+			log.Fatalf("cover uploader: %v", err)
+		}
+		coverGen = collectioncover.UseCase{
+			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Images:   imgClient,
+			Uploader: coverUploader,
+			Style:    cfg.Images.Style,
+		}
+	}
+
 	deps := tools.Deps{
 		Registry:    registry,
 		Transcripts: transcriptStore,
@@ -495,6 +529,7 @@ func main() {
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
 				Minter:  minter,
 			},
+			Cover: coverGen,
 		},
 		Find: tools.FindDeps{
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
