@@ -94,6 +94,16 @@ ffmpeg:
   bin: ffmpeg
 
 # ──────────────────────────────────────────────────────────────────────────
+# Denoiser — track.audio.denoise (produces clean.mp3 + track_audio kind=clean)
+# ──────────────────────────────────────────────────────────────────────────
+denoiser:
+  # Interpreter that has the denoise deps (pyrnnoise, pydub, soundfile, numpy,
+  # scipy). A venv python is recommended. Default: python3.
+  python_bin: python3
+  # Path to the audio-denoiser script (single-file --in/--out mode).
+  script: ../audio-denoiser/denoise_mp3.py
+
+# ──────────────────────────────────────────────────────────────────────────
 # Transcribe — transcript_create
 # ──────────────────────────────────────────────────────────────────────────
 # Multiple providers can coexist; `default` selects the one used when
