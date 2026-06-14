@@ -19,6 +19,8 @@ export interface CollectionGroupView {
 
 export interface UseCollectionGroupsReturn {
   readonly groups: Ref<readonly CollectionGroupView[]>
+  /** All collections for the locale (flat, sort_order), for the "others" list. */
+  readonly allCollections: Ref<readonly GroupCollection[]>
 }
 
 function coverUrl(cover: string): string | undefined {
@@ -36,11 +38,15 @@ function coverUrl(cover: string): string | undefined {
 export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsReturn {
   const app = useShruti()
   const groups = ref<readonly CollectionGroupView[]>([])
+  const allCollections = ref<readonly GroupCollection[]>([])
 
   async function load(currentLocale: string): Promise<void> {
     try {
       const repos = app.repositories()
-      const headers = await repos.collections.listGroups(currentLocale)
+      const [headers, flat] = await Promise.all([
+        repos.collections.listGroups(currentLocale),
+        repos.collections.listCollections(currentLocale),
+      ])
       const built = await Promise.all(
         headers.map(async (g) => {
           const cols = await repos.collections.getGroupCollections(g.id, currentLocale)
@@ -53,9 +59,15 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
         })
       )
       groups.value = built.filter((g) => g.collections.length > 0)
+      allCollections.value = flat.map((c) => ({
+        id: c.id,
+        name: c.name,
+        coverUrl: coverUrl(c.cover),
+      }))
     } catch (err) {
       console.warn("[collection-groups] load failed", err)
       groups.value = []
+      allCollections.value = []
     }
   }
 
@@ -67,5 +79,5 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
     { immediate: true }
   )
 
-  return { groups }
+  return { groups, allCollections }
 }

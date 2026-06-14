@@ -54,5 +54,6 @@ export default {
     addAll: "Добавить коллекцию",
     trackCount: "Лекций: {count}",
     addError: "Не удалось добавить коллекцию",
+    others: "Другие коллекции",
   },
 }
