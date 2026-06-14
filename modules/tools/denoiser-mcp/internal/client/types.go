@@ -28,9 +28,12 @@ type S3Dest struct {
 
 // DenoiseParams are the algorithm knobs forwarded to denoise_mp3.py.
 type DenoiseParams struct {
-	Normalize    bool `json:"normalize"`
-	NoiseProfile bool `json:"noise_profile"`
-	SampleRate   int  `json:"sample_rate"`
+	// Strategy: "afftdn" (default), "rnnoise", or "rnnoise-mix".
+	Strategy string  `json:"strategy"`
+	NR       float64 `json:"nr"`      // afftdn: noise reduction dB
+	NF       float64 `json:"nf"`      // afftdn: noise floor dB
+	MixMin   float64 `json:"mix_min"` // rnnoise-mix: original ratio in pauses
+	MixMax   float64 `json:"mix_max"` // rnnoise-mix: original ratio on voice
 }
 
 // CreateJobRequest is the POST /jobs body.

@@ -94,12 +94,16 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 			mcp.Description("Destination object key, e.g. 'clean/lecture.mp3'.")),
 		mcp.WithString("bucket",
 			mcp.Description("Override the destination bucket for this job (default: S3 config bucket).")),
-		mcp.WithBoolean("noise_profile",
-			mcp.Description("Apply spectral subtraction (slower, ~3x). Default false.")),
-		mcp.WithBoolean("no_normalize",
-			mcp.Description("Disable loudness-matching the clean to the original. Default false.")),
-		mcp.WithNumber("sample_rate",
-			mcp.Description("Processing sample rate. Default 48000.")),
+		mcp.WithString("strategy",
+			mcp.Description("Cleaning strategy: afftdn (default) | rnnoise | rnnoise-mix.")),
+		mcp.WithNumber("nr",
+			mcp.Description("afftdn: noise reduction in dB, higher = more aggressive. Default 12.")),
+		mcp.WithNumber("nf",
+			mcp.Description("afftdn: noise floor in dB. Default -25.")),
+		mcp.WithNumber("mix_min",
+			mcp.Description("rnnoise-mix: original ratio in pauses (0-1). Default 0.10.")),
+		mcp.WithNumber("mix_max",
+			mcp.Description("rnnoise-mix: original ratio on voice (0-1). Default 0.25.")),
 		mcp.WithNumber("timeout_s",
 			mcp.Description("Max wall seconds to wait. Default 1800. 0 = enqueue and return now.")),
 	)
@@ -229,9 +233,11 @@ func waitForJob(ctx context.Context, c JobClient, jobID string, total time.Durat
 
 func paramsFromReq(req mcp.CallToolRequest) client.DenoiseParams {
 	return client.DenoiseParams{
-		Normalize:    !req.GetBool("no_normalize", false),
-		NoiseProfile: req.GetBool("noise_profile", false),
-		SampleRate:   int(req.GetFloat("sample_rate", 48000)),
+		Strategy: req.GetString("strategy", "afftdn"),
+		NR:       req.GetFloat("nr", 12),
+		NF:       req.GetFloat("nf", -25),
+		MixMin:   req.GetFloat("mix_min", 0.10),
+		MixMax:   req.GetFloat("mix_max", 0.25),
 	}
 }
 
@@ -264,9 +270,11 @@ func registerDenoiseBatch(s *server.MCPServer, p Provider) {
 		mcp.WithNumber("limit", mcp.Description("Enumerate mode: max objects to submit. Default 100000.")),
 		mcp.WithNumber("presign_expiry_s",
 			mcp.Description("Enumerate mode: presigned source-URL TTL in seconds. Default 86400.")),
-		mcp.WithBoolean("noise_profile", mcp.Description("Spectral subtraction (slower ~3x). Default false.")),
-		mcp.WithBoolean("no_normalize", mcp.Description("Disable loudness-match to original. Default false.")),
-		mcp.WithNumber("sample_rate", mcp.Description("Processing sample rate. Default 48000.")),
+		mcp.WithString("strategy", mcp.Description("Cleaning strategy: afftdn (default) | rnnoise | rnnoise-mix.")),
+		mcp.WithNumber("nr", mcp.Description("afftdn: noise reduction dB. Default 12.")),
+		mcp.WithNumber("nf", mcp.Description("afftdn: noise floor dB. Default -25.")),
+		mcp.WithNumber("mix_min", mcp.Description("rnnoise-mix: original ratio in pauses. Default 0.10.")),
+		mcp.WithNumber("mix_max", mcp.Description("rnnoise-mix: original ratio on voice. Default 0.25.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		cfg := p.S3Config()
