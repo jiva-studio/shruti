@@ -51,7 +51,7 @@ export function maxAudioDurationMs(track: Track): number {
  * respect the user's language preference; that is a separate concern.
  */
 export function pickPlayableVariant(track: Track): TrackVariant | null {
-  const original = track.variants.find((v) => v.audio !== null && v.audio.kind === "original")
-  if (original) return original
+  // `variant.audio` is already the preferred version (clean over original),
+  // so any variant with audio is playable.
   return track.variants.find((v) => v.audio !== null) ?? null
 }
