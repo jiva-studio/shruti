@@ -64,6 +64,19 @@ class Store:
                  j.status.value, j.uploaded_at),
             )
 
+    def insert_many(self, jobs: list[Job]) -> None:
+        rows = [
+            (j.job_id, j.filename, j.source_url, j.dest_bucket, j.dest_key,
+             j.status.value, j.uploaded_at)
+            for j in jobs
+        ]
+        with self._conn() as c:
+            c.executemany(
+                "INSERT INTO jobs (job_id, filename, source_url, dest_bucket, dest_key, "
+                "status, uploaded_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+
     def mark_running(self, job_id: str) -> None:
         with self._conn() as c:
             c.execute(

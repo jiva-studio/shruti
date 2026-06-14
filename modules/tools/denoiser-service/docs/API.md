@@ -65,6 +65,72 @@ Queue a denoise job. Returns `201`.
 
 ---
 
+## `POST /jobs/batch`
+
+Queue many jobs in one call (hundreds/thousands). Provide **exactly one** of
+`items` (explicit) or `source` (enumerate). Returns `201`.
+
+### Explicit mode
+
+```json
+{
+  "dest": { "bucket": "out", "access_key_id": "…", "secret_access_key": "…",
+            "endpoint_url": "https://storage.yandexcloud.net", "acl": "public-read" },
+  "items": [
+    { "source_url": "https://…/1.mp3", "dest_key": "clean/1.mp3" },
+    { "source_url": "https://…/2.mp3", "dest_key": "clean/2.mp3" }
+  ],
+  "params": { "normalize": true }
+}
+```
+
+### Enumerate mode
+
+The service lists `source.bucket/source.prefix`, presigns a GET URL for every
+object (so private sources download through the unchanged worker), and submits
+one job per file. Output keys mirror the source layout under `dest_prefix`.
+
+```json
+{
+  "dest": { "bucket": "out", "access_key_id": "…", "secret_access_key": "…",
+            "endpoint_url": "https://storage.yandexcloud.net", "acl": "public-read" },
+  "source": { "bucket": "in", "prefix": "raw/",
+              "access_key_id": "…", "secret_access_key": "…",
+              "endpoint_url": "https://storage.yandexcloud.net" },
+  "dest_prefix": "clean/",
+  "presign_expiry_s": 86400,
+  "limit": 100000,
+  "params": { "normalize": true }
+}
+```
+
+### Response `201`
+
+```json
+{ "count": 1240, "job_ids": ["…", "…", …] }
+```
+
+Non-blocking — the jobs queue and the worker pool drains them. Watch progress
+via `GET /healthz` counts or `GET /jobs?status=running`. `400` if neither/both
+of `items`/`source` are given; `502` on an S3 list/presign error.
+
+---
+
+## `POST /source/list`
+
+Enumerate a source bucket/prefix (credentials passed through, never stored).
+
+```json
+{ "source": { "bucket": "in", "prefix": "raw/",
+              "access_key_id": "…", "secret_access_key": "…",
+              "endpoint_url": "https://storage.yandexcloud.net" },
+  "limit": 100000 }
+```
+
+Response: `{ "count": 1240, "objects": [ { "key": "raw/a.mp3", "size": 12345 }, … ] }`.
+
+---
+
 ## `GET /jobs/{job_id}`
 
 Job metadata. `404` if unknown.
