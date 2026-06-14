@@ -47,19 +47,29 @@ class S3Dest(BaseModel):
 
 
 class DenoiseParams(BaseModel):
-    """Knobs forwarded to denoise_mp3.py. Defaults match the script's defaults."""
+    """Knobs forwarded to denoise_mp3.py. Defaults match the script."""
 
-    normalize: bool = Field(
-        True,
-        description="Loudness-match the clean to the original's integrated loudness "
-        "(EBU R128), so the app's original↔clean slider has no volume jump.",
+    strategy: str = Field(
+        "afftdn",
+        description="Cleaning strategy: 'afftdn' (default, ffmpeg FFT denoise — "
+        "fast, no dead pauses), 'rnnoise' (RNNoise, aggressive), or 'rnnoise-mix' "
+        "(RNNoise blended back with the original by voice probability).",
     )
-    noise_profile: bool = Field(
-        False,
-        description="Apply spectral subtraction using the bundled noise-profile.wav "
-        "(slower — see README; roughly triples processing time).",
+    # afftdn knobs
+    nr: float = Field(
+        12.0, ge=0.01, le=97.0,
+        description="afftdn: noise reduction in dB — higher is more aggressive. Default 12.",
     )
-    sample_rate: int = Field(48000, description="Processing sample rate (RNNoise native = 48000).")
+    nf: float = Field(-25.0, description="afftdn: noise floor estimate in dB. Default -25.")
+    # rnnoise-mix knobs (ratio of original blended back)
+    mix_min: float = Field(
+        0.10, ge=0.0, le=1.0,
+        description="rnnoise-mix: original ratio in pauses (no voice). Default 0.10.",
+    )
+    mix_max: float = Field(
+        0.25, ge=0.0, le=1.0,
+        description="rnnoise-mix: original ratio on voice. Default 0.25.",
+    )
 
 
 class CreateJobRequest(BaseModel):
