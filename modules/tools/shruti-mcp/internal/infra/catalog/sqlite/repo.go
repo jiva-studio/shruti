@@ -397,5 +397,21 @@ func (r *Repo) DeleteTrackVariant(ctx context.Context, trackID, language string)
 	})
 }
 
+// UpsertAudio inserts/updates one track_audio row without touching the
+// variant's other versions (used to add a 'clean' row next to 'original').
+func (r *Repo) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
+	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
+		_, err := r.db.ExecContext(ctx, `
+			INSERT INTO track_audio (track_id, language, kind, path, filesize, duration)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(track_id, language, kind) DO UPDATE SET
+				path     = excluded.path,
+				filesize = excluded.filesize,
+				duration = excluded.duration`,
+			a.TrackID, a.Language, a.Kind, a.Path, a.Filesize, a.Duration)
+		return err
+	})
+}
+
 // Compile-time interface assertion.
 var _ catalogport.Repository = (*Repo)(nil)

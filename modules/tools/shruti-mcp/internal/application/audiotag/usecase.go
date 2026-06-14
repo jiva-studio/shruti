@@ -98,7 +98,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (Result
 		TrackID:       string(id),
 	}
 
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	if err := uc.Tagger.Tag(ctx, audioPath, tags); err != nil {
 		return Result{}, err
 	}

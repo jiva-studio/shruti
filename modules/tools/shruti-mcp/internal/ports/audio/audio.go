@@ -7,13 +7,23 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/domain/track"
 )
 
+// Version selects which audio version a path refers to.
+type Version string
+
+const (
+	VersionOriginal Version = "original"
+	VersionClean    Version = "clean"
+)
+
 // Store owns the on-disk paths for audio under out/.
 type Store interface {
 	// SourceArtifactPath returns out/artifacts/tracks/{id}/audio/source.mp3.
 	SourceArtifactPath(id track.Id) string
 
-	// PublicAudioPath returns out/public/tracks/{id}/audio/original.mp3.
-	PublicAudioPath(id track.Id) string
+	// PublicAudioPath returns out/public/tracks/{id}/audio/{version}.mp3
+	// — VersionOriginal ("original.mp3") or VersionClean ("clean.mp3", the
+	// denoised version produced by track.audio.denoise).
+	PublicAudioPath(id track.Id, version Version) string
 
 	// MoveSourceFromInput consumes the source mp3 at srcPath into
 	// SourceArtifactPath. Same-filesystem case is a free os.Rename;

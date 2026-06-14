@@ -59,7 +59,7 @@ type fakeAudio struct {
 	publicPath string
 }
 
-func (a *fakeAudio) PublicAudioPath(track.Id) string { return a.publicPath }
+func (a *fakeAudio) PublicAudioPath(track.Id, audioport.Version) string { return a.publicPath }
 
 // fakeFS — plain map of paths → exists.
 type fakeFS struct {
@@ -260,7 +260,7 @@ func TestCommitRefusesMissingTranscriptFile(t *testing.T) {
 	h := newHarness(t)
 	// Drop the transcript file from FS so the existence check fails.
 	h.uc.FS = &fakeFS{exists: map[string]bool{
-		h.uc.Audio.PublicAudioPath(h.track): true,
+		h.uc.Audio.PublicAudioPath(h.track, audioport.VersionOriginal): true,
 	}}
 	h.seedMetadata(t, nil)
 	res, _ := h.uc.Run(context.Background(), h.track, "en")

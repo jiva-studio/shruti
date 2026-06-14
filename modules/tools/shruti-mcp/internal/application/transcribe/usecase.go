@@ -50,7 +50,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string, opts Op
 		return Result{}, err
 	}
 
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	raw, err := tx.Transcribe(ctx, audioPath, transcriber.Options{Language: language, Model: opts.Model})
 	if err != nil {
 		return Result{}, err
