@@ -1,19 +1,21 @@
 <template>
-  <button type="button" class="collection-card" @click="emit('click')">
-    <div class="cover" :class="{ 'cover--placeholder': !coverUrl }">
-      <img v-if="coverUrl" :src="coverUrl" :alt="name" loading="lazy" />
-    </div>
+  <button
+    type="button"
+    class="collection-card"
+    :class="{ 'is-placeholder': !coverUrl }"
+    @click="emit('click')"
+  >
+    <img v-if="coverUrl" :src="coverUrl" :alt="name" loading="lazy" />
     <span class="name">{{ name }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
 /**
- * One collection card for the Search carousel: cover image + name. Dumb /
- * presentational — knows only "tapped". The parent resolves the cover URL and
- * decides what a tap opens. When no cover is set yet (the common case until
- * cover assets are published) it falls back to a cream gradient tile so the
- * card never shows a broken image.
+ * One collection card for the Search carousel: cover image with the name
+ * overlaid at the bottom over a readability scrim. Dumb / presentational —
+ * knows only "tapped". Falls back to a cream gradient tile when no cover is
+ * published yet, so the card never shows a broken image.
  */
 defineProps<{
   name: string
@@ -26,45 +28,30 @@ const emit = defineEmits<{ (e: "click"): void }>()
 
 <style scoped>
 .collection-card {
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 140px;
-  flex: 0 0 auto;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  scroll-snap-align: start;
-  text-align: left;
-}
-
-.cover {
+  position: relative;
   width: 140px;
   height: 140px;
-  border-radius: 14px;
+  flex: 0 0 auto;
+  appearance: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--ion-color-light);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  scroll-snap-align: start;
   transition: transform 120ms ease;
 }
 
-.collection-card:active .cover {
+.collection-card:active {
   transform: scale(0.97);
 }
 
-.cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 /* No cover yet → warm saffron→coffee tile in the cream palette. */
-.cover--placeholder {
+.collection-card.is-placeholder {
   background: linear-gradient(
     135deg,
     rgba(var(--ion-color-primary-rgb), 0.55),
@@ -72,11 +59,29 @@ const emit = defineEmits<{ (e: "click"): void }>()
   );
 }
 
+.collection-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 10px 8px;
+  text-align: left;
   font-size: 13px;
-  line-height: 1.3;
-  color: var(--ion-text-color);
-  /* Two-line clamp so long seminar names don't push card heights apart. */
+  line-height: 1.25;
+  font-weight: 600;
+  /* Warm cream text on a warm espresso scrim — matches the palette instead of
+     stark white-on-black. Fixed tones (not theme vars, which invert) so the
+     overlay stays legible over any cover in both themes. */
+  color: #f4ebdd;
+  background: linear-gradient(to top, rgba(61, 43, 31, 0.72), rgba(61, 43, 31, 0));
+  /* Two-line clamp so long names don't overrun the tile. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
