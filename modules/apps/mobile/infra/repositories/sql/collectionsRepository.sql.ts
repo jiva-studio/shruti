@@ -253,7 +253,8 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
     ): Promise<readonly FeaturedCollectionRow[]> {
       try {
         return await contentDb.query<FeaturedCollectionRow>(
-          `SELECT c.id, c.name, COALESCE(c.cover, '') AS cover, c.sort_order
+          `SELECT c.id, c.name, COALESCE(c.cover, '') AS cover, c.sort_order,
+                  COALESCE(c.description, '') AS description
              FROM collection_group_items gi
              JOIN collections c
                ON c.id = gi.collection_id AND c.language = gi.group_language
