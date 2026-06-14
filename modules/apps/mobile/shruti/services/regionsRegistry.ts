@@ -1,5 +1,5 @@
 import { ref } from "vue"
-import { SERVERS, type CdnServer } from "@lib/domain/servers.js"
+import { SERVERS, buildServerUrl, type CdnServer } from "@lib/domain/servers.js"
 import type { IPreferences } from "@ports/app/index.js"
 
 /**
@@ -93,6 +93,17 @@ export function getRegions(): readonly CdnServer[] {
 /** Resolve a region by id from the current list, or undefined. */
 export function findRegion(id: string): CdnServer | undefined {
   return regions.value.find((s) => s.id === id)
+}
+
+/**
+ * Build a full asset URL for an S3 key against the active region, or undefined
+ * for an empty key / no region. Single home for the `getRegions()[0]` +
+ * `buildServerUrl` pattern that collection covers and avatars share.
+ */
+export function resolveAssetUrl(key: string | undefined): string | undefined {
+  if (!key) return undefined
+  const region = regions.value[0]
+  return region ? buildServerUrl(region, key) : undefined
 }
 
 function isValidRegion(r: unknown): r is CdnServer {
