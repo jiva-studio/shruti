@@ -81,14 +81,29 @@ class MediaDownloaderPlugin : Plugin() {
         val localPath = resolveLocalPath(destination)
             ?: return call.reject("invalid destination")
 
-        // Idempotency: if this id is already tracked and the worker is alive, return its current state.
+        // Idempotency vs. recovery. If this id is already tracked we only
+        // ride the existing work when it is *genuinely running* — then a
+        // duplicate download() is a no-op that returns live state.
+        //
+        // Any other prior state is treated as stale and replaced. After a
+        // process death mid-download (common on OEMs that aggressively kill
+        // background WorkManager jobs — MIUI/Xiaomi et al.) the job is left
+        // ENQUEUED/BLOCKED and may never run again on its own, while a partial
+        // `.download` temp sits on disk. Returning that job would leave the
+        // caller spinning on a "pending" task forever (and the final file
+        // never appears). So we cancel the stale work, drop its partial temp,
+        // and fall through to enqueue a fresh request — every reopen of the
+        // app thus re-kicks an interrupted download to completion.
         val existing = store.get(id)
         if (existing != null) {
             val info = WorkManager.getInstance(context).getWorkInfoById(existing.workerId).get()
-            if (info != null && !info.state.isFinished) {
+            if (info != null && info.state == WorkInfo.State.RUNNING) {
                 call.resolve(taskJson(id, info, localPath))
                 return
             }
+            WorkManager.getInstance(context).cancelWorkById(existing.workerId)
+            File(existing.localPath + ".download").delete()
+            store.remove(id)
         }
 
         val network = call.getString("network", "any") ?: "any"
