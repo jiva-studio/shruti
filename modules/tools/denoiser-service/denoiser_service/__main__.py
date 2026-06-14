@@ -27,11 +27,7 @@ def default_data_dir() -> str:
 
 
 def default_workers() -> int:
-    """Concurrency default when --workers isn't passed. Denoising is CPU-bound
-    (DeepFilterNet binary / ffmpeg, no GPU), so we scale with cores rather than
-    the transcriber's GPU-limited 2. Override order: --workers flag >
-    $DENOISER_WORKERS > auto (logical cores − 2, leaving headroom for the OS
-    and the per-job ffmpeg)."""
+    """Worker count: --workers flag > $DENOISER_WORKERS > auto (cores − 2)."""
     env = os.environ.get("DENOISER_WORKERS")
     if env:
         try:
