@@ -4,6 +4,7 @@ export default {
   filtersButton: "Filters",
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
+  lecturesTitle: "Lectures",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
