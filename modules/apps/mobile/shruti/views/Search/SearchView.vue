@@ -75,11 +75,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import {
   IonText,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
+  onIonViewWillEnter,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
 import { AppPage } from "@ui/primitives/index.js"
@@ -97,7 +98,10 @@ import {
 } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
-import { useCollectionGroups } from "@shruti/composables/useCollectionGroups.js"
+import {
+  useCollectionGroups,
+  type GroupCollection,
+} from "@shruti/composables/useCollectionGroups.js"
 import { useSearchController } from "./SearchView.controller.js"
 
 const player = usePlayerStore()
@@ -105,14 +109,25 @@ const search = useSearchController()
 const appLanguage = useAppLanguage()
 const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
 
-// Discovery surface: show the first two groups as carousels, then up to four
-// "other" collections not already featured in those groups.
+// First two groups as carousels; then a random sample of other collections
+// (not in those groups), reshuffled on each visit so every collection gets
+// a chance to surface over time.
 const OTHER_COLLECTIONS_LIMIT = 4
 const topGroups = computed(() => collectionGroups.value.slice(0, 2))
-const otherCollections = computed(() => {
+const otherCollections = ref<readonly GroupCollection[]>([])
+
+function pickOtherCollections(): void {
   const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
-  return allCollections.value.filter((c) => !shown.has(c.id)).slice(0, OTHER_COLLECTIONS_LIMIT)
-})
+  const pool = allCollections.value.filter((c) => !shown.has(c.id))
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  otherCollections.value = pool.slice(0, OTHER_COLLECTIONS_LIMIT)
+}
+
+watch([allCollections, topGroups], pickOtherCollections, { immediate: true })
+onIonViewWillEnter(pickOtherCollections)
 
 const selectedCollectionId = ref<string | null>(null)
 const detailOpen = ref(false)
