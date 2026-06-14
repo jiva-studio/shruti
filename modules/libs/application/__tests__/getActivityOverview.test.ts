@@ -99,6 +99,7 @@ function makeTrack(id: string, durationMs = 600_000): Track {
         trackId: id as TrackId,
         language: "en",
         title: id,
+        audios: [{ path: `audio/${id}.mp3`, filesize: null, duration: durationMs, kind: "original" }],
         audio: { path: `audio/${id}.mp3`, filesize: null, duration: durationMs, kind: "original" },
         transcript: null,
       },

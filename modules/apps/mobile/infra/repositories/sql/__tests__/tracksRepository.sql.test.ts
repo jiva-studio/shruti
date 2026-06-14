@@ -36,14 +36,19 @@ async function applyContentSchemaForTests(db: IDatabase): Promise<void> {
     track_id         TEXT NOT NULL,
     language         TEXT NOT NULL,
     title            TEXT NOT NULL COLLATE NOCASE,
-    audio_path       TEXT,
-    audio_filesize   INTEGER,
-    audio_duration   INTEGER,
-    audio_kind       TEXT,
     transcript_path  TEXT,
     transcript_kind  TEXT,
     sort_reference   TEXT,
     PRIMARY KEY (track_id, language)
+  )`)
+  await db.execute(`CREATE TABLE track_audio (
+    track_id  TEXT NOT NULL,
+    language  TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    path      TEXT NOT NULL,
+    filesize  INTEGER,
+    duration  INTEGER,
+    PRIMARY KEY (track_id, language, kind)
   )`)
   await db.execute(`CREATE TABLE track_references (
     track_id  TEXT NOT NULL,
