@@ -226,12 +226,21 @@ export const usePlayerStore = defineStore("player", () => {
     playing.value = isPlaying
     itemId.value = id
 
+    // Recompute source-mix availability for the track we advanced to — the
+    // FloatingPlayer slide is gated on this, and a queue transition can move
+    // between a both-versions track and a single-source one.
+    const mixAudios = cmd.variant.audios
+    sourceMixAvailable.value =
+      !!mixAudios.find((a) => a.kind === "original") &&
+      !!mixAudios.find((a) => a.kind === "clean")
+
     // Re-push the user's mix + speed. Native re-applies per item while it
     // owns the session, but after a cold restore (service killed & rebuilt)
     // the engine is back at defaults and JS is the only place that still
-    // knows the user's choices — so re-assert them here. Both calls are
+    // knows the user's choices — so re-assert them here. All calls are
     // idempotent and cheap.
     applyMix()
+    applySourceMix()
     applyPlaybackSpeed()
 
     // Continuous playback should carry an open, player-mirroring transcript

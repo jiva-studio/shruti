@@ -4,8 +4,9 @@ LAN-local HTTP service for batch audio **denoising**. It is the sibling of
 [`transcriber-service`](../transcriber-service/) and copies its data plane
 (HTTP + SQLite job queue + worker pool, restart-safe), but the heavy lifting is
 delegated to the existing [`denoise_mp3.py`](../audio-denoiser/denoise_mp3.py)
-algorithm (RNNoise + optional spectral subtraction + normalization) instead of a
-Swift ANE daemon.
+algorithm — selectable strategies `afftdn` (default, ffmpeg FFT denoise),
+`rnnoise`, `rnnoise-mix`, and `afftdn-rnnoise-mix` — instead of a Swift ANE
+daemon.
 
 ```
 client (any machine) ──HTTP──► denoiser-service (Python/FastAPI)
@@ -25,9 +26,9 @@ job* — the service never persists them (see "Security" below).
 Mirrors transcriber: a queue + worker pool with persistence so a remote machine
 (e.g. an M4) can chew through a corpus while a thin local MCP
 ([`denoiser-mcp`](../denoiser-mcp/)) drives it. Measured throughput of the
-algorithm itself: ~11× realtime (default pipeline) / ~3.8× (with spectral
-subtraction) per worker on a Ryzen 7 6800U; faster single-thread on Apple
-Silicon. Scale with `--workers` (RAM-bound: ~1–1.35 GB per worker).
+algorithm itself: `afftdn` is fastest (ffmpeg only, no ML), the `rnnoise*`
+strategies run ~18–20× realtime on Apple Silicon (M4) per worker. Scale with
+`--workers` (RAM-bound: ~1–1.35 GB per worker).
 
 ## Requirements
 
@@ -70,7 +71,7 @@ curl -s -X POST http://m4.local:8091/jobs -H 'content-type: application/json' -d
     "endpoint_url": "https://storage.yandexcloud.net",
     "acl": "public-read"
   },
-  "params": { "normalize": true, "noise_profile": false }
+  "params": { "strategy": "afftdn", "nr": 12 }
 }'
 # → {"job_id":"…","status":"queued","filename":"lecture.mp3"}
 

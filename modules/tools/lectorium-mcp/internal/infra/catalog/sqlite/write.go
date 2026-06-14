@@ -293,6 +293,14 @@ func (r *Repo) DeleteTrackVariantImpl(ctx context.Context, trackID, language str
 	}
 	defer tx.Rollback()
 
+	// track_audio is FK ON DELETE CASCADE off track_variants, but delete it
+	// explicitly too — matching the sibling child tables below and not relying
+	// on PRAGMA foreign_keys being on for this connection.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM track_audio WHERE track_id = ? AND language = ?`,
+		trackID, language); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM track_variants WHERE track_id = ? AND language = ?`,
 		trackID, language); err != nil {
