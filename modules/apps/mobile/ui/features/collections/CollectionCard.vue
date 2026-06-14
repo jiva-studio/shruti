@@ -2,7 +2,7 @@
   <button
     type="button"
     class="collection-card"
-    :class="{ 'is-placeholder': !loaded, 'is-loaded': loaded }"
+    :class="{ 'is-loaded': loaded }"
     @click="emit('click')"
   >
     <CachedImage :url="coverUrl" :alt="name" @loaded="loaded = true" />
@@ -17,21 +17,18 @@ import { CachedImage } from "@ui/primitives/index.js"
 
 /**
  * One collection card for the Search carousel: cover image with the name
- * overlaid at the bottom over a readability scrim. Falls back to a cream
- * gradient tile when no cover is published yet, so the card never shows a
- * broken image. (The author is shown inside the detail sheet, not on the card.)
+ * overlaid at the bottom over a readability scrim. (The author is shown inside
+ * the detail sheet, not on the card.)
  *
- * The cover (a `CachedImage` fill layer) is out of flow over a fixed-size
- * tile, so the name stays pinned to the bottom and never jumps while it loads.
- *
- * Until the cover has decoded we keep the solid placeholder tile and hide the
- * bottom scrim — the scrim only makes sense over an actual image, and on the
- * plain tile it would read as a stray dark band. Both reveal together once the
- * `CachedImage` reports `loaded`.
+ * The tile keeps a light placeholder background at all times; the cover (a
+ * `CachedImage` fill layer) fades in on top of it, so there is no flash between
+ * states. The name is always shown — dark over the bare placeholder, animating
+ * to cream as the scrim fades in with the image once `CachedImage` reports
+ * `loaded`. The scrim itself only appears over an actual cover.
  */
 defineProps<{
   name: string
-  /** Remote cover image URL, or undefined to show the placeholder tile. */
+  /** Remote cover image URL, or undefined to keep the placeholder tile. */
   coverUrl?: string
 }>()
 
@@ -50,10 +47,10 @@ const loaded = ref(false)
   border: none;
   margin: 0;
   padding: 0;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--ion-color-light);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 4px rgba(var(--ion-color-dark-rgb), 0.12);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   scroll-snap-align: start;
@@ -64,16 +61,8 @@ const loaded = ref(false)
   transform: scale(0.97);
 }
 
-/* Cover not decoded yet (or none published) → flat warm coffee tile, so the
-   card never flashes a broken/empty image. Fixed tone (not a theme var, which
-   inverts) so the overlaid cream name stays legible in both themes, and shared
-   verbatim with CollectionListItem's thumb so the two cards match. */
-.collection-card.is-placeholder {
-  background: #6f4e37;
-}
-
-/* Readability scrim behind the name — only over an actual cover. Fades in with
-   the image (matching CachedImage's 200ms fade), hidden over the placeholder. */
+/* Readability scrim behind the name — fades in with the image (matching
+   CachedImage's 200ms fade), absent over the bare placeholder. */
 .scrim {
   position: absolute;
   left: 0;
@@ -88,10 +77,6 @@ const loaded = ref(false)
   pointer-events: none;
 }
 
-.collection-card.is-loaded .scrim {
-  opacity: 1;
-}
-
 .name {
   position: absolute;
   left: 0;
@@ -102,12 +87,23 @@ const loaded = ref(false)
   font-size: 13px;
   line-height: 1.25;
   font-weight: 600;
-  /* Warm cream text — legible over both the scrim and the placeholder tile. */
-  color: #f4ebdd;
+  /* Always visible. Over the bare placeholder it's the dark theme text colour
+     (legible on the light tile); when the cover + scrim fade in, it animates to
+     warm cream (fixed tone, doesn't invert) so it stays legible over the image. */
+  color: var(--ion-text-color);
+  transition: color 200ms ease;
   /* Two-line clamp so long names don't overrun the tile. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.collection-card.is-loaded .scrim {
+  opacity: 1;
+}
+
+.collection-card.is-loaded .name {
+  color: #f4ebdd;
 }
 </style>
