@@ -27,6 +27,7 @@ const (
 	KindTranscriptReview   Kind = "transcript_review"
 	KindTranscriptCreate   Kind = "transcript_create"
 	KindAudioNormalize     Kind = "audio_normalize"
+	KindAudioDenoise       Kind = "audio_denoise"
 	KindTranscriptAlignPDF Kind = "transcript_align_pdf"
 	KindLibraryImport      Kind = "library_import"
 )
