@@ -11,6 +11,8 @@ Removes noise from MP3 files with a multi-stage processing pipeline:
 
 import argparse
 import os
+import re
+import subprocess
 import tempfile
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -19,7 +21,6 @@ from pydub import AudioSegment
 from pyrnnoise import RNNoise
 import soundfile as sf
 import numpy as np
-from scipy.ndimage import gaussian_filter1d
 from scipy import signal
 from tqdm import tqdm
 
@@ -139,140 +140,46 @@ def spectral_subtraction(
     return output
 
 
-def smooth_mix_audio(
-    original: np.ndarray,
-    processed: np.ndarray,
-    voice_probabilities: np.ndarray,
-    min_mix_ratio: float,
-    max_mix_ratio: float,
-    transition_ms: int = 50,
-    sample_rate: int = 48000
-) -> np.ndarray:
-    """
-    Mix original and processed audio using RNNoise voice probability detection.
-
-    Uses voice activity detection from RNNoise to dynamically adjust the mix ratio:
-    - No voice (0% probability): Uses min_mix_ratio
-    - Full voice (100% probability): Uses max_mix_ratio
-    - Partial voice: Linear interpolation between min and max
-    - Smooth transitions: Gaussian filtering prevents harsh jumps
-
-    Args:
-        original: Original audio as int16 numpy array
-        processed: Processed (denoised+normalized) audio as int16 numpy array
-        voice_probabilities: Voice probability for each frame from RNNoise (0.0-1.0)
-        min_mix_ratio: Minimum ratio of original audio when no voice detected (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice detected (0.0-1.0)
-        transition_ms: Transition smoothing time in milliseconds (default: 50ms)
-        sample_rate: Audio sample rate (default: 48000 Hz)
-
-    Returns:
-        Mixed audio with smooth transitions as int16 numpy array
-    """
-    original_float = original.astype(np.float32)
-    processed_float = processed.astype(np.float32)
-    transition_samples = int(transition_ms * sample_rate / 1000)
-
-    # RNNoise processes in 480-sample frames (10ms at 48kHz)
-    FRAME_SIZE = 480
-
-    # Create mix envelope based on voice probabilities
-    mix_envelope = np.zeros(len(original_float))
-
-    for i, voice_prob in enumerate(voice_probabilities):
-        start = i * FRAME_SIZE
-        end = min(start + FRAME_SIZE, len(mix_envelope))
-
-        # Interpolate between min and max mix ratio based on voice probability
-        # voice_prob = 0.0 (no voice) -> use min_mix_ratio
-        # voice_prob = 1.0 (full voice) -> use max_mix_ratio
-        current_mix = min_mix_ratio + (max_mix_ratio - min_mix_ratio) * voice_prob
-
-        mix_envelope[start:end] = current_mix
-
-    # Apply Gaussian smoothing for gradual crossfades
-    if transition_samples > 0:
-        mix_envelope = gaussian_filter1d(mix_envelope, sigma=transition_samples / 3)
-
-    # Final mix: envelope controls blend between original and processed
-    mixed = mix_envelope * original_float + (1.0 - mix_envelope) * processed_float
-
-    return mixed.astype(np.int16)
+def _measure_lufs(path):
+    """Integrated loudness (LUFS) of a file via ffmpeg's EBU R128 meter, or None."""
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", path,
+             "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=600,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    matches = re.findall(r"I:\s*(-?\d+(?:\.\d+)?)\s*LUFS", out.stderr)
+    return float(matches[-1]) if matches else None
 
 
-def normalize_audio_evenly(
-    audio_data: np.ndarray,
-    target_db: float = -20.0,
-    threshold_db: float = -40.0
-) -> np.ndarray:
-    """
-    Apply dynamic window-based normalization for consistent volume throughout track.
-
-    Uses overlapping windows to calculate local RMS and apply appropriate gain,
-    ensuring even volume without destroying dynamics or amplifying noise.
-
-    Args:
-        audio_data: Input audio data as int16 numpy array
-        target_db: Target dB level for normalization (default: -20.0 dB, broadcast standard)
-        threshold_db: Noise gate threshold in dB (default: -40.0 dB, ignores silence)
-
-    Returns:
-        Normalized audio data as int16 numpy array
-    """
-    audio_float = audio_data.astype(np.float32)
-
-    # Window parameters for smooth normalization
-    WINDOW_SIZE = 2048  # ~43ms at 48kHz
-    HOP_SIZE = 512      # ~11ms at 48kHz, 75% overlap
-
-    padding = WINDOW_SIZE // 2
-    padded_audio = np.pad(audio_float, (padding, padding), mode='reflect')
-
-    # Calculate RMS energy for each window
-    rms_values = []
-    for i in range(0, len(padded_audio) - WINDOW_SIZE, HOP_SIZE):
-        window = padded_audio[i:i + WINDOW_SIZE]
-        rms = np.sqrt(np.mean(window ** 2))
-        rms_values.append(rms)
-
-    # Convert dB targets to linear scale
-    target_rms = 32768.0 * (10 ** (target_db / 20.0))
-    threshold_rms = 32768.0 * (10 ** (threshold_db / 20.0))
-
-    # Apply window-based gain
-    normalized_audio = np.zeros_like(audio_float)
-    counts = np.zeros_like(audio_float)
-
-    for i, rms_val in enumerate(rms_values):
-        start_idx = i * HOP_SIZE
-        end_idx = start_idx + WINDOW_SIZE
-
-        # Noise gate: skip quiet sections to avoid amplifying silence
-        if rms_val < threshold_rms:
-            continue
-
-        # Calculate and limit gain
-        gain = min(target_rms / rms_val, 10.0) if rms_val > 0 else 1.0  # Max 20dB boost
-
-        # Apply gain to window
-        window_slice = slice(max(0, start_idx - padding), min(len(normalized_audio), end_idx - padding))
-        audio_slice = slice(max(0, start_idx), min(len(padded_audio), end_idx))
-
-        if window_slice.start < window_slice.stop:
-            slice_len = len(normalized_audio[window_slice])
-            normalized_audio[window_slice] += padded_audio[audio_slice][:slice_len] * gain
-            counts[window_slice] += 1
-
-    # Average overlapping windows
-    counts[counts == 0] = 1
-    normalized_audio /= counts
-
-    # Final peak limiting to prevent clipping
-    peak = np.abs(normalized_audio).max()
-    if peak > 32767:
-        normalized_audio *= (32767 / peak)
-
-    return normalized_audio.astype(np.int16)
+def _match_loudness(target_path, reference_path):
+    """Shift `target_path` to match `reference_path`'s integrated loudness (EBU
+    R128), so the app's original↔clean slider has no volume jump (denoising
+    removes energy, leaving the clean otherwise quieter). A pure gain shift
+    preserves the denoised dynamics; a brickwall limiter guards against clipping
+    on boost. No-op if measurement fails."""
+    ref = _measure_lufs(reference_path)
+    cur = _measure_lufs(target_path)
+    if ref is None or cur is None:
+        print("Loudness match skipped (measurement failed)")
+        return
+    gain_db = ref - cur
+    print(f"Loudness: ref {ref:.1f} LUFS, clean {cur:.1f} → gain {gain_db:+.2f} dB")
+    tmp = target_path + ".loudnorm.mp3"
+    try:
+        subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", target_path,
+             "-af", f"volume={gain_db:.2f}dB,alimiter=limit=0.95",
+             "-c:a", "libmp3lame", "-b:a", "128k", tmp],
+            check=True, capture_output=True, timeout=600,
+        )
+    except (OSError, subprocess.SubprocessError):
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        return
+    os.replace(tmp, target_path)
 
 
 def denoise_mp3(
@@ -280,29 +187,25 @@ def denoise_mp3(
     output_path: str = None,
     sample_rate: int = 48000,
     normalize: bool = True,
-    min_mix_ratio: float = 0.0,
-    max_mix_ratio: float = 0.0,
     noise_profile_path: str = None
 ):
     """
-    Denoise MP3 file with optional noise profile, RNNoise, normalization, and mixing.
+    Denoise an MP3: produce a single clean file (no original mixed in — the
+    app's original↔clean slider is what blends them at playback).
 
     Processing pipeline:
     1. Load MP3 and convert to mono 48kHz 16-bit PCM
-    2. (Optional) Apply spectral subtraction using noise profile
-    3. Denoise using RNNoise frame-by-frame (captures voice probabilities)
-    4. Normalize volume dynamically across the track
-    5. Optionally mix with original audio using voice-probability-based crossfading
-    6. Export as MP3 (128kbps — matches the canonical original; the source is
-       128k so a higher bitrate would only inflate size without adding quality)
+    2. (Optional) Apply spectral subtraction using a noise profile
+    3. Denoise using RNNoise frame-by-frame
+    4. Export as MP3 (128kbps — matches the canonical original)
+    5. Loudness-match the clean to the original's integrated loudness (EBU R128)
+       so the app slider has no volume jump
 
     Args:
         input_path: Path to input MP3 file
         output_path: Path to output MP3 file (if None, adds "_denoised" suffix)
         sample_rate: Processing sample rate (default: 48000 Hz, RNNoise native rate)
-        normalize: Apply dynamic normalization (default: True)
-        min_mix_ratio: Minimum ratio of original audio when no voice (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice present (0.0-1.0)
+        normalize: Loudness-match the clean to the original (default: True)
         noise_profile_path: Path to noise profile WAV file (optional)
     """
     input_path = Path(input_path)
@@ -364,48 +267,26 @@ def denoise_mp3(
             # Convert back to int16 for RNNoise
             processed_audio = (cleaned_audio_float * 32768.0).astype(np.int16)
 
-        # Step 2: Denoise with RNNoise and capture voice probabilities
+        # Step 2: Denoise with RNNoise.
         print("Denoising with RNNoise...")
         denoiser = RNNoise(sample_rate=sample_rate)
         denoised_frames = []
-        voice_probabilities = []
-
-        for speech_prob, denoised_frame in denoiser.denoise_chunk(processed_audio, partial=True):
+        for _speech_prob, denoised_frame in denoiser.denoise_chunk(processed_audio, partial=True):
             denoised_frames.append(denoised_frame)
-            voice_probabilities.append(speech_prob)
 
         if not denoised_frames:
             raise ValueError("No audio frames were denoised")
         denoised_audio_data = np.concatenate([frame.flatten() for frame in denoised_frames])
-        voice_probabilities = np.array(voice_probabilities)
 
-        # Post-processing (Normalize and/or Mix)
-        if normalize:
-            print("Normalizing...")
-            denoised_audio_data = normalize_audio_evenly(
-                denoised_audio_data,
-                target_db=-5.0,
-                threshold_db=-40.0
-            )
-
-        # Mix with original using voice probability if min or max mix ratio is set
-        if min_mix_ratio > 0.0 or max_mix_ratio > 0.0:
-            print(f"Mixing with voice-based crossfading (min: {min_mix_ratio:.0%}, max: {max_mix_ratio:.0%})...")
-            min_len = min(len(audio_data), len(denoised_audio_data))
-            denoised_audio_data = smooth_mix_audio(
-                audio_data[:min_len],
-                denoised_audio_data[:min_len],
-                voice_probabilities,
-                min_mix_ratio,
-                max_mix_ratio,
-                transition_ms=50,
-                sample_rate=sample_rate
-            )
-
-        # Export to MP3
+        # Export to MP3 (128k — matches the canonical original).
         sf.write(temp_output_path, denoised_audio_data, sample_rate, subtype='PCM_16')
         denoised_audio = AudioSegment.from_wav(temp_output_path)
         denoised_audio.export(str(output_path), format="mp3", bitrate="128k")
+
+        # Loudness-match the clean to the original (so the app slider has no
+        # volume jump). Denoising removes energy → clean is otherwise quieter.
+        if normalize:
+            _match_loudness(str(output_path), str(input_path))
 
         print(f"Completed: {output_path}")
 
@@ -422,12 +303,12 @@ def process_single_file(args):
     Wrapper function to process a single file (for parallel processing).
 
     Args:
-        args: Tuple of (input_file, output_file, sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path)
+        args: Tuple of (input_file, output_file, sample_rate, normalize, noise_profile_path)
 
     Returns:
         Tuple of (input_file, success, error_message)
     """
-    input_file, output_file, sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path = args
+    input_file, output_file, sample_rate, normalize, noise_profile_path = args
 
     try:
         denoise_mp3(
@@ -435,8 +316,6 @@ def process_single_file(args):
             str(output_file),
             sample_rate=sample_rate,
             normalize=normalize,
-            min_mix_ratio=min_mix_ratio,
-            max_mix_ratio=max_mix_ratio,
             noise_profile_path=noise_profile_path
         )
         return (input_file, True, None)
@@ -448,8 +327,6 @@ def find_and_process_files(
     root_dir: str = ".",
     sample_rate: int = 48000,
     normalize: bool = True,
-    min_mix_ratio: float = 0.0,
-    max_mix_ratio: float = 0.0,
     workers: int = 1,
     noise_profile_path: str = None
 ):
@@ -459,9 +336,7 @@ def find_and_process_files(
     Args:
         root_dir: Root directory to start searching (default: current directory)
         sample_rate: Processing sample rate (default: 48000 Hz)
-        normalize: Apply dynamic normalization (default: True)
-        min_mix_ratio: Minimum ratio of original audio when no voice (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice present (0.0-1.0)
+        normalize: Loudness-match the clean to the original (default: True)
         workers: Number of parallel workers (default: 1, sequential processing)
         noise_profile_path: Path to noise profile WAV file (optional)
     """
@@ -474,7 +349,7 @@ def find_and_process_files(
 
     # Prepare arguments for each file
     tasks = [
-        (input_file, input_file.parent / "clean.mp3", sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path)
+        (input_file, input_file.parent / "clean.mp3", sample_rate, normalize, noise_profile_path)
         for input_file in original_files
     ]
 
@@ -510,10 +385,9 @@ Examples:
   python3.10 denoise_mp3.py --root-dir /path/to/files
   python3.10 denoise_mp3.py --sample-rate 48000
   python3.10 denoise_mp3.py -n noise-profile.wav  # Use noise profile
-  python3.10 denoise_mp3.py --mix-min 5 --mix-max 25  # Voice-based mixing (5% no voice, 25% with voice)
-  python3.10 denoise_mp3.py --no-normalize  # Skip normalization
+  python3.10 denoise_mp3.py --no-normalize  # Skip loudness match to original
   python3.10 denoise_mp3.py --workers 4  # Process 4 files in parallel
-  python3.10 denoise_mp3.py -n noise-profile.wav --mix-min 10 --mix-max 20 --workers 4  # Full pipeline
+  python3.10 denoise_mp3.py -i in.mp3 -o clean.mp3  # Single-file mode
         """
     )
 
@@ -549,23 +423,9 @@ Examples:
 
     parser.add_argument(
         "--no-normalize",
-        help="Disable even volume normalization throughout the track",
+        help="Disable loudness-matching the clean to the original",
         action="store_true",
         default=False
-    )
-
-    parser.add_argument(
-        "--mix-min",
-        help="Minimum mix percentage of original audio when no voice detected (0-100, default: 0)",
-        type=float,
-        default=0.0
-    )
-
-    parser.add_argument(
-        "--mix-max",
-        help="Maximum mix percentage of original audio when voice detected (0-100, default: 0)",
-        type=float,
-        default=0.0
     )
 
     parser.add_argument(
@@ -584,10 +444,6 @@ Examples:
 
     args = parser.parse_args()
 
-    # Convert mix percentages to 0.0-1.0 range
-    min_mix = max(0.0, min(100.0, args.mix_min)) / 100.0
-    max_mix = max(0.0, min(100.0, args.mix_max)) / 100.0
-
     # Single-file mode: --in and --out must be supplied together.
     if args.in_path or args.out_path:
         if not (args.in_path and args.out_path):
@@ -597,8 +453,6 @@ Examples:
             args.out_path,
             sample_rate=args.sample_rate,
             normalize=not args.no_normalize,
-            min_mix_ratio=min_mix,
-            max_mix_ratio=max_mix,
             noise_profile_path=args.noise_profile,
         )
         return
@@ -607,8 +461,6 @@ Examples:
         root_dir=args.root_dir,
         sample_rate=args.sample_rate,
         normalize=not args.no_normalize,
-        min_mix_ratio=min_mix,
-        max_mix_ratio=max_mix,
         workers=args.workers,
         noise_profile_path=args.noise_profile
     )

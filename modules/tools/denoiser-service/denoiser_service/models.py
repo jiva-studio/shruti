@@ -49,19 +49,15 @@ class S3Dest(BaseModel):
 class DenoiseParams(BaseModel):
     """Knobs forwarded to denoise_mp3.py. Defaults match the script's defaults."""
 
-    normalize: bool = Field(True, description="Dynamic volume normalization.")
+    normalize: bool = Field(
+        True,
+        description="Loudness-match the clean to the original's integrated loudness "
+        "(EBU R128), so the app's original↔clean slider has no volume jump.",
+    )
     noise_profile: bool = Field(
         False,
         description="Apply spectral subtraction using the bundled noise-profile.wav "
         "(slower — see README; roughly triples processing time).",
-    )
-    mix_min: float = Field(
-        0.0, ge=0.0, le=100.0,
-        description="%% of original audio mixed back where NO voice is detected (0-100).",
-    )
-    mix_max: float = Field(
-        0.0, ge=0.0, le=100.0,
-        description="%% of original audio mixed back where voice IS detected (0-100).",
     )
     sample_rate: int = Field(48000, description="Processing sample rate (RNNoise native = 48000).")
 

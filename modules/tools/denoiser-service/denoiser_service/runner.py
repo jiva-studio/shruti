@@ -46,8 +46,6 @@ class Runner:
             "--in", in_path,
             "--out", out_path,
             "--sample-rate", str(params.sample_rate),
-            "--mix-min", str(params.mix_min),
-            "--mix-max", str(params.mix_max),
         ]
         if not params.normalize:
             args.append("--no-normalize")

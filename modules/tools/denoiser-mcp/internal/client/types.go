@@ -28,11 +28,9 @@ type S3Dest struct {
 
 // DenoiseParams are the algorithm knobs forwarded to denoise_mp3.py.
 type DenoiseParams struct {
-	Normalize    bool    `json:"normalize"`
-	NoiseProfile bool    `json:"noise_profile"`
-	MixMin       float64 `json:"mix_min"`
-	MixMax       float64 `json:"mix_max"`
-	SampleRate   int     `json:"sample_rate"`
+	Normalize    bool `json:"normalize"`
+	NoiseProfile bool `json:"noise_profile"`
+	SampleRate   int  `json:"sample_rate"`
 }
 
 // CreateJobRequest is the POST /jobs body.
