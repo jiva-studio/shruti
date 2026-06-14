@@ -194,7 +194,10 @@ def outline_model_tag(model: str) -> str:
 
 def _outline_key(track_id: str, lang: str, settings: Settings) -> str:
     tag = outline_model_tag(settings.llm_outline)
-    return f"artifacts/tracks/{track_id}/outlines/{lang}.{tag}.json"
+    # `.c1` = the two-pass collapse algorithm. Bumping it (here AND in
+    # share-transcript's `outline_key`, which shares this cache) invalidates
+    # outlines produced by the old single-pass generator.
+    return f"artifacts/tracks/{track_id}/outlines/{lang}.{tag}.c1.json"
 
 
 _S3_ABSENT_CODES = frozenset({"404", "NoSuchKey", "NotFound"})

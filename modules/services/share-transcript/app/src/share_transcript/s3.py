@@ -7,7 +7,7 @@ outline already produced by chat is reused verbatim (and vice-versa):
            travels in object metadata (not the key); a HEAD whose tag
            mismatches the current version is treated as absent so a
            layout bump re-renders in place.
-- Outline  `artifacts/tracks/<id>/outlines/<lang>.<model_tag>.json` —
+- Outline  `artifacts/tracks/<id>/outlines/<lang>.<model_tag>.c1.json` —
            conditional PUT (`If-None-Match: *`) guards cross-writer races.
 
 boto3 is sync; every call is wrapped through `asyncio.to_thread` so the
@@ -60,7 +60,10 @@ class S3:
 
     def outline_key(self, track_id: str, lang: str) -> str:
         tag = self._s.llm_outline.replace("/", "_")
-        return f"artifacts/tracks/{track_id}/outlines/{lang}.{tag}.json"
+        # `.c1` = the two-pass collapse algorithm. Bumping it (here AND in the
+        # chat indexer's `_outline_key`, which shares this cache) invalidates
+        # outlines produced by the old single-pass generator.
+        return f"artifacts/tracks/{track_id}/outlines/{lang}.{tag}.c1.json"
 
     def public_url(self, key: str) -> str:
         return self._s.public_url(key)
