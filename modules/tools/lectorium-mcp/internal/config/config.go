@@ -24,6 +24,18 @@ type Config struct {
 	Review     Review     `yaml:"review"`
 	Resolver   Resolver   `yaml:"resolver"`
 	Metadata   Metadata   `yaml:"metadata"`
+	Images     Images     `yaml:"images"`
+}
+
+// Images configures collection-cover generation via an OpenRouter-compatible
+// image model. When APIKey is empty the feature is disabled (collection.create
+// won't auto-generate and collection.cover.generate returns a clear error).
+type Images struct {
+	Endpoint string `yaml:"endpoint,omitempty"`
+	APIKey   string `yaml:"api_key,omitempty"`
+	Model    string `yaml:"model,omitempty"`
+	// Style is appended to every prompt so all covers share one look.
+	Style string `yaml:"style,omitempty"`
 }
 
 type CDN struct {
@@ -75,21 +87,21 @@ type Review struct {
 	// mode (raw). Lookup falls back to "*" when a language isn't
 	// explicitly listed.
 	Default     map[string][]Attempt `yaml:"default"`
-	ChunkSize   int                 `yaml:"chunk_size"`
-	Overlap     int                 `yaml:"overlap"`
-	Retries     int                 `yaml:"retries"`
-	Concurrency int                 `yaml:"concurrency"`
+	ChunkSize   int                  `yaml:"chunk_size"`
+	Overlap     int                  `yaml:"overlap"`
+	Retries     int                  `yaml:"retries"`
+	Concurrency int                  `yaml:"concurrency"`
 	// MaxConcurrentLLM caps total in-flight LLM calls across the worker
 	// pool. Without this, workers × Concurrency can fan out beyond the
 	// API tier's RPM budget.
-	MaxConcurrentLLM int                        `yaml:"max_concurrent_llm"`
+	MaxConcurrentLLM int `yaml:"max_concurrent_llm"`
 	// NoiseFilterThreshold drops the text of raw segments whose Whisper
 	// confidence is below this cutoff before they reach the LLM (0 =
 	// disabled). 0.20 catches whisper hallucinations on noise/silence
 	// (digits, isolated dots, quote-soup) without risking real speech.
 	NoiseFilterThreshold float64                    `yaml:"noise_filter_threshold"`
 	Hybrid               HybridOptions              `yaml:"hybrid"`
-	Providers        map[string]ProviderOptions `yaml:"providers"`
+	Providers            map[string]ProviderOptions `yaml:"providers"`
 	// Sentencer optionally configures a deterministic sentence splitter
 	// (razdel subprocess). When script is set, the review usecase uses
 	// it to compute sentence boundaries from the corrected text instead
@@ -290,6 +302,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.S3.Yandex.Endpoint == "" {
 		c.S3.Yandex.Endpoint = "https://storage.yandexcloud.net"
+	}
+	if c.Images.Endpoint == "" {
+		c.Images.Endpoint = "https://openrouter.ai/api/v1"
+	}
+	if c.Images.Model == "" {
+		c.Images.Model = "google/gemini-2.5-flash-image"
+	}
+	if c.Images.Style == "" {
+		c.Images.Style = "Devotional illustration in the Gaudiya Vaishnava (Hare Krishna / ISKCON) tradition. Warm palette of saffron, cream and soft gold; gentle painterly digital art; serene and uplifting; soft golden-hour light. Full-bleed square 1:1 composition that fills the entire frame edge to edge — no border, no frame, no margin, no vignette. Absolutely no text, words or letters. Avoid Buddhist and generic new-age imagery — no Buddha, no buddhist temples; depict Vaishnava devotees with tilak and dhoti/sari where people appear."
 	}
 	if c.FFmpeg.Bin == "" {
 		c.FFmpeg.Bin = "ffmpeg"
