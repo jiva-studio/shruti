@@ -205,10 +205,10 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.pendingSeekSec = positionSec > 0 ? positionSec : null
     this.audio.removeAttribute("src")
     this.audio.load()
-    this.audio.src = item.url
+    this.audio.src = item.audios[0]
     this.audio.load()
     this.currentItemId = item.itemId
-    if (item.secondaryUrl) this.setupSecondary(item.secondaryUrl)
+    if (item.audios[1]) this.setupSecondary(item.audios[1])
     else this.teardownSecondary()
     if (autoplay) await this.play()
   }
@@ -280,14 +280,14 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
     this.pendingSeekSec = null
     this.audio.removeAttribute("src")
     this.audio.load()
-    this.audio.src = params.url
+    this.audio.src = params.audios[0]
     this.audio.load()
     this.currentItemId = params.itemId
     // Single-track open: no queue, so `ended` won't auto-advance.
     this.queue = []
     this.queueIndex = 0
     this.currentFromSec = 0
-    if (params.secondaryUrl) this.setupSecondary(params.secondaryUrl)
+    if (params.audios[1]) this.setupSecondary(params.audios[1])
     else this.teardownSecondary()
   }
 
