@@ -58,6 +58,11 @@ type TrackRepository interface {
 	// invariant is violated (e.g. dangling FK).
 	SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error
 
+	// UpsertAudio inserts or updates one (track, language, kind) audio row
+	// WITHOUT touching the variant's other audio versions — used by
+	// track.audio.denoise to add a 'clean' row next to the 'original'.
+	UpsertAudio(ctx context.Context, a catalog.AudioRow) error
+
 	// DeleteTrackVariant removes one (track, language) variant + its
 	// FTS rows. If the last variant of a track is removed, also removes
 	// the tracks row + references.

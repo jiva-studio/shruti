@@ -102,6 +102,18 @@ func (l *Lazy) GetAudios(ctx context.Context, trackID, language string) ([]catal
 	return r.GetAudios(ctx, trackID, language)
 }
 
+func (l *Lazy) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.UpsertAudio(ctx, a); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
 func (l *Lazy) GetReferences(ctx context.Context, trackID string) ([]catalog.TrackReference, error) {
 	r, err := l.open(ctx)
 	if err != nil {
