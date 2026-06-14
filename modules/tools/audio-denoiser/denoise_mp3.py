@@ -1,174 +1,94 @@
 #!/usr/bin/env python3
 """
-MP3 Audio Denoiser using Spectral Subtraction and RNNoise
+Audio denoiser with selectable strategies (`--strategy`).
 
-Removes noise from MP3 files with a multi-stage processing pipeline:
-- Optional spectral subtraction using custom noise profile
-- Intelligent denoising via RNNoise
-- Dynamic volume normalization
-- Smooth crossfading between original and processed audio
+  afftdn       ffmpeg adaptive FFT denoise — reduces the noise floor by `--nr`
+               dB without gating pauses to dead silence. Fast, no ML deps
+               (ffmpeg only). Milder than DeepFilterNet — leaves more residual.
+  rnnoise      RNNoise (pyrnnoise) speech denoiser, straight output. Aggressive
+               — can leave dead-silent pauses on noisy material.
+  rnnoise-mix  RNNoise blended back with the original by voice probability
+               (`--mix-min` in pauses, `--mix-max` on voice) — keeps a natural
+               noise floor so pauses don't sound cut out.
+  afftdn-rnnoise-mix
+               Chain: afftdn first (tames steady noise), then RNNoise, then the
+               TRUE original blended back by voice probability — afftdn does the
+               bulk while the blend keeps a natural floor in pauses.
+  deepfilternet
+               (default) DeepFilterNet3 — a learned full-band speech denoiser. Removes
+               steady tape hiss / static far better than afftdn without the
+               over-gating artefacts of RNNoise, and preserves the voice (no
+               generative hallucination). Runs real-time on CPU (no GPU/CUDA),
+               so it works on the service and Apple Silicon alike. Uses the
+               standalone `deep-filter` binary (no torch / no Python ML deps);
+               set $DEEP_FILTER_BIN, put it on PATH, or drop it next to this
+               script. Binaries: github.com/Rikorose/DeepFilterNet releases.
+
+All strategies output mono 128 kbps MP3 (matching the canonical original). The
+app's original↔clean slider does the user-facing blend; this only produces the
+clean file. The rnnoise* strategies need pyrnnoise/numpy/scipy/pydub/soundfile;
+afftdn needs only ffmpeg.
 """
 
 import argparse
 import os
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from pydub import AudioSegment
-from pyrnnoise import RNNoise
-import soundfile as sf
-import numpy as np
-from scipy.ndimage import gaussian_filter1d
-from scipy import signal
-from tqdm import tqdm
+STRATEGIES = ("afftdn", "rnnoise", "rnnoise-mix", "afftdn-rnnoise-mix", "deepfilternet")
+DEFAULT_STRATEGY = "deepfilternet"
+
+# afftdn knobs
+DEFAULT_NR = 12.0   # noise reduction (dB), higher = more aggressive
+DEFAULT_NF = -25.0  # noise floor (dB)
+
+# rnnoise-mix knobs (ratio of ORIGINAL blended back)
+DEFAULT_MIX_MIN = 0.10  # in pauses (no voice)
+DEFAULT_MIX_MAX = 0.25  # on voice
+
+SAMPLE_RATE = 48000  # RNNoise native rate
 
 
-def load_noise_profile(noise_profile_path: str, target_sample_rate: int = 48000) -> np.ndarray:
-    """
-    Load and analyze noise profile from a WAV file.
+# ─────────────────────────────── afftdn ────────────────────────────────────
 
-    Args:
-        noise_profile_path: Path to noise profile WAV file
-        target_sample_rate: Target sample rate to resample to
-
-    Returns:
-        Noise spectrum (magnitude) for spectral subtraction
-    """
-    noise_data, noise_sr = sf.read(noise_profile_path, dtype='float32')
-
-    # Convert to mono if stereo
-    if len(noise_data.shape) > 1:
-        noise_data = noise_data.mean(axis=1)
-
-    # Resample if needed
-    if noise_sr != target_sample_rate:
-        num_samples = int(len(noise_data) * target_sample_rate / noise_sr)
-        noise_data = signal.resample(noise_data, num_samples)
-
-    # Compute noise spectrum using FFT
-    noise_fft = np.fft.rfft(noise_data)
-    noise_magnitude = np.abs(noise_fft)
-
-    return noise_magnitude
+def _denoise_afftdn(in_path, out_path, nr, nf):
+    """One ffmpeg pass: afftdn denoise + a safety limiter, mono 128k."""
+    af = f"afftdn=nr={nr}:nf={nf},alimiter=limit=0.95"
+    cmd = [
+        "ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(in_path),
+        "-af", af, "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-2000:]
+        raise RuntimeError(f"ffmpeg afftdn failed ({proc.returncode}): {tail}")
 
 
-def spectral_subtraction(
-    audio_data: np.ndarray,
-    noise_profile: np.ndarray,
-    sample_rate: int = 48000,
-    frame_length: int = 2048,
-    hop_length: int = 512,
-    noise_factor: float = 1.5,
-    floor_factor: float = 0.002
-) -> np.ndarray:
-    """
-    Apply spectral subtraction using a noise profile.
-
-    This removes noise by subtracting the noise spectrum from the signal spectrum
-    in the frequency domain, then reconstructing the time-domain signal.
-
-    Args:
-        audio_data: Input audio as float32 numpy array (normalized -1 to 1)
-        noise_profile: Noise magnitude spectrum from load_noise_profile()
-        sample_rate: Audio sample rate
-        frame_length: FFT window size (default: 2048)
-        hop_length: Hop size between frames (default: 512)
-        noise_factor: How aggressively to subtract noise (default: 1.5)
-        floor_factor: Minimum signal floor to prevent over-subtraction (default: 0.002)
-
-    Returns:
-        Denoised audio as float32 numpy array
-    """
-    # Ensure audio is float32
-    audio_float = audio_data.astype(np.float32)
-
-    # Create output buffer
-    output = np.zeros_like(audio_float)
-    window = signal.windows.hann(frame_length)
-
-    # Normalize noise profile to match frame length
-    noise_profile_normalized = signal.resample(noise_profile, frame_length // 2 + 1)
-
-    # Process in overlapping frames
-    num_frames = (len(audio_float) - frame_length) // hop_length + 1
-
-    for i in range(num_frames):
-        start = i * hop_length
-        end = start + frame_length
-
-        if end > len(audio_float):
-            break
-
-        # Extract frame and apply window
-        frame = audio_float[start:end] * window
-
-        # FFT to frequency domain
-        frame_fft = np.fft.rfft(frame)
-        magnitude = np.abs(frame_fft)
-        phase = np.angle(frame_fft)
-
-        # Spectral subtraction: subtract noise spectrum
-        cleaned_magnitude = magnitude - (noise_factor * noise_profile_normalized)
-
-        # Apply floor to prevent negative values and musical noise
-        floor = floor_factor * magnitude
-        cleaned_magnitude = np.maximum(cleaned_magnitude, floor)
-
-        # Reconstruct with original phase
-        cleaned_fft = cleaned_magnitude * np.exp(1j * phase)
-
-        # IFFT back to time domain
-        cleaned_frame = np.fft.irfft(cleaned_fft, n=frame_length)
-
-        # Overlap-add
-        output[start:end] += cleaned_frame * window
-
-    # Normalize by window overlap
-    normalization = np.zeros_like(audio_float)
-    for i in range(num_frames):
-        start = i * hop_length
-        end = start + frame_length
-        if end > len(audio_float):
-            break
-        normalization[start:end] += window ** 2
-
-    normalization[normalization < 1e-8] = 1.0
-    output /= normalization
-
-    return output
-
+# ─────────────────────────────── RNNoise ───────────────────────────────────
 
 def smooth_mix_audio(
-    original: np.ndarray,
-    processed: np.ndarray,
-    voice_probabilities: np.ndarray,
+    original,
+    processed,
+    voice_probabilities,
     min_mix_ratio: float,
     max_mix_ratio: float,
     transition_ms: int = 50,
-    sample_rate: int = 48000
-) -> np.ndarray:
+    sample_rate: int = SAMPLE_RATE,
+):
     """
     Mix original and processed audio using RNNoise voice probability detection.
 
-    Uses voice activity detection from RNNoise to dynamically adjust the mix ratio:
     - No voice (0% probability): Uses min_mix_ratio
     - Full voice (100% probability): Uses max_mix_ratio
     - Partial voice: Linear interpolation between min and max
     - Smooth transitions: Gaussian filtering prevents harsh jumps
-
-    Args:
-        original: Original audio as int16 numpy array
-        processed: Processed (denoised+normalized) audio as int16 numpy array
-        voice_probabilities: Voice probability for each frame from RNNoise (0.0-1.0)
-        min_mix_ratio: Minimum ratio of original audio when no voice detected (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice detected (0.0-1.0)
-        transition_ms: Transition smoothing time in milliseconds (default: 50ms)
-        sample_rate: Audio sample rate (default: 48000 Hz)
-
-    Returns:
-        Mixed audio with smooth transitions as int16 numpy array
     """
+    import numpy as np
+    from scipy.ndimage import gaussian_filter1d
+
     original_float = original.astype(np.float32)
     processed_float = processed.astype(np.float32)
     transition_samples = int(transition_ms * sample_rate / 1000)
@@ -176,409 +96,236 @@ def smooth_mix_audio(
     # RNNoise processes in 480-sample frames (10ms at 48kHz)
     FRAME_SIZE = 480
 
-    # Create mix envelope based on voice probabilities
     mix_envelope = np.zeros(len(original_float))
-
     for i, voice_prob in enumerate(voice_probabilities):
         start = i * FRAME_SIZE
         end = min(start + FRAME_SIZE, len(mix_envelope))
+        # voice_prob 0 -> min_mix_ratio (more original in pauses);
+        # voice_prob 1 -> max_mix_ratio.
+        mix_envelope[start:end] = min_mix_ratio + (max_mix_ratio - min_mix_ratio) * voice_prob
 
-        # Interpolate between min and max mix ratio based on voice probability
-        # voice_prob = 0.0 (no voice) -> use min_mix_ratio
-        # voice_prob = 1.0 (full voice) -> use max_mix_ratio
-        current_mix = min_mix_ratio + (max_mix_ratio - min_mix_ratio) * voice_prob
-
-        mix_envelope[start:end] = current_mix
-
-    # Apply Gaussian smoothing for gradual crossfades
     if transition_samples > 0:
         mix_envelope = gaussian_filter1d(mix_envelope, sigma=transition_samples / 3)
 
-    # Final mix: envelope controls blend between original and processed
     mixed = mix_envelope * original_float + (1.0 - mix_envelope) * processed_float
-
     return mixed.astype(np.int16)
 
 
-def normalize_audio_evenly(
-    audio_data: np.ndarray,
-    target_db: float = -20.0,
-    threshold_db: float = -40.0
-) -> np.ndarray:
-    """
-    Apply dynamic window-based normalization for consistent volume throughout track.
+def _load_int16_mono(path):
+    """Load an audio file as a mono 48k int16 numpy array (RNNoise's format)."""
+    from pydub import AudioSegment
+    import numpy as np
 
-    Uses overlapping windows to calculate local RMS and apply appropriate gain,
-    ensuring even volume without destroying dynamics or amplifying noise.
-
-    Args:
-        audio_data: Input audio data as int16 numpy array
-        target_db: Target dB level for normalization (default: -20.0 dB, broadcast standard)
-        threshold_db: Noise gate threshold in dB (default: -40.0 dB, ignores silence)
-
-    Returns:
-        Normalized audio data as int16 numpy array
-    """
-    audio_float = audio_data.astype(np.float32)
-
-    # Window parameters for smooth normalization
-    WINDOW_SIZE = 2048  # ~43ms at 48kHz
-    HOP_SIZE = 512      # ~11ms at 48kHz, 75% overlap
-
-    padding = WINDOW_SIZE // 2
-    padded_audio = np.pad(audio_float, (padding, padding), mode='reflect')
-
-    # Calculate RMS energy for each window
-    rms_values = []
-    for i in range(0, len(padded_audio) - WINDOW_SIZE, HOP_SIZE):
-        window = padded_audio[i:i + WINDOW_SIZE]
-        rms = np.sqrt(np.mean(window ** 2))
-        rms_values.append(rms)
-
-    # Convert dB targets to linear scale
-    target_rms = 32768.0 * (10 ** (target_db / 20.0))
-    threshold_rms = 32768.0 * (10 ** (threshold_db / 20.0))
-
-    # Apply window-based gain
-    normalized_audio = np.zeros_like(audio_float)
-    counts = np.zeros_like(audio_float)
-
-    for i, rms_val in enumerate(rms_values):
-        start_idx = i * HOP_SIZE
-        end_idx = start_idx + WINDOW_SIZE
-
-        # Noise gate: skip quiet sections to avoid amplifying silence
-        if rms_val < threshold_rms:
-            continue
-
-        # Calculate and limit gain
-        gain = min(target_rms / rms_val, 10.0) if rms_val > 0 else 1.0  # Max 20dB boost
-
-        # Apply gain to window
-        window_slice = slice(max(0, start_idx - padding), min(len(normalized_audio), end_idx - padding))
-        audio_slice = slice(max(0, start_idx), min(len(padded_audio), end_idx))
-
-        if window_slice.start < window_slice.stop:
-            slice_len = len(normalized_audio[window_slice])
-            normalized_audio[window_slice] += padded_audio[audio_slice][:slice_len] * gain
-            counts[window_slice] += 1
-
-    # Average overlapping windows
-    counts[counts == 0] = 1
-    normalized_audio /= counts
-
-    # Final peak limiting to prevent clipping
-    peak = np.abs(normalized_audio).max()
-    if peak > 32767:
-        normalized_audio *= (32767 / peak)
-
-    return normalized_audio.astype(np.int16)
-
-
-def denoise_mp3(
-    input_path: str,
-    output_path: str = None,
-    sample_rate: int = 48000,
-    normalize: bool = True,
-    min_mix_ratio: float = 0.0,
-    max_mix_ratio: float = 0.0,
-    noise_profile_path: str = None
-):
-    """
-    Denoise MP3 file with optional noise profile, RNNoise, normalization, and mixing.
-
-    Processing pipeline:
-    1. Load MP3 and convert to mono 48kHz 16-bit PCM
-    2. (Optional) Apply spectral subtraction using noise profile
-    3. Denoise using RNNoise frame-by-frame (captures voice probabilities)
-    4. Normalize volume dynamically across the track
-    5. Optionally mix with original audio using voice-probability-based crossfading
-    6. Export as MP3 (192kbps)
-
-    Args:
-        input_path: Path to input MP3 file
-        output_path: Path to output MP3 file (if None, adds "_denoised" suffix)
-        sample_rate: Processing sample rate (default: 48000 Hz, RNNoise native rate)
-        normalize: Apply dynamic normalization (default: True)
-        min_mix_ratio: Minimum ratio of original audio when no voice (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice present (0.0-1.0)
-        noise_profile_path: Path to noise profile WAV file (optional)
-    """
-    input_path = Path(input_path)
-
-    if not input_path.exists():
-        raise FileNotFoundError(f"Input file not found: {input_path}")
-
-    if output_path is None:
-        output_path = input_path.parent / f"{input_path.stem}_denoised{input_path.suffix}"
-    else:
-        output_path = Path(output_path)
-
-    print(f"Processing started: {input_path}")
-
-    audio = AudioSegment.from_mp3(str(input_path))
-
-    # Ensure mono audio (RNNoise requirement)
+    audio = AudioSegment.from_file(str(path))
     if audio.channels > 1:
         audio = audio.set_channels(1)
-
-    # Resample to target rate if needed
-    if audio.frame_rate != sample_rate:
-        audio = audio.set_frame_rate(sample_rate)
-
-    # Ensure 16-bit PCM format
+    if audio.frame_rate != SAMPLE_RATE:
+        audio = audio.set_frame_rate(SAMPLE_RATE)
     audio = audio.set_sample_width(2)
-
-    # Create temporary WAV files for processing
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_input, \
-         tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_output:
-
-        temp_input_path = temp_input.name
-        temp_output_path = temp_output.name
-
-    try:
-        # Prepare audio data
-        audio_array = np.array(audio.get_array_of_samples(), dtype=np.int16)
-        audio_float = audio_array.astype(np.float32) / 32768.0
-        sf.write(temp_input_path, audio_float, sample_rate, subtype='PCM_16')
-        audio_data, _ = sf.read(temp_input_path, dtype='int16')
-        if len(audio_data.shape) > 1:
-            audio_data = audio_data[:, 0]
-
-        # Step 1: Apply spectral subtraction if noise profile provided
-        processed_audio = audio_data
-        if noise_profile_path and Path(noise_profile_path).exists():
-            print("Applying spectral subtraction with noise profile...")
-            noise_profile = load_noise_profile(noise_profile_path, sample_rate)
-
-            # Convert to float for spectral subtraction
-            audio_float_for_spectral = audio_data.astype(np.float32) / 32768.0
-            cleaned_audio_float = spectral_subtraction(
-                audio_float_for_spectral,
-                noise_profile,
-                sample_rate=sample_rate,
-                noise_factor=1.5,
-                floor_factor=0.002
-            )
-            # Convert back to int16 for RNNoise
-            processed_audio = (cleaned_audio_float * 32768.0).astype(np.int16)
-
-        # Step 2: Denoise with RNNoise and capture voice probabilities
-        print("Denoising with RNNoise...")
-        denoiser = RNNoise(sample_rate=sample_rate)
-        denoised_frames = []
-        voice_probabilities = []
-
-        for speech_prob, denoised_frame in denoiser.denoise_chunk(processed_audio, partial=True):
-            denoised_frames.append(denoised_frame)
-            voice_probabilities.append(speech_prob)
-
-        if not denoised_frames:
-            raise ValueError("No audio frames were denoised")
-        denoised_audio_data = np.concatenate([frame.flatten() for frame in denoised_frames])
-        voice_probabilities = np.array(voice_probabilities)
-
-        # Post-processing (Normalize and/or Mix)
-        if normalize:
-            print("Normalizing...")
-            denoised_audio_data = normalize_audio_evenly(
-                denoised_audio_data,
-                target_db=-5.0,
-                threshold_db=-40.0
-            )
-
-        # Mix with original using voice probability if min or max mix ratio is set
-        if min_mix_ratio > 0.0 or max_mix_ratio > 0.0:
-            print(f"Mixing with voice-based crossfading (min: {min_mix_ratio:.0%}, max: {max_mix_ratio:.0%})...")
-            min_len = min(len(audio_data), len(denoised_audio_data))
-            denoised_audio_data = smooth_mix_audio(
-                audio_data[:min_len],
-                denoised_audio_data[:min_len],
-                voice_probabilities,
-                min_mix_ratio,
-                max_mix_ratio,
-                transition_ms=50,
-                sample_rate=sample_rate
-            )
-
-        # Export to MP3
-        sf.write(temp_output_path, denoised_audio_data, sample_rate, subtype='PCM_16')
-        denoised_audio = AudioSegment.from_wav(temp_output_path)
-        denoised_audio.export(str(output_path), format="mp3", bitrate="192k")
-
-        print(f"Completed: {output_path}")
-
-    finally:
-        # Clean up temporary files
-        if os.path.exists(temp_input_path):
-            os.unlink(temp_input_path)
-        if os.path.exists(temp_output_path):
-            os.unlink(temp_output_path)
+    return np.array(audio.get_array_of_samples(), dtype=np.int16)
 
 
-def process_single_file(args):
+def _denoise_rnnoise(in_path, out_path, mix=False,
+                     mix_min=DEFAULT_MIX_MIN, mix_max=DEFAULT_MIX_MAX,
+                     mix_reference=None):
+    """RNNoise denoise (mono 48k), optionally blended back by voice probability.
+
+    `mix_reference` is what gets blended in (defaults to `in_path`). For the
+    chained strategy it's the TRUE original, while `in_path` is the afftdn-cleaned
+    intermediate — so the blend reintroduces a natural floor from the original,
+    not from the intermediate. Exports 128k mp3.
     """
-    Wrapper function to process a single file (for parallel processing).
+    from pyrnnoise import RNNoise
+    from pydub import AudioSegment
+    import soundfile as sf
+    import numpy as np
 
-    Args:
-        args: Tuple of (input_file, output_file, sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path)
+    audio_data = _load_int16_mono(in_path)
 
-    Returns:
-        Tuple of (input_file, success, error_message)
-    """
-    input_file, output_file, sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path = args
+    denoiser = RNNoise(sample_rate=SAMPLE_RATE)
+    frames, probs = [], []
+    for speech_prob, frame in denoiser.denoise_chunk(audio_data, partial=True):
+        frames.append(frame)
+        probs.append(speech_prob)
+    if not frames:
+        raise ValueError("No audio frames were denoised")
+    out_data = np.concatenate([f.flatten() for f in frames])
 
-    try:
-        denoise_mp3(
-            str(input_file),
-            str(output_file),
-            sample_rate=sample_rate,
-            normalize=normalize,
-            min_mix_ratio=min_mix_ratio,
-            max_mix_ratio=max_mix_ratio,
-            noise_profile_path=noise_profile_path
+    if mix:
+        ref = _load_int16_mono(mix_reference) if mix_reference else audio_data
+        n = min(len(ref), len(out_data))
+        out_data = smooth_mix_audio(
+            ref[:n], out_data[:n], np.array(probs),
+            mix_min, mix_max, sample_rate=SAMPLE_RATE,
         )
-        return (input_file, True, None)
-    except Exception as e:
-        return (input_file, False, str(e))
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as to_:
+        temp_out = to_.name
+    try:
+        sf.write(temp_out, out_data, SAMPLE_RATE, subtype="PCM_16")
+        AudioSegment.from_wav(temp_out).export(str(out_path), format="mp3", bitrate="128k")
+    finally:
+        if os.path.exists(temp_out):
+            os.unlink(temp_out)
 
 
-def find_and_process_files(
-    root_dir: str = ".",
-    sample_rate: int = 48000,
-    normalize: bool = True,
-    min_mix_ratio: float = 0.0,
-    max_mix_ratio: float = 0.0,
-    workers: int = 1,
-    noise_profile_path: str = None
-):
-    """
-    Recursively find all 'original.mp3' files and process them to 'clean.mp3'.
+def _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max):
+    """Chain: afftdn (gentle FFT clean) → RNNoise → blend the TRUE original back
+    by voice probability. afftdn first tames steady noise; RNNoise then handles
+    the rest; the original blended into pauses keeps a natural floor."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+        pre = tf.name
+    try:
+        _denoise_afftdn(in_path, pre, nr, nf)
+        _denoise_rnnoise(pre, out_path, mix=True, mix_min=mix_min, mix_max=mix_max,
+                         mix_reference=in_path)
+    finally:
+        if os.path.exists(pre):
+            os.unlink(pre)
 
-    Args:
-        root_dir: Root directory to start searching (default: current directory)
-        sample_rate: Processing sample rate (default: 48000 Hz)
-        normalize: Apply dynamic normalization (default: True)
-        min_mix_ratio: Minimum ratio of original audio when no voice (0.0-1.0)
-        max_mix_ratio: Maximum ratio of original audio when voice present (0.0-1.0)
-        workers: Number of parallel workers (default: 1, sequential processing)
-        noise_profile_path: Path to noise profile WAV file (optional)
-    """
-    root_path = Path(root_dir).resolve()
 
-    # Find all original.mp3 files recursively and sort them
-    original_files = sorted(root_path.rglob("original.mp3"))
+# ──────────────────────────── DeepFilterNet ────────────────────────────────
 
-    total = len(original_files)
+def _resolve_deep_filter_bin():
+    """Locate the standalone `deep-filter` binary (DeepFilterNet3, no torch):
+    $DEEP_FILTER_BIN, then PATH, then a copy sitting next to this script."""
+    cand = os.environ.get("DEEP_FILTER_BIN") or shutil.which("deep-filter")
+    if not cand:
+        sibling = Path(__file__).resolve().parent / "deep-filter"
+        if sibling.exists():
+            cand = str(sibling)
+    if not cand or not Path(cand).exists():
+        raise RuntimeError(
+            "deep-filter binary not found — set DEEP_FILTER_BIN, put it on PATH, "
+            "or drop it next to denoise_mp3.py "
+            "(github.com/Rikorose/DeepFilterNet releases)."
+        )
+    return cand
 
-    # Prepare arguments for each file
-    tasks = [
-        (input_file, input_file.parent / "clean.mp3", sample_rate, normalize, min_mix_ratio, max_mix_ratio, noise_profile_path)
-        for input_file in original_files
-    ]
 
-    with tqdm(total=total, desc="Overall Progress", unit="file", ncols=100) as pbar:
-        if workers == 1:
-            # Sequential processing
-            for task in tasks:
-                input_file = task[0]
-                relative_path = input_file.relative_to(root_path) if input_file.is_relative_to(root_path) else input_file
-                pbar.set_postfix_str(f"{relative_path}")
+def _run(cmd):
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-2000:]
+        raise RuntimeError(f"{cmd[0]} failed ({proc.returncode}): {tail}")
 
-                process_single_file(task)
-                pbar.update(1)
-        else:
-            # Parallel processing
-            with ProcessPoolExecutor(max_workers=workers) as executor:
-                futures = {executor.submit(process_single_file, task): task for task in tasks}
 
-                for future in as_completed(futures):
-                    input_file, success, error = future.result()
-                    relative_path = input_file.relative_to(root_path) if input_file.is_relative_to(root_path) else input_file
-                    pbar.set_postfix_str(f"{relative_path}")
-                    pbar.update(1)
+def _denoise_deepfilternet(in_path, out_path):
+    """DeepFilterNet3 via the standalone `deep-filter` Rust binary — no torch,
+    no Python ML deps, CPU-only, model weights embedded. Decode → 48k mono wav
+    → deep-filter → mono 128k mp3 (matches the other strategies' contract)."""
+    bin_path = _resolve_deep_filter_bin()
+    with tempfile.TemporaryDirectory() as td:
+        wav_in = os.path.join(td, "in.wav")
+        outdir = os.path.join(td, "out")
+        os.makedirs(outdir, exist_ok=True)
+        # DeepFilterNet operates at 48 kHz.
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(in_path),
+              "-ac", "1", "-ar", "48000", wav_in])
+        # deep-filter writes <basename>.wav into --output-dir (separate dir so
+        # it can't clobber the input).
+        _run([bin_path, "--output-dir", outdir, wav_in])
+        wav_out = os.path.join(outdir, "in.wav")
+        if not os.path.exists(wav_out):
+            raise RuntimeError("deep-filter produced no output")
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", wav_out,
+              "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)])
+
+
+# ─────────────────────────────── dispatch ──────────────────────────────────
+
+def denoise_one(in_path, out_path, strategy=DEFAULT_STRATEGY,
+                nr=DEFAULT_NR, nf=DEFAULT_NF,
+                mix_min=DEFAULT_MIX_MIN, mix_max=DEFAULT_MIX_MAX):
+    """Denoise one file with the chosen strategy. Raises on failure."""
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    if strategy == "afftdn":
+        _denoise_afftdn(in_path, out_path, nr, nf)
+    elif strategy == "rnnoise":
+        _denoise_rnnoise(in_path, out_path, mix=False)
+    elif strategy == "rnnoise-mix":
+        _denoise_rnnoise(in_path, out_path, mix=True, mix_min=mix_min, mix_max=mix_max)
+    elif strategy == "afftdn-rnnoise-mix":
+        _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max)
+    elif strategy == "deepfilternet":
+        _denoise_deepfilternet(in_path, out_path)
+    else:
+        raise ValueError(f"unknown strategy: {strategy!r} (one of {STRATEGIES})")
+
+
+def _process(args):
+    in_file, out_file, strategy, nr, nf, mix_min, mix_max = args
+    try:
+        denoise_one(in_file, out_file, strategy, nr, nf, mix_min, mix_max)
+        return (in_file, True, None)
+    except Exception as e:  # noqa: BLE001
+        return (in_file, False, str(e))
+
+
+def find_and_process_files(root_dir=".", strategy=DEFAULT_STRATEGY,
+                           nr=DEFAULT_NR, nf=DEFAULT_NF,
+                           mix_min=DEFAULT_MIX_MIN, mix_max=DEFAULT_MIX_MAX, workers=1):
+    """Recursively find 'original.mp3' files and denoise each to 'clean.mp3'."""
+    root = Path(root_dir).resolve()
+    originals = sorted(root.rglob("original.mp3"))
+    tasks = [(f, f.parent / "clean.mp3", strategy, nr, nf, mix_min, mix_max) for f in originals]
+    total, done = len(tasks), 0
+    if workers == 1:
+        for task in tasks:
+            in_file, ok, err = _process(task)
+            done += 1
+            print(f"[{done}/{total}] {in_file} {'ok' if ok else 'FAIL: ' + str(err)}")
+    else:
+        with ProcessPoolExecutor(max_workers=workers) as ex:
+            futures = {ex.submit(_process, t): t for t in tasks}
+            for fut in as_completed(futures):
+                in_file, ok, err = fut.result()
+                done += 1
+                print(f"[{done}/{total}] {in_file} {'ok' if ok else 'FAIL: ' + str(err)}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Recursively find 'original.mp3' files and denoise them to 'clean.mp3'",
+        description="Denoise audio with a selectable strategy. Single-file "
+                    "(--in/--out) or recursive (original.mp3 → clean.mp3).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python3.10 denoise_mp3.py
-  python3.10 denoise_mp3.py --root-dir /path/to/files
-  python3.10 denoise_mp3.py --sample-rate 48000
-  python3.10 denoise_mp3.py -n noise-profile.wav  # Use noise profile
-  python3.10 denoise_mp3.py --mix-min 5 --mix-max 25  # Voice-based mixing (5% no voice, 25% with voice)
-  python3.10 denoise_mp3.py --no-normalize  # Skip normalization
-  python3.10 denoise_mp3.py --workers 4  # Process 4 files in parallel
-  python3.10 denoise_mp3.py -n noise-profile.wav --mix-min 10 --mix-max 20 --workers 4  # Full pipeline
-        """
+  denoise_mp3.py -i in.mp3 -o clean.mp3                      # afftdn (default)
+  denoise_mp3.py -i in.mp3 -o clean.mp3 --strategy rnnoise
+  denoise_mp3.py -i in.mp3 -o clean.mp3 --strategy rnnoise-mix --mix-min 0.1 --mix-max 0.25
+  denoise_mp3.py --root-dir /path --workers 4 --nr 18
+        """,
     )
-
-    parser.add_argument(
-        "--root-dir",
-        help="Root directory to search for original.mp3 files (default: current directory)",
-        default="."
-    )
-
-    parser.add_argument(
-        "-s", "--sample-rate",
-        help="Sample rate for processing (default: 48000 Hz)",
-        type=int,
-        default=48000
-    )
-
-    parser.add_argument(
-        "--no-normalize",
-        help="Disable even volume normalization throughout the track",
-        action="store_true",
-        default=False
-    )
-
-    parser.add_argument(
-        "--mix-min",
-        help="Minimum mix percentage of original audio when no voice detected (0-100, default: 0)",
-        type=float,
-        default=0.0
-    )
-
-    parser.add_argument(
-        "--mix-max",
-        help="Maximum mix percentage of original audio when voice detected (0-100, default: 0)",
-        type=float,
-        default=0.0
-    )
-
-    parser.add_argument(
-        "-w", "--workers",
-        help="Number of parallel workers for processing files (default: 1, sequential)",
-        type=int,
-        default=1
-    )
-
-    parser.add_argument(
-        "-n", "--noise-profile",
-        help="Path to noise profile WAV file (e.g., noise-profile.wav)",
-        type=str,
-        default=None
-    )
-
+    parser.add_argument("--root-dir", default=".",
+                        help="Root to search for original.mp3 (default: cwd)")
+    parser.add_argument("-i", "--in", dest="in_path", default=None,
+                        help="Single-file mode: input path (requires --out).")
+    parser.add_argument("-o", "--out", dest="out_path", default=None,
+                        help="Single-file mode: output path (requires --in).")
+    parser.add_argument("--strategy", choices=STRATEGIES, default=DEFAULT_STRATEGY,
+                        help=f"Cleaning strategy (default {DEFAULT_STRATEGY}).")
+    parser.add_argument("--nr", type=float, default=DEFAULT_NR,
+                        help=f"afftdn: noise reduction in dB (default {DEFAULT_NR}).")
+    parser.add_argument("--nf", type=float, default=DEFAULT_NF,
+                        help=f"afftdn: noise floor in dB (default {DEFAULT_NF}).")
+    parser.add_argument("--mix-min", type=float, default=DEFAULT_MIX_MIN,
+                        help=f"rnnoise-mix: original ratio in pauses (default {DEFAULT_MIX_MIN}).")
+    parser.add_argument("--mix-max", type=float, default=DEFAULT_MIX_MAX,
+                        help=f"rnnoise-mix: original ratio on voice (default {DEFAULT_MIX_MAX}).")
+    parser.add_argument("-w", "--workers", type=int, default=1,
+                        help="Parallel workers for recursive mode (default 1).")
     args = parser.parse_args()
 
-    # Convert mix percentages to 0.0-1.0 range
-    min_mix = max(0.0, min(100.0, args.mix_min)) / 100.0
-    max_mix = max(0.0, min(100.0, args.mix_max)) / 100.0
+    if args.in_path or args.out_path:
+        if not (args.in_path and args.out_path):
+            parser.error("--in and --out must be used together")
+        denoise_one(args.in_path, args.out_path, args.strategy,
+                    args.nr, args.nf, args.mix_min, args.mix_max)
+        return
 
-    find_and_process_files(
-        root_dir=args.root_dir,
-        sample_rate=args.sample_rate,
-        normalize=not args.no_normalize,
-        min_mix_ratio=min_mix,
-        max_mix_ratio=max_mix,
-        workers=args.workers,
-        noise_profile_path=args.noise_profile
-    )
+    find_and_process_files(args.root_dir, args.strategy, args.nr, args.nf,
+                           args.mix_min, args.mix_max, args.workers)
 
 
 if __name__ == "__main__":

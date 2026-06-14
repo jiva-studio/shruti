@@ -24,6 +24,7 @@ function track(variants: Array<{ language: string; title: string }>): Track {
       trackId: "t" as TrackId,
       language: v.language as Track["variants"][number]["language"],
       title: v.title,
+      audios: [],
       audio: null,
       transcript: null,
     })),

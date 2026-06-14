@@ -17,6 +17,7 @@ import (
 
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
@@ -59,6 +60,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
 	openrouterimage "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
+	execdenoise "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/denoise/exec"
 	sqlitelibrary "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/infra/metadata/canonical"
@@ -447,6 +449,12 @@ func main() {
 			Registry:   registry,
 			Audio:      audioStore,
 			Normalizer: ffTool,
+		},
+		AudioDenoise: audiodenoise.UseCase{
+			Audio:    audioStore,
+			Probe:    ffTool,
+			Denoiser: execdenoise.New(cfg.Denoiser.PythonBin, cfg.Denoiser.Script),
+			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
 		},
 		Catalog: tools.CatalogDeps{
 			Refresh: catalogrefresh.UseCase{

@@ -93,6 +93,27 @@ func (l *Lazy) GetVariant(ctx context.Context, trackID, language string) (catalo
 	return r.GetVariant(ctx, trackID, language)
 }
 
+func (l *Lazy) GetAudios(ctx context.Context, trackID, language string) ([]catalog.AudioRow, error) {
+	r, err := l.open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return r.GetAudios(ctx, trackID, language)
+}
+
+func (l *Lazy) UpsertAudio(ctx context.Context, a catalog.AudioRow) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.UpsertAudio(ctx, a); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
 func (l *Lazy) GetReferences(ctx context.Context, trackID string) ([]catalog.TrackReference, error) {
 	r, err := l.open(ctx)
 	if err != nil {
@@ -158,13 +179,13 @@ func (l *Lazy) DeleteDict(ctx context.Context, kind catalog.Kind, id string) err
 	}
 	return markModified(l.Path)
 }
-func (l *Lazy) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, refs []catalog.TrackReference) error {
+func (l *Lazy) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error {
 	r, err := l.open(ctx)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	if err := r.SaveTrack(ctx, t, v, refs); err != nil {
+	if err := r.SaveTrack(ctx, t, v, audios, refs); err != nil {
 		return err
 	}
 	return markModified(l.Path)

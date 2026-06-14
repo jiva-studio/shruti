@@ -11,7 +11,7 @@ import (
 
 // SaveTrack performs the atomic UPSERT for tracks + track_variants +
 // track_references + tracks_search FTS row. Replaces ErrReadOnly stub.
-func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, refs []catalog.TrackReference) error {
+func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -50,22 +50,35 @@ func (r *Repo) SaveTrackImpl(ctx context.Context, t catalog.TrackRow, v catalog.
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO track_variants (track_id, language, title, audio_path, audio_filesize,
-			audio_duration, audio_kind, transcript_path, transcript_kind, sort_reference)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO track_variants (track_id, language, title,
+			transcript_path, transcript_kind, sort_reference)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(track_id, language) DO UPDATE SET
 			title           = excluded.title,
-			audio_path      = excluded.audio_path,
-			audio_filesize  = excluded.audio_filesize,
-			audio_duration  = excluded.audio_duration,
-			audio_kind      = excluded.audio_kind,
 			transcript_path = excluded.transcript_path,
 			transcript_kind = excluded.transcript_kind,
 			sort_reference  = excluded.sort_reference`,
-		v.TrackID, v.Language, v.Title, v.AudioPath, v.AudioFilesize,
-		v.AudioDuration, v.AudioKind, v.TranscriptPath, v.TranscriptKind, v.SortReference)
+		v.TrackID, v.Language, v.Title, v.TranscriptPath, v.TranscriptKind, v.SortReference)
 	if err != nil {
 		return fmt.Errorf("upsert track_variants: %w", err)
+	}
+
+	// Replace this variant's audio versions in full.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM track_audio WHERE track_id = ? AND language = ?`,
+		v.TrackID, v.Language); err != nil {
+		return fmt.Errorf("delete track_audio: %w", err)
+	}
+	for _, a := range audios {
+		if a.Path == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO track_audio (track_id, language, kind, path, filesize, duration)
+			VALUES (?, ?, ?, ?, ?, ?)`,
+			a.TrackID, a.Language, a.Kind, a.Path, a.Filesize, a.Duration); err != nil {
+			return fmt.Errorf("insert track_audio[%s]: %w", a.Kind, err)
+		}
 	}
 
 	// Replace track_references in full.
@@ -280,6 +293,14 @@ func (r *Repo) DeleteTrackVariantImpl(ctx context.Context, trackID, language str
 	}
 	defer tx.Rollback()
 
+	// track_audio is FK ON DELETE CASCADE off track_variants, but delete it
+	// explicitly too — matching the sibling child tables below and not relying
+	// on PRAGMA foreign_keys being on for this connection.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM track_audio WHERE track_id = ? AND language = ?`,
+		trackID, language); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM track_variants WHERE track_id = ? AND language = ?`,
 		trackID, language); err != nil {

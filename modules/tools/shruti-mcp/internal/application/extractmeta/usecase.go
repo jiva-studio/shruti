@@ -138,7 +138,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, srcPath string) (res Res
 	}
 
 	// 2. Audio probe on the canonical file.
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	info, err := uc.Probe.Probe(ctx, audioPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("ffprobe %s: %w (run audio_normalize first?)", audioPath, err)
