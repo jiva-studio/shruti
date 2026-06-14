@@ -4,6 +4,7 @@ export default {
   filtersButton: "Filters",
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
+  lecturesTitle: "Lectures",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
@@ -48,5 +49,15 @@ export default {
     sortByDateDesc: "Date (newest first)",
     sortByDateAsc: "Date (oldest first)",
     sortByReference: "By reference",
+  },
+  collections: {
+    addAll: "Add collection",
+    trackCount: "Lectures: {count}",
+    addError: "Couldn’t add the collection",
+    addConfirm: "Add {count} lecture to the playlist? | Add {count} lectures to the playlist?",
+    others: "Other collections",
+    all: "All collections",
+    seeAll: "See all",
+    seeAllNamed: "See all: {name}",
   },
 }

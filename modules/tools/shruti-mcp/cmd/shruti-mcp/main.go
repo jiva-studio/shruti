@@ -18,9 +18,12 @@ import (
 	adminconfigapp "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	alignpdfuc "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/authorprofile"
+	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
-	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/packcrud"
 	catalogproactive "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
 	catalogpublish "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	catalogrefresh "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/application/catalog/refresh"
@@ -54,6 +57,7 @@ import (
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/glossary"
 	sha256hash "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/hashing/sha256"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/ids/nanoid"
+	openrouterimage "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/imagegen/openrouter"
 	sqliteregistry "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/lakeregistry/sqlite"
 	sqlitelibrary "github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/library/sqlite"
 	"github.com/akdasa-studios/shruti/modules/tools/shruti-mcp/internal/infra/loudness/ffmpeg"
@@ -382,6 +386,53 @@ func main() {
 		OutDir:      cfg.Out,
 	}
 
+	// One AWS uploader shared by the asset-writing tools (collection covers,
+	// author avatars). Built whenever a bucket is configured, independent of
+	// the image-generation API key.
+	var assetUploader s3port.Uploader
+	if cfg.S3.AWS.Bucket != "" {
+		up, err := awss3.New(ctx, awss3.Target{
+			Name:            "aws",
+			Bucket:          cfg.S3.AWS.Bucket,
+			Region:          cfg.S3.AWS.Region,
+			Endpoint:        cfg.S3.AWS.Endpoint,
+			AccessKeyID:     cfg.S3.AWS.AccessKeyID,
+			SecretAccessKey: cfg.S3.AWS.SecretAccessKey,
+			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
+		})
+		if err != nil {
+			log.Fatalf("asset uploader: %v", err)
+		}
+		assetUploader = up
+	}
+
+	// Collection cover generation (optional — disabled when images.api_key is
+	// empty). Uploads generated covers to the AWS bucket at generate time.
+	var coverGen collectioncover.UseCase
+	if cfg.Images.APIKey != "" && assetUploader != nil {
+		imgClient, err := openrouterimage.New(openrouterimage.Config{
+			Endpoint: cfg.Images.Endpoint,
+			APIKey:   cfg.Images.APIKey,
+			Model:    cfg.Images.Model,
+		})
+		if err != nil {
+			log.Fatalf("image generator: %v", err)
+		}
+		coverGen = collectioncover.UseCase{
+			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+			Images:   imgClient,
+			Uploader: assetUploader,
+			Style:    cfg.Images.Style,
+		}
+	}
+
+	// Author avatar/bio (avatar upload disabled when no S3 bucket; bio set
+	// works regardless since it only writes the catalog DB).
+	authorProfile := authorprofile.UseCase{
+		Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+		Uploader: assetUploader,
+	}
+
 	deps := tools.Deps{
 		Registry:    registry,
 		Transcripts: transcriptStore,
@@ -490,12 +541,20 @@ func main() {
 				Minter:     minter,
 			},
 		},
-		PackCRUD: tools.PackCRUDDeps{
-			UseCase: packcrud.UseCase{
+		CollectionCRUD: tools.CollectionCRUDDeps{
+			UseCase: collectioncrud.UseCase{
+				Catalog: sqlitecatalog.NewLazy(currentDBPath),
+				Minter:  minter,
+			},
+			Cover: coverGen,
+		},
+		CollectionGroupCRUD: tools.CollectionGroupCRUDDeps{
+			UseCase: collectiongroupcrud.UseCase{
 				Catalog: sqlitecatalog.NewLazy(currentDBPath),
 				Minter:  minter,
 			},
 		},
+		AuthorProfile: tools.AuthorProfileDeps{UseCase: authorProfile},
 		Find: tools.FindDeps{
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
 			Resolver: resolverChain,
