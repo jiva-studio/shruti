@@ -2,11 +2,17 @@
   <IonPage>
     <FlatHeader>
       <IonToolbar>
-        <IonButtons slot="start">
-          <IonBackButton default-href="/tabs/search" />
-        </IonButtons>
         <div class="search-row">
-          <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
+          <SearchInput
+            v-model="search.query.value"
+            :placeholder="$t('app.search')"
+            :leading-label="$t('app.back')"
+            @leading-click="onBack"
+          >
+            <template #leading>
+              <IconArrowLeft :size="22" />
+            </template>
+          </SearchInput>
           <SearchFiltersButton
             class="search-row-filter-button"
             :active="search.activeFilterCount.value > 0"
@@ -48,8 +54,6 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonButtons,
   IonContent,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
@@ -58,6 +62,8 @@ import {
   IonToolbar,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
+import { useRouter } from "vue-router"
+import { IconArrowLeft } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
@@ -68,7 +74,12 @@ import {
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useSearchController } from "@shruti/views/Search/SearchView.controller.js"
 
+const router = useRouter()
 const search = useSearchController()
+
+function onBack(): void {
+  router.back()
+}
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
   await search.loadMore()
