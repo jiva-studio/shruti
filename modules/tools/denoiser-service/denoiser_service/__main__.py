@@ -17,7 +17,7 @@ import time
 import uvicorn
 
 from .app import create_app
-from .runner import Runner, default_noise_profile, resolve_script
+from .runner import Runner, resolve_script
 from .store import Store
 from .worker import Worker
 
@@ -51,7 +51,6 @@ def main(argv: list[str] | None = None) -> int:
     runner = Runner(
         python=args.python,
         script=script,
-        noise_profile=default_noise_profile(script),
     )
     log.info("denoiser script: %s (python=%s)", script, args.python)
     if not runner.ready():

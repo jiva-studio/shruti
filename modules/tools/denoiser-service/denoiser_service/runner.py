@@ -20,7 +20,6 @@ from .models import DenoiseParams
 class Runner:
     python: str          # interpreter that has the denoise deps installed
     script: str          # path to denoise_mp3.py
-    noise_profile: str    # path to noise-profile.wav (for params.noise_profile=True)
     ffprobe: str = "ffprobe"
 
     def ready(self) -> bool:
@@ -40,19 +39,18 @@ class Runner:
 
     def denoise(self, in_path: str, out_path: str, params: DenoiseParams,
                 timeout: float) -> None:
-        """Run denoise_mp3.py single-file mode. Raises RuntimeError on failure."""
+        """Run denoise_mp3.py single-file mode with the chosen strategy.
+        Raises RuntimeError on failure."""
         args = [
             self.python, self.script,
             "--in", in_path,
             "--out", out_path,
-            "--sample-rate", str(params.sample_rate),
+            "--strategy", params.strategy,
+            "--nr", str(params.nr),
+            "--nf", str(params.nf),
+            "--mix-min", str(params.mix_min),
+            "--mix-max", str(params.mix_max),
         ]
-        if not params.normalize:
-            args.append("--no-normalize")
-        if params.noise_profile:
-            if not Path(self.noise_profile).is_file():
-                raise RuntimeError(f"noise profile not found: {self.noise_profile}")
-            args += ["--noise-profile", self.noise_profile]
 
         proc = subprocess.run(
             args, capture_output=True, text=True, timeout=timeout,
@@ -79,7 +77,3 @@ def resolve_script(flag: Optional[str]) -> str:
         "could not locate denoise_mp3.py; pass --denoiser-script explicitly "
         f"(looked in {candidate})"
     )
-
-
-def default_noise_profile(script_path: str) -> str:
-    return str(Path(script_path).parent / "noise-profile.wav")
