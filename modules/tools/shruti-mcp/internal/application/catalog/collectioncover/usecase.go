@@ -22,7 +22,7 @@ import (
 // Catalog is the slice of the collection repository this use case needs.
 type Catalog interface {
 	GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error)
-	UpdateCollectionLocale(ctx context.Context, id, language string, name, cover, description, meta *string, sortOrder *int) error
+	SetCollectionCover(ctx context.Context, id, cover string) error
 }
 
 // UseCase wires the collection repo, the image generator and the S3 uploader.
@@ -70,12 +70,10 @@ func (uc UseCase) Generate(ctx context.Context, id, language, extra string) (str
 		return "", fmt.Errorf("upload cover: %w", err)
 	}
 
-	// The art is language-neutral — record the same key on every locale.
-	for lang := range c.Names {
-		k := key
-		if err := uc.Catalog.UpdateCollectionLocale(ctx, id, lang, nil, &k, nil, nil, nil); err != nil {
-			return "", fmt.Errorf("set cover on %s/%s: %w", id, lang, err)
-		}
+	// The art is language-neutral — record the same key on every locale in one
+	// statement so the locales can't end up pointing at different covers.
+	if err := uc.Catalog.SetCollectionCover(ctx, id, key); err != nil {
+		return "", fmt.Errorf("set cover on %s: %w", id, err)
 	}
 	return key, nil
 }

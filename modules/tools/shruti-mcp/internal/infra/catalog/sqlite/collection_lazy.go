@@ -32,6 +32,18 @@ func (l *Lazy) UpdateCollectionLocale(ctx context.Context, id, language string, 
 	return markModified(l.Path)
 }
 
+func (l *Lazy) SetCollectionCover(ctx context.Context, id, cover string) error {
+	r, err := l.open(ctx)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := r.SetCollectionCover(ctx, id, cover); err != nil {
+		return err
+	}
+	return markModified(l.Path)
+}
+
 func (l *Lazy) GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
 	r, err := l.open(ctx)
 	if err != nil {

@@ -522,6 +522,16 @@ func (r *Repo) UpdateCollectionLocale(ctx context.Context, id, language string, 
 		return r.UpdateCollectionLocaleImpl(ctx, id, language, name, cover, description, meta, sortOrder)
 	})
 }
+
+// SetCollectionCover sets the cover key on every locale of a collection in a
+// single statement, so the locales never end up pointing at different covers.
+func (r *Repo) SetCollectionCover(ctx context.Context, id, cover string) error {
+	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
+		_, err := r.db.ExecContext(ctx, `UPDATE collections SET cover = ? WHERE id = ?`, cover, id)
+		return err
+	})
+}
+
 func (r *Repo) GetCollection(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
 	return r.GetCollectionImpl(ctx, id)
 }
