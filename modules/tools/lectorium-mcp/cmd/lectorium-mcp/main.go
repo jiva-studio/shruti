@@ -20,6 +20,7 @@ import (
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/audiotag"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncover"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectioncrud"
+	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/authorprofile"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/configpublish"
 	"github.com/akdasa-studios/lectorium/modules/tools/lectorium-mcp/internal/application/catalog/dictcrud"
@@ -385,19 +386,12 @@ func main() {
 		OutDir:      cfg.Out,
 	}
 
-	// Collection cover generation (optional — disabled when images.api_key is
-	// empty). Uploads generated covers to the AWS bucket at generate time.
-	var coverGen collectioncover.UseCase
-	if cfg.Images.APIKey != "" && cfg.S3.AWS.Bucket != "" {
-		imgClient, err := openrouterimage.New(openrouterimage.Config{
-			Endpoint: cfg.Images.Endpoint,
-			APIKey:   cfg.Images.APIKey,
-			Model:    cfg.Images.Model,
-		})
-		if err != nil {
-			log.Fatalf("image generator: %v", err)
-		}
-		coverUploader, err := awss3.New(ctx, awss3.Target{
+	// One AWS uploader shared by the asset-writing tools (collection covers,
+	// author avatars). Built whenever a bucket is configured, independent of
+	// the image-generation API key.
+	var assetUploader s3port.Uploader
+	if cfg.S3.AWS.Bucket != "" {
+		up, err := awss3.New(ctx, awss3.Target{
 			Name:            "aws",
 			Bucket:          cfg.S3.AWS.Bucket,
 			Region:          cfg.S3.AWS.Region,
@@ -407,14 +401,36 @@ func main() {
 			ForcePathStyle:  cfg.S3.AWS.ForcePathStyle,
 		})
 		if err != nil {
-			log.Fatalf("cover uploader: %v", err)
+			log.Fatalf("asset uploader: %v", err)
+		}
+		assetUploader = up
+	}
+
+	// Collection cover generation (optional — disabled when images.api_key is
+	// empty). Uploads generated covers to the AWS bucket at generate time.
+	var coverGen collectioncover.UseCase
+	if cfg.Images.APIKey != "" && assetUploader != nil {
+		imgClient, err := openrouterimage.New(openrouterimage.Config{
+			Endpoint: cfg.Images.Endpoint,
+			APIKey:   cfg.Images.APIKey,
+			Model:    cfg.Images.Model,
+		})
+		if err != nil {
+			log.Fatalf("image generator: %v", err)
 		}
 		coverGen = collectioncover.UseCase{
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
 			Images:   imgClient,
-			Uploader: coverUploader,
+			Uploader: assetUploader,
 			Style:    cfg.Images.Style,
 		}
+	}
+
+	// Author avatar/bio (avatar upload disabled when no S3 bucket; bio set
+	// works regardless since it only writes the catalog DB).
+	authorProfile := authorprofile.UseCase{
+		Catalog:  sqlitecatalog.NewLazy(currentDBPath),
+		Uploader: assetUploader,
 	}
 
 	deps := tools.Deps{
@@ -538,6 +554,7 @@ func main() {
 				Minter:  minter,
 			},
 		},
+		AuthorProfile: tools.AuthorProfileDeps{UseCase: authorProfile},
 		Find: tools.FindDeps{
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
 			Resolver: resolverChain,

@@ -5,6 +5,7 @@
       :key="c.id"
       :name="c.name"
       :cover-url="c.coverUrl"
+      :author-image-urls="c.authorImageUrls"
       @click="emit('select', c.id)"
     />
   </div>
@@ -22,6 +23,8 @@ export interface CarouselItem {
   readonly id: string
   readonly name: string
   readonly coverUrl?: string
+  /** Author avatars, shown as overlapping circles on the card. */
+  readonly authorImageUrls?: readonly string[]
 }
 
 defineProps<{ items: readonly CarouselItem[] }>()
