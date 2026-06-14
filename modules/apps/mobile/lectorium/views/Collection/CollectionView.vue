@@ -1,23 +1,15 @@
 <template>
-  <IonModal
-    class="collection-dialog"
-    :is-open="open"
-    :breakpoints="[0, 0.75, 1]"
-    :initial-breakpoint="0.75"
-    @did-dismiss="onDismiss"
-  >
-    <Header>
+  <IonPage>
+    <IonHeader>
       <IonToolbar>
-        <IonTitle>{{ detail?.name ?? "" }}</IonTitle>
-        <IonButtons slot="end">
-          <IonButton shape="round" size="small" @click="open = false">
-            {{ t("app.close") }}
-          </IonButton>
+        <IonButtons slot="start">
+          <IonBackButton default-href="/tabs/search" />
         </IonButtons>
+        <IonTitle>{{ detail?.name ?? "" }}</IonTitle>
       </IonToolbar>
-    </Header>
+    </IonHeader>
 
-    <IonContent>
+    <IonContent :fullscreen="true">
       <p v-if="detail?.description" class="description">{{ detail.description }}</p>
       <TracksList :rows="rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
@@ -35,18 +27,27 @@
         </IonButton>
       </div>
     </IonContent>
-  </IonModal>
+  </IonPage>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
-import { IonButton, IonButtons, IonContent, IonModal, IonTitle, IonToolbar } from "@ionic/vue"
-import { Header } from "@ui/primitives/index.js"
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue"
 import { TracksList, type UiTrackRow } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useLectorium } from "@lectorium/lectorium.js"
 import { usePlaylistStore } from "@lectorium/stores/usePlaylistStore.js"
+import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
 import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import { addTracksToPlaylist } from "@lib/application"
@@ -55,18 +56,7 @@ import type { TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
 import type { CollectionDetail } from "@infra/repositories/sql/index.js"
 
-/**
- * Collection-detail sheet (75% breakpoint) opened from the Search carousel:
- * header with the collection name, the ordered list of its tracks, and a footer
- * "Add collection". Tapping a track opens the standard per-track action sheet
- * (add / download / PDF / …) — same as the library — rather than playing it.
- */
-const open = defineModel<boolean>("open", { required: true, default: false })
-
-const props = defineProps<{
-  collectionId: string | null
-  locale: string
-}>()
+const props = defineProps<{ id: string }>()
 
 const { t } = useI18n()
 const app = useLectorium()
@@ -74,6 +64,7 @@ const playlist = usePlaylistStore()
 const toast = useToast()
 const mapper = useTrackUiStateMapper()
 const trackActions = useTrackActionSheet()
+const appLanguage = useAppLanguage()
 
 const detail = ref<CollectionDetail | null>(null)
 const tracks = ref<readonly Track[]>([])
@@ -94,23 +85,17 @@ async function load(id: string, locale: string): Promise<void> {
       .map((tid) => byId.get(tid))
       .filter((tr): tr is Track => tr !== undefined)
   } catch (err) {
-    console.warn("[collection-detail] load failed", err)
+    console.warn("[collection] load failed", err)
     detail.value = null
     tracks.value = []
   }
 }
 
 watch(
-  () => [open.value, props.collectionId] as const,
-  ([isOpen, id]) => {
-    if (isOpen && id) void load(id, props.locale)
-  },
+  () => [props.id, appLanguage.value] as const,
+  ([id, locale]) => void load(id, locale),
   { immediate: true }
 )
-
-function onDismiss(): void {
-  open.value = false
-}
 
 async function onSelectTrack(trackId: string): Promise<void> {
   await trackActions.present(trackId as TrackId)
@@ -124,11 +109,7 @@ async function onAdd(): Promise<void> {
       { trackIds: [...detail.value.trackIds] },
       { playlist: { add: (id) => playlist.add(id) } }
     )
-    if (!result.ok) {
-      void toast.error(t("search.collections.addError"))
-    } else {
-      open.value = false
-    }
+    if (!result.ok) void toast.error(t("search.collections.addError"))
   } catch {
     void toast.error(t("search.collections.addError"))
   } finally {
@@ -150,21 +131,7 @@ async function onAdd(): Promise<void> {
   padding: 8px 12px 16px;
 }
 
-/* Flat add button — no Material elevation. */
 .add-button {
   --box-shadow: none;
-}
-</style>
-
-<style>
-/* Flatten the Material elevation/hairline under the header so the sheet reads
-   flat (matches HelpDialog). */
-.collection-dialog ion-header,
-.collection-dialog ion-header::after {
-  box-shadow: none !important;
-  background-image: none;
-}
-.collection-dialog ion-header::after {
-  display: none;
 }
 </style>
