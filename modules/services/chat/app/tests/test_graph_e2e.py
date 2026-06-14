@@ -22,6 +22,7 @@ from lectorium_chat.agent.graph import build_chat_graph
 from lectorium_chat.agent.marker_expander import MarkerExpander
 from lectorium_chat.agent.turn_aliases import TurnAliasMap
 from lectorium_chat.domain.entities import CompletionChunk, Message
+from lectorium_chat.application.followup_rewrite import FollowupRewrite
 from lectorium_chat.domain.routing import RoutingDecision
 from lectorium_chat.agent.graph.turn_context import TurnContext
 
@@ -49,6 +50,11 @@ class FakeLLM:
         callbacks: list[Any] | None = None,
         run_name: str | None = None,
     ) -> T:
+        # The pre-router follow-up rewrite shares this LLM. Return an empty
+        # passthrough (→ caller keeps the original query) WITHOUT consuming a
+        # scripted router_response, so the router script stays in sequence.
+        if schema is FollowupRewrite:
+            return FollowupRewrite(query="")  # type: ignore[return-value]
         resp = self.router_responses[self._ridx]
         self._ridx += 1
         assert isinstance(resp, schema)
