@@ -19,18 +19,18 @@
 
     <IonContent>
       <div v-if="authors.length" class="author-header">
-        <span class="author-pile">
-          <AuthorAvatar
-            v-for="(url, i) in authorAvatarUrls"
-            :key="i"
-            :url="url"
-            :alt="authorNames"
-          />
-        </span>
-        <div class="author-text">
-          <div class="author-names">{{ authorNames }}</div>
-          <p v-if="primaryBio" class="author-bio">{{ primaryBio }}</p>
+        <div class="author-id">
+          <span class="author-pile">
+            <AuthorAvatar
+              v-for="(url, i) in authorAvatarUrls"
+              :key="i"
+              :url="url"
+              :alt="authorNames"
+            />
+          </span>
+          <span class="author-names">{{ authorNames }}</span>
         </div>
+        <p v-if="primaryBio" class="author-bio">{{ primaryBio }}</p>
       </div>
       <p v-if="detail?.description" class="description">{{ detail.description }}</p>
       <TracksList :rows="rows" @select="onSelectTrack">
@@ -172,12 +172,15 @@ async function onAdd(): Promise<void> {
 </script>
 
 <style scoped>
-/* Author header: avatar pile + name(s) + short bio, above the description. */
+/* Author header: a row of avatar pile + name(s), with the short bio below. */
 .author-header {
+  padding: 14px 16px 4px;
+}
+
+.author-id {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px 4px;
 }
 
 .author-pile {
@@ -191,10 +194,6 @@ async function onAdd(): Promise<void> {
   margin-left: -16px;
 }
 
-.author-text {
-  min-width: 0;
-}
-
 .author-names {
   font-size: 15px;
   font-weight: 600;
@@ -202,9 +201,9 @@ async function onAdd(): Promise<void> {
 }
 
 .author-bio {
-  margin: 2px 0 0;
+  margin: 10px 0 0;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: var(--ion-color-medium-shade);
 }
 
