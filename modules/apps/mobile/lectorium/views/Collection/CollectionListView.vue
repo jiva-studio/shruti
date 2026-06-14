@@ -10,6 +10,7 @@
     </FlatHeader>
 
     <IonContent :fullscreen="true">
+      <p v-if="description" class="group-description">{{ description }}</p>
       <div class="list">
         <CollectionListItem
           v-for="c in collections"
@@ -51,6 +52,7 @@ interface Row {
 }
 
 const title = ref("")
+const description = ref("")
 const collections = ref<readonly Row[]>([])
 
 function coverUrl(cover: string): string | undefined {
@@ -61,12 +63,15 @@ function coverUrl(cover: string): string | undefined {
 
 async function load(groupId: string | undefined, locale: string): Promise<void> {
   title.value = ""
+  description.value = ""
   collections.value = []
   try {
     const repos = app.repositories()
     if (groupId) {
       const groups = await repos.collections.listGroups(locale)
-      title.value = groups.find((g) => g.id === groupId)?.name ?? ""
+      const group = groups.find((g) => g.id === groupId)
+      title.value = group?.name ?? ""
+      description.value = group?.description ?? ""
       const cols = await repos.collections.getGroupCollections(groupId, locale)
       collections.value = cols.map((c) => ({
         id: c.id,
@@ -102,6 +107,14 @@ function openCollection(id: string): void {
 </script>
 
 <style scoped>
+.group-description {
+  margin: 0;
+  padding: 12px 16px 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ion-color-medium-shade);
+}
+
 .list {
   padding: 8px 0 16px;
 }
