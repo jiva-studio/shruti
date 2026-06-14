@@ -46,26 +46,28 @@ func (c *Client) GetHealth(ctx context.Context) (*Health, error) {
 
 // CreateJob queues a denoise job. Returns the new job id.
 func (c *Client) CreateJob(ctx context.Context, req CreateJobRequest) (*CreateJobResponse, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.BaseURL+"/jobs", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTP.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return nil, c.unexpectedStatus(resp)
-	}
 	var out CreateJobResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.postJSON(ctx, "/jobs", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CreateBatch fan-out: queue many jobs in one call (explicit items or enumerate
+// from a source bucket/prefix). Returns the created job ids.
+func (c *Client) CreateBatch(ctx context.Context, req BatchRequest) (*BatchResponse, error) {
+	var out BatchResponse
+	if err := c.postJSON(ctx, "/jobs/batch", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListObjects enumerates a source bucket/prefix via the service (which holds no
+// creds — they're passed through in the request).
+func (c *Client) ListObjects(ctx context.Context, req ListObjectsRequest) (*ListObjectsResponse, error) {
+	var out ListObjectsResponse
+	if err := c.postJSON(ctx, "/source/list", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -125,6 +127,34 @@ func (c *Client) DeleteJob(ctx context.Context, jobID string) error {
 }
 
 // --- internals ---
+
+func (c *Client) postJSON(ctx context.Context, path string, in, into any) error {
+	body, err := json.Marshal(in)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path,
+		bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		return json.NewDecoder(resp.Body).Decode(into)
+	case http.StatusNotFound:
+		return ErrNotFound
+	case http.StatusConflict:
+		return ErrConflict
+	default:
+		return c.unexpectedStatus(resp)
+	}
+}
 
 func (c *Client) getJSON(ctx context.Context, path string, into any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)

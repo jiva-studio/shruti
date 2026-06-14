@@ -12,15 +12,23 @@ import (
 // --- mock JobClient ---
 
 type mockClient struct {
-	createFn    func(ctx context.Context, req client.CreateJobRequest) (*client.CreateJobResponse, error)
-	getJobFn    func(ctx context.Context, jobID string) (*client.Job, error)
-	listJobsFn  func(ctx context.Context, status string, limit int) ([]*client.Job, error)
-	deleteFn    func(ctx context.Context, jobID string) error
-	getHealthFn func(ctx context.Context) (*client.Health, error)
+	createFn      func(ctx context.Context, req client.CreateJobRequest) (*client.CreateJobResponse, error)
+	createBatchFn func(ctx context.Context, req client.BatchRequest) (*client.BatchResponse, error)
+	listObjectsFn func(ctx context.Context, req client.ListObjectsRequest) (*client.ListObjectsResponse, error)
+	getJobFn      func(ctx context.Context, jobID string) (*client.Job, error)
+	listJobsFn    func(ctx context.Context, status string, limit int) ([]*client.Job, error)
+	deleteFn      func(ctx context.Context, jobID string) error
+	getHealthFn   func(ctx context.Context) (*client.Health, error)
 }
 
 func (m *mockClient) CreateJob(ctx context.Context, req client.CreateJobRequest) (*client.CreateJobResponse, error) {
 	return m.createFn(ctx, req)
+}
+func (m *mockClient) CreateBatch(ctx context.Context, req client.BatchRequest) (*client.BatchResponse, error) {
+	return m.createBatchFn(ctx, req)
+}
+func (m *mockClient) ListObjects(ctx context.Context, req client.ListObjectsRequest) (*client.ListObjectsResponse, error) {
+	return m.listObjectsFn(ctx, req)
 }
 func (m *mockClient) GetJob(ctx context.Context, id string) (*client.Job, error) {
 	return m.getJobFn(ctx, id)

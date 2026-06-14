@@ -43,6 +43,8 @@ S3 config can be preloaded from env: `DENOISER_S3_BUCKET`,
 | `set_s3_config` | Set upload bucket + credentials (+ region/endpoint/acl) at runtime. |
 | `get_s3_config` | Show the current S3 config (secret masked). |
 | `denoise_wait` | Queue a job (`source_url` → `dest_key`) and long-poll until done. `timeout_s=0` enqueues and returns the id. |
+| `denoise_batch` | Fan out hundreds/thousands of jobs in one call. Non-blocking. Enumerate a `source_prefix` (service lists + presigns each file) or pass explicit `items_json`. |
+| `list_objects` | List a bucket/prefix (using the S3 config creds) to discover files before a batch. |
 | `get_job` | Fetch one job's status / `dest_url` / metrics. |
 | `list_jobs` | List recent jobs, optional status filter. |
 | `delete_job` | Remove a finished/failed job. |
@@ -57,6 +59,22 @@ set_s3_config bucket=lectorium-clean access_key_id=… secret_access_key=… \
 denoise_wait source_url=https://…/lecture.mp3 dest_key=clean/lecture.mp3
 # → { "status": "done", "dest_url": "https://…/clean/lecture.mp3", "rtfx": 10.9, ... }
 ```
+
+## Batch (hundreds/thousands of files)
+
+```
+set_s3_config bucket=lectorium-clean access_key_id=… secret_access_key=… \
+              region=ru-central1 endpoint_url=https://storage.yandexcloud.net acl=public-read
+list_objects  prefix=raw/ bucket=lectorium-raw          # discover what's there
+denoise_batch source_bucket=lectorium-raw source_prefix=raw/ dest_prefix=clean/
+# → { "count": 1240, "job_ids_preview": [...], "note": "poll health or list_jobs for progress" }
+health                                                   # queued/running/done/failed counts
+```
+
+`denoise_batch` is non-blocking: the remote service lists the prefix, presigns
+each object (so private sources download fine), queues one job per file, and the
+worker pool drains them. Output keys mirror the source layout under
+`dest_prefix`. Watch progress with `health` or `list_jobs status=running`.
 
 Credentials live only in this process (atomic pointer; in-flight jobs keep their
 snapshot, new calls observe the swap) and ride with each job request. The

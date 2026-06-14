@@ -19,6 +19,8 @@ import (
 // tool tests can inject mocks.
 type JobClient interface {
 	CreateJob(ctx context.Context, req client.CreateJobRequest) (*client.CreateJobResponse, error)
+	CreateBatch(ctx context.Context, req client.BatchRequest) (*client.BatchResponse, error)
+	ListObjects(ctx context.Context, req client.ListObjectsRequest) (*client.ListObjectsResponse, error)
 	GetJob(ctx context.Context, jobID string) (*client.Job, error)
 	ListJobs(ctx context.Context, status string, limit int) ([]*client.Job, error)
 	DeleteJob(ctx context.Context, jobID string) error
@@ -64,6 +66,8 @@ func (c Config) withDefaults() Config {
 func RegisterAll(s *server.MCPServer, p Provider, cfg Config) {
 	cfg = cfg.withDefaults()
 	registerDenoiseWait(s, p, cfg)
+	registerDenoiseBatch(s, p)
+	registerListObjects(s, p)
 	registerGetJob(s, p)
 	registerListJobs(s, p)
 	registerDeleteJob(s, p)
@@ -123,13 +127,7 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 		}
 		dest.Key = destKey
 
-		params := client.DenoiseParams{
-			Normalize:    !req.GetBool("no_normalize", false),
-			NoiseProfile: req.GetBool("noise_profile", false),
-			MixMin:       req.GetFloat("mix_min", 0),
-			MixMax:       req.GetFloat("mix_max", 0),
-			SampleRate:   int(req.GetFloat("sample_rate", 48000)),
-		}
+		params := paramsFromReq(req)
 
 		created, err := p.Client().CreateJob(ctx, client.CreateJobRequest{
 			SourceURL: sourceURL, Dest: dest, Params: params,
@@ -231,6 +229,162 @@ func waitForJob(ctx context.Context, c JobClient, jobID string, total time.Durat
 	}
 	res.TimedOut = true
 	return res, nil
+}
+
+func paramsFromReq(req mcp.CallToolRequest) client.DenoiseParams {
+	return client.DenoiseParams{
+		Normalize:    !req.GetBool("no_normalize", false),
+		NoiseProfile: req.GetBool("noise_profile", false),
+		MixMin:       req.GetFloat("mix_min", 0),
+		MixMax:       req.GetFloat("mix_max", 0),
+		SampleRate:   int(req.GetFloat("sample_rate", 48000)),
+	}
+}
+
+// --- denoise_batch ---
+
+func registerDenoiseBatch(s *server.MCPServer, p Provider) {
+	tool := mcp.NewTool("denoise_batch",
+		mcp.WithDescription(
+			"Queue MANY denoise jobs in one call (hundreds/thousands). Non-blocking: "+
+				"returns the created job ids immediately; the remote service chews through them "+
+				"with its worker pool. Watch progress with health (queued/running/done/failed) "+
+				"or list_jobs.\n\n"+
+				"Two modes:\n"+
+				"  • enumerate (default): set source_prefix — the service lists that prefix in "+
+				"the source bucket, presigns each object, and submits one job per file. Outputs "+
+				"go to dest_prefix, mirroring the source layout.\n"+
+				"  • explicit: pass items_json = JSON array of {\"source_url\",\"dest_key\"}.\n\n"+
+				"Uses the current S3 config (set_s3_config) for both listing the source and "+
+				"uploading results, unless overridden."),
+		mcp.WithString("source_prefix",
+			mcp.Description("Enumerate mode: key prefix to list in the source bucket (e.g. 'raw/').")),
+		mcp.WithString("source_bucket",
+			mcp.Description("Source bucket to enumerate (default: S3 config bucket).")),
+		mcp.WithString("dest_prefix",
+			mcp.Description("Output key prefix (default 'clean/'). Source-relative paths are appended.")),
+		mcp.WithString("dest_bucket",
+			mcp.Description("Override destination bucket (default: S3 config bucket).")),
+		mcp.WithString("items_json",
+			mcp.Description("Explicit mode: JSON array of {\"source_url\",\"dest_key\"[,\"filename\"]}.")),
+		mcp.WithNumber("limit", mcp.Description("Enumerate mode: max objects to submit. Default 100000.")),
+		mcp.WithNumber("presign_expiry_s",
+			mcp.Description("Enumerate mode: presigned source-URL TTL in seconds. Default 86400.")),
+		mcp.WithBoolean("noise_profile", mcp.Description("Spectral subtraction (slower ~3x). Default false.")),
+		mcp.WithBoolean("no_normalize", mcp.Description("Disable normalization. Default false.")),
+		mcp.WithNumber("mix_min", mcp.Description("%% original where no voice (0-100). Default 0.")),
+		mcp.WithNumber("mix_max", mcp.Description("%% original where voice present (0-100). Default 0.")),
+		mcp.WithNumber("sample_rate", mcp.Description("Processing sample rate. Default 48000.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg := p.S3Config()
+		if cfg.Bucket == "" {
+			return mcp.NewToolResultError(
+				"no S3 config set — call set_s3_config first (bucket + keys)"), nil
+		}
+
+		dest := cfg
+		if b := strings.TrimSpace(req.GetString("dest_bucket", "")); b != "" {
+			dest.Bucket = b
+		}
+
+		batch := client.BatchRequest{
+			Dest:           dest,
+			Params:         paramsFromReq(req),
+			DestPrefix:     strings.TrimSpace(req.GetString("dest_prefix", "")),
+			PresignExpiryS: int(req.GetFloat("presign_expiry_s", 0)),
+			Limit:          int(req.GetFloat("limit", 0)),
+		}
+
+		itemsJSON := strings.TrimSpace(req.GetString("items_json", ""))
+		sourcePrefix := strings.TrimSpace(req.GetString("source_prefix", ""))
+		switch {
+		case itemsJSON != "":
+			var items []client.BatchItem
+			if err := json.Unmarshal([]byte(itemsJSON), &items); err != nil {
+				return mcp.NewToolResultError("items_json: " + err.Error()), nil
+			}
+			if len(items) == 0 {
+				return mcp.NewToolResultError("items_json is empty"), nil
+			}
+			batch.Items = items
+		case sourcePrefix != "" || req.GetString("source_bucket", "") != "":
+			srcBucket := strings.TrimSpace(req.GetString("source_bucket", ""))
+			if srcBucket == "" {
+				srcBucket = cfg.Bucket
+			}
+			batch.Source = &client.S3Source{
+				Bucket:          srcBucket,
+				Prefix:          sourcePrefix,
+				AccessKeyID:     cfg.AccessKeyID,
+				SecretAccessKey: cfg.SecretAccessKey,
+				Region:          cfg.Region,
+				EndpointURL:     cfg.EndpointURL,
+			}
+		default:
+			return mcp.NewToolResultError(
+				"provide source_prefix (enumerate mode) or items_json (explicit mode)"), nil
+		}
+
+		out, err := p.Client().CreateBatch(ctx, batch)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		preview := out.JobIDs
+		if len(preview) > 20 {
+			preview = preview[:20]
+		}
+		body, _ := json.MarshalIndent(map[string]any{
+			"count":                out.Count,
+			"job_ids_preview":      preview,
+			"note":                 "jobs queued; poll health or list_jobs for progress",
+			"truncated_to_preview": len(out.JobIDs) > len(preview),
+		}, "", "  ")
+		return mcp.NewToolResultText(string(body)), nil
+	})
+}
+
+// --- list_objects ---
+
+func registerListObjects(s *server.MCPServer, p Provider) {
+	tool := mcp.NewTool("list_objects",
+		mcp.WithDescription(
+			"List objects under a bucket/prefix using the current S3 config credentials. "+
+				"Use to discover what's there before denoise_batch."),
+		mcp.WithString("prefix", mcp.Description("Key prefix to list (e.g. 'raw/'). Empty = whole bucket.")),
+		mcp.WithString("bucket", mcp.Description("Bucket to list (default: S3 config bucket).")),
+		mcp.WithNumber("limit", mcp.Description("Max keys. Default 1000.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		cfg := p.S3Config()
+		if cfg.Bucket == "" {
+			return mcp.NewToolResultError("no S3 config set — call set_s3_config first"), nil
+		}
+		bucket := strings.TrimSpace(req.GetString("bucket", ""))
+		if bucket == "" {
+			bucket = cfg.Bucket
+		}
+		limit := int(req.GetFloat("limit", 1000))
+		if limit <= 0 {
+			limit = 1000
+		}
+		out, err := p.Client().ListObjects(ctx, client.ListObjectsRequest{
+			Source: client.S3Source{
+				Bucket:          bucket,
+				Prefix:          strings.TrimSpace(req.GetString("prefix", "")),
+				AccessKeyID:     cfg.AccessKeyID,
+				SecretAccessKey: cfg.SecretAccessKey,
+				Region:          cfg.Region,
+				EndpointURL:     cfg.EndpointURL,
+			},
+			Limit: limit,
+		})
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		body, _ := json.MarshalIndent(out, "", "  ")
+		return mcp.NewToolResultText(string(body)), nil
+	})
 }
 
 // --- get_job ---

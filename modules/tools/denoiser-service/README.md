@@ -77,7 +77,14 @@ curl -s -X POST http://m4.local:8091/jobs -H 'content-type: application/json' -d
 curl -s http://m4.local:8091/jobs/<job_id> | jq   # poll until status=done → dest_url
 ```
 
-See [`docs/API.md`](docs/API.md) for the full REST spec.
+## Batch (hundreds/thousands of files)
+
+`POST /jobs/batch` queues many jobs in one call — either an explicit `items`
+list, or a `source` bucket+prefix the service enumerates itself (it lists the
+prefix, presigns a GET URL per object, and submits one job per file with output
+keys mirroring the source layout under `dest_prefix`). Non-blocking; watch
+progress with `/healthz` counts. `POST /source/list` enumerates a prefix for
+discovery. See [`docs/API.md`](docs/API.md) for the full REST spec.
 
 ## Security
 
