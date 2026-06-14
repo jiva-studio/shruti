@@ -3,6 +3,7 @@ package tools
 import (
 	adminconfigapp "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/adminconfig"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/alignpdf"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiodenoise"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/publish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/commit"
@@ -29,6 +30,7 @@ type Deps struct {
 	Transcripts         transcriptport.Store
 	Ingest              ingest.UseCase
 	Normalize           normalize.UseCase
+	AudioDenoise        audiodenoise.UseCase
 	Metadata            extractmeta.UseCase
 	Transcribe          transcribe.UseCase
 	Review              review.UseCase

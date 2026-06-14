@@ -20,6 +20,7 @@ type Config struct {
 	CDN        CDN        `yaml:"cdn"`
 	S3         S3         `yaml:"s3"`
 	FFmpeg     FFmpeg     `yaml:"ffmpeg"`
+	Denoiser   Denoiser   `yaml:"denoiser"`
 	Transcribe Transcribe `yaml:"transcribe"`
 	Review     Review     `yaml:"review"`
 	Resolver   Resolver   `yaml:"resolver"`
@@ -58,6 +59,12 @@ type S3Target struct {
 
 type FFmpeg struct {
 	Bin string `yaml:"bin"`
+}
+
+// Denoiser configures the audio-denoiser subprocess used by track.audio.denoise.
+type Denoiser struct {
+	PythonBin string `yaml:"python_bin"` // interpreter with the denoise deps; default "python3"
+	Script    string `yaml:"script"`     // path to audio-denoiser/denoise_mp3.py
 }
 
 // Transcribe configures the transcription stage. Multiple providers can be
@@ -314,6 +321,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.FFmpeg.Bin == "" {
 		c.FFmpeg.Bin = "ffmpeg"
+	}
+	if c.Denoiser.PythonBin == "" {
+		c.Denoiser.PythonBin = "python3"
 	}
 	if c.Transcribe.Default == "" {
 		c.Transcribe.Default = "transcriber-service"
