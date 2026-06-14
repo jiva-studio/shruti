@@ -25,9 +25,9 @@ func New(python, script string) *Tool {
 }
 
 // Denoise runs `python denoise_mp3.py --in <in> --out <out>`. The catalog
-// producer intentionally uses the script's default strategy (afftdn) — that is
-// the canonical "clean" version; strategy selection / A-B tuning lives in
-// denoiser-mcp, not in the publish path.
+// producer intentionally uses the script's default strategy (DeepFilterNet3) —
+// that is the canonical "clean" version; strategy selection / A-B tuning lives
+// in denoiser-mcp, not in the publish path.
 func (t *Tool) Denoise(ctx context.Context, inPath, outPath string) error {
 	if t.Script == "" {
 		return fmt.Errorf("denoiser: script path not configured")

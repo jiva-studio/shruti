@@ -4,7 +4,7 @@ LAN-local HTTP service for batch audio **denoising**. It is the sibling of
 [`transcriber-service`](../transcriber-service/) and copies its data plane
 (HTTP + SQLite job queue + worker pool, restart-safe), but the heavy lifting is
 delegated to the existing [`denoise_mp3.py`](../audio-denoiser/denoise_mp3.py)
-algorithm — selectable strategies `afftdn` (default, ffmpeg FFT denoise),
+algorithm — selectable strategies `deepfilternet` (default, DeepFilterNet3 learned denoiser), `afftdn` (ffmpeg FFT denoise),
 `rnnoise`, `rnnoise-mix`, and `afftdn-rnnoise-mix` — instead of a Swift ANE
 daemon.
 

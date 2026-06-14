@@ -2,9 +2,9 @@
 """
 Audio denoiser with selectable strategies (`--strategy`).
 
-  afftdn       (default) ffmpeg adaptive FFT denoise — reduces the noise floor
-               by `--nr` dB without gating pauses to dead silence. Fast, no ML
-               deps (ffmpeg only). Sounded the cleanest on archival lectures.
+  afftdn       ffmpeg adaptive FFT denoise — reduces the noise floor by `--nr`
+               dB without gating pauses to dead silence. Fast, no ML deps
+               (ffmpeg only). Milder than DeepFilterNet — leaves more residual.
   rnnoise      RNNoise (pyrnnoise) speech denoiser, straight output. Aggressive
                — can leave dead-silent pauses on noisy material.
   rnnoise-mix  RNNoise blended back with the original by voice probability
@@ -14,6 +14,13 @@ Audio denoiser with selectable strategies (`--strategy`).
                Chain: afftdn first (tames steady noise), then RNNoise, then the
                TRUE original blended back by voice probability — afftdn does the
                bulk while the blend keeps a natural floor in pauses.
+  deepfilternet
+               (default) DeepFilterNet3 — a learned full-band speech denoiser. Removes
+               steady tape hiss / static far better than afftdn without the
+               over-gating artefacts of RNNoise, and preserves the voice (no
+               generative hallucination). Runs real-time on CPU (no GPU/CUDA),
+               so it works on the service and Apple Silicon alike. Needs the
+               `deepfilternet` package (pulls torch).
 
 All strategies output mono 128 kbps MP3 (matching the canonical original). The
 app's original↔clean slider does the user-facing blend; this only produces the
@@ -28,8 +35,8 @@ import tempfile
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-STRATEGIES = ("afftdn", "rnnoise", "rnnoise-mix", "afftdn-rnnoise-mix")
-DEFAULT_STRATEGY = "afftdn"
+STRATEGIES = ("afftdn", "rnnoise", "rnnoise-mix", "afftdn-rnnoise-mix", "deepfilternet")
+DEFAULT_STRATEGY = "deepfilternet"
 
 # afftdn knobs
 DEFAULT_NR = 12.0   # noise reduction (dB), higher = more aggressive
@@ -174,6 +181,38 @@ def _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max):
             os.unlink(pre)
 
 
+# ──────────────────────────── DeepFilterNet ────────────────────────────────
+
+def _denoise_deepfilternet(in_path, out_path):
+    """DeepFilterNet3 speech denoise → mono 128k mp3.
+
+    Loads the model once per call (the producer runs one file per process via
+    the pool). `load_audio` resamples to the model's 48k; `enhance` runs the
+    full-band deep filter on CPU. We then encode mono 128k to match the other
+    strategies' output contract.
+    """
+    from df.enhance import enhance, init_df, load_audio, save_audio
+
+    model, df_state, _ = init_df()
+    audio, _ = load_audio(str(in_path), sr=df_state.sr())
+    enhanced = enhance(model, df_state, audio)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+        temp_out = tf.name
+    try:
+        save_audio(temp_out, enhanced, df_state.sr())
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", temp_out,
+             "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "").strip()[-2000:]
+            raise RuntimeError(f"ffmpeg encode failed ({proc.returncode}): {tail}")
+    finally:
+        if os.path.exists(temp_out):
+            os.unlink(temp_out)
+
+
 # ─────────────────────────────── dispatch ──────────────────────────────────
 
 def denoise_one(in_path, out_path, strategy=DEFAULT_STRATEGY,
@@ -189,6 +228,8 @@ def denoise_one(in_path, out_path, strategy=DEFAULT_STRATEGY,
         _denoise_rnnoise(in_path, out_path, mix=True, mix_min=mix_min, mix_max=mix_max)
     elif strategy == "afftdn-rnnoise-mix":
         _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max)
+    elif strategy == "deepfilternet":
+        _denoise_deepfilternet(in_path, out_path)
     else:
         raise ValueError(f"unknown strategy: {strategy!r} (one of {STRATEGIES})")
 
