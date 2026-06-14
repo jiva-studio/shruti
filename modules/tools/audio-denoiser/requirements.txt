@@ -4,3 +4,5 @@ soundfile
 numpy
 scipy
 tqdm
+# deepfilternet strategy (DeepFilterNet3, default) — pulls torch (CPU is fine)
+deepfilternet

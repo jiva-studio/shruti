@@ -53,11 +53,12 @@ S3 config can be preloaded from env: `DENOISER_S3_BUCKET`,
 
 ## Cleaning strategies
 
-`denoise_wait` / `denoise_batch` take an optional `strategy` (default `afftdn`):
+`denoise_wait` / `denoise_batch` take an optional `strategy` (default `deepfilternet`):
 
 | Strategy | What it does |
 |---|---|
-| `afftdn` (default) | ffmpeg FFT denoise — fast, no ML deps, no dead pauses. Matches the original's loudness; the cleanest choice for archival lectures. |
+| `deepfilternet` (default) | DeepFilterNet3 learned speech denoiser — best on archival hiss/static, preserves the voice, runs real-time on CPU. |
+| `afftdn` | ffmpeg FFT denoise — fast, no ML deps, milder (leaves more residual). |
 | `rnnoise` | RNNoise speech denoiser, straight output. Aggressive — can leave dead-silent pauses. |
 | `rnnoise-mix` | RNNoise blended back with the original by voice probability — keeps a natural noise floor in pauses. |
 | `afftdn-rnnoise-mix` | afftdn → RNNoise → original blended back. |

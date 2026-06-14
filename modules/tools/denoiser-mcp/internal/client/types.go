@@ -28,8 +28,8 @@ type S3Dest struct {
 
 // DenoiseParams are the algorithm knobs forwarded to denoise_mp3.py.
 type DenoiseParams struct {
-	// Strategy: "afftdn" (default), "rnnoise", "rnnoise-mix", or
-	// "afftdn-rnnoise-mix".
+	// Strategy: "deepfilternet" (default), "afftdn", "rnnoise",
+	// "rnnoise-mix", or "afftdn-rnnoise-mix".
 	Strategy string  `json:"strategy"`
 	NR       float64 `json:"nr"`      // afftdn: noise reduction dB
 	NF       float64 `json:"nf"`      // afftdn: noise floor dB
