@@ -58,6 +58,13 @@ export interface ISqlCollectionRepository {
   listFeaturedCollections(locale: string): Promise<readonly FeaturedCollectionRow[]>
 
   /**
+   * All collections for `locale`, ordered by `sort_order ASC` then `id ASC`.
+   * Used by the Search page's "other collections" list. Empty array when the
+   * tables are missing.
+   */
+  listCollections(locale: string): Promise<readonly FeaturedCollectionRow[]>
+
+  /**
    * Ordered list of track ids for one collection locale. Empty array when
    * the collection has no members yet, or when the tables are missing.
    * Order is `position ASC`.
@@ -178,6 +185,21 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
             WHERE ctk.track_id = ? AND ctk.collection_language = ?
             ORDER BY c.sort_order ASC, c.id ASC`,
           [trackId, locale]
+        )
+      } catch (err) {
+        if (isMissingTable(err)) return []
+        throw err
+      }
+    },
+
+    async listCollections(locale: string): Promise<readonly FeaturedCollectionRow[]> {
+      try {
+        return await contentDb.query<FeaturedCollectionRow>(
+          `SELECT id, name, COALESCE(cover, '') AS cover, sort_order
+             FROM collections
+            WHERE language = ?
+            ORDER BY sort_order ASC, id ASC`,
+          [locale]
         )
       } catch (err) {
         if (isMissingTable(err)) return []

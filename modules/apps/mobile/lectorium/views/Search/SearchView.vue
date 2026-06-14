@@ -19,13 +19,24 @@
          row isn't hidden on initial paint. -->
     <div class="search-content-spacer" />
 
-    <!-- Discovery surface: collection groups (shelves), shown only when the
-         user hasn't typed a query yet. Each group = title + a carousel. -->
+    <!-- Discovery surface, shown only when the user hasn't typed a query yet:
+         the first two collection groups as carousels, then a flat list of
+         other (not-yet-shown) collections, then the tracks below. -->
     <template v-if="!search.query.value">
-      <div v-for="g in collectionGroups" :key="g.id" class="collection-group">
+      <div v-for="g in topGroups" :key="g.id" class="collection-group">
         <h2 class="collection-group-title">{{ g.name }}</h2>
         <CollectionsCarousel :items="g.collections" @select="onSelectCollection" />
       </div>
+      <template v-if="otherCollections.length">
+        <h2 class="collection-group-title">{{ $t("search.collections.others") }}</h2>
+        <CollectionListItem
+          v-for="c in otherCollections"
+          :key="c.id"
+          :name="c.name"
+          :cover-url="c.coverUrl"
+          @click="onSelectCollection(c.id)"
+        />
+      </template>
     </template>
 
     <IonText v-if="search.error.value" color="danger" class="ion-padding">
@@ -62,7 +73,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import {
   IonText,
   IonInfiniteScroll,
@@ -77,7 +88,11 @@ import {
   SearchFiltersSheet,
 } from "@ui/features/tracks/search/filters/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import { CollectionsCarousel, CollectionDetailModal } from "@ui/features/collections/index.js"
+import {
+  CollectionsCarousel,
+  CollectionListItem,
+  CollectionDetailModal,
+} from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
 import { useCollectionGroups } from "@lectorium/composables/useCollectionGroups.js"
@@ -86,7 +101,16 @@ import { useSearchController } from "./SearchView.controller.js"
 const player = usePlayerStore()
 const search = useSearchController()
 const appLanguage = useAppLanguage()
-const { groups: collectionGroups } = useCollectionGroups(appLanguage)
+const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
+
+// Discovery surface: show the first two groups as carousels, then up to four
+// "other" collections not already featured in those groups.
+const OTHER_COLLECTIONS_LIMIT = 4
+const topGroups = computed(() => collectionGroups.value.slice(0, 2))
+const otherCollections = computed(() => {
+  const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
+  return allCollections.value.filter((c) => !shown.has(c.id)).slice(0, OTHER_COLLECTIONS_LIMIT)
+})
 
 const selectedCollectionId = ref<string | null>(null)
 const detailOpen = ref(false)
