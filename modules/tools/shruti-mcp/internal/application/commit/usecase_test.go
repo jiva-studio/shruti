@@ -96,6 +96,7 @@ type fakeCatalog struct {
 	saveCalls      int
 	lastTrackRow   domaincatalog.TrackRow
 	lastVariantRow domaincatalog.VariantRow
+	lastAudios     []domaincatalog.AudioRow
 	lastRefs       []domaincatalog.TrackReference
 }
 
@@ -109,9 +110,9 @@ func (c *fakeCatalog) LookupIDByName(_ context.Context, kind domaincatalog.Kind,
 func (c *fakeCatalog) GetDict(_ context.Context, _ domaincatalog.Kind, _ string) (domaincatalog.DictEntry, bool, error) {
 	return domaincatalog.DictEntry{}, false, nil
 }
-func (c *fakeCatalog) SaveTrack(_ context.Context, t domaincatalog.TrackRow, v domaincatalog.VariantRow, refs []domaincatalog.TrackReference) error {
+func (c *fakeCatalog) SaveTrack(_ context.Context, t domaincatalog.TrackRow, v domaincatalog.VariantRow, audios []domaincatalog.AudioRow, refs []domaincatalog.TrackReference) error {
 	c.saveCalls++
-	c.lastTrackRow, c.lastVariantRow, c.lastRefs = t, v, refs
+	c.lastTrackRow, c.lastVariantRow, c.lastAudios, c.lastRefs = t, v, audios, refs
 	return nil
 }
 
@@ -219,6 +220,11 @@ func TestCommitHappyPath(t *testing.T) {
 	}
 	if h.cat.lastVariantRow.Title != "Bombay Lecture" {
 		t.Errorf("Title = %q", h.cat.lastVariantRow.Title)
+	}
+	if len(h.cat.lastAudios) != 1 ||
+		h.cat.lastAudios[0].Kind != domaincatalog.AudioKindOriginal ||
+		h.cat.lastAudios[0].Path != "public/tracks/"+string(h.track)+"/audio/original.mp3" {
+		t.Errorf("expected one original audio row, got %+v", h.cat.lastAudios)
 	}
 }
 

@@ -276,20 +276,39 @@ func (r *Repo) GetTrack(ctx context.Context, id string) (catalog.TrackRow, bool,
 func (r *Repo) GetVariant(ctx context.Context, trackID, language string) (catalog.VariantRow, bool, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT track_id, language, title,
-		       COALESCE(audio_path,''), COALESCE(audio_filesize,0),
-		       COALESCE(audio_duration,0), COALESCE(audio_kind,''),
 		       COALESCE(transcript_path,''), COALESCE(transcript_kind,''),
 		       sort_reference
 		FROM track_variants WHERE track_id = ? AND language = ?`, trackID, language)
 	var v catalog.VariantRow
-	if err := row.Scan(&v.TrackID, &v.Language, &v.Title, &v.AudioPath, &v.AudioFilesize,
-		&v.AudioDuration, &v.AudioKind, &v.TranscriptPath, &v.TranscriptKind, &v.SortReference); err != nil {
+	if err := row.Scan(&v.TrackID, &v.Language, &v.Title,
+		&v.TranscriptPath, &v.TranscriptKind, &v.SortReference); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return catalog.VariantRow{}, false, nil
 		}
 		return catalog.VariantRow{}, false, err
 	}
 	return v, true, nil
+}
+
+// GetAudios returns all audio versions of a variant, ordered by kind.
+func (r *Repo) GetAudios(ctx context.Context, trackID, language string) ([]catalog.AudioRow, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT track_id, language, kind, path,
+		       COALESCE(filesize,0), COALESCE(duration,0)
+		FROM track_audio WHERE track_id = ? AND language = ? ORDER BY kind`, trackID, language)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []catalog.AudioRow
+	for rows.Next() {
+		var a catalog.AudioRow
+		if err := rows.Scan(&a.TrackID, &a.Language, &a.Kind, &a.Path, &a.Filesize, &a.Duration); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repo) GetTrackTags(ctx context.Context, trackID string) ([]string, error) {
@@ -367,9 +386,9 @@ func (r *Repo) DeleteDict(ctx context.Context, kind catalog.Kind, id string) err
 		return r.DeleteDictImpl(ctx, kind, id)
 	})
 }
-func (r *Repo) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, refs []catalog.TrackReference) error {
+func (r *Repo) SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error {
 	return sqliteutil.WithRetry(ctx, sqliteutil.DefaultRetry, func() error {
-		return r.SaveTrackImpl(ctx, t, v, refs)
+		return r.SaveTrackImpl(ctx, t, v, audios, refs)
 	})
 }
 func (r *Repo) DeleteTrackVariant(ctx context.Context, trackID, language string) error {
