@@ -58,5 +58,6 @@ export default {
     others: "Other collections",
     all: "All collections",
     seeAll: "See all",
+    seeAllNamed: "See all: {name}",
   },
 }
