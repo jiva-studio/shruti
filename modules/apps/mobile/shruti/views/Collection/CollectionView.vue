@@ -1,13 +1,13 @@
 <template>
   <IonPage>
-    <IonHeader>
+    <FlatHeader>
       <IonToolbar>
         <IonButtons slot="start">
           <IonBackButton default-href="/tabs/search" />
         </IonButtons>
         <IonTitle>{{ detail?.name ?? "" }}</IonTitle>
       </IonToolbar>
-    </IonHeader>
+    </FlatHeader>
 
     <IonContent :fullscreen="true">
       <p v-if="detail?.description" class="description">{{ detail.description }}</p>
@@ -38,11 +38,11 @@ import {
   IonButton,
   IonButtons,
   IonContent,
-  IonHeader,
   IonPage,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue"
+import { FlatHeader } from "@ui/primitives/index.js"
 import { TracksList, type UiTrackRow } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useShruti } from "@shruti/shruti.js"

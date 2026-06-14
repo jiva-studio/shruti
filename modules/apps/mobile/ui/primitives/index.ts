@@ -21,6 +21,7 @@ export {
 //    search-specific, intentionally kept local.
 //  - WithDeleteAction: hardcodes the @tabler IconTrashFilled icon (app icon
 //    set), so it isn't generic; kept local.
+export { default as FlatHeader } from "./FlatHeader.vue"
 export { default as FloatingChip } from "./FloatingChip.vue"
 export { default as HighlightText } from "./HighlightText.vue"
 export { default as WithDeleteAction } from "./WithDeleteAction.vue"
