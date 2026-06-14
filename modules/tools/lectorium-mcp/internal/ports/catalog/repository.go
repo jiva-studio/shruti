@@ -48,13 +48,15 @@ type DictRepository interface {
 type TrackRepository interface {
 	GetTrack(ctx context.Context, id string) (catalog.TrackRow, bool, error)
 	GetVariant(ctx context.Context, trackID, language string) (catalog.VariantRow, bool, error)
+	GetAudios(ctx context.Context, trackID, language string) ([]catalog.AudioRow, error)
 	GetReferences(ctx context.Context, trackID string) ([]catalog.TrackReference, error)
 	GetTrackTags(ctx context.Context, trackID string) ([]string, error)
 
 	// SaveTrack performs the atomic UPSERT on tracks + track_variants +
-	// track_references + tracks_search FTS row. Returns error if any
+	// track_audio + track_references + tracks_search FTS row. The audios slice
+	// replaces the variant's track_audio rows in full. Returns error if any
 	// invariant is violated (e.g. dangling FK).
-	SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, refs []catalog.TrackReference) error
+	SaveTrack(ctx context.Context, t catalog.TrackRow, v catalog.VariantRow, audios []catalog.AudioRow, refs []catalog.TrackReference) error
 
 	// DeleteTrackVariant removes one (track, language) variant + its
 	// FTS rows. If the last variant of a track is removed, also removes
