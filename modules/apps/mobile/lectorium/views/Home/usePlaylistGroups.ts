@@ -1,4 +1,5 @@
 import { ref, computed, watch, type ComputedRef, type Ref } from "vue"
+import { useI18n } from "vue-i18n"
 import { useLectorium } from "@lectorium/lectorium.js"
 import type { UiTrackRow } from "@ui/components/tracks/list/index.js"
 import type { PlaylistRenderItem } from "@ui/features/playlist/index.js"
@@ -31,7 +32,29 @@ export function usePlaylistGroups(
   locale: Ref<string>
 ): UsePlaylistGroupsReturn {
   const app = useLectorium()
+  const { t } = useI18n()
   const membership = ref<Map<string, readonly TrackCollectionRef[]>>(new Map())
+
+  // Dominant author across a group's lectures: the one contributing the most
+  // lectures, with an "…and others" suffix when more than one author appears.
+  // "" when none of the rows carry an author name.
+  function dominantAuthor(rows: readonly UiTrackRow[]): string {
+    const counts = new Map<string, number>()
+    for (const r of rows) {
+      const name = r.author.trim()
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1)
+    }
+    if (counts.size === 0) return ""
+    let top = ""
+    let topCount = -1
+    for (const [name, n] of counts) {
+      if (n > topCount) {
+        top = name
+        topCount = n
+      }
+    }
+    return counts.size > 1 ? t("home.collectionMoreAuthors", { author: top }) : top
+  }
 
   async function load(ids: readonly string[], loc: string): Promise<void> {
     const repos = app.repositories()
@@ -82,11 +105,13 @@ export function usePlaylistGroups(
         if (j > i && (best === null || j - i > best.end - i)) best = { col, end: j }
       }
       if (best) {
+        const groupRows = rs.slice(i, best.end + 1)
         out.push({
           kind: "group",
           id: best.col.id,
           name: best.col.name,
-          rows: rs.slice(i, best.end + 1),
+          author: dominantAuthor(groupRows),
+          rows: groupRows,
         })
         i = best.end + 1
       } else {

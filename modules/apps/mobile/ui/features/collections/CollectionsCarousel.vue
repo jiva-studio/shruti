@@ -67,7 +67,10 @@ watch(
   gap: 14px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding: 4px 16px 10px;
+  /* Side insets so the first/last cards aren't flush to the screen edges.
+     scroll-padding keeps snap alignment honouring the same gutter. */
+  padding: 6px 20px 14px;
+  scroll-padding-inline: 20px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
