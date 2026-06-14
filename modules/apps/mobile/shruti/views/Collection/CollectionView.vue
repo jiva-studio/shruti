@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { ref, watch } from "vue"
 import { useI18n } from "vue-i18n"
 import {
   alertController,
@@ -45,7 +45,7 @@ import {
 } from "@ionic/vue"
 import { IconPlaylistAdd } from "@tabler/icons-vue"
 import { FlatHeader } from "@ui/primitives/index.js"
-import { TracksList, type UiTrackRow } from "@ui/components/tracks/list/index.js"
+import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { useShruti } from "@shruti/shruti.js"
 import { usePlaylistStore } from "@shruti/stores/usePlaylistStore.js"
@@ -72,7 +72,7 @@ const detail = ref<CollectionDetail | null>(null)
 const tracks = ref<readonly Track[]>([])
 const adding = ref(false)
 
-const rows = computed<readonly UiTrackRow[]>(() => tracks.value.map((tr) => mapper.toUiRow(tr)))
+const rows = mapper.mapRows(() => tracks.value, { context: "discovery" })
 
 async function load(id: string, locale: string): Promise<void> {
   detail.value = null

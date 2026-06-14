@@ -59,7 +59,7 @@ import { useRouter } from "vue-router"
 import { IonButton, IonLabel, IonListHeader, onIonViewWillEnter } from "@ionic/vue"
 import { IconChevronRight } from "@tabler/icons-vue"
 import { AppPage } from "@ui/primitives/index.js"
-import { TracksList, type UiTrackRow } from "@ui/components/tracks/list/index.js"
+import { TracksList } from "@ui/components/tracks/list/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
@@ -92,11 +92,10 @@ const otherCollections = ref<readonly GroupCollection[]>([])
 const lecturePool = ref<readonly Track[]>([])
 const lectureSample = ref<readonly Track[]>([])
 
-// Map on read so the row state (download/playback) stays live, while the
-// selection itself only changes when we reshuffle — no churn.
-const previewLectures = computed<readonly UiTrackRow[]>(() =>
-  lectureSample.value.map((t) => mapper.toUiRow(t))
-)
+// mapRows keeps row state live and, in "discovery" context, folds playback
+// progress to the binary state discovery surfaces use. The selection only
+// changes on reshuffle, so the displayed set stays stable.
+const previewLectures = mapper.mapRows(() => lectureSample.value, { context: "discovery" })
 
 function shuffled<T>(items: readonly T[]): T[] {
   const pool = [...items]
