@@ -36,7 +36,7 @@
     </template>
 
     <IonListHeader>
-      <IonLabel>{{ $t("search.popularLecturesTitle") }}</IonLabel>
+      <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
       <IonButton
         class="no-ripple"
         :aria-label="$t('search.collections.seeAll')"
@@ -45,7 +45,7 @@
         <IconChevronRight :size="20" />
       </IonButton>
     </IonListHeader>
-    <TracksList :rows="previewLectures" @select="search.onSelect">
+    <TracksList :rows="previewLectures" @select="onSelectTrack">
       <template #state="{ state, progressPct }">
         <TrackStateIndicator :state="state" :progress="progressPct" />
       </template>
@@ -64,23 +64,39 @@ import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
 import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@lectorium/stores/usePlayerStore.js"
 import { useAppLanguage } from "@lectorium/composables/useAppLanguage.js"
+import { useTrackUiStateMapper } from "@lectorium/composables/useTrackUiStateMapper.js"
+import { useTrackActionSheet } from "@lectorium/composables/useTrackActionSheet.js"
 import {
   useCollectionGroups,
   type GroupCollection,
 } from "@lectorium/composables/useCollectionGroups.js"
-import { useSearchController } from "./SearchView.controller.js"
+import { useLectorium } from "@lectorium/lectorium.js"
+import { searchAndFilterTracks } from "@lib/application/searchAndFilterTracks.js"
+import type { Track } from "@lib/domain/track.js"
+import type { TrackId } from "@lib/domain/core.js"
 
 const player = usePlayerStore()
 const router = useRouter()
-const search = useSearchController()
+const app = useLectorium()
 const appLanguage = useAppLanguage()
+const mapper = useTrackUiStateMapper()
+const trackActions = useTrackActionSheet()
 const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
 
 const topGroups = computed(() => collectionGroups.value.slice(0, 2))
 const OTHER_COLLECTIONS_LIMIT = 4
 const PREVIEW_LECTURES_LIMIT = 10
+const PREVIEW_POOL_SIZE = 40
+
 const otherCollections = ref<readonly GroupCollection[]>([])
-const previewLectures = ref<readonly UiTrackRow[]>([])
+const lecturePool = ref<readonly Track[]>([])
+const lectureSample = ref<readonly Track[]>([])
+
+// Map on read so the row state (download/playback) stays live, while the
+// selection itself only changes when we reshuffle — no churn.
+const previewLectures = computed<readonly UiTrackRow[]>(() =>
+  lectureSample.value.map((t) => mapper.toUiRow(t))
+)
 
 function shuffled<T>(items: readonly T[]): T[] {
   const pool = [...items]
@@ -91,23 +107,42 @@ function shuffled<T>(items: readonly T[]): T[] {
   return pool
 }
 
-function pickDiscovery(): void {
+function pickOtherCollections(): void {
   const shown = new Set(topGroups.value.flatMap((g) => g.collections.map((c) => c.id)))
   otherCollections.value = shuffled(allCollections.value.filter((c) => !shown.has(c.id))).slice(
     0,
     OTHER_COLLECTIONS_LIMIT
   )
-  previewLectures.value = shuffled(search.rows.value).slice(0, PREVIEW_LECTURES_LIMIT)
 }
 
-// Depend on the row COUNT, not the rows array: the mapped rows recompute a new
-// array on every download/playback store tick, and watching the array itself
-// re-ran the shuffle dozens of times a second (remounting the cards). The count
-// only changes when results actually load, so the sample stays stable.
-watch([collectionGroups, allCollections, () => search.rows.value.length], pickDiscovery, {
-  immediate: true,
+function pickLectures(): void {
+  lectureSample.value = shuffled(lecturePool.value).slice(0, PREVIEW_LECTURES_LIMIT)
+}
+
+async function loadLecturePool(language: string): Promise<void> {
+  try {
+    lecturePool.value = await searchAndFilterTracks(
+      { query: "", languageCodes: [language], limit: PREVIEW_POOL_SIZE, offset: 0 },
+      { tracks: app.repositories().tracks }
+    )
+  } catch (err) {
+    console.warn("[search] lecture preview load failed", err)
+    lecturePool.value = []
+  }
+  pickLectures()
+}
+
+watch([collectionGroups, allCollections], pickOtherCollections, { immediate: true })
+watch(appLanguage, (language) => void loadLecturePool(language), { immediate: true })
+
+onIonViewWillEnter(() => {
+  pickOtherCollections()
+  pickLectures()
 })
-onIonViewWillEnter(pickDiscovery)
+
+async function onSelectTrack(trackId: string): Promise<void> {
+  await trackActions.present(trackId as TrackId)
+}
 
 function onSelectCollection(id: string): void {
   void router.push({ name: "collection", params: { id } })
