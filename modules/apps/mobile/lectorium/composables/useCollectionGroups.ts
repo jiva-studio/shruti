@@ -1,7 +1,6 @@
 import { ref, watch, type Ref } from "vue"
 import { useLectorium } from "@lectorium/lectorium.js"
-import { buildServerUrl } from "@lib/domain/servers.js"
-import { getRegions } from "@lectorium/services/regionsRegistry.js"
+import { resolveAssetUrl } from "@lectorium/services/regionsRegistry.js"
 
 /** One collection card within a group. */
 export interface GroupCollection {
@@ -22,12 +21,6 @@ export interface UseCollectionGroupsReturn {
   readonly groups: Ref<readonly CollectionGroupView[]>
   /** All collections for the locale (flat, sort_order), for the "others" list. */
   readonly allCollections: Ref<readonly GroupCollection[]>
-}
-
-function coverUrl(cover: string): string | undefined {
-  if (!cover) return undefined
-  const region = getRegions()[0]
-  return region ? buildServerUrl(region, cover) : undefined
 }
 
 /**
@@ -54,7 +47,7 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
           const collections = cols.map((c) => ({
             id: c.id,
             name: c.name,
-            coverUrl: coverUrl(c.cover),
+            coverUrl: resolveAssetUrl(c.cover),
           }))
           return { id: g.id, name: g.name, collections }
         })
@@ -63,7 +56,7 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
       allCollections.value = flat.map((c) => ({
         id: c.id,
         name: c.name,
-        coverUrl: coverUrl(c.cover),
+        coverUrl: resolveAssetUrl(c.cover),
         description: c.description,
       }))
     } catch (err) {
