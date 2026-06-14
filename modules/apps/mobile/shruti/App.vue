@@ -68,6 +68,7 @@ import { computed, provide, useTemplateRef } from "vue"
 import { IonApp, IonRouterOutlet } from "@ionic/vue"
 import router from "@shruti/router/index.js"
 import { TRACK_META_CONFIG_KEY } from "@ui/components/tracks/list/index.js"
+import { FILES_STORAGE_KEY } from "@ui/primitives/index.js"
 import { useTrackMetadataFields } from "@shruti/composables/useTrackMetadataFields.js"
 import { FloatingPlayer } from "@ui/features/player/index.js"
 import { TranscriptDialog, TranscriptSelectionPopover } from "@ui/features/transcript/index.js"
@@ -142,6 +143,7 @@ const showPlayerProgress = computed(() => showPlayerProgressConfig.value)
 // the app (Home / Search / Library / playlist). Settings edits this same
 // preference live; non-subscribers always get the default layout.
 provide(TRACK_META_CONFIG_KEY, useTrackMetadataFields().config)
+provide(FILES_STORAGE_KEY, app.filesStorage)
 
 const playButtonSize = app.platform === "android" ? 48 : 44
 
