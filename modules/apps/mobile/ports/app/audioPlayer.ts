@@ -6,10 +6,7 @@
  */
 export interface AudioOpenParams {
   itemId: string
-  /** Audio sources in priority order: `audios[0]` is the source to play
-   *  (owns the timeline); `audios[1]`, when present, is a second source the
-   *  engine plays in sync and crossfades toward via `setSourceMix`. */
-  audios: string[]
+  url: string
   title: string
   author: string
   /** Optional http(s) artwork URL for the lock-screen large icon. */
@@ -51,8 +48,7 @@ export interface AudioMixParams {
  */
 export interface AudioQueueItem {
   itemId: string
-  /** Audio sources in priority order; see `AudioOpenParams.audios`. */
-  audios: string[]
+  url: string
   title: string
   author: string
   /** Optional http(s) artwork URL for the lock-screen large icon. */
@@ -98,13 +94,6 @@ export interface IAudioPlayer {
   seekBy(deltaMs: number): Promise<void>
   stop(): Promise<void>
   setMix(params: AudioMixParams): Promise<void>
-  /**
-   * Cross-fade between the current item's audio sources — `audios[0]`
-   * (0 = first source) and `audios[1]` (1 = second source). No-op when the
-   * item has only one source. Distinct from `setMix` (which blends L/R
-   * channels of one file).
-   */
-  setSourceMix(level: number): Promise<void>
   /** Set playback rate (1.0 = normal). Engines preserve pitch. */
   setPlaybackRate(rate: number): Promise<void>
   /**

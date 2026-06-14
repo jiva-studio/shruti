@@ -129,15 +129,14 @@ public final class AudioPlayerPlugin extends Plugin {
 
     @PluginMethod
     public void open(PluginCall call) {
-        // audios[0] = primary (played), audios[1] = optional crossfade source.
-        JSArray audios = call.getArray("audios");
+        String url = call.getString("url");
         String itemId = call.getString("itemId", "");
         String title = call.getString("title", "");
         String author = call.getString("author", "");
         String cover = call.getString("cover");
 
-        if (audios == null || audios.length() == 0) {
-            call.reject("Argument 'audios' (non-empty array) is required");
+        if (url == null) {
+            call.reject("Argument 'url' is required");
             return;
         }
         if (!ensureController(call)) {
@@ -151,7 +150,7 @@ public final class AudioPlayerPlugin extends Plugin {
             JSONArray items = new JSONArray();
             JSONObject o = new JSONObject();
             o.put("itemId", itemId);
-            o.put("audios", audios);
+            o.put("url", url);
             o.put("title", title);
             o.put("author", author);
             if (cover != null && !cover.isEmpty()) {
@@ -270,23 +269,6 @@ public final class AudioPlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             controller.sendCustomCommand(
                     new SessionCommand(AudioPlayerService.ACTION_SET_MIX, Bundle.EMPTY), args);
-            call.resolve();
-        });
-    }
-
-    @PluginMethod
-    public void setSourceMix(PluginCall call) {
-        Float level = call.getFloat("level", 0f);
-        if (level == null) {
-            call.reject("Argument 'level' is required");
-            return;
-        }
-        if (!ensureController(call)) return;
-        Bundle args = new Bundle();
-        args.putFloat("level", level);
-        mainHandler.post(() -> {
-            controller.sendCustomCommand(
-                    new SessionCommand(AudioPlayerService.ACTION_SET_SOURCE_MIX, Bundle.EMPTY), args);
             call.resolve();
         });
     }
@@ -504,8 +486,7 @@ public final class AudioPlayerPlugin extends Plugin {
                 }
                 JSONObject o = new JSONObject();
                 o.put("itemId", in.optString("itemId", ""));
-                JSONArray audios = in.optJSONArray("audios");
-                o.put("audios", audios != null ? audios : new JSONArray());
+                o.put("url", in.optString("url", ""));
                 o.put("title", in.optString("title", ""));
                 o.put("author", in.optString("author", ""));
                 if (in.has("cover") && !in.isNull("cover")) {
@@ -578,7 +559,7 @@ public final class AudioPlayerPlugin extends Plugin {
      */
     static MediaItem buildMediaItem(
             android.content.Context context,
-            String itemId, String url, String secondaryUrl, String title, String author,
+            String itemId, String url, String title, String author,
             String cover, long durationMs) {
         MediaMetadata.Builder meta = new MediaMetadata.Builder()
                 .setTitle(title)
@@ -596,20 +577,11 @@ public final class AudioPlayerPlugin extends Plugin {
                 meta.setArtworkData(artwork, MediaMetadata.PICTURE_TYPE_FRONT_COVER);
             }
         }
-        MediaItem.Builder builder = new MediaItem.Builder()
+        return new MediaItem.Builder()
                 .setUri(url)
                 .setMediaId(itemId == null ? "" : itemId)
-                .setMediaMetadata(meta.build());
-        // Stash the optional clean source on the item so the service can load
-        // it into the sidecar player when this item becomes current.
-        if (secondaryUrl != null && !secondaryUrl.isEmpty()) {
-            Bundle extras = new Bundle();
-            extras.putString("secondaryUrl", secondaryUrl);
-            builder.setRequestMetadata(new MediaItem.RequestMetadata.Builder()
-                    .setExtras(extras)
-                    .build());
-        }
-        return builder.build();
+                .setMediaMetadata(meta.build())
+                .build();
     }
 
     private static volatile byte[] cachedArtwork;

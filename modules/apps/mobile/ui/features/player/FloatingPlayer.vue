@@ -17,7 +17,7 @@
     @pointerdown="onShellPointerDown"
     @click="onClick"
   >
-    <FloatingPlayerPageDots :page="page" :count="pageCount" :hidden="hidden" />
+    <FloatingPlayerPageDots :page="page" :count="PAGE_COUNT" :hidden="hidden" />
 
     <div ref="viewport" class="pages-viewport">
       <div
@@ -48,15 +48,6 @@
             @skip-forward="emit('skipForward')"
           />
         </div>
-        <div v-if="sourceMixAvailable" class="page">
-          <SourceMixControl
-            :model-value="sourceMixLevel"
-            :left-label="t('player.sourceMix.original')"
-            :right-label="t('player.sourceMix.clean')"
-            @update:model-value="(v: number) => emit('update:sourceMixLevel', v)"
-            @tick="emit('sourceMixTick')"
-          />
-        </div>
       </div>
     </div>
 
@@ -73,10 +64,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { ref } from "vue"
 import { useI18n } from "vue-i18n"
 import MixControl from "./MixControl.vue"
-import SourceMixControl from "./SourceMixControl.vue"
 import PlayerControls from "./PlayerControls.vue"
 import SpeedSkipPanel from "./SpeedSkipPanel.vue"
 import FloatingPlayerPageDots from "./FloatingPlayerPageDots.vue"
@@ -104,14 +94,10 @@ const props = withDefaults(
     mixPosition: number
     /** Playback speed (1.0 = normal). */
     playbackSpeed: number
-    /** Source-mix level [0,1]: 0 = original, 1 = clean. */
-    sourceMixLevel?: number
-    /** Show the original↔clean slide (only when the track has both). */
-    sourceMixAvailable?: boolean
     /** Diameter (px) of the static Play button. */
     playButtonSize?: number
   }>(),
-  { playButtonSize: 44, sourceMixLevel: 0, sourceMixAvailable: false }
+  { playButtonSize: 44 }
 )
 
 const emit = defineEmits<{
@@ -126,29 +112,18 @@ const emit = defineEmits<{
   /** Same idea for the speed slider — fires when the puck enters a
    *  new nearest-preset zone during drag. */
   speedTick: []
-  "update:sourceMixLevel": [value: number]
-  /** Light haptic when the source-mix puck reaches an endpoint. */
-  sourceMixTick: []
   skipBack: []
   skipForward: []
 }>()
 
-// 3 pages normally (mix / controls / speed); a 4th source-mix slide appears
-// only when the track has both an original and a clean audio version.
-const pageCount = computed(() => (props.sourceMixAvailable ? 4 : 3))
+const PAGE_COUNT = 3
 const viewport = ref<HTMLElement | null>(null)
 // Default to the centre page (title/author). Mix is page 0 (top), speed
-// is page 2 — swipe up reveals speed, swipe down reveals mix.
+// is page 2 (bottom) — swipe up reveals speed, swipe down reveals mix.
 const { page, dragOffset, pointerId, onPointerDown, consumeVerticalGesture } = useVerticalCarousel({
-  pageCount: () => pageCount.value,
+  pageCount: PAGE_COUNT,
   initialPage: 1,
   viewportEl: () => viewport.value,
-})
-
-// When the source-mix slide disappears (track without clean), clamp the
-// current page so we never sit on a page that no longer exists.
-watch(pageCount, (count) => {
-  if (page.value > count - 1) page.value = count - 1
 })
 
 function onShellPointerDown(e: PointerEvent): void {
