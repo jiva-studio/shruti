@@ -187,6 +187,12 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 /* Group shelf header — sits above each collections carousel. Matches the
    warm/cream theme; weight + size read as a section title, not a card. */
+ion-list-header ion-label {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ion-text-color);
+}
+
 ion-list-header ion-button {
   --color: var(--ion-color-medium);
 }
