@@ -5,25 +5,43 @@
     :class="{ 'is-placeholder': !coverUrl }"
     @click="emit('click')"
   >
-    <img v-if="coverUrl" :src="coverUrl" :alt="name" loading="lazy" />
+    <img
+      v-if="src"
+      :src="src"
+      :alt="name"
+      class="cover"
+      :class="{ 'is-loaded': loaded }"
+      @load="loaded = true"
+    />
     <span class="name">{{ name }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
+import { ref, toRef } from "vue"
+import { useCachedImageUrl } from "@shruti/composables/useCachedImageUrl.js"
+
 /**
  * One collection card for the Search carousel: cover image with the name
- * overlaid at the bottom over a readability scrim. Dumb / presentational —
- * knows only "tapped". Falls back to a cream gradient tile when no cover is
- * published yet, so the card never shows a broken image.
+ * overlaid at the bottom over a readability scrim. Falls back to a cream
+ * gradient tile when no cover is published yet, so the card never shows a
+ * broken image.
+ *
+ * The cover is served through `useCachedImageUrl` so it's fetched from S3 once
+ * and reused from the local cache afterwards. The image is an
+ * absolutely-positioned layer (out of flow) over a fixed-size tile, so the
+ * name stays pinned to the bottom and never jumps while the cover loads.
  */
-defineProps<{
+const props = defineProps<{
   name: string
-  /** Resolved cover image URL, or undefined to show the placeholder tile. */
+  /** Remote cover image URL, or undefined to show the placeholder tile. */
   coverUrl?: string
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
+
+const { src } = useCachedImageUrl(toRef(props, "coverUrl"))
+const loaded = ref(false)
 </script>
 
 <style scoped>
@@ -59,11 +77,21 @@ const emit = defineEmits<{ (e: "click"): void }>()
   );
 }
 
-.collection-card img {
+/* Cover is an absolute fill layer so it's fully out of flow: the tile keeps
+   its fixed square and the name stays anchored to the bottom regardless of
+   whether the image has loaded yet. Fades in once decoded to avoid a flash. */
+.collection-card .cover {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.collection-card .cover.is-loaded {
+  opacity: 1;
 }
 
 .name {
