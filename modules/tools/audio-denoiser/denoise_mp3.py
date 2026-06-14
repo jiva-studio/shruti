@@ -523,6 +523,23 @@ Examples:
     )
 
     parser.add_argument(
+        "-i", "--in",
+        dest="in_path",
+        help="Single-file mode: path to one input audio file. Requires --out. "
+             "Bypasses the recursive original.mp3 search.",
+        type=str,
+        default=None
+    )
+
+    parser.add_argument(
+        "-o", "--out",
+        dest="out_path",
+        help="Single-file mode: destination path for the denoised file. Requires --in.",
+        type=str,
+        default=None
+    )
+
+    parser.add_argument(
         "-s", "--sample-rate",
         help="Sample rate for processing (default: 48000 Hz)",
         type=int,
@@ -569,6 +586,21 @@ Examples:
     # Convert mix percentages to 0.0-1.0 range
     min_mix = max(0.0, min(100.0, args.mix_min)) / 100.0
     max_mix = max(0.0, min(100.0, args.mix_max)) / 100.0
+
+    # Single-file mode: --in and --out must be supplied together.
+    if args.in_path or args.out_path:
+        if not (args.in_path and args.out_path):
+            parser.error("--in and --out must be used together")
+        denoise_mp3(
+            args.in_path,
+            args.out_path,
+            sample_rate=args.sample_rate,
+            normalize=not args.no_normalize,
+            min_mix_ratio=min_mix,
+            max_mix_ratio=max_mix,
+            noise_profile_path=args.noise_profile,
+        )
+        return
 
     find_and_process_files(
         root_dir=args.root_dir,
