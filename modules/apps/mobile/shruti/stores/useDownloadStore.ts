@@ -123,7 +123,12 @@ export const useDownloadStore = defineStore("downloads", () => {
       await repo.failStaleDownloads()
       const ready = await repo.listReady()
       const next = new Map<TrackId, DownloadState>()
-      for (const item of ready) next.set(item.trackId, "completed")
+      // Only the "original" leg gates the download indicator — the "clean"
+      // version is a best-effort secondary, so a clean-only "ready" row must
+      // NOT flip a track to "completed" on its own.
+      for (const item of ready) {
+        if (item.kind === "original") next.set(item.trackId, "completed")
+      }
       states.value = next
       hydrated = true
       hydrationError.value = null

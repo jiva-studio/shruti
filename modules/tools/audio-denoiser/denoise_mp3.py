@@ -10,6 +10,10 @@ Audio denoiser with selectable strategies (`--strategy`).
   rnnoise-mix  RNNoise blended back with the original by voice probability
                (`--mix-min` in pauses, `--mix-max` on voice) — keeps a natural
                noise floor so pauses don't sound cut out.
+  afftdn-rnnoise-mix
+               Chain: afftdn first (tames steady noise), then RNNoise, then the
+               TRUE original blended back by voice probability — afftdn does the
+               bulk while the blend keeps a natural floor in pauses.
 
 All strategies output mono 128 kbps MP3 (matching the canonical original). The
 app's original↔clean slider does the user-facing blend; this only produces the

@@ -130,6 +130,7 @@ public final class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void open(PluginCall call) {
         String url = call.getString("url");
+        String secondaryUrl = call.getString("secondaryUrl");
         String itemId = call.getString("itemId", "");
         String title = call.getString("title", "");
         String author = call.getString("author", "");
@@ -151,6 +152,9 @@ public final class AudioPlayerPlugin extends Plugin {
             JSONObject o = new JSONObject();
             o.put("itemId", itemId);
             o.put("url", url);
+            if (secondaryUrl != null && !secondaryUrl.isEmpty()) {
+                o.put("secondaryUrl", secondaryUrl);
+            }
             o.put("title", title);
             o.put("author", author);
             if (cover != null && !cover.isEmpty()) {
@@ -504,6 +508,9 @@ public final class AudioPlayerPlugin extends Plugin {
                 JSONObject o = new JSONObject();
                 o.put("itemId", in.optString("itemId", ""));
                 o.put("url", in.optString("url", ""));
+                if (in.has("secondaryUrl") && !in.isNull("secondaryUrl")) {
+                    o.put("secondaryUrl", in.optString("secondaryUrl", ""));
+                }
                 o.put("title", in.optString("title", ""));
                 o.put("author", in.optString("author", ""));
                 if (in.has("cover") && !in.isNull("cover")) {
