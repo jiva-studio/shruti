@@ -46,6 +46,7 @@ type Deps struct {
 	DictCRUD            DictCRUDDeps
 	CollectionCRUD      CollectionCRUDDeps
 	CollectionGroupCRUD CollectionGroupCRUDDeps
+	AuthorProfile       AuthorProfileDeps
 	Catalog             CatalogDeps
 	Library             LibraryDeps
 	LibraryAttribution  LibraryAttributionDeps

@@ -324,6 +324,7 @@ func RegisterAll(s *server.MCPServer, deps Deps) {
 	RegisterDictCRUD(s, deps.DictCRUD)
 	RegisterCollectionCRUD(s, deps.CollectionCRUD)
 	RegisterCollectionGroupCRUD(s, deps.CollectionGroupCRUD)
+	RegisterAuthorProfile(s, deps.AuthorProfile)
 	RegisterCatalogRefresh(s, deps.Catalog)
 	RegisterCatalogStatus(s, deps.Catalog)
 	RegisterCatalogPublish(s, deps)

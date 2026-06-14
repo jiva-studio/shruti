@@ -18,6 +18,20 @@
     </Header>
 
     <IonContent>
+      <div v-if="authors.length" class="author-header">
+        <span class="author-pile">
+          <AuthorAvatar
+            v-for="(url, i) in authorAvatarUrls"
+            :key="i"
+            :url="url"
+            :alt="authorNames"
+          />
+        </span>
+        <div class="author-text">
+          <div class="author-names">{{ authorNames }}</div>
+          <p v-if="primaryBio" class="author-bio">{{ primaryBio }}</p>
+        </div>
+      </div>
       <p v-if="detail?.description" class="description">{{ detail.description }}</p>
       <TracksList :rows="rows" @select="onSelectTrack">
         <template #state="{ state, progressPct }">
@@ -51,9 +65,12 @@ import { useTrackUiStateMapper } from "@shruti/composables/useTrackUiStateMapper
 import { useTrackActionSheet } from "@shruti/composables/useTrackActionSheet.js"
 import { addTracksToPlaylist } from "@lib/application"
 import { useToast } from "@kit/composables"
+import { buildServerUrl } from "@lib/domain/servers.js"
+import { getRegions } from "@shruti/services/regionsRegistry.js"
+import AuthorAvatar from "./AuthorAvatar.vue"
 import type { TrackId } from "@lib/domain/core.js"
 import type { Track } from "@lib/domain/track.js"
-import type { CollectionDetail } from "@infra/repositories/sql/index.js"
+import type { CollectionDetail, CollectionAuthor } from "@infra/repositories/sql/index.js"
 
 /**
  * Collection-detail sheet (75% breakpoint) opened from the Search carousel:
@@ -77,17 +94,33 @@ const trackActions = useTrackActionSheet()
 
 const detail = ref<CollectionDetail | null>(null)
 const tracks = ref<readonly Track[]>([])
+const authors = ref<readonly CollectionAuthor[]>([])
 const adding = ref(false)
 
 const rows = computed<readonly UiTrackRow[]>(() => tracks.value.map((tr) => mapper.toUiRow(tr)))
 
+function authorImageUrl(key: string): string | undefined {
+  if (!key) return undefined
+  const region = getRegions()[0]
+  return region ? buildServerUrl(region, key) : undefined
+}
+
+const authorAvatarUrls = computed(() =>
+  authors.value.map((a) => authorImageUrl(a.image)).filter((u): u is string => !!u)
+)
+const authorNames = computed(() => authors.value.map((a) => a.name).join(", "))
+// A bio only makes sense for a single author — multiple bios would clutter.
+const primaryBio = computed(() => (authors.value.length === 1 ? authors.value[0].description : ""))
+
 async function load(id: string, locale: string): Promise<void> {
   detail.value = null
   tracks.value = []
+  authors.value = []
   try {
     const repos = app.repositories()
     const d = await repos.collections.getCollection(id, locale)
     detail.value = d
+    authors.value = await repos.collections.getCollectionAuthors(id, locale)
     if (!d || d.trackIds.length === 0) return
     const byId = await repos.tracks.getByIds([...d.trackIds])
     tracks.value = d.trackIds
@@ -97,6 +130,7 @@ async function load(id: string, locale: string): Promise<void> {
     console.warn("[collection-detail] load failed", err)
     detail.value = null
     tracks.value = []
+    authors.value = []
   }
 }
 
@@ -138,6 +172,42 @@ async function onAdd(): Promise<void> {
 </script>
 
 <style scoped>
+/* Author header: avatar pile + name(s) + short bio, above the description. */
+.author-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 4px;
+}
+
+.author-pile {
+  display: flex;
+  flex-direction: row-reverse;
+  flex: 0 0 auto;
+  --author-avatar-size: 44px;
+}
+
+.author-pile :deep(.author-avatar:not(:last-child)) {
+  margin-left: -16px;
+}
+
+.author-text {
+  min-width: 0;
+}
+
+.author-names {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ion-text-color);
+}
+
+.author-bio {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ion-color-medium-shade);
+}
+
 .description {
   margin: 0;
   padding: 12px 16px 4px;

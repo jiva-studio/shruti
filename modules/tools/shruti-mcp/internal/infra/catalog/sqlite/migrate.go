@@ -20,6 +20,32 @@ func applyLocalMigrations(ctx context.Context, db *sql.DB) error {
 	if err := backfillCombinedFtsRows(ctx, db); err != nil {
 		return fmt.Errorf("backfill combined fts: %w", err)
 	}
+	if err := ensureAuthorProfileColumns(ctx, db); err != nil {
+		return fmt.Errorf("ensure author profile columns: %w", err)
+	}
+	return nil
+}
+
+// ensureAuthorProfileColumns adds the author avatar/bio columns when missing:
+//   - image       : S3 asset key for the avatar, language-neutral (same value
+//     on every locale row);
+//   - description : a short per-locale bio.
+//
+// Additive ALTERs under the same scheme — older mobile binaries ignore the new
+// columns, newer ones read them. Idempotent: a no-op once present.
+func ensureAuthorProfileColumns(ctx context.Context, db *sql.DB) error {
+	for _, col := range []string{"image", "description"} {
+		has, err := columnExists(ctx, db, "authors", col)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := db.ExecContext(ctx,
+				fmt.Sprintf(`ALTER TABLE authors ADD COLUMN %s TEXT`, col)); err != nil {
+				return fmt.Errorf("add authors.%s: %w", col, err)
+			}
+		}
+	}
 	return nil
 }
 
