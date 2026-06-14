@@ -5,21 +5,13 @@
     :class="{ 'is-placeholder': !coverUrl }"
     @click="emit('click')"
   >
-    <img
-      v-if="src"
-      :src="src"
-      :alt="name"
-      class="cover"
-      :class="{ 'is-loaded': loaded }"
-      @load="loaded = true"
-    />
+    <CachedImage :url="coverUrl" :alt="name" />
     <span class="name">{{ name }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from "vue"
-import { useCachedImageUrl } from "@shruti/composables/useCachedImageUrl.js"
+import { CachedImage } from "@ui/primitives/index.js"
 
 /**
  * One collection card for the Search carousel: cover image with the name
@@ -27,21 +19,16 @@ import { useCachedImageUrl } from "@shruti/composables/useCachedImageUrl.js"
  * gradient tile when no cover is published yet, so the card never shows a
  * broken image. (The author is shown inside the detail sheet, not on the card.)
  *
- * The cover is served through `useCachedImageUrl` so it's fetched from S3 once
- * and reused from the local cache afterwards. The image is an
- * absolutely-positioned layer (out of flow) over a fixed-size tile, so the
- * name stays pinned to the bottom and never jumps while the cover loads.
+ * The cover (a `CachedImage` fill layer) is out of flow over a fixed-size
+ * tile, so the name stays pinned to the bottom and never jumps while it loads.
  */
-const props = defineProps<{
+defineProps<{
   name: string
   /** Remote cover image URL, or undefined to show the placeholder tile. */
   coverUrl?: string
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
-
-const { src } = useCachedImageUrl(toRef(props, "coverUrl"))
-const loaded = ref(false)
 </script>
 
 <style scoped>
@@ -75,23 +62,6 @@ const loaded = ref(false)
     rgba(var(--ion-color-primary-rgb), 0.55),
     rgba(var(--ion-color-tertiary-rgb), 0.7)
   );
-}
-
-/* Cover is an absolute fill layer so it's fully out of flow: the tile keeps
-   its fixed square and the name stays anchored to the bottom regardless of
-   whether the image has loaded yet. Fades in once decoded to avoid a flash. */
-.collection-card .cover {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-
-.collection-card .cover.is-loaded {
-  opacity: 1;
 }
 
 .name {
