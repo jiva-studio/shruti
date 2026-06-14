@@ -57,7 +57,7 @@ func (uc UseCase) Create(ctx context.Context, in CreateInput) (string, error) {
 	if id == "" {
 		id = catalog.CollectionIDPrefix + uc.Minter.MintTail()
 	} else if !CollectionIDPattern.MatchString(id) {
-		return "", fmt.Errorf("id %q does not match pack_<12 alnum>", id)
+		return "", fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", id)
 	}
 	if err := uc.Catalog.CreateCollectionLocale(ctx, id, lang, name, in.Cover, in.Description, in.Meta, in.SortOrder); err != nil {
 		return "", err
@@ -79,7 +79,7 @@ type UpdateInput struct {
 
 func (uc UseCase) Update(ctx context.Context, in UpdateInput) error {
 	if !CollectionIDPattern.MatchString(in.ID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", in.ID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", in.ID)
 	}
 	if strings.TrimSpace(in.Language) == "" {
 		return fmt.Errorf("language is required")
@@ -89,7 +89,7 @@ func (uc UseCase) Update(ctx context.Context, in UpdateInput) error {
 
 func (uc UseCase) Get(ctx context.Context, id string) (catalog.Collection, map[string][]string, bool, error) {
 	if !CollectionIDPattern.MatchString(id) {
-		return catalog.Collection{}, nil, false, fmt.Errorf("id %q does not match pack_<12 alnum>", id)
+		return catalog.Collection{}, nil, false, fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", id)
 	}
 	return uc.Catalog.GetCollection(ctx, id)
 }
@@ -100,14 +100,14 @@ func (uc UseCase) List(ctx context.Context, opts catalog.CollectionListOpts) ([]
 
 func (uc UseCase) Delete(ctx context.Context, id string) error {
 	if !CollectionIDPattern.MatchString(id) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", id)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", id)
 	}
 	return uc.Catalog.DeleteCollection(ctx, id)
 }
 
 func (uc UseCase) DeleteLocale(ctx context.Context, id, language string) error {
 	if !CollectionIDPattern.MatchString(id) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", id)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", id)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -121,7 +121,7 @@ func (uc UseCase) DeleteLocale(ctx context.Context, id, language string) error {
 // commit — collection composition is a deliberate edit).
 func (uc UseCase) SetTracks(ctx context.Context, collectionID, language string, trackIDs []string) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -136,7 +136,7 @@ func (uc UseCase) SetTracks(ctx context.Context, collectionID, language string, 
 
 func (uc UseCase) AddTrack(ctx context.Context, collectionID, language, trackID string, position *int) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -149,7 +149,7 @@ func (uc UseCase) AddTrack(ctx context.Context, collectionID, language, trackID 
 
 func (uc UseCase) RemoveTrack(ctx context.Context, collectionID, language, trackID string) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -160,7 +160,7 @@ func (uc UseCase) RemoveTrack(ctx context.Context, collectionID, language, track
 // SetTags replaces the full tag membership of (collectionID, language).
 func (uc UseCase) SetTags(ctx context.Context, collectionID, language string, tagIDs []string) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -171,7 +171,7 @@ func (uc UseCase) SetTags(ctx context.Context, collectionID, language string, ta
 // AddTag adds one tag to a collection locale (idempotent).
 func (uc UseCase) AddTag(ctx context.Context, collectionID, language, tagID string) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
@@ -185,7 +185,7 @@ func (uc UseCase) AddTag(ctx context.Context, collectionID, language, tagID stri
 // RemoveTag removes one tag from a collection locale (idempotent).
 func (uc UseCase) RemoveTag(ctx context.Context, collectionID, language, tagID string) error {
 	if !CollectionIDPattern.MatchString(collectionID) {
-		return fmt.Errorf("id %q does not match pack_<12 alnum>", collectionID)
+		return fmt.Errorf("collection id %q must match pack_<12 alnum> (legacy prefix kept)", collectionID)
 	}
 	if strings.TrimSpace(language) == "" {
 		return fmt.Errorf("language is required")
