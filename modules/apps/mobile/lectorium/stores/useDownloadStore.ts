@@ -407,7 +407,9 @@ export const useDownloadStore = defineStore("downloads", () => {
     // is consistent regardless; this removes the clean bytes too when the
     // caller knows its storage key.
     if (cleanPath) {
-      await app.mediaDownloader.delete(buildServerUrl(app.activeServer.value, cleanPath)).catch(() => {})
+      await app.mediaDownloader
+        .delete(buildServerUrl(app.activeServer.value, cleanPath))
+        .catch(() => {})
     }
     setCleanProgress(trackId, null)
     await removeDownloadedMedia(

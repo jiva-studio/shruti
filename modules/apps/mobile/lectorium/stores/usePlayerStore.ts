@@ -231,8 +231,7 @@ export const usePlayerStore = defineStore("player", () => {
     // between a both-versions track and a single-source one.
     const mixAudios = cmd.variant.audios
     sourceMixAvailable.value =
-      !!mixAudios.find((a) => a.kind === "original") &&
-      !!mixAudios.find((a) => a.kind === "clean")
+      !!mixAudios.find((a) => a.kind === "original") && !!mixAudios.find((a) => a.kind === "clean")
 
     // Re-push the user's mix + speed. Native re-applies per item while it
     // owns the session, but after a cold restore (service killed & rebuilt)

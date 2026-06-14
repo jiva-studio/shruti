@@ -339,15 +339,11 @@ function buildFilterClauses(filters: TrackListFilters): {
   if (filters.durationMinMs !== undefined) {
     // Duration comes from any audio version of any variant. Pick the max —
     // every version of a track is the same recording length.
-    clauses.push(
-      `(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) >= ?`
-    )
+    clauses.push(`(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) >= ?`)
     params.push(filters.durationMinMs)
   }
   if (filters.durationMaxMs !== undefined) {
-    clauses.push(
-      `(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) < ?`
-    )
+    clauses.push(`(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) < ?`)
     params.push(filters.durationMaxMs)
   }
   // `tracks.date` is a "YYYY-MM-DD" string; BINARY collation makes string
