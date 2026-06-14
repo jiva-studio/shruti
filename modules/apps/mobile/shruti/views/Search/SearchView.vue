@@ -24,11 +24,21 @@
          other (not-yet-shown) collections, then the tracks below. -->
     <template v-if="!search.query.value">
       <div v-for="g in topGroups" :key="g.id" class="collection-group">
-        <h2 class="collection-group-title">{{ g.name }}</h2>
+        <IonListHeader>
+          <IonLabel>{{ g.name }}</IonLabel>
+          <IonButton :aria-label="$t('search.collections.seeAll')" @click="openGroup(g.id)">
+            <IconChevronRight :size="20" />
+          </IonButton>
+        </IonListHeader>
         <CollectionsCarousel :items="g.collections" @select="onSelectCollection" />
       </div>
       <template v-if="otherCollections.length">
-        <h2 class="collection-group-title">{{ $t("search.collections.others") }}</h2>
+        <IonListHeader>
+          <IonLabel>{{ $t("search.collections.others") }}</IonLabel>
+          <IonButton :aria-label="$t('search.collections.seeAll')" @click="openAllCollections">
+            <IconChevronRight :size="20" />
+          </IonButton>
+        </IonListHeader>
         <CollectionListItem
           v-for="c in otherCollections"
           :key="c.id"
@@ -38,7 +48,9 @@
           @click="onSelectCollection(c.id)"
         />
       </template>
-      <h2 class="collection-group-title">{{ $t("search.lecturesTitle") }}</h2>
+      <IonListHeader>
+        <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
+      </IonListHeader>
     </template>
 
     <IonText v-if="search.error.value" color="danger" class="ion-padding">
@@ -65,24 +77,23 @@
       @update:open="search.filtersOpen.value = $event"
       @reset="search.resetFilters"
     />
-
-    <CollectionDetailModal
-      v-model:open="detailOpen"
-      :collection-id="selectedCollectionId"
-      :locale="appLanguage"
-    />
   </AppPage>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { useRouter } from "vue-router"
 import {
+  IonButton,
+  IonLabel,
+  IonListHeader,
   IonText,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
   onIonViewWillEnter,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"
+import { IconChevronRight } from "@tabler/icons-vue"
 import { AppPage } from "@ui/primitives/index.js"
 import { SearchInput } from "@ui/components/tracks/search/input/index.js"
 import { TracksList } from "@ui/components/tracks/list/index.js"
@@ -91,11 +102,7 @@ import {
   SearchFiltersSheet,
 } from "@ui/features/tracks/search/filters/index.js"
 import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
-import {
-  CollectionsCarousel,
-  CollectionListItem,
-  CollectionDetailModal,
-} from "@ui/features/collections/index.js"
+import { CollectionsCarousel, CollectionListItem } from "@ui/features/collections/index.js"
 import { usePlayerStore } from "@shruti/stores/usePlayerStore.js"
 import { useAppLanguage } from "@shruti/composables/useAppLanguage.js"
 import {
@@ -105,6 +112,7 @@ import {
 import { useSearchController } from "./SearchView.controller.js"
 
 const player = usePlayerStore()
+const router = useRouter()
 const search = useSearchController()
 const appLanguage = useAppLanguage()
 const { groups: collectionGroups, allCollections } = useCollectionGroups(appLanguage)
@@ -129,12 +137,16 @@ function pickOtherCollections(): void {
 watch([allCollections, topGroups], pickOtherCollections, { immediate: true })
 onIonViewWillEnter(pickOtherCollections)
 
-const selectedCollectionId = ref<string | null>(null)
-const detailOpen = ref(false)
-
 function onSelectCollection(id: string): void {
-  selectedCollectionId.value = id
-  detailOpen.value = true
+  void router.push({ name: "collection", params: { id } })
+}
+
+function openGroup(groupId: string): void {
+  void router.push({ name: "collection-group", params: { groupId } })
+}
+
+function openAllCollections(): void {
+  void router.push({ name: "collections" })
 }
 
 async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
@@ -175,12 +187,8 @@ async function onInfinite(e: InfiniteScrollCustomEvent): Promise<void> {
 
 /* Group shelf header — sits above each collections carousel. Matches the
    warm/cream theme; weight + size read as a section title, not a card. */
-.collection-group-title {
-  margin: 14px 0 2px;
-  padding: 0 20px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--ion-text-color);
+ion-list-header ion-button {
+  --color: var(--ion-color-medium);
 }
 
 /* IonInput renders inside SearchInputAndroid wrapped with `margin: 10px`.

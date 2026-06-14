@@ -61,6 +61,23 @@ const routes: RouteRecordRaw[] = [
         props: true,
       },
       {
+        path: "collection/:id",
+        name: "collection",
+        component: () => import("@shruti/views/Collection/CollectionView.vue"),
+        props: true,
+      },
+      {
+        path: "collection-group/:groupId",
+        name: "collection-group",
+        component: () => import("@shruti/views/Collection/CollectionListView.vue"),
+        props: true,
+      },
+      {
+        path: "collections",
+        name: "collections",
+        component: () => import("@shruti/views/Collection/CollectionListView.vue"),
+      },
+      {
         // Single route for both Note-edit and Citation modes. Entry
         // points (NotesView, CitationChip) hand off the payload via
         // `useStudioHandoffStore` and then push here.
