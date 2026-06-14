@@ -7,8 +7,14 @@ export type OpenParams = {
   // The ID of the playlist item associated with this file
   itemId: string,
 
-  // The URL of the audio track to play
+  // The URL of the audio track to play (the "original" recording)
   url: string,
+
+  // Optional second source: the denoised "clean" version of the same
+  // recording. When present, the player plays BOTH in sync and blends them
+  // per `setSourceMix` (0 = original, 1 = clean). Absent → single-source,
+  // today's behaviour unchanged.
+  secondaryUrl?: string,
 
   // The title of the audio track to be displayed
   // in the system player UI
@@ -67,6 +73,24 @@ export type SetMixParams = {
 }
 
 /**
+ * Source-mix configuration — blends two SEPARATE audio files of the same
+ * recording (the noisy `original` and the denoised `clean`, supplied via
+ * `OpenParams.secondaryUrl` / `QueueItem.secondaryUrl`). Distinct from
+ * `setMix`, which blends the L/R channels of ONE stereo file.
+ *
+ * Both sources play sample-synchronized; `level` cross-fades by gain:
+ *   level = 0   → original only (default)
+ *   level = 1   → clean only
+ *   0 < l < 1   → both, gains (1 − l) and l (with a short ramp, no clicks)
+ *
+ * No-op when the current item has no secondary source.
+ */
+export type SetSourceMixParams = {
+  /** 0..1. 0 = original, 1 = clean. */
+  level: number
+}
+
+/**
  * Playback rate. `1.0` is normal speed; `2.0` is double-speed. The
  * implementations preserve pitch (no chipmunk effect) — `preservesPitch`
  * on web, `PlaybackParameters` with `pitch=1` on Android, and
@@ -115,8 +139,11 @@ export type SetProgressIntervalParams = {
 export type QueueItem = {
   // Playlist item id — the bookkeeping key echoed back in Status / events
   itemId: string
-  // file:// (preferred) or HTTP url
+  // file:// (preferred) or HTTP url (the "original" recording)
   url: string
+  // Optional denoised "clean" source, played in sync and blended via
+  // setSourceMix. Absent → single-source.
+  secondaryUrl?: string
   title: string
   author: string
   // Optional http(s)/content artwork URL for the lock-screen large icon;
@@ -187,6 +214,9 @@ export interface AudioPlayerPlugin extends Plugin {
   seekBy(options: SeekByParams): Promise<void>
   stop(): Promise<void>
   setMix(params: SetMixParams): Promise<void>
+  /** Cross-fade between the original and the clean source (0..1). No-op when
+   *  the current item has no `secondaryUrl`. */
+  setSourceMix(params: SetSourceMixParams): Promise<void>
   setPlaybackRate(params: SetPlaybackRateParams): Promise<void>
   setProgressInterval(params: SetProgressIntervalParams): Promise<void>
   onProgressChanged(

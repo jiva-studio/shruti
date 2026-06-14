@@ -9,6 +9,7 @@ import type {
   QueueTransition,
   SeekByParams,
   SetMixParams,
+  SetSourceMixParams,
   SetPlaybackRateParams,
   SetProgressIntervalParams,
   SetQueueParams,
@@ -69,6 +70,9 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
   private rightGain: GainNode | null = null
   private sumGain: GainNode | null = null
   private mixActive = false
+  // Source-mix level (0 = original, 1 = clean). Real dual-source graph is
+  // wired in a follow-up commit; for now this records the requested level.
+  private sourceMixLevel = 0
 
 
   constructor () {
@@ -394,6 +398,13 @@ export class AudioPlayerPluginWeb implements AudioPlayerPlugin {
         this.mixActive = false
       }
     }
+  }
+
+  async setSourceMix(params: SetSourceMixParams): Promise<void> {
+    // Contract stub: records the requested 0..1 level. The dual-source
+    // graph (second <audio> + gain crossfade) lands in a follow-up commit;
+    // single-source items ignore this safely.
+    this.sourceMixLevel = clamp01(params.level)
   }
 
   private ensureGraph(): void {
