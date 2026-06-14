@@ -181,7 +181,7 @@ async def observe_turn(
             request_id=base_ctx.request_id,
             aliases=base_ctx.aliases,
             expander=base_ctx.expander,
-            emitted_verse_refs=set(),
+            emitted_card_keys=set(),
             llm=base_ctx.llm,
             research_tools=_wrap_tools_for_capture(base_ctx.research_tools, buf),
             catalog_tools=_wrap_tools_for_capture(base_ctx.catalog_tools, buf),
