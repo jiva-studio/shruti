@@ -58,8 +58,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
       await ensureRegistered()
       await AudioPlayer.open({
         itemId: params.itemId,
-        url: params.url,
-        secondaryUrl: params.secondaryUrl,
+        audios: params.audios,
         title: params.title,
         author: params.author,
         cover: params.cover,
@@ -148,8 +147,7 @@ export function useCapacitorAudioPlayer(): IAudioPlayer {
 
 function toPluginQueueItem(item: AudioQueueItem): {
   itemId: string
-  url: string
-  secondaryUrl?: string
+  audios: string[]
   title: string
   author: string
   cover?: string
@@ -157,8 +155,7 @@ function toPluginQueueItem(item: AudioQueueItem): {
 } {
   return {
     itemId: item.itemId,
-    url: item.url,
-    secondaryUrl: item.secondaryUrl,
+    audios: item.audios,
     title: item.title,
     author: item.author,
     cover: item.cover,

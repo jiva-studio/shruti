@@ -272,13 +272,17 @@ public final class AudioPlayerService extends MediaSessionService {
             for (int i = 0; i < arr.length(); i++) {
                 org.json.JSONObject o = arr.optJSONObject(i);
                 if (o == null) continue;
-                String url = o.optString("url", null);
+                // audios[0] = primary (played), audios[1] = optional crossfade source.
+                org.json.JSONArray audios = o.optJSONArray("audios");
+                String url = (audios != null && audios.length() > 0)
+                        ? audios.optString(0, null) : null;
                 if (url == null || url.isEmpty()) continue;
+                String secondaryUrl = (audios != null && audios.length() > 1)
+                        ? audios.optString(1, null) : null;
                 String itemId = o.optString("itemId", "");
                 String title = o.optString("title", "");
                 String author = o.optString("author", "");
                 String cover = o.optString("cover", null);
-                String secondaryUrl = o.optString("secondaryUrl", null);
                 long durationMs = o.has("durationMs") ? o.optLong("durationMs", C.TIME_UNSET)
                         : C.TIME_UNSET;
                 out.add(AudioPlayerPlugin.buildMediaItem(

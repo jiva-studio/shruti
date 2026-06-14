@@ -7,14 +7,13 @@ export type OpenParams = {
   // The ID of the playlist item associated with this file
   itemId: string,
 
-  // The URL of the audio track to play (the "original" recording)
-  url: string,
-
-  // Optional second source: the denoised "clean" version of the same
-  // recording. When present, the player plays BOTH in sync and blends them
-  // per `setSourceMix` (0 = original, 1 = clean). Absent → single-source,
-  // today's behaviour unchanged.
-  secondaryUrl?: string,
+  // Audio sources in priority order. `audios[0]` is the source to play and
+  // owns the timeline. `audios[1]`, when present, is a second source the
+  // player loads in sync and crossfades toward via `setSourceMix`
+  // (0 = first source, 1 = second). One entry → single-source playback.
+  // The player is agnostic about what each source IS — picking which file
+  // goes where is the caller's concern.
+  audios: string[],
 
   // The title of the audio track to be displayed
   // in the system player UI
@@ -73,20 +72,20 @@ export type SetMixParams = {
 }
 
 /**
- * Source-mix configuration — blends two SEPARATE audio files of the same
- * recording (the noisy `original` and the denoised `clean`, supplied via
- * `OpenParams.secondaryUrl` / `QueueItem.secondaryUrl`). Distinct from
- * `setMix`, which blends the L/R channels of ONE stereo file.
+ * Source-mix configuration — blends the two SEPARATE audio files supplied
+ * for the current item (`audios[0]` and `audios[1]` in `OpenParams` /
+ * `QueueItem`). Distinct from `setMix`, which blends the L/R channels of
+ * ONE stereo file.
  *
  * Both sources play sample-synchronized; `level` cross-fades by gain:
- *   level = 0   → original only (default)
- *   level = 1   → clean only
+ *   level = 0   → first source only (default)
+ *   level = 1   → second source only
  *   0 < l < 1   → both, gains (1 − l) and l (with a short ramp, no clicks)
  *
- * No-op when the current item has no secondary source.
+ * No-op when the current item has only one source.
  */
 export type SetSourceMixParams = {
-  /** 0..1. 0 = original, 1 = clean. */
+  /** 0..1. 0 = first source (`audios[0]`), 1 = second source (`audios[1]`). */
   level: number
 }
 
@@ -139,11 +138,10 @@ export type SetProgressIntervalParams = {
 export type QueueItem = {
   // Playlist item id — the bookkeeping key echoed back in Status / events
   itemId: string
-  // file:// (preferred) or HTTP url (the "original" recording)
-  url: string
-  // Optional denoised "clean" source, played in sync and blended via
-  // setSourceMix. Absent → single-source.
-  secondaryUrl?: string
+  // Audio sources in priority order; see `OpenParams.audios`. `audios[0]`
+  // (file:// preferred, or HTTP) is played; `audios[1]` is the optional
+  // crossfade source for setSourceMix.
+  audios: string[]
   title: string
   author: string
   // Optional http(s)/content artwork URL for the lock-screen large icon;
@@ -214,8 +212,8 @@ export interface AudioPlayerPlugin extends Plugin {
   seekBy(options: SeekByParams): Promise<void>
   stop(): Promise<void>
   setMix(params: SetMixParams): Promise<void>
-  /** Cross-fade between the original and the clean source (0..1). No-op when
-   *  the current item has no `secondaryUrl`. */
+  /** Cross-fade between the current item's two audio sources (0..1). No-op
+   *  when the item has only one source (`audios.length < 2`). */
   setSourceMix(params: SetSourceMixParams): Promise<void>
   setPlaybackRate(params: SetPlaybackRateParams): Promise<void>
   setProgressInterval(params: SetProgressIntervalParams): Promise<void>
