@@ -147,7 +147,12 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if existing == nil {
 			existing = configManifest{}
 		}
-		// Merge the library section: dedup by version, prepend, sort desc, keep top 5.
+		// Merge the library section: dedup by version, prepend, sort desc. We
+		// keep EVERY previously published version — a client pinned to an
+		// older library scheme must keep finding its compatible version.
+		// Dropping old entries here strands those clients even though the blob
+		// is still on the bucket. Old blobs are pruned (if ever) by a separate,
+		// scheme-aware retention pass, never by a blind top-N.
 		var lib librarySection
 		if raw, ok := existing["library"]; ok {
 			_ = json.Unmarshal(raw, &lib)
@@ -160,9 +165,6 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 		filtered = append([]libraryEntry{{Version: cur}}, filtered...)
 		sort.Slice(filtered, func(i, j int) bool { return filtered[i].Version > filtered[j].Version })
-		if len(filtered) > 5 {
-			filtered = filtered[:5]
-		}
 		lib.Versions = filtered
 		libRaw, _ := json.Marshal(lib)
 		existing["library"] = libRaw

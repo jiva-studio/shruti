@@ -188,7 +188,12 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		if cfg == nil {
 			cfg = configManifest{}
 		}
-		// dedupe by version, prepend, sort desc, top 5.
+		// dedupe by version, prepend, sort desc. We keep EVERY previously
+		// published version: a client pinned to an older scheme must keep
+		// finding its compatible DB. Dropping old entries here strands those
+		// clients ("No compatible content database for scheme N") even though
+		// the .db blob is still on the bucket. Old blobs are pruned (if ever)
+		// by a separate, scheme-aware retention pass, never by a blind top-N.
 		entries := cfg.databases()
 		filtered := entries[:0]
 		for _, d := range entries {
@@ -198,9 +203,6 @@ func (uc UseCase) Run(ctx context.Context, opts Options) (Result, error) {
 		}
 		filtered = append([]databaseEntry{{Version: cur, Scheme: uc.SupportedScheme}}, filtered...)
 		sort.Slice(filtered, func(i, j int) bool { return filtered[i].Version > filtered[j].Version })
-		if len(filtered) > 5 {
-			filtered = filtered[:5]
-		}
 		cfg.setDatabases(filtered)
 		// Re-ship the locally-edited config sections (regions + proactive)
 		// from config.json — the local file is the source of truth. Sections
