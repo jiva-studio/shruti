@@ -229,7 +229,9 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
           [collectionId, locale]
         )
       } catch (err) {
-        if (isMissingTable(err)) return []
+        // Also tolerate an older catalog DB that predates authors.image /
+        // authors.description (no such column), not just missing tables.
+        if (isMissingTable(err) || isMissingColumn(err)) return []
         throw err
       }
     },
@@ -286,4 +288,16 @@ function isMissingTable(err: unknown): boolean {
   return /no such table:\s*(collections|collection_tracks|collection_tags|collection_groups|collection_group_items)\b/i.test(
     message
   )
+}
+
+/**
+ * SQLite reports `no such column: <name>` when a query reads a column an
+ * older catalog DB doesn't have yet (e.g. authors.image / authors.description
+ * before the author-profile migration). Lets reads degrade gracefully on a
+ * stale bundled DB.
+ */
+function isMissingColumn(err: unknown): boolean {
+  if (!err) return false
+  const message = err instanceof Error ? err.message : String(err)
+  return /no such column:/i.test(message)
 }
