@@ -33,9 +33,17 @@ Client-initiated + async, same contract as share-audio's `/excerpts`:
 - **Cold**: do the cheap checks synchronously (a missing transcript →
   `404 transcript_unavailable`), then **dispatch the render to a background
   task** (GET transcript → ensure outline
-  `artifacts/tracks/<id>/outlines/<lang>.<model_tag>.json`, generate via LLM
+  `artifacts/tracks/<id>/outlines/<lang>.<model_tag>.c1.json`, generate via LLM
   on miss → reportlab → PUT) and return `202 {ready:false}` with the
   predicted URL. The render is coalesced per output key.
+
+The outline is generated in two passes (kept in sync with chat's
+`track_outline_get`, which shares this cache): a granular fine pass lists
+every topic shift, then a merge pass folds consecutive topics into ≤8 coarse
+chapters, repeating until at/below the ceiling. The chapter count emerges
+from the content rather than a fixed number the LLM ignores. The `.c1` tag
+in the cache key is the algorithm version — bump it (here and in chat) to
+invalidate outlines from the old single-pass generator.
 
 The predicted URL equals the canonical key the render writes to, so the
 client polls that URL (`resolveShareArtifact` / `pollUntilReady`) until the
