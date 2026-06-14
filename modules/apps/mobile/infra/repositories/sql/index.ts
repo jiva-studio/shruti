@@ -37,6 +37,7 @@ export type {
   CollectionDetail,
   TrackCollectionRef,
   CollectionGroupRow,
+  CollectionAuthor,
   ISqlCollectionRepository,
 } from "./collectionsRepository.sql.js"
 

@@ -36,6 +36,18 @@ export interface CollectionGroupRow {
   readonly name: string
 }
 
+/**
+ * The author behind a collection (derived from its tracks' dominant author).
+ * `image` is an S3 asset key for the avatar; `description` a short bio. Both
+ * are empty when not yet published — the UI then shows name only / no avatar.
+ */
+export interface CollectionAuthor {
+  readonly id: string
+  readonly name: string
+  readonly image: string
+  readonly description: string
+}
+
 export interface ISqlCollectionRepository {
   /**
    * Featured collections for `locale` (carrying the `tag_featured` tag),
@@ -61,6 +73,15 @@ export interface ISqlCollectionRepository {
    * per-item provenance is stored.
    */
   getTrackCollections(trackId: string, locale: string): Promise<readonly TrackCollectionRef[]>
+
+  /**
+   * Distinct authors of a collection, ordered by how many of its tracks each
+   * one wrote (dominant first), each with avatar + short bio. Empty when the
+   * collection has no tracks / no resolvable authors, or the catalog DB
+   * predates the author profile columns. Drives the collection-card avatar
+   * pile (overlapping circles) and the detail-sheet header.
+   */
+  getCollectionAuthors(collectionId: string, locale: string): Promise<readonly CollectionAuthor[]>
 
   /** Named collection-groups for `locale`, ordered by `sort_order`. */
   listGroups(locale: string): Promise<readonly CollectionGroupRow[]>
@@ -157,6 +178,30 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
             WHERE ctk.track_id = ? AND ctk.collection_language = ?
             ORDER BY c.sort_order ASC, c.id ASC`,
           [trackId, locale]
+        )
+      } catch (err) {
+        if (isMissingTable(err)) return []
+        throw err
+      }
+    },
+
+    async getCollectionAuthors(
+      collectionId: string,
+      locale: string
+    ): Promise<readonly CollectionAuthor[]> {
+      try {
+        return await contentDb.query<CollectionAuthor>(
+          `SELECT a.id,
+                  a.full_name AS name,
+                  COALESCE(a.image, '') AS image,
+                  COALESCE(a.description, '') AS description
+             FROM collection_tracks ctk
+             JOIN tracks t ON t.id = ctk.track_id
+             JOIN authors a ON a.id = t.author_id AND a.language = ctk.collection_language
+            WHERE ctk.collection_id = ? AND ctk.collection_language = ?
+            GROUP BY a.id
+            ORDER BY COUNT(*) DESC, a.full_name ASC`,
+          [collectionId, locale]
         )
       } catch (err) {
         if (isMissingTable(err)) return []
