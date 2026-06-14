@@ -11,7 +11,10 @@ const newMediaItemId = createIdGenerator("media")
 
 export function createSqlMediaItemRepository(db: IDatabase): IMediaItemRepository {
   return {
-    async getByTrack(trackId: TrackId, kind: MediaAudioKind = "original"): Promise<MediaItem | null> {
+    async getByTrack(
+      trackId: TrackId,
+      kind: MediaAudioKind = "original"
+    ): Promise<MediaItem | null> {
       return queryOne<MediaItemRow, MediaItem>(
         db,
         "SELECT * FROM media_items WHERE track_id = ? AND kind = ? LIMIT 1",

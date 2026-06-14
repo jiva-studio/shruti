@@ -10,9 +10,7 @@ import type { Migration } from "./types.js"
 export const migration_011_media_items_kind: Migration = {
   name: "011_media_items_kind",
   up: async (db) => {
-    await db.execute(
-      "ALTER TABLE media_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'original'"
-    )
+    await db.execute("ALTER TABLE media_items ADD COLUMN kind TEXT NOT NULL DEFAULT 'original'")
     // Replace the per-track unique index with a per-(track, kind) one.
     await db.execute("DROP INDEX IF EXISTS idx_media_items_track")
     await db.execute(
