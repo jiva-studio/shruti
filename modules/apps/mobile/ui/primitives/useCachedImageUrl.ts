@@ -1,5 +1,5 @@
-import { ref, watch, onUnmounted, type Ref } from "vue"
-import { useLectorium } from "@lectorium/lectorium.js"
+import { ref, watch, onUnmounted, inject, type Ref } from "vue"
+import { FILES_STORAGE_KEY } from "./filesStorageKey.js"
 
 export interface UseCachedImageUrlReturn {
   /** Locally-cached src for `<img>`, or undefined until the first resolve. */
@@ -7,20 +7,20 @@ export interface UseCachedImageUrlReturn {
 }
 
 /**
- * Resolve a remote image URL to a locally-cached one via the shared
- * `IRemoteFilesStorage`. The file bytes are cached (CacheStorage on web,
- * Filesystem on native) so they're fetched from S3 once; note that on web
- * `get()` mints a fresh `blob:` object URL on every call (even a cache hit),
- * which is why we revoke the previous one.
+ * Resolve a remote image URL to a locally-cached one via the injected
+ * `IRemoteFilesStorage` (provided by the composition root). The file bytes are
+ * cached (CacheStorage on web, Filesystem on native); note that on web `get()`
+ * mints a fresh `blob:` object URL on every call (even a cache hit), which is
+ * why we revoke the previous one.
  *
  * `src` starts `undefined` (caller shows its placeholder), becomes the cached
- * URL on success, and falls back to the raw remote URL if caching fails so the
- * image still appears. A generation token guards against a slow earlier
+ * URL on success, and falls back to the raw remote URL when caching is
+ * unavailable or fails. A generation token guards against a slow earlier
  * resolve landing after a newer url change; any `blob:` URL is revoked on
- * url-change / unmount to avoid leaks.
+ * url-change / unmount.
  */
 export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedImageUrlReturn {
-  const { filesStorage } = useLectorium()
+  const filesStorage = inject(FILES_STORAGE_KEY, null)
   const src = ref<string | undefined>(undefined)
   let objectUrl: string | undefined
   let token = 0
@@ -35,18 +35,20 @@ export function useCachedImageUrl(remote: Ref<string | undefined>): UseCachedIma
     revoke()
     src.value = undefined
     if (!url) return
+    if (!filesStorage) {
+      // No cache wired (e.g. tests) — load the remote URL directly.
+      src.value = url
+      return
+    }
     try {
       const local = await filesStorage.get(url)
       if (current !== token) {
-        // A newer url arrived while we were fetching — drop this result.
         if (local.startsWith("blob:")) URL.revokeObjectURL(local)
         return
       }
       objectUrl = local
       src.value = local
     } catch {
-      // Caching failed (offline first-load, transient 5xx). Show the remote
-      // URL directly rather than a broken/placeholder tile.
       if (current === token) src.value = url
     }
   }

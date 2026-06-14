@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { ref, toRef } from "vue"
-import { useCachedImageUrl } from "@lectorium/composables/useCachedImageUrl.js"
+import { useCachedImageUrl } from "./useCachedImageUrl.js"
 
 /**
  * An <img> served through the local image cache, as an absolute fill layer
