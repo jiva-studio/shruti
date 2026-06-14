@@ -1,87 +1,113 @@
 <template>
-  <template v-for="row in rows" :key="row.id">
-    <div :class="['playlist-row', { 'is-disabled': row.disabled, 'is-dimmed': row.dimmed }]">
-      <WithDeleteAction @delete="emit('delete', row.id)">
-        <TrackListItem
-          :track-id="row.id"
-          :title="row.title"
-          :author="row.author"
-          :location="row.location"
-          :references="row.references"
-          :tags="row.tags"
-          :date="row.date"
-          :duration="row.duration"
-          @select="emit('click', row.id)"
-        >
-          <template #state>
-            <TrackStateIndicator :state="row.state" :progress="row.progressPct" />
-          </template>
-        </TrackListItem>
-      </WithDeleteAction>
+  <template v-for="item in items" :key="itemKey(item)">
+    <PlaylistRow
+      v-if="item.kind === 'track'"
+      :row="item.row"
+      @click="emit('click', $event)"
+      @delete="emit('delete', $event)"
+    />
+    <div v-else class="collection-group">
+      <TrackListItem
+        class="group-header"
+        :track-id="item.id"
+        :title="item.name"
+        :author="item.author"
+        :references="EMPTY"
+        :tags="EMPTY"
+      >
+        <template #state>
+          <RadialIndicator slot="end" :value="groupProgress(item.rows)" color="medium" />
+        </template>
+      </TrackListItem>
+      <PlaylistRow
+        v-for="row in item.rows"
+        :key="row.id"
+        :row="row"
+        @click="emit('click', $event)"
+        @delete="emit('delete', $event)"
+      />
     </div>
   </template>
 </template>
 
 <script setup lang="ts">
-import { WithDeleteAction } from "@ui/primitives/index.js"
+import RadialIndicator from "@ui/components/tracks/state/RadialIndicator.vue"
 import { TrackListItem, type UiTrackRow } from "@ui/components/tracks/list/index.js"
-import { TrackStateIndicator } from "@ui/components/tracks/state/index.js"
+import PlaylistRow from "./PlaylistRow.vue"
+import type { PlaylistRenderItem } from "./types.js"
 
-/* -------------------------------------------------------------------------- */
-/*                                  Interface                                 */
-/* -------------------------------------------------------------------------- */
-
+/**
+ * Renders the Home playlist as a mix of standalone track rows and collection
+ * groups. A group is delimited by top/bottom border lines (always expanded —
+ * no collapse) and a header built from the SAME TrackListItem as a track row,
+ * for identical type, spacing and background — only the orange title and the
+ * overall-progress ring mark it as the collection. Grouping is derived upstream
+ * (usePlaylistGroups); this is presentation-only.
+ */
 defineProps<{
-  rows: readonly UiTrackRow[]
+  items: readonly PlaylistRenderItem[]
 }>()
 
 const emit = defineEmits<{
   click: [trackId: string]
   delete: [trackId: string]
 }>()
+
+// Stable empty arrays for the header's (unused) reference/tag chip props.
+const EMPTY: readonly string[] = []
+
+/**
+ * Overall listening progress (0–100) across a group's lectures: a completed
+ * track counts as 100, an in-progress one as its playback %, anything not
+ * started as 0. Averaged over the group.
+ */
+function groupProgress(rows: readonly UiTrackRow[]): number {
+  if (rows.length === 0) return 0
+  let sum = 0
+  for (const r of rows) {
+    if (r.state === "completed") sum += 100
+    else if (r.state === "playing" || r.state === "queued") sum += r.progressPct
+  }
+  return Math.round(sum / rows.length)
+}
+
+function itemKey(item: PlaylistRenderItem): string {
+  return item.kind === "track" ? `t:${item.row.id}` : `g:${item.id}:${item.rows[0]?.id ?? ""}`
+}
 </script>
 
 <style scoped>
-/* Disabled / dimmed visuals sit on the outermost wrapper, OUTSIDE
-   WithDeleteAction (IonItemSliding) — Ionic Stencil components reparent
-   slotted content into shadow DOM, which broke opacity/pointer-events
-   on inner wrappers. A regular <div> at the top level isn't touched by
-   Ionic.
-
-   `is-dimmed` is opacity-only (failed downloads stay tappable to retry).
-   `is-disabled` is the hard non-interactive flag (used while a download
-   is in flight). Both can coexist: a downloading row is both dimmed and
-   non-interactive.
-
-   Ionic's `<IonItem :disabled>` is intentionally NOT used inside
-   TrackListItem — it stacks its own ~0.5 dim on top, making a
-   downloading row visibly darker than a failed one. Tap blocking is
-   owned by this wrapper's pointer-events:none alone.
-
-   The dim is scoped to <ion-label> only — the state indicator slot
-   (red X / spinner / completed check) sits OUTSIDE the label inside
-   TrackListItem, so it stays at full opacity and reads as the same
-   vivid red on Home as on Search. */
-/* IonItemSliding translates the IonItem horizontally to reveal the
-   IonItemOptions (trash) underneath. The IonItem is set to a transparent
-   background globally (TrackListItem.vue), so on Search/Library the row
-   blends with the surrounding list. On the Home playlist, however, the
-   transparent IonItem lets the revealed trash icon bleed through the
-   row content during the swipe. Force an opaque background only here,
-   on the actually-translated layer (the IonItem). The previous
-   background-color on `.playlist-row` was a no-op for this — that
-   wrapper never moves. */
-.playlist-row {
-  background-color: var(--ion-background-color);
+/* One background for the whole collection (header + its tracks): the soft tan
+   --ion-color-light. The ring track is the slightly darker --ion-color-light-shade
+   (set globally in RadialIndicator), so rings stay visible on this band and look
+   identical everywhere. The shared --collection-bg cascades to the grouped rows. */
+.collection-group {
+  --collection-bg: color-mix(in srgb, var(--ion-color-light) 70%, var(--ion-background-color));
+  background: var(--collection-bg);
+  /* Faint warm edge lines so the band's start/end stay visible even though the
+     fill is muted. */
+  border-top: 1px solid rgba(var(--ion-color-primary-rgb), 0.18);
+  border-bottom: 1px solid rgba(var(--ion-color-primary-rgb), 0.18);
 }
-.playlist-row :deep(ion-item.track) {
-  --ion-item-background: var(--ion-background-color);
-  --background: var(--ion-background-color);
+
+/* Header shares the band background (its IonItem is transparent) and the
+   track-row typography; only the orange title marks it as the collection. */
+.group-header {
+  --ion-item-background: transparent;
+  --background: transparent;
 }
-.playlist-row.is-dimmed :deep(ion-label) {
-  opacity: 0.65;
+
+.group-header :deep(.title) {
+  color: var(--ion-color-primary);
+  font-weight: 600;
 }
-.playlist-row.is-disabled {
-  pointer-events: none;
+
+/* Grouped track rows take the same band background. */
+.collection-group :deep(.playlist-row) {
+  background-color: var(--collection-bg);
+}
+.collection-group :deep(.playlist-row ion-item.track) {
+  --ion-item-background: var(--collection-bg);
+  --background: var(--collection-bg);
 }
 </style>
