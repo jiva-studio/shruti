@@ -50,11 +50,13 @@ class DenoiseParams(BaseModel):
     """Knobs forwarded to denoise_mp3.py. Defaults match the script."""
 
     strategy: str = Field(
-        "afftdn",
-        description="Cleaning strategy: 'afftdn' (default, ffmpeg FFT denoise — "
-        "fast, no dead pauses), 'rnnoise' (RNNoise, aggressive), 'rnnoise-mix' "
-        "(RNNoise blended back with the original by voice probability), or "
-        "'afftdn-rnnoise-mix' (afftdn then RNNoise, original blended back).",
+        "deepfilternet",
+        description="Cleaning strategy: 'deepfilternet' (default, DeepFilterNet3 "
+        "learned speech denoiser — best for archival hiss/static, preserves the "
+        "voice), 'afftdn' (ffmpeg FFT denoise — milder, leaves residual), "
+        "'rnnoise' (RNNoise, aggressive), 'rnnoise-mix' (RNNoise blended back "
+        "with the original by voice probability), or 'afftdn-rnnoise-mix' "
+        "(afftdn then RNNoise, original blended back).",
     )
     # afftdn knobs
     nr: float = Field(

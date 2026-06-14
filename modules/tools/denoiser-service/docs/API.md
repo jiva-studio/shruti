@@ -49,7 +49,7 @@ Queue a denoise job. Returns `201`.
 | `dest.acl` | string | no | Canned ACL, e.g. `public-read`. |
 | `dest.content_type` | string | no | Default `audio/mpeg`. |
 | `filename` | string | no | Display name; defaults to the URL basename. |
-| `params.strategy` | string | no | `afftdn` (default) \| `rnnoise` \| `rnnoise-mix` \| `afftdn-rnnoise-mix`. |
+| `params.strategy` | string | no | `deepfilternet` (default) \| `afftdn` \| `rnnoise` \| `rnnoise-mix` \| `afftdn-rnnoise-mix`. |
 | `params.nr` | float | no | afftdn noise reduction in dB, higher = more aggressive. Default `12`. |
 | `params.nf` | float | no | afftdn noise floor in dB. Default `-25`. |
 | `params.mix_min` | float | no | rnnoise-mix: original ratio in pauses (0–1). Default `0.10`. |
