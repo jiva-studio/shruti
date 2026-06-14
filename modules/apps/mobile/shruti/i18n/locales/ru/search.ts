@@ -5,6 +5,7 @@ export default {
   filtersButton: "Фильтры",
   filtersSheetTitle: "Фильтры",
   filtersReset: "Сбросить",
+  lecturesTitle: "Лекции",
   actions: {
     addToPlaylist: "Добавить в плейлист",
     openTranscript: "Открыть транскрипт",
