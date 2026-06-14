@@ -10,6 +10,7 @@ Removes noise from MP3 files with a multi-stage processing pipeline:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -155,24 +156,43 @@ def _measure_lufs(path):
 
 
 def _match_loudness(target_path, reference_path):
-    """Shift `target_path` to match `reference_path`'s integrated loudness (EBU
-    R128), so the app's original↔clean slider has no volume jump (denoising
-    removes energy, leaving the clean otherwise quieter). A pure gain shift
-    preserves the denoised dynamics; a brickwall limiter guards against clipping
-    on boost. No-op if measurement fails."""
+    """Match `target_path`'s integrated loudness to `reference_path`'s (EBU R128
+    via two-pass ffmpeg loudnorm, linear), so the app's original↔clean slider has
+    no volume jump (denoising removes energy, leaving the clean otherwise
+    quieter). `linear=true` applies a single gain (preserving the denoised
+    dynamics) and only falls back to dynamic if it would breach true peak; a high
+    target LRA avoids range compression. No-op if measurement fails."""
     ref = _measure_lufs(reference_path)
-    cur = _measure_lufs(target_path)
-    if ref is None or cur is None:
-        print("Loudness match skipped (measurement failed)")
+    if ref is None:
+        print("Loudness match skipped (reference measurement failed)")
         return
-    gain_db = ref - cur
-    print(f"Loudness: ref {ref:.1f} LUFS, clean {cur:.1f} → gain {gain_db:+.2f} dB")
+    # Pass 1: measure the clean's loudnorm stats.
+    try:
+        p1 = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", target_path,
+             "-af", "loudnorm=print_format=json", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=600,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return
+    m = re.search(r'\{[^{}]*"input_i"[\s\S]*?\}', p1.stderr)
+    if not m:
+        print("Loudness match skipped (loudnorm measure failed)")
+        return
+    st = json.loads(m.group(0))
+    # Pass 2: normalize to the reference's integrated loudness.
+    af = (
+        f"loudnorm=I={ref:.2f}:TP=-1.5:LRA=20:linear=true"
+        f":measured_I={st['input_i']}:measured_TP={st['input_tp']}"
+        f":measured_LRA={st['input_lra']}:measured_thresh={st['input_thresh']}"
+        f":offset={st['target_offset']}"
+    )
+    print(f"Loudness: matching clean to reference {ref:.1f} LUFS (linear)")
     tmp = target_path + ".loudnorm.mp3"
     try:
         subprocess.run(
             ["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", target_path,
-             "-af", f"volume={gain_db:.2f}dB,alimiter=limit=0.95",
-             "-c:a", "libmp3lame", "-b:a", "128k", tmp],
+             "-af", af, "-c:a", "libmp3lame", "-b:a", "128k", tmp],
             check=True, capture_output=True, timeout=600,
         )
     except (OSError, subprocess.SubprocessError):
