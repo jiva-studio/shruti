@@ -75,11 +75,24 @@ type VariantRow struct {
 	TrackID        string
 	Language       string
 	Title          string
-	AudioPath      string
-	AudioFilesize  int64
-	AudioDuration  int64 // ms
-	AudioKind      string
 	TranscriptPath string
 	TranscriptKind string
 	SortReference  *string
+}
+
+// Audio kind discriminators for track_audio rows.
+const (
+	AudioKindOriginal = "original" // the source/published recording
+	AudioKindClean    = "clean"    // denoised version produced by the denoiser
+)
+
+// AudioRow is one (track, language, kind) row in track_audio — a single audio
+// version of a variant. A variant can have several (original, clean, …).
+type AudioRow struct {
+	TrackID  string
+	Language string
+	Kind     string // AudioKindOriginal | AudioKindClean | …
+	Path     string // relative key, e.g. public/tracks/{id}/audio/original.mp3
+	Filesize int64
+	Duration int64 // ms
 }

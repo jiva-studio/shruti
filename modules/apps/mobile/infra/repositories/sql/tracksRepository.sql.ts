@@ -8,6 +8,7 @@ import type {
 } from "@lib/domain/ports/trackRepository.js"
 import type { Track } from "@lib/domain/track.js"
 import type {
+  TrackAudioRow,
   TrackReferenceRow,
   TrackRow,
   TrackTagRow,
@@ -133,9 +134,13 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
   const ids = tracks.map((t) => t.id)
   const placeholders = ids.map(() => "?").join(", ")
 
-  const [variants, references, tags] = await Promise.all([
+  const [variants, audios, references, tags] = await Promise.all([
     contentDb.query<TrackVariantRow>(
       `SELECT * FROM track_variants WHERE track_id IN (${placeholders})`,
+      ids
+    ),
+    contentDb.query<TrackAudioRow>(
+      `SELECT * FROM track_audio WHERE track_id IN (${placeholders})`,
       ids
     ),
     contentDb.query<TrackReferenceRow>(
@@ -148,7 +153,7 @@ async function hydrate(contentDb: IDatabase, tracks: readonly TrackRow[]): Promi
     ),
   ])
 
-  return tracks.map((track) => rowToTrack({ track, variants, references, tags }))
+  return tracks.map((track) => rowToTrack({ track, variants, audios, references, tags }))
 }
 
 /**
@@ -332,18 +337,13 @@ function buildFilterClauses(filters: TrackListFilters): {
     params.push(...filters.sourceIds)
   }
   if (filters.durationMinMs !== undefined) {
-    // Duration comes from any variant that has audio. Pick the max of
-    // the per-variant durations — every variant of the same track
-    // points at the same original recording for now.
-    clauses.push(
-      `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) >= ?`
-    )
+    // Duration comes from any audio version of any variant. Pick the max —
+    // every version of a track is the same recording length.
+    clauses.push(`(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) >= ?`)
     params.push(filters.durationMinMs)
   }
   if (filters.durationMaxMs !== undefined) {
-    clauses.push(
-      `(SELECT COALESCE(MAX(audio_duration), 0) FROM track_variants WHERE track_id = t.id) < ?`
-    )
+    clauses.push(`(SELECT COALESCE(MAX(duration), 0) FROM track_audio WHERE track_id = t.id) < ?`)
     params.push(filters.durationMaxMs)
   }
   // `tracks.date` is a "YYYY-MM-DD" string; BINARY collation makes string
@@ -555,16 +555,16 @@ export function createSqlTrackRepository(deps: CreateSqlTrackRepositoryDeps): IT
     async getDurationsMs(trackIds: readonly TrackId[]): Promise<ReadonlyMap<TrackId, number>> {
       const out = new Map<TrackId, number>()
       if (trackIds.length === 0) return out
-      // GROUP BY + MAX picks the longest variant per track. Variants
-      // typically differ in language but share audio length within a few
-      // hundred ms; MAX is the conservative pick when they don't.
+      // GROUP BY + MAX picks the longest audio per track. Versions/variants
+      // typically share audio length within a few hundred ms; MAX is the
+      // conservative pick when they don't.
       const placeholders = trackIds.map(() => "?").join(",")
       const rows = await contentDb.query<{
         track_id: string
         duration: number | null
       }>(
-        `SELECT track_id, MAX(audio_duration) AS duration
-           FROM track_variants
+        `SELECT track_id, MAX(duration) AS duration
+           FROM track_audio
           WHERE track_id IN (${placeholders})
           GROUP BY track_id`,
         [...trackIds]

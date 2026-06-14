@@ -50,11 +50,6 @@ export interface TrackVariantRow {
   readonly track_id: string
   readonly language: string
   readonly title: string
-  readonly audio_path: string | null
-  readonly audio_filesize: number | null
-  /** Audio duration in **milliseconds**. */
-  readonly audio_duration: number | null
-  readonly audio_kind: string | null
   readonly transcript_path: string | null
   readonly transcript_kind: string | null
   /**
@@ -67,6 +62,19 @@ export interface TrackVariantRow {
    * Conversations) — consumer sorts those last via `NULLS LAST`.
    */
   readonly sort_reference: string | null
+}
+
+/** One audio version of a (track, language) variant — see the track_audio table. */
+export interface TrackAudioRow {
+  readonly track_id: string
+  readonly language: string
+  /** "original" | "clean" | … */
+  readonly kind: string
+  /** Full path from the bucket root. */
+  readonly path: string
+  readonly filesize: number | null
+  /** Audio duration in **milliseconds**. */
+  readonly duration: number | null
 }
 
 export interface TrackReferenceRow {
