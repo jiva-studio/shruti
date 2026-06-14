@@ -26,11 +26,30 @@ def default_data_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".denoiser")
 
 
+def default_workers() -> int:
+    """Concurrency default when --workers isn't passed. Denoising is CPU-bound
+    (DeepFilterNet binary / ffmpeg, no GPU), so we scale with cores rather than
+    the transcriber's GPU-limited 2. Override order: --workers flag >
+    $DENOISER_WORKERS > auto (logical cores − 2, leaving headroom for the OS
+    and the per-job ffmpeg)."""
+    env = os.environ.get("DENOISER_WORKERS")
+    if env:
+        try:
+            v = int(env)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    cpu = os.cpu_count() or 2
+    return max(1, cpu - 2)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="denoiser-service")
     p.add_argument("--addr", default="0.0.0.0:8091", help="HTTP listen address host:port")
     p.add_argument("--data-dir", default=default_data_dir(), help="dir for jobs.db")
-    p.add_argument("--workers", type=int, default=2, help="concurrent denoise workers")
+    p.add_argument("--workers", type=int, default=default_workers(),
+                   help="concurrent denoise workers (default: $DENOISER_WORKERS or cores-2)")
     p.add_argument("--denoiser-script", default=None,
                    help="path to denoise_mp3.py (default: sibling audio-denoiser/)")
     p.add_argument("--python", default=sys.executable,
