@@ -8,6 +8,7 @@ export interface GroupCollection {
   readonly id: string
   readonly name: string
   readonly coverUrl?: string
+  readonly description?: string
 }
 
 /** A named group (shelf) with its ordered collections, ready to render. */
@@ -63,6 +64,7 @@ export function useCollectionGroups(locale: Ref<string>): UseCollectionGroupsRet
         id: c.id,
         name: c.name,
         coverUrl: coverUrl(c.cover),
+        description: c.description,
       }))
     } catch (err) {
       console.warn("[collection-groups] load failed", err)

@@ -13,6 +13,7 @@ export interface FeaturedCollectionRow {
   readonly name: string
   readonly cover: string
   readonly sort_order: number
+  readonly description?: string
 }
 
 /** Full detail for the collection screen/modal. */
@@ -195,7 +196,8 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
     async listCollections(locale: string): Promise<readonly FeaturedCollectionRow[]> {
       try {
         return await contentDb.query<FeaturedCollectionRow>(
-          `SELECT id, name, COALESCE(cover, '') AS cover, sort_order
+          `SELECT id, name, COALESCE(cover, '') AS cover, sort_order,
+                  COALESCE(description, '') AS description
              FROM collections
             WHERE language = ?
             ORDER BY sort_order ASC, id ASC`,

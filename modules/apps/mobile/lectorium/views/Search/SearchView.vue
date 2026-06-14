@@ -34,9 +34,11 @@
           :key="c.id"
           :name="c.name"
           :cover-url="c.coverUrl"
+          :description="c.description"
           @click="onSelectCollection(c.id)"
         />
       </template>
+      <h2 class="collection-group-title">{{ $t("search.lecturesTitle") }}</h2>
     </template>
 
     <IonText v-if="search.error.value" color="danger" class="ion-padding">

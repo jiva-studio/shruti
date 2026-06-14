@@ -10,7 +10,10 @@
         @load="loaded = true"
       />
     </span>
-    <span class="name">{{ name }}</span>
+    <span class="text">
+      <span class="name">{{ name }}</span>
+      <span v-if="description" class="desc">{{ description }}</span>
+    </span>
   </button>
 </template>
 
@@ -25,8 +28,8 @@ import { useCachedImageUrl } from "@lectorium/composables/useCachedImageUrl.js"
  */
 const props = defineProps<{
   name: string
-  /** Remote cover image URL, or undefined to show a cream placeholder tile. */
   coverUrl?: string
+  description?: string
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
@@ -86,11 +89,27 @@ const loaded = ref(false)
   opacity: 1;
 }
 
-.name {
+.text {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
   font-size: 15px;
   line-height: 1.3;
   font-weight: 500;
   color: var(--ion-text-color);
+}
+
+.desc {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ion-color-medium-shade);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>
