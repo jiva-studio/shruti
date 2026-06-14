@@ -5,9 +5,6 @@
         <IonButtons slot="start">
           <IonBackButton default-href="/tabs/search" />
         </IonButtons>
-        <IonTitle>{{ $t("search.lecturesTitle") }}</IonTitle>
-      </IonToolbar>
-      <IonToolbar>
         <div class="search-row">
           <SearchInput v-model="search.query.value" :placeholder="$t('app.search')" />
           <SearchFiltersButton
@@ -58,7 +55,6 @@ import {
   IonInfiniteScrollContent,
   IonPage,
   IonText,
-  IonTitle,
   IonToolbar,
   type InfiniteScrollCustomEvent,
 } from "@ionic/vue"

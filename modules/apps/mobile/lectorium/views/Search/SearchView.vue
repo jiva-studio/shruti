@@ -28,7 +28,7 @@
     </template>
 
     <IonListHeader>
-      <IonLabel>{{ $t("search.lecturesTitle") }}</IonLabel>
+      <IonLabel>{{ $t("search.popularLecturesTitle") }}</IonLabel>
       <IonButton :aria-label="$t('search.collections.seeAll')" @click="openTracks">
         <IconChevronRight :size="20" />
       </IonButton>
