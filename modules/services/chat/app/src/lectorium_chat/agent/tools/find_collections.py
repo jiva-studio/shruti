@@ -1,7 +1,9 @@
 """find_collections — name search over curated collections (seminars).
 
-Returns collections (id, name, description, ordered track ids) the synthesizer
-can offer the user to add wholesale. With no query, returns the featured set.
+Returns collections (id, name, description, track_count) the synthesizer can
+offer the user to add wholesale. With no query, returns the featured set.
+Raw track ids are deliberately withheld (chat alias invariant) — the client
+resolves a collection's tracks from `collection_id`.
 This is a METADATA name search (LIKE over collection names), not a semantic
 search over spoken text — for "find the seminar named X", not "lectures about X".
 """
@@ -50,8 +52,8 @@ register_tool(ToolDef(
         "seminar on Iśopaniṣad, or Nectar of Devotion) — by name. With no "
         "query, returns the featured collections. Use when the user asks for a "
         "seminar / cycle / course, or wants to add a whole collection at once. "
-        "Each result carries `collection_id`, `name`, `description` and the "
-        "ordered `track_ids`; offer to add the whole collection. This is a "
+        "Each result carries `collection_id`, `name`, `description` and "
+        "`track_count`; offer to add the whole collection. This is a "
         "name search (not semantic): for «семинар по X» / «найди курс X», not "
         "«лекции про X» (use chunks_search / tracks_list for those)."
     ),
