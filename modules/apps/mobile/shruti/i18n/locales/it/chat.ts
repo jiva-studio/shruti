@@ -268,6 +268,7 @@ export default {
   proactiveSessionTitleNextShloka: "Lezione sul prossimo verso",
   proactiveSessionTitleUnfinishedLecture: "Lezione non terminata",
   proactiveSessionTitleInactivity: "Torna alla tua pratica",
+  proactiveSessionTitleWeeklyDigest: "La tua settimana",
   proactiveInactivityWelcomeBody:
     "È passato un po' di tempo. Nuove lezioni ti aspettano — apri la tua biblioteca e riprendi da dove avevi lasciato.",
 

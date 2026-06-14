@@ -1,4 +1,6 @@
-import type { TrackId } from "@lib/domain/core.js"
+import type { LanguageCode, SourceId, TrackId } from "@lib/domain/core.js"
+import type { Source } from "@lib/domain/source.js"
+import { formatReference } from "@lib/domain/services/references.js"
 import { registerRule } from "../registry.js"
 import type { ProactiveRuleHandler } from "../types.js"
 
@@ -80,8 +82,10 @@ const handler: ProactiveRuleHandler = {
     const track = await ctx.repos.tracks.getById(entry.ruleDate as TrackId)
     if (track === null || track.references.length === 0) return null
     const ref = track.references[track.references.length - 1]
-    const refLabel = ref.tokens.join(".")
-    const lang = ctx.locale.startsWith("en") ? "en" : "ru"
+    const lang: LanguageCode = ctx.locale.startsWith("en") ? "en" : "ru"
+    const allSources = await ctx.repos.sources.listAll()
+    const sourcesById = new Map<SourceId, Source>(allSources.map((s) => [s.id, s]))
+    const refLabel = formatReference(ref, sourcesById, lang)
     const variant = track.variants.find((v) => v.language === lang) ?? track.variants[0] ?? null
     const title = variant?.title ?? ""
     const body = ctx.t("chat.proactiveNextShlokaBody", {

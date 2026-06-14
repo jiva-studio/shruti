@@ -271,6 +271,7 @@ export default {
   proactiveSessionTitleNextShloka: "Conférence sur le verset suivant",
   proactiveSessionTitleUnfinishedLecture: "Conférence inachevée",
   proactiveSessionTitleInactivity: "Reprenez votre pratique",
+  proactiveSessionTitleWeeklyDigest: "Votre semaine",
 
   // Welcome body shown when re-engaging the user after a period of
   // inactivity (the `inactivity` proactive rule).

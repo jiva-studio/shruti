@@ -41,8 +41,11 @@ export function useChatStoreProactiveSync(): void {
     const unseen = chatStore.unseenProactiveSessionIds
     const sessionId = unseen.size > 0 ? [...unseen][0] : undefined
     if (!sessionId) return
+    // Distinct title/body: the toast header falls back to `title` whenever the
+    // session has none (proactive rules on the system session store `title:
+    // null`). Reusing the body string there made the header and body identical.
     emitNotify({
-      title: t("notifications.proactiveNewMessageToast"),
+      title: t("notifications.proactiveNewMessageTitle"),
       body: t("notifications.proactiveNewMessageToast"),
       sessionId,
       whenBackground: "skip",
