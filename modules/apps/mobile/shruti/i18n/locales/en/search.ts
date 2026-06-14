@@ -5,7 +5,6 @@ export default {
   filtersSheetTitle: "Filters",
   filtersReset: "Reset",
   lecturesTitle: "Lectures",
-  popularLecturesTitle: "Popular lectures",
   actions: {
     addToPlaylist: "Add to playlist",
     openTranscript: "Open transcript",
