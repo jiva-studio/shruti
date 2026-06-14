@@ -1,14 +1,7 @@
 <template>
   <button type="button" class="collection-row" @click="emit('click')">
     <span class="thumb" :class="{ 'is-placeholder': !coverUrl }">
-      <img
-        v-if="src"
-        :src="src"
-        :alt="name"
-        class="thumb-img"
-        :class="{ 'is-loaded': loaded }"
-        @load="loaded = true"
-      />
+      <CachedImage :url="coverUrl" :alt="name" />
     </span>
     <span class="text">
       <span class="name">{{ name }}</span>
@@ -18,24 +11,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from "vue"
-import { useCachedImageUrl } from "@lectorium/composables/useCachedImageUrl.js"
+import { CachedImage } from "@ui/primitives/index.js"
 
 /**
  * A single collection rendered as a list row (small square cover + name) —
  * the "other collections" list on the Search page, styled to sit alongside
- * the track rows. Cover is served from the local image cache.
+ * the track rows. Cover is served from the local image cache via CachedImage.
  */
-const props = defineProps<{
+defineProps<{
   name: string
   coverUrl?: string
   description?: string
 }>()
 
 const emit = defineEmits<{ (e: "click"): void }>()
-
-const { src } = useCachedImageUrl(toRef(props, "coverUrl"))
-const loaded = ref(false)
 </script>
 
 <style scoped>
@@ -73,20 +62,6 @@ const loaded = ref(false)
     rgba(var(--ion-color-primary-rgb), 0.55),
     rgba(var(--ion-color-tertiary-rgb), 0.7)
   );
-}
-
-.thumb-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0;
-  transition: opacity 200ms ease;
-}
-
-.thumb-img.is-loaded {
-  opacity: 1;
 }
 
 .text {
