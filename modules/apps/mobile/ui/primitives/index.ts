@@ -23,6 +23,8 @@ export {
 //    set), so it isn't generic; kept local.
 export { default as CachedImage } from "./CachedImage.vue"
 export { default as FlatHeader } from "./FlatHeader.vue"
+export { useCachedImageUrl } from "./useCachedImageUrl.js"
+export { FILES_STORAGE_KEY } from "./filesStorageKey.js"
 export { default as FloatingChip } from "./FloatingChip.vue"
 export { default as HighlightText } from "./HighlightText.vue"
 export { default as WithDeleteAction } from "./WithDeleteAction.vue"

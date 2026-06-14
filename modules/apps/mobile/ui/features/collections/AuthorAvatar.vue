@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { ref, toRef } from "vue"
-import { useCachedImageUrl } from "@shruti/composables/useCachedImageUrl.js"
+import { useCachedImageUrl } from "@ui/primitives/index.js"
 
 /**
  * A single circular author avatar, served through the local image cache. Sized
