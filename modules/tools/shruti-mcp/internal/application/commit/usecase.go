@@ -181,7 +181,7 @@ func (uc UseCase) Run(ctx context.Context, id track.Id, language string) (res Re
 	}
 
 	// 3. Audio invariants — file exists, duration > 0, bytes > 0.
-	audioPath := uc.Audio.PublicAudioPath(id)
+	audioPath := uc.Audio.PublicAudioPath(id, audioport.VersionOriginal)
 	if ok, err := uc.FS.Exists(ctx, audioPath); err != nil {
 		res.Invalid = append(res.Invalid, fmt.Sprintf("audio: stat failed at %s: %v", audioPath, err))
 	} else if !ok {

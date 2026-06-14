@@ -11,6 +11,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/run"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/track"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
+	audioport "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/ports/audio"
 )
 
 func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
@@ -49,7 +50,7 @@ func RegisterAudioNormalize(s *server.MCPServer, deps Deps) {
 					SourcePath string `json:"source_path"`
 				}{
 					TrackId:    string(id),
-					AudioPath:  deps.Normalize.Audio.PublicAudioPath(id),
+					AudioPath:  deps.Normalize.Audio.PublicAudioPath(id, audioport.VersionOriginal),
 					SourcePath: deps.Normalize.Audio.SourceArtifactPath(id),
 				})
 			},
