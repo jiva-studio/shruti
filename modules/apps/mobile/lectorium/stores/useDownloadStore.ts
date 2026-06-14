@@ -37,6 +37,9 @@ export const useDownloadStore = defineStore("downloads", () => {
   // why. The Welcome screen / Settings can render a banner from this.
   const hydrationError = ref<string | null>(null)
   const inFlight = new Map<TrackId, Promise<string | null>>()
+  // Separate in-flight map for the optional clean (denoised) leg, keyed by
+  // trackId — so a clean fetch doesn't collide with the primary's slot.
+  const cleanInFlight = new Map<TrackId, Promise<string | null>>()
   // Bounded FIFO for prefetch-style enqueues. Without this, restoring
   // many tracks at once fires `ensureDownloaded` in a tight loop and
   // the native plugin's WorkManager (Android) / URLSession (iOS) drops
@@ -76,8 +79,32 @@ export const useDownloadStore = defineStore("downloads", () => {
     return states.value.get(trackId) ?? "idle"
   }
 
+  // Per-track progress (0..100) of the optional "clean" (denoised) file.
+  // Tracked separately from the primary so the offline indicator can show
+  // combined progress when both are downloading, without persisting the
+  // clean file in the user DB (it rides the native URL cache).
+  const cleanProgress = ref<Map<TrackId, number>>(new Map())
+
+  function setCleanProgress(trackId: TrackId, pct: number | null): void {
+    const next = new Map(cleanProgress.value)
+    if (pct === null) {
+      if (!next.delete(trackId)) return
+    } else {
+      const clamped = Math.max(0, Math.min(100, Math.round(pct)))
+      if (next.get(trackId) === clamped) return
+      next.set(trackId, clamped)
+    }
+    cleanProgress.value = next
+  }
+
   function getProgress(trackId: TrackId): number {
-    return progress.value.get(trackId) ?? 0
+    const primary = progress.value.get(trackId)
+    const clean = cleanProgress.value.get(trackId)
+    // While the clean leg is in flight, show the average of the two so the
+    // indicator reflects BOTH files. Once clean finishes (cleared) the
+    // primary value alone drives the ring, as before.
+    if (clean !== undefined && primary !== undefined) return Math.round((primary + clean) / 2)
+    return primary ?? 0
   }
 
   /**
@@ -244,6 +271,45 @@ export const useDownloadStore = defineStore("downloads", () => {
     return task
   }
 
+  /**
+   * Best-effort fetch of the denoised "clean" file for a track (kind="clean").
+   * Tracked as a first-class media_items row so it's counted and cleaned up,
+   * but its readiness does NOT gate the offline indicator — playback works on
+   * the original alone; clean only enables the source-mix slider. Returns the
+   * local URL or null. Reports combined progress via `cleanProgress`.
+   */
+  async function ensureSecondaryDownloaded(trackId: TrackId, path: string): Promise<string | null> {
+    const existing = cleanInFlight.get(trackId)
+    if (existing) return existing
+    const task = (async (): Promise<string | null> => {
+      try {
+        const probeUrl = buildServerUrl(app.activeServer.value, path)
+        const cached = await app.mediaDownloader.resolveLocalUrl(probeUrl)
+        if (cached) return cached
+        setCleanProgress(trackId, 0)
+        const result = await downloadMedia(
+          { trackId, path, candidates: fallback.candidates(), kind: "clean" },
+          {
+            mediaItems: app.repositories().mediaItems,
+            unitOfWork: app.repositories().unitOfWork,
+            transfer: (url, onProgress) =>
+              app.mediaDownloader.download(url, (received, total) => onProgress?.(received, total)),
+          },
+          (pct) => setCleanProgress(trackId, pct)
+        )
+        return result.ok ? result.value.mediaItem.localPath : null
+      } catch (err) {
+        console.error(`[downloads] clean leg failed for ${trackId}:`, err)
+        return null
+      } finally {
+        setCleanProgress(trackId, null)
+        cleanInFlight.delete(trackId)
+      }
+    })()
+    cleanInFlight.set(trackId, task)
+    return task
+  }
+
   async function drainPrefetchQueue(): Promise<void> {
     if (queueDraining) return
     queueDraining = true
@@ -329,8 +395,16 @@ export const useDownloadStore = defineStore("downloads", () => {
     if (nextProgress.delete(trackId)) progress.value = nextProgress
   }
 
-  async function remove(trackId: TrackId, remoteUrl: string): Promise<void> {
+  async function remove(trackId: TrackId, remoteUrl: string, cleanPath?: string): Promise<void> {
     const repos = app.repositories()
+    // Delete the optional clean file first. removeDownloadedMedia's
+    // deleteByTrack drops ALL media_items rows (original + clean), so the DB
+    // is consistent regardless; this removes the clean bytes too when the
+    // caller knows its storage key.
+    if (cleanPath) {
+      await app.mediaDownloader.delete(buildServerUrl(app.activeServer.value, cleanPath)).catch(() => {})
+    }
+    setCleanProgress(trackId, null)
     await removeDownloadedMedia(
       { trackId, remoteUrl },
       {
@@ -404,8 +478,10 @@ export const useDownloadStore = defineStore("downloads", () => {
     storeEpoch += 1
     states.value = new Map()
     progress.value = new Map()
+    cleanProgress.value = new Map()
     hydrationError.value = null
     inFlight.clear()
+    cleanInFlight.clear()
     prefetchQueue.length = 0
     queuedTrackIds.clear()
     hydrated = false
@@ -419,6 +495,7 @@ export const useDownloadStore = defineStore("downloads", () => {
     getProgress,
     hydrate,
     ensureDownloaded,
+    ensureSecondaryDownloaded,
     prefetch,
     cancelPrefetch,
     markStartingDownload,
