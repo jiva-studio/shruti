@@ -7,14 +7,18 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/domain/catalog"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/mcp/envelope"
 )
 
-// CollectionCRUDDeps wires `collection.*` tools to the collectioncrud use case.
+// CollectionCRUDDeps wires `collection.*` tools to the collectioncrud use case
+// plus the cover generator (for collection.cover.generate and auto-cover on
+// create). Cover is zero/disabled when image generation isn't configured.
 type CollectionCRUDDeps struct {
 	UseCase collectioncrud.UseCase
+	Cover   collectioncover.UseCase
 }
 
 // RegisterCollectionCRUD registers all 12 collection tools:
@@ -38,6 +42,7 @@ func RegisterCollectionCRUD(s *server.MCPServer, deps CollectionCRUDDeps) {
 	registerCollectionTagsSet(s, deps)
 	registerCollectionTagsAdd(s, deps)
 	registerCollectionTagsRemove(s, deps)
+	registerCollectionCoverGenerate(s, deps)
 }
 
 func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
@@ -74,7 +79,7 @@ func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
 		if err != nil {
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
-		return envelope.Result(kind, map[string]any{
+		result := map[string]any{
 			"id":          id,
 			"language":    lang,
 			"name":        name,
@@ -82,7 +87,18 @@ func registerCollectionCreate(s *server.MCPServer, deps CollectionCRUDDeps) {
 			"description": in.Description,
 			"meta":        in.Meta,
 			"sort_order":  in.SortOrder,
-		}), nil
+		}
+		// Auto-generate a cover for a freshly-minted collection (only on the
+		// first-locale create, i.e. no caller id). Best-effort: a failure
+		// leaves the collection without a cover but does not fail the create.
+		if in.ID == "" && in.Cover == "" && deps.Cover.Enabled() {
+			if key, gerr := deps.Cover.Generate(ctx, id, lang, ""); gerr != nil {
+				result["cover_error"] = gerr.Error()
+			} else {
+				result["cover"] = key
+			}
+		}
+		return envelope.Result(kind, result), nil
 	})
 }
 
@@ -407,6 +423,31 @@ func registerCollectionTagsRemove(s *server.MCPServer, deps CollectionCRUDDeps) 
 			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
 		}
 		return envelope.Result(kind, map[string]bool{"ok": true}), nil
+	})
+}
+
+func registerCollectionCoverGenerate(s *server.MCPServer, deps CollectionCRUDDeps) {
+	kind := "collection.cover.generate"
+	tool := mcp.NewTool(kind,
+		mcp.WithDescription("Generate (or regenerate) the collection's cover image from its name/description via the configured image model, upload it to S3 (public/collections/<id>/cover.jpg), and set the cover key on every locale. Pass extra_prompt to steer the art."),
+		mcp.WithString("id", mcp.Required()),
+		mcp.WithString("language", mcp.Description("Locale whose name/description seed the prompt (en fallback).")),
+		mcp.WithString("extra_prompt", mcp.Description("Optional extra prompt fragment appended to steer the generation.")),
+	)
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := req.RequireString("id")
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInvalidArgument, err.Error(), nil), nil
+		}
+		if !deps.Cover.Enabled() {
+			return envelope.Err(kind, envelope.CodeInvalidArgument,
+				"image generation is not configured (set images.api_key)", nil), nil
+		}
+		key, err := deps.Cover.Generate(ctx, id, req.GetString("language", ""), req.GetString("extra_prompt", ""))
+		if err != nil {
+			return envelope.Err(kind, envelope.CodeInternal, err.Error(), nil), nil
+		}
+		return envelope.Result(kind, map[string]any{"id": id, "cover": key}), nil
 	})
 }
 
