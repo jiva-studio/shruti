@@ -70,7 +70,7 @@ curl -s -X POST http://m4.local:8091/jobs -H 'content-type: application/json' -d
     "endpoint_url": "https://storage.yandexcloud.net",
     "acl": "public-read"
   },
-  "params": { "normalize": true, "noise_profile": false, "mix_min": 0, "mix_max": 0 }
+  "params": { "normalize": true, "noise_profile": false }
 }'
 # → {"job_id":"…","status":"queued","filename":"lecture.mp3"}
 

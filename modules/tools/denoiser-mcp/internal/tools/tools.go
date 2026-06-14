@@ -97,11 +97,7 @@ func registerDenoiseWait(s *server.MCPServer, p Provider, cfg Config) {
 		mcp.WithBoolean("noise_profile",
 			mcp.Description("Apply spectral subtraction (slower, ~3x). Default false.")),
 		mcp.WithBoolean("no_normalize",
-			mcp.Description("Disable volume normalization. Default false (normalization on).")),
-		mcp.WithNumber("mix_min",
-			mcp.Description("%% original mixed back where NO voice (0-100). Default 0.")),
-		mcp.WithNumber("mix_max",
-			mcp.Description("%% original mixed back where voice present (0-100). Default 0.")),
+			mcp.Description("Disable loudness-matching the clean to the original. Default false.")),
 		mcp.WithNumber("sample_rate",
 			mcp.Description("Processing sample rate. Default 48000.")),
 		mcp.WithNumber("timeout_s",
@@ -235,8 +231,6 @@ func paramsFromReq(req mcp.CallToolRequest) client.DenoiseParams {
 	return client.DenoiseParams{
 		Normalize:    !req.GetBool("no_normalize", false),
 		NoiseProfile: req.GetBool("noise_profile", false),
-		MixMin:       req.GetFloat("mix_min", 0),
-		MixMax:       req.GetFloat("mix_max", 0),
 		SampleRate:   int(req.GetFloat("sample_rate", 48000)),
 	}
 }
@@ -271,9 +265,7 @@ func registerDenoiseBatch(s *server.MCPServer, p Provider) {
 		mcp.WithNumber("presign_expiry_s",
 			mcp.Description("Enumerate mode: presigned source-URL TTL in seconds. Default 86400.")),
 		mcp.WithBoolean("noise_profile", mcp.Description("Spectral subtraction (slower ~3x). Default false.")),
-		mcp.WithBoolean("no_normalize", mcp.Description("Disable normalization. Default false.")),
-		mcp.WithNumber("mix_min", mcp.Description("%% original where no voice (0-100). Default 0.")),
-		mcp.WithNumber("mix_max", mcp.Description("%% original where voice present (0-100). Default 0.")),
+		mcp.WithBoolean("no_normalize", mcp.Description("Disable loudness-match to original. Default false.")),
 		mcp.WithNumber("sample_rate", mcp.Description("Processing sample rate. Default 48000.")),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
