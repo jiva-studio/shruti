@@ -68,6 +68,60 @@ type Job struct {
 	Error                 string  `json:"error,omitempty"`
 }
 
+// S3Source is a bucket+prefix to enumerate for batch fan-out, with read/list
+// credentials. The service lists the prefix and presigns each object.
+type S3Source struct {
+	Bucket          string `json:"bucket"`
+	Prefix          string `json:"prefix,omitempty"`
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	Region          string `json:"region,omitempty"`
+	EndpointURL     string `json:"endpoint_url,omitempty"`
+}
+
+// BatchItem is one explicit (source_url -> dest_key) pair.
+type BatchItem struct {
+	SourceURL string `json:"source_url"`
+	DestKey   string `json:"dest_key"`
+	Filename  string `json:"filename,omitempty"`
+}
+
+// BatchRequest is the POST /jobs/batch body. Provide exactly one of Items
+// (explicit) or Source (enumerate).
+type BatchRequest struct {
+	Dest           S3Dest        `json:"dest"`
+	Params         DenoiseParams `json:"params"`
+	Items          []BatchItem   `json:"items,omitempty"`
+	Source         *S3Source     `json:"source,omitempty"`
+	DestPrefix     string        `json:"dest_prefix,omitempty"`
+	PresignExpiryS int           `json:"presign_expiry_s,omitempty"`
+	Limit          int           `json:"limit,omitempty"`
+}
+
+// BatchResponse is returned from POST /jobs/batch.
+type BatchResponse struct {
+	Count  int      `json:"count"`
+	JobIDs []string `json:"job_ids"`
+}
+
+// ListObjectsRequest is the POST /source/list body.
+type ListObjectsRequest struct {
+	Source S3Source `json:"source"`
+	Limit  int      `json:"limit,omitempty"`
+}
+
+// S3Object is one listed object.
+type S3Object struct {
+	Key  string `json:"key"`
+	Size int64  `json:"size"`
+}
+
+// ListObjectsResponse is returned from POST /source/list.
+type ListObjectsResponse struct {
+	Count   int        `json:"count"`
+	Objects []S3Object `json:"objects"`
+}
+
 // Health is the response of GET /healthz.
 type Health struct {
 	Workers       int   `json:"workers"`
