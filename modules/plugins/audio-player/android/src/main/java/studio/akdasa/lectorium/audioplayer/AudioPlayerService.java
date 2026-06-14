@@ -49,6 +49,8 @@ public final class AudioPlayerService extends MediaSessionService {
      *  cannot travel over the standard Player interface a MediaController
      *  exposes. Args: {@code enabled:boolean, ratio:float}. */
     public static final String ACTION_SET_MIX = "studio.jiva.shruti.audioplayer.SET_MIX";
+    /** Source-mix crossfade (original↔clean). Args: {@code level:float} 0..1. */
+    public static final String ACTION_SET_SOURCE_MIX = "studio.jiva.shruti.audioplayer.SET_SOURCE_MIX";
     /** Replace the queue. Args: {@code items:String} (JSON array of
      *  {itemId,url,title,author,duration?}), {@code startIndex:int},
      *  {@code startPositionMs:long}. */
@@ -63,6 +65,26 @@ public final class AudioPlayerService extends MediaSessionService {
     private ExoPlayer exoPlayer;
     private MediaSession mediaSession;
     private final StereoMixAudioProcessor stereoMixProcessor = new StereoMixAudioProcessor();
+
+    /** Secondary player for the denoised "clean" track of the current item.
+     *  Plays in parallel with the primary; volume crossfades against it
+     *  (original = 1−level, clean = level) and a drift watch keeps it aligned.
+     *  Not in the MediaSession — purely an audio sidecar. */
+    private ExoPlayer cleanPlayer;
+    private float sourceMixLevel = 0f;
+    private final android.os.Handler driftHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final long DRIFT_POLL_MS = 500L;
+    private static final long DRIFT_TOLERANCE_MS = 150L;
+    private final Runnable driftRunnable = new Runnable() {
+        @Override public void run() {
+            if (exoPlayer != null && cleanPlayer != null
+                    && cleanPlayer.getMediaItemCount() > 0 && exoPlayer.isPlaying()) {
+                long gap = Math.abs(cleanPlayer.getCurrentPosition() - exoPlayer.getCurrentPosition());
+                if (gap > DRIFT_TOLERANCE_MS) cleanPlayer.seekTo(exoPlayer.getCurrentPosition());
+            }
+            driftHandler.postDelayed(this, DRIFT_POLL_MS);
+        }
+    };
     private studio.jiva.shruti.audioplayer.queue.QueueJournal journal;
     private studio.jiva.shruti.audioplayer.queue.QueuePlaybackManager queueManager;
 
@@ -98,6 +120,32 @@ public final class AudioPlayerService extends MediaSessionService {
         // local-file first, so local is the right default.
         exoPlayer.setWakeMode(C.WAKE_MODE_LOCAL);
 
+        // Secondary sidecar player for the denoised "clean" track. Plays in
+        // parallel; volume crossfades against the primary and a drift watch
+        // keeps the two heads aligned (Android has no single-clock mixer for
+        // files, and mixing inside one ExoPlayer deadlocks — see the design doc).
+        cleanPlayer = new ExoPlayer.Builder(context).build();
+        cleanPlayer.setWakeMode(C.WAKE_MODE_LOCAL);
+        cleanPlayer.setVolume(0f);
+        exoPlayer.addListener(new androidx.media3.common.Player.Listener() {
+            @Override public void onIsPlayingChanged(boolean isPlaying) {
+                if (cleanPlayer == null || cleanPlayer.getMediaItemCount() == 0) return;
+                if (isPlaying) cleanPlayer.play(); else cleanPlayer.pause();
+            }
+            @Override public void onMediaItemTransition(
+                    @Nullable MediaItem item, int reason) {
+                syncCleanToCurrent();
+            }
+            @Override public void onPositionDiscontinuity(
+                    androidx.media3.common.Player.PositionInfo oldPos,
+                    androidx.media3.common.Player.PositionInfo newPos, int reason) {
+                if (cleanPlayer != null && cleanPlayer.getMediaItemCount() > 0) {
+                    cleanPlayer.seekTo(exoPlayer.getCurrentPosition());
+                }
+            }
+        });
+        driftHandler.postDelayed(driftRunnable, DRIFT_POLL_MS);
+
         // Native auto-advance bookkeeping + durable journal. Must be attached
         // before any playback so no transition is missed.
         journal = new studio.jiva.shruti.audioplayer.queue.QueueJournal(context);
@@ -128,6 +176,11 @@ public final class AudioPlayerService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        driftHandler.removeCallbacks(driftRunnable);
+        if (cleanPlayer != null) {
+            cleanPlayer.release();
+            cleanPlayer = null;
+        }
         if (queueManager != null) {
             queueManager.release();
             queueManager = null;
@@ -175,6 +228,9 @@ public final class AudioPlayerService extends MediaSessionService {
         }
         exoPlayer.prepare();
         exoPlayer.play();
+        // onMediaItemTransition doesn't fire for the initial item, so load the
+        // clean sidecar for the start item explicitly.
+        syncCleanToCurrent();
     }
 
     private void appendQueue(String itemsJson) {
@@ -222,10 +278,11 @@ public final class AudioPlayerService extends MediaSessionService {
                 String title = o.optString("title", "");
                 String author = o.optString("author", "");
                 String cover = o.optString("cover", null);
+                String secondaryUrl = o.optString("secondaryUrl", null);
                 long durationMs = o.has("durationMs") ? o.optLong("durationMs", C.TIME_UNSET)
                         : C.TIME_UNSET;
                 out.add(AudioPlayerPlugin.buildMediaItem(
-                        this, itemId, url, title, author, cover, durationMs));
+                        this, itemId, url, secondaryUrl, title, author, cover, durationMs));
             }
         } catch (org.json.JSONException e) {
             e.printStackTrace();
@@ -241,6 +298,48 @@ public final class AudioPlayerService extends MediaSessionService {
         if (target < 0) target = 0;
         if (duration != C.TIME_UNSET && target > duration) target = duration;
         exoPlayer.seekTo(target);
+        if (cleanPlayer != null && cleanPlayer.getMediaItemCount() > 0) cleanPlayer.seekTo(target);
+    }
+
+    /* -------------------------------------------------------------------------- */
+    /*                                Source mix                                  */
+    /* -------------------------------------------------------------------------- */
+
+    /** Set the original↔clean crossfade level (0 = original, 1 = clean). */
+    private void setSourceMix(float level) {
+        sourceMixLevel = Math.max(0f, Math.min(1f, level));
+        applySourceVolumes();
+    }
+
+    /** Apply the crossfade gains. With no clean loaded the primary stays at
+     *  full volume (so a persisted level never quiets a single-source track). */
+    private void applySourceVolumes() {
+        boolean hasClean = cleanPlayer != null && cleanPlayer.getMediaItemCount() > 0;
+        if (exoPlayer != null) exoPlayer.setVolume(hasClean ? (1f - sourceMixLevel) : 1f);
+        if (cleanPlayer != null) cleanPlayer.setVolume(hasClean ? sourceMixLevel : 0f);
+    }
+
+    /** Load the current item's clean track into the sidecar player (or clear
+     *  it when the item has none), then align position/volume/play-state. */
+    private void syncCleanToCurrent() {
+        if (exoPlayer == null || cleanPlayer == null) return;
+        MediaItem current = exoPlayer.getCurrentMediaItem();
+        String secondaryUrl = null;
+        if (current != null && current.requestMetadata != null
+                && current.requestMetadata.extras != null) {
+            secondaryUrl = current.requestMetadata.extras.getString("secondaryUrl", null);
+        }
+        if (secondaryUrl == null || secondaryUrl.isEmpty()) {
+            cleanPlayer.stop();
+            cleanPlayer.clearMediaItems();
+            applySourceVolumes();
+            return;
+        }
+        cleanPlayer.setMediaItem(MediaItem.fromUri(secondaryUrl));
+        cleanPlayer.prepare();
+        cleanPlayer.seekTo(exoPlayer.getCurrentPosition());
+        applySourceVolumes();
+        if (exoPlayer.isPlaying()) cleanPlayer.play();
     }
 
     /**
@@ -258,6 +357,7 @@ public final class AudioPlayerService extends MediaSessionService {
                                     .add(new SessionCommand(ACTION_REWIND_15, Bundle.EMPTY))
                                     .add(new SessionCommand(ACTION_FORWARD_15, Bundle.EMPTY))
                                     .add(new SessionCommand(ACTION_SET_MIX, Bundle.EMPTY))
+                                    .add(new SessionCommand(ACTION_SET_SOURCE_MIX, Bundle.EMPTY))
                                     .add(new SessionCommand(ACTION_SET_QUEUE, Bundle.EMPTY))
                                     .add(new SessionCommand(ACTION_APPEND_QUEUE, Bundle.EMPTY))
                                     .add(new SessionCommand(ACTION_SKIP, Bundle.EMPTY))
@@ -281,6 +381,9 @@ public final class AudioPlayerService extends MediaSessionService {
                 boolean enabled = args.getBoolean("enabled", false);
                 float ratio = args.getFloat("ratio", 0.5f);
                 stereoMixProcessor.setMix(enabled, ratio);
+                return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
+            } else if (ACTION_SET_SOURCE_MIX.equals(customCommand.customAction)) {
+                setSourceMix(args.getFloat("level", 0f));
                 return Futures.immediateFuture(new SessionResult(SessionResult.RESULT_SUCCESS));
             } else if (ACTION_SET_QUEUE.equals(customCommand.customAction)) {
                 setQueue(args.getString("items", "[]"),
