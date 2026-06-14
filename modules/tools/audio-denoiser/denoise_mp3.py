@@ -19,8 +19,10 @@ Audio denoiser with selectable strategies (`--strategy`).
                steady tape hiss / static far better than afftdn without the
                over-gating artefacts of RNNoise, and preserves the voice (no
                generative hallucination). Runs real-time on CPU (no GPU/CUDA),
-               so it works on the service and Apple Silicon alike. Needs the
-               `deepfilternet` package (pulls torch).
+               so it works on the service and Apple Silicon alike. Uses the
+               standalone `deep-filter` binary (no torch / no Python ML deps);
+               set $DEEP_FILTER_BIN, put it on PATH, or drop it next to this
+               script. Binaries: github.com/Rikorose/DeepFilterNet releases.
 
 All strategies output mono 128 kbps MP3 (matching the canonical original). The
 app's original↔clean slider does the user-facing blend; this only produces the
@@ -30,6 +32,7 @@ afftdn needs only ffmpeg.
 
 import argparse
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -183,34 +186,50 @@ def _denoise_afftdn_rnnoise_mix(in_path, out_path, nr, nf, mix_min, mix_max):
 
 # ──────────────────────────── DeepFilterNet ────────────────────────────────
 
-def _denoise_deepfilternet(in_path, out_path):
-    """DeepFilterNet3 speech denoise → mono 128k mp3.
-
-    Loads the model once per call (the producer runs one file per process via
-    the pool). `load_audio` resamples to the model's 48k; `enhance` runs the
-    full-band deep filter on CPU. We then encode mono 128k to match the other
-    strategies' output contract.
-    """
-    from df.enhance import enhance, init_df, load_audio, save_audio
-
-    model, df_state, _ = init_df()
-    audio, _ = load_audio(str(in_path), sr=df_state.sr())
-    enhanced = enhance(model, df_state, audio)
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
-        temp_out = tf.name
-    try:
-        save_audio(temp_out, enhanced, df_state.sr())
-        proc = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", temp_out,
-             "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)],
-            capture_output=True, text=True,
+def _resolve_deep_filter_bin():
+    """Locate the standalone `deep-filter` binary (DeepFilterNet3, no torch):
+    $DEEP_FILTER_BIN, then PATH, then a copy sitting next to this script."""
+    cand = os.environ.get("DEEP_FILTER_BIN") or shutil.which("deep-filter")
+    if not cand:
+        sibling = Path(__file__).resolve().parent / "deep-filter"
+        if sibling.exists():
+            cand = str(sibling)
+    if not cand or not Path(cand).exists():
+        raise RuntimeError(
+            "deep-filter binary not found — set DEEP_FILTER_BIN, put it on PATH, "
+            "or drop it next to denoise_mp3.py "
+            "(github.com/Rikorose/DeepFilterNet releases)."
         )
-        if proc.returncode != 0:
-            tail = (proc.stderr or proc.stdout or "").strip()[-2000:]
-            raise RuntimeError(f"ffmpeg encode failed ({proc.returncode}): {tail}")
-    finally:
-        if os.path.exists(temp_out):
-            os.unlink(temp_out)
+    return cand
+
+
+def _run(cmd):
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-2000:]
+        raise RuntimeError(f"{cmd[0]} failed ({proc.returncode}): {tail}")
+
+
+def _denoise_deepfilternet(in_path, out_path):
+    """DeepFilterNet3 via the standalone `deep-filter` Rust binary — no torch,
+    no Python ML deps, CPU-only, model weights embedded. Decode → 48k mono wav
+    → deep-filter → mono 128k mp3 (matches the other strategies' contract)."""
+    bin_path = _resolve_deep_filter_bin()
+    with tempfile.TemporaryDirectory() as td:
+        wav_in = os.path.join(td, "in.wav")
+        outdir = os.path.join(td, "out")
+        os.makedirs(outdir, exist_ok=True)
+        # DeepFilterNet operates at 48 kHz.
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", str(in_path),
+              "-ac", "1", "-ar", "48000", wav_in])
+        # deep-filter writes <basename>.wav into --output-dir (separate dir so
+        # it can't clobber the input).
+        _run([bin_path, "--output-dir", outdir, wav_in])
+        wav_out = os.path.join(outdir, "in.wav")
+        if not os.path.exists(wav_out):
+            raise RuntimeError("deep-filter produced no output")
+        _run(["ffmpeg", "-hide_banner", "-nostats", "-y", "-i", wav_out,
+              "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", str(out_path)])
 
 
 # ─────────────────────────────── dispatch ──────────────────────────────────
