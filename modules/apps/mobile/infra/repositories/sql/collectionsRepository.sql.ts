@@ -35,6 +35,7 @@ export interface TrackCollectionRef {
 export interface CollectionGroupRow {
   readonly id: string
   readonly name: string
+  readonly description: string
 }
 
 /**
@@ -236,7 +237,8 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
     async listGroups(locale: string): Promise<readonly CollectionGroupRow[]> {
       try {
         return await contentDb.query<CollectionGroupRow>(
-          `SELECT id, name FROM collection_groups
+          `SELECT id, name, COALESCE(description, '') AS description
+             FROM collection_groups
             WHERE language = ?
             ORDER BY sort_order ASC, id ASC`,
           [locale]
