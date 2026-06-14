@@ -293,7 +293,8 @@ def denoise_mp3(
     3. Denoise using RNNoise frame-by-frame (captures voice probabilities)
     4. Normalize volume dynamically across the track
     5. Optionally mix with original audio using voice-probability-based crossfading
-    6. Export as MP3 (192kbps)
+    6. Export as MP3 (128kbps — matches the canonical original; the source is
+       128k so a higher bitrate would only inflate size without adding quality)
 
     Args:
         input_path: Path to input MP3 file
@@ -404,7 +405,7 @@ def denoise_mp3(
         # Export to MP3
         sf.write(temp_output_path, denoised_audio_data, sample_rate, subtype='PCM_16')
         denoised_audio = AudioSegment.from_wav(temp_output_path)
-        denoised_audio.export(str(output_path), format="mp3", bitrate="192k")
+        denoised_audio.export(str(output_path), format="mp3", bitrate="128k")
 
         print(f"Completed: {output_path}")
 
