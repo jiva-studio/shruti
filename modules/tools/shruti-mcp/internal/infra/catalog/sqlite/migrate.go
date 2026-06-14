@@ -170,6 +170,33 @@ func finalizeCollectionSchema(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("create collection_tags: %w", err)
 	}
 
+	// Collection groups — named, ordered shelves of collections (additive;
+	// older clients ignore them, newer clients read them gracefully).
+	for _, s := range []string{
+		`CREATE TABLE IF NOT EXISTS collection_groups (
+			id          TEXT NOT NULL,
+			language    TEXT NOT NULL,
+			name        TEXT NOT NULL,
+			description TEXT,
+			meta        TEXT,
+			sort_order  INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (id, language)
+		)`,
+		`CREATE TABLE IF NOT EXISTS collection_group_items (
+			group_id        TEXT NOT NULL,
+			group_language  TEXT NOT NULL,
+			collection_id   TEXT NOT NULL,
+			position        INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (group_id, group_language, collection_id),
+			FOREIGN KEY (group_id, group_language) REFERENCES collection_groups(id, language) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_collection_group_items ON collection_group_items(group_id, group_language, position)`,
+	} {
+		if _, err := db.ExecContext(ctx, s); err != nil {
+			return fmt.Errorf("create collection group tables: %w", err)
+		}
+	}
+
 	// Seed the curation tag. `tags` is part of the canonical published schema.
 	// (Literal kept here — migrations are schema snapshots; mirrors catalog.FeaturedTagID.)
 	for _, t := range []struct{ lang, name string }{{"ru", "Рекомендуем"}, {"en", "Featured"}} {

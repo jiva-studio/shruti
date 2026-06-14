@@ -30,6 +30,12 @@ export interface TrackCollectionRef {
   readonly name: string
 }
 
+/** A named group (shelf) of collections, as shown on the Search page. */
+export interface CollectionGroupRow {
+  readonly id: string
+  readonly name: string
+}
+
 export interface ISqlCollectionRepository {
   /**
    * Featured collections for `locale` (carrying the `tag_featured` tag),
@@ -55,6 +61,12 @@ export interface ISqlCollectionRepository {
    * per-item provenance is stored.
    */
   getTrackCollections(trackId: string, locale: string): Promise<readonly TrackCollectionRef[]>
+
+  /** Named collection-groups for `locale`, ordered by `sort_order`. */
+  listGroups(locale: string): Promise<readonly CollectionGroupRow[]>
+
+  /** Collection headers of one group, in the group's defined order. */
+  getGroupCollections(groupId: string, locale: string): Promise<readonly FeaturedCollectionRow[]>
 }
 
 /**
@@ -151,6 +163,40 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
         throw err
       }
     },
+
+    async listGroups(locale: string): Promise<readonly CollectionGroupRow[]> {
+      try {
+        return await contentDb.query<CollectionGroupRow>(
+          `SELECT id, name FROM collection_groups
+            WHERE language = ?
+            ORDER BY sort_order ASC, id ASC`,
+          [locale]
+        )
+      } catch (err) {
+        if (isMissingTable(err)) return []
+        throw err
+      }
+    },
+
+    async getGroupCollections(
+      groupId: string,
+      locale: string
+    ): Promise<readonly FeaturedCollectionRow[]> {
+      try {
+        return await contentDb.query<FeaturedCollectionRow>(
+          `SELECT c.id, c.name, COALESCE(c.cover, '') AS cover, c.sort_order
+             FROM collection_group_items gi
+             JOIN collections c
+               ON c.id = gi.collection_id AND c.language = gi.group_language
+            WHERE gi.group_id = ? AND gi.group_language = ?
+            ORDER BY gi.position ASC`,
+          [groupId, locale]
+        )
+      } catch (err) {
+        if (isMissingTable(err)) return []
+        throw err
+      }
+    },
   }
 }
 
@@ -165,5 +211,7 @@ export function createSqlCollectionRepository(contentDb: IDatabase): ISqlCollect
 function isMissingTable(err: unknown): boolean {
   if (!err) return false
   const message = err instanceof Error ? err.message : String(err)
-  return /no such table:\s*(collections|collection_tracks|collection_tags)\b/i.test(message)
+  return /no such table:\s*(collections|collection_tracks|collection_tags|collection_groups|collection_group_items)\b/i.test(
+    message
+  )
 }

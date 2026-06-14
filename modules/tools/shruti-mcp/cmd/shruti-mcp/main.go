@@ -20,6 +20,7 @@ import (
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/audiotag"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncover"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectioncrud"
+	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/collectiongroupcrud"
 	configpublish "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/configpublish"
 	"github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/dictcrud"
 	catalogproactive "github.com/jiva-studio/shruti/modules/tools/shruti-mcp/internal/application/catalog/proactive"
@@ -530,6 +531,12 @@ func main() {
 				Minter:  minter,
 			},
 			Cover: coverGen,
+		},
+		CollectionGroupCRUD: tools.CollectionGroupCRUDDeps{
+			UseCase: collectiongroupcrud.UseCase{
+				Catalog: sqlitecatalog.NewLazy(currentDBPath),
+				Minter:  minter,
+			},
 		},
 		Find: tools.FindDeps{
 			Catalog:  sqlitecatalog.NewLazy(currentDBPath),
